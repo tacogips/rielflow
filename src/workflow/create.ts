@@ -15,7 +15,7 @@ export interface CreateWorkflowFailure {
 }
 
 const TEMPLATE_EXECUTION_BACKEND = "codex-agent";
-const TEMPLATE_MODEL = "gpt-5";
+const TEMPLATE_MODEL = "gpt-5-nano";
 
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -69,6 +69,9 @@ export async function createWorkflowTemplate(
     defaults: {
       maxLoopIterations: 3,
       nodeTimeoutMs: 120000,
+      containerRuntime: {
+        runnerKind: "podman",
+      },
     },
     prompts: {
       oyakataPromptTemplate:

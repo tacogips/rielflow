@@ -271,14 +271,15 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(
-      reloaded.value.bundle.nodePayloads["oyakata-manager"]?.runtimeIsolation,
-    ).toEqual({
-      mode: "podman",
-      build: {
-        contextPath: "containers/oyakata-manager",
-        dockerfilePath: "containers/oyakata-manager/Dockerfile",
-        target: "runtime",
+    expect(reloaded.value.bundle.nodePayloads["oyakata-manager"]).toMatchObject({
+      nodeType: "container",
+      container: {
+        runnerKind: "podman",
+        build: {
+          contextPath: "containers/oyakata-manager",
+          dockerfilePath: "containers/oyakata-manager/Dockerfile",
+          target: "runtime",
+        },
       },
     });
   });

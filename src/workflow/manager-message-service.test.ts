@@ -482,7 +482,7 @@ describe("manager-message-service", () => {
         {
           id: "workflow-input",
           executionBackend: "codex-agent",
-          model: "gpt-5",
+          model: "gpt-5-nano",
           promptTemplate: "Normalize the received sub-workflow instruction",
           variables: {},
           argumentsTemplate: { routed: { message: "" } },

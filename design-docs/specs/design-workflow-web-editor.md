@@ -17,6 +17,8 @@ Current-state note:
 - The browser workflow editor is served as a built frontend from `ui/dist/`.
 - `oyakata serve` no longer embeds or maintains a second inline browser implementation inside the Bun server.
 - The checked-in UI implementation is SolidJS-based today, and the server/API boundary remains framework-agnostic at the `ui/dist/` asset contract.
+- Browser workflow-definition, execution, and session flows now use `/graphql`; `/api/ui-config` remains only as bootstrap metadata.
+- Legacy browser REST routes such as `/api/workflows*`, `/api/workflow-executions*`, and `/api/sessions*` are no longer served.
 
 ## Goals
 
@@ -40,7 +42,8 @@ Current-state note:
 3. User edits:
 
 - Graph nodes/edges and conditions
-- Node payload (`executionBackend`, `model`, `promptTemplate`, `variables`, optional `timeoutMs`)
+- Workflow defaults (`maxLoopIterations`, `nodeTimeoutMs`, and optional `containerRuntime`)
+- Node payload (`nodeType`, agent backend/model/prompt fields, `variables`, command/container settings, optional `durability`, and optional `timeoutMs`)
 - Vertical sequence metadata (`order`)
 - Structural sub-workflow metadata (`subWorkflows[].block.type`, and `block.loopId` for loop bodies)
 
@@ -53,9 +56,9 @@ Current-state note:
 ### Workflow Execution
 
 1. User clicks Run in browser.
-2. UI calls execute endpoint with optional runtime variable overrides.
+2. UI calls the GraphQL `executeWorkflow` mutation with optional runtime variable overrides.
 3. Server creates session and starts engine.
-4. UI polls session API for node progress and terminal status.
+4. UI polls GraphQL `workflowExecutions` / `workflowExecution` queries for node progress and terminal status.
 5. User can cancel run from UI.
 
 ## Server Architecture
@@ -63,7 +66,7 @@ Current-state note:
 Single-process local runtime:
 
 - Static asset serving for the built browser app from `ui/dist/`
-- JSON API for workflow and session operations
+- GraphQL control plane for workflow-definition, execution, and session operations
 - Shared workflow validation and execution services used by CLI commands
 - UI bootstrap/config endpoint (`GET /api/ui-config`) for fixed-workflow, read-only, and no-exec mode flags
 - Explicit unavailable response when `ui/dist/` is absent
@@ -74,39 +77,44 @@ Data safety:
 - Revision check on update (`revision` or equivalent hash/version)
 - Validation before save commit
 
-## API Contract (v1)
+## Browser Control-Plane Contract
 
-### Workflow APIs
+### Bootstrap Endpoint
 
-- `GET /api/workflows`
-  - Returns names and basic metadata.
-- `GET /api/workflows/:name`
+- `GET /api/ui-config`
+  - Returns bootstrap/config state such as fixed-workflow, read-only, no-exec, and built-frontend mode metadata.
+
+### GraphQL Queries and Mutations
+
+- `query workflows`
+  - Returns workflow names for the picker.
+- `query workflowDefinition(workflowName)`
   - Returns normalized workflow data and current revision.
-- `PUT /api/workflows/:name`
-  - Request: full normalized workflow payload + expected revision.
-  - Response: success + new revision; conflict if stale.
-- `POST /api/workflows/:name/validate`
-  - Response: structured validation errors/warnings.
+- `mutation createWorkflowDefinition(input)`
+  - Creates a new workflow bundle and returns the normalized workflow payload.
+- `mutation saveWorkflowDefinition(input)`
+  - Saves the normalized workflow payload with an expected revision and returns either success or revision-conflict metadata.
+- `mutation validateWorkflowDefinition(input)`
+  - Returns structured validation errors and warnings.
+- `query workflowExecutions(first)`
+  - Returns workflow execution/session summary items for the browser execution list.
+- `query workflowExecution(workflowExecutionId)`
+  - Returns execution/session detail including node progress and terminal status.
+- `mutation executeWorkflow(input)`
+  - Starts a workflow execution. The response keeps `workflowExecutionId` as canonical and may still include `sessionId` as a compatibility alias through `2026-09-30`.
+- `mutation cancelWorkflowExecution(input)`
+  - Requests cancellation for an active workflow execution.
 
-### Execution APIs
+Route-removal note:
 
-- `POST /api/workflows/:name/execute`
-  - Request: optional runtime variable overrides and limits.
-  - Response: `workflowExecutionId` (canonical) and `sessionId` (compatibility alias through `2026-09-30`).
-- `GET /api/workflow-executions/:workflowExecutionId`
-  - Response: status, active node, completed nodes, branch/loop counters, failures.
-- `POST /api/workflow-executions/:workflowExecutionId/cancel`
-  - Response: cancellation accepted/ignored (already terminal).
-- Legacy compatibility through `2026-09-30`:
-  - `GET /api/sessions/:sessionId` (alias to `GET /api/workflow-executions/:workflowExecutionId`)
-  - `POST /api/sessions/:sessionId/cancel` (alias to `POST /api/workflow-executions/:workflowExecutionId/cancel`)
+- The served browser surface no longer provides workflow/session REST routes under `/api/workflows*`, `/api/workflow-executions*`, or `/api/sessions*`.
 
 ## Browser UI Design
 
 ### Migration Strategy
 
 1. Introduce a frontend asset boundary in `oyakata serve`.
-2. Keep the frontend under `ui/` as a standalone app that consumes the existing JSON API.
+2. Keep the frontend under `ui/` as a standalone app that consumes the GraphQL control plane plus `/api/ui-config` bootstrap metadata.
 3. Port browser editor capabilities in slices:
 
 - bootstrap/config + workflow list/loading
@@ -148,6 +156,7 @@ Supporting migration refactoring references:
 - Vertical workflow list (top-to-bottom) with card-based node rendering
 - Property panel for selected node/edge/sequence row
 - Workflow defaults panel
+- Node-type-aware payload editing for `agent`, `command`, and `container` nodes
 - Save/validate controls
 
 ### Vertical Interaction Model

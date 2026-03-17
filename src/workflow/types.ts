@@ -29,6 +29,7 @@ export interface CompletionRule {
 export interface WorkflowDefaults {
   readonly maxLoopIterations: number;
   readonly nodeTimeoutMs: number;
+  readonly containerRuntime?: ContainerRuntimeDefaults;
 }
 
 export interface WorkflowPrompts {
@@ -158,38 +159,106 @@ export interface NodeOutputContract {
   readonly maxValidationAttempts?: number;
 }
 
+export type NodeType = "agent" | "command" | "container";
+
 export type NodeSessionMode = "new" | "reuse";
 
 export interface NodeSessionPolicy {
   readonly mode: NodeSessionMode;
 }
 
-export interface RuntimeIsolationBuild {
+export type ContainerRunnerKind =
+  | "podman"
+  | "docker"
+  | "nerdctl"
+  | "apple-container";
+
+export interface ContainerRuntimeDefaults {
+  readonly runnerKind?: ContainerRunnerKind;
+  readonly runnerPath?: string;
+}
+
+export interface CommandExecution {
+  readonly scriptPath: string;
+  readonly argvTemplate?: readonly string[];
+  readonly envTemplate?: Readonly<Record<string, string>>;
+  readonly workingDirectory?: string;
+}
+
+export interface ContainerBuild {
   readonly contextPath: string;
+  readonly containerfilePath?: string;
   readonly dockerfilePath?: string;
   readonly target?: string;
 }
 
-export interface RuntimeIsolation {
-  readonly mode: "host" | "podman";
+export interface ContainerWorkspace {
+  readonly mode?: "none" | "ephemeral";
+  readonly mountPath?: string;
+}
+
+export interface ContainerResources {
+  readonly cpuMax?: number;
+  readonly memoryMaxMb?: number;
+  readonly pidsMax?: number;
+}
+
+export interface ContainerExecution {
+  readonly runnerKind?: ContainerRunnerKind;
+  readonly runnerPath?: string;
   readonly image?: string;
-  readonly build?: RuntimeIsolationBuild;
+  readonly build?: ContainerBuild;
+  readonly entrypoint?: readonly string[];
+  readonly argsTemplate?: readonly string[];
+  readonly envTemplate?: Readonly<Record<string, string>>;
+  readonly workingDirectory?: string;
+  readonly workspace?: ContainerWorkspace;
+  readonly resources?: ContainerResources;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface NodeDurability {
+  readonly mode: "disabled" | "node-persistent";
+  readonly mountPath?: string;
 }
 
 export interface NodePayload {
   readonly id: string;
-  readonly model: string;
+  readonly nodeType?: NodeType;
+  readonly model?: string;
   readonly executionBackend?: NodeExecutionBackend;
   readonly sessionPolicy?: NodeSessionPolicy;
-  readonly promptTemplate: string;
+  readonly promptTemplate?: string;
   readonly promptTemplateFile?: string;
   readonly variables: Readonly<Record<string, unknown>>;
+  readonly command?: CommandExecution;
+  readonly container?: ContainerExecution;
+  readonly durability?: NodeDurability;
   readonly argumentsTemplate?: Readonly<Record<string, unknown>>;
   readonly argumentBindings?: readonly ArgumentBinding[];
   readonly templateEngine?: string;
   readonly timeoutMs?: number;
-  readonly runtimeIsolation?: RuntimeIsolation;
   readonly output?: NodeOutputContract;
+}
+
+export interface AgentNodePayload extends NodePayload {
+  readonly nodeType?: "agent";
+  readonly model: string;
+  readonly promptTemplate: string;
+}
+
+export function asAgentNodePayload(node: NodePayload): AgentNodePayload | null {
+  if ((node.nodeType ?? "agent") !== "agent") {
+    return null;
+  }
+  if (
+    typeof node.model !== "string" ||
+    node.model.length === 0 ||
+    typeof node.promptTemplate !== "string"
+  ) {
+    return null;
+  }
+  return node as AgentNodePayload;
 }
 
 export interface VisNode {
@@ -231,6 +300,7 @@ export interface EffectiveRoots {
 
 export const DEFAULT_MAX_LOOP_ITERATIONS = 3;
 export const DEFAULT_NODE_TIMEOUT_MS = 120000;
+export const DEFAULT_CONTAINER_RUNNER_KIND: ContainerRunnerKind = "podman";
 export const DEFAULT_WORKFLOW_ROOT = "./.oyakata";
 export const DEFAULT_ROOT_DATA_DIR = "./.oyakata-datas";
 export const DEFAULT_RUNTIME_ROOT = DEFAULT_ROOT_DATA_DIR;

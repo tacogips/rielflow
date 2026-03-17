@@ -14,6 +14,7 @@ import type {
   WorkflowListResponse,
   WorkflowResponse,
 } from "../../../src/shared/ui-contract";
+import type { ValidationIssue } from "../../../src/workflow/types";
 import type { EditorWorkflowBundle } from "./editor-workflow";
 
 interface GraphqlErrorResponse {
@@ -44,7 +45,10 @@ interface CreateWorkflowDefinitionGraphqlData {
 }
 
 interface SaveWorkflowDefinitionGraphqlData {
-  readonly saveWorkflowDefinition: SaveWorkflowResponse & ErrorResponse;
+  readonly saveWorkflowDefinition: SaveWorkflowResponse &
+    ErrorResponse & {
+      readonly issues?: readonly ValidationIssue[];
+    };
 }
 
 interface ValidateWorkflowDefinitionGraphqlData {
@@ -54,7 +58,10 @@ interface ValidateWorkflowDefinitionGraphqlData {
 interface WorkflowExecutionGraphqlData {
   readonly workflowExecution: {
     readonly workflowExecutionId: string;
-    readonly session: Omit<WorkflowExecutionStateResponse, "workflowExecutionId">;
+    readonly session: Omit<
+      WorkflowExecutionStateResponse,
+      "workflowExecutionId"
+    >;
   } | null;
 }
 
@@ -156,6 +163,7 @@ const SAVE_WORKFLOW_DEFINITION_MUTATION = `
       revision
       error
       currentRevision
+      issues
     }
   }
 `;
@@ -233,6 +241,16 @@ export class WorkflowRevisionConflictError extends Error {
   }
 }
 
+export class WorkflowSaveValidationError extends Error {
+  readonly issues: readonly ValidationIssue[];
+
+  constructor(message: string, issues: readonly ValidationIssue[]) {
+    super(message);
+    this.name = "WorkflowSaveValidationError";
+    this.issues = issues;
+  }
+}
+
 async function readJsonResponse<T>(
   response: Response,
 ): Promise<T & ErrorResponse> {
@@ -294,9 +312,11 @@ export function loadConfig(): Promise<UiConfigResponse> {
 }
 
 export function listWorkflows(): Promise<WorkflowListResponse> {
-  return fetchGraphqlData<WorkflowsGraphqlData>(WORKFLOWS_QUERY).then((data) => ({
-    workflows: data.workflows,
-  }));
+  return fetchGraphqlData<WorkflowsGraphqlData>(WORKFLOWS_QUERY).then(
+    (data) => ({
+      workflows: data.workflows,
+    }),
+  );
 }
 
 export function loadWorkflow(workflowName: string): Promise<WorkflowResponse> {
@@ -363,6 +383,9 @@ export async function saveWorkflowBundle(input: {
     throw new WorkflowRevisionConflictError(payload.currentRevision);
   }
   if (typeof payload.error === "string") {
+    if (Array.isArray(payload.issues) && payload.issues.length > 0) {
+      throw new WorkflowSaveValidationError(payload.error, payload.issues);
+    }
     throw new Error(payload.error);
   }
   if (typeof payload.revision !== "string") {
@@ -414,7 +437,9 @@ export function executeWorkflow(
         ...(request.mockScenario === undefined
           ? {}
           : { mockScenario: request.mockScenario }),
-        ...(request.maxSteps === undefined ? {} : { maxSteps: request.maxSteps }),
+        ...(request.maxSteps === undefined
+          ? {}
+          : { maxSteps: request.maxSteps }),
         ...(request.maxLoopIterations === undefined
           ? {}
           : { maxLoopIterations: request.maxLoopIterations }),

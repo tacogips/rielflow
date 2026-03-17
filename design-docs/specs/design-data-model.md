@@ -36,6 +36,7 @@ Scope:
 | `workflowType` | string | No | `single` or `orchestrate`; default `orchestrate` |
 | `defaults.maxLoopIterations` | number | Yes | Initial default: `3` |
 | `defaults.nodeTimeoutMs` | number | Yes | Initial default: `120000` |
+| `defaults.containerRuntime` | object | No | Workflow-wide container runner defaults; initial `runnerKind = "podman"` |
 | `managerNodeId` | string | Yes | Must reference the root `oyakata` manager node id (`kind: "root-manager"`) |
 | `subWorkflows` | array of `SubWorkflowRef` | Yes | Node sequence units and callable workflow references |
 | `nodeGroups` | array of `NodeGroup` | No | Concurrent execution groups |
@@ -131,6 +132,10 @@ Block semantics:
 - `when: string` (expression name or `always`)
 - `priority?: number` (optional metadata only; fan-out still applies)
 
+`ContainerRuntimeDefaults`:
+- `runnerKind?: "podman" | "docker" | "nerdctl" | "apple-container"` (defaults to `podman`)
+- `runnerPath?: string`
+
 `NodeGroup`:
 - `id: string`
 - `executionMode: "concurrent"`
@@ -156,23 +161,25 @@ Block semantics:
 | Field | Type | Required | Notes |
 |------|------|----------|-------|
 | `id` | string | Yes | Must match workflow node id |
-| `nodeType` | string | No | `agent` or `command`; default `agent` |
+| `nodeType` | string | No | `agent`, `command`, or `container`; default `agent` |
 | `executionBackend` | string | No | Canonical execution interface identifier such as `codex-agent`, `claude-code-agent`, `official/openai-sdk`, or `official/anthropic-sdk` |
-| `model` | string | Yes | Provider or backend-specific model name such as `gpt-5` or `claude-sonnet-4-5` |
-| `promptTemplate` | string | Yes* | Render template; may be resolved from `promptTemplateFile` during workflow load |
+| `model` | string | No | Required when `nodeType = "agent"`; provider or backend-specific model name such as `gpt-5` or `claude-sonnet-4-5` |
+| `promptTemplate` | string | No* | Required when `nodeType = "agent"`; may be resolved from `promptTemplateFile` during workflow load |
 | `promptTemplateFile` | string | No | Workflow-relative path to a prompt source file such as `prompts/<node-id>.md` |
 | `variables` | object | Yes | Template bindings |
 | `command` | object | No | Required when `nodeType = "command"` |
+| `container` | object | No | Required when `nodeType = "container"` |
+| `durability` | object | No | Node-level durable storage policy; currently meaningful for `container` nodes |
 | `argumentsTemplate` | object | No | Structured arguments skeleton to pass to skill/tool adapters |
 | `argumentBindings` | array of `ArgumentBinding` | No | Runtime mapping rules for complex input assembly |
 | `templateEngine` | string | No | Default `mustache`; logic-heavy engines are out of scope |
-| `runtimeIsolation` | object | No | Host or Podman execution contract |
 | `timeoutMs` | number | No | Overrides workflow default timeout |
 
 `*` Authoring rule:
-- Disk-backed workflow definitions may omit inline `promptTemplate` and provide `promptTemplateFile` instead.
-- After workflow load, the normalized runtime node payload must always contain the effective `promptTemplate` string.
+- `agent` payloads may omit inline `promptTemplate` and provide `promptTemplateFile` instead.
+- After workflow load, normalized `agent` payloads contain the effective `promptTemplate` string.
 - `promptTemplateFile` remains on the normalized payload as provenance and authoring metadata.
+- `command` and `container` payloads do not require prompt fields unless a later execution mode explicitly adopts them.
 
 Legacy read-compatible aliases:
 - `prompt` -> `promptTemplate`
@@ -196,17 +203,48 @@ Legacy compatibility mode:
 - `envTemplate?: Record<string, string>`
 - `workingDirectory?: string`
 
-`RuntimeIsolation`:
-- `mode: "host" | "podman"`
-- `image?: string` (required for `podman`)
-- `workspaceMountMode?: "none" | "read-only" | "read-write"`
-- `extraMounts?: RuntimeIsolationMount[]`
-- `futureAgentIsolationReserved?: boolean`
+`ContainerExecution`:
+- `runnerKind?: "podman" | "docker" | "nerdctl" | "apple-container"` (falls back to workflow defaults, then to `podman`)
+- `runnerPath?: string`
+- `image?: string` (mutually exclusive with `build`)
+- `build?: ContainerBuild` (mutually exclusive with `image`)
+- `entrypoint?: string[]`
+- `argsTemplate?: string[]`
+- `envTemplate?: Record<string, string>`
+- `workingDirectory?: string`
+- `workspace?: ContainerWorkspace`
+- `resources?: ContainerResources`
+- `networkPolicy?: "disabled" | "egress-allowed"`
 
-`RuntimeIsolationMount`:
-- `hostPath: string`
-- `containerPath: string`
-- `readOnly?: boolean`
+`ContainerBuild`:
+- `contextPath: string` (workflow-relative path without `.` or `..` segments)
+- `containerfilePath?: string` (workflow-relative path; must not target canonical workflow definition files)
+- `dockerfilePath?: string` (legacy alias for `containerfilePath`)
+- `target?: string`
+
+`ContainerWorkspace`:
+- `mode?: "none" | "ephemeral"`
+- `mountPath?: string` (defaults to `/workspace`)
+
+`ContainerResources`:
+- `cpuMax?: number`
+- `memoryMaxMb?: number`
+- `pidsMax?: number`
+
+`NodeDurability`:
+- `mode: "disabled" | "node-persistent"`
+- `mountPath?: string` (defaults to `/durable` when `mode = "node-persistent"`)
+
+Current runtime behavior:
+
+- `container` nodes are the only nodes that use `container` execution metadata.
+- Exactly one image source must be declared: `container.image` or `container.build`.
+- file inputs for `container` nodes are delivered only through inbox-visible paths under `/mailbox/inbox`
+- `stdout` and `stderr` are execution logs, not workflow output channels
+- accepted workflow output is runtime-promoted from staged files under `/mailbox/outbox`
+- `durability.mode = "node-persistent"` indicates that the runtime should mount a writable host-backed directory into the container at `durability.mountPath` or `/durable`
+- the durable host path is `{artifact-root}/{workflow_id}/durable/{node_id}/`
+- The runtime currently does not execute container nodes yet; the design defines the authoring and validation contract for a future executor.
 
 ### workflow-vis.json
 
@@ -267,19 +305,21 @@ These are normalized in memory after file loading and validation.
 
 - `maxLoopIterations: number`
 - `nodeTimeoutMs: number`
+- `containerRuntime?: ContainerRuntimeDefaults`
 
 ### WorkflowNode
 
 - `id: NodeId`
 - `kind: "task" | "branch-judge" | "loop-judge" | "root-manager" | "sub-oyakata-manager" | "input" | "output"`
-- `nodeType: "agent" | "command"`
+- `nodeType: "agent" | "command" | "container"`
 - `executionBackend?: "codex-agent" | "claude-code-agent" | "official/openai-sdk" | "official/anthropic-sdk"`
-- `model: string`
-- `promptTemplate: string`
+- `model?: string` (`agent` nodes require it)
+- `promptTemplate?: string` (`agent` nodes require it directly or via `promptTemplateFile`)
 - `promptTemplateFile?: string`
 - `variables: Record<string, unknown>`
 - `command?: CommandExecution`
-- `runtimeIsolation: RuntimeIsolation`
+- `container?: ContainerExecution`
+- `durability?: NodeDurability`
 - `timeoutMs: number` (effective timeout after default merge)
 - `completion: CompletionRule | null` (null means auto-complete)
 
@@ -456,10 +496,22 @@ Prompt-source invariants:
 - Branch mode is always fan-out.
 - Effective timeout exists for every executable node (node override or default).
 - Loop execution must be bounded (explicit `loops` config or global default).
-- `nodeType` defaults to `agent`; `agent` and `command` are the only valid authored values.
+- `nodeType` defaults to `agent`; `agent`, `command`, and `container` are the valid authored values.
+- `agent` nodes must define `model`.
+- `agent` nodes must define inline `promptTemplate` or a resolvable `promptTemplateFile`.
 - `command` nodes must define `command.scriptPath`.
 - `command.scriptPath` and `command.workingDirectory` must remain inside the workflow directory.
-- `runtimeIsolation.mode = "podman"` currently requires `nodeType = "command"`.
+- `container` nodes must define `container`.
+- `container.image` and `container.build` are mutually exclusive, and one is required.
+- `container.build.containerfilePath` and legacy `container.build.dockerfilePath` must remain inside the workflow directory and must not target canonical workflow definition files.
+- `workflow.defaults.containerRuntime.runnerKind` defaults to `podman`.
+- `container.networkPolicy`, when present, must be `disabled` or `egress-allowed`.
+- `container.workspace.mountPath`, when present, must be an absolute container path.
+- `container.resources.cpuMax`, `memoryMaxMb`, and `pidsMax`, when present, must be positive.
+- `durability.mode`, when present, must be `disabled` or `node-persistent`.
+- `durability.mountPath`, when present, must be an absolute container path.
+- `durability` is currently valid only for `container` nodes.
+- container-node file references exposed to workers must resolve under `/mailbox/inbox`; no separate arbitrary input-file mount mechanism exists in v1.
 - Every `nodeGroups[]` entry with `executionMode = "concurrent"` must have at least two members.
 - Every `nodeGroups[].members[]` entry must reference an existing node id or sub-workflow id.
 - Every `single` workflow must keep orchestration local to the root manager and must not depend on `nodeGroups` or inline child execution scopes for its main path.
@@ -488,11 +540,13 @@ Before approving a workflow model:
 
 3. Node runtime quality
 - `executionBackend` and `model` are not conflated in newly authored nodes.
-- `nodeType` correctly distinguishes agent execution from command execution.
+- `nodeType` correctly distinguishes agent execution, command execution, and opaque container execution.
 - `promptTemplate` is understandable and deterministic.
 - `variables` do not contain missing placeholders.
 - Command nodes receive only the intended inbox-derived argv/env values.
-- Podman-isolated nodes mount only the intended mailbox/workspace surfaces.
+- Container nodes declare the intended future image/build metadata and runner selection clearly, and current runtime behavior fails explicitly instead of silently falling back to host execution.
+- Container nodes use inbox-only file input, runtime-owned output publication, and explicit resource/network policy appropriate to their task.
+- Container nodes that need workload-managed persistence use explicit `durability` rather than relying on execution-artifact paths or backend session-policy semantics.
 - Output handoff to downstream nodes is traceable via execution artifact references.
 
 4. Safety controls

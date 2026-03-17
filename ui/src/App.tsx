@@ -1,6 +1,12 @@
 import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
 
-import { toErrorMessage, workflowBundleDirty } from "./lib/editor-support";
+import { WorkflowSaveValidationError } from "./lib/api-client";
+import {
+  combinedValidationIssues,
+  toErrorMessage,
+  validationSummaryFromIssues,
+  workflowBundleDirty,
+} from "./lib/editor-support";
 import {
   loadEditorAppShellData,
   type EditorAppShellData,
@@ -19,8 +25,11 @@ import {
   updateEdgeFieldValue,
   updateNodeCompletionValue,
   updateNodeKindValue,
+  updateNodePayloadObjectValue,
   updateNodePayloadStringValue,
+  updateNodePayloadTypeValue,
   updateNodeTimeoutValue,
+  updateWorkflowContainerRuntimeValue,
   updateWorkflowDefaultValue,
   updateWorkflowDescriptionValue,
   updateWorkflowManagerNodeValue,
@@ -63,6 +72,7 @@ import "./styles/editor-ui.css";
 import type {
   CompletionType,
   NodeKind,
+  NodeType,
   SubWorkflowBlockType,
   SubWorkflowInputSourceType,
   ValidationIssue,
@@ -507,6 +517,12 @@ export default function App(): JSX.Element {
     );
   }
 
+  function updateContainerRuntime(value: string): void {
+    applyWorkflowMutation(
+      updateWorkflowContainerRuntimeValue(editableBundleForMutation(), value),
+    );
+  }
+
   function updateManagerNode(value: string): void {
     applyWorkflowMutation(
       updateWorkflowManagerNodeValue(editableBundleForMutation(), value),
@@ -534,6 +550,28 @@ export default function App(): JSX.Element {
   ): void {
     applyWorkflowMutation(
       updateNodePayloadStringValue(
+        appData()?.workflowState.selectedNodePayload ?? null,
+        field,
+        value,
+      ),
+    );
+  }
+
+  function updateNodeType(value: NodeType): void {
+    applyWorkflowMutation(
+      updateNodePayloadTypeValue(
+        appData()?.workflowState.selectedNodePayload ?? null,
+        value,
+      ),
+    );
+  }
+
+  function updateNodePayloadObject(
+    field: "command" | "container" | "durability",
+    value: string,
+  ): void {
+    applyWorkflowMutation(
+      updateNodePayloadObjectValue(
         appData()?.workflowState.selectedNodePayload ?? null,
         field,
         value,
@@ -834,6 +872,16 @@ export default function App(): JSX.Element {
       });
       setInfoMessage(nextState.infoMessage);
     } catch (error: unknown) {
+      if (error instanceof WorkflowSaveValidationError) {
+        const nextValidationIssues = combinedValidationIssues({
+          valid: false,
+          issues: error.issues,
+        });
+        setValidationIssues(nextValidationIssues);
+        setValidationSummary(
+          validationSummaryFromIssues(false, nextValidationIssues),
+        );
+      }
       setInfoMessage("");
       setErrorMessage(toErrorMessage(error));
     } finally {
@@ -922,11 +970,14 @@ export default function App(): JSX.Element {
           onNewNodeKindChange={setNewNodeKind}
           onUpdateDescription={updateDescription}
           onUpdateDefaultNumber={updateDefaultNumber}
+          onUpdateContainerRuntime={updateContainerRuntime}
           onUpdateManagerNode={updateManagerNode}
           onAddNode={addNode}
           onUpdateNodeKind={updateNodeKind}
           onUpdateNodeCompletion={updateNodeCompletion}
           onUpdateNodePayloadString={updateNodePayloadString}
+          onUpdateNodeType={updateNodeType}
+          onUpdateNodePayloadObject={updateNodePayloadObject}
           onUpdateNodeTimeout={updateNodeTimeout}
           onSyncVariablesText={syncVariablesText}
           onSetSelectedNode={setSelectedNode}

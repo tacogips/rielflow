@@ -1,7 +1,7 @@
 {
   "id": "implement",
   "executionBackend": "codex-agent",
-  "model": "gpt-5",
+  "model": "gpt-5-nano",
   "sessionPolicy": {
     "mode": "reuse"
   },

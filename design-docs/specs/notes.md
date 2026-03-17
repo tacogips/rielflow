@@ -58,10 +58,10 @@ Implicit transitions are avoided.
 - Timeout: each node can define execution timeout, with workflow-level default fallback.
 - Conversation handoff: `oyakata` routes by explicit `OutputRef` (`workflowExecutionId`, `outputNodeId`, `nodeExecId`, and optional `subWorkflowId` for sub-workflow outputs) instead of implicit latest-output inference.
 - Node mailbox transport: messages are persisted as hierarchical manager-routed file mailboxes with per-workflow-execution `communicationId` allocation owned by the root workflow manager. The parent workflow manager writes only to the recipient sub-workflow manager inbox, and the recipient sub-workflow manager writes only to nodes inside that sub-workflow (validated via `subWorkflows[].nodeIds`). A re-executed/resubmitted send always allocates a new `communicationId`; delivery retries for an already-created send keep the same `communicationId` and advance `deliveryAttemptId` (and optional `agentSessionId`). See `design-docs/specs/design-node-mailbox.md`.
-- GraphQL migration direction: GraphQL is the canonical control-plane schema during migration for execution, communication inspection/replay, and manager send operations. CLI may remain as a thin client surface over GraphQL, while existing REST editor endpoints remain active until migrated. See `design-docs/specs/design-graphql-manager-control-plane.md`.
+- GraphQL control-plane direction: GraphQL is now the canonical served control-plane schema for execution, communication inspection/replay, manager send operations, and browser workflow/session flows. CLI may remain as a thin client surface over GraphQL, while `/api/ui-config` remains only as bootstrap metadata outside `/graphql`. See `design-docs/specs/design-graphql-manager-control-plane.md`.
 - Manager control-plane separation: a manager-issued GraphQL manager-message mutation invoked through `oyakata gql` is not itself a mailbox communication. It is a scoped control-plane request that may cause new mailbox communications, retries, planner-state changes, or node execution requests.
 - Manager-message provenance: manager-authored mailbox sends now use discriminated `payloadRef` provenance so node-output-backed and manager-message-backed communications stay replay/retry compatible under one durable artifact model.
-- File/image reference portability: GraphQL must use data-root-relative file references resolved under `OYAKATA_ROOT_DATA_DIR`, never host absolute paths. This is required for future Podman/container node execution with bind-mounted or synchronized data volumes.
+- File/image reference portability: GraphQL must use data-root-relative file references resolved under `OYAKATA_ROOT_DATA_DIR`, never host absolute paths. This is required for future container node execution with bind-mounted or synchronized data volumes regardless of whether the selected runner is Podman, Docker, nerdctl, or Apple container.
 - Manager attachment scope: manager-scoped GraphQL attachments are not just root-data-relative; they must stay inside the authenticated execution's `files/{workflowId}/{workflowExecutionId}/...` namespace so manager messages cannot read unrelated workflow artifacts or session files.
 - Root-data migration note: `OYAKATA_ROOT_DATA_DIR` is the canonical setting for derived artifact/session/file paths, while `OYAKATA_RUNTIME_ROOT` remains an implementation compatibility alias until older flows are migrated.
 - `oyakata gql` variables contract: GraphQL variables are passed through `--variables`, which accepts inline JSON or `@path/to/variables.json`. First-iteration attachment handling assumes files are pre-placed under the Oyakata root data directory; no upload mutation is introduced yet.
@@ -73,7 +73,7 @@ Implicit transitions are avoided.
 - Manager control-mode exclusivity: each manager execution persists one authoritative control source, so `sendManagerMessage` and payload `managerControl` cannot both drive the same manager step; the control-mode claim itself must be atomic at the storage boundary.
 - Node output ingestion contract: ordinary node completion is runtime-captured in the execution path itself, not discovered by periodic scanning for `output.json` files. File watching is only an adapter-local fallback for special external backends and must still feed results back into the runtime-owned completion path.
 - Timeout inspection fallback: if the normal transition/notification path fails, Oyakata still needs a deterministic inspection path for node `status`, published `output.json`, `meta.json`, and timeout/failure messages via GraphQL `nodeExecution(...)` or internal runtime-db/session helpers.
-- Podman image-source contract: future Podman-isolated nodes may declare either a prebuilt `image` or a workflow-local `build` block with `contextPath` and optional `dockerfilePath`. The additive authoring and validation rules are specified in `design-docs/specs/design-podman-runtime-isolation-build-contract.md`.
+- Container runtime contract: future container nodes may declare either a prebuilt `image` or a workflow-local `build` block with `contextPath` and optional `containerfilePath`/legacy `dockerfilePath`, plus workflow-level runner defaults. The additive authoring and validation rules are specified in `design-docs/specs/design-container-runtime-contract.md`.
 
 ### Completion-First Progression
 
@@ -94,7 +94,7 @@ This supports quality gates in collaborative writing workflows.
   - expose `oyakata gql` as the manager tool client over that control plane,
   - add first-class communication inspection and replay services,
   - keep CLI only as a thin GraphQL client surface,
-  - keep current REST editor/workflow-definition endpoints until those browser surfaces migrate.
+  - keep browser workflow-definition, execution, and session flows on GraphQL rather than reintroducing parallel REST routes.
 
 ### Migration Rule
 
@@ -122,4 +122,4 @@ This supports quality gates in collaborative writing workflows.
 - Frontend center-panel component extraction is tracked in `design-docs/specs/design-refactoring-editor-main-panel-component.md`.
 - Server API request-parsing helper extraction is tracked in `design-docs/specs/design-refactoring-server-api-request-parsing.md`.
 - Server UI asset-serving helper extraction is tracked in `design-docs/specs/design-refactoring-server-ui-asset-serving.md`.
-- SolidJS migration-preparation also requires framework-aware UI tooling to validate dependency availability explicitly before build/typecheck execution, because the repository can temporarily keep a checked-in Svelte entrypoint while SolidJS remains the active architectural target.
+- Frontend verification still requires framework-aware UI tooling to validate dependency availability explicitly before build/typecheck execution, even though the checked-in browser implementation is SolidJS today, because future framework swaps should preserve the same package-root and tooling guarantees.

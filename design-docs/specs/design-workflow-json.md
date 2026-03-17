@@ -64,11 +64,13 @@ Path variable mapping:
 - loop definitions (including loop-judge node references)
 - sub-workflow block typing for ordinary groups, branch blocks, and loop bodies
 - global defaults (including loop limit and node timeout)
+- workflow-level container runtime defaults
 - references to `node-{id}.json`
 
 Initial default values:
 - `defaults.maxLoopIterations = 3`
 - `defaults.nodeTimeoutMs = 120000`
+- `defaults.containerRuntime.runnerKind = "podman"`
 
 Partial conceptual example (not copy-paste ready):
 (illustrative fragment; node list and edge list are intentionally abbreviated for readability.)
@@ -80,7 +82,10 @@ Partial conceptual example (not copy-paste ready):
   "workflowType": "orchestrate",
   "defaults": {
     "maxLoopIterations": 3,
-    "nodeTimeoutMs": 120000
+    "nodeTimeoutMs": 120000,
+    "containerRuntime": {
+      "runnerKind": "podman"
+    }
   },
   "prompts": {
     "oyakataPromptTemplate": "Coordinate {{topic}} end-to-end.",
@@ -167,28 +172,46 @@ Each `node-{id}.json` contains execution payload used at runtime:
 - `id`: stable slug-like identifier matching `^[a-z0-9][a-z0-9-]{1,63}$`
 - `name`: human-readable node name
 - `description`: brief summary of the node's purpose
-- optional `nodeType`: `agent` or `command` (`agent` by default)
+- optional `nodeType`: `agent`, `command`, or `container` (`agent` by default)
 - `executionBackend` (optional canonical interface selector such as `codex-agent`, `claude-code-agent`, `official/openai-sdk`, or `official/anthropic-sdk`; used by `agent` nodes)
-- `model` (required provider or backend-specific model name such as `gpt-5` or `claude-sonnet-4-5`; used by `agent` nodes)
-- `promptTemplate` (used by `agent` nodes and manager nodes)
+- optional `model` (required for `agent` nodes; provider or backend-specific model name such as `gpt-5` or `claude-sonnet-4-5`)
+- optional `promptTemplate` (required for `agent` nodes and manager nodes; omitted for `container` nodes unless a future execution mode explicitly uses it)
 - optional `promptTemplateFile`
 - `variables`
 - optional `command`
   - `scriptPath`: workflow-relative path to the command/script entrypoint
-  - optional `argvTemplate`: array of rendered argv entries; render context includes `{{inbox.*}}`, `{{mailbox.*}}`, and `{{variables.*}}`
+  - optional `argvTemplate`: array of rendered argv entries; render context includes `{{inbox.*}}` and `{{variables.*}}`
   - optional `envTemplate`: string map rendered with the same context
   - optional `workingDirectory`: workflow-relative working directory
   - runtime must execute the rendered argv directly without implicit shell interpolation
-- optional `runtimeIsolation`
-  - `mode: "host" | "podman"` (`host` by default)
+- optional `container`
+  - optional `runnerKind`: `podman` | `docker` | `nerdctl` | `apple-container`
+  - optional `runnerPath`: host path to the runner CLI binary
   - optional `image`
-  - optional `workspaceMountMode: "none" | "read-only" | "read-write"`
-  - optional `extraMounts`
-  - optional `futureAgentIsolationReserved: true` to document author intent for future isolated `agent` support
+  - optional `build`
+    - `contextPath`: workflow-relative build context path
+    - optional `containerfilePath`: workflow-relative Containerfile/Dockerfile path
+    - optional legacy alias `dockerfilePath`
+    - optional `target`
+  - optional `entrypoint`: argv array passed as the container entrypoint override
+  - optional `argsTemplate`: rendered argv array passed after entrypoint/image
+  - optional `envTemplate`: string map rendered with the same context as command nodes
+  - optional `workingDirectory`: working directory inside the container
+  - optional `workspace`
+    - optional `mode`: `none` | `ephemeral` (`ephemeral` by default when present)
+    - optional `mountPath`: container-visible scratch path (`/workspace` by default)
+  - optional `resources`
+    - optional `cpuMax`
+    - optional `memoryMaxMb`
+    - optional `pidsMax`
+  - optional `networkPolicy`: `disabled` | `egress-allowed`
 - optional `sessionPolicy`
   - `mode: "new" | "reuse"`
   - omitted means `new`
   - `reuse` allows repeated executions of the same node to continue one backend-managed session within the same workflow run
+- optional `durability`
+  - `mode`: `disabled` | `node-persistent`
+  - optional `mountPath`: container-visible durable mount path (`/durable` by default)
 - optional `output` contract:
   - must define at least one of `description` or `jsonSchema`
   - `description`
@@ -201,17 +224,51 @@ Execution type policy:
 
 - `agent` nodes call an AI/backend adapter and use `executionBackend`, `model`, prompt rendering, and optional backend session reuse.
 - `command` nodes execute a local command/script and must define `command.scriptPath`.
+- `container` nodes execute an opaque containerized task and must define a `container` block with an image source and optional runner override.
+- `model` and prompt fields are agent-oriented metadata. They are required for `agent` nodes, not for opaque `container` nodes.
+- `durability` is a node-level execution-state policy for container nodes. It allows the containerized workload to persist its own filesystem state across repeated calls of the same workflow/node identity.
 - Structural `kind` in `workflow.json` remains the topology/role classifier (`root-manager`, `sub-oyakata-manager`, `branch-judge`, and so on). Execution flavor is modeled separately by `nodeType` to avoid overloading `kind`.
 - `root-manager` and `sub-oyakata-manager` nodes are still expected to use `nodeType: "agent"` in the current design.
 
-Isolation policy:
+Container runtime policy:
 
-- `runtimeIsolation.mode = "podman"` is currently valid only for `command` nodes.
-- The schema is intentionally node-type-agnostic so `agent` nodes can adopt the same isolation contract later without redesigning the workflow format.
-- When Podman isolation is enabled, the runtime must bind-mount a node-scoped mailbox view into the container:
-  - `/mailbox/inbox` -> host read-only inbox view for that node execution
-  - `/mailbox/outbox` -> host writable outbox staging directory for that node execution
-- The container mailbox mount is not the canonical cross-node communications tree. It is a runtime-prepared node-local view that preserves manager-owned routing rules while still giving the isolated process a filesystem transport boundary.
+- `workflow.json.defaults.containerRuntime` defines workflow-wide container runner defaults.
+- The initial default is `runnerKind = "podman"` when no workflow-level or node-level override is present.
+- `container.runnerKind` and `container.runnerPath` on a node override workflow defaults for that node only.
+- Exactly one image source must be declared for a `container` node: `image` or `build`.
+- `build.contextPath` and optional `build.containerfilePath` must stay workflow-relative and must not target canonical workflow definition files such as `workflow.json`, `workflow-vis.json`, or `node-*.json`.
+- `dockerfilePath` remains a legacy authoring alias, but `containerfilePath` is the canonical field because the runtime may target non-Docker runners.
+- `podman`, `docker`, `nerdctl`, and `apple-container` are runner kinds. Host-side environments such as Colima, OrbStack, and Lima are intentionally not modeled as runner kinds because they sit below or beside the selected runner.
+- `container` nodes do not inspect other nodes' canonical mailbox artifacts directly. They receive only a runtime-prepared execution-local bind mount at `/mailbox`.
+- The execution-local mailbox contract is:
+  - `/mailbox/inbox` mounted read-only
+  - `/mailbox/outbox` mounted read-write
+- File inputs for `container` nodes use no special side channel. They are delivered only through the same inbox contract as other worker nodes.
+- When inbox data references files, those references must resolve within the worker-visible `/mailbox/inbox` tree, for example through structured refs such as `{ "path": "/mailbox/inbox/files/spec.md" }`.
+- `container.workspace`, when enabled, provides a writable scratch mount separate from `/mailbox`; the default mount path is `/workspace`.
+- `durability.mode = "node-persistent"` mounts a writable durable volume into the container. The default container-visible mount path is `/durable`.
+- The durable host path is scoped by workflow and node identity, not by workflow execution:
+  - `{artifact-root}/{workflow_id}/durable/{node_id}/`
+- This makes durable state reusable by later calls of the same `container` node, including later workflow executions of the same workflow.
+- `container.networkPolicy` defines whether the runtime launches the container with networking disabled or normal egress-enabled behavior.
+- `container.resources` expresses runner-normalized CPU, memory, and PID limits; the runtime manager/executor is responsible for mapping those limits onto the selected runner's CLI/API.
+- `durability` is distinct from `sessionPolicy`:
+  - `sessionPolicy` is runtime/backend-managed conversational session reuse
+  - `durability` is workload-managed filesystem persistence inside the container
+- Oyakata managers remain the only components that own routed message creation, delivery, and cross-node mailbox artifact management.
+- The current runtime does not execute container nodes yet; this design only defines schema and validation direction for a future executor.
+- V1 container nodes are one-shot job executions, not long-lived compose/service workloads.
+- Container exit semantics for v1:
+  - exit code `0` means execution reached the output-validation phase
+  - non-zero exit codes fail the node execution
+  - timeout and cancellation are distinct runtime failure classes
+  - exit code `0` with missing or invalid required output still fails the node
+- Container output publication is runtime-owned:
+  - the container may write staged results only under `/mailbox/outbox`
+  - the runtime validates and promotes accepted output into canonical execution artifacts and downstream manager-routed messages
+  - `stdout` and `stderr` are logs, not workflow output channels
+- Retries re-run a `container` node in a fresh container with the same immutable inbox snapshot and a fresh scratch workspace when enabled.
+- When `durability.mode = "node-persistent"` is enabled, retries and later same-node calls reuse the same durable host directory mounted into the fresh container.
 
 Prompt authoring policy:
 
@@ -245,7 +302,7 @@ Effective worker prompt order:
 Template-variable context:
 
 - Workflow-level prompt templates and node-level prompt templates may reference workflow metadata such as `{{workflowId}}`, `{{workflowDescription}}`, `{{nodeId}}`, and `{{nodeKind}}`.
-- Node-level prompt templates may also reference upstream mailbox/inbox context through `{{inbox.*}}` or the equivalent alias `{{mailbox.*}}`.
+- Node-level prompt templates may reference upstream inbox context through `{{inbox.*}}`.
 - The canonical inbox shape includes `{{inbox.count}}`, `{{inbox.hasMessages}}`, `{{inbox.latest.fromNodeId}}`, `{{inbox.latest.output}}`, and `{{inbox.messages}}`.
 
 Example:
@@ -268,6 +325,38 @@ Example:
 }
 ```
 
+Illustrative `container` node example:
+
+```json
+{
+  "id": "reviewer-runtime",
+  "nodeType": "container",
+  "variables": {},
+  "durability": {
+    "mode": "node-persistent",
+    "mountPath": "/durable"
+  },
+  "container": {
+    "image": "ghcr.io/example/reviewer:latest",
+    "entrypoint": ["./entry.sh"],
+    "argsTemplate": ["--inbox-dir", "/mailbox/inbox", "--outbox-dir", "/mailbox/outbox"],
+    "workspace": {
+      "mode": "ephemeral",
+      "mountPath": "/workspace"
+    },
+    "networkPolicy": "disabled",
+    "resources": {
+      "memoryMaxMb": 512,
+      "pidsMax": 64
+    },
+    "envTemplate": {
+      "TASK_ID": "{{variables.taskId}}",
+      "SESSION_HOME": "/durable/session"
+    }
+  }
+}
+```
+
 Example prompt file:
 
 ```md
@@ -282,6 +371,8 @@ Legacy compatibility:
 - Older workflows may omit `executionBackend` and encode `tacogips/codex-agent` or `tacogips/claude-code-agent` directly in `model`.
 - Runtime still accepts that shape, but new workflow authoring must prefer explicit `executionBackend`.
 - Older workflows may omit `workflowType` and `nodeType`; loaders should normalize them to `orchestrate` and `agent`.
+- Older Podman-specific isolation metadata may be normalized into the newer `container` block during migration.
+- Older workflows that do not declare `durability` behave as `durability.mode = "disabled"`.
 
 ## workflow-vis.json
 
@@ -724,9 +815,18 @@ Completion result drives transition decisions.
   - `node-output`
   - `sub-workflow-output`
 - `workflowType = "single"` must not declare execution-time child nodes, inline sub-workflows, or `nodeGroups` on its main path.
-- `nodeType` must be `agent` or `command` when present.
+- `nodeType` must be `agent`, `command`, or `container` when present.
+- `agent` nodes must define `model`.
+- `agent` nodes must define inline `promptTemplate` or a resolvable `promptTemplateFile`.
 - `command` nodes must define a workflow-relative `command.scriptPath` that stays inside the workflow directory.
-- `runtimeIsolation.mode = "podman"` is currently valid only for `command` nodes.
+- `container` nodes must define exactly one image source: `container.image` or `container.build`.
+- `container.runnerKind` defaults from `workflow.json.defaults.containerRuntime.runnerKind`, which defaults to `podman` when omitted.
+- `container.networkPolicy` must be `disabled` or `egress-allowed` when present.
+- `container.workspace.mountPath` defaults to `/workspace` when `container.workspace` is enabled.
+- `container.resources` values must be positive when present.
+- `durability.mode` must be `disabled` or `node-persistent` when present.
+- `durability` is currently valid only for `container` nodes.
+- `durability.mountPath` defaults to `/durable` when `durability.mode = "node-persistent"`.
 - Every `nodeGroup.members[]` entry must reference an existing node or sub-workflow id.
 - Every `nodeGroup` with `executionMode = "concurrent"` must contain at least two members.
 - Every `subWorkflowConversations[].participants[]` entry must reference an existing `subWorkflow.id`.

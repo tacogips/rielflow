@@ -3,7 +3,10 @@ import type { NormalizedWorkflowBundle } from "../../../src/workflow/types";
 import { cloneEditableValue } from "./editor-workflow";
 import {
   updateNodeKindValue,
+  updateNodePayloadObjectValue,
+  updateNodePayloadTypeValue,
   updateNodeTimeoutValue,
+  updateWorkflowContainerRuntimeValue,
   updateWorkflowDefaultValue,
 } from "./editor-field-updates";
 import { parseOptionalInteger } from "./editor-support";
@@ -112,6 +115,66 @@ describe("editor-field-updates", () => {
     expect(() => parseOptionalInteger("25ms", "Max steps")).toThrow(
       "Max steps must be a positive integer.",
     );
+  });
+
+  test("updates optional object-backed workflow and node payload sections", () => {
+    const bundle = makeBundle();
+    const payload = bundle.nodePayloads["worker-1"];
+    if (!payload) {
+      throw new Error("missing payload fixture");
+    }
+
+    expect(
+      updateWorkflowContainerRuntimeValue(
+        bundle,
+        '{\n  "runnerKind": "docker"\n}',
+      ),
+    ).toEqual({ ok: true });
+    expect(bundle.workflow.defaults.containerRuntime).toEqual({
+      runnerKind: "docker",
+    });
+
+    expect(updateNodePayloadTypeValue(payload, "container")).toBe(true);
+    expect(payload.nodeType).toBe("container");
+
+    expect(
+      updateNodePayloadObjectValue(
+        payload,
+        "container",
+        '{\n  "image": "ghcr.io/example/worker:latest"\n}',
+      ),
+    ).toEqual({ ok: true });
+    expect(payload.container).toEqual({
+      image: "ghcr.io/example/worker:latest",
+    });
+
+    expect(
+      updateNodePayloadObjectValue(
+        payload,
+        "durability",
+        '{\n  "mode": "node-persistent"\n}',
+      ),
+    ).toEqual({ ok: true });
+    expect(payload.durability).toEqual({
+      mode: "node-persistent",
+    });
+  });
+
+  test("preserves invalid JSON text by rejecting object-backed updates", () => {
+    const bundle = makeBundle();
+    const payload = bundle.nodePayloads["worker-1"];
+    if (!payload) {
+      throw new Error("missing payload fixture");
+    }
+
+    const result = updateNodePayloadObjectValue(payload, "command", "{");
+
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "Node field 'command' JSON Parse error: JSON Parse error: Expected '}'",
+    });
+    expect(payload.command).toBeUndefined();
   });
 
   test("clears empty node timeout and rejects non-positive values", () => {

@@ -5,10 +5,7 @@ import {
   type AdapterExecutionOutput,
   type NodeAdapter,
 } from "../adapter";
-import type {
-  NodeExecutionBackend,
-  NodePayload,
-} from "../types";
+import type { AgentNodePayload, NodeExecutionBackend } from "../types";
 import { normalizeCliAgentBackend } from "../backend";
 import {
   AnthropicSdkAdapter,
@@ -26,7 +23,7 @@ export interface DispatchingNodeAdapterConfig {
 }
 
 export function resolveNodeExecutionBackend(
-  node: NodePayload,
+  node: AgentNodePayload,
 ): NodeExecutionBackend {
   if (node.executionBackend !== undefined) {
     return node.executionBackend;

@@ -72,7 +72,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "gpt-5",
+      model: "gpt-5-nano",
       executionBackend: "official/openai-sdk",
       promptTemplate: "worker",
       variables: {},
@@ -86,7 +86,7 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.nodePayloads["worker-1"]?.executionBackend).toBe(
       "official/openai-sdk",
     );
-    expect(result.value.nodePayloads["worker-1"]?.model).toBe("gpt-5");
+    expect(result.value.nodePayloads["worker-1"]?.model).toBe("gpt-5-nano");
   });
 
   test("accepts canonical short backend with provider model string", () => {
@@ -216,9 +216,12 @@ describe("validateWorkflowBundle", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.nodePayloads["worker-1"]?.runtimeIsolation).toEqual({
-      mode: "podman",
-      image: "ghcr.io/example/reviewer:latest",
+    expect(result.value.nodePayloads["worker-1"]).toMatchObject({
+      nodeType: "container",
+      container: {
+        runnerKind: "podman",
+        image: "ghcr.io/example/reviewer:latest",
+      },
     });
   });
 
@@ -244,12 +247,47 @@ describe("validateWorkflowBundle", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.nodePayloads["worker-1"]?.runtimeIsolation).toEqual({
-      mode: "podman",
-      build: {
-        contextPath: "containers/reviewer",
-        dockerfilePath: "containers/reviewer/Dockerfile",
-        target: "runtime",
+    expect(result.value.nodePayloads["worker-1"]).toMatchObject({
+      nodeType: "container",
+      container: {
+        runnerKind: "podman",
+        build: {
+          contextPath: "containers/reviewer",
+          dockerfilePath: "containers/reviewer/Dockerfile",
+          target: "runtime",
+        },
+      },
+    });
+  });
+
+  test("accepts authored container nodes without agent-only fields", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      nodeType: "container",
+      variables: {},
+      container: {
+        image: "ghcr.io/example/reviewer:latest",
+      },
+      durability: {
+        mode: "node-persistent",
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.nodePayloads["worker-1"]).toEqual({
+      id: "worker-1",
+      nodeType: "container",
+      variables: {},
+      container: {
+        image: "ghcr.io/example/reviewer:latest",
+      },
+      durability: {
+        mode: "node-persistent",
       },
     });
   });
@@ -475,7 +513,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "gpt-5",
+      model: "gpt-5-nano",
       promptTemplate: "worker",
       variables: {},
     };

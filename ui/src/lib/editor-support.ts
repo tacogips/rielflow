@@ -90,6 +90,19 @@ export function combinedValidationIssues(
   });
 }
 
+export function validationSummaryFromIssues(
+  valid: boolean,
+  validationIssues: readonly ValidationIssue[],
+): string {
+  const warningCount = validationIssues.filter(
+    (issue) => issue.severity === "warning",
+  ).length;
+  const errorCount = validationIssues.length - warningCount;
+  return valid
+    ? `Validation passed${warningCount > 0 ? ` with ${warningCount} warning${warningCount === 1 ? "" : "s"}` : ""}.`
+    : `Validation returned ${errorCount} error${errorCount === 1 ? "" : "s"} and ${warningCount} warning${warningCount === 1 ? "" : "s"}.`;
+}
+
 export function workflowBundleDirty(
   savedBundle:
     | NormalizedWorkflowBundle

@@ -12,7 +12,7 @@ const baseInput: AdapterExecutionInput = {
   nodeExecId: "exec-1",
   node: {
     id: "node-1",
-    model: "gpt-5",
+    model: "gpt-5-nano",
     executionBackend: "official/openai-sdk",
     promptTemplate: "test",
     variables: {},
@@ -49,7 +49,7 @@ describe("OpenAiSdkAdapter", () => {
 
     const output = await adapter.execute(baseInput, baseContext);
     expect(output.provider).toBe("official-openai-sdk");
-    expect(output.model).toBe("gpt-5");
+    expect(output.model).toBe("gpt-5-nano");
     expect(output.payload["text"]).toBe("hello from openai");
     expect(output.payload["outputAttempt"]).toBeUndefined();
     expect(capturedSignal).toBe(baseContext.signal);

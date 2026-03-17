@@ -15,7 +15,7 @@ const baseInput: AdapterExecutionInput = {
   node: {
     id: "node-1",
     executionBackend: "codex-agent",
-    model: "gpt-5",
+    model: "gpt-5-nano",
     promptTemplate: "test",
     variables: {},
   },
@@ -45,7 +45,7 @@ describe("CodexAgentAdapter", () => {
       return new Response(
         JSON.stringify({
           provider: "codex-provider",
-          model: "gpt-5",
+          model: "gpt-5-nano",
           promptText: "hello",
           completionPassed: true,
           when: { always: true },
@@ -74,7 +74,7 @@ describe("CodexAgentAdapter", () => {
       string,
       unknown
     >;
-    expect(body["model"]).toBe("gpt-5");
+    expect(body["model"]).toBe("gpt-5-nano");
     expect(body["workflowExecutionId"]).toBe("sess-1");
     expect(body["nodeExecId"]).toBe("exec-1");
     expect(body["artifactDir"]).toBe("/tmp/node-1/exec-1");
@@ -85,7 +85,7 @@ describe("CodexAgentAdapter", () => {
       return new Response(
         JSON.stringify({
           provider: "codex-provider",
-          model: "gpt-5",
+          model: "gpt-5-nano",
           promptText: "hello",
           completionPassed: true,
           when: { always: true },
@@ -130,7 +130,7 @@ describe("CodexAgentAdapter", () => {
       return new Response(
         JSON.stringify({
           provider: "codex-provider",
-          model: "gpt-5",
+          model: "gpt-5-nano",
           promptText: "hello",
           completionPassed: true,
           when: { always: true },
@@ -202,7 +202,7 @@ describe("CodexAgentAdapter", () => {
       return new Response(
         JSON.stringify({
           provider: "codex-provider",
-          model: "gpt-5",
+          model: "gpt-5-nano",
           promptText: "hello",
           completionPassed: true,
           when: { always: true },
@@ -258,7 +258,7 @@ describe("CodexAgentAdapter", () => {
           new Response(
             JSON.stringify({
               provider: "codex-provider",
-              model: "gpt-5",
+              model: "gpt-5-nano",
               promptText: "hello",
               completionPassed: true,
               when: { always: true },

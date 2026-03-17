@@ -405,7 +405,7 @@ describe("callNode", () => {
     if (result.ok) {
       return;
     }
-    expect(result.error.message).toContain("runtimeIsolation.mode='podman'");
+    expect(result.error.message).toContain("nodeType='container'");
     expect(result.error.message).toContain("not implemented yet");
   });
 });

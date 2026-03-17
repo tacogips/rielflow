@@ -197,14 +197,15 @@ describe("loadWorkflowFromDisk", () => {
     if (!result.ok) {
       return;
     }
-    expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.runtimeIsolation,
-    ).toEqual({
-      mode: "podman",
-      build: {
-        contextPath: "containers/manager",
-        dockerfilePath: "containers/manager/Dockerfile",
-        target: "runtime",
+    expect(result.value.bundle.nodePayloads["oyakata-manager"]).toMatchObject({
+      nodeType: "container",
+      container: {
+        runnerKind: "podman",
+        build: {
+          contextPath: "containers/manager",
+          dockerfilePath: "containers/manager/Dockerfile",
+          target: "runtime",
+        },
       },
     });
   });
@@ -347,7 +348,7 @@ describe("loadWorkflowFromDisk", () => {
       result.value.bundle.nodePayloads["oyakata-manager"]?.executionBackend,
     ).toBe("codex-agent");
     expect(result.value.bundle.nodePayloads["oyakata-manager"]?.model).toBe(
-      "gpt-5",
+      "gpt-5-nano",
     );
     expect(
       result.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplateFile,
@@ -359,7 +360,7 @@ describe("loadWorkflowFromDisk", () => {
       result.value.bundle.nodePayloads["workflow-output"]?.executionBackend,
     ).toBe("codex-agent");
     expect(result.value.bundle.nodePayloads["workflow-output"]?.model).toBe(
-      "gpt-5",
+      "gpt-5-nano",
     );
   });
 

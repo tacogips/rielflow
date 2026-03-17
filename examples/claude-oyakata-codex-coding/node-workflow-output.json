@@ -1,7 +1,7 @@
 {
   "id": "workflow-output",
   "executionBackend": "claude-code-agent",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-haiku-4-5",
   "promptTemplateFile": "prompts/workflow-output.md",
   "variables": {},
   "output": {

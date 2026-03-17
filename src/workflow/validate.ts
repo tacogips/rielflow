@@ -10,18 +10,25 @@ import {
   normalizeNodeExecutionBackend,
 } from "./backend";
 import {
+  DEFAULT_CONTAINER_RUNNER_KIND,
   DEFAULT_MAX_LOOP_ITERATIONS,
   DEFAULT_NODE_TIMEOUT_MS,
   NODE_ID_PATTERN,
   type ArgumentBinding,
+  type CommandExecution,
+  type ContainerBuild,
+  type ContainerExecution,
+  type ContainerRuntimeDefaults,
+  type ContainerRunnerKind,
   type JsonObject,
   type CompletionRule,
   type NodeOutputContract,
+  type NodeDurability,
   type LoopRule,
   type NodeExecutionBackend,
   type NodeKind,
   type NodePayload,
-  type RuntimeIsolation,
+  type NodeType,
   type NodeSessionPolicy,
   type NormalizedWorkflowBundle,
   type SubWorkflowBlock,
@@ -79,6 +86,19 @@ function requiresSeparatedModel(
 
 function isNodeSessionMode(value: unknown): value is NodeSessionPolicy["mode"] {
   return value === "new" || value === "reuse";
+}
+
+function isNodeType(value: unknown): value is NodeType {
+  return value === "agent" || value === "command" || value === "container";
+}
+
+function isContainerRunnerKind(value: unknown): value is ContainerRunnerKind {
+  return (
+    value === "podman" ||
+    value === "docker" ||
+    value === "nerdctl" ||
+    value === "apple-container"
+  );
 }
 
 function makeIssue(
@@ -143,38 +163,389 @@ function readNumberField(
   return value;
 }
 
-function normalizeRuntimeIsolation(
+function isAbsoluteContainerPath(value: string): boolean {
+  return value.startsWith("/");
+}
+
+function normalizeStringArrayField(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
-): RuntimeIsolation | undefined {
+): readonly string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    issues.push(makeIssue("error", path, "must be an array when provided"));
+    return undefined;
+  }
+  const entries: string[] = [];
+  value.forEach((entry, index) => {
+    if (typeof entry !== "string" || entry.length === 0) {
+      issues.push(
+        makeIssue("error", `${path}[${index}]`, "must be a non-empty string"),
+      );
+      return;
+    }
+    entries.push(entry);
+  });
+  return entries;
+}
+
+function normalizeStringMapField(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): Readonly<Record<string, string>> | undefined {
   if (value === undefined) {
     return undefined;
   }
   if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+  const entries: Record<string, string> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (typeof entryValue !== "string") {
+      issues.push(
+        makeIssue("error", `${path}.${key}`, "must be a string when provided"),
+      );
+      continue;
+    }
+    entries[key] = entryValue;
+  }
+  return entries;
+}
+
+function normalizeContainerBuild(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): ContainerBuild | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
     return undefined;
   }
 
-  const allowedKeys = new Set(["mode", "image", "build"]);
+  const allowedKeys = new Set([
+    "contextPath",
+    "containerfilePath",
+    "dockerfilePath",
+    "target",
+  ]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(
         makeIssue(
           "error",
           `${path}.${key}`,
-          "uses an unsupported runtimeIsolation field",
+          "uses an unsupported container build field",
         ),
       );
     }
   }
 
-  const modeRaw = value["mode"];
-  if (modeRaw !== "host" && modeRaw !== "podman") {
+  const contextPath = readStringField(value, "contextPath", path, issues);
+  if (contextPath !== null && !isSafeWorkflowRelativePath(contextPath)) {
     issues.push(
-      makeIssue("error", `${path}.mode`, "must be 'host' or 'podman'"),
+      makeIssue(
+        "error",
+        `${path}.contextPath`,
+        "must be a workflow-relative path without '.' or '..' segments",
+      ),
     );
+  }
+
+  const normalizeBuildPath = (
+    key: "containerfilePath" | "dockerfilePath",
+  ): string | undefined => {
+    const rawValue = value[key];
+    if (rawValue === undefined) {
+      return undefined;
+    }
+    if (typeof rawValue !== "string" || rawValue.length === 0) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "must be a non-empty string when provided",
+        ),
+      );
+      return undefined;
+    }
+    if (!isSafeWorkflowRelativePath(rawValue)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "must be a workflow-relative path without '.' or '..' segments",
+        ),
+      );
+      return undefined;
+    }
+    if (isReservedWorkflowDefinitionPath(rawValue)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "must not target canonical workflow definition files such as workflow.json, workflow-vis.json, or node-*.json",
+        ),
+      );
+      return undefined;
+    }
+    return rawValue;
+  };
+
+  const containerfilePath = normalizeBuildPath("containerfilePath");
+  const dockerfilePath = normalizeBuildPath("dockerfilePath");
+  const targetRaw = value["target"];
+  let target: string | undefined;
+  if (targetRaw !== undefined) {
+    if (typeof targetRaw === "string" && targetRaw.length > 0) {
+      target = targetRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.target`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  if (contextPath === null || !isSafeWorkflowRelativePath(contextPath)) {
     return undefined;
+  }
+
+  return {
+    contextPath,
+    ...(containerfilePath === undefined ? {} : { containerfilePath }),
+    ...(dockerfilePath === undefined ? {} : { dockerfilePath }),
+    ...(target === undefined ? {} : { target }),
+  };
+}
+
+function normalizeContainerRuntimeDefaults(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): ContainerRuntimeDefaults {
+  if (value === undefined) {
+    return { runnerKind: DEFAULT_CONTAINER_RUNNER_KIND };
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return { runnerKind: DEFAULT_CONTAINER_RUNNER_KIND };
+  }
+
+  const allowedKeys = new Set(["runnerKind", "runnerPath"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported container runtime defaults field",
+        ),
+      );
+    }
+  }
+
+  const runnerKindRaw = value["runnerKind"];
+  let runnerKind = DEFAULT_CONTAINER_RUNNER_KIND;
+  if (runnerKindRaw !== undefined) {
+    if (isContainerRunnerKind(runnerKindRaw)) {
+      runnerKind = runnerKindRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runnerKind`,
+          "must be podman, docker, nerdctl, or apple-container",
+        ),
+      );
+    }
+  }
+
+  const runnerPathRaw = value["runnerPath"];
+  let runnerPath: string | undefined;
+  if (runnerPathRaw !== undefined) {
+    if (typeof runnerPathRaw === "string" && runnerPathRaw.length > 0) {
+      runnerPath = runnerPathRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runnerPath`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  return {
+    runnerKind,
+    ...(runnerPath === undefined ? {} : { runnerPath }),
+  };
+}
+
+function normalizeCommandExecution(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): CommandExecution | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set([
+    "scriptPath",
+    "argvTemplate",
+    "envTemplate",
+    "workingDirectory",
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported command field",
+        ),
+      );
+    }
+  }
+
+  const scriptPath = readStringField(value, "scriptPath", path, issues);
+  if (scriptPath !== null && !isSafeWorkflowRelativePath(scriptPath)) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.scriptPath`,
+        "must be a workflow-relative path without '.' or '..' segments",
+      ),
+    );
+  }
+
+  const argvTemplate = normalizeStringArrayField(
+    value["argvTemplate"],
+    `${path}.argvTemplate`,
+    issues,
+  );
+  const envTemplate = normalizeStringMapField(
+    value["envTemplate"],
+    `${path}.envTemplate`,
+    issues,
+  );
+
+  const workingDirectoryRaw = value["workingDirectory"];
+  let workingDirectory: string | undefined;
+  if (workingDirectoryRaw !== undefined) {
+    if (
+      typeof workingDirectoryRaw === "string" &&
+      workingDirectoryRaw.length > 0 &&
+      isSafeWorkflowRelativePath(workingDirectoryRaw)
+    ) {
+      workingDirectory = workingDirectoryRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.workingDirectory`,
+          "must be a workflow-relative path without '.' or '..' segments when provided",
+        ),
+      );
+    }
+  }
+
+  if (scriptPath === null || !isSafeWorkflowRelativePath(scriptPath)) {
+    return undefined;
+  }
+
+  return {
+    scriptPath,
+    ...(argvTemplate === undefined ? {} : { argvTemplate }),
+    ...(envTemplate === undefined ? {} : { envTemplate }),
+    ...(workingDirectory === undefined ? {} : { workingDirectory }),
+  };
+}
+
+function normalizeContainerExecution(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): ContainerExecution | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set([
+    "runnerKind",
+    "runnerPath",
+    "image",
+    "build",
+    "entrypoint",
+    "argsTemplate",
+    "envTemplate",
+    "workingDirectory",
+    "workspace",
+    "resources",
+    "networkPolicy",
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported container field",
+        ),
+      );
+    }
+  }
+
+  const runnerKindRaw = value["runnerKind"];
+  let runnerKind: ContainerRunnerKind | undefined;
+  if (runnerKindRaw !== undefined) {
+    if (isContainerRunnerKind(runnerKindRaw)) {
+      runnerKind = runnerKindRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runnerKind`,
+          "must be podman, docker, nerdctl, or apple-container",
+        ),
+      );
+    }
+  }
+
+  const runnerPathRaw = value["runnerPath"];
+  let runnerPath: string | undefined;
+  if (runnerPathRaw !== undefined) {
+    if (typeof runnerPathRaw === "string" && runnerPathRaw.length > 0) {
+      runnerPath = runnerPathRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runnerPath`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
   }
 
   const imageRaw = value["image"];
@@ -193,138 +564,283 @@ function normalizeRuntimeIsolation(
     }
   }
 
-  const buildRaw = value["build"];
-  let build: RuntimeIsolation["build"];
-  if (buildRaw !== undefined) {
-    if (!isRecord(buildRaw)) {
-      issues.push(
-        makeIssue("error", `${path}.build`, "must be an object when provided"),
-      );
-    } else {
-      const buildAllowedKeys = new Set([
-        "contextPath",
-        "dockerfilePath",
-        "target",
-      ]);
-      for (const key of Object.keys(buildRaw)) {
-        if (!buildAllowedKeys.has(key)) {
-          issues.push(
-            makeIssue(
-              "error",
-              `${path}.build.${key}`,
-              "uses an unsupported runtimeIsolation.build field",
-            ),
-          );
-        }
-      }
-
-      const contextPath = readStringField(
-        buildRaw,
-        "contextPath",
-        `${path}.build`,
-        issues,
-      );
-      const dockerfilePathRaw = buildRaw["dockerfilePath"];
-      const targetRaw = buildRaw["target"];
-      let dockerfilePath: string | undefined;
-      let target: string | undefined;
-
-      if (contextPath !== null && !isSafeWorkflowRelativePath(contextPath)) {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.build.contextPath`,
-            "must be a workflow-relative path without '.' or '..' segments",
-          ),
-        );
-      }
-
-      if (dockerfilePathRaw !== undefined) {
-        if (
-          typeof dockerfilePathRaw === "string" &&
-          dockerfilePathRaw.length > 0
-        ) {
-          if (isSafeWorkflowRelativePath(dockerfilePathRaw)) {
-            if (isReservedWorkflowDefinitionPath(dockerfilePathRaw)) {
-              issues.push(
-                makeIssue(
-                  "error",
-                  `${path}.build.dockerfilePath`,
-                  "must not target canonical workflow definition files such as workflow.json, workflow-vis.json, or node-*.json",
-                ),
-              );
-            } else {
-              dockerfilePath = dockerfilePathRaw;
-            }
-          } else {
-            issues.push(
-              makeIssue(
-                "error",
-                `${path}.build.dockerfilePath`,
-                "must be a workflow-relative path without '.' or '..' segments",
-              ),
-            );
-          }
-        } else {
-          issues.push(
-            makeIssue(
-              "error",
-              `${path}.build.dockerfilePath`,
-              "must be a non-empty string when provided",
-            ),
-          );
-        }
-      }
-
-      if (targetRaw !== undefined) {
-        if (typeof targetRaw === "string" && targetRaw.length > 0) {
-          target = targetRaw;
-        } else {
-          issues.push(
-            makeIssue(
-              "error",
-              `${path}.build.target`,
-              "must be a non-empty string when provided",
-            ),
-          );
-        }
-      }
-
-      if (contextPath !== null && isSafeWorkflowRelativePath(contextPath)) {
-        build = {
-          contextPath,
-          ...(dockerfilePath === undefined ? {} : { dockerfilePath }),
-          ...(target === undefined ? {} : { target }),
-        };
-      }
-    }
-  }
-
-  if (modeRaw === "podman") {
-    if ((image === undefined) === (build === undefined)) {
-      issues.push(
-        makeIssue(
-          "error",
-          path,
-          "podman isolation requires exactly one of runtimeIsolation.image or runtimeIsolation.build",
-        ),
-      );
-    }
-  } else if (image !== undefined || build !== undefined) {
+  const build = normalizeContainerBuild(
+    value["build"],
+    `${path}.build`,
+    issues,
+  );
+  if ((image === undefined) === (build === undefined)) {
     issues.push(
       makeIssue(
         "error",
         path,
-        "runtimeIsolation.image and runtimeIsolation.build are only supported when mode is 'podman'",
+        "must declare exactly one of container.image or container.build",
       ),
     );
   }
 
+  const entrypoint = normalizeStringArrayField(
+    value["entrypoint"],
+    `${path}.entrypoint`,
+    issues,
+  );
+  const argsTemplate = normalizeStringArrayField(
+    value["argsTemplate"],
+    `${path}.argsTemplate`,
+    issues,
+  );
+  const envTemplate = normalizeStringMapField(
+    value["envTemplate"],
+    `${path}.envTemplate`,
+    issues,
+  );
+
+  const workingDirectoryRaw = value["workingDirectory"];
+  let workingDirectory: string | undefined;
+  if (workingDirectoryRaw !== undefined) {
+    if (
+      typeof workingDirectoryRaw === "string" &&
+      workingDirectoryRaw.length > 0 &&
+      isAbsoluteContainerPath(workingDirectoryRaw)
+    ) {
+      workingDirectory = workingDirectoryRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.workingDirectory`,
+          "must be an absolute container path when provided",
+        ),
+      );
+    }
+  }
+
+  const workspaceRaw = value["workspace"];
+  let workspace: ContainerExecution["workspace"];
+  if (workspaceRaw !== undefined) {
+    if (!isRecord(workspaceRaw)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.workspace`,
+          "must be an object when provided",
+        ),
+      );
+    } else {
+      const modeRaw = workspaceRaw["mode"];
+      let mode: "none" | "ephemeral" | undefined;
+      if (modeRaw !== undefined) {
+        if (modeRaw === "none" || modeRaw === "ephemeral") {
+          mode = modeRaw;
+        } else {
+          issues.push(
+            makeIssue(
+              "error",
+              `${path}.workspace.mode`,
+              "must be 'none' or 'ephemeral'",
+            ),
+          );
+        }
+      }
+      const mountPathRaw = workspaceRaw["mountPath"];
+      let mountPath: string | undefined;
+      if (mountPathRaw !== undefined) {
+        if (
+          typeof mountPathRaw === "string" &&
+          mountPathRaw.length > 0 &&
+          isAbsoluteContainerPath(mountPathRaw)
+        ) {
+          mountPath = mountPathRaw;
+        } else {
+          issues.push(
+            makeIssue(
+              "error",
+              `${path}.workspace.mountPath`,
+              "must be an absolute container path when provided",
+            ),
+          );
+        }
+      }
+      workspace = {
+        ...(mode === undefined ? {} : { mode }),
+        ...(mountPath === undefined ? {} : { mountPath }),
+      };
+    }
+  }
+
+  const resourcesRaw = value["resources"];
+  let resources: ContainerExecution["resources"];
+  if (resourcesRaw !== undefined) {
+    if (!isRecord(resourcesRaw)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.resources`,
+          "must be an object when provided",
+        ),
+      );
+    } else {
+      const parsed: Record<string, number> = {};
+      for (const key of ["cpuMax", "memoryMaxMb", "pidsMax"] as const) {
+        const rawValue = resourcesRaw[key];
+        if (rawValue === undefined) {
+          continue;
+        }
+        if (
+          typeof rawValue === "number" &&
+          Number.isFinite(rawValue) &&
+          rawValue > 0
+        ) {
+          parsed[key] = rawValue;
+        } else {
+          issues.push(
+            makeIssue(
+              "error",
+              `${path}.resources.${key}`,
+              "must be > 0 when provided",
+            ),
+          );
+        }
+      }
+      resources = parsed;
+    }
+  }
+
+  const networkPolicyRaw = value["networkPolicy"];
+  let networkPolicy: "disabled" | "egress-allowed" | undefined;
+  if (networkPolicyRaw !== undefined) {
+    if (
+      networkPolicyRaw === "disabled" ||
+      networkPolicyRaw === "egress-allowed"
+    ) {
+      networkPolicy = networkPolicyRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.networkPolicy`,
+          "must be 'disabled' or 'egress-allowed'",
+        ),
+      );
+    }
+  }
+
   return {
-    mode: modeRaw,
+    ...(runnerKind === undefined ? {} : { runnerKind }),
+    ...(runnerPath === undefined ? {} : { runnerPath }),
     ...(image === undefined ? {} : { image }),
     ...(build === undefined ? {} : { build }),
+    ...(entrypoint === undefined ? {} : { entrypoint }),
+    ...(argsTemplate === undefined ? {} : { argsTemplate }),
+    ...(envTemplate === undefined ? {} : { envTemplate }),
+    ...(workingDirectory === undefined ? {} : { workingDirectory }),
+    ...(workspace === undefined ? {} : { workspace }),
+    ...(resources === undefined ? {} : { resources }),
+    ...(networkPolicy === undefined ? {} : { networkPolicy }),
   };
+}
+
+function normalizeNodeDurability(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): NodeDurability | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const modeRaw = value["mode"];
+  if (modeRaw !== "disabled" && modeRaw !== "node-persistent") {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.mode`,
+        "must be 'disabled' or 'node-persistent'",
+      ),
+    );
+    return undefined;
+  }
+
+  const mountPathRaw = value["mountPath"];
+  let mountPath: string | undefined;
+  if (mountPathRaw !== undefined) {
+    if (
+      typeof mountPathRaw === "string" &&
+      mountPathRaw.length > 0 &&
+      isAbsoluteContainerPath(mountPathRaw)
+    ) {
+      mountPath = mountPathRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.mountPath`,
+          "must be an absolute container path when provided",
+        ),
+      );
+    }
+  }
+
+  return {
+    mode: modeRaw,
+    ...(mountPath === undefined ? {} : { mountPath }),
+  };
+}
+
+function normalizeLegacyRuntimeIsolationToContainer(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): ContainerExecution | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return undefined;
+  }
+
+  const modeRaw = value["mode"];
+  if (modeRaw === "host") {
+    issues.push(
+      makeIssue(
+        "warning",
+        path,
+        "legacy runtimeIsolation.mode='host' is ignored; omit runtimeIsolation in new workflows",
+      ),
+    );
+    return undefined;
+  }
+  if (modeRaw !== "podman") {
+    issues.push(
+      makeIssue("error", `${path}.mode`, "must be 'host' or 'podman'"),
+    );
+    return undefined;
+  }
+
+  const normalized = normalizeContainerExecution(
+    {
+      runnerKind: "podman",
+      ...(value["image"] === undefined ? {} : { image: value["image"] }),
+      ...(value["build"] === undefined ? {} : { build: value["build"] }),
+    },
+    path,
+    issues,
+  );
+  if (normalized !== undefined) {
+    issues.push(
+      makeIssue(
+        "warning",
+        path,
+        "legacy runtimeIsolation normalized to container metadata",
+      ),
+    );
+  }
+  return normalized;
 }
 
 function normalizeCompletion(
@@ -895,6 +1411,11 @@ function normalizeWorkflow(
       "workflow.defaults",
       issues,
     );
+  const containerRuntime = normalizeContainerRuntimeDefaults(
+    isRecord(defaultsValue) ? defaultsValue["containerRuntime"] : undefined,
+    "workflow.defaults.containerRuntime",
+    issues,
+  );
 
   let prompts: WorkflowPrompts | undefined;
   const promptsRaw = workflow["prompts"];
@@ -1049,7 +1570,7 @@ function normalizeWorkflow(
   return {
     workflowId,
     description,
-    defaults: { maxLoopIterations, nodeTimeoutMs },
+    defaults: { maxLoopIterations, nodeTimeoutMs, containerRuntime },
     ...(prompts === undefined ? {} : { prompts }),
     managerNodeId,
     subWorkflows,
@@ -1258,10 +1779,60 @@ function normalizeNodePayload(
     issues.push(makeIssue("error", `${path}.id`, `must equal ${nodeId}`));
   }
 
+  let nodeType: NodeType = "agent";
+  const nodeTypeRaw = payload["nodeType"];
+  if (nodeTypeRaw !== undefined) {
+    if (isNodeType(nodeTypeRaw)) {
+      nodeType = nodeTypeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.nodeType`,
+          "must be 'agent', 'command', or 'container'",
+        ),
+      );
+    }
+  }
+
+  const command = normalizeCommandExecution(
+    payload["command"],
+    `${path}.command`,
+    issues,
+  );
+  const container = normalizeContainerExecution(
+    payload["container"],
+    `${path}.container`,
+    issues,
+  );
+  const legacyContainer = normalizeLegacyRuntimeIsolationToContainer(
+    payload["runtimeIsolation"],
+    `${path}.runtimeIsolation`,
+    issues,
+  );
+  if (container !== undefined && legacyContainer !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        path,
+        "must not declare both container and legacy runtimeIsolation",
+      ),
+    );
+  }
+  const effectiveContainer = container ?? legacyContainer;
+  if (effectiveContainer !== undefined && nodeTypeRaw === undefined) {
+    nodeType = "container";
+  }
+
   const modelRaw = payload["model"];
-  const model =
-    typeof modelRaw === "string" && modelRaw.length > 0 ? modelRaw : null;
-  if (model === null) {
+  let model: string | undefined;
+  if (typeof modelRaw === "string" && modelRaw.length > 0) {
+    model = modelRaw;
+  } else if (modelRaw !== undefined && nodeType === "agent") {
+    issues.push(
+      makeIssue("error", `${path}.model`, "must be a non-empty string"),
+    );
+  } else if (modelRaw !== undefined && typeof modelRaw !== "string") {
     issues.push(
       makeIssue("error", `${path}.model`, "must be a non-empty string"),
     );
@@ -1295,7 +1866,11 @@ function normalizeNodePayload(
         ),
       );
     }
-  } else if (model !== null && !isCliAgentBackend(model)) {
+  } else if (
+    nodeType === "agent" &&
+    model !== undefined &&
+    !isCliAgentBackend(model)
+  ) {
     issues.push(
       makeIssue(
         "error",
@@ -1304,7 +1879,8 @@ function normalizeNodePayload(
       ),
     );
   } else if (
-    model !== null &&
+    nodeType === "agent" &&
+    model !== undefined &&
     executionBackend === undefined &&
     isCliAgentBackend(model)
   ) {
@@ -1317,7 +1893,8 @@ function normalizeNodePayload(
     );
   }
   if (
-    model !== null &&
+    nodeType === "agent" &&
+    model !== undefined &&
     requiresSeparatedModel(executionBackend) &&
     normalizeCliAgentBackend(model) !== null
   ) {
@@ -1333,7 +1910,7 @@ function normalizeNodePayload(
   const promptTemplateRaw = payload["promptTemplate"];
   const promptTemplateFileRaw = payload["promptTemplateFile"];
   const promptAlias = payload["prompt"];
-  let promptTemplate: string | null = null;
+  let promptTemplate: string | undefined;
   let promptTemplateFile: string | undefined;
   if (promptTemplateFileRaw !== undefined) {
     if (
@@ -1382,7 +1959,7 @@ function normalizeNodePayload(
         "legacy field 'prompt' normalized to 'promptTemplate'",
       ),
     );
-  } else {
+  } else if (nodeType === "agent") {
     issues.push(
       makeIssue(
         "error",
@@ -1422,9 +1999,9 @@ function normalizeNodePayload(
     }
   }
 
-  const runtimeIsolation = normalizeRuntimeIsolation(
-    payload["runtimeIsolation"],
-    `${path}.runtimeIsolation`,
+  const durability = normalizeNodeDurability(
+    payload["durability"],
+    `${path}.durability`,
     issues,
   );
 
@@ -1545,28 +2122,61 @@ function normalizeNodePayload(
     issues,
   );
 
+  if (nodeType === "command" && command === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.command`,
+        "is required when nodeType is 'command'",
+      ),
+    );
+  }
+  if (nodeType === "container" && effectiveContainer === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.container`,
+        "is required when nodeType is 'container'",
+      ),
+    );
+  }
+  if (durability !== undefined && nodeType !== "container") {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.durability`,
+        "is currently valid only for container nodes",
+      ),
+    );
+  }
+
   if (
     id === null ||
-    model === null ||
-    promptTemplate === null ||
-    variables === null
+    variables === null ||
+    (nodeType === "agent" &&
+      (model === undefined || promptTemplate === undefined))
   ) {
     return null;
   }
 
   return {
     id,
-    model,
+    ...(nodeType === "agent" ? {} : { nodeType }),
+    ...(model === undefined ? {} : { model }),
     ...(executionBackend === undefined ? {} : { executionBackend }),
     ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
-    promptTemplate,
+    ...(promptTemplate === undefined ? {} : { promptTemplate }),
     ...(promptTemplateFile === undefined ? {} : { promptTemplateFile }),
     variables,
+    ...(command === undefined ? {} : { command }),
+    ...(effectiveContainer === undefined
+      ? {}
+      : { container: effectiveContainer }),
+    ...(durability === undefined ? {} : { durability }),
     ...(argumentsTemplate === undefined ? {} : { argumentsTemplate }),
     ...(argumentBindings === undefined ? {} : { argumentBindings }),
     ...(templateEngine === undefined ? {} : { templateEngine }),
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    ...(runtimeIsolation === undefined ? {} : { runtimeIsolation }),
     ...(outputContract === undefined ? {} : { output: outputContract }),
   };
 }

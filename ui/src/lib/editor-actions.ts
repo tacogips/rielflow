@@ -2,7 +2,6 @@ import type {
   ExecuteWorkflowRequest,
   SessionStatus,
   UiConfigResponse,
-  ValidationResponse,
 } from "../../../src/shared/ui-contract";
 import type { ValidationIssue } from "../../../src/workflow/types";
 import {
@@ -28,7 +27,10 @@ import {
   emptyWorkflowEditorState,
 } from "./editor-state";
 import type { EditorWorkflowBundle } from "./editor-workflow";
-import { combinedValidationIssues } from "./editor-support";
+import {
+  combinedValidationIssues,
+  validationSummaryFromIssues,
+} from "./editor-support";
 
 export interface RefreshedEditorState {
   readonly config: UiConfigResponse;
@@ -133,19 +135,6 @@ const defaultDependencies: EditorActionDependencies = {
   cancelWorkflowExecution: cancelWorkflowExecutionRequest,
 };
 
-function validationSummaryFromResult(
-  result: ValidationResponse,
-  validationIssues: readonly ValidationIssue[],
-): string {
-  const warningCount = validationIssues.filter(
-    (issue) => issue.severity === "warning",
-  ).length;
-  const errorCount = validationIssues.length - warningCount;
-  return result.valid
-    ? `Validation passed${warningCount > 0 ? ` with ${warningCount} warning${warningCount === 1 ? "" : "s"}` : ""}.`
-    : `Validation returned ${errorCount} error${errorCount === 1 ? "" : "s"} and ${warningCount} warning${warningCount === 1 ? "" : "s"}.`;
-}
-
 function loadWorkflowData(
   deps: EditorActionDependencies,
   input: {
@@ -243,8 +232,8 @@ export function createEditorActions(
         input.bundle,
       );
       const validationIssues = combinedValidationIssues(result);
-      const validationSummary = validationSummaryFromResult(
-        result,
+      const validationSummary = validationSummaryFromIssues(
+        result.valid,
         validationIssues,
       );
       return {

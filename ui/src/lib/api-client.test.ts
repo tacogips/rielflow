@@ -8,6 +8,7 @@ import type {
   WorkflowExecutionSummary,
   WorkflowResponse,
 } from "../../../src/shared/ui-contract";
+import type { ValidationIssue } from "../../../src/workflow/types";
 import type { EditorWorkflowBundle } from "./editor-workflow";
 import {
   cancelWorkflowExecution,
@@ -20,6 +21,7 @@ import {
   saveWorkflowBundle,
   validateWorkflowBundle,
   WorkflowRevisionConflictError,
+  WorkflowSaveValidationError,
 } from "./api-client";
 
 const originalFetch = globalThis.fetch;
@@ -104,9 +106,7 @@ describe("api-client GraphQL session transport", () => {
     if (call === undefined) {
       return;
     }
-    const body = JSON.parse(
-      String(call[1]?.body),
-    ) as {
+    const body = JSON.parse(String(call[1]?.body)) as {
       readonly query: string;
     };
     expect(body.query).toContain("workflows");
@@ -208,6 +208,56 @@ describe("api-client GraphQL session transport", () => {
     ).rejects.toBeInstanceOf(WorkflowRevisionConflictError);
   });
 
+  test("surfaces save validation issues through GraphQL", async () => {
+    const workflow = makeWorkflowResponse();
+    const issues: readonly ValidationIssue[] = [
+      {
+        severity: "error",
+        path: "workflow.nodes[0].id",
+        message: "duplicate node id",
+      },
+    ];
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        data: {
+          saveWorkflowDefinition: {
+            workflowName: "demo",
+            error: "workflow bundle is invalid",
+            issues,
+          },
+        },
+      }),
+    );
+    (globalThis as { fetch: typeof fetch }).fetch =
+      fetchMock as unknown as typeof fetch;
+
+    await expect(
+      saveWorkflowBundle({
+        workflowName: "demo",
+        bundle: workflow.bundle as unknown as EditorWorkflowBundle,
+        ...(workflow.revision === null
+          ? {}
+          : { expectedRevision: workflow.revision }),
+      }),
+    ).rejects.toMatchObject({
+      name: "WorkflowSaveValidationError",
+      message: "workflow bundle is invalid",
+      issues,
+    } satisfies Partial<WorkflowSaveValidationError>);
+
+    const call = fetchMock.mock.calls[0] as
+      | [string, RequestInit | undefined]
+      | undefined;
+    expect(call).toBeDefined();
+    if (call === undefined) {
+      return;
+    }
+    const body = JSON.parse(String(call[1]?.body)) as {
+      readonly query: string;
+    };
+    expect(body.query).toContain("issues");
+  });
+
   test("lists sessions through GraphQL", async () => {
     const summary: WorkflowExecutionSummary = {
       workflowExecutionId: "exec-1",
@@ -255,22 +305,23 @@ describe("api-client GraphQL session transport", () => {
   });
 
   test("loads a workflow execution through GraphQL and preserves the browser shape", async () => {
-    const session: Omit<WorkflowExecutionStateResponse, "workflowExecutionId"> = {
-      sessionId: "exec-1",
-      workflowName: "demo",
-      workflowId: "demo",
-      status: "paused",
-      startedAt: "2026-03-15T01:00:00.000Z",
-      queue: [],
-      currentNodeId: "worker-1",
-      nodeExecutionCounter: 1,
-      nodeExecutionCounts: {},
-      transitions: [],
-      nodeExecutions: [],
-      communicationCounter: 0,
-      communications: [],
-      runtimeVariables: {},
-    };
+    const session: Omit<WorkflowExecutionStateResponse, "workflowExecutionId"> =
+      {
+        sessionId: "exec-1",
+        workflowName: "demo",
+        workflowId: "demo",
+        status: "paused",
+        startedAt: "2026-03-15T01:00:00.000Z",
+        queue: [],
+        currentNodeId: "worker-1",
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {},
+        transitions: [],
+        nodeExecutions: [],
+        communicationCounter: 0,
+        communications: [],
+        runtimeVariables: {},
+      };
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () =>
       jsonResponse({
         data: {
@@ -299,14 +350,12 @@ describe("api-client GraphQL session transport", () => {
       }),
     ) as unknown as typeof fetch;
 
-    await expect(loadWorkflowExecution("missing-exec")).rejects.toMatchObject(
-      {
-        status: 404,
-        payload: {
-          error: "workflow execution 'missing-exec' was not found",
-        },
+    await expect(loadWorkflowExecution("missing-exec")).rejects.toMatchObject({
+      status: 404,
+      payload: {
+        error: "workflow execution 'missing-exec' was not found",
       },
-    );
+    });
   });
 
   test("executes and cancels workflows through GraphQL", async () => {

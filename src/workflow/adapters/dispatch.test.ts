@@ -55,7 +55,7 @@ describe("DispatchingNodeAdapter", () => {
       nodeExecId: "exec-1",
       node: {
         id: "node-1",
-        model: "gpt-5",
+        model: "gpt-5-nano",
         executionBackend: "official/openai-sdk",
         promptTemplate: "test",
         variables: {},

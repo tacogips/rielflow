@@ -37,7 +37,7 @@ Phase 1 adds prompt-level semantics without replacing the deterministic executio
 - `prompts.oyakataPromptTemplate`
 - `prompts.workerSystemPromptTemplate`
 
-The root/sub manager execution prompt becomes:
+The root/sub-oyakata-manager execution prompt becomes:
 
 1. default `oyakata system prompt` from a repository markdown asset
 2. workflow-rendered `prompts.oyakataPromptTemplate`
@@ -102,9 +102,9 @@ Supported action semantics:
   - root `oyakata` only
   - treats a sub-workflow as one child node
   - repeating the same action re-invokes that child sub-workflow as a rerun unit when the manager judges the prior result insufficient
-  - the runtime always delivers the manager output through the owned `sub oyakata` mailbox
+  - the runtime always delivers the manager output through the owned `sub-oyakata-manager` mailbox
 - `deliver-to-child-input`
-  - `sub oyakata` only
+  - `sub-oyakata-manager` only
   - forwards the current manager output through mailbox delivery to its owned input node
   - this is the nested "treat parent instruction like user input" handoff point
 - `retry-node`
@@ -117,7 +117,7 @@ Override rule:
 
 - when a manager returns `managerControl.actions`, the runtime treats that manager as authoritative for its manager-owned planning category in that execution:
   - root manager: sub-workflow start planning
-  - sub manager: child input forwarding
+  - sub-oyakata-manager: child input forwarding
 - if `managerControl` is omitted, the existing deterministic fallback planners remain active
 
 ## Remaining Limitation

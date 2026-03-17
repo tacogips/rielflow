@@ -57,10 +57,11 @@ Outputs:
 
 - Distinguishes executable `nodeType` from structural node `kind`
 - Runs `agent` nodes through backend adapters selected by `executionBackend`
-- Runs `command` nodes through direct process execution or Podman-isolated process execution
+- Runs `command` nodes through direct process execution today
+- Plans a dedicated container runtime manager/executor for `container` nodes with workflow-level runner defaults and per-node container definitions
 - Sends node `model` through the selected agent backend as the provider/backend-specific model name
 - Initial agent targets: `codex-agent`, `claude-code-agent`
-- Initial isolation target: Podman for `command` nodes only
+- Current runtime direction keeps `container` schema explicit but rejects execution until a container executor exists
 
 5. Execution Engine
 
@@ -76,7 +77,7 @@ Outputs:
 - Applies fan-out transitions when multiple branch conditions match
 - Enforces node execution timeout (node override or workflow default)
 - Composes execution prompts from workflow-level manager/worker prompt policy, runtime context, and node-level prompt text
-- Prepares node-local mailbox mount views for isolated executions when `runtimeIsolation.mode = "podman"`
+- Rejects container-node executions explicitly before dispatch today; a future container executor may prepare node-local mailbox mount views at that point
 
 6. Session State Store
 
@@ -99,6 +100,7 @@ Outputs:
 - Enforces manager communication replay/retry scope so root managers stay at root scope and sub-oyakata-managers stay within their owned sub-workflow, with node-ownership fallback for legacy records missing boundary ids
 - Returns an explicit setup error page when the built frontend bundle is unavailable instead of embedding a second browser implementation in the server
 - Exposes a small UI bootstrap/config endpoint so frontend assets do not need server mode baked in at build time
+- Keeps `/api/ui-config` as that bootstrap endpoint and does not serve browser workflow/session REST routes anymore
 - Derives the reported frontend mode for that bootstrap/config endpoint from explicit metadata published under `ui/dist/` when available, while still allowing an explicit override for tests or forced deployments
 - Resolves that default `ui/dist/` metadata path from the same package root used for frontend entrypoint detection and built-asset serving, so overrides cannot mix one package's source tree with another package's built bundle
 - Falls back to checked-in frontend entrypoint detection only when built frontend metadata is absent, so local development and pre-rebuild states still remain diagnosable
@@ -116,7 +118,7 @@ GraphQL-first redesign direction:
 - GraphQL becomes the canonical domain API for execution, communication inspection/replay, and manager control-plane messaging
 - CLI commands become thin clients over the same application services/GraphQL contract for domain operations
 - GraphQL file/image parameters use data-root-relative file references resolved under the configured Oyakata root data directory instead of host absolute paths
-- existing REST editor/workflow-definition endpoints remain supported during migration until GraphQL replacements are implemented
+- the served browser workflow-definition, execution, and session surfaces now use GraphQL directly; `/api/ui-config` remains the only browser bootstrap endpoint outside `/graphql`
 
 8. Browser Workflow Editor
 
@@ -125,7 +127,7 @@ GraphQL-first redesign direction:
 - Node payload editing (`nodeType`, `executionBackend`, `model`, `promptTemplate`, `variables`, command/isolation settings, `timeoutMs`)
 - Layout editing persisted to `workflow-vis.json`
 - Run controls and execution trace view for local sessions
-- Uses the existing local JSON API; frontend build output is treated as replaceable static assets rather than inline server-rendered HTML
+- Uses the GraphQL control plane for workflow-definition, execution, and session flows, plus `/api/ui-config` for bootstrap metadata; frontend build output is treated as replaceable static assets rather than inline server-rendered HTML
 - Consumes shared transport contracts from `src/shared/` for API/bootstrap/session payloads; mutable editor-local state remains frontend-owned
 - Reuses shared workflow domain types from `src/workflow/types.ts` for persisted workflow structures; any editor-only fields must be modeled as explicit additive extensions
 - The current checked-in browser implementation is SolidJS-based and is served from the built `ui/dist/` bundle
@@ -311,7 +313,8 @@ Mailbox transport contract:
 - worker nodes never perform direct peer-to-peer delivery
 - worker nodes consume manager-resolved `input.json`; they do not poll mailbox directories
 - callable child workflows keep their own execution-local mailbox roots; parent/child handoff is a boundary translation, not one shared mailbox tree across workflows
-- when a `command` node runs in Podman, the runtime exposes a node-local mailbox view at `/mailbox/inbox` and `/mailbox/outbox`; those mounts are execution-scoped views, not direct write access to canonical cross-node routing directories
+- when a `container` node runs, the container runtime manager/executor exposes a node-local mailbox view at `/mailbox/inbox` and `/mailbox/outbox`; `/mailbox/inbox` is read-only and `/mailbox/outbox` is writable
+- those mounts are execution-scoped views, not direct write access to canonical cross-node routing directories
 - the root workflow manager owns global `communicationId` allocation within one `workflowExecutionId`
 - one communication may have multiple `deliveryAttemptId` retries and optional AI/code-agent `agentSessionId` restarts
 - any send re-execution/rerun/resend must allocate a new `communicationId`
@@ -350,17 +353,19 @@ Manager control-plane contract:
 
 Execution node payload is externalized in `node-{id}.json`:
 
-- `nodeType`: execution flavor (`agent` by default, `command` for script/process execution)
+- `nodeType`: execution flavor (`agent` by default; `command` for script/process execution; `container` for opaque runner-launched container execution)
+- `containerRuntime` workflow defaults: default runner selection for `container` nodes (`podman` by default)
 - `executionBackend`: adapter/interface identifier
 - `model`: provider or backend-specific model name
 - `promptTemplate`: template text
 - `variables`: runtime bindings
 - optional `command`: workflow-relative script path plus inbox-derived argv/env templates
+- optional `container`: runner override plus image/build, entrypoint, args, env, and working-directory config for opaque container execution
 - optional `sessionPolicy`: backend session handling policy (`new` by default, `reuse` for node-local backend session continuation)
+- optional `durability`: node-level durable storage policy for container workloads
 - optional `argumentsTemplate`: structured argument skeleton
 - optional `argumentBindings`: deterministic mapping rules from runtime sources to `argumentsTemplate`
 - optional `templateEngine`: rendering engine for prompt text (default: `mustache`)
-- optional `runtimeIsolation`: host or Podman execution environment selection
 
 Node input injection policy:
 
@@ -368,7 +373,12 @@ Node input injection policy:
 - Complex data composition must be done via `argumentBindings` and source references, not logic-heavy template syntax.
 - Keep template engine intentionally simple for prompt text rendering; avoid full Handlebars-style execution semantics in core runtime.
 - `command` nodes should prefer explicit argv/env templates over shell string concatenation; inbox-derived values must be passed as direct argv entries rather than through implicit shell parsing.
-- `runtimeIsolation.mode = "podman"` is currently supported for `command` nodes only, but the architecture keeps the isolation contract generic so future `agent` node isolation can reuse it unchanged.
+- `container` nodes are intentionally opaque execution units: Oyakata launches the declared image/build with runtime-provided argv/env, but does not introspect whether the container internally runs an agent, a shell script, or another process model.
+- The container runtime manager/executor owns runner dispatch, mailbox bind-mount preparation, and runner-specific process invocation so workflow orchestration code does not branch on individual container CLI details.
+- That manager/executor also owns normalized exit handling, timeout/cancellation cleanup, and persistence of `stdout.log` / `stderr.log` in the node artifact directory.
+- When `durability.mode = "node-persistent"` is enabled for a container node, that manager/executor also mounts a stable durable directory from `{artifact-root}/{workflow_id}/durable/{node_id}/` into the container, typically at `/durable`.
+- This durable storage contract is independent from `sessionPolicy`; it exists so workloads inside the container can persist their own state such as an embedded agent session home across later calls of the same node.
+- Container runner choice is modeled separately from the host-side environment. Runner kinds include `podman`, `docker`, `nerdctl`, and `apple-container`; environments such as Colima, OrbStack, and Lima are out of scope for the runner enum.
 
 Node backend session reuse:
 

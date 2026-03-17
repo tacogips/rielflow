@@ -43,7 +43,7 @@ The requested redesign does not fundamentally conflict with the current runtime 
 The redesign does conflict with the current surface architecture in these areas:
 
 1. CLI domain parameters are currently expressed as positional arguments and option flags.
-2. Browser/server execution APIs are currently REST/JSON route-specific rather than schema-driven.
+2. Browser/server execution APIs historically included REST/JSON route-specific editor flows rather than a single schema-driven control plane.
 3. Manager control is currently expressed as node output content, not as a first-class manager command channel.
 4. There is no stable public concept of a communication query or communication replay API.
 5. The current `oyakata` executable is a runtime entrypoint, not a manager-tool client with ambient execution identity.
@@ -85,7 +85,7 @@ Rule:
 - CLI flags are retained only for transport/bootstrap concerns such as endpoint selection, auth token, output format, and local debug overrides.
 - `oyakata gql` supports GraphQL variables through a single `--variables` option that accepts inline JSON or a file reference syntax such as `@path/to/variables.json`
 - legacy execution commands may gain GraphQL-backed transport one slice at a time; until that migration completes, some local debug-only flags remain local-only and are not forwarded through GraphQL
-- during migration, GraphQL is the canonical execution/communication/manager control surface, while existing REST editor endpoints remain supported until their GraphQL replacements land
+- GraphQL is now the canonical execution/communication/manager control surface, including the served browser workflow-definition, execution, and session flows; `/api/ui-config` remains only as bootstrap metadata outside `/graphql`
 
 Examples:
 
@@ -235,7 +235,7 @@ This separation avoids overloading a user- or manager-authored freeform message 
 Manager send must be scope-bound:
 
 - root manager may request root-scope actions and sub-workflow starts
-- sub manager may request only actions within its owned sub-workflow
+- sub-oyakata-manager may request only actions within its owned sub-workflow
 - worker nodes do not get manager-session credentials
 
 Required ambient identity for LLM-triggered CLI use:
@@ -715,8 +715,8 @@ Added responsibilities:
 
 - expose `/graphql`
 - expose optional GraphQL schema/introspection in local development mode
-- continue serving the current REST editor endpoints during migration
-- make the browser UI migrate toward GraphQL queries/mutations in follow-up phases
+- keep `/api/ui-config` as a small browser bootstrap/config endpoint outside GraphQL
+- avoid reintroducing parallel browser workflow/session REST endpoints now that the browser UI already uses GraphQL queries/mutations
 - allow the generic `oyakata gql` CLI client to target the same local endpoint
 
 ## Data Model Extensions
@@ -781,7 +781,7 @@ Recommended migration order:
 4. Add GraphQL schema and server integration on top of those services.
 5. Add the generic `oyakata gql` CLI client.
 6. Inject manager-session environment into manager-node executions and update manager prompt guidance.
-7. Migrate browser UI execution/session APIs to GraphQL.
+7. Keep browser workflow-definition, execution, and session flows aligned on GraphQL now that the REST browser surface has been removed.
 
 ## Decision
 

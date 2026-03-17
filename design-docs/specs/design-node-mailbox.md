@@ -13,7 +13,7 @@ Design goals:
 - clear separation between sender output production and manager-mediated delivery
 
 The manager that owns the recipient scope is the only actor allowed to write recipient inboxes.
-Worker nodes do not read canonical cross-node mailbox directories directly; they consume manager-materialized `input.json` and write their own execution outputs. Isolated command executions may receive a runtime-prepared node-local mailbox view, but that view must not grant direct write access to canonical routed communication artifacts.
+Worker nodes do not read canonical cross-node mailbox directories directly; they consume manager-materialized `input.json` and write their own execution outputs. Container executions may receive a runtime-prepared node-local mailbox view, but that view must not grant direct write access to canonical routed communication artifacts.
 
 Role taxonomy:
 - `manager node` (control-plane role): orchestrates routing, reads mailbox entries addressed to itself, and writes mailbox artifacts for its owned scope
@@ -262,11 +262,13 @@ Write permissions by component:
 
 This ownership rule is mandatory for auditability and to prevent accidental peer-to-peer coupling between worker nodes.
 
-Containerized command-node rule:
+Container-node mailbox view:
 
-- When a `command` node uses Podman isolation, the runtime must mount:
+- When a `container` node executes, the runtime must mount:
   - host node-execution inbox view -> `/mailbox/inbox` (read-only)
   - host node-execution outbox staging directory -> `/mailbox/outbox` (read-write)
+- Any worker-visible file attachments for that node execution must appear only
+  under the `/mailbox/inbox` tree; v1 does not add a second input-file mount.
 - Those bind mounts are execution-scoped worker I/O surfaces, not the authoritative routed-communication store under `communications/{communicationId}/`.
 - Runtime-owned validation/publication still decides when data written through `/mailbox/outbox` becomes accepted node output or downstream mailbox traffic.
 
@@ -366,7 +368,8 @@ Rules:
 - manager nodes may read mailbox files addressed to themselves because they are the owning managers for their routing scope
 - mailbox directories are audit/provenance storage; `input.json` is the worker-facing execution contract
 - `consumed` means the communication has been durably bound to a specific recipient `nodeExecId`, not merely that an agent process started
-- a Podman-isolated `command` node may read `/mailbox/inbox` and write `/mailbox/outbox`, but those paths are node-local execution views prepared by the runtime rather than the shared routed-communication store
+- a `container` node may read `/mailbox/inbox` and write `/mailbox/outbox`, but those paths are node-local execution views prepared by the runtime rather than the shared routed-communication store
+- a `container` node must treat `/mailbox/inbox` as its only worker-visible incoming message surface; it must not assume visibility into sibling or upstream canonical mailbox artifacts
 
 Conceptual example:
 

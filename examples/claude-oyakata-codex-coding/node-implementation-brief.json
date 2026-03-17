@@ -1,7 +1,7 @@
 {
   "id": "implementation-brief",
   "executionBackend": "claude-code-agent",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-haiku-4-5",
   "promptTemplateFile": "prompts/implementation-brief.md",
   "variables": {},
   "output": {

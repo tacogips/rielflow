@@ -47,12 +47,14 @@ import type {
   WorkflowSessionState,
 } from "./session";
 import type {
+  AgentNodePayload,
   JsonObject,
   LoadOptions,
   NodeKind,
   NodePayload,
   WorkflowJson,
 } from "./types";
+import { asAgentNodePayload } from "./types";
 
 export interface CallNodeInput extends LoadOptions, SessionStoreOptions {
   readonly workflowId: string;
@@ -345,7 +347,7 @@ async function executeAdapterWithTimeout(
 
 function resolveRequestedBackendSession(
   session: WorkflowSessionState,
-  node: NodePayload,
+  node: AgentNodePayload,
 ): AdapterExecutionInput["backendSession"] | undefined {
   if (node.sessionPolicy === undefined) {
     return undefined;
@@ -373,7 +375,7 @@ function resolveRequestedBackendSession(
 
 function persistNodeBackendSession(input: {
   readonly session: WorkflowSessionState;
-  readonly node: NodePayload;
+  readonly node: AgentNodePayload;
   readonly nodeExecId: string;
   readonly provider: string;
   readonly endedAt: string;
@@ -756,11 +758,26 @@ class ExecutionDispatcher {
         message: `missing node definition for '${input.nodeId}'`,
       });
     }
-    if (nodePayload.runtimeIsolation?.mode === "podman") {
+    if (nodePayload.nodeType === "command") {
       return err({
         session,
         exitCode: 1,
-        message: `node '${input.nodeId}' requests runtimeIsolation.mode='podman', but Podman execution is not implemented yet`,
+        message: `node '${input.nodeId}' requests nodeType='command', but command execution is not implemented yet`,
+      });
+    }
+    if (nodePayload.nodeType === "container") {
+      return err({
+        session,
+        exitCode: 1,
+        message: `node '${input.nodeId}' requests nodeType='container', but container execution is not implemented yet`,
+      });
+    }
+    const agentNodePayload = asAgentNodePayload(nodePayload);
+    if (agentNodePayload === null) {
+      return err({
+        session,
+        exitCode: 1,
+        message: `node '${input.nodeId}' is missing agent execution fields`,
       });
     }
 
@@ -778,13 +795,13 @@ class ExecutionDispatcher {
     await mkdir(artifactDir, { recursive: true });
 
     const mergedVariables = {
-      ...nodePayload.variables,
+      ...agentNodePayload.variables,
       ...session.runtimeVariables,
     };
 
     const assembled = assembleNodeInput({
       runtimeVariables: session.runtimeVariables,
-      node: nodePayload,
+      node: agentNodePayload,
       workflowId: workflow.workflowId,
       workflowDescription: workflow.description,
       ...(nodeRef.kind === undefined ? {} : { nodeKind: nodeRef.kind }),
@@ -803,7 +820,7 @@ class ExecutionDispatcher {
     const basePromptText = composeExecutionPrompt({
       workflow,
       nodeRef,
-      node: nodePayload,
+      node: agentNodePayload,
       nodePayloads: loaded.value.bundle.nodePayloads,
       runtimeVariables: session.runtimeVariables,
       basePromptText: assembled.promptText,
@@ -812,11 +829,14 @@ class ExecutionDispatcher {
     });
     const promptText = withManagerMessage(basePromptText, input.message);
     const timeoutMs = resolveTimeoutMs(
-      nodePayload,
+      agentNodePayload,
       workflow.defaults.nodeTimeoutMs,
       input.defaultTimeoutMs,
     );
-    let backendSession = resolveRequestedBackendSession(session, nodePayload);
+    let backendSession = resolveRequestedBackendSession(
+      session,
+      agentNodePayload,
+    );
     const requestedBackendSessionMode = backendSession?.mode;
     let backendSessionId = backendSession?.sessionId;
     let backendSessionProvider: string | undefined;
@@ -861,21 +881,21 @@ class ExecutionDispatcher {
       workflowId: workflow.workflowId,
       nodeId: input.nodeId,
       nodeExecId,
-      model: nodePayload.model,
-      promptTemplate: nodePayload.promptTemplate,
+      model: agentNodePayload.model,
+      promptTemplate: agentNodePayload.promptTemplate,
       promptText,
       arguments: assembled.arguments,
       variables: mergedVariables,
       upstreamOutputRefs: [],
       upstreamCommunications: [],
       outputContract:
-        nodePayload.output === undefined
+        agentNodePayload.output === undefined
           ? undefined
           : {
-              description: nodePayload.output.description,
-              jsonSchema: nodePayload.output.jsonSchema,
+              description: agentNodePayload.output.description,
+              jsonSchema: agentNodePayload.output.jsonSchema,
               maxValidationAttempts:
-                resolveOutputValidationAttempts(nodePayload),
+                resolveOutputValidationAttempts(agentNodePayload),
               publication: buildOutputPublicationPolicy(),
             },
       ...(backendSession === undefined ? {} : { backendSession }),
@@ -896,18 +916,18 @@ class ExecutionDispatcher {
     if (input.dryRun === true) {
       finalOutputPayload = {
         provider: "dry-run",
-        model: nodePayload.model,
+        model: agentNodePayload.model,
         promptText,
         completionPassed: true,
         when: { always: true },
         payload: { skippedExecution: true },
       };
     } else {
-      const maxAttempts = resolveOutputValidationAttempts(nodePayload);
+      const maxAttempts = resolveOutputValidationAttempts(agentNodePayload);
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         outputAttemptCount = attempt;
         const outputAttemptId =
-          nodePayload.output === undefined
+          agentNodePayload.output === undefined
             ? undefined
             : nextOutputAttemptId(attempt);
         const attemptDir =
@@ -950,7 +970,7 @@ class ExecutionDispatcher {
             ? promptText
             : buildOutputPromptText({
                 basePromptText: promptText,
-                node: nodePayload,
+                node: agentNodePayload,
                 candidatePath,
                 validationErrors: outputValidationErrors,
               });
@@ -973,7 +993,7 @@ class ExecutionDispatcher {
             workflowExecutionId: session.sessionId,
             nodeId: input.nodeId,
             nodeExecId,
-            node: nodePayload,
+            node: agentNodePayload,
             mergedVariables,
             promptText: executionPromptText,
             arguments: assembled.arguments,
@@ -984,16 +1004,17 @@ class ExecutionDispatcher {
             ...(ambientManagerContext === undefined
               ? {}
               : { ambientManagerContext }),
-            ...(candidatePath === undefined || nodePayload.output === undefined
+            ...(candidatePath === undefined ||
+            agentNodePayload.output === undefined
               ? {}
               : {
                   output: {
-                    ...(nodePayload.output.description === undefined
+                    ...(agentNodePayload.output.description === undefined
                       ? {}
-                      : { description: nodePayload.output.description }),
-                    ...(nodePayload.output.jsonSchema === undefined
+                      : { description: agentNodePayload.output.description }),
+                    ...(agentNodePayload.output.jsonSchema === undefined
                       ? {}
-                      : { jsonSchema: nodePayload.output.jsonSchema }),
+                      : { jsonSchema: agentNodePayload.output.jsonSchema }),
                     maxValidationAttempts: maxAttempts,
                     attempt,
                     candidatePath,
@@ -1011,7 +1032,7 @@ class ExecutionDispatcher {
           if (!execution.ok) {
             if (
               execution.error.code === "invalid_output" &&
-              nodePayload.output !== undefined &&
+              agentNodePayload.output !== undefined &&
               validationPath !== undefined
             ) {
               outputValidationErrors = [
@@ -1028,7 +1049,7 @@ class ExecutionDispatcher {
               nodeStatus = "failed";
               finalOutputPayload = {
                 provider: "deterministic-local",
-                model: nodePayload.model,
+                model: agentNodePayload.model,
                 promptText,
                 completionPassed: false,
                 when: {},
@@ -1042,7 +1063,7 @@ class ExecutionDispatcher {
               execution.error.code === "timeout" ? "timed_out" : "failed";
             finalOutputPayload = {
               provider: "deterministic-local",
-              model: nodePayload.model,
+              model: agentNodePayload.model,
               promptText,
               completionPassed: false,
               when: {},
@@ -1061,7 +1082,7 @@ class ExecutionDispatcher {
             backendSessionId = execution.value.backendSession.sessionId;
           }
           if (
-            nodePayload.output === undefined &&
+            agentNodePayload.output === undefined &&
             execution.value.candidateFilePath !== undefined
           ) {
             outputValidationErrors = [
@@ -1082,7 +1103,7 @@ class ExecutionDispatcher {
           }
 
           const validation = await this.#validator.validate({
-            node: nodePayload,
+            node: agentNodePayload,
             execution: execution.value,
             ...(candidatePath === undefined
               ? {}
@@ -1175,7 +1196,7 @@ class ExecutionDispatcher {
 
     const nextNodeBackendSessions = persistNodeBackendSession({
       session,
-      node: nodePayload,
+      node: agentNodePayload,
       nodeExecId,
       provider:
         backendSessionProvider ??
@@ -1254,7 +1275,7 @@ class ExecutionDispatcher {
       outputRef = await this.#publisher.publish({
         workflow,
         session,
-        node: nodePayload,
+        node: agentNodePayload,
         nodeExecution,
         artifactDir,
         inputJson,
@@ -1273,7 +1294,7 @@ class ExecutionDispatcher {
         status: nodeStatus,
         startedAt,
         endedAt,
-        model: nodePayload.model,
+        model: agentNodePayload.model,
         timeoutMs,
         ...(outputAttemptCount === 1 ? {} : { outputAttemptCount }),
         ...(outputValidationErrors.length === 0

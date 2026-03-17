@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from "solid-js";
+import { For, Show, createEffect, createSignal, type JSX } from "solid-js";
 
 import type {
   UiConfigResponse,
@@ -7,6 +7,7 @@ import type {
 import type {
   CompletionType,
   NodeKind,
+  NodeType,
   SubWorkflowBlockType,
   SubWorkflowInputSourceType,
   ValidationIssue,
@@ -25,7 +26,6 @@ import type {
   EditorSubWorkflowInputSource,
   EditorSubWorkflowRef,
   EditorWorkflowBundle,
-  EditorWorkflowDefaults,
   EditorWorkflowEdge,
   EditorWorkflowNode,
 } from "../editor-workflow";
@@ -57,9 +57,10 @@ export interface WorkflowEditorPanelProps {
   readonly onNewNodeKindChange: (value: NodeKind) => void;
   readonly onUpdateDescription: (value: string) => void;
   readonly onUpdateDefaultNumber: (
-    field: keyof EditorWorkflowDefaults,
+    field: "maxLoopIterations" | "nodeTimeoutMs",
     value: string,
   ) => void;
+  readonly onUpdateContainerRuntime: (value: string) => void;
   readonly onUpdateManagerNode: (nodeId: string) => void;
   readonly onAddNode: () => void;
   readonly onSetSelectedNode: (nodeId: string) => void;
@@ -72,6 +73,11 @@ export interface WorkflowEditorPanelProps {
   ) => void;
   readonly onUpdateNodePayloadString: (
     field: "executionBackend" | "model" | "promptTemplate",
+    value: string,
+  ) => void;
+  readonly onUpdateNodeType: (value: NodeType) => void;
+  readonly onUpdateNodePayloadObject: (
+    field: "command" | "container" | "durability",
     value: string,
   ) => void;
   readonly onUpdateNodeTimeout: (value: string) => void;
@@ -164,6 +170,13 @@ function subWorkflowInputSourceOptions(
   );
 }
 
+function formatOptionalJson(value: unknown): string {
+  if (value === undefined) {
+    return "";
+  }
+  return JSON.stringify(value, null, 2);
+}
+
 export default function WorkflowEditorPanel(
   props: WorkflowEditorPanelProps,
 ): JSX.Element {
@@ -182,6 +195,31 @@ export default function WorkflowEditorPanel(
     }
     return orderedNodes(props.editableBundle);
   };
+  const selectedNodeType = (): NodeType =>
+    props.selectedNodePayload?.nodeType ?? "agent";
+  const [containerRuntimeText, setContainerRuntimeText] = createSignal("");
+  const [commandText, setCommandText] = createSignal("");
+  const [containerText, setContainerText] = createSignal("");
+  const [durabilityText, setDurabilityText] = createSignal("");
+
+  createEffect(() => {
+    setContainerRuntimeText(
+      formatOptionalJson(
+        props.editableBundle?.workflow.defaults.containerRuntime,
+      ),
+    );
+  });
+  createEffect(() => {
+    setCommandText(formatOptionalJson(props.selectedNodePayload?.command));
+  });
+  createEffect(() => {
+    setContainerText(formatOptionalJson(props.selectedNodePayload?.container));
+  });
+  createEffect(() => {
+    setDurabilityText(
+      formatOptionalJson(props.selectedNodePayload?.durability),
+    );
+  });
 
   return (
     <section class="panel main-panel">
@@ -272,6 +310,22 @@ export default function WorkflowEditorPanel(
                     />
                   </div>
                 </div>
+                <label for="container-runtime-default">
+                  Container Runtime Defaults JSON
+                </label>
+                <textarea
+                  id="container-runtime-default"
+                  class="code"
+                  value={containerRuntimeText()}
+                  spellcheck={false}
+                  disabled={props.config?.readOnly === true || props.busy}
+                  placeholder={'{\n  "runnerKind": "podman"\n}'}
+                  onInput={(event) => {
+                    const value = event.currentTarget.value;
+                    setContainerRuntimeText(value);
+                    props.onUpdateContainerRuntime(value);
+                  }}
+                />
 
                 <div class="structure-block">
                   <div class="section-head">
@@ -539,40 +593,23 @@ export default function WorkflowEditorPanel(
                         </select>
                       </div>
                       <div>
-                        <label for="execution-backend">Execution Backend</label>
-                        <input
-                          id="execution-backend"
-                          value={
-                            props.selectedNodePayload?.executionBackend ?? ""
-                          }
-                          placeholder="tacogips/codex-agent"
+                        <label for="node-type">Node Type</label>
+                        <select
+                          id="node-type"
+                          value={selectedNodeType()}
                           disabled={
                             props.config?.readOnly === true || props.busy
                           }
-                          onInput={(event) => {
-                            props.onUpdateNodePayloadString(
-                              "executionBackend",
-                              event.currentTarget.value,
+                          onChange={(event) => {
+                            props.onUpdateNodeType(
+                              event.currentTarget.value as NodeType,
                             );
                           }}
-                        />
-                      </div>
-                      <div>
-                        <label for="model">Model</label>
-                        <input
-                          id="model"
-                          value={props.selectedNodePayload?.model ?? ""}
-                          placeholder="gpt-5 / claude-sonnet-4-5 / claude-opus-4-1"
-                          disabled={
-                            props.config?.readOnly === true || props.busy
-                          }
-                          onInput={(event) => {
-                            props.onUpdateNodePayloadString(
-                              "model",
-                              event.currentTarget.value,
-                            );
-                          }}
-                        />
+                        >
+                          <option value="agent">agent</option>
+                          <option value="command">command</option>
+                          <option value="container">container</option>
+                        </select>
                       </div>
                       <div>
                         <label for="timeout">Node Timeout (ms)</label>
@@ -598,18 +635,130 @@ export default function WorkflowEditorPanel(
                       </div>
                     </div>
 
-                    <label for="prompt-template">Prompt Template</label>
-                    <textarea
-                      id="prompt-template"
-                      value={props.selectedNodePayload?.promptTemplate ?? ""}
-                      disabled={props.config?.readOnly === true || props.busy}
-                      onInput={(event) => {
-                        props.onUpdateNodePayloadString(
-                          "promptTemplate",
-                          event.currentTarget.value,
-                        );
-                      }}
-                    />
+                    <Show when={selectedNodeType() === "agent"}>
+                      <div class="property-grid">
+                        <div>
+                          <label for="execution-backend">
+                            Execution Backend
+                          </label>
+                          <input
+                            id="execution-backend"
+                            value={
+                              props.selectedNodePayload?.executionBackend ?? ""
+                            }
+                            placeholder="tacogips/codex-agent"
+                            disabled={
+                              props.config?.readOnly === true || props.busy
+                            }
+                            onInput={(event) => {
+                              props.onUpdateNodePayloadString(
+                                "executionBackend",
+                                event.currentTarget.value,
+                              );
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label for="model">Model</label>
+                          <input
+                            id="model"
+                            value={props.selectedNodePayload?.model ?? ""}
+                            placeholder="gpt-5 / claude-sonnet-4-5 / claude-opus-4-1"
+                            disabled={
+                              props.config?.readOnly === true || props.busy
+                            }
+                            onInput={(event) => {
+                              props.onUpdateNodePayloadString(
+                                "model",
+                                event.currentTarget.value,
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <label for="prompt-template">Prompt Template</label>
+                      <textarea
+                        id="prompt-template"
+                        value={props.selectedNodePayload?.promptTemplate ?? ""}
+                        disabled={props.config?.readOnly === true || props.busy}
+                        onInput={(event) => {
+                          props.onUpdateNodePayloadString(
+                            "promptTemplate",
+                            event.currentTarget.value,
+                          );
+                        }}
+                      />
+                    </Show>
+
+                    <Show when={selectedNodeType() === "command"}>
+                      <div>
+                        <label for="command-json">Command JSON</label>
+                        <textarea
+                          id="command-json"
+                          class="code"
+                          value={commandText()}
+                          spellcheck={false}
+                          disabled={
+                            props.config?.readOnly === true || props.busy
+                          }
+                          placeholder={
+                            '{\n  "scriptPath": "scripts/run.sh",\n  "argvTemplate": ["--topic", "{{variables.topic}}"]\n}'
+                          }
+                          onInput={(event) => {
+                            const value = event.currentTarget.value;
+                            setCommandText(value);
+                            props.onUpdateNodePayloadObject("command", value);
+                          }}
+                        />
+                      </div>
+                    </Show>
+
+                    <Show when={selectedNodeType() === "container"}>
+                      <div>
+                        <label for="container-json">Container JSON</label>
+                        <textarea
+                          id="container-json"
+                          class="code"
+                          value={containerText()}
+                          spellcheck={false}
+                          disabled={
+                            props.config?.readOnly === true || props.busy
+                          }
+                          placeholder={
+                            '{\n  "image": "ghcr.io/example/worker:latest",\n  "networkPolicy": "disabled"\n}'
+                          }
+                          onInput={(event) => {
+                            const value = event.currentTarget.value;
+                            setContainerText(value);
+                            props.onUpdateNodePayloadObject("container", value);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label for="durability-json">Durability JSON</label>
+                        <textarea
+                          id="durability-json"
+                          class="code"
+                          value={durabilityText()}
+                          spellcheck={false}
+                          disabled={
+                            props.config?.readOnly === true || props.busy
+                          }
+                          placeholder={
+                            '{\n  "mode": "node-persistent",\n  "mountPath": "/durable"\n}'
+                          }
+                          onInput={(event) => {
+                            const value = event.currentTarget.value;
+                            setDurabilityText(value);
+                            props.onUpdateNodePayloadObject(
+                              "durability",
+                              value,
+                            );
+                          }}
+                        />
+                      </div>
+                    </Show>
 
                     <label for="variables">Variables JSON</label>
                     <textarea

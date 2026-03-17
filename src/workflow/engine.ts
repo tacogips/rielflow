@@ -58,6 +58,7 @@ import {
   type SessionStoreOptions,
 } from "./session-store";
 import type {
+  AgentNodePayload,
   JsonObject,
   LoadOptions,
   LoopRule,
@@ -66,6 +67,7 @@ import type {
   WorkflowEdge,
   WorkflowJson,
 } from "./types";
+import { asAgentNodePayload } from "./types";
 
 export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly sessionId?: string;
@@ -1193,7 +1195,7 @@ function cloneSession(session: WorkflowSessionState): WorkflowSessionState {
 
 function resolveRequestedBackendSession(
   session: WorkflowSessionState,
-  node: NodePayload,
+  node: AgentNodePayload,
 ): AdapterExecutionInput["backendSession"] | undefined {
   if (node.sessionPolicy === undefined) {
     return undefined;
@@ -1221,7 +1223,7 @@ function resolveRequestedBackendSession(
 
 function persistNodeBackendSession(input: {
   readonly session: WorkflowSessionState;
-  readonly node: NodePayload;
+  readonly node: AgentNodePayload;
   readonly nodeExecId: string;
   readonly provider: string;
   readonly endedAt: string;
@@ -1467,20 +1469,52 @@ export async function runWorkflow(
         message: failed.lastError ?? "missing node definition",
       });
     }
-    if (nodePayload.runtimeIsolation?.mode === "podman") {
+    if (nodePayload.nodeType === "command") {
       const failed: WorkflowSessionState = {
         ...session,
         queue,
         status: "failed",
         currentNodeId: nodeId,
         endedAt: nowIso(),
-        lastError: `node '${nodeId}' requests runtimeIsolation.mode='podman', but Podman execution is not implemented yet`,
+        lastError: `node '${nodeId}' requests nodeType='command', but command execution is not implemented yet`,
       };
       await saveSession(failed, options);
       return err({
         exitCode: 1,
         message:
-          failed.lastError ?? "unsupported podman runtime isolation request",
+          failed.lastError ?? "unsupported command node execution request",
+      });
+    }
+    if (nodePayload.nodeType === "container") {
+      const failed: WorkflowSessionState = {
+        ...session,
+        queue,
+        status: "failed",
+        currentNodeId: nodeId,
+        endedAt: nowIso(),
+        lastError: `node '${nodeId}' requests nodeType='container', but container execution is not implemented yet`,
+      };
+      await saveSession(failed, options);
+      return err({
+        exitCode: 1,
+        message:
+          failed.lastError ?? "unsupported container node execution request",
+      });
+    }
+    const agentNodePayload = asAgentNodePayload(nodePayload);
+    if (agentNodePayload === null) {
+      const failed: WorkflowSessionState = {
+        ...session,
+        queue,
+        status: "failed",
+        currentNodeId: nodeId,
+        endedAt: nowIso(),
+        lastError: `node '${nodeId}' is missing agent execution fields`,
+      };
+      await saveSession(failed, options);
+      return err({
+        exitCode: 1,
+        message: failed.lastError ?? "invalid agent node payload",
       });
     }
 
@@ -1511,7 +1545,7 @@ export async function runWorkflow(
       await mkdir(artifactDir, { recursive: true });
 
       const mergedVariables = mergeVariables(
-        nodePayload.variables,
+        agentNodePayload.variables,
         session.runtimeVariables,
       );
       const upstreamOutputRefs = buildUpstreamOutputRefs(
@@ -1568,7 +1602,7 @@ export async function runWorkflow(
       try {
         const assembled = assembleNodeInput({
           runtimeVariables: session.runtimeVariables,
-          node: nodePayload,
+          node: agentNodePayload,
           workflowId: workflow.workflowId,
           workflowDescription: workflow.description,
           ...(nodeRef.kind === undefined ? {} : { nodeKind: nodeRef.kind }),
@@ -1578,7 +1612,7 @@ export async function runWorkflow(
         assembledPromptText = composeExecutionPrompt({
           workflow,
           nodeRef,
-          node: nodePayload,
+          node: agentNodePayload,
           nodePayloads: nodeMap,
           runtimeVariables: session.runtimeVariables,
           basePromptText: assembled.promptText,
@@ -1606,7 +1640,10 @@ export async function runWorkflow(
         });
       }
 
-      let backendSession = resolveRequestedBackendSession(session, nodePayload);
+      let backendSession = resolveRequestedBackendSession(
+        session,
+        agentNodePayload,
+      );
       const requestedBackendSessionMode = backendSession?.mode;
       let backendSessionId: string | undefined = backendSession?.sessionId;
       let backendSessionProvider: string | undefined;
@@ -1617,8 +1654,8 @@ export async function runWorkflow(
         workflowId: workflow.workflowId,
         nodeId,
         nodeExecId,
-        model: nodePayload.model,
-        promptTemplate: nodePayload.promptTemplate,
+        model: agentNodePayload.model,
+        promptTemplate: agentNodePayload.promptTemplate,
         promptText: assembledPromptText,
         arguments: assembledArguments,
         variables: mergedVariables,
@@ -1626,13 +1663,13 @@ export async function runWorkflow(
         upstreamCommunications: upstreamCommunicationIds,
         restartAttempt,
         outputContract:
-          nodePayload.output === undefined
+          agentNodePayload.output === undefined
             ? undefined
             : {
-                description: nodePayload.output.description,
-                jsonSchema: nodePayload.output.jsonSchema,
+                description: agentNodePayload.output.description,
+                jsonSchema: agentNodePayload.output.jsonSchema,
                 maxValidationAttempts:
-                  resolveOutputValidationAttempts(nodePayload),
+                  resolveOutputValidationAttempts(agentNodePayload),
                 publication: buildOutputPublicationPolicy(),
               },
         ...(backendSession === undefined ? {} : { backendSession }),
@@ -1649,7 +1686,7 @@ export async function runWorkflow(
 
       const startedAt = nowIso();
       const timeoutMs = resolveTimeoutMs(
-        nodePayload,
+        agentNodePayload,
         workflow.defaults.nodeTimeoutMs,
         options.defaultTimeoutMs,
       );
@@ -1716,7 +1753,7 @@ export async function runWorkflow(
       if (options.dryRun === true) {
         outputPayload = {
           provider: "dry-run",
-          model: nodePayload.model,
+          model: agentNodePayload.model,
           promptText: assembledPromptText,
           completionPassed: true,
           when: { always: true },
@@ -1724,9 +1761,9 @@ export async function runWorkflow(
         };
       } else {
         let finalizedOutput: Readonly<Record<string, unknown>> | undefined;
-        const hasOutputContract = nodePayload.output !== undefined;
+        const hasOutputContract = agentNodePayload.output !== undefined;
         const maxOutputAttempts = hasOutputContract
-          ? resolveOutputValidationAttempts(nodePayload)
+          ? resolveOutputValidationAttempts(agentNodePayload)
           : 1;
 
         for (
@@ -1778,7 +1815,7 @@ export async function runWorkflow(
               ? assembledPromptText
               : buildOutputPromptText({
                   basePromptText: assembledPromptText,
-                  node: nodePayload,
+                  node: agentNodePayload,
                   candidatePath,
                   validationErrors: outputValidationErrors,
                 });
@@ -1803,15 +1840,15 @@ export async function runWorkflow(
               );
             }
             const adapterOutputContract =
-              !hasOutputContract || nodePayload.output === undefined
+              !hasOutputContract || agentNodePayload.output === undefined
                 ? undefined
                 : {
-                    ...(nodePayload.output.description === undefined
+                    ...(agentNodePayload.output.description === undefined
                       ? {}
-                      : { description: nodePayload.output.description }),
-                    ...(nodePayload.output.jsonSchema === undefined
+                      : { description: agentNodePayload.output.description }),
+                    ...(agentNodePayload.output.jsonSchema === undefined
                       ? {}
-                      : { jsonSchema: nodePayload.output.jsonSchema }),
+                      : { jsonSchema: agentNodePayload.output.jsonSchema }),
                     maxValidationAttempts: maxOutputAttempts,
                     attempt: outputAttempt,
                     candidatePath: contractCandidatePath!,
@@ -1825,7 +1862,7 @@ export async function runWorkflow(
                 workflowExecutionId: session.sessionId,
                 nodeId,
                 nodeExecId,
-                node: nodePayload,
+                node: agentNodePayload,
                 mergedVariables,
                 promptText: executionPromptText,
                 arguments: assembledArguments,
@@ -1862,7 +1899,7 @@ export async function runWorkflow(
                   nodeStatus = "failed";
                   finalizedOutput = {
                     provider: "deterministic-local",
-                    model: nodePayload.model,
+                    model: agentNodePayload.model,
                     promptText: assembledPromptText,
                     completionPassed: false,
                     when: {},
@@ -1881,7 +1918,7 @@ export async function runWorkflow(
                 execution.error.code === "timeout" ? "timed_out" : "failed";
               finalizedOutput = {
                 provider: "deterministic-local",
-                model: nodePayload.model,
+                model: agentNodePayload.model,
                 promptText: assembledPromptText,
                 completionPassed: false,
                 when: {},
@@ -1980,7 +2017,7 @@ export async function runWorkflow(
             if (candidateArtifactPath !== undefined) {
               await writeJsonFile(candidateArtifactPath, candidateResult.value);
             }
-            const schema = nodePayload.output?.jsonSchema;
+            const schema = agentNodePayload.output?.jsonSchema;
             const validationErrors =
               schema === undefined
                 ? []
@@ -2031,7 +2068,7 @@ export async function runWorkflow(
 
         outputPayload = finalizedOutput ?? {
           provider: "deterministic-local",
-          model: nodePayload.model,
+          model: agentNodePayload.model,
           promptText: assembledPromptText,
           completionPassed: false,
           when: {},
@@ -2043,7 +2080,7 @@ export async function runWorkflow(
       const endedAt = nowIso();
       const nextNodeBackendSessions = persistNodeBackendSession({
         session,
-        node: nodePayload,
+        node: agentNodePayload,
         nodeExecId,
         provider:
           backendSessionProvider ??
@@ -2516,7 +2553,7 @@ export async function runWorkflow(
         status: nodeStatus,
         startedAt,
         endedAt,
-        model: nodePayload.model,
+        model: agentNodePayload.model,
         timeoutMs,
         restartAttempt,
         outputAttemptCount,

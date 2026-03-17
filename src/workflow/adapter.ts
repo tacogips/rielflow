@@ -1,5 +1,5 @@
 import type { AmbientManagerControlPlaneEnvironment } from "./manager-session-store";
-import type { JsonObject, NodePayload } from "./types";
+import type { AgentNodePayload, JsonObject } from "./types";
 
 export type AdapterFailureCode =
   | "provider_error"
@@ -26,7 +26,7 @@ export interface AdapterExecutionInput {
   readonly workflowExecutionId: string;
   readonly nodeId: string;
   readonly nodeExecId: string;
-  readonly node: NodePayload;
+  readonly node: AgentNodePayload;
   readonly mergedVariables: Readonly<Record<string, unknown>>;
   readonly promptText: string;
   readonly arguments: Readonly<Record<string, unknown>> | null;

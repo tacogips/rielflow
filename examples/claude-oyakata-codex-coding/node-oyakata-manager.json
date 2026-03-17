@@ -1,7 +1,7 @@
 {
   "id": "oyakata-manager",
   "executionBackend": "claude-code-agent",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-haiku-4-5",
   "promptTemplateFile": "prompts/oyakata-manager.md",
   "variables": {
     "workflowId": "claude-oyakata-codex-coding"

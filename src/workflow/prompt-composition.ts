@@ -71,14 +71,27 @@ function summarizeJson(value: unknown, maxLength = 260): string {
 }
 
 function summarizePromptTemplate(
-  promptTemplate: string,
+  promptTemplate: string | undefined,
   maxLength = 220,
 ): string {
+  if (promptTemplate === undefined || promptTemplate.length === 0) {
+    return "(no prompt template)";
+  }
   const compact = promptTemplate.replace(/\s+/g, " ").trim();
   if (compact.length <= maxLength) {
     return compact;
   }
   return `${compact.slice(0, maxLength - 3)}...`;
+}
+
+function summarizeNodeExecutionSeed(node: NodePayload): string {
+  if ((node.nodeType ?? "agent") === "container") {
+    return "opaque container execution";
+  }
+  if (node.nodeType === "command") {
+    return "direct command execution";
+  }
+  return summarizePromptTemplate(node.promptTemplate);
 }
 
 function buildNodeReason(
@@ -204,9 +217,7 @@ function buildManagerChildCatalog(input: {
       lines.push(`- Child node: ${child.id} (${child.kind ?? "task"})`);
       lines.push(`  reason=${buildNodeReason(child.kind, workflow, child.id)}`);
       lines.push(`  expectedReturn=${buildExpectedReturn(child, payload)}`);
-      lines.push(
-        `  promptSeed=${summarizePromptTemplate(payload.promptTemplate)}`,
-      );
+      lines.push(`  promptSeed=${summarizeNodeExecutionSeed(payload)}`);
     }
   } else {
     const ownedSubWorkflow = findOwnedSubWorkflow(workflow, nodeRef.id);
@@ -226,9 +237,7 @@ function buildManagerChildCatalog(input: {
       lines.push(`- Child node: ${child.id} (${child.kind ?? "task"})`);
       lines.push(`  reason=${buildNodeReason(child.kind, workflow, child.id)}`);
       lines.push(`  expectedReturn=${buildExpectedReturn(child, payload)}`);
-      lines.push(
-        `  promptSeed=${summarizePromptTemplate(payload.promptTemplate)}`,
-      );
+      lines.push(`  promptSeed=${summarizeNodeExecutionSeed(payload)}`);
     }
   }
 

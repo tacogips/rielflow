@@ -172,7 +172,7 @@ export function assembleNodeInput(
     })),
   });
   const promptText = renderPromptTemplate(
-    ctx.node.promptTemplate,
+    ctx.node.promptTemplate ?? "",
     mergedVariables,
   );
 

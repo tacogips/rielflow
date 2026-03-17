@@ -1,27 +1,30 @@
-# Podman Runtime Isolation Build Contract Implementation Plan
+# Container Runtime Contract Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/design-podman-runtime-isolation-build-contract.md`
+**Design Reference**: `design-docs/specs/design-container-runtime-contract.md`
 **Created**: 2026-03-16
-**Last Updated**: 2026-03-16
+**Last Updated**: 2026-03-17
 
 ## Scope
 
-Implement the workflow authoring and validation slice for Podman runtime
-isolation metadata, including optional Dockerfile-path build metadata, without
-adding a real Podman executor in this session.
+Implement the workflow authoring and validation slice for the container runtime
+contract, including workflow-level runner defaults, node-level container
+metadata, durability, legacy Podman metadata migration, and explicit runtime
+rejection until a real container executor exists.
 
 In scope:
 
-- add typed `runtimeIsolation` metadata to node payloads
-- validate `podman` image/build authoring rules
-- preserve the metadata through workflow load/validation
-- fail clearly if runtime execution targets a Podman-isolated node
+- add typed `containerRuntime` defaults to workflow definitions
+- add typed `container` and `durability` metadata to node payloads
+- validate container image/build authoring rules and runner defaults
+- preserve normalized metadata through workflow load/validation/save
+- normalize legacy `runtimeIsolation` metadata into the newer container schema
+- fail clearly if runtime execution targets a container node
 
 Out of scope:
 
 - command-node runtime execution
-- Podman image build orchestration
+- container image build orchestration
 - mailbox mount preparation inside containers
 
 ## Modules
@@ -33,22 +36,16 @@ Out of scope:
 **Status**: COMPLETED
 
 ```ts
-export interface RuntimeIsolationBuild {
-  readonly contextPath: string;
-  readonly dockerfilePath?: string;
-  readonly target?: string;
-}
-
-export interface RuntimeIsolation {
-  readonly mode: "host" | "podman";
-  readonly image?: string;
-  readonly build?: RuntimeIsolationBuild;
+export interface ContainerRuntimeDefaults {
+  readonly runnerKind?: "podman" | "docker" | "nerdctl" | "apple-container";
+  readonly runnerPath?: string;
 }
 ```
 
 **Checklist**:
 
-- [x] Add `runtimeIsolation` types to node payloads
+- [x] Add `containerRuntime`, `container`, and `durability` types
+- [x] Normalize legacy `runtimeIsolation` metadata into the container schema
 - [x] Preserve additive compatibility for existing agent nodes
 
 #### `src/workflow/validate.ts`
@@ -57,9 +54,9 @@ export interface RuntimeIsolation {
 
 **Checklist**:
 
-- [x] Validate `podman` image/build exclusivity
-- [x] Validate workflow-relative `build` paths
-- [x] Preserve normalized metadata in the validated node payload
+- [x] Validate workflow-level container runner defaults
+- [x] Validate container image/build exclusivity and workflow-relative paths
+- [x] Preserve normalized container metadata in the validated node payload
 
 ### 2. Runtime Guard
 
@@ -71,7 +68,7 @@ export interface RuntimeIsolation {
 
 **Checklist**:
 
-- [x] Reject execution of Podman-isolated nodes with a deterministic error
+- [x] Reject execution of container nodes with a deterministic error
 - [x] Keep existing agent execution behavior unchanged
 
 ### 3. Regression Tests
@@ -88,16 +85,17 @@ export interface RuntimeIsolation {
 
 **Checklist**:
 
-- [x] Accept valid Podman build metadata with `dockerfilePath`
+- [x] Accept valid container build metadata with `containerfilePath` or legacy `dockerfilePath`
 - [x] Reject ambiguous or unsafe build/image configuration
-- [x] Verify metadata survives workflow loading
-- [x] Verify execution fails clearly before a Podman executor exists
+- [x] Verify metadata survives workflow loading and save/reload
+- [x] Verify execution fails clearly before a container executor exists
 
 ## Completion Criteria
 
-- [x] Node payloads can declare Podman image or build metadata
-- [x] Validation enforces exact image/build rules
-- [x] Runtime rejects unsupported Podman execution explicitly
+- [x] Workflow defaults can declare container runner defaults
+- [x] Node payloads can declare container image/build and durability metadata
+- [x] Validation enforces exact container image/build rules
+- [x] Runtime rejects unsupported container execution explicitly
 - [x] Focused tests pass
 - [x] Type checking passes
 
@@ -108,4 +106,4 @@ export interface RuntimeIsolation {
 **Tasks Completed**: Types, validation, runtime guard, and focused regression tests
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Chose the smallest coherent slice that answers the Dockerfile-path question directly: preserve and validate Podman build metadata now, but reject actual Podman execution until a command/container executor exists.
+**Notes**: Initial completion covered the smallest coherent Podman-only slice. The 2026-03-17 continuation broadened that implementation to the new container-oriented design: workflow defaults now carry container runner defaults, node payloads normalize legacy `runtimeIsolation` into `container`, save/load preserve the normalized schema, and runtime execution rejects `container` nodes explicitly until a dedicated container executor exists.

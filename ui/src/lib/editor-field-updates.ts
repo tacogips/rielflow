@@ -1,8 +1,11 @@
-import type { CompletionType, NodeKind } from "../../../src/workflow/types";
+import type {
+  CompletionType,
+  NodeKind,
+  NodeType,
+} from "../../../src/workflow/types";
 import type {
   EditorNodePayload,
   EditorWorkflowBundle,
-  EditorWorkflowDefaults,
   EditorWorkflowEdge,
 } from "./editor-workflow";
 import {
@@ -30,6 +33,9 @@ export type FieldUpdateResult = FieldUpdateSuccess | FieldUpdateError;
 type ParsedPositiveInteger =
   | { readonly ok: true; readonly value: number }
   | FieldUpdateError;
+type ParsedOptionalObject =
+  | { readonly ok: true; readonly value: Record<string, unknown> | undefined }
+  | FieldUpdateError;
 
 function ok(): FieldUpdateSuccess {
   return { ok: true };
@@ -53,6 +59,26 @@ function parsePositiveInteger(
       error instanceof Error
         ? error.message
         : `${fieldName} must be a positive integer.`,
+    );
+  }
+}
+
+function parseOptionalObject(
+  rawValue: string,
+  fieldName: string,
+): ParsedOptionalObject {
+  const trimmed = rawValue.trim();
+  if (trimmed.length === 0) {
+    return { ok: true, value: undefined };
+  }
+  try {
+    return {
+      ok: true,
+      value: parseJsonObject(trimmed, fieldName),
+    };
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : `${fieldName} must be JSON.`,
     );
   }
 }
@@ -152,7 +178,7 @@ export function updateEdgeFieldValue(
 
 export function updateWorkflowDefaultValue(
   bundle: EditorWorkflowBundle | null | undefined,
-  field: keyof EditorWorkflowDefaults,
+  field: "maxLoopIterations" | "nodeTimeoutMs",
   rawValue: string,
 ): FieldUpdateResult {
   if (!bundle) {
@@ -165,6 +191,33 @@ export function updateWorkflowDefaultValue(
   }
 
   bundle.workflow.defaults[field] = parsed.value;
+  return ok();
+}
+
+export function updateWorkflowContainerRuntimeValue(
+  bundle: EditorWorkflowBundle | null | undefined,
+  rawValue: string,
+): FieldUpdateResult {
+  if (!bundle) {
+    return fail("workflow is not loaded.");
+  }
+
+  const parsed = parseOptionalObject(
+    rawValue,
+    "Workflow default 'containerRuntime'",
+  );
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  if (parsed.value === undefined) {
+    delete bundle.workflow.defaults.containerRuntime;
+    return ok();
+  }
+
+  bundle.workflow.defaults.containerRuntime = parsed.value as NonNullable<
+    EditorWorkflowBundle["workflow"]["defaults"]["containerRuntime"]
+  >;
   return ok();
 }
 
@@ -193,6 +246,62 @@ export function updateNodePayloadStringValue(
     payload.promptTemplate = value;
   }
   return true;
+}
+
+export function updateNodePayloadTypeValue(
+  payload: EditorNodePayload | null | undefined,
+  nodeType: NodeType,
+): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  if (nodeType === "agent") {
+    delete payload.nodeType;
+    return true;
+  }
+
+  payload.nodeType = nodeType;
+  return true;
+}
+
+export function updateNodePayloadObjectValue(
+  payload: EditorNodePayload | null | undefined,
+  field: "command" | "container" | "durability",
+  rawValue: string,
+): FieldUpdateResult {
+  if (!payload) {
+    return fail("node payload is not loaded.");
+  }
+
+  const parsed = parseOptionalObject(rawValue, `Node field '${field}'`);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  if (parsed.value === undefined) {
+    delete payload[field];
+    return ok();
+  }
+
+  switch (field) {
+    case "command":
+      payload.command = parsed.value as NonNullable<
+        EditorNodePayload["command"]
+      >;
+      break;
+    case "container":
+      payload.container = parsed.value as NonNullable<
+        EditorNodePayload["container"]
+      >;
+      break;
+    case "durability":
+      payload.durability = parsed.value as NonNullable<
+        EditorNodePayload["durability"]
+      >;
+      break;
+  }
+  return ok();
 }
 
 export function updateNodeTimeoutValue(

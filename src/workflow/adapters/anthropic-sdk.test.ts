@@ -12,7 +12,7 @@ const baseInput: AdapterExecutionInput = {
   nodeExecId: "exec-1",
   node: {
     id: "node-1",
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     executionBackend: "official/anthropic-sdk",
     promptTemplate: "test",
     variables: {},
@@ -49,7 +49,7 @@ describe("AnthropicSdkAdapter", () => {
 
     const output = await adapter.execute(baseInput, baseContext);
     expect(output.provider).toBe("official-anthropic-sdk");
-    expect(output.model).toBe("claude-sonnet-4-5");
+    expect(output.model).toBe("claude-haiku-4-5");
     expect(output.payload["text"]).toBe("hello from anthropic");
     expect(output.payload["outputAttempt"]).toBeUndefined();
     expect(capturedSignal).toBe(baseContext.signal);

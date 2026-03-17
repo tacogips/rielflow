@@ -1,7 +1,7 @@
 {
   "oyakata-manager": {
     "provider": "scenario-mock",
-    "model": "claude-sonnet-4-5",
+    "model": "claude-haiku-4-5",
     "when": {
       "always": true
     },
@@ -12,7 +12,7 @@
   },
   "main-oyakata": {
     "provider": "scenario-mock",
-    "model": "claude-sonnet-4-5",
+    "model": "claude-haiku-4-5",
     "when": {
       "always": true
     },
@@ -23,7 +23,7 @@
   },
   "workflow-input": {
     "provider": "scenario-mock",
-    "model": "claude-sonnet-4-5",
+    "model": "claude-haiku-4-5",
     "when": {
       "always": true
     },
@@ -42,7 +42,7 @@
   },
   "implementation-brief": {
     "provider": "scenario-mock",
-    "model": "claude-sonnet-4-5",
+    "model": "claude-haiku-4-5",
     "when": {
       "always": true
     },
@@ -65,7 +65,7 @@
   },
   "implement": {
     "provider": "scenario-mock",
-    "model": "gpt-5",
+    "model": "gpt-5-nano",
     "when": {
       "always": true
     },
@@ -85,7 +85,7 @@
   },
   "workflow-output": {
     "provider": "scenario-mock",
-    "model": "claude-sonnet-4-5",
+    "model": "claude-haiku-4-5",
     "when": {
       "always": true
     },
