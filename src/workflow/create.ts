@@ -17,6 +17,100 @@ export interface CreateWorkflowFailure {
 const TEMPLATE_EXECUTION_BACKEND = "codex-agent";
 const TEMPLATE_MODEL = "gpt-5-nano";
 
+interface TemplateNodeDefinition {
+  readonly id: string;
+  readonly kind: "root-manager" | "sub-oyakata-manager" | "input" | "output";
+  readonly prompt: string;
+  readonly includeWorkflowId: boolean;
+}
+
+const TEMPLATE_NODE_DEFINITIONS = [
+  {
+    id: "oyakata-manager",
+    kind: "root-manager",
+    prompt: "Coordinate workflow execution for {{workflowId}}",
+    includeWorkflowId: true,
+  },
+  {
+    id: "main-oyakata",
+    kind: "sub-oyakata-manager",
+    prompt:
+      "Translate the parent oyakata instruction into this sub-workflow's child work for {{workflowId}}",
+    includeWorkflowId: true,
+  },
+  {
+    id: "workflow-input",
+    kind: "input",
+    prompt:
+      "Normalize the received sub-workflow instruction into workflow input",
+    includeWorkflowId: false,
+  },
+  {
+    id: "workflow-output",
+    kind: "output",
+    prompt: "Finalize workflow output",
+    includeWorkflowId: false,
+  },
+] as const satisfies readonly [
+  TemplateNodeDefinition,
+  TemplateNodeDefinition,
+  TemplateNodeDefinition,
+  TemplateNodeDefinition,
+];
+
+function templateNodeFileName(nodeId: string): string {
+  return `node-${nodeId}.json`;
+}
+
+function createTemplateWorkflowNode(definition: TemplateNodeDefinition): {
+  readonly id: string;
+  readonly kind: TemplateNodeDefinition["kind"];
+  readonly nodeFile: string;
+  readonly completion: { readonly type: "none" };
+} {
+  return {
+    id: definition.id,
+    kind: definition.kind,
+    nodeFile: templateNodeFileName(definition.id),
+    completion: { type: "none" },
+  };
+}
+
+function createTemplateNodePayload(
+  definition: TemplateNodeDefinition,
+  workflowId: string,
+): {
+  readonly fileName: string;
+  readonly payload: {
+    readonly id: string;
+    readonly executionBackend: typeof TEMPLATE_EXECUTION_BACKEND;
+    readonly model: typeof TEMPLATE_MODEL;
+    readonly promptTemplateFile: string;
+    readonly variables: Readonly<Record<string, string>>;
+  };
+} {
+  return {
+    fileName: templateNodeFileName(definition.id),
+    payload: {
+      id: definition.id,
+      executionBackend: TEMPLATE_EXECUTION_BACKEND,
+      model: TEMPLATE_MODEL,
+      promptTemplateFile: `prompts/${definition.id}.md`,
+      variables: definition.includeWorkflowId ? { workflowId } : {},
+    },
+  };
+}
+
+function createTemplatePromptFile(definition: TemplateNodeDefinition): {
+  readonly fileName: string;
+  readonly content: string;
+} {
+  return {
+    fileName: `${definition.id}.md`,
+    content: definition.prompt,
+  };
+}
+
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
@@ -58,10 +152,12 @@ export async function createWorkflowTemplate(
   }
 
   const workflowId = workflowName;
-  const managerId = "oyakata-manager";
-  const mainManagerId = "main-oyakata";
-  const inputId = "workflow-input";
-  const outputId = "workflow-output";
+  const [managerNode, mainManagerNode, inputNode, outputNode] =
+    TEMPLATE_NODE_DEFINITIONS;
+  const managerId = managerNode.id;
+  const mainManagerId = mainManagerNode.id;
+  const inputId = inputNode.id;
+  const outputId = outputNode.id;
 
   const workflowJson = {
     workflowId,
@@ -92,110 +188,24 @@ export async function createWorkflowTemplate(
         block: { type: "plain" },
       },
     ],
-    nodes: [
-      {
-        id: managerId,
-        kind: "root-manager",
-        nodeFile: `node-${managerId}.json`,
-        completion: { type: "none" },
-      },
-      {
-        id: mainManagerId,
-        kind: "sub-oyakata-manager",
-        nodeFile: `node-${mainManagerId}.json`,
-        completion: { type: "none" },
-      },
-      {
-        id: inputId,
-        kind: "input",
-        nodeFile: `node-${inputId}.json`,
-        completion: { type: "none" },
-      },
-      {
-        id: outputId,
-        kind: "output",
-        nodeFile: `node-${outputId}.json`,
-        completion: { type: "none" },
-      },
-    ],
+    nodes: TEMPLATE_NODE_DEFINITIONS.map(createTemplateWorkflowNode),
     edges: [{ from: inputId, to: outputId, when: "always" }],
     loops: [],
     branching: { mode: "fan-out" },
   };
 
   const workflowVis = {
-    nodes: [
-      { id: managerId, order: 0 },
-      { id: mainManagerId, order: 1 },
-      { id: inputId, order: 2 },
-      { id: outputId, order: 3 },
-    ],
+    nodes: TEMPLATE_NODE_DEFINITIONS.map((definition, order) => ({
+      id: definition.id,
+      order,
+    })),
     uiMeta: { layout: "vertical" },
   };
 
-  const nodePayloads: Array<{ fileName: string; payload: object }> = [
-    {
-      fileName: `node-${managerId}.json`,
-      payload: {
-        id: managerId,
-        executionBackend: TEMPLATE_EXECUTION_BACKEND,
-        model: TEMPLATE_MODEL,
-        promptTemplateFile: `prompts/${managerId}.md`,
-        variables: { workflowId },
-      },
-    },
-    {
-      fileName: `node-${mainManagerId}.json`,
-      payload: {
-        id: mainManagerId,
-        executionBackend: TEMPLATE_EXECUTION_BACKEND,
-        model: TEMPLATE_MODEL,
-        promptTemplateFile: `prompts/${mainManagerId}.md`,
-        variables: { workflowId },
-      },
-    },
-    {
-      fileName: `node-${inputId}.json`,
-      payload: {
-        id: inputId,
-        executionBackend: TEMPLATE_EXECUTION_BACKEND,
-        model: TEMPLATE_MODEL,
-        promptTemplateFile: `prompts/${inputId}.md`,
-        variables: {},
-      },
-    },
-    {
-      fileName: `node-${outputId}.json`,
-      payload: {
-        id: outputId,
-        executionBackend: TEMPLATE_EXECUTION_BACKEND,
-        model: TEMPLATE_MODEL,
-        promptTemplateFile: `prompts/${outputId}.md`,
-        variables: {},
-      },
-    },
-  ];
-
-  const promptFiles: Array<{ fileName: string; content: string }> = [
-    {
-      fileName: `${managerId}.md`,
-      content: "Coordinate workflow execution for {{workflowId}}",
-    },
-    {
-      fileName: `${mainManagerId}.md`,
-      content:
-        "Translate the parent oyakata instruction into this sub-workflow's child work for {{workflowId}}",
-    },
-    {
-      fileName: `${inputId}.md`,
-      content:
-        "Normalize the received sub-workflow instruction into workflow input",
-    },
-    {
-      fileName: `${outputId}.md`,
-      content: "Finalize workflow output",
-    },
-  ];
+  const nodePayloads = TEMPLATE_NODE_DEFINITIONS.map((definition) =>
+    createTemplateNodePayload(definition, workflowId),
+  );
+  const promptFiles = TEMPLATE_NODE_DEFINITIONS.map(createTemplatePromptFile);
 
   try {
     await writeJson(
@@ -214,7 +224,10 @@ export async function createWorkflowTemplate(
       );
     }
     for (const promptFile of promptFiles) {
-      await writeText(path.join(promptDirectory, promptFile.fileName), promptFile.content);
+      await writeText(
+        path.join(promptDirectory, promptFile.fileName),
+        promptFile.content,
+      );
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";

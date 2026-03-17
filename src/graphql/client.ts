@@ -1,4 +1,4 @@
-import { DEFAULT_SERVE_PORT } from "../server/serve";
+export { DEFAULT_GRAPHQL_ENDPOINT } from "./endpoint";
 import { GRAPHQL_MANAGER_SESSION_HEADER } from "./transport";
 
 export interface GraphqlClientRequest {
@@ -19,10 +19,6 @@ export interface GraphqlClientResponse {
   readonly errors?: readonly GraphqlResponseError[];
 }
 
-export const DEFAULT_GRAPHQL_ENDPOINT = `http://127.0.0.1:${String(
-  DEFAULT_SERVE_PORT,
-)}/graphql`;
-
 export async function executeGraphqlRequest(
   request: GraphqlClientRequest,
 ): Promise<GraphqlClientResponse> {
@@ -41,7 +37,9 @@ export async function executeGraphqlRequest(
     headers,
     body: JSON.stringify({
       query: request.document,
-      ...(request.variables === undefined ? {} : { variables: request.variables }),
+      ...(request.variables === undefined
+        ? {}
+        : { variables: request.variables }),
     }),
   });
 
@@ -66,7 +64,8 @@ export async function executeGraphqlRequest(
       (entry) =>
         typeof entry === "object" &&
         entry !== null &&
-        typeof (entry as Readonly<Record<string, unknown>>)["message"] === "string",
+        typeof (entry as Readonly<Record<string, unknown>>)["message"] ===
+          "string",
     )
       ? (errorsRaw as readonly GraphqlResponseError[])
       : undefined;

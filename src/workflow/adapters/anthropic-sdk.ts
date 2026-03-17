@@ -7,10 +7,14 @@ import {
   type AdapterExecutionOutput,
   type NodeAdapter,
 } from "../adapter";
+import {
+  executeWithRetry,
+  normalizeAdapterFailure,
+  resolveConfiguredEnvValue,
+  resolveRetryPolicy,
+} from "./shared";
 
 const DEFAULT_ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY";
-const DEFAULT_ANTHROPIC_MAX_ATTEMPTS = 2;
-const DEFAULT_ANTHROPIC_RETRY_DELAY_MS = 50;
 const DEFAULT_ANTHROPIC_MAX_TOKENS = 1024;
 
 interface AnthropicMessagesClient {
@@ -46,9 +50,10 @@ export interface AnthropicSdkAdapterConfig {
 }
 
 function resolveApiKey(config: AnthropicSdkAdapterConfig): string | undefined {
-  const keyEnv = config.apiKeyEnv ?? DEFAULT_ANTHROPIC_API_KEY_ENV;
-  const value = process.env[keyEnv];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  return resolveConfiguredEnvValue(
+    config.apiKeyEnv,
+    DEFAULT_ANTHROPIC_API_KEY_ENV,
+  );
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -116,21 +121,17 @@ export class AnthropicSdkAdapter implements NodeAdapter {
         ? {}
         : { baseURL: this.#config.baseUrl }),
     });
-    const maxAttempts = Math.max(
-      1,
-      this.#config.maxAttempts ?? DEFAULT_ANTHROPIC_MAX_ATTEMPTS,
-    );
-    const retryDelayMs = Math.max(
-      0,
-      this.#config.retryDelayMs ?? DEFAULT_ANTHROPIC_RETRY_DELAY_MS,
-    );
+    const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
     const maxTokens = Math.max(
       1,
       this.#config.maxTokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
     );
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
+    return executeWithRetry({
+      maxAttempts,
+      retryDelayMs,
+      signal: context.signal,
+      run: async () => {
         const response = await client.messages.create(
           {
             model: input.node.model,
@@ -158,47 +159,22 @@ export class AnthropicSdkAdapter implements NodeAdapter {
           when: { always: true },
           payload,
         };
-      } catch (error: unknown) {
+      },
+      normalizeError: (error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") {
-          throw new AdapterExecutionError(
+          return new AdapterExecutionError(
             "timeout",
             "official Anthropic SDK request aborted",
           );
         }
         if (context.signal.aborted) {
-          throw new AdapterExecutionError(
+          return new AdapterExecutionError(
             "timeout",
             "official Anthropic SDK request aborted",
           );
         }
-
-        const normalized =
-          error instanceof AdapterExecutionError
-            ? error
-            : new AdapterExecutionError(
-                "provider_error",
-                error instanceof Error
-                  ? error.message
-                  : "unknown Anthropic SDK failure",
-              );
-
-        const retryable =
-          normalized.code === "provider_error" || normalized.code === "timeout";
-        if (attempt < maxAttempts && retryable && !context.signal.aborted) {
-          if (retryDelayMs > 0) {
-            await new Promise<void>((resolve) =>
-              setTimeout(resolve, retryDelayMs),
-            );
-          }
-          continue;
-        }
-        throw normalized;
-      }
-    }
-
-    throw new AdapterExecutionError(
-      "provider_error",
-      "official Anthropic SDK adapter exhausted retries",
-    );
+        return normalizeAdapterFailure(error, "unknown Anthropic SDK failure");
+      },
+    });
   }
 }

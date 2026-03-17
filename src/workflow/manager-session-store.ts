@@ -2,6 +2,7 @@ import { timingSafeEqual, createHash, randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Database } from "bun:sqlite";
+import { DEFAULT_GRAPHQL_ENDPOINT } from "../graphql/endpoint";
 import { resolveRuntimeDbPath } from "./runtime-db";
 import type { LoadOptions } from "./types";
 
@@ -95,7 +96,9 @@ const AMBIENT_MANAGER_ENV_KEYS = [
 ] as const;
 
 export interface ManagerSessionStore {
-  createOrResumeSession(input: ManagerSessionRecord): Promise<ManagerSessionRecord>;
+  createOrResumeSession(
+    input: ManagerSessionRecord,
+  ): Promise<ManagerSessionRecord>;
   claimControlMode(input: {
     readonly managerSessionId: string;
     readonly controlMode: ManagerControlMode;
@@ -103,7 +106,9 @@ export interface ManagerSessionStore {
   }): Promise<ManagerControlMode>;
   appendMessage(input: ManagerMessageRecord): Promise<ManagerMessageRecord>;
   loadSession(managerSessionId: string): Promise<ManagerSessionRecord | null>;
-  listMessages(managerSessionId: string): Promise<readonly ManagerMessageRecord[]>;
+  listMessages(
+    managerSessionId: string,
+  ): Promise<readonly ManagerMessageRecord[]>;
   saveIdempotentResult(
     input: IdempotentMutationRecord,
   ): Promise<IdempotentMutationRecord>;
@@ -155,8 +160,6 @@ interface IdempotentMutationRow {
   readonly completed_at: string;
 }
 
-const DEFAULT_LOCAL_GRAPHQL_ENDPOINT = "http://127.0.0.1:43173/graphql";
-
 function readEnvValue(
   env: Readonly<Record<string, string | undefined>>,
   name: string,
@@ -193,7 +196,9 @@ function toManagerMessageRecord(row: ManagerMessageRow): ManagerMessageRecord {
     managerNodeId: row.manager_node_id,
     managerNodeExecId: row.manager_node_exec_id,
     ...(row.message === null ? {} : { message: row.message }),
-    parsedIntent: JSON.parse(row.parsed_intent_json) as readonly ManagerIntentSummary[],
+    parsedIntent: JSON.parse(
+      row.parsed_intent_json,
+    ) as readonly ManagerIntentSummary[],
     accepted: row.accepted === 1,
     ...(row.rejection_reason === null
       ? {}
@@ -227,7 +232,9 @@ export function verifyManagerAuthToken(
   authToken: string,
   authTokenHash: string,
 ): boolean {
-  const actual = new Uint8Array(Buffer.from(hashManagerAuthToken(authToken), "hex"));
+  const actual = new Uint8Array(
+    Buffer.from(hashManagerAuthToken(authToken), "hex"),
+  );
   const expected = new Uint8Array(Buffer.from(authTokenHash, "hex"));
   if (actual.length !== expected.length || expected.length === 0) {
     return false;
@@ -239,7 +246,10 @@ export function resolveAmbientManagerExecutionContext(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): AmbientManagerExecutionContext | null {
   const workflowId = readEnvValue(env, "OYAKATA_WORKFLOW_ID");
-  const workflowExecutionId = readEnvValue(env, "OYAKATA_WORKFLOW_EXECUTION_ID");
+  const workflowExecutionId = readEnvValue(
+    env,
+    "OYAKATA_WORKFLOW_EXECUTION_ID",
+  );
   const managerNodeId = readEnvValue(env, "OYAKATA_MANAGER_NODE_ID");
   const managerNodeExecId = readEnvValue(env, "OYAKATA_MANAGER_NODE_EXEC_ID");
 
@@ -267,7 +277,9 @@ export function resolveAmbientManagerExecutionContext(
 export function resolveManagerGraphqlEndpoint(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  return readEnvValue(env, "OYAKATA_GRAPHQL_ENDPOINT") ?? DEFAULT_LOCAL_GRAPHQL_ENDPOINT;
+  return (
+    readEnvValue(env, "OYAKATA_GRAPHQL_ENDPOINT") ?? DEFAULT_GRAPHQL_ENDPOINT
+  );
 }
 
 export function buildAmbientManagerControlPlaneEnvironment(input: {
@@ -344,9 +356,9 @@ function ensureSchema(db: Database): void {
 
   const managerSessionColumns = new Set(
     (
-      db
-        .prepare("PRAGMA table_info(manager_sessions)")
-        .all() as readonly { readonly name: string }[]
+      db.prepare("PRAGMA table_info(manager_sessions)").all() as readonly {
+        readonly name: string;
+      }[]
     ).map((column) => column.name),
   );
   if (!managerSessionColumns.has("control_mode")) {
@@ -375,7 +387,8 @@ export function createManagerSessionStore(
   return {
     async createOrResumeSession(input) {
       await withManagerDatabase(options, (db) => {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO manager_sessions (
             manager_session_id, workflow_id, workflow_execution_id, manager_node_id,
             manager_node_exec_id, status, created_at, updated_at, last_message_id,
@@ -399,7 +412,8 @@ export function createManagerSessionStore(
             ),
             auth_token_hash=excluded.auth_token_hash,
             auth_token_expires_at=excluded.auth_token_expires_at
-        `).run(
+        `,
+        ).run(
           input.managerSessionId,
           input.workflowId,
           input.workflowExecutionId,
@@ -418,25 +432,25 @@ export function createManagerSessionStore(
     },
     async claimControlMode(input) {
       return await withManagerDatabase(options, (db) => {
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE manager_sessions
           SET control_mode = ?, updated_at = ?
           WHERE manager_session_id = ?
             AND control_mode IS NULL
-        `).run(
-          input.controlMode,
-          input.updatedAt,
-          input.managerSessionId,
-        );
+        `,
+        ).run(input.controlMode, input.updatedAt, input.managerSessionId);
         const persisted = db
-          .prepare(`
+          .prepare(
+            `
             SELECT control_mode
             FROM manager_sessions
             WHERE manager_session_id = ?
-          `)
-          .get(input.managerSessionId) as
-          | { readonly control_mode: ManagerControlMode | null }
-          | null;
+          `,
+          )
+          .get(input.managerSessionId) as {
+          readonly control_mode: ManagerControlMode | null;
+        } | null;
         if (persisted === null) {
           throw new Error(
             `manager session '${input.managerSessionId}' was not found`,
@@ -452,13 +466,15 @@ export function createManagerSessionStore(
     },
     async appendMessage(input) {
       await withManagerDatabase(options, (db) => {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO manager_messages (
             manager_message_id, manager_session_id, workflow_id, workflow_execution_id,
             manager_node_id, manager_node_exec_id, message, parsed_intent_json,
             accepted, rejection_reason, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
+        `,
+        ).run(
           input.managerMessageId,
           input.managerSessionId,
           input.workflowId,
@@ -471,22 +487,21 @@ export function createManagerSessionStore(
           input.rejectionReason ?? null,
           input.createdAt,
         );
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE manager_sessions
           SET last_message_id = ?, updated_at = ?
           WHERE manager_session_id = ?
-        `).run(
-          input.managerMessageId,
-          input.createdAt,
-          input.managerSessionId,
-        );
+        `,
+        ).run(input.managerMessageId, input.createdAt, input.managerSessionId);
       });
       return input;
     },
     async loadSession(managerSessionId) {
       return await withManagerDatabase(options, (db) => {
         const row = db
-          .prepare(`
+          .prepare(
+            `
             SELECT
               manager_session_id,
               workflow_id,
@@ -502,7 +517,8 @@ export function createManagerSessionStore(
               auth_token_expires_at
             FROM manager_sessions
             WHERE manager_session_id = ?
-          `)
+          `,
+          )
           .get(managerSessionId) as ManagerSessionRow | null;
         return row === null ? null : toManagerSessionRecord(row);
       });
@@ -510,7 +526,8 @@ export function createManagerSessionStore(
     async listMessages(managerSessionId) {
       return await withManagerDatabase(options, (db) => {
         const rows = db
-          .prepare(`
+          .prepare(
+            `
             SELECT
               manager_message_id,
               manager_session_id,
@@ -526,14 +543,16 @@ export function createManagerSessionStore(
             FROM manager_messages
             WHERE manager_session_id = ?
             ORDER BY created_at ASC, manager_message_id ASC
-          `)
+          `,
+          )
           .all(managerSessionId) as ManagerMessageRow[];
         return rows.map((row) => toManagerMessageRecord(row));
       });
     },
     async saveIdempotentResult(input) {
       await withManagerDatabase(options, (db) => {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO idempotent_mutations (
             mutation_name, manager_session_id, idempotency_key,
             normalized_request_hash, response_json, completed_at
@@ -543,7 +562,8 @@ export function createManagerSessionStore(
             normalized_request_hash=excluded.normalized_request_hash,
             response_json=excluded.response_json,
             completed_at=excluded.completed_at
-        `).run(
+        `,
+        ).run(
           input.mutationName,
           input.managerSessionId,
           input.idempotencyKey,
@@ -557,7 +577,8 @@ export function createManagerSessionStore(
     async loadIdempotentResult(input) {
       return await withManagerDatabase(options, (db) => {
         const row = db
-          .prepare(`
+          .prepare(
+            `
             SELECT
               mutation_name,
               manager_session_id,
@@ -569,7 +590,8 @@ export function createManagerSessionStore(
             WHERE mutation_name = ?
               AND manager_session_id = ?
               AND idempotency_key = ?
-          `)
+          `,
+          )
           .get(
             input.mutationName,
             input.managerSessionId,

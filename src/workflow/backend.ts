@@ -5,22 +5,30 @@ type CliAgentBackendAlias =
   | "tacogips/codex-agent"
   | "tacogips/claude-code-agent";
 
+const CLI_AGENT_BACKEND_ALIASES = {
+  "codex-agent": "codex-agent",
+  "tacogips/codex-agent": "codex-agent",
+  "claude-code-agent": "claude-code-agent",
+  "tacogips/claude-code-agent": "claude-code-agent",
+} as const satisfies Record<CliAgentBackendAlias, CliAgentBackend>;
+
+const NATIVE_NODE_EXECUTION_BACKENDS = new Set<NodeExecutionBackend>([
+  "official/openai-sdk",
+  "official/anthropic-sdk",
+]);
+
 export function normalizeCliAgentBackend(
   value: unknown,
 ): CliAgentBackend | null {
-  switch (value) {
-    case "codex-agent":
-    case "tacogips/codex-agent":
-      return "codex-agent";
-    case "claude-code-agent":
-    case "tacogips/claude-code-agent":
-      return "claude-code-agent";
-    default:
-      return null;
+  if (typeof value !== "string") {
+    return null;
   }
+  return CLI_AGENT_BACKEND_ALIASES[value as CliAgentBackendAlias] ?? null;
 }
 
-export function isCliAgentBackend(value: unknown): value is CliAgentBackendAlias {
+export function isCliAgentBackend(
+  value: unknown,
+): value is CliAgentBackendAlias {
   return normalizeCliAgentBackend(value) !== null;
 }
 
@@ -31,11 +39,8 @@ export function normalizeNodeExecutionBackend(
   if (cliBackend !== null) {
     return cliBackend;
   }
-  switch (value) {
-    case "official/openai-sdk":
-    case "official/anthropic-sdk":
-      return value;
-    default:
-      return null;
-  }
+  return typeof value === "string" &&
+    NATIVE_NODE_EXECUTION_BACKENDS.has(value as NodeExecutionBackend)
+    ? (value as NodeExecutionBackend)
+    : null;
 }

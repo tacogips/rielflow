@@ -6,6 +6,13 @@ import {
   type AdapterExecutionOutput,
   type NodeAdapter,
 } from "../adapter";
+import {
+  buildRemoteAgentRequestBody,
+  executeWithRetry,
+  normalizeAdapterFailure,
+  resolveConfiguredEnvValue,
+  resolveRetryPolicy,
+} from "./shared";
 
 const DEFAULT_CLAUDE_ENDPOINT = "http://127.0.0.1:7070/claude/execute";
 const DEFAULT_CLAUDE_API_KEY_ENV = "CLAUDE_API_KEY";
@@ -18,34 +25,10 @@ export interface ClaudeAdapterConfig {
 }
 
 function resolveApiKey(config: ClaudeAdapterConfig): string | undefined {
-  const keyEnv = config.apiKeyEnv ?? DEFAULT_CLAUDE_API_KEY_ENV;
-  const value = process.env[keyEnv];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function buildRequestBody(
-  input: AdapterExecutionInput,
-): Record<string, unknown> {
-  return {
-    workflowId: input.workflowId,
-    workflowExecutionId: input.workflowExecutionId,
-    nodeId: input.nodeId,
-    nodeExecId: input.nodeExecId,
-    model: input.node.model,
-    promptText: input.promptText,
-    arguments: input.arguments,
-    mergedVariables: input.mergedVariables,
-    executionIndex: input.executionIndex,
-    ...(input.output === undefined ? { artifactDir: input.artifactDir } : {}),
-    upstreamCommunicationIds: input.upstreamCommunicationIds,
-    ...(input.backendSession === undefined
-      ? {}
-      : { backendSession: input.backendSession }),
-    ...(input.ambientManagerContext === undefined
-      ? {}
-      : { ambientManagerContext: input.ambientManagerContext }),
-    ...(input.output === undefined ? {} : { output: input.output }),
-  };
+  return resolveConfiguredEnvValue(
+    config.apiKeyEnv,
+    DEFAULT_CLAUDE_API_KEY_ENV,
+  );
 }
 
 export class ClaudeCodeAgentAdapter implements NodeAdapter {
@@ -61,8 +44,7 @@ export class ClaudeCodeAgentAdapter implements NodeAdapter {
   ): Promise<AdapterExecutionOutput> {
     const endpoint = this.#config.endpoint ?? DEFAULT_CLAUDE_ENDPOINT;
     const apiKey = resolveApiKey(this.#config);
-    const maxAttempts = Math.max(1, this.#config.maxAttempts ?? 2);
-    const retryDelayMs = Math.max(0, this.#config.retryDelayMs ?? 50);
+    const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
     const headers: Record<string, string> = {
       "content-type": "application/json",
     };
@@ -70,13 +52,16 @@ export class ClaudeCodeAgentAdapter implements NodeAdapter {
       headers["authorization"] = `Bearer ${apiKey}`;
     }
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
+    return executeWithRetry({
+      maxAttempts,
+      retryDelayMs,
+      signal: context.signal,
+      run: async () => {
         const response = await fetch(endpoint, {
           method: "POST",
           headers,
           signal: context.signal,
-          body: JSON.stringify(buildRequestBody(input)),
+          body: JSON.stringify(buildRemoteAgentRequestBody(input)),
         });
 
         if (!response.ok) {
@@ -100,39 +85,14 @@ export class ClaudeCodeAgentAdapter implements NodeAdapter {
 
         const payload = (await response.json()) as unknown;
         return normalizeAdapterOutput(payload, input.node.model);
-      } catch (error: unknown) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          throw new AdapterExecutionError(
-            "timeout",
-            "claude adapter aborted by timeout",
-          );
-        }
-        const normalized =
-          error instanceof AdapterExecutionError
-            ? error
-            : new AdapterExecutionError(
-                "provider_error",
-                error instanceof Error
-                  ? error.message
-                  : "unknown claude adapter failure",
-              );
-        const retryable =
-          normalized.code === "provider_error" || normalized.code === "timeout";
-        if (attempt < maxAttempts && retryable && !context.signal.aborted) {
-          if (retryDelayMs > 0) {
-            await new Promise<void>((resolve) =>
-              setTimeout(resolve, retryDelayMs),
-            );
-          }
-          continue;
-        }
-        throw normalized;
-      }
-    }
-
-    throw new AdapterExecutionError(
-      "provider_error",
-      "claude adapter exhausted retries",
-    );
+      },
+      normalizeError: (error) =>
+        error instanceof DOMException && error.name === "AbortError"
+          ? new AdapterExecutionError(
+              "timeout",
+              "claude adapter aborted by timeout",
+            )
+          : normalizeAdapterFailure(error, "unknown claude adapter failure"),
+    });
   }
 }
