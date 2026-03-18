@@ -28,7 +28,10 @@ import {
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
 import { composeExecutionPrompt } from "./prompt-composition";
-import { parseManagerControlPayload } from "./manager-control";
+import {
+  parseManagerControlPayload,
+  type ParsedManagerControl,
+} from "./manager-control";
 import { err, ok, type Result } from "./result";
 import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
 import { executeConversationRound } from "./conversation";
@@ -54,6 +57,7 @@ import {
   type NodeBackendSessionRecord,
   type NodeExecutionRecord,
   type OutputRef,
+  type PendingOptionalNodeDecision,
   type WorkflowSessionState,
 } from "./session";
 import {
@@ -590,6 +594,164 @@ function findOwningSubWorkflowByNodeId(
 
 function isRootScopeNode(workflow: WorkflowJson, nodeId: string): boolean {
   return findOwningSubWorkflowByNodeId(workflow, nodeId) === undefined;
+}
+
+function findNodeRef(workflow: WorkflowJson, nodeId: string) {
+  return workflow.nodes.find((entry) => entry.id === nodeId);
+}
+
+function isOptionalNode(workflow: WorkflowJson, nodeId: string): boolean {
+  return findNodeRef(workflow, nodeId)?.execution?.mode === "optional";
+}
+
+function findOwningManagerNodeId(
+  workflow: WorkflowJson,
+  nodeId: string,
+): string {
+  return (
+    findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId)?.managerNodeId ??
+    workflow.managerNodeId
+  );
+}
+
+function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
+  return nodeIds.filter((value, index, all) => all.indexOf(value) === index);
+}
+
+function upsertPendingOptionalNodeDecision(
+  decisions: readonly PendingOptionalNodeDecision[],
+  decision: PendingOptionalNodeDecision,
+): readonly PendingOptionalNodeDecision[] {
+  return [
+    ...decisions.filter((entry) => entry.nodeId !== decision.nodeId),
+    decision,
+  ];
+}
+
+function removePendingOptionalNodeDecision(
+  decisions: readonly PendingOptionalNodeDecision[],
+  nodeId: string,
+): readonly PendingOptionalNodeDecision[] {
+  return decisions.filter((entry) => entry.nodeId !== nodeId);
+}
+
+function findPendingOptionalNodeDecision(
+  session: WorkflowSessionState,
+  nodeId: string,
+): PendingOptionalNodeDecision | undefined {
+  return session.pendingOptionalNodeDecisions?.find(
+    (entry) => entry.nodeId === nodeId,
+  );
+}
+
+function buildOptionalSkipOutput(reason = "manager judged unnecessary"): Readonly<
+  Record<string, unknown>
+> {
+  return {
+    provider: "runtime-optional-skip",
+    completionPassed: true,
+    when: {
+      always: true,
+      skipped: true,
+    },
+    payload: {
+      optionalNodeSkipped: true,
+      reason,
+    },
+  };
+}
+
+function applyOptionalManagerDecisions(input: {
+  readonly managerControl: ParsedManagerControl | null;
+  readonly session: WorkflowSessionState;
+  readonly workflow: WorkflowJson;
+  readonly managerNodeId: string;
+  readonly managerNodeExecId: string;
+  readonly decidedAt: string;
+}): Result<
+  {
+    readonly pendingOptionalNodeDecisions: readonly PendingOptionalNodeDecision[];
+    readonly queuedNodeIds: readonly string[];
+  },
+  string
+> {
+  const managerControl = input.managerControl;
+  if (managerControl === null) {
+    return ok({
+      pendingOptionalNodeDecisions:
+        input.session.pendingOptionalNodeDecisions ?? [],
+      queuedNodeIds: [],
+    });
+  }
+
+  const actionsByNodeId = new Map<
+    string,
+    { readonly status: "execute" | "skip"; readonly reason?: string }
+  >();
+  for (const action of managerControl.actions) {
+    if (
+      action.type !== "execute-optional-node" &&
+      action.type !== "skip-optional-node"
+    ) {
+      continue;
+    }
+    const nextStatus =
+      action.type === "execute-optional-node" ? "execute" : "skip";
+    const existingAction = actionsByNodeId.get(action.nodeId);
+    if (existingAction !== undefined && existingAction.status !== nextStatus) {
+      return err(
+        `invalid manager control at '${input.managerNodeId}': optional node '${action.nodeId}' cannot be both executed and skipped in one manager turn`,
+      );
+    }
+    actionsByNodeId.set(action.nodeId, {
+      status: nextStatus,
+      ...(action.type === "skip-optional-node" && action.reason !== undefined
+        ? { reason: action.reason }
+        : {}),
+    });
+  }
+
+  let pendingOptionalNodeDecisions =
+    input.session.pendingOptionalNodeDecisions ?? [];
+  const queuedNodeIds: string[] = [];
+  for (const [nodeId, action] of actionsByNodeId.entries()) {
+    const currentDecision = pendingOptionalNodeDecisions.find(
+      (entry) => entry.nodeId === nodeId,
+    );
+    if (currentDecision === undefined || currentDecision.status !== "pending") {
+      return err(
+        `invalid manager control at '${input.managerNodeId}': optional node '${nodeId}' is not currently pending`,
+      );
+    }
+    if (currentDecision.owningManagerNodeId !== input.managerNodeId) {
+      return err(
+        `invalid manager control at '${input.managerNodeId}': optional node '${nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
+      );
+    }
+    if (!isOptionalNode(input.workflow, nodeId)) {
+      return err(
+        `invalid manager control at '${input.managerNodeId}': node '${nodeId}' is not optional`,
+      );
+    }
+    pendingOptionalNodeDecisions = upsertPendingOptionalNodeDecision(
+      pendingOptionalNodeDecisions,
+      {
+        ...currentDecision,
+        status: action.status,
+        ...(action.status === "skip" && action.reason !== undefined
+          ? { reason: action.reason }
+          : {}),
+        decidedAt: input.decidedAt,
+        decidedByNodeExecId: input.managerNodeExecId,
+      },
+    );
+    queuedNodeIds.push(nodeId);
+  }
+
+  return ok({
+    pendingOptionalNodeDecisions,
+    queuedNodeIds: dedupeNodeIds(queuedNodeIds),
+  });
 }
 
 function isRootScopeOutputNode(
@@ -1193,6 +1355,10 @@ function cloneSession(session: WorkflowSessionState): WorkflowSessionState {
     communications: [...session.communications],
     conversationTurns: [...(session.conversationTurns ?? [])],
     nodeBackendSessions: { ...(session.nodeBackendSessions ?? {}) },
+    pendingOptionalNodeDecisions: [
+      ...(session.pendingOptionalNodeDecisions ?? []),
+    ],
+    activeUserActions: [...(session.activeUserActions ?? [])],
     runtimeVariables: { ...session.runtimeVariables },
   };
 }
@@ -1350,6 +1516,9 @@ export async function runWorkflow(
     if (session.status === "completed") {
       return ok({ session, exitCode: 0 });
     }
+    if ((session.activeUserActions?.length ?? 0) > 0) {
+      return ok({ session, exitCode: 4 });
+    }
     session = {
       ...session,
       status: "running",
@@ -1405,6 +1574,10 @@ export async function runWorkflow(
   const restartOnStuck = options.restartOnStuck ?? true;
   const maxStuckRestarts = options.maxStuckRestarts ?? 2;
   const stuckRestartBackoffMs = options.stuckRestartBackoffMs ?? 250;
+
+  if ((session.activeUserActions?.length ?? 0) > 0 && session.status === "paused") {
+    return ok({ session, exitCode: 4 });
+  }
 
   while (session.queue.length > 0) {
     const persisted = await loadSession(session.sessionId, options);
@@ -1473,6 +1646,45 @@ export async function runWorkflow(
         message: failed.lastError ?? "missing node definition",
       });
     }
+    const pendingOptionalDecision = findPendingOptionalNodeDecision(
+      session,
+      nodeId,
+    );
+    const isOptionalExecutionNode = nodeRef.execution?.mode === "optional";
+    if (
+      isOptionalExecutionNode &&
+      (pendingOptionalDecision === undefined ||
+        pendingOptionalDecision.status === "pending")
+    ) {
+      const requestedAt = nowIso();
+      const owningManagerNodeId = findOwningManagerNodeId(workflow, nodeId);
+      const owningSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
+        workflow,
+        nodeId,
+      );
+      session = {
+        ...session,
+        status: "running",
+        queue: dedupeNodeIds([...queue, owningManagerNodeId]),
+        currentNodeId: owningManagerNodeId,
+        pendingOptionalNodeDecisions: upsertPendingOptionalNodeDecision(
+          session.pendingOptionalNodeDecisions ?? [],
+          {
+            nodeId,
+            owningManagerNodeId,
+            ...(owningSubWorkflow === undefined
+              ? {}
+              : { subWorkflowId: owningSubWorkflow.id }),
+            requestedAt,
+            status: "pending",
+          },
+        ),
+      };
+      await saveSession(session, options);
+      continue;
+    }
+    const skipOptionalNode =
+      isOptionalExecutionNode && pendingOptionalDecision?.status === "skip";
     if (nodePayload.nodeType === "command") {
       const failed: WorkflowSessionState = {
         ...session,
@@ -1506,7 +1718,11 @@ export async function runWorkflow(
       });
     }
     const agentNodePayload = asAgentNodePayload(nodePayload);
-    if (agentNodePayload === null) {
+    if (
+      agentNodePayload === null &&
+      nodePayload.nodeType !== "user-action" &&
+      !skipOptionalNode
+    ) {
       const failed: WorkflowSessionState = {
         ...session,
         queue,
@@ -1548,8 +1764,9 @@ export async function runWorkflow(
       );
       await mkdir(artifactDir, { recursive: true });
 
+      const executionNodePayload = agentNodePayload ?? nodePayload;
       const mergedVariables = mergeVariables(
-        agentNodePayload.variables,
+        executionNodePayload.variables,
         session.runtimeVariables,
       );
       const upstreamOutputRefs = buildUpstreamOutputRefs(
@@ -1609,7 +1826,7 @@ export async function runWorkflow(
       try {
         const assembled = assembleNodeInput({
           runtimeVariables: session.runtimeVariables,
-          node: agentNodePayload,
+          node: executionNodePayload,
           workflowId: workflow.workflowId,
           workflowDescription: workflow.description,
           ...(nodeRef.kind === undefined ? {} : { nodeKind: nodeRef.kind }),
@@ -1619,7 +1836,7 @@ export async function runWorkflow(
         executionMailbox = buildNodeExecutionMailbox({
           workflow,
           nodeRef,
-          node: agentNodePayload,
+          node: executionNodePayload,
           nodePayloads: nodeMap,
           runtimeVariables: session.runtimeVariables,
           basePromptText: assembled.promptText,
@@ -1629,7 +1846,7 @@ export async function runWorkflow(
         assembledPromptText = composeExecutionPrompt({
           workflow,
           nodeRef,
-          node: agentNodePayload,
+          node: executionNodePayload,
           nodePayloads: nodeMap,
           runtimeVariables: session.runtimeVariables,
           basePromptText: assembled.promptText,
@@ -1696,6 +1913,319 @@ export async function runWorkflow(
         });
       }
 
+      const baseInputPayload = {
+        sessionId: session.sessionId,
+        workflowExecutionId: session.sessionId,
+        workflowId: workflow.workflowId,
+        nodeId,
+        nodeExecId,
+        promptTemplate: executionNodePayload.promptTemplate,
+        promptText: assembledPromptText,
+        arguments: assembledArguments,
+        variables: mergedVariables,
+        upstreamOutputRefs,
+        upstreamCommunications: upstreamCommunicationIds,
+        executionMailbox,
+        restartAttempt,
+        ...(previousNodeExecId === undefined
+          ? {}
+          : { restartedFromNodeExecId: previousNodeExecId }),
+        dryRun: options.dryRun ?? false,
+      };
+
+      if (nodePayload.nodeType === "user-action") {
+        const startedAt = nowIso();
+        const inputJson = stableJson({
+          ...baseInputPayload,
+          nodeType: "user-action",
+          userAction: nodePayload.userAction,
+          outputContract:
+            nodePayload.output === undefined
+              ? undefined
+              : {
+                  description: nodePayload.output.description,
+                  jsonSchema: nodePayload.output.jsonSchema,
+                  maxValidationAttempts:
+                    nodePayload.output.maxValidationAttempts,
+                },
+        });
+        await writeRawTextFile(
+          path.join(artifactDir, "input.json"),
+          `${inputJson}\n`,
+        );
+        const userActionDir = path.join(artifactDir, "user-action");
+        const userActionId = `useract-${nodeExecId}`;
+        await mkdir(userActionDir, { recursive: true });
+        await writeJsonFile(path.join(userActionDir, "request.json"), {
+          userActionId,
+          workflowId: workflow.workflowId,
+          workflowExecutionId: session.sessionId,
+          nodeId,
+          nodeExecId,
+          promptText: assembledPromptText,
+          userAction: nodePayload.userAction,
+          outputContract: nodePayload.output,
+          createdAt: startedAt,
+          status: "waiting-for-reply",
+        });
+        await writeJsonFile(path.join(userActionDir, "resolution.json"), {
+          status: "waiting-for-reply",
+          updatedAt: startedAt,
+        });
+        const {
+          endedAt: _endedAt,
+          lastError: _lastError,
+          ...restSession
+        } = session;
+        const paused: WorkflowSessionState = {
+          ...restSession,
+          status: "paused",
+          queue,
+          currentNodeId: nodeId,
+          nodeExecutionCounter: nextExecutionCounter,
+          nodeExecutionCounts: updatedCounts,
+          pendingOptionalNodeDecisions: removePendingOptionalNodeDecision(
+            session.pendingOptionalNodeDecisions ?? [],
+            nodeId,
+          ),
+          activeUserActions: [
+            ...(session.activeUserActions ?? []).filter(
+              (entry) => entry.nodeId !== nodeId,
+            ),
+            {
+              nodeId,
+              nodeExecId,
+              userActionId,
+              artifactDir: userActionDir,
+              status: "waiting-for-reply",
+              pausedAt: startedAt,
+            },
+          ],
+        };
+        await saveSession(paused, options);
+        return ok({ session: paused, exitCode: 4 });
+      }
+
+      if (skipOptionalNode) {
+        const startedAt = nowIso();
+        const endedAt = startedAt;
+        const outputPayload = buildOptionalSkipOutput(
+          pendingOptionalDecision?.reason,
+        );
+        const loopRule = loopRuleByJudgeNodeId.get(nodeId);
+        let selected = (outgoingEdges.get(nodeId) ?? []).filter((edge) =>
+          evaluateEdge(edge, outputPayload),
+        );
+        let updatedLoopIterationCounts = session.loopIterationCounts ?? {};
+        if (loopRule !== undefined) {
+          const effectiveLoopRule: LoopRule = {
+            ...loopRule,
+            maxIterations: loopRule.maxIterations ?? maxLoopIterations,
+          };
+          const iteration =
+            (session.loopIterationCounts ?? {})[loopRule.id] ?? 0;
+          const transition = resolveLoopTransition({
+            loopRule: effectiveLoopRule,
+            output: outputPayload,
+            state: { loopId: loopRule.id, iteration },
+          });
+          if (transition === "continue") {
+            selected = (outgoingEdges.get(nodeId) ?? []).filter(
+              (edge) => edge.when === effectiveLoopRule.continueWhen,
+            );
+            updatedLoopIterationCounts = {
+              ...(session.loopIterationCounts ?? {}),
+              [loopRule.id]: iteration + 1,
+            };
+          } else if (transition === "exit") {
+            selected = (outgoingEdges.get(nodeId) ?? []).filter(
+              (edge) => edge.when === effectiveLoopRule.exitWhen,
+            );
+          }
+        }
+
+        const inputJson = stableJson({
+          ...baseInputPayload,
+          nodeType: executionNodePayload.nodeType ?? "agent",
+          optionalDecision: "skip",
+        });
+        await writeRawTextFile(
+          path.join(artifactDir, "input.json"),
+          `${inputJson}\n`,
+        );
+        const nodeExecution: NodeExecutionRecord = {
+          nodeId,
+          nodeExecId,
+          status: "skipped",
+          artifactDir,
+          startedAt,
+          endedAt,
+        };
+        const outputRef = outputRefForExecution(workflow, session, nodeExecution, nodeId);
+        const outputJson = stableJson(outputPayload);
+        const outputRaw = `${outputJson}\n`;
+        const inputHash = sha256Hex(inputJson);
+        const outputHash = sha256Hex(outputJson);
+        const nextNodes = selected.map((edge) => edge.to);
+        await writeRawTextFile(path.join(artifactDir, "output.json"), outputRaw);
+        await writeJsonFile(path.join(artifactDir, "meta.json"), {
+          nodeId,
+          nodeExecId,
+          status: "skipped",
+          startedAt,
+          endedAt,
+          optionalDecision: "skip",
+        });
+        await writeJsonFile(path.join(artifactDir, "handoff.json"), {
+          schemaVersion: 1,
+          generatedAt: endedAt,
+          nodeId,
+          outputRef,
+          inputHash: `sha256:${inputHash}`,
+          outputHash: `sha256:${outputHash}`,
+          nextNodes,
+        });
+        await writeRawTextFile(
+          path.join(artifactDir, "commit-message.txt"),
+          `${buildCommitMessageTemplate(inputHash, outputHash, outputRef, nextNodes)}\n`,
+        );
+        try {
+          await saveNodeExecutionToRuntimeDb(
+            {
+              sessionId: session.sessionId,
+              nodeId,
+              nodeExecId,
+              status: "skipped",
+              artifactDir,
+              startedAt,
+              endedAt,
+              inputJson,
+              outputJson,
+              inputHash: `sha256:${inputHash}`,
+              outputHash: `sha256:${outputHash}`,
+            },
+            options,
+          );
+        } catch {
+          // runtime DB index is best-effort
+        }
+
+        const consumedCommunicationsResult = await markCommunicationsConsumed(
+          session,
+          upstreamCommunicationIds,
+          nodeExecId,
+          endedAt,
+        );
+        if (!consumedCommunicationsResult.ok) {
+          const failed: WorkflowSessionState = {
+            ...session,
+            queue,
+            status: "failed",
+            currentNodeId: nodeId,
+            endedAt,
+            nodeExecutionCounter: nextExecutionCounter,
+            nodeExecutionCounts: updatedCounts,
+            nodeExecutions: [...session.nodeExecutions, nodeExecution],
+            lastError: consumedCommunicationsResult.error,
+          };
+          await saveSession(failed, options);
+          return err({
+            exitCode: 1,
+            message:
+              failed.lastError ?? "mailbox consumption persistence failed",
+          });
+        }
+        let currentCommunications = consumedCommunicationsResult.value;
+        const transitionCommunications = await Promise.all(
+          selected.map((edge, index) => {
+            const boundary = resolveCommunicationBoundary({
+              workflow,
+              fromNodeId: edge.from,
+              toNodeId: edge.to,
+            });
+            return persistCommunicationArtifact({
+              artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
+              workflowId: workflow.workflowId,
+              workflowExecutionId: session.sessionId,
+              communicationCounter: session.communicationCounter + index,
+              fromNodeId: edge.from,
+              toNodeId: edge.to,
+              ...(boundary.fromSubWorkflowId === undefined
+                ? {}
+                : { fromSubWorkflowId: boundary.fromSubWorkflowId }),
+              ...(boundary.toSubWorkflowId === undefined
+                ? {}
+                : { toSubWorkflowId: boundary.toSubWorkflowId }),
+              routingScope: boundary.routingScope,
+              deliveryKind:
+                edge.to === edge.from ? "loop-back" : "edge-transition",
+              transitionWhen: edge.when,
+              sourceNodeExecId: nodeExecId,
+              payloadRef: outputRef,
+              outputRaw,
+              deliveredByNodeId: mailboxDeliveryManagerNodeId(
+                workflow,
+                edge.to,
+              ),
+              createdAt: endedAt,
+            });
+          }),
+        );
+        currentCommunications = [
+          ...currentCommunications,
+          ...transitionCommunications,
+        ];
+        session = {
+          ...session,
+          status: "running",
+          queue: dedupeNodeIds([...queue, ...nextNodes]),
+          currentNodeId: nodeId,
+          nodeExecutionCounter: nextExecutionCounter,
+          nodeExecutionCounts: updatedCounts,
+          loopIterationCounts: updatedLoopIterationCounts,
+          transitions: [
+            ...session.transitions,
+            ...selected.map((edge) => ({
+              from: edge.from,
+              to: edge.to,
+              when: edge.when,
+            })),
+          ],
+          nodeExecutions: [...session.nodeExecutions, nodeExecution],
+          communicationCounter:
+            session.communicationCounter + transitionCommunications.length,
+          communications: currentCommunications,
+          runtimeVariables: isRootScopeOutputNode(workflow, nodeId)
+            ? {
+                ...session.runtimeVariables,
+                workflowOutput: outputPayload["payload"],
+              }
+            : session.runtimeVariables,
+          pendingOptionalNodeDecisions: removePendingOptionalNodeDecision(
+            session.pendingOptionalNodeDecisions ?? [],
+            nodeId,
+          ),
+        };
+        await saveSession(session, options);
+        break;
+      }
+
+      if (agentNodePayload === null) {
+        const failed: WorkflowSessionState = {
+          ...session,
+          queue,
+          status: "failed",
+          currentNodeId: nodeId,
+          endedAt: nowIso(),
+          lastError: `node '${nodeId}' is missing agent execution fields`,
+        };
+        await saveSession(failed, options);
+        return err({
+          exitCode: 1,
+          message: failed.lastError ?? "invalid agent node payload",
+        });
+      }
+
       let backendSession = resolveRequestedBackendSession(
         session,
         agentNodePayload,
@@ -1705,20 +2235,8 @@ export async function runWorkflow(
       let backendSessionProvider: string | undefined;
 
       const inputPayload = {
-        sessionId: session.sessionId,
-        workflowExecutionId: session.sessionId,
-        workflowId: workflow.workflowId,
-        nodeId,
-        nodeExecId,
+        ...baseInputPayload,
         model: agentNodePayload.model,
-        promptTemplate: agentNodePayload.promptTemplate,
-        promptText: assembledPromptText,
-        arguments: assembledArguments,
-        variables: mergedVariables,
-        upstreamOutputRefs,
-        upstreamCommunications: upstreamCommunicationIds,
-        executionMailbox,
-        restartAttempt,
         outputContract:
           agentNodePayload.output === undefined
             ? undefined
@@ -1730,10 +2248,6 @@ export async function runWorkflow(
                 publication: buildOutputPublicationPolicy(),
               },
         ...(backendSession === undefined ? {} : { backendSession }),
-        ...(previousNodeExecId === undefined
-          ? {}
-          : { restartedFromNodeExecId: previousNodeExecId }),
-        dryRun: options.dryRun ?? false,
       };
       const inputJson = stableJson(inputPayload);
       await writeRawTextFile(
@@ -2490,6 +3004,67 @@ export async function runWorkflow(
           });
         }
       }
+      const optionalManagerDecisionsResult = applyOptionalManagerDecisions({
+        managerControl,
+        session,
+        workflow,
+        managerNodeId: nodeId,
+        managerNodeExecId: nodeExecId,
+        decidedAt: endedAt,
+      });
+      if (!optionalManagerDecisionsResult.ok) {
+        nodeStatus = "failed";
+        const nodeExecutions = buildNodeExecutions();
+        try {
+          await finalizeManagerSession("failed");
+        } catch (finalizationError: unknown) {
+          const message =
+            finalizationError instanceof Error
+              ? finalizationError.message
+              : "unknown manager session finalization failure";
+          const failed: WorkflowSessionState = {
+            ...session,
+            queue,
+            status: "failed",
+            currentNodeId: nodeId,
+            endedAt,
+            nodeExecutionCounter: nextExecutionCounter,
+            nodeExecutionCounts: updatedCounts,
+            nodeExecutions,
+            communicationCounter: session.communicationCounter,
+            communications: session.communications,
+            nodeBackendSessions: nextNodeBackendSessions,
+            lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+          };
+          await saveSession(failed, options);
+          return err({
+            exitCode: 1,
+            message: failed.lastError ?? "failed to finalize manager session",
+          });
+        }
+        await saveSession({
+          ...session,
+          queue,
+          status: "failed",
+          currentNodeId: nodeId,
+          endedAt,
+          nodeExecutionCounter: nextExecutionCounter,
+          nodeExecutionCounts: updatedCounts,
+          nodeExecutions,
+          communicationCounter: session.communicationCounter,
+          communications: session.communications,
+          nodeBackendSessions: nextNodeBackendSessions,
+          lastError: optionalManagerDecisionsResult.error,
+        }, options);
+        return err({
+          exitCode: 5,
+          message: optionalManagerDecisionsResult.error,
+        });
+      }
+      const queuedOptionalDecisionNodeIds =
+        optionalManagerDecisionsResult.value.queuedNodeIds;
+      const pendingOptionalNodeDecisionsAfterManagerActions =
+        optionalManagerDecisionsResult.value.pendingOptionalNodeDecisions;
       const nodeExecutions = buildNodeExecutions();
       try {
         await finalizeManagerSession(
@@ -3183,6 +3758,7 @@ export async function runWorkflow(
         ...transitionNextNodes,
         ...managerPlannedInputs,
         ...conversationPlannedInputs,
+        ...queuedOptionalDecisionNodeIds,
       ].filter((value, index, all) => all.indexOf(value) === index);
       const nextQueueWithRetries = [...nextQueue, ...retryNodeIds].filter(
         (value, index, all) => all.indexOf(value) === index,
@@ -3202,6 +3778,12 @@ export async function runWorkflow(
         communications: currentCommunications,
         conversationTurns,
         nodeBackendSessions: nextNodeBackendSessions,
+        pendingOptionalNodeDecisions: isOptionalExecutionNode
+          ? removePendingOptionalNodeDecision(
+              pendingOptionalNodeDecisionsAfterManagerActions,
+              nodeId,
+            )
+          : pendingOptionalNodeDecisionsAfterManagerActions,
         runtimeVariables: currentRuntimeVariables,
       };
 

@@ -92,6 +92,60 @@ async function createCallNodeFixture(
   });
 }
 
+async function createOptionalCallNodeFixture(
+  workflowRoot: string,
+  workflowName: string,
+): Promise<void> {
+  await createCallNodeFixture(workflowRoot, workflowName);
+  const workflowDir = path.join(workflowRoot, workflowName);
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "call-node fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerNodeId: "oyakata-manager",
+    subWorkflows: [],
+    nodes: [
+      {
+        id: "oyakata-manager",
+        kind: "manager",
+        nodeFile: "node-oyakata-manager.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "writer",
+        kind: "task",
+        nodeFile: "node-writer.json",
+        completion: { type: "none" },
+        execution: {
+          mode: "optional",
+          decisionBy: "owning-manager",
+        },
+      },
+    ],
+    edges: [],
+    loops: [],
+    branching: { mode: "fan-out" },
+  });
+}
+
+async function createUserActionCallNodeFixture(
+  workflowRoot: string,
+  workflowName: string,
+): Promise<void> {
+  await createCallNodeFixture(workflowRoot, workflowName);
+  const workflowDir = path.join(workflowRoot, workflowName);
+  await writeJson(path.join(workflowDir, "node-writer.json"), {
+    id: "writer",
+    nodeType: "user-action",
+    promptTemplate: "ask the reviewer for approval",
+    variables: {},
+    userAction: {
+      messageToolIds: ["matrix-primary"],
+      replyPolicy: "first-valid-reply-wins",
+    },
+  });
+}
+
 async function createCallNodeSession(input: {
   readonly workflowName: string;
   readonly sessionId: string;
@@ -395,6 +449,68 @@ describe("callNode", () => {
     }
     expect(result.error.message).toContain("terminal session");
     expect(result.error.message).toContain("completed");
+  });
+
+  test("rejects direct node calls for optional workflow nodes", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const workflowName = "call-node-optional";
+    const sessionId = "sess-call-node-optional";
+
+    await createOptionalCallNodeFixture(root, workflowName);
+    await createCallNodeSession({
+      workflowName,
+      sessionId,
+      sessionStoreRoot,
+    });
+
+    const result = await callNode({
+      workflowRoot: root,
+      artifactRoot: artifactsRoot,
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      nodeId: "writer",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("is optional");
+    expect(result.error.message).toContain("workflow scheduler");
+  });
+
+  test("rejects direct node calls for user-action nodes", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const workflowName = "call-node-user-action";
+    const sessionId = "sess-call-node-user-action";
+
+    await createUserActionCallNodeFixture(root, workflowName);
+    await createCallNodeSession({
+      workflowName,
+      sessionId,
+      sessionStoreRoot,
+    });
+
+    const result = await callNode({
+      workflowRoot: root,
+      artifactRoot: artifactsRoot,
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      nodeId: "writer",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("nodeType='user-action'");
+    expect(result.error.message).toContain("direct call-node execution is not supported");
   });
 
   test("fails deterministically when execution mailbox artifacts cannot be persisted", async () => {

@@ -15,6 +15,44 @@ import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
 
+class OptionalDecisionAdapter implements NodeAdapter {
+  managerCalls = 0;
+
+  async execute(
+    input: Parameters<NodeAdapter["execute"]>[0],
+  ): Promise<
+    ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
+  > {
+    if (input.nodeId === "oyakata-manager") {
+      this.managerCalls += 1;
+      return {
+        provider: "optional-decision-adapter",
+        model: input.node.model,
+        promptText: input.promptText,
+        completionPassed: true,
+        when: { always: true },
+        payload:
+          this.managerCalls >= 2
+            ? {
+                managerControl: {
+                  actions: [{ type: "skip-optional-node", nodeId: "step-1" }],
+                },
+              }
+            : {},
+      };
+    }
+
+    return {
+      provider: "optional-decision-adapter",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      when: { always: true },
+      payload: { nodeId: input.nodeId },
+    };
+  }
+}
+
 class OutputContractRetryAdapter implements NodeAdapter {
   readonly #mode: "retry-success" | "always-invalid";
 
@@ -847,6 +885,137 @@ async function createWorkflowFixture(
   }
 }
 
+async function createOptionalExecutionFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "optional fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerNodeId: "oyakata-manager",
+    subWorkflows: [],
+    nodes: [
+      {
+        id: "oyakata-manager",
+        kind: "manager",
+        nodeFile: "node-oyakata-manager.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "step-1",
+        kind: "task",
+        nodeFile: "node-step-1.json",
+        completion: { type: "none" },
+        execution: {
+          mode: "optional",
+          decisionBy: "owning-manager",
+        },
+      },
+      {
+        id: "done",
+        kind: "output",
+        nodeFile: "node-done.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [
+      { from: "oyakata-manager", to: "step-1", when: "always" },
+      { from: "step-1", to: "done", when: "always" },
+    ],
+    loops: [],
+    branching: { mode: "fan-out" },
+  });
+
+  await writeJson(path.join(workflowDir, "workflow-vis.json"), {
+    nodes: [
+      { id: "oyakata-manager", order: 0 },
+      { id: "step-1", order: 1 },
+      { id: "done", order: 2 },
+    ],
+  });
+
+  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
+    id: "oyakata-manager",
+    model: "tacogips/codex-agent",
+    promptTemplate: "manager",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDir, "node-step-1.json"), {
+    id: "step-1",
+    model: "tacogips/claude-code-agent",
+    promptTemplate: "optional task",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDir, "node-done.json"), {
+    id: "done",
+    model: "tacogips/claude-code-agent",
+    promptTemplate: "done",
+    variables: {},
+  });
+}
+
+async function createUserActionFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "user action fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerNodeId: "oyakata-manager",
+    subWorkflows: [],
+    nodes: [
+      {
+        id: "oyakata-manager",
+        kind: "manager",
+        nodeFile: "node-oyakata-manager.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "approval",
+        kind: "task",
+        nodeFile: "node-approval.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [{ from: "oyakata-manager", to: "approval", when: "always" }],
+    loops: [],
+    branching: { mode: "fan-out" },
+  });
+
+  await writeJson(path.join(workflowDir, "workflow-vis.json"), {
+    nodes: [
+      { id: "oyakata-manager", order: 0 },
+      { id: "approval", order: 1 },
+    ],
+  });
+
+  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
+    id: "oyakata-manager",
+    model: "tacogips/codex-agent",
+    promptTemplate: "manager",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDir, "node-approval.json"), {
+    id: "approval",
+    nodeType: "user-action",
+    promptTemplate: "Please approve the release.",
+    variables: {},
+    userAction: {
+      messageToolIds: ["matrix-primary"],
+      notificationToolIds: ["desktop-notify"],
+      replyPolicy: "first-valid-reply-wins",
+    },
+  });
+}
+
 async function createNodeSessionReuseFixture(
   root: string,
   workflowName: string,
@@ -1594,6 +1763,250 @@ describe("runWorkflow", () => {
     expect(commitMessage).toContain(
       `Run-ID: ${result.value.session.sessionId}`,
     );
+  });
+
+  test("holds optional nodes until the manager explicitly executes them", async () => {
+    const root = await makeTempDir();
+    const workflowName = "optional-execute";
+    await createOptionalExecutionFixture(root, workflowName);
+
+    const result = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        sessionId: "sess-optional-execute",
+      },
+      new ScenarioNodeAdapter({
+        "oyakata-manager": [
+          { payload: {} },
+          {
+            payload: {
+              managerControl: {
+                actions: [
+                  { type: "execute-optional-node", nodeId: "step-1" },
+                ],
+              },
+            },
+          },
+        ],
+        "step-1": {
+          payload: { summary: "optional executed" },
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.exitCode).toBe(0);
+    expect(result.value.session.status).toBe("completed");
+    expect(result.value.session.pendingOptionalNodeDecisions).toEqual([]);
+
+    const managerExecutions = result.value.session.nodeExecutions.filter(
+      (entry) => entry.nodeId === "oyakata-manager",
+    );
+    expect(managerExecutions).toHaveLength(2);
+
+    const stepExecution = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExecution?.status).toBe("succeeded");
+    if (stepExecution === undefined) {
+      return;
+    }
+
+    const stepOutput = JSON.parse(
+      await readFile(path.join(stepExecution.artifactDir, "output.json"), "utf8"),
+    ) as { payload: { summary: string } };
+    expect(stepOutput.payload.summary).toBe("optional executed");
+  });
+
+  test("records explicit skipped status when the manager skips an optional node", async () => {
+    const root = await makeTempDir();
+    const workflowName = "optional-skip";
+    await createOptionalExecutionFixture(root, workflowName);
+
+    const result = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        sessionId: "sess-optional-skip",
+      },
+      new OptionalDecisionAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.exitCode).toBe(0);
+    expect(result.value.session.status).toBe("completed");
+    expect(result.value.session.pendingOptionalNodeDecisions).toEqual([]);
+
+    const managerExecutions = result.value.session.nodeExecutions.filter(
+      (entry) => entry.nodeId === "oyakata-manager",
+    );
+    expect(managerExecutions).toHaveLength(2);
+
+    const stepExecution = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExecution?.status).toBe("skipped");
+    if (stepExecution === undefined) {
+      return;
+    }
+
+    const outputJson = JSON.parse(
+      await readFile(path.join(stepExecution.artifactDir, "output.json"), "utf8"),
+    ) as { payload: { optionalNodeSkipped: boolean; reason: string } };
+    expect(outputJson.payload.optionalNodeSkipped).toBe(true);
+    expect(outputJson.payload.reason).toBe("manager judged unnecessary");
+
+    const metaJson = JSON.parse(
+      await readFile(path.join(stepExecution.artifactDir, "meta.json"), "utf8"),
+    ) as { status: string; optionalDecision: string };
+    expect(metaJson.status).toBe("skipped");
+    expect(metaJson.optionalDecision).toBe("skip");
+  });
+
+  test("preserves the manager-provided reason when skipping an optional node", async () => {
+    const root = await makeTempDir();
+    const workflowName = "optional-skip-reason";
+    await createOptionalExecutionFixture(root, workflowName);
+
+    const result = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        sessionId: "sess-optional-skip-reason",
+      },
+      new ScenarioNodeAdapter({
+        "oyakata-manager": [
+          { payload: {} },
+          {
+            payload: {
+              managerControl: {
+                actions: [
+                  {
+                    type: "skip-optional-node",
+                    nodeId: "step-1",
+                    reason: "already satisfied by upstream evidence",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const stepExecution = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExecution?.status).toBe("skipped");
+    if (stepExecution === undefined) {
+      return;
+    }
+
+    const outputJson = JSON.parse(
+      await readFile(path.join(stepExecution.artifactDir, "output.json"), "utf8"),
+    ) as { payload: { optionalNodeSkipped: boolean; reason: string } };
+    expect(outputJson.payload.optionalNodeSkipped).toBe(true);
+    expect(outputJson.payload.reason).toBe(
+      "already satisfied by upstream evidence",
+    );
+  });
+
+  test("pauses on user-action nodes and remains paused on resume until resolved", async () => {
+    const root = await makeTempDir();
+    const workflowName = "user-action-pause";
+    await createUserActionFixture(root, workflowName);
+
+    const first = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        sessionId: "sess-user-action-pause",
+      },
+      deterministicAdapter,
+    );
+
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+
+    expect(first.value.exitCode).toBe(4);
+    expect(first.value.session.status).toBe("paused");
+    expect(first.value.session.currentNodeId).toBe("approval");
+    expect(first.value.session.nodeExecutionCounter).toBe(2);
+    expect(first.value.session.nodeExecutions).toHaveLength(1);
+    expect(first.value.session.activeUserActions).toHaveLength(1);
+
+    const activeUserAction = first.value.session.activeUserActions?.[0];
+    expect(activeUserAction?.nodeId).toBe("approval");
+    expect(activeUserAction?.status).toBe("waiting-for-reply");
+    if (activeUserAction === undefined) {
+      return;
+    }
+
+    const approvalArtifactDir = path.dirname(activeUserAction.artifactDir);
+    const approvalInput = JSON.parse(
+      await readFile(path.join(approvalArtifactDir, "input.json"), "utf8"),
+    ) as { nodeType: string; promptText: string };
+    expect(approvalInput.nodeType).toBe("user-action");
+    expect(approvalInput.promptText).toContain("Please approve the release.");
+
+    const requestJson = JSON.parse(
+      await readFile(path.join(activeUserAction.artifactDir, "request.json"), "utf8"),
+    ) as { status: string; userAction: { messageToolIds: readonly string[] } };
+    const resolutionJson = JSON.parse(
+      await readFile(
+        path.join(activeUserAction.artifactDir, "resolution.json"),
+        "utf8",
+      ),
+    ) as { status: string };
+    expect(requestJson.status).toBe("waiting-for-reply");
+    expect(requestJson.userAction.messageToolIds).toEqual(["matrix-primary"]);
+    expect(resolutionJson.status).toBe("waiting-for-reply");
+
+    const resumed = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        resumeSessionId: first.value.session.sessionId,
+      },
+      deterministicAdapter,
+    );
+
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+
+    expect(resumed.value.exitCode).toBe(4);
+    expect(resumed.value.session.status).toBe("paused");
+    expect(resumed.value.session.activeUserActions).toHaveLength(1);
+    expect(resumed.value.session.nodeExecutionCounter).toBe(2);
+    expect(resumed.value.session.nodeExecutions).toHaveLength(1);
   });
 
   test("rejects podman-isolated nodes until Podman execution is implemented", async () => {

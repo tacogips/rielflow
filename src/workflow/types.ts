@@ -37,11 +37,17 @@ export interface WorkflowPrompts {
   readonly workerSystemPromptTemplate?: string;
 }
 
+export interface WorkflowNodeExecutionPolicy {
+  readonly mode?: "required" | "optional";
+  readonly decisionBy?: "owning-manager";
+}
+
 export interface WorkflowNodeRef {
   readonly id: string;
   readonly nodeFile: string;
   readonly kind?: NodeKind;
   readonly completion?: CompletionRule;
+  readonly execution?: WorkflowNodeExecutionPolicy;
 }
 
 export interface WorkflowEdge {
@@ -159,7 +165,7 @@ export interface NodeOutputContract {
   readonly maxValidationAttempts?: number;
 }
 
-export type NodeType = "agent" | "command" | "container";
+export type NodeType = "agent" | "command" | "container" | "user-action";
 
 export type NodeSessionMode = "new" | "reuse";
 
@@ -222,6 +228,14 @@ export interface NodeDurability {
   readonly mountPath?: string;
 }
 
+export interface UserActionNodeConfig {
+  readonly messageToolIds: readonly string[];
+  readonly notificationToolIds?: readonly string[];
+  readonly replyPolicy?: "first-valid-reply-wins";
+  readonly allowStructuredReply?: boolean;
+  readonly allowFreeTextReply?: boolean;
+}
+
 export interface NodePayload {
   readonly id: string;
   readonly nodeType?: NodeType;
@@ -234,6 +248,7 @@ export interface NodePayload {
   readonly command?: CommandExecution;
   readonly container?: ContainerExecution;
   readonly durability?: NodeDurability;
+  readonly userAction?: UserActionNodeConfig;
   readonly argumentsTemplate?: Readonly<Record<string, unknown>>;
   readonly argumentBindings?: readonly ArgumentBinding[];
   readonly templateEngine?: string;

@@ -740,6 +740,20 @@ class ExecutionDispatcher {
         message: `missing node definition for '${input.nodeId}'`,
       });
     }
+    if (nodeRef.execution?.mode === "optional") {
+      return err({
+        session,
+        exitCode: 1,
+        message: `node '${input.nodeId}' is optional and must be executed through the workflow scheduler after an owning-manager decision`,
+      });
+    }
+    if (nodePayload.nodeType === "user-action") {
+      return err({
+        session,
+        exitCode: 1,
+        message: `node '${input.nodeId}' requests nodeType='user-action', but direct call-node execution is not supported`,
+      });
+    }
     if (nodePayload.nodeType === "command") {
       return err({
         session,

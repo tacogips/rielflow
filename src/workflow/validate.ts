@@ -39,9 +39,11 @@ import {
   type VisNode,
   type WorkflowEdge,
   type WorkflowJson,
+  type WorkflowNodeExecutionPolicy,
   type WorkflowNodeRef,
   type WorkflowPrompts,
   type WorkflowVisJson,
+  type UserActionNodeConfig,
 } from "./types";
 
 interface RawBundle {
@@ -89,7 +91,12 @@ function isNodeSessionMode(value: unknown): value is NodeSessionPolicy["mode"] {
 }
 
 function isNodeType(value: unknown): value is NodeType {
-  return value === "agent" || value === "command" || value === "container";
+  return (
+    value === "agent" ||
+    value === "command" ||
+    value === "container" ||
+    value === "user-action"
+  );
 }
 
 function isContainerRunnerKind(value: unknown): value is ContainerRunnerKind {
@@ -901,6 +908,11 @@ function normalizeNodeRef(
     `${path}.completion`,
     issues,
   );
+  const execution = normalizeWorkflowNodeExecutionPolicy(
+    value["execution"],
+    `${path}.execution`,
+    issues,
+  );
 
   const kindRaw = value["kind"];
   let kind: WorkflowNodeRef["kind"];
@@ -944,6 +956,96 @@ function normalizeNodeRef(
     nodeFile,
     ...(kind === undefined ? {} : { kind }),
     ...(completion === undefined ? {} : { completion }),
+    ...(execution === undefined ? {} : { execution }),
+  };
+}
+
+function normalizeWorkflowNodeExecutionPolicy(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeExecutionPolicy | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["mode", "decisionBy"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported workflow node execution policy field",
+        ),
+      );
+    }
+  }
+
+  const modeRaw = value["mode"];
+  let mode: WorkflowNodeExecutionPolicy["mode"];
+  if (modeRaw !== undefined) {
+    if (modeRaw === "required" || modeRaw === "optional") {
+      mode = modeRaw;
+    } else {
+      issues.push(
+        makeIssue("error", `${path}.mode`, "must be 'required' or 'optional'"),
+      );
+    }
+  }
+
+  const decisionByRaw = value["decisionBy"];
+  let decisionBy: WorkflowNodeExecutionPolicy["decisionBy"];
+  if (decisionByRaw !== undefined) {
+    if (decisionByRaw === "owning-manager") {
+      decisionBy = decisionByRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.decisionBy`,
+          "must be 'owning-manager' when provided",
+        ),
+      );
+    }
+  }
+
+  if (mode === undefined && decisionBy === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        path,
+        "must define execution.mode when execution is provided",
+      ),
+    );
+    return undefined;
+  }
+  if (mode === "optional" && decisionBy === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.decisionBy`,
+        "is required when execution.mode is 'optional'",
+      ),
+    );
+  }
+  if (mode !== "optional" && decisionBy !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.decisionBy`,
+        "is currently valid only when execution.mode is 'optional'",
+      ),
+    );
+  }
+
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(decisionBy === undefined ? {} : { decisionBy }),
   };
 }
 
@@ -1789,7 +1891,7 @@ function normalizeNodePayload(
         makeIssue(
           "error",
           `${path}.nodeType`,
-          "must be 'agent', 'command', or 'container'",
+          "must be 'agent', 'command', 'container', or 'user-action'",
         ),
       );
     }
@@ -2004,6 +2106,11 @@ function normalizeNodePayload(
     `${path}.durability`,
     issues,
   );
+  const userAction = normalizeUserActionNodeConfig(
+    payload["userAction"],
+    `${path}.userAction`,
+    issues,
+  );
 
   const sessionPolicyRaw = payload["sessionPolicy"];
   let sessionPolicy: NodeSessionPolicy | undefined;
@@ -2149,6 +2256,91 @@ function normalizeNodePayload(
       ),
     );
   }
+  if (userAction !== undefined && nodeType !== "user-action") {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.userAction`,
+        "is valid only when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && userAction === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.userAction`,
+        "is required when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && model !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.model`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && executionBackend !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.executionBackend`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && sessionPolicy !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.sessionPolicy`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && command !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.command`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && effectiveContainer !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.container`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (nodeType === "user-action" && durability !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.durability`,
+        "must be omitted when nodeType is 'user-action'",
+      ),
+    );
+  }
+  if (
+    nodeType === "user-action" &&
+    promptTemplate === undefined &&
+    promptTemplateFile === undefined
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.promptTemplate`,
+        "must be provided inline or by promptTemplateFile when nodeType is 'user-action'",
+      ),
+    );
+  }
 
   if (
     id === null ||
@@ -2173,12 +2365,169 @@ function normalizeNodePayload(
       ? {}
       : { container: effectiveContainer }),
     ...(durability === undefined ? {} : { durability }),
+    ...(userAction === undefined ? {} : { userAction }),
     ...(argumentsTemplate === undefined ? {} : { argumentsTemplate }),
     ...(argumentBindings === undefined ? {} : { argumentBindings }),
     ...(templateEngine === undefined ? {} : { templateEngine }),
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(outputContract === undefined ? {} : { output: outputContract }),
   };
+}
+
+function normalizeUserActionNodeConfig(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): UserActionNodeConfig | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set([
+    "messageToolIds",
+    "notificationToolIds",
+    "replyPolicy",
+    "allowStructuredReply",
+    "allowFreeTextReply",
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported userAction field",
+        ),
+      );
+    }
+  }
+
+  const messageToolIds = normalizeNamedStringArrayField(
+    value,
+    "messageToolIds",
+    path,
+    issues,
+  );
+  const notificationToolIds = normalizeOptionalNamedStringArrayField(
+    value,
+    "notificationToolIds",
+    path,
+    issues,
+  );
+
+  if (messageToolIds !== null && messageToolIds.length === 0) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.messageToolIds`,
+        "must contain at least one tool id",
+      ),
+    );
+  }
+
+  const replyPolicyRaw = value["replyPolicy"];
+  let replyPolicy: UserActionNodeConfig["replyPolicy"];
+  if (replyPolicyRaw !== undefined) {
+    if (replyPolicyRaw === "first-valid-reply-wins") {
+      replyPolicy = replyPolicyRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.replyPolicy`,
+          "must be 'first-valid-reply-wins' when provided",
+        ),
+      );
+    }
+  }
+
+  const allowStructuredReply = normalizeOptionalBooleanField(
+    value,
+    "allowStructuredReply",
+    path,
+    issues,
+  );
+  const allowFreeTextReply = normalizeOptionalBooleanField(
+    value,
+    "allowFreeTextReply",
+    path,
+    issues,
+  );
+
+  if (messageToolIds === null) {
+    return undefined;
+  }
+
+  return {
+    messageToolIds,
+    ...(notificationToolIds === undefined ? {} : { notificationToolIds }),
+    ...(replyPolicy === undefined ? {} : { replyPolicy }),
+    ...(allowStructuredReply === undefined ? {} : { allowStructuredReply }),
+    ...(allowFreeTextReply === undefined ? {} : { allowFreeTextReply }),
+  };
+}
+
+function normalizeNamedStringArrayField(
+  record: UnknownRecord,
+  key: string,
+  path: string,
+  issues: ValidationIssue[],
+): readonly string[] | null {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    issues.push(makeIssue("error", `${path}.${key}`, "must be an array"));
+    return null;
+  }
+  const normalized = value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  if (normalized.length !== value.length) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.${key}`,
+        "must contain only non-empty strings",
+      ),
+    );
+  }
+  return normalized;
+}
+
+function normalizeOptionalNamedStringArrayField(
+  record: UnknownRecord,
+  key: string,
+  path: string,
+  issues: ValidationIssue[],
+): readonly string[] | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  const normalized = normalizeNamedStringArrayField(record, key, path, issues);
+  return normalized === null ? undefined : normalized;
+}
+
+function normalizeOptionalBooleanField(
+  record: UnknownRecord,
+  key: string,
+  path: string,
+  issues: ValidationIssue[],
+): boolean | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    issues.push(
+      makeIssue("error", `${path}.${key}`, "must be a boolean when provided"),
+    );
+    return undefined;
+  }
+  return value;
 }
 
 function normalizeNodeOutputContract(

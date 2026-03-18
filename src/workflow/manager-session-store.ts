@@ -13,6 +13,8 @@ export interface ManagerIntentSummary {
     | "deliver-to-child-input"
     | "retry-node"
     | "replay-communication"
+    | "execute-optional-node"
+    | "skip-optional-node"
     | "wait"
     | "invalid";
   readonly targetId?: string;

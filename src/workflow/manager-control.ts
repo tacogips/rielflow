@@ -6,7 +6,9 @@ export type ManagerControlActionType =
   | "start-sub-workflow"
   | "deliver-to-child-input"
   | "retry-node"
-  | "replay-communication";
+  | "replay-communication"
+  | "execute-optional-node"
+  | "skip-optional-node";
 
 export interface PlannerNoteAction {
   readonly type: "planner-note";
@@ -33,12 +35,25 @@ export interface ReplayCommunicationAction {
   readonly reason?: string;
 }
 
+export interface ExecuteOptionalNodeAction {
+  readonly type: "execute-optional-node";
+  readonly nodeId: string;
+}
+
+export interface SkipOptionalNodeAction {
+  readonly type: "skip-optional-node";
+  readonly nodeId: string;
+  readonly reason?: string;
+}
+
 export type ManagerControlAction =
   | PlannerNoteAction
   | StartSubWorkflowAction
   | DeliverToChildInputAction
   | RetryNodeAction
-  | ReplayCommunicationAction;
+  | ReplayCommunicationAction
+  | ExecuteOptionalNodeAction
+  | SkipOptionalNodeAction;
 
 export interface ParsedManagerControl {
   readonly actions: readonly ManagerControlAction[];
@@ -46,6 +61,8 @@ export interface ParsedManagerControl {
   readonly childInputNodeIds: readonly string[];
   readonly retryNodeIds: readonly string[];
   readonly replayCommunicationIds: readonly string[];
+  readonly executeOptionalNodeIds: readonly string[];
+  readonly skipOptionalNodeIds: readonly string[];
   readonly overridesRootSubWorkflowPlanning: boolean;
   readonly overridesChildInputPlanning: boolean;
 }
@@ -111,6 +128,24 @@ export function parseManagerControlActionInput(
         type,
         nodeId: readStringField(value, "nodeId", "managerControl.actions[]"),
       };
+    case "execute-optional-node":
+      return {
+        type,
+        nodeId: readStringField(value, "nodeId", "managerControl.actions[]"),
+      };
+    case "skip-optional-node": {
+      const reason = value["reason"];
+      if (reason !== undefined && typeof reason !== "string") {
+        throw new Error(
+          "managerControl.actions[].reason must be a string when provided",
+        );
+      }
+      return {
+        type,
+        nodeId: readStringField(value, "nodeId", "managerControl.actions[]"),
+        ...(typeof reason === "string" && reason.length > 0 ? { reason } : {}),
+      };
+    }
     case "replay-communication": {
       const reason = value["reason"];
       if (reason !== undefined && typeof reason !== "string") {
@@ -147,6 +182,62 @@ function findOwnedSubWorkflow(workflow: WorkflowJson, managerNodeId: string) {
 
 function getOwnedSubWorkflowForNode(workflow: WorkflowJson, nodeId: string) {
   return workflow.subWorkflows.find((entry) => entry.nodeIds.includes(nodeId));
+}
+
+function assertOptionalNodeDecisionScope(
+  workflow: WorkflowJson,
+  context: ManagerControlParseContext,
+  nodeId: string,
+  actionType: "execute-optional-node" | "skip-optional-node",
+): void {
+  const node = workflow.nodes.find((entry) => entry.id === nodeId);
+  if (node === undefined) {
+    throw new Error(
+      `managerControl ${actionType} node '${nodeId}' does not exist`,
+    );
+  }
+  if (node.id === context.managerNodeId) {
+    throw new Error(
+      `managerControl ${actionType} node '${nodeId}' cannot target the manager node itself`,
+    );
+  }
+  if (node.execution?.mode !== "optional") {
+    throw new Error(
+      `managerControl ${actionType} node '${nodeId}' must reference a node with workflow execution.mode 'optional'`,
+    );
+  }
+
+  if (context.managerNodeId === workflow.managerNodeId) {
+    const ownedSubWorkflow = getOwnedSubWorkflowForNode(workflow, nodeId);
+    if (ownedSubWorkflow !== undefined) {
+      throw new Error(
+        `managerControl ${actionType} node '${nodeId}' is inside sub-workflow '${ownedSubWorkflow.id}'; use the owning sub-oyakata-manager instead`,
+      );
+    }
+    return;
+  }
+
+  if (context.managerKind === "sub-oyakata-manager") {
+    const ownedSubWorkflow = findOwnedSubWorkflow(
+      workflow,
+      context.managerNodeId,
+    );
+    if (ownedSubWorkflow === undefined) {
+      throw new Error(
+        `manager node '${context.managerNodeId}' does not own a sub-workflow`,
+      );
+    }
+    if (!ownedSubWorkflow.nodeIds.includes(nodeId)) {
+      throw new Error(
+        `managerControl ${actionType} node '${nodeId}' must belong to sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerNodeId}'`,
+      );
+    }
+    return;
+  }
+
+  throw new Error(
+    `manager node '${context.managerNodeId}' does not have a recognized control scope`,
+  );
 }
 
 function resolveEffectiveCommunicationScope(
@@ -283,6 +374,19 @@ export function parseManagerControlActions(
       continue;
     }
 
+    if (
+      action.type === "execute-optional-node" ||
+      action.type === "skip-optional-node"
+    ) {
+      assertOptionalNodeDecisionScope(
+        workflow,
+        context,
+        action.nodeId,
+        action.type,
+      );
+      continue;
+    }
+
     const node = workflow.nodes.find((entry) => entry.id === action.nodeId);
     if (node === undefined) {
       throw new Error(
@@ -352,6 +456,22 @@ export function parseManagerControlActions(
       )
       .map((entry) => entry.communicationId),
   );
+  const executeOptionalNodeIds = dedupe(
+    actions
+      .filter(
+        (entry): entry is ExecuteOptionalNodeAction =>
+          entry.type === "execute-optional-node",
+      )
+      .map((entry) => entry.nodeId),
+  );
+  const skipOptionalNodeIds = dedupe(
+    actions
+      .filter(
+        (entry): entry is SkipOptionalNodeAction =>
+          entry.type === "skip-optional-node",
+      )
+      .map((entry) => entry.nodeId),
+  );
 
   return {
     actions,
@@ -359,6 +479,8 @@ export function parseManagerControlActions(
     childInputNodeIds,
     retryNodeIds,
     replayCommunicationIds,
+    executeOptionalNodeIds,
+    skipOptionalNodeIds,
     overridesRootSubWorkflowPlanning: true,
     overridesChildInputPlanning: true,
   };
@@ -385,6 +507,8 @@ export function parseManagerControlPayload(
       childInputNodeIds: [],
       retryNodeIds: [],
       replayCommunicationIds: [],
+      executeOptionalNodeIds: [],
+      skipOptionalNodeIds: [],
       overridesRootSubWorkflowPlanning: true,
       overridesChildInputPlanning: true,
     };

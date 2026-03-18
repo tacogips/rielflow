@@ -14,7 +14,12 @@ export interface SessionTransition {
 export interface NodeExecutionRecord {
   readonly nodeId: string;
   readonly nodeExecId: string;
-  readonly status: "succeeded" | "failed" | "timed_out" | "cancelled";
+  readonly status:
+    | "succeeded"
+    | "failed"
+    | "timed_out"
+    | "cancelled"
+    | "skipped";
   readonly artifactDir: string;
   readonly startedAt: string;
   readonly endedAt: string;
@@ -130,6 +135,26 @@ export interface NodeBackendSessionRecord {
   readonly lastNodeExecId: string;
 }
 
+export interface PendingOptionalNodeDecision {
+  readonly nodeId: string;
+  readonly owningManagerNodeId: string;
+  readonly subWorkflowId?: string;
+  readonly requestedAt: string;
+  readonly status: "pending" | "execute" | "skip";
+  readonly reason?: string;
+  readonly decidedAt?: string;
+  readonly decidedByNodeExecId?: string;
+}
+
+export interface ActiveUserActionRef {
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly userActionId: string;
+  readonly artifactDir: string;
+  readonly status: "waiting-for-reply";
+  readonly pausedAt: string;
+}
+
 export interface WorkflowSessionState {
   readonly sessionId: string;
   readonly workflowName: string;
@@ -152,6 +177,8 @@ export interface WorkflowSessionState {
   readonly nodeBackendSessions?: Readonly<
     Record<string, NodeBackendSessionRecord>
   >;
+  readonly pendingOptionalNodeDecisions?: readonly PendingOptionalNodeDecision[];
+  readonly activeUserActions?: readonly ActiveUserActionRef[];
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly lastError?: string;
 }
@@ -185,6 +212,8 @@ export function createSessionState(
     communications: [],
     conversationTurns: [],
     nodeBackendSessions: {},
+    pendingOptionalNodeDecisions: [],
+    activeUserActions: [],
     runtimeVariables: input.runtimeVariables,
   };
 }
@@ -210,6 +239,10 @@ export function normalizeSessionState(
     communicationCounter,
     communications: [...communications],
     nodeBackendSessions: { ...(session.nodeBackendSessions ?? {}) },
+    pendingOptionalNodeDecisions: [
+      ...(session.pendingOptionalNodeDecisions ?? []),
+    ],
+    activeUserActions: [...(session.activeUserActions ?? [])],
   };
 }
 

@@ -41,6 +41,10 @@ function makeWorkflow(): WorkflowJson {
         nodeFile: "node-a-input.json",
         kind: "input",
         completion: { type: "none" },
+        execution: {
+          mode: "optional",
+          decisionBy: "owning-manager",
+        },
       },
       {
         id: "a-output",
@@ -53,6 +57,10 @@ function makeWorkflow(): WorkflowJson {
         nodeFile: "node-step-1.json",
         kind: "task",
         completion: { type: "none" },
+        execution: {
+          mode: "optional",
+          decisionBy: "owning-manager",
+        },
       },
     ],
     edges: [],
@@ -140,6 +148,27 @@ describe("parseManagerControlPayload", () => {
     expect(parsed.actions).toHaveLength(2);
     expect(parsed.retryNodeIds).toEqual([]);
     expect(parsed.replayCommunicationIds).toEqual(["comm-000123"]);
+  });
+
+  test("parses execute-optional-node and skip-optional-node action variants", () => {
+    const parsed = parseManagerControlActions(
+      [
+        { type: "execute-optional-node", nodeId: "step-1" },
+        {
+          type: "skip-optional-node",
+          nodeId: "step-1",
+          reason: "not needed this run",
+        },
+      ],
+      makeWorkflow(),
+      {
+        managerNodeId: "oyakata-manager",
+        managerKind: "root-manager",
+      },
+    );
+
+    expect(parsed.executeOptionalNodeIds).toEqual(["step-1"]);
+    expect(parsed.skipOptionalNodeIds).toEqual(["step-1"]);
   });
 
   test("rejects start-sub-workflow outside the root-manager scope", () => {
@@ -302,6 +331,38 @@ describe("parseManagerControlPayload", () => {
         },
       ),
     ).toThrow("cannot target the manager node itself");
+  });
+
+  test("rejects optional-node decisions for non-optional or out-of-scope nodes", () => {
+    expect(() =>
+      parseManagerControlPayload(
+        {
+          managerControl: {
+            actions: [{ type: "execute-optional-node", nodeId: "a-output" }],
+          },
+        },
+        makeWorkflow(),
+        {
+          managerNodeId: "a-manager",
+          managerKind: "sub-oyakata-manager",
+        },
+      ),
+    ).toThrow("workflow execution.mode 'optional'");
+
+    expect(() =>
+      parseManagerControlPayload(
+        {
+          managerControl: {
+            actions: [{ type: "skip-optional-node", nodeId: "a-input" }],
+          },
+        },
+        makeWorkflow(),
+        {
+          managerNodeId: "oyakata-manager",
+          managerKind: "root-manager",
+        },
+      ),
+    ).toThrow("use the owning sub-oyakata-manager instead");
   });
 
   test("enforces communication replay scope with legacy boundary fallback", () => {

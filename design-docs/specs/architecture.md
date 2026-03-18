@@ -199,6 +199,12 @@ Role split:
 - judge nodes: emit branch/loop decisions
 - task: ordinary business work
 
+Planned extension:
+
+- `user-action` should be added as a new `nodeType`, not a new manager boundary, so human approval/input remains a runtime-owned execution flavor rather than a second structural control-flow system
+- optional node execution should be added as scheduler policy on `workflow.json.nodes[]`, with decisions owned by the already-scoped root manager or sub-oyakata-manager
+- detailed design: `design-docs/specs/design-user-action-and-optional-node-execution.md`
+
 ## Current Execution Flow
 
 ```mermaid

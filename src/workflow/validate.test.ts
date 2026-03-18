@@ -176,6 +176,189 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
+  test("accepts optional execution policy on workflow nodes", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "oyakata-manager",
+          kind: "manager",
+          nodeFile: "node-oyakata-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          kind: "task",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+          execution: {
+            mode: "optional",
+            decisionBy: "owning-manager",
+          },
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.workflow.nodes[1]?.execution).toEqual({
+      mode: "optional",
+      decisionBy: "owning-manager",
+    });
+  });
+
+  test("rejects optional execution policy without owning-manager decisionBy", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "oyakata-manager",
+          kind: "manager",
+          nodeFile: "node-oyakata-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          kind: "task",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+          execution: {
+            mode: "optional",
+          },
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.nodes[1].execution.decisionBy" &&
+          issue.message.includes("required"),
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts user-action node payloads", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      nodeType: "user-action",
+      promptTemplate: "Approve the release?",
+      variables: {},
+      userAction: {
+        messageToolIds: ["matrix-primary"],
+        notificationToolIds: ["desktop-notify"],
+        replyPolicy: "first-valid-reply-wins",
+        allowStructuredReply: true,
+        allowFreeTextReply: true,
+      },
+      output: {
+        description: "Validated user reply payload",
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.nodePayloads["worker-1"]).toEqual({
+      id: "worker-1",
+      nodeType: "user-action",
+      promptTemplate: "Approve the release?",
+      variables: {},
+      userAction: {
+        messageToolIds: ["matrix-primary"],
+        notificationToolIds: ["desktop-notify"],
+        replyPolicy: "first-valid-reply-wins",
+        allowStructuredReply: true,
+        allowFreeTextReply: true,
+      },
+      output: {
+        description: "Validated user reply payload",
+      },
+    });
+  });
+
+  test("rejects user-action nodes without message tool ids", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      nodeType: "user-action",
+      promptTemplate: "Approve the release?",
+      variables: {},
+      userAction: {
+        messageToolIds: [],
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.userAction.messageToolIds" &&
+          issue.message.includes("at least one"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects agent-only fields on user-action nodes", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      nodeType: "user-action",
+      model: "gpt-5-nano",
+      executionBackend: "official/openai-sdk",
+      sessionPolicy: { mode: "reuse" },
+      promptTemplate: "Approve the release?",
+      variables: {},
+      userAction: {
+        messageToolIds: ["matrix-primary"],
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.model" &&
+          issue.message.includes("must be omitted"),
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.executionBackend" &&
+          issue.message.includes("must be omitted"),
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.sessionPolicy" &&
+          issue.message.includes("must be omitted"),
+      ),
+    ).toBe(true);
+  });
+
   test("accepts node session reuse policy", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {

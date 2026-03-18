@@ -24,9 +24,7 @@ impl-plans/
 
 ## Active Plans
 
-| Plan                            | Status      | Design Reference             | Last Updated |
-| ------------------------------- | ----------- | ---------------------------- | ------------ |
-| _None_ | - | - | - |
+None currently.
 
 ## Completed Plans
 
@@ -99,6 +97,7 @@ impl-plans/
 | `tui-resume-runtime-variable-merge`           | 2026-03-15 | `design-tui`, `command`                                                                            |
 | `example-node-combination-showcase`           | 2026-03-17 | `design-workflow-json`, `design-container-runtime-contract`, `architecture`                      |
 | `node-execution-inbox-contract`               | 2026-03-17 | `design-node-execution-inbox-contract`, `design-node-mailbox`, `architecture`                   |
+| `user-action-and-optional-node-execution`     | 2026-03-18 | `design-user-action-and-optional-node-execution`                                                 |
 
 ## Phase Dependencies
 
@@ -172,6 +171,7 @@ impl-plans/
 | 66    | COMPLETED | Phase 65 |
 | 67    | COMPLETED | Phase 66 |
 | 68    | COMPLETED | Phase 67 |
+| 69    | COMPLETED | Phase 68 |
 
 ### Phase to Plans Mapping
 
@@ -244,6 +244,7 @@ PHASE_TO_PLANS = {
   65: ["impl-plans/manager-driven-call-node-runtime.md"],
   66: ["impl-plans/graphql-library-rest-surface-simplification.md"],
   67: ["impl-plans/example-node-combination-showcase.md"],
-  68: ["impl-plans/node-execution-inbox-contract.md"]
+  68: ["impl-plans/node-execution-inbox-contract.md"],
+  69: ["impl-plans/user-action-and-optional-node-execution.md"]
 }
 ```

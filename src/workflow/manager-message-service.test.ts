@@ -11,7 +11,8 @@ import {
   hashManagerAuthToken,
 } from "./manager-session-store";
 import { createManagerMessageService } from "./manager-message-service";
-import { loadSession } from "./session-store";
+import { createSessionState, type WorkflowSessionState } from "./session";
+import { loadSession, saveSession } from "./session-store";
 
 const tempDirs: string[] = [];
 
@@ -91,6 +92,7 @@ async function createManagerSession(
   root: string,
   workflowExecutionId: string,
   managerNodeId = "oyakata-manager",
+  workflowId = "demo",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -98,7 +100,7 @@ async function createManagerSession(
   });
   await store.createOrResumeSession({
     managerSessionId: "mgrsess-000001",
-    workflowId: "demo",
+    workflowId,
     workflowExecutionId,
     managerNodeId,
     managerNodeExecId: "exec-000001",
@@ -109,6 +111,157 @@ async function createManagerSession(
     authTokenExpiresAt: "2026-03-16T00:00:00.000Z",
   });
   return store;
+}
+
+async function createOptionalDecisionWorkflowFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeFile(
+    path.join(workflowDir, "workflow.json"),
+    `${JSON.stringify(
+      {
+        workflowId: workflowName,
+        description: "optional manager-message fixture",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        managerNodeId: "oyakata-manager",
+        subWorkflows: [],
+        nodes: [
+          {
+            id: "oyakata-manager",
+            kind: "manager",
+            nodeFile: "node-oyakata-manager.json",
+            completion: { type: "none" },
+          },
+          {
+            id: "step-1",
+            kind: "task",
+            nodeFile: "node-step-1.json",
+            completion: { type: "none" },
+            execution: {
+              mode: "optional",
+              decisionBy: "owning-manager",
+            },
+          },
+          {
+            id: "step-2",
+            kind: "task",
+            nodeFile: "node-step-2.json",
+            completion: { type: "none" },
+            execution: {
+              mode: "optional",
+              decisionBy: "owning-manager",
+            },
+          },
+        ],
+        edges: [],
+        loops: [],
+        branching: { mode: "fan-out" },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(workflowDir, "workflow-vis.json"),
+    `${JSON.stringify(
+      {
+        nodes: [
+          { id: "oyakata-manager", order: 0 },
+          { id: "step-1", order: 1 },
+          { id: "step-2", order: 2 },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  for (const node of [
+    {
+      file: "node-oyakata-manager.json",
+      payload: {
+        id: "oyakata-manager",
+        model: "tacogips/codex-agent",
+        promptTemplate: "manager",
+        variables: {},
+      },
+    },
+    {
+      file: "node-step-1.json",
+      payload: {
+        id: "step-1",
+        model: "tacogips/claude-code-agent",
+        promptTemplate: "optional step 1",
+        variables: {},
+      },
+    },
+    {
+      file: "node-step-2.json",
+      payload: {
+        id: "step-2",
+        model: "tacogips/claude-code-agent",
+        promptTemplate: "optional step 2",
+        variables: {},
+      },
+    },
+  ]) {
+    await writeFile(
+      path.join(workflowDir, node.file),
+      `${JSON.stringify(node.payload, null, 2)}\n`,
+      "utf8",
+    );
+  }
+}
+
+async function createPendingOptionalDecisionSession(input: {
+  readonly root: string;
+  readonly workflowName: string;
+  readonly sessionId: string;
+}): Promise<WorkflowSessionState> {
+  const baseSession = createSessionState({
+    sessionId: input.sessionId,
+    workflowName: input.workflowName,
+    workflowId: input.workflowName,
+    initialNodeId: "oyakata-manager",
+    runtimeVariables: {},
+  });
+  const session: WorkflowSessionState = {
+    ...baseSession,
+    status: "running",
+    queue: [],
+    currentNodeId: "oyakata-manager",
+    pendingOptionalNodeDecisions: [
+      {
+        nodeId: "step-1",
+        owningManagerNodeId: "oyakata-manager",
+        requestedAt: "2026-03-15T04:00:00.000Z",
+        status: "pending",
+      },
+      {
+        nodeId: "step-2",
+        owningManagerNodeId: "oyakata-manager",
+        requestedAt: "2026-03-15T04:00:00.000Z",
+        status: "pending",
+      },
+    ],
+  };
+  const saved = await saveSession(session, {
+    workflowRoot: input.root,
+    artifactRoot: path.join(input.root, "artifacts"),
+    rootDataDir: path.join(input.root, "data"),
+    cwd: input.root,
+  });
+  expect(saved.ok).toBe(true);
+  if (!saved.ok) {
+    throw new Error(saved.error.message);
+  }
+  return session;
 }
 
 describe("manager-message-service", () => {
@@ -461,6 +614,91 @@ describe("manager-message-service", () => {
     const messages = await managerStore.listMessages("mgrsess-000001");
     expect(messages).toHaveLength(1);
     expect(messages[0]?.accepted).toBe(true);
+  });
+
+  test("applies optional-node execute/skip actions through manager messages", async () => {
+    const root = await makeTempDir();
+    const workflowName = "optional-manager-message";
+    const sessionId = "wfexec-optional-manager-message";
+    await createOptionalDecisionWorkflowFixture(root, workflowName);
+    await createPendingOptionalDecisionSession({
+      root,
+      workflowName,
+      sessionId,
+    });
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const managerStore = await createManagerSession(
+      root,
+      sessionId,
+      "oyakata-manager",
+      workflowName,
+    );
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T04:15:00.000Z",
+      managerSessionStore: managerStore,
+    });
+
+    const accepted = await service.sendManagerMessage(
+      {
+        workflowId: workflowName,
+        workflowExecutionId: sessionId,
+        managerSessionId: "mgrsess-000001",
+        message: "Execute step-1 and skip step-2.",
+        actions: [
+          { type: "execute-optional-node", nodeId: "step-1" },
+          {
+            type: "skip-optional-node",
+            nodeId: "step-2",
+            reason: "already covered by another branch",
+          },
+        ],
+      },
+      options,
+    );
+
+    expect(accepted.accepted).toBe(true);
+    expect(accepted.queuedNodeIds).toEqual(["step-1", "step-2"]);
+    expect(accepted.parsedIntent).toEqual([
+      { kind: "execute-optional-node", targetId: "step-1" },
+      {
+        kind: "skip-optional-node",
+        targetId: "step-2",
+        reason: "already covered by another branch",
+      },
+    ]);
+
+    const loaded = await loadSession(sessionId, options);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    expect(loaded.value.queue).toEqual(["step-1", "step-2"]);
+    expect(loaded.value.pendingOptionalNodeDecisions).toEqual([
+      {
+        nodeId: "step-1",
+        owningManagerNodeId: "oyakata-manager",
+        requestedAt: "2026-03-15T04:00:00.000Z",
+        status: "execute",
+        decidedAt: "2026-03-15T04:15:00.000Z",
+        decidedByNodeExecId: "exec-000001",
+      },
+      {
+        nodeId: "step-2",
+        owningManagerNodeId: "oyakata-manager",
+        requestedAt: "2026-03-15T04:00:00.000Z",
+        status: "skip",
+        reason: "already covered by another branch",
+        decidedAt: "2026-03-15T04:15:00.000Z",
+        decidedByNodeExecId: "exec-000001",
+      },
+    ]);
   });
 
   test("delivers manager-authored child-input messages with durable provenance", async () => {

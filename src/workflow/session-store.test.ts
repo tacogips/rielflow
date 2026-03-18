@@ -72,6 +72,8 @@ describe("session-store", () => {
     }
     expect(loaded.value.sessionId).toBe(session.sessionId);
     expect(loaded.value.queue[0]).toBe("manager");
+    expect(loaded.value.pendingOptionalNodeDecisions).toEqual([]);
+    expect(loaded.value.activeUserActions).toEqual([]);
   });
 
   test("rejects invalid session id", async () => {
@@ -99,6 +101,8 @@ describe("session-store", () => {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     delete parsed["communicationCounter"];
     delete parsed["communications"];
+    delete parsed["pendingOptionalNodeDecisions"];
+    delete parsed["activeUserActions"];
     await writeFile(filePath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
 
     const loaded = await loadSession(session.sessionId, {
@@ -110,5 +114,7 @@ describe("session-store", () => {
     }
     expect(loaded.value.communicationCounter).toBe(0);
     expect(loaded.value.communications).toEqual([]);
+    expect(loaded.value.pendingOptionalNodeDecisions).toEqual([]);
+    expect(loaded.value.activeUserActions).toEqual([]);
   });
 });
