@@ -18,7 +18,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-manager-message-service-test-"),
+    path.join(os.tmpdir(), "divedra-manager-message-service-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -26,12 +26,12 @@ async function makeTempDir(): Promise<string> {
 
 function makeDefaultTemplateScenario(): MockNodeScenario {
   return {
-    "oyakata-manager": {
+    "divedra-manager": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-oyakata": {
+    "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "dispatch" },
@@ -91,7 +91,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "oyakata-manager",
+  managerNodeId = "divedra-manager",
   workflowId = "demo",
 ) {
   const store = createManagerSessionStore({
@@ -127,13 +127,13 @@ async function createOptionalDecisionWorkflowFixture(
         workflowId: workflowName,
         description: "optional manager-message fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         subWorkflows: [],
         nodes: [
           {
-            id: "oyakata-manager",
+            id: "divedra-manager",
             kind: "manager",
-            nodeFile: "node-oyakata-manager.json",
+            nodeFile: "node-divedra-manager.json",
             completion: { type: "none" },
           },
           {
@@ -171,7 +171,7 @@ async function createOptionalDecisionWorkflowFixture(
     `${JSON.stringify(
       {
         nodes: [
-          { id: "oyakata-manager", order: 0 },
+          { id: "divedra-manager", order: 0 },
           { id: "step-1", order: 1 },
           { id: "step-2", order: 2 },
         ],
@@ -184,9 +184,9 @@ async function createOptionalDecisionWorkflowFixture(
 
   for (const node of [
     {
-      file: "node-oyakata-manager.json",
+      file: "node-divedra-manager.json",
       payload: {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -228,24 +228,24 @@ async function createPendingOptionalDecisionSession(input: {
     sessionId: input.sessionId,
     workflowName: input.workflowName,
     workflowId: input.workflowName,
-    initialNodeId: "oyakata-manager",
+    initialNodeId: "divedra-manager",
     runtimeVariables: {},
   });
   const session: WorkflowSessionState = {
     ...baseSession,
     status: "running",
     queue: [],
-    currentNodeId: "oyakata-manager",
+    currentNodeId: "divedra-manager",
     pendingOptionalNodeDecisions: [
       {
         nodeId: "step-1",
-        owningManagerNodeId: "oyakata-manager",
+        owningManagerNodeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
       {
         nodeId: "step-2",
-        owningManagerNodeId: "oyakata-manager",
+        owningManagerNodeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
@@ -271,7 +271,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:00:00.000Z",
@@ -355,7 +355,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:30:00.000Z",
@@ -404,7 +404,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:45:00.000Z",
@@ -456,7 +456,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T02:00:00.000Z",
@@ -529,13 +529,13 @@ describe("manager-message-service", () => {
     expect(replayed).toEqual(result);
   });
 
-  test("rejects replay actions outside the sub-oyakata-manager owned communication scope", async () => {
+  test("rejects replay actions outside the sub-divedra-manager owned communication scope", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T02:15:00.000Z",
@@ -599,7 +599,7 @@ describe("manager-message-service", () => {
 
     expect(accepted.accepted).toBe(true);
     expect(accepted.createdCommunicationIds).toEqual([]);
-    expect(accepted.queuedNodeIds).toEqual(["main-oyakata"]);
+    expect(accepted.queuedNodeIds).toEqual(["main-divedra"]);
     expect(accepted.parsedIntent[0]?.kind).toBe("start-sub-workflow");
     expect(accepted.parsedIntent[0]?.targetId).toBe("main");
 
@@ -609,7 +609,7 @@ describe("manager-message-service", () => {
       return;
     }
     expect(loaded.value.status).toBe("running");
-    expect(loaded.value.queue).toContain("main-oyakata");
+    expect(loaded.value.queue).toContain("main-divedra");
 
     const messages = await managerStore.listMessages("mgrsess-000001");
     expect(messages).toHaveLength(1);
@@ -636,7 +636,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       sessionId,
-      "oyakata-manager",
+      "divedra-manager",
       workflowName,
     );
     const service = createManagerMessageService({
@@ -683,7 +683,7 @@ describe("manager-message-service", () => {
     expect(loaded.value.pendingOptionalNodeDecisions).toEqual([
       {
         nodeId: "step-1",
-        owningManagerNodeId: "oyakata-manager",
+        owningManagerNodeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "execute",
         decidedAt: "2026-03-15T04:15:00.000Z",
@@ -691,7 +691,7 @@ describe("manager-message-service", () => {
       },
       {
         nodeId: "step-2",
-        owningManagerNodeId: "oyakata-manager",
+        owningManagerNodeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "skip",
         reason: "already covered by another branch",
@@ -707,7 +707,7 @@ describe("manager-message-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createManagerMessageService({
       now: () => "2026-03-15T03:00:00.000Z",
@@ -728,7 +728,7 @@ describe("manager-message-service", () => {
             {
               targetPath: "routed.message",
               source: "node-output",
-              sourceRef: "main-oyakata",
+              sourceRef: "main-divedra",
               sourcePath: "output.payload.message",
               required: true,
             },

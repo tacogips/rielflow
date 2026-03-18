@@ -123,7 +123,7 @@ function isManagerNodeKind(kind: NodeKind | undefined): boolean {
   return (
     kind === "manager" ||
     kind === "root-manager" ||
-    kind === "sub-oyakata-manager"
+    kind === "sub-divedra-manager"
   );
 }
 
@@ -166,7 +166,7 @@ function buildReservedCandidateSubmissionPath(input: {
 }): string {
   return path.join(
     os.tmpdir(),
-    "oyakata-output-candidates",
+    "divedra-output-candidates",
     input.workflowId,
     input.workflowExecutionId,
     input.nodeId,
@@ -1258,7 +1258,7 @@ class ExecutionDispatcher {
         createdAt: startedAt,
         updatedAt: endedAt,
         authTokenHash: hashManagerAuthToken(
-          ambientManagerContext.environment.OYAKATA_MANAGER_AUTH_TOKEN,
+          ambientManagerContext.environment.DIVEDRA_MANAGER_AUTH_TOKEN,
         ),
         authTokenExpiresAt: endedAt,
       });

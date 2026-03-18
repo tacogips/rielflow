@@ -211,13 +211,13 @@ function assertOptionalNodeDecisionScope(
     const ownedSubWorkflow = getOwnedSubWorkflowForNode(workflow, nodeId);
     if (ownedSubWorkflow !== undefined) {
       throw new Error(
-        `managerControl ${actionType} node '${nodeId}' is inside sub-workflow '${ownedSubWorkflow.id}'; use the owning sub-oyakata-manager instead`,
+        `managerControl ${actionType} node '${nodeId}' is inside sub-workflow '${ownedSubWorkflow.id}'; use the owning sub-divedra-manager instead`,
       );
     }
     return;
   }
 
-  if (context.managerKind === "sub-oyakata-manager") {
+  if (context.managerKind === "sub-divedra-manager") {
     const ownedSubWorkflow = findOwnedSubWorkflow(
       workflow,
       context.managerNodeId,
@@ -270,7 +270,7 @@ export function assertCommunicationInManagerScope(
     workflow,
   );
 
-  if (context.managerKind === "sub-oyakata-manager") {
+  if (context.managerKind === "sub-divedra-manager") {
     const ownedSubWorkflow = findOwnedSubWorkflow(
       workflow,
       context.managerNodeId,
@@ -297,7 +297,7 @@ export function assertCommunicationInManagerScope(
       effectiveScope.toSubWorkflowId !== undefined
     ) {
       throw new Error(
-        `${operationLabel} communication '${communication.communicationId}' is outside root-manager scope; re-invoke the sub-workflow or use the owning sub-oyakata-manager`,
+        `${operationLabel} communication '${communication.communicationId}' is outside root-manager scope; re-invoke the sub-workflow or use the owning sub-divedra-manager`,
       );
     }
     return;
@@ -340,9 +340,9 @@ export function parseManagerControlActions(
     }
 
     if (action.type === "deliver-to-child-input") {
-      if (context.managerKind !== "sub-oyakata-manager") {
+      if (context.managerKind !== "sub-divedra-manager") {
         throw new Error(
-          "managerControl deliver-to-child-input is only allowed for a sub-oyakata-manager",
+          "managerControl deliver-to-child-input is only allowed for a sub-divedra-manager",
         );
       }
       const node = workflow.nodes.find(
@@ -364,7 +364,7 @@ export function parseManagerControlActions(
       }
       if (ownedSubWorkflow.inputNodeId !== action.inputNodeId) {
         throw new Error(
-          `managerControl input node '${action.inputNodeId}' must be the owned input node '${ownedSubWorkflow.inputNodeId}' for sub-oyakata-manager '${context.managerNodeId}'`,
+          `managerControl input node '${action.inputNodeId}' must be the owned input node '${ownedSubWorkflow.inputNodeId}' for sub-divedra-manager '${context.managerNodeId}'`,
         );
       }
       continue;
@@ -409,7 +409,7 @@ export function parseManagerControlActions(
         );
       }
     }
-    if (context.managerKind === "sub-oyakata-manager") {
+    if (context.managerKind === "sub-divedra-manager") {
       const ownedSubWorkflow = findOwnedSubWorkflow(
         workflow,
         context.managerNodeId,

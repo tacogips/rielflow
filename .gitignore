@@ -52,12 +52,12 @@ impl-plans/.progress.lock
 **/.envrc.private*
 .private*/
 
-# oyakata runtime artifacts and session store (default paths)
-.oyakata/
-.oyakata/**
-.oyakata-data/
-.oyakata-data/**
-.oyakata-opt/
-.oyakata-opt/**
-.oyakata-datas/
-.oyakata-datas/**
+# divedra runtime artifacts and session store (default paths)
+.divedra/
+.divedra/**
+.divedra-data/
+.divedra-data/**
+.divedra-opt/
+.divedra-opt/**
+.divedra-datas/
+.divedra-datas/**

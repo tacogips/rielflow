@@ -16,8 +16,8 @@ export function resolveRootDataDir(options: LoadOptions = {}): string {
   const cwd = options.cwd ?? process.cwd();
   const rootDataDir =
     options.rootDataDir ??
-    env["OYAKATA_ROOT_DATA_DIR"] ??
-    env["OYAKATA_RUNTIME_ROOT"] ??
+    env["DIVEDRA_ROOT_DATA_DIR"] ??
+    env["DIVEDRA_RUNTIME_ROOT"] ??
     DEFAULT_ROOT_DATA_DIR;
   return resolveRootPath(rootDataDir, cwd);
 }
@@ -26,7 +26,7 @@ export function resolveAttachmentRoot(options: LoadOptions = {}): string {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const attachmentRoot =
-    env["OYAKATA_ATTACHMENT_ROOT"] ??
+    env["DIVEDRA_ATTACHMENT_ROOT"] ??
     path.join(resolveRootDataDir(options), "files");
   return resolveRootPath(attachmentRoot, cwd);
 }
@@ -40,14 +40,14 @@ export function resolveEffectiveRoots(
 
   const workflowRoot =
     options.workflowRoot ??
-    env["OYAKATA_WORKFLOW_ROOT"] ??
+    env["DIVEDRA_WORKFLOW_ROOT"] ??
     DEFAULT_WORKFLOW_ROOT;
   const artifactRoot =
     options.artifactRoot ??
-    env["OYAKATA_ARTIFACT_ROOT"] ??
+    env["DIVEDRA_ARTIFACT_ROOT"] ??
     path.join(rootDataDir, "workflow");
   const attachmentRoot =
-    env["OYAKATA_ATTACHMENT_ROOT"] ??
+    env["DIVEDRA_ATTACHMENT_ROOT"] ??
     path.join(rootDataDir, "files");
 
   return {

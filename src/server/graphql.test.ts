@@ -20,7 +20,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-server-graphql-test-"),
+    path.join(os.tmpdir(), "divedra-server-graphql-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -36,12 +36,12 @@ afterEach(async () => {
 
 function makeDefaultTemplateScenario(): MockNodeScenario {
   return {
-    "oyakata-manager": {
+    "divedra-manager": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-oyakata": {
+    "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "dispatch" },
@@ -99,7 +99,7 @@ async function createManagerSession(root: string, workflowExecutionId: string) {
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerNodeId: "main-oyakata",
+    managerNodeId: "main-divedra",
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -145,7 +145,7 @@ describe("GraphQL HTTP transport", () => {
       data: {
         workflow: {
           workflowId: "demo",
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           counts: {
             nodes: 4,
           },
@@ -628,7 +628,7 @@ describe("GraphQL HTTP transport", () => {
         headers: {
           "content-type": "application/json",
           authorization: "Bearer secret",
-          "x-oyakata-manager-session-id": "mgrsess-000001",
+          "x-divedra-manager-session-id": "mgrsess-000001",
         },
         body: JSON.stringify({
           query: `
@@ -699,12 +699,12 @@ describe("GraphQL HTTP transport", () => {
       {
         ...options,
         env: {
-          OYAKATA_MANAGER_AUTH_TOKEN: "secret",
-          OYAKATA_MANAGER_SESSION_ID: "mgrsess-000001",
-          OYAKATA_WORKFLOW_ID: "demo",
-          OYAKATA_WORKFLOW_EXECUTION_ID: session.sessionId,
-          OYAKATA_MANAGER_NODE_ID: "main-oyakata",
-          OYAKATA_MANAGER_NODE_EXEC_ID: "exec-000001",
+          DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+          DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
+          DIVEDRA_WORKFLOW_ID: "demo",
+          DIVEDRA_WORKFLOW_EXECUTION_ID: session.sessionId,
+          DIVEDRA_MANAGER_NODE_ID: "main-divedra",
+          DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
         },
       },
     );

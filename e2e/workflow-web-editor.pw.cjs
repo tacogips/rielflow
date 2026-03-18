@@ -91,7 +91,7 @@ async function waitForServeUrl() {
 
 test.beforeAll(async ({}, testInfo) => {
   testInfo.setTimeout(10_000);
-  tempRoot = await mkdtemp(path.join(os.tmpdir(), "oyakata-e2e-"));
+  tempRoot = await mkdtemp(path.join(os.tmpdir(), "divedra-e2e-"));
   const workflowRoot = path.join(tempRoot, "workflows");
   const artifactRoot = path.join(tempRoot, "artifacts");
   const sessionStoreRoot = path.join(tempRoot, "sessions");
@@ -113,7 +113,7 @@ test.beforeAll(async ({}, testInfo) => {
       "--host",
       host,
       "--port",
-      String(process.env.OYAKATA_E2E_PORT ?? "0"),
+      String(process.env.DIVEDRA_E2E_PORT ?? "0"),
       "--output",
       "json",
     ],
@@ -175,7 +175,7 @@ test("creates, edits, and executes a workflow from the browser", async ({
   await page.goto(`${currentBaseUrl}/`);
 
   await expect(
-    page.getByRole("heading", { name: "oyakata Workflow Editor" }),
+    page.getByRole("heading", { name: "divedra Workflow Editor" }),
   ).toBeVisible();
 
   await page.getByLabel("Create Workflow").fill("browser-demo");
@@ -201,7 +201,7 @@ test("creates, edits, and executes a workflow from the browser", async ({
   await page
     .getByLabel("Mock Scenario JSON")
     .fill(
-      '{"oyakata-manager":{"provider":"scenario-mock","when":{"always":true},"payload":{"stage":"design"}}}',
+      '{"divedra-manager":{"provider":"scenario-mock","when":{"always":true},"payload":{"stage":"design"}}}',
     );
   await page.getByLabel("Max Steps").fill("1");
   await page.getByRole("button", { name: "Run Workflow" }).click();
@@ -228,7 +228,7 @@ test("creates, edits, and executes a workflow from the browser", async ({
     '"workflowName": "browser-demo"',
   );
   await expect(page.locator(".execution-history")).toContainText(
-    "oyakata-manager",
+    "divedra-manager",
   );
 
   await expect(

@@ -1,6 +1,6 @@
 # Server UI Asset Serving Refactoring
 
-This document defines the next refactoring slice for built frontend asset serving inside `oyakata serve`.
+This document defines the next refactoring slice for built frontend asset serving inside `divedra serve`.
 
 ## Overview
 

@@ -19,7 +19,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-graphql-schema-test-"),
+    path.join(os.tmpdir(), "divedra-graphql-schema-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -35,12 +35,12 @@ afterEach(async () => {
 
 function makeDefaultTemplateScenario(): MockNodeScenario {
   return {
-    "oyakata-manager": {
+    "divedra-manager": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-oyakata": {
+    "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "dispatch" },
@@ -92,7 +92,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "main-oyakata",
+  managerNodeId = "main-divedra",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -403,7 +403,7 @@ describe("createGraphqlSchema", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "oyakata-manager",
+      "divedra-manager",
     );
     const schema = createGraphqlSchema({
       now: () => "2026-03-15T01:30:00.000Z",

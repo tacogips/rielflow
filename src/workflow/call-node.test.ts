@@ -17,7 +17,7 @@ const deterministicAdapter = new DeterministicNodeAdapter();
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-call-node-test-"),
+    path.join(os.tmpdir(), "divedra-call-node-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -38,13 +38,13 @@ async function createCallNodeFixture(
     workflowId: workflowName,
     description: "call-node fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -61,13 +61,13 @@ async function createCallNodeFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "writer", order: 1 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/claude-code-agent",
     promptTemplate: "manager",
     variables: {},
@@ -102,13 +102,13 @@ async function createOptionalCallNodeFixture(
     workflowId: workflowName,
     description: "call-node fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -156,7 +156,7 @@ async function createCallNodeSession(input: {
       sessionId: input.sessionId,
       workflowName: input.workflowName,
       workflowId: input.workflowName,
-      initialNodeId: "oyakata-manager",
+      initialNodeId: "divedra-manager",
       runtimeVariables: {},
     }),
     {
@@ -267,7 +267,7 @@ describe("callNode", () => {
     expect(inputJson.managerMessage?.instruction).toBe("produce review json");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR",
+        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
         paths: {
           inputPath: "inbox/input.json",
           outputPath: "outbox/output.json",
@@ -422,7 +422,7 @@ describe("callNode", () => {
           sessionId,
           workflowName,
           workflowId: workflowName,
-          initialNodeId: "oyakata-manager",
+          initialNodeId: "divedra-manager",
           runtimeVariables: {},
         }),
         status: "completed",

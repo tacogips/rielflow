@@ -1,5 +1,5 @@
 {
-  "oyakata-manager": {
+  "divedra-manager": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {
@@ -10,7 +10,7 @@
       "backendPolicy": "all-claude"
     }
   },
-  "main-oyakata": {
+  "main-divedra": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {

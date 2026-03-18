@@ -11,7 +11,7 @@ function makeWorkflow(): WorkflowJson {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "sw-a",
@@ -25,15 +25,15 @@ function makeWorkflow(): WorkflowJson {
     ],
     nodes: [
       {
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
         completion: { type: "none" },
       },
       {
         id: "a-manager",
         nodeFile: "node-a-manager.json",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -73,7 +73,7 @@ describe("parseManagerControlPayload", () => {
   test("returns null when managerControl is absent", () => {
     expect(
       parseManagerControlPayload({ marker: "plain" }, makeWorkflow(), {
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         managerKind: "root-manager",
       }),
     ).toBeNull();
@@ -88,7 +88,7 @@ describe("parseManagerControlPayload", () => {
       },
       makeWorkflow(),
       {
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -102,7 +102,7 @@ describe("parseManagerControlPayload", () => {
     expect(parsed?.overridesChildInputPlanning).toBe(true);
   });
 
-  test("parses supported sub-oyakata-manager child-input and retry actions", () => {
+  test("parses supported sub-divedra-manager child-input and retry actions", () => {
     const parsed = parseManagerControlPayload(
       {
         managerControl: {
@@ -115,7 +115,7 @@ describe("parseManagerControlPayload", () => {
       makeWorkflow(),
       {
         managerNodeId: "a-manager",
-        managerKind: "sub-oyakata-manager",
+        managerKind: "sub-divedra-manager",
       },
     );
 
@@ -140,7 +140,7 @@ describe("parseManagerControlPayload", () => {
       ],
       makeWorkflow(),
       {
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -162,7 +162,7 @@ describe("parseManagerControlPayload", () => {
       ],
       makeWorkflow(),
       {
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -182,7 +182,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("only allowed for the root manager");
@@ -199,7 +199,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("does not exist");
@@ -217,14 +217,14 @@ describe("parseManagerControlPayload", () => {
         ],
         makeWorkflow(),
         {
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
     ).toThrow("reason must be a string");
   });
 
-  test("rejects child-input dispatch outside the sub-oyakata-manager owned scope", () => {
+  test("rejects child-input dispatch outside the sub-divedra-manager owned scope", () => {
     expect(() =>
       parseManagerControlPayload(
         {
@@ -236,11 +236,11 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
-    ).toThrow("only allowed for a sub-oyakata-manager");
+    ).toThrow("only allowed for a sub-divedra-manager");
 
     expect(() =>
       parseManagerControlPayload(
@@ -249,7 +249,7 @@ describe("parseManagerControlPayload", () => {
             actions: [
               {
                 type: "deliver-to-child-input",
-                inputNodeId: "oyakata-manager",
+                inputNodeId: "divedra-manager",
               },
             ],
           },
@@ -257,7 +257,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("must exist with kind 'input'");
@@ -274,24 +274,24 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("must exist with kind 'input'");
   });
 
-  test("rejects sub-oyakata-manager retries outside the owned sub-workflow scope", () => {
+  test("rejects sub-divedra-manager retries outside the owned sub-workflow scope", () => {
     expect(() =>
       parseManagerControlPayload(
         {
           managerControl: {
-            actions: [{ type: "retry-node", nodeId: "oyakata-manager" }],
+            actions: [{ type: "retry-node", nodeId: "divedra-manager" }],
           },
         },
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("must belong to sub-workflow 'sw-a'");
@@ -307,7 +307,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -327,7 +327,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("cannot target the manager node itself");
@@ -344,7 +344,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
       ),
     ).toThrow("workflow execution.mode 'optional'");
@@ -358,11 +358,11 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
-    ).toThrow("use the owning sub-oyakata-manager instead");
+    ).toThrow("use the owning sub-divedra-manager instead");
   });
 
   test("enforces communication replay scope with legacy boundary fallback", () => {
@@ -396,7 +396,7 @@ describe("parseManagerControlPayload", () => {
         workflow,
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
         "test replay",
       ),
@@ -408,14 +408,14 @@ describe("parseManagerControlPayload", () => {
           workflowId: "wf",
           workflowExecutionId: "sess-1",
           communicationId: "comm-root",
-          fromNodeId: "oyakata-manager",
+          fromNodeId: "divedra-manager",
           toNodeId: "step-1",
           routingScope: "intra-sub-workflow",
           sourceNodeExecId: "exec-2",
           payloadRef: {
             workflowId: "wf",
             workflowExecutionId: "sess-1",
-            outputNodeId: "oyakata-manager",
+            outputNodeId: "divedra-manager",
             nodeExecId: "exec-2",
             artifactDir: "/tmp/out",
           },
@@ -430,7 +430,7 @@ describe("parseManagerControlPayload", () => {
         workflow,
         {
           managerNodeId: "a-manager",
-          managerKind: "sub-oyakata-manager",
+          managerKind: "sub-divedra-manager",
         },
         "test replay",
       ),
@@ -463,7 +463,7 @@ describe("parseManagerControlPayload", () => {
         },
         workflow,
         {
-          managerNodeId: "oyakata-manager",
+          managerNodeId: "divedra-manager",
           managerKind: "root-manager",
         },
         "test replay",

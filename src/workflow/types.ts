@@ -10,7 +10,7 @@ export type NodeKind =
   | "branch-judge"
   | "loop-judge"
   | "root-manager"
-  | "sub-oyakata-manager"
+  | "sub-divedra-manager"
   | "manager"
   | "input"
   | "output";
@@ -33,7 +33,7 @@ export interface WorkflowDefaults {
 }
 
 export interface WorkflowPrompts {
-  readonly oyakataPromptTemplate?: string;
+  readonly divedraPromptTemplate?: string;
   readonly workerSystemPromptTemplate?: string;
 }
 
@@ -316,8 +316,8 @@ export interface EffectiveRoots {
 export const DEFAULT_MAX_LOOP_ITERATIONS = 3;
 export const DEFAULT_NODE_TIMEOUT_MS = 120000;
 export const DEFAULT_CONTAINER_RUNNER_KIND: ContainerRunnerKind = "podman";
-export const DEFAULT_WORKFLOW_ROOT = "./.oyakata";
-export const DEFAULT_ROOT_DATA_DIR = "./.oyakata-datas";
+export const DEFAULT_WORKFLOW_ROOT = "./.divedra";
+export const DEFAULT_ROOT_DATA_DIR = "./.divedra-datas";
 export const DEFAULT_RUNTIME_ROOT = DEFAULT_ROOT_DATA_DIR;
 export const DEFAULT_ARTIFACT_ROOT = `${DEFAULT_ROOT_DATA_DIR}/workflow`;
 export const DEFAULT_SESSION_STORE_ROOT = `${DEFAULT_ROOT_DATA_DIR}/sessions`;

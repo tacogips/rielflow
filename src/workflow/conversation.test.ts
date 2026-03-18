@@ -8,7 +8,7 @@ function makeWorkflow(): WorkflowJson {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "sw-a",
@@ -39,15 +39,15 @@ function makeWorkflow(): WorkflowJson {
     ],
     nodes: [
       {
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
         completion: { type: "none" },
       },
       {
         id: "a-manager",
         nodeFile: "node-a-manager.json",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -65,7 +65,7 @@ function makeWorkflow(): WorkflowJson {
       {
         id: "b-manager",
         nodeFile: "node-b-manager.json",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {

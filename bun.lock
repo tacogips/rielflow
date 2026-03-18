@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "oyakata",
+      "name": "divedra",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "claude-code-agent": "github:tacogips/claude-code-agent#fd9634695b9369902cc1ee01960dd39cbc300b85",

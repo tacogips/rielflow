@@ -6,8 +6,8 @@
 ## Confirmed Decisions (from user)
 
 1. Workflow location
-- Workflows are stored under `.oyakata/` in subdirectories.
-- Unit path: `.oyakata/<workflow-name>/`.
+- Workflows are stored under `.divedra/` in subdirectories.
+- Unit path: `.divedra/<workflow-name>/`.
 
 2. Required files per workflow
 - `workflow.json`
@@ -63,7 +63,7 @@
 - `node-{id}.json.model` is required for validation and runtime execution.
 - `node-{id}.json.executionBackend` is the canonical execution interface field for newly authored workflows.
 - Existing workflows may omit `executionBackend` only when `model` is a tacogips legacy backend identifier.
-- `OYAKATA_DEFAULT_MODEL` is only for interactive/template generation convenience.
+- `DIVEDRA_DEFAULT_MODEL` is only for interactive/template generation convenience.
 - Workflows missing `model` must fail validation.
 
 3. Completion semantics
@@ -80,8 +80,8 @@
 - Artifact root is configurable and independent of workflow definition root.
 - Resolution order:
   1. CLI `--artifact-root`
-  2. `OYAKATA_ARTIFACT_ROOT`
-  3. `./.oyakata-datas/workflow` (default)
+  2. `DIVEDRA_ARTIFACT_ROOT`
+  3. `./.divedra-datas/workflow` (default)
 - Artifact path format remains `{artifact-root}/{workflow_id}/executions/{workflowExecutionId}/nodes/{node}/{node-exec-id}/`.
 
 6. Prompt authoring policy

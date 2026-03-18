@@ -183,13 +183,13 @@ function renderMissingUiPage(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>oyakata UI unavailable</title>
+  <title>divedra UI unavailable</title>
 </head>
 <body>
   <main>
-    <h1>oyakata UI is unavailable</h1>
+    <h1>divedra UI is unavailable</h1>
     <p>The server expects built browser UI assets under <code>ui/dist/</code>.</p>
-    <p>Run <code>bun run build:ui</code> before starting <code>oyakata serve</code>.</p>
+    <p>Run <code>bun run build:ui</code> before starting <code>divedra serve</code>.</p>
   </main>
 </body>
 </html>`;

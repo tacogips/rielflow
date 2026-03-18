@@ -9,10 +9,10 @@
     }
   },
   "prompts": {
-    "oyakataPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Treat sibling plain sub-workflows as the current fan-out pattern, and treat the loop-body sub-workflow as the current repeated-iteration pattern.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Treat sibling plain sub-workflows as the current fan-out pattern, and treat the loop-body sub-workflow as the current repeated-iteration pattern.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise workflow JSON-oriented output."
   },
-  "managerNodeId": "oyakata-manager",
+  "managerNodeId": "divedra-manager",
   "subWorkflows": [
     {
       "id": "command-lane",
@@ -82,16 +82,16 @@
   ],
   "nodes": [
     {
-      "id": "oyakata-manager",
+      "id": "divedra-manager",
       "kind": "root-manager",
-      "nodeFile": "node-oyakata-manager.json",
+      "nodeFile": "node-divedra-manager.json",
       "completion": {
         "type": "none"
       }
     },
     {
       "id": "command-manager",
-      "kind": "sub-oyakata-manager",
+      "kind": "sub-divedra-manager",
       "nodeFile": "node-command-manager.json",
       "completion": {
         "type": "none"
@@ -123,7 +123,7 @@
     },
     {
       "id": "container-manager",
-      "kind": "sub-oyakata-manager",
+      "kind": "sub-divedra-manager",
       "nodeFile": "node-container-manager.json",
       "completion": {
         "type": "none"
@@ -155,7 +155,7 @@
     },
     {
       "id": "foreach-manager",
-      "kind": "sub-oyakata-manager",
+      "kind": "sub-divedra-manager",
       "nodeFile": "node-foreach-manager.json",
       "completion": {
         "type": "none"
@@ -196,17 +196,17 @@
   ],
   "edges": [
     {
-      "from": "oyakata-manager",
+      "from": "divedra-manager",
       "to": "command-manager",
       "when": "always"
     },
     {
-      "from": "oyakata-manager",
+      "from": "divedra-manager",
       "to": "container-manager",
       "when": "always"
     },
     {
-      "from": "oyakata-manager",
+      "from": "divedra-manager",
       "to": "foreach-manager",
       "when": "always"
     },

@@ -53,13 +53,13 @@ This plan closes the remaining runtime integration gap for the GraphQL manager c
 
 ```typescript
 export interface AmbientManagerControlPlaneEnvironment {
-  readonly OYAKATA_GRAPHQL_ENDPOINT: string;
-  readonly OYAKATA_MANAGER_AUTH_TOKEN: string;
-  readonly OYAKATA_MANAGER_SESSION_ID: string;
-  readonly OYAKATA_WORKFLOW_ID: string;
-  readonly OYAKATA_WORKFLOW_EXECUTION_ID: string;
-  readonly OYAKATA_MANAGER_NODE_ID: string;
-  readonly OYAKATA_MANAGER_NODE_EXEC_ID: string;
+  readonly DIVEDRA_GRAPHQL_ENDPOINT: string;
+  readonly DIVEDRA_MANAGER_AUTH_TOKEN: string;
+  readonly DIVEDRA_MANAGER_SESSION_ID: string;
+  readonly DIVEDRA_WORKFLOW_ID: string;
+  readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
+  readonly DIVEDRA_MANAGER_NODE_ID: string;
+  readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
 }
 
 export function mintManagerAuthToken(): string;
@@ -195,4 +195,4 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
 **Tasks Completed**: TASK-001, TASK-002, TASK-003
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: The GraphQL surface itself was already implemented, but the runtime had not yet minted manager sessions or exposed ambient `oyakata gql` context to manager-node adapter executions. This slice closes that lifecycle gap without changing worker-node behavior.
+**Notes**: The GraphQL surface itself was already implemented, but the runtime had not yet minted manager sessions or exposed ambient `divedra gql` context to manager-node adapter executions. This slice closes that lifecycle gap without changing worker-node behavior.

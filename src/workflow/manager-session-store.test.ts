@@ -15,7 +15,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-manager-session-store-test-"),
+    path.join(os.tmpdir(), "divedra-manager-session-store-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -43,7 +43,7 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-000001",
       workflowId: "demo",
       workflowExecutionId: "sess-abc12345",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       status: "active",
       createdAt,
@@ -61,7 +61,7 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-000001",
       workflowId: "demo",
       workflowExecutionId: "sess-abc12345",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       message: "start replay",
       parsedIntent: [
@@ -127,7 +127,7 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-000001",
       workflowId: "demo",
       workflowExecutionId: "sess-abc12345",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       status: "completed",
       createdAt,
@@ -144,17 +144,17 @@ describe("manager-session-store", () => {
     expect(resolveAmbientManagerExecutionContext({})).toBeNull();
     expect(
       resolveAmbientManagerExecutionContext({
-        OYAKATA_WORKFLOW_ID: "demo",
-        OYAKATA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-        OYAKATA_MANAGER_NODE_ID: "oyakata-manager",
-        OYAKATA_MANAGER_NODE_EXEC_ID: "exec-000001",
-        OYAKATA_MANAGER_SESSION_ID: "mgrsess-000001",
-        OYAKATA_MANAGER_AUTH_TOKEN: "secret",
+        DIVEDRA_WORKFLOW_ID: "demo",
+        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+        DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
+        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
       }),
     ).toEqual({
       workflowId: "demo",
       workflowExecutionId: "sess-abc12345",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       managerSessionId: "mgrsess-000001",
       authToken: "secret",
@@ -169,39 +169,39 @@ describe("manager-session-store", () => {
       buildAmbientManagerControlPlaneEnvironment({
         workflowId: "demo",
         workflowExecutionId: "sess-abc12345",
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         managerNodeExecId: "exec-000001",
         managerSessionId: "mgrsess-000001",
         authToken,
         env: {
-          OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
+          DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
         },
       }),
     ).toEqual({
-      OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
-      OYAKATA_MANAGER_AUTH_TOKEN: authToken,
-      OYAKATA_MANAGER_SESSION_ID: "mgrsess-000001",
-      OYAKATA_WORKFLOW_ID: "demo",
-      OYAKATA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-      OYAKATA_MANAGER_NODE_ID: "oyakata-manager",
-      OYAKATA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
+      DIVEDRA_MANAGER_AUTH_TOKEN: authToken,
+      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
+      DIVEDRA_WORKFLOW_ID: "demo",
+      DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+      DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
   });
 
   test("strips ambient manager execution context without removing unrelated env", () => {
     expect(
       stripAmbientManagerExecutionContext({
-        OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-        OYAKATA_MANAGER_AUTH_TOKEN: "secret",
-        OYAKATA_MANAGER_SESSION_ID: "mgrsess-000001",
-        OYAKATA_WORKFLOW_ID: "demo",
-        OYAKATA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-        OYAKATA_MANAGER_NODE_ID: "oyakata-manager",
-        OYAKATA_MANAGER_NODE_EXEC_ID: "exec-000001",
+        DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
+        DIVEDRA_WORKFLOW_ID: "demo",
+        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+        DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
         PATH: "/usr/bin",
       }),
     ).toEqual({
-      OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
       PATH: "/usr/bin",
     });
   });
@@ -219,7 +219,7 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-atomic-000001",
       workflowId: "demo",
       workflowExecutionId: "sess-atomic-000001",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       status: "active",
       createdAt: "2026-03-15T00:00:00.000Z",

@@ -9,7 +9,7 @@ import { resolveAttachmentRoot, resolveEffectiveRoots } from "./paths";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-load-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-load-test-"));
   tempDirs.push(directory);
   return directory;
 }
@@ -34,34 +34,34 @@ describe("resolveEffectiveRoots", () => {
   test("uses option > env > default priority", () => {
     const fromEnv = resolveEffectiveRoots({
       env: {
-        OYAKATA_WORKFLOW_ROOT: "env-workflows",
-        OYAKATA_ARTIFACT_ROOT: "env-artifacts",
+        DIVEDRA_WORKFLOW_ROOT: "env-workflows",
+        DIVEDRA_ARTIFACT_ROOT: "env-artifacts",
       },
       cwd: "/tmp/project",
     });
     expect(fromEnv.workflowRoot).toBe("/tmp/project/env-workflows");
     expect(fromEnv.artifactRoot).toBe("/tmp/project/env-artifacts");
-    expect(fromEnv.rootDataDir).toBe("/tmp/project/.oyakata-datas");
-    expect(fromEnv.attachmentRoot).toBe("/tmp/project/.oyakata-datas/files");
+    expect(fromEnv.rootDataDir).toBe("/tmp/project/.divedra-datas");
+    expect(fromEnv.attachmentRoot).toBe("/tmp/project/.divedra-datas/files");
 
     const fromOption = resolveEffectiveRoots({
       workflowRoot: "flag-workflows",
       artifactRoot: "flag-artifacts",
       env: {
-        OYAKATA_WORKFLOW_ROOT: "env-workflows",
-        OYAKATA_ARTIFACT_ROOT: "env-artifacts",
+        DIVEDRA_WORKFLOW_ROOT: "env-workflows",
+        DIVEDRA_ARTIFACT_ROOT: "env-artifacts",
       },
       cwd: "/tmp/project",
     });
     expect(fromOption.workflowRoot).toBe("/tmp/project/flag-workflows");
     expect(fromOption.artifactRoot).toBe("/tmp/project/flag-artifacts");
-    expect(fromOption.rootDataDir).toBe("/tmp/project/.oyakata-datas");
+    expect(fromOption.rootDataDir).toBe("/tmp/project/.divedra-datas");
   });
 
-  test("derives artifact and attachment roots from OYAKATA_ROOT_DATA_DIR", () => {
+  test("derives artifact and attachment roots from DIVEDRA_ROOT_DATA_DIR", () => {
     const resolved = resolveEffectiveRoots({
       env: {
-        OYAKATA_ROOT_DATA_DIR: "env-data",
+        DIVEDRA_ROOT_DATA_DIR: "env-data",
       },
       cwd: "/tmp/project",
     });
@@ -72,17 +72,17 @@ describe("resolveEffectiveRoots", () => {
     expect(
       resolveAttachmentRoot({
         env: {
-          OYAKATA_ROOT_DATA_DIR: "env-data",
+          DIVEDRA_ROOT_DATA_DIR: "env-data",
         },
         cwd: "/tmp/project",
       }),
     ).toBe("/tmp/project/env-data/files");
   });
 
-  test("accepts OYAKATA_RUNTIME_ROOT as a compatibility alias", () => {
+  test("accepts DIVEDRA_RUNTIME_ROOT as a compatibility alias", () => {
     const resolved = resolveEffectiveRoots({
       env: {
-        OYAKATA_RUNTIME_ROOT: "legacy-data",
+        DIVEDRA_RUNTIME_ROOT: "legacy-data",
       },
       cwd: "/tmp/project",
     });
@@ -103,13 +103,13 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: "sample-workflow",
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
       ],
@@ -119,11 +119,11 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
-      nodes: [{ id: "oyakata-manager", order: 0 }],
+      nodes: [{ id: "divedra-manager", order: 0 }],
     });
 
-    await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-      id: "oyakata-manager",
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
       promptTemplate: "manager",
       variables: {},
@@ -155,13 +155,13 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
       ],
@@ -171,11 +171,11 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
-      nodes: [{ id: "oyakata-manager", order: 0 }],
+      nodes: [{ id: "divedra-manager", order: 0 }],
     });
 
-    await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-      id: "oyakata-manager",
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
       promptTemplate: "manager",
       variables: {},
@@ -197,7 +197,7 @@ describe("loadWorkflowFromDisk", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.bundle.nodePayloads["oyakata-manager"]).toMatchObject({
+    expect(result.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
       nodeType: "container",
       container: {
         runnerKind: "podman",
@@ -251,13 +251,13 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: "missing-vis",
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -272,8 +272,8 @@ describe("loadWorkflowFromDisk", () => {
       branching: { mode: "fan-out" },
     });
 
-    await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-      id: "oyakata-manager",
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
       promptTemplate: "manager",
       variables: {},
@@ -296,7 +296,7 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflowVis.nodes).toEqual([
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "worker-1", order: 1 },
     ]);
     expect(result.value.bundle.workflowVis.uiMeta).toEqual({
@@ -325,19 +325,19 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(result.value.bundle.workflow.nodes[0]?.id).toBe("oyakata-manager");
+    expect(result.value.bundle.workflow.nodes[0]?.id).toBe("divedra-manager");
     expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("root-manager");
     expect(
-      result.value.bundle.workflow.prompts?.oyakataPromptTemplate,
+      result.value.bundle.workflow.prompts?.divedraPromptTemplate,
     ).toContain("Coordinate");
     expect(
       result.value.bundle.workflow.prompts?.workerSystemPromptTemplate,
     ).toContain("assigned node task");
     expect(result.value.bundle.workflow.subWorkflows[0]?.managerNodeId).toBe(
-      "main-oyakata",
+      "main-divedra",
     );
     expect(result.value.bundle.workflow.subWorkflows[0]?.nodeIds).toEqual([
-      "main-oyakata",
+      "main-divedra",
       "workflow-input",
       "workflow-output",
     ]);
@@ -345,16 +345,16 @@ describe("loadWorkflowFromDisk", () => {
       { type: "human-input" },
     ]);
     expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.executionBackend,
+      result.value.bundle.nodePayloads["divedra-manager"]?.executionBackend,
     ).toBe("codex-agent");
-    expect(result.value.bundle.nodePayloads["oyakata-manager"]?.model).toBe(
+    expect(result.value.bundle.nodePayloads["divedra-manager"]?.model).toBe(
       "gpt-5-nano",
     );
     expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplateFile,
-    ).toBe("prompts/oyakata-manager.md");
+      result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplateFile,
+    ).toBe("prompts/divedra-manager.md");
     expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplate,
+      result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate,
     ).toContain("Coordinate workflow execution");
     expect(
       result.value.bundle.nodePayloads["workflow-output"]?.executionBackend,
@@ -374,13 +374,13 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
       ],
@@ -390,17 +390,17 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
-      nodes: [{ id: "oyakata-manager", order: 0 }],
+      nodes: [{ id: "divedra-manager", order: 0 }],
     });
 
-    await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-      id: "oyakata-manager",
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
-      promptTemplateFile: "prompts/oyakata-manager.md",
+      promptTemplateFile: "prompts/divedra-manager.md",
       variables: {},
     });
     await writeText(
-      path.join(workflowDirectory, "prompts", "oyakata-manager.md"),
+      path.join(workflowDirectory, "prompts", "divedra-manager.md"),
       "Coordinate via prompt file {{workflowId}}",
     );
 
@@ -415,16 +415,16 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplateFile,
-    ).toBe("prompts/oyakata-manager.md");
+      result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplateFile,
+    ).toBe("prompts/divedra-manager.md");
     expect(
-      result.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplate,
+      result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate,
     ).toBe("Coordinate via prompt file {{workflowId}}\n");
   });
 
   test("loads the claude worker example with an explicit claude-code-agent task node", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
-    const result = await loadWorkflowFromDisk("claude-oyakata-claude-worker", {
+    const result = await loadWorkflowFromDisk("claude-divedra-claude-worker", {
       workflowRoot: path.resolve(process.cwd(), "examples"),
       artifactRoot,
     });
@@ -459,13 +459,13 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
       ],
@@ -475,11 +475,11 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
-      nodes: [{ id: "oyakata-manager", order: 0 }],
+      nodes: [{ id: "divedra-manager", order: 0 }],
     });
 
-    await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-      id: "oyakata-manager",
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
       promptTemplateFile: "workflow.json",
       variables: {},

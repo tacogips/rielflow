@@ -12,35 +12,35 @@ const sampleBundle = {
       nodeTimeoutMs: 120000,
     },
     prompts: {
-      oyakataPromptTemplate:
+      divedraPromptTemplate:
         "Coordinate {{workflowId}} so each node and sub-workflow works for a clear reason and returns the value needed downstream.",
       workerSystemPromptTemplate:
         "Work only on the assigned node task, use the provided workflow context, and return the business JSON payload requested by the node.",
     },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "main",
         description: "Main sub-workflow",
-        managerNodeId: "main-oyakata",
+        managerNodeId: "main-divedra",
         inputNodeId: "workflow-input",
         outputNodeId: "workflow-output",
-        nodeIds: ["main-oyakata", "workflow-input", "workflow-output"],
+        nodeIds: ["main-divedra", "workflow-input", "workflow-output"],
         inputSources: [{ type: "human-input" }],
         block: { type: "plain" },
       },
     ],
     nodes: [
       {
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
         completion: { type: "none" },
       },
       {
-        id: "main-oyakata",
-        nodeFile: "node-main-oyakata.json",
-        kind: "sub-manager",
+        id: "main-divedra",
+        nodeFile: "node-main-divedra.json",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -62,27 +62,27 @@ const sampleBundle = {
   },
   workflowVis: {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
-      { id: "main-oyakata", order: 1 },
+      { id: "divedra-manager", order: 0 },
+      { id: "main-divedra", order: 1 },
       { id: "workflow-input", order: 2 },
       { id: "workflow-output", order: 3 },
     ],
     uiMeta: { layout: "vertical" },
   },
   nodePayloads: {
-    "oyakata-manager": {
-      id: "oyakata-manager",
+    "divedra-manager": {
+      id: "divedra-manager",
       model: "gpt-5",
       executionBackend: "tacogips/codex-agent",
       promptTemplate: "Coordinate workflow execution for {{workflowId}}",
       variables: { workflowId: "browser-demo" },
     },
-    "main-oyakata": {
-      id: "main-oyakata",
+    "main-divedra": {
+      id: "main-divedra",
       model: "gpt-5",
       executionBackend: "tacogips/codex-agent",
       promptTemplate:
-        "Translate the parent oyakata instruction into this sub-workflow's child work for {{workflowId}}",
+        "Translate the parent divedra instruction into this sub-workflow's child work for {{workflowId}}",
       variables: { workflowId: "browser-demo" },
     },
     "workflow-input": {
@@ -104,8 +104,8 @@ const sampleBundle = {
 };
 
 const sampleDerivedVisualization = [
-  { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
-  { id: "main-oyakata", order: 1, indent: 0, color: "default" },
+  { id: "divedra-manager", order: 0, indent: 0, color: "default" },
+  { id: "main-divedra", order: 1, indent: 0, color: "default" },
   { id: "workflow-input", order: 2, indent: 1, color: "group:main" },
   { id: "workflow-output", order: 3, indent: 1, color: "group:main" },
 ];
@@ -118,8 +118,8 @@ function createWorkflowResponse(workflowName) {
   const bundle = deepClone(sampleBundle);
   bundle.workflow.workflowId = workflowName;
   bundle.workflow.description = "New workflow";
-  bundle.nodePayloads["oyakata-manager"].variables.workflowId = workflowName;
-  bundle.nodePayloads["main-oyakata"].variables.workflowId = workflowName;
+  bundle.nodePayloads["divedra-manager"].variables.workflowId = workflowName;
+  bundle.nodePayloads["main-divedra"].variables.workflowId = workflowName;
 
   return {
     workflowName,
@@ -143,7 +143,7 @@ function createSessionDetail(workflowName, workflowExecutionId) {
     currentNodeId: "workflow-output",
     nodeExecutionCounter: 1,
     nodeExecutionCounts: {
-      "oyakata-manager": 1,
+      "divedra-manager": 1,
     },
     loopIterationCounts: {},
     restartCounts: {},
@@ -153,10 +153,10 @@ function createSessionDetail(workflowName, workflowExecutionId) {
     ],
     nodeExecutions: [
       {
-        nodeId: "oyakata-manager",
+        nodeId: "divedra-manager",
         nodeExecId: `${workflowExecutionId}-node-1`,
         status: "succeeded",
-        artifactDir: `/virtual/artifacts/${workflowExecutionId}/oyakata-manager/1`,
+        artifactDir: `/virtual/artifacts/${workflowExecutionId}/divedra-manager/1`,
         startedAt: "2026-03-09T10:00:00.000Z",
         endedAt: "2026-03-09T10:00:02.000Z",
       },
@@ -430,7 +430,7 @@ function renderHarnessHtml(assetUrls) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>oyakata UI harness</title>
+    <title>divedra UI harness</title>
 ${stylesheetTags}
     <script type="module" src="${assetUrls.moduleScriptUrl}"></script>
   </head>
@@ -565,7 +565,7 @@ test("runs browser workflow editor flow against the built UI with a file-backed 
     await page.goto(`${baseUrl}/`);
 
     await expect(
-      page.getByRole("heading", { name: "oyakata Workflow Editor" }),
+      page.getByRole("heading", { name: "divedra Workflow Editor" }),
     ).toBeVisible();
 
     await page.getByLabel("Create Workflow").fill("browser-demo");
@@ -589,7 +589,7 @@ test("runs browser workflow editor flow against the built UI with a file-backed 
     await page
       .getByLabel("Mock Scenario JSON")
       .fill(
-        '{"oyakata-manager":{"provider":"scenario-mock","when":{"always":true},"payload":{"stage":"design"}}}',
+        '{"divedra-manager":{"provider":"scenario-mock","when":{"always":true},"payload":{"stage":"design"}}}',
       );
     await page.getByLabel("Max Steps").fill("1");
     await page.getByRole("button", { name: "Run Workflow" }).click();
@@ -605,7 +605,7 @@ test("runs browser workflow editor flow against the built UI with a file-backed 
       '"workflowName": "browser-demo"',
     );
     await expect(page.locator(".execution-history")).toContainText(
-      "oyakata-manager",
+      "divedra-manager",
     );
 
     await page.getByRole("button", { name: "Cancel Selected" }).click();

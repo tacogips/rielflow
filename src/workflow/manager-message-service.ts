@@ -208,7 +208,7 @@ function normalizeFileRef(fileRef: DataDirFileRef): string {
   }
   if (path.isAbsolute(candidate)) {
     throw new Error(
-      "attachment path must be relative to OYAKATA_ROOT_DATA_DIR",
+      "attachment path must be relative to DIVEDRA_ROOT_DATA_DIR",
     );
   }
   if (candidate.includes("\\")) {
@@ -220,7 +220,7 @@ function normalizeFileRef(fileRef: DataDirFileRef): string {
     normalized === ".." ||
     normalized.startsWith("../")
   ) {
-    throw new Error("attachment path must not escape OYAKATA_ROOT_DATA_DIR");
+    throw new Error("attachment path must not escape DIVEDRA_ROOT_DATA_DIR");
   }
   return normalized;
 }
@@ -261,7 +261,7 @@ async function validateAttachments(
     const resolved = path.resolve(rootDataDir, ...normalized.split("/"));
     const rootPrefix = `${rootDataDir}${path.sep}`;
     if (resolved !== rootDataDir && !resolved.startsWith(rootPrefix)) {
-      throw new Error("attachment path must stay within OYAKATA_ROOT_DATA_DIR");
+      throw new Error("attachment path must stay within DIVEDRA_ROOT_DATA_DIR");
     }
     await access(resolved);
     normalizedAttachments.push({

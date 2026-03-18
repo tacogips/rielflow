@@ -66,7 +66,7 @@ export async function handleApiRequest(
   }
 
   if (url.pathname === "/healthz") {
-    return json({ service: "oyakata-serve", status: "ok" });
+    return json({ service: "divedra-serve", status: "ok" });
   }
 
   if (request.method === "GET") {

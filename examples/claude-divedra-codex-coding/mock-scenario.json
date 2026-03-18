@@ -1,5 +1,5 @@
 {
-  "oyakata-manager": {
+  "divedra-manager": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {
@@ -7,10 +7,10 @@
     },
     "payload": {
       "stage": "root-dispatch",
-      "backendPolicy": "oyakata-on-claude-code"
+      "backendPolicy": "divedra-on-claude-code"
     }
   },
-  "main-oyakata": {
+  "main-divedra": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {
@@ -30,7 +30,7 @@
     "payload": {
       "normalizedRequest": "Add an examples workflow that demonstrates mixed backends.",
       "constraints": [
-        "Keep oyakata on claude-code",
+        "Keep divedra on claude-code",
         "Use codex for code production",
         "Make the workflow directly reusable as a reference"
       ],
@@ -49,17 +49,17 @@
     "payload": {
       "filesToTouch": [
         "examples/README.md",
-        "examples/claude-oyakata-codex-coding/workflow.json"
+        "examples/claude-divedra-codex-coding/workflow.json"
       ],
       "implementationPlan": [
         "Create a workflow bundle under examples/",
-        "Assign claude-code to oyakata nodes",
+        "Assign claude-code to divedra nodes",
         "Assign codex to the coding node",
         "Provide a deterministic mock scenario"
       ],
       "verificationCommands": [
-        "bun run src/main.ts workflow validate claude-oyakata-codex-coding --workflow-root ./examples",
-        "bun run src/main.ts workflow inspect claude-oyakata-codex-coding --workflow-root ./examples --output json"
+        "bun run src/main.ts workflow validate claude-divedra-codex-coding --workflow-root ./examples",
+        "bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-root ./examples --output json"
       ]
     }
   },
@@ -72,8 +72,8 @@
     "payload": {
       "changedFiles": [
         "examples/README.md",
-        "examples/claude-oyakata-codex-coding/workflow.json",
-        "examples/claude-oyakata-codex-coding/node-implement.json"
+        "examples/claude-divedra-codex-coding/workflow.json",
+        "examples/claude-divedra-codex-coding/node-implement.json"
       ],
       "summary": "Created a mixed-backend reference workflow with claude-code managers and a codex implementation node.",
       "verification": [
@@ -94,7 +94,7 @@
       "status": "ready",
       "changedFiles": [
         "examples/README.md",
-        "examples/claude-oyakata-codex-coding/"
+        "examples/claude-divedra-codex-coding/"
       ],
       "verification": [
         "workflow validate",

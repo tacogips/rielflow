@@ -1,21 +1,21 @@
 # Workflow Web Editor and Serve Mode Design
 
-This document defines the browser editing and execution design for `oyakata`.
+This document defines the browser editing and execution design for `divedra`.
 
 ## Overview
 
 Add a local web interface so users can:
 
 - Edit workflow structure and node payloads with the browser UI
-- Start local HTTP server via `oyakata serve`
+- Start local HTTP server via `divedra serve`
 - Execute workflows from the UI and monitor session progress
 
-The server and UI are local-first and operate on the existing `.oyakata/<workflow-name>/` directory contract.
+The server and UI are local-first and operate on the existing `.divedra/<workflow-name>/` directory contract.
 
 Current-state note:
 
 - The browser workflow editor is served as a built frontend from `ui/dist/`.
-- `oyakata serve` no longer embeds or maintains a second inline browser implementation inside the Bun server.
+- `divedra serve` no longer embeds or maintains a second inline browser implementation inside the Bun server.
 - The checked-in UI implementation is SolidJS-based today, and the server/API boundary remains framework-agnostic at the `ui/dist/` asset contract.
 - Browser workflow-definition, execution, and session flows now use `/graphql`; `/api/ui-config` remains only as bootstrap metadata.
 - Legacy browser REST routes such as `/api/workflows*`, `/api/workflow-executions*`, and `/api/sessions*` are no longer served.
@@ -37,7 +37,7 @@ Current-state note:
 
 ### Workflow Editing
 
-1. User starts server with `oyakata serve`.
+1. User starts server with `divedra serve`.
 2. User chooses workflow from list or creates one from template.
 3. User edits:
 
@@ -113,7 +113,7 @@ Route-removal note:
 
 ### Migration Strategy
 
-1. Introduce a frontend asset boundary in `oyakata serve`.
+1. Introduce a frontend asset boundary in `divedra serve`.
 2. Keep the frontend under `ui/` as a standalone app that consumes the GraphQL control plane plus `/api/ui-config` bootstrap metadata.
 3. Port browser editor capabilities in slices:
 
@@ -173,7 +173,7 @@ Supporting migration refactoring references:
   - `branch-block` colors as a branch scope
   - `loop-body` sub-workflows take precedence over inferred loop intervals
   - typed structural scopes (`loop-body`, then `branch-block`) keep their color precedence even when they contain nested plain groups
-- Reserved structure roles (`root-manager`, `sub-oyakata-manager`, `input`, `output`) are derived from workflow manager and sub-workflow boundary configuration, not assigned manually through generic node-kind editing.
+- Reserved structure roles (`root-manager`, `sub-divedra-manager`, `input`, `output`) are derived from workflow manager and sub-workflow boundary configuration, not assigned manually through generic node-kind editing.
 - Edge creation/editing is form-driven (source/target/when), not canvas drawing.
 - Validation blocks invalid links (self-loop rules, missing node, duplicate edge policy).
 

@@ -4,7 +4,7 @@ This document describes the current runtime architecture implemented in `src/wor
 
 ## Overview
 
-`oyakata` executes JSON-defined workflows by combining:
+`divedra` executes JSON-defined workflows by combining:
 
 - workflow definition loading and validation
 - queue-based session orchestration
@@ -32,9 +32,9 @@ The loader resolves prompt files into effective `promptTemplate` text before val
 
 The runtime persists three distinct forms of state:
 
-- workflow session state in `.oyakata-datas/sessions/`
-- node and communication artifacts in `.oyakata-datas/workflow/`
-- query-oriented runtime index data in `.oyakata-datas/oyakata.db`
+- workflow session state in `.divedra-datas/sessions/`
+- node and communication artifacts in `.divedra-datas/workflow/`
+- query-oriented runtime index data in `.divedra-datas/divedra.db`
 
 File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for inspection and UI queries.
 
@@ -71,7 +71,7 @@ Responsibilities:
 
 Important validation facts:
 
-- `root-manager`, `sub-oyakata-manager`, `input`, and `output` are structural roles enforced by validation
+- `root-manager`, `sub-divedra-manager`, `input`, and `output` are structural roles enforced by validation
 - cross-scope edges must target manager boundaries
 - `branching.mode` is currently fixed to `fan-out`
 - legacy `manager` and `sub-manager` values are still accepted and normalized
@@ -185,7 +185,7 @@ Current structural node kinds:
 - `branch-judge`
 - `loop-judge`
 - `root-manager`
-- `sub-oyakata-manager`
+- `sub-divedra-manager`
 - `input`
 - `output`
 - `manager` as legacy compatibility
@@ -202,7 +202,7 @@ Role split:
 Planned extension:
 
 - `user-action` should be added as a new `nodeType`, not a new manager boundary, so human approval/input remains a runtime-owned execution flavor rather than a second structural control-flow system
-- optional node execution should be added as scheduler policy on `workflow.json.nodes[]`, with decisions owned by the already-scoped root manager or sub-oyakata-manager
+- optional node execution should be added as scheduler policy on `workflow.json.nodes[]`, with decisions owned by the already-scoped root manager or sub-divedra-manager
 - detailed design: `design-docs/specs/design-user-action-and-optional-node-execution.md`
 
 ## Current Execution Flow

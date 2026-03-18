@@ -43,7 +43,7 @@ describe("assembleNodeInput", () => {
           {
             targetPath: "task.upstreamNode",
             source: "node-output",
-            sourceRef: "oyakata-manager",
+            sourceRef: "divedra-manager",
             sourcePath: "output.payload.nodeId",
             required: true,
           },
@@ -54,9 +54,9 @@ describe("assembleNodeInput", () => {
       nodeKind: "task",
       upstream: [
         {
-          fromNodeId: "oyakata-manager",
+          fromNodeId: "divedra-manager",
           output: {
-            payload: { nodeId: "oyakata-manager" },
+            payload: { nodeId: "divedra-manager" },
           },
         },
       ],
@@ -66,7 +66,7 @@ describe("assembleNodeInput", () => {
     expect(assembled.arguments).toEqual({
       task: {
         topic: "runtime-topic",
-        upstreamNode: "oyakata-manager",
+        upstreamNode: "divedra-manager",
       },
     });
   });
@@ -132,7 +132,7 @@ describe("assembleNodeInput", () => {
       nodeKind: "input",
       upstream: [
         {
-          fromNodeId: "oyakata-manager",
+          fromNodeId: "divedra-manager",
           communicationId: "comm-000001",
           transitionWhen: "always",
           output: {
@@ -148,7 +148,7 @@ describe("assembleNodeInput", () => {
     });
 
     expect(assembled.promptText).toBe(
-      "latest=implement release flow count=1 sender=oyakata-manager",
+      "latest=implement release flow count=1 sender=divedra-manager",
     );
   });
 

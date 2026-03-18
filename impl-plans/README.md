@@ -24,7 +24,9 @@ impl-plans/
 
 ## Active Plans
 
-None currently.
+| Plan                         | Status   | Design Reference |
+| ---------------------------- | -------- | ---------------- |
+| `manager-kind-simplification` | Planning | `design-manager-kind-simplification` |
 
 ## Completed Plans
 
@@ -44,7 +46,7 @@ None currently.
 | `workflow-tui-resume-decoupling`              | 2026-02-25 | `design-tui`                                                                                        |
 | `node-execution-backend-selection`            | 2026-03-07 | `architecture`                                                                                      |
 | `node-output-contract-and-validation`         | 2026-03-07 | `design-node-output-contract`, `design-data-model`, `architecture`                                  |
-| `oyakata-manager-prompt-contract`             | 2026-03-07 | `design-oyakata-manager-prompt-contract`, `architecture`                                            |
+| `divedra-manager-prompt-contract`             | 2026-03-07 | `design-divedra-manager-prompt-contract`, `architecture`                                            |
 | `node-session-reuse`                          | 2026-03-07 | `design-node-session-reuse`, `architecture`, `design-data-model`                                    |
 | `node-backend-model-separation`               | 2026-03-07 | `design-node-backend-model-separation`, `design-data-model`, `design-workflow-json`, `architecture` |
 | `runtime-owned-external-output-publication`   | 2026-03-08 | `design-runtime-owned-external-output-publication`, `architecture`, `design-node-output-contract`   |
@@ -172,6 +174,7 @@ None currently.
 | 67    | COMPLETED | Phase 66 |
 | 68    | COMPLETED | Phase 67 |
 | 69    | COMPLETED | Phase 68 |
+| 70    | PLANNING  | Phase 69 |
 
 ### Phase to Plans Mapping
 
@@ -191,7 +194,7 @@ PHASE_TO_PLANS = {
   12: ["impl-plans/node-execution-backend-selection.md"],
   13: ["impl-plans/node-output-contract-and-validation.md"],
   14: ["impl-plans/workflow-web-editor-execution.md"],
-  15: ["impl-plans/oyakata-manager-prompt-contract.md"],
+  15: ["impl-plans/divedra-manager-prompt-contract.md"],
   16: ["impl-plans/node-session-reuse.md"],
   17: ["impl-plans/node-backend-model-separation.md"],
   18: ["impl-plans/runtime-owned-external-output-publication.md"],
@@ -245,6 +248,7 @@ PHASE_TO_PLANS = {
   66: ["impl-plans/graphql-library-rest-surface-simplification.md"],
   67: ["impl-plans/example-node-combination-showcase.md"],
   68: ["impl-plans/node-execution-inbox-contract.md"],
-  69: ["impl-plans/user-action-and-optional-node-execution.md"]
+  69: ["impl-plans/user-action-and-optional-node-execution.md"],
+  70: ["impl-plans/manager-kind-simplification.md"]
 }
 ```

@@ -129,7 +129,7 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is oyakata, a TypeScript/Bun system for cooperative multi-agent session management.
+This is divedra, a TypeScript/Bun system for cooperative multi-agent session management.
 The project orchestrates writing sessions with two primary agent backends:
 
 - `codex-agent`
@@ -145,7 +145,7 @@ Agent cooperation is defined by a JSON-managed `workflow` model. A workflow can 
 - Repetition (loop control)
 - Node timeout control (global default + per-node override)
 
-Workflow storage is directory-based under `.oyakata/<workflow-name>/` and uses:
+Workflow storage is directory-based under `.divedra/<workflow-name>/` and uses:
 
 - `workflow.json` (purpose via `description`, graph/control-flow)
 - `workflow.json` (purpose via `description`, graph/control-flow, global defaults)
@@ -169,7 +169,7 @@ Workflow storage is directory-based under `.oyakata/<workflow-name>/` and uses:
 ├── AGENTS.md          # Agent operation and workflow rules
 ├── README.md          # Project overview and workflow model summary
 ├── examples/          # Reference workflows runnable with --workflow-root ./examples
-├── .oyakata/          # Workflow definitions and browser visualization state
+├── .divedra/          # Workflow definitions and browser visualization state
 ├── design-docs/       # Architecture and command design docs
 ├── src/               # Source code
 │   ├── main.ts        # Entry point
@@ -185,10 +185,10 @@ Workflow storage is directory-based under `.oyakata/<workflow-name>/` and uses:
 - Keep example bundles aligned with the canonical workflow file set:
   `workflow.json`, `workflow-vis.json`, and `node-{id}.json`.
 - Prefer examples that demonstrate the recommended backend split:
-  `oyakata` managers on `claude-code-agent` and coding workers on
+  `divedra` managers on `claude-code-agent` and coding workers on
   `codex-agent`.
-- Example workflow-level `oyakataPromptTemplate` content may explicitly instruct
-  managers to prefer `oyakata gql` when that tool path is available.
+- Example workflow-level `divedraPromptTemplate` content may explicitly instruct
+  managers to prefer `divedra gql` when that tool path is available.
 - Example node `promptTemplate` content may reference inbox data via template
   variables such as `{{inbox.latest.output}}`.
 - Prefer `promptTemplateFile` plus workflow-local `prompts/*.md` files for long

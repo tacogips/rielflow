@@ -10,12 +10,12 @@ function makeBaseWorkflow(
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: nodes.map((id) => ({
       id,
       nodeFile: `node-${id}.json`,
-      kind: id === "oyakata-manager" ? "manager" : "task",
+      kind: id === "divedra-manager" ? "manager" : "task",
       completion: { type: "none" },
     })),
     edges,
@@ -33,20 +33,20 @@ function makeVis(nodeIds: readonly string[]): WorkflowVisJson {
 describe("deriveWorkflowVisualization", () => {
   test("keeps top-level linear chain at base indent", () => {
     const workflow = makeBaseWorkflow(
-      ["oyakata-manager", "design", "implement"],
+      ["divedra-manager", "design", "implement"],
       [
-        { from: "oyakata-manager", to: "design", when: "always" },
+        { from: "divedra-manager", to: "design", when: "always" },
         { from: "design", to: "implement", when: "always" },
       ],
     );
 
     const derived = deriveWorkflowVisualization({
       workflow,
-      workflowVis: makeVis(["oyakata-manager", "design", "implement"]),
+      workflowVis: makeVis(["divedra-manager", "design", "implement"]),
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "design", order: 1, indent: 0, color: "default" },
       { id: "implement", order: 2, indent: 0, color: "default" },
     ]);
@@ -55,9 +55,9 @@ describe("deriveWorkflowVisualization", () => {
   test("derives loop color and returns exit target to base depth", () => {
     const workflow = {
       ...makeBaseWorkflow(
-        ["oyakata-manager", "implement", "test-review", "done"],
+        ["divedra-manager", "implement", "test-review", "done"],
         [
-          { from: "oyakata-manager", to: "implement", when: "always" },
+          { from: "divedra-manager", to: "implement", when: "always" },
           { from: "implement", to: "test-review", when: "always" },
           { from: "test-review", to: "implement", when: "continue_round" },
           { from: "test-review", to: "done", when: "loop_exit" },
@@ -65,8 +65,8 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
@@ -102,7 +102,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "implement",
         "test-review",
         "done",
@@ -110,7 +110,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "implement", order: 1, indent: 1, color: "loop:main-loop" },
       { id: "test-review", order: 2, indent: 1, color: "loop:main-loop" },
       { id: "done", order: 3, indent: 0, color: "default" },
@@ -120,14 +120,14 @@ describe("deriveWorkflowVisualization", () => {
   test("derives sub-workflow group indent and color", () => {
     const workflow = makeBaseWorkflow(
       [
-        "oyakata-manager",
+        "divedra-manager",
         "group-manager",
         "group-input",
         "group-output",
         "done",
       ],
       [
-        { from: "oyakata-manager", to: "group-manager", when: "always" },
+        { from: "divedra-manager", to: "group-manager", when: "always" },
         { from: "group-input", to: "group-output", when: "always" },
         { from: "group-output", to: "done", when: "always" },
       ],
@@ -136,15 +136,15 @@ describe("deriveWorkflowVisualization", () => {
       ...workflow,
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "group-manager",
           nodeFile: "node-group-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -182,7 +182,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow: grouped,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "group-manager",
         "group-input",
         "group-output",
@@ -191,7 +191,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "group-manager", order: 1, indent: 0, color: "default" },
       { id: "group-input", order: 2, indent: 1, color: "group:main-group" },
       { id: "group-output", order: 3, indent: 1, color: "group:main-group" },
@@ -203,7 +203,7 @@ describe("deriveWorkflowVisualization", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
-          "oyakata-manager",
+          "divedra-manager",
           "branch-manager",
           "branch-input",
           "branch-output",
@@ -211,7 +211,7 @@ describe("deriveWorkflowVisualization", () => {
         ],
         [
           {
-            from: "oyakata-manager",
+            from: "divedra-manager",
             to: "branch-manager",
             when: "needs_review",
           },
@@ -221,15 +221,15 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "branch-manager",
           nodeFile: "node-branch-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -268,7 +268,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "branch-manager",
         "branch-input",
         "branch-output",
@@ -277,7 +277,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "branch-manager", order: 1, indent: 0, color: "default" },
       {
         id: "branch-input",
@@ -299,7 +299,7 @@ describe("deriveWorkflowVisualization", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
-          "oyakata-manager",
+          "divedra-manager",
           "group-manager",
           "group-input",
           "implement",
@@ -308,7 +308,7 @@ describe("deriveWorkflowVisualization", () => {
           "done",
         ],
         [
-          { from: "oyakata-manager", to: "group-manager", when: "always" },
+          { from: "divedra-manager", to: "group-manager", when: "always" },
           { from: "group-input", to: "implement", when: "always" },
           { from: "implement", to: "test-review", when: "always" },
           { from: "test-review", to: "implement", when: "continue_round" },
@@ -318,15 +318,15 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "group-manager",
           nodeFile: "node-group-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -390,7 +390,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "group-manager",
         "group-input",
         "implement",
@@ -401,7 +401,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "group-manager", order: 1, indent: 0, color: "default" },
       { id: "group-input", order: 2, indent: 1, color: "group:main-group" },
       { id: "implement", order: 3, indent: 2, color: "loop:main-loop" },
@@ -415,7 +415,7 @@ describe("deriveWorkflowVisualization", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
-          "oyakata-manager",
+          "divedra-manager",
           "loop-manager",
           "loop-input",
           "implement",
@@ -424,7 +424,7 @@ describe("deriveWorkflowVisualization", () => {
           "done",
         ],
         [
-          { from: "oyakata-manager", to: "loop-manager", when: "always" },
+          { from: "divedra-manager", to: "loop-manager", when: "always" },
           { from: "loop-input", to: "implement", when: "always" },
           { from: "implement", to: "loop-output", when: "always" },
           { from: "loop-output", to: "loop-judge", when: "always" },
@@ -434,15 +434,15 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "loop-manager",
           nodeFile: "node-loop-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -501,7 +501,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "loop-manager",
         "loop-input",
         "implement",
@@ -512,7 +512,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "loop-manager", order: 1, indent: 0, color: "default" },
       { id: "loop-input", order: 2, indent: 1, color: "loop:main-loop" },
       { id: "implement", order: 3, indent: 1, color: "loop:main-loop" },
@@ -526,7 +526,7 @@ describe("deriveWorkflowVisualization", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
-          "oyakata-manager",
+          "divedra-manager",
           "loop-manager",
           "loop-input",
           "inner-manager",
@@ -538,7 +538,7 @@ describe("deriveWorkflowVisualization", () => {
           "done",
         ],
         [
-          { from: "oyakata-manager", to: "loop-manager", when: "always" },
+          { from: "divedra-manager", to: "loop-manager", when: "always" },
           { from: "loop-input", to: "inner-manager", when: "always" },
           { from: "inner-input", to: "implement", when: "always" },
           { from: "implement", to: "inner-output", when: "always" },
@@ -550,15 +550,15 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "loop-manager",
           nodeFile: "node-loop-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -570,7 +570,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "inner-manager",
           nodeFile: "node-inner-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -658,7 +658,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "loop-manager",
         "loop-input",
         "inner-manager",
@@ -672,7 +672,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "loop-manager", order: 1, indent: 0, color: "default" },
       { id: "loop-input", order: 2, indent: 1, color: "loop:main-loop" },
       { id: "inner-manager", order: 3, indent: 1, color: "loop:main-loop" },
@@ -689,7 +689,7 @@ describe("deriveWorkflowVisualization", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
-          "oyakata-manager",
+          "divedra-manager",
           "branch-manager",
           "branch-input",
           "inner-manager",
@@ -701,7 +701,7 @@ describe("deriveWorkflowVisualization", () => {
         ],
         [
           {
-            from: "oyakata-manager",
+            from: "divedra-manager",
             to: "branch-manager",
             when: "needs_review",
           },
@@ -714,15 +714,15 @@ describe("deriveWorkflowVisualization", () => {
       ),
       nodes: [
         {
-          id: "oyakata-manager",
-          nodeFile: "node-oyakata-manager.json",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
           kind: "manager",
           completion: { type: "none" },
         },
         {
           id: "branch-manager",
           nodeFile: "node-branch-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -734,7 +734,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "inner-manager",
           nodeFile: "node-inner-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
         {
@@ -803,7 +803,7 @@ describe("deriveWorkflowVisualization", () => {
     const derived = deriveWorkflowVisualization({
       workflow,
       workflowVis: makeVis([
-        "oyakata-manager",
+        "divedra-manager",
         "branch-manager",
         "branch-input",
         "inner-manager",
@@ -816,7 +816,7 @@ describe("deriveWorkflowVisualization", () => {
     });
 
     expect(derived).toEqual([
-      { id: "oyakata-manager", order: 0, indent: 0, color: "default" },
+      { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "branch-manager", order: 1, indent: 0, color: "default" },
       {
         id: "branch-input",

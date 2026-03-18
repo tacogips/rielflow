@@ -13,7 +13,7 @@ const packageOptions = resolvePackageOptionsFromModuleUrl(import.meta.url);
 
 function resolveChromiumExecutablePath() {
   const candidates = [
-    process.env["OYAKATA_CHROMIUM_EXECUTABLE"],
+    process.env["DIVEDRA_CHROMIUM_EXECUTABLE"],
     "/etc/profiles/per-user/taco/bin/chromium-browser",
     "/run/current-system/sw/bin/chromium-browser",
     "/usr/bin/chromium-browser",

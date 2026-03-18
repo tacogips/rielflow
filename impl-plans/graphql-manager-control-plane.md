@@ -33,7 +33,7 @@ This plan implements the additive foundation required before the GraphQL schema 
 **Excluded**:
 - GraphQL SDL/schema construction
 - `/graphql` HTTP handler integration
-- `oyakata gql` CLI client and prompt/tool contract changes
+- `divedra gql` CLI client and prompt/tool contract changes
 - browser UI GraphQL migration
 
 ## Modules
@@ -67,7 +67,7 @@ export function resolveEffectiveRoots(options?: LoadOptions): EffectiveRoots;
 
 **Checklist**:
 - [x] Introduce `rootDataDir` as an explicit load option
-- [x] Treat `OYAKATA_ROOT_DATA_DIR` as canonical and `OYAKATA_RUNTIME_ROOT` as compatibility alias
+- [x] Treat `DIVEDRA_ROOT_DATA_DIR` as canonical and `DIVEDRA_RUNTIME_ROOT` as compatibility alias
 - [x] Derive artifact/session/runtime defaults from the canonical root when surface-specific overrides are absent
 - [x] Cover precedence with tests
 

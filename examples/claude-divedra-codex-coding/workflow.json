@@ -1,24 +1,24 @@
 {
-  "workflowId": "claude-oyakata-codex-coding",
-  "description": "Reference workflow that keeps oyakata orchestration on claude-code while delegating concrete coding work to codex.",
+  "workflowId": "claude-divedra-codex-coding",
+  "description": "Reference workflow that keeps divedra orchestration on claude-code while delegating concrete coding work to codex.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "oyakataPromptTemplate": "Coordinate {{workflowId}} so claude-code managers preserve scope, keep instructions concrete, and hand coding tasks to codex only when the implementation brief is ready. When `oyakata gql` is available, use it for manager control actions such as sub-workflow starts, child-input delivery, retries, and manager-authored routing instead of relying only on prose.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}} so claude-code managers preserve scope, keep instructions concrete, and hand coding tasks to codex only when the implementation brief is ready. When `divedra gql` is available, use it for manager control actions such as sub-workflow starts, child-input delivery, retries, and manager-authored routing instead of relying only on prose.",
     "workerSystemPromptTemplate": "Work only on the current node's responsibility. Return a concise business JSON payload that is useful to the next node."
   },
-  "managerNodeId": "oyakata-manager",
+  "managerNodeId": "divedra-manager",
   "subWorkflows": [
     {
       "id": "delivery",
       "description": "Single delivery lane that turns a human request into a codex implementation handoff.",
-      "managerNodeId": "main-oyakata",
+      "managerNodeId": "main-divedra",
       "inputNodeId": "workflow-input",
       "outputNodeId": "workflow-output",
       "nodeIds": [
-        "main-oyakata",
+        "main-divedra",
         "workflow-input",
         "implementation-brief",
         "implement",
@@ -36,17 +36,17 @@
   ],
   "nodes": [
     {
-      "id": "oyakata-manager",
+      "id": "divedra-manager",
       "kind": "root-manager",
-      "nodeFile": "node-oyakata-manager.json",
+      "nodeFile": "node-divedra-manager.json",
       "completion": {
         "type": "none"
       }
     },
     {
-      "id": "main-oyakata",
-      "kind": "sub-oyakata-manager",
-      "nodeFile": "node-main-oyakata.json",
+      "id": "main-divedra",
+      "kind": "sub-divedra-manager",
+      "nodeFile": "node-main-divedra.json",
       "completion": {
         "type": "none"
       }
@@ -86,12 +86,12 @@
   ],
   "edges": [
     {
-      "from": "oyakata-manager",
-      "to": "main-oyakata",
+      "from": "divedra-manager",
+      "to": "main-divedra",
       "when": "always"
     },
     {
-      "from": "main-oyakata",
+      "from": "main-divedra",
       "to": "workflow-input",
       "when": "always"
     },

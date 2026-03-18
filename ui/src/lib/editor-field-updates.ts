@@ -15,7 +15,7 @@ import {
 
 export const RESERVED_STRUCTURE_KINDS = new Set<NodeKind>([
   "root-manager",
-  "sub-oyakata-manager",
+  "sub-divedra-manager",
   "input",
   "output",
 ]);

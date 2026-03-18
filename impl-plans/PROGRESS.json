@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-03-18T03:34:21Z",
+  "lastUpdated": "2026-03-18T09:55:00Z",
   "phases": {
     "1": { "status": "COMPLETED" },
     "2": { "status": "COMPLETED" },
@@ -69,7 +69,8 @@
     "66": { "status": "COMPLETED" },
     "67": { "status": "COMPLETED" },
     "68": { "status": "COMPLETED" },
-    "69": { "status": "COMPLETED" }
+    "69": { "status": "COMPLETED" },
+    "70": { "status": "PLANNING" }
   },
   "plans": {
     "workflow-core-and-validation": {
@@ -446,7 +447,7 @@
         }
       }
     },
-    "oyakata-manager-prompt-contract": {
+    "divedra-manager-prompt-contract": {
       "phase": 15,
       "status": "Completed",
       "tasks": {
@@ -522,7 +523,7 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": [
-            "oyakata-manager-prompt-contract:TASK-003",
+            "divedra-manager-prompt-contract:TASK-003",
             "node-output-contract-and-validation:TASK-005"
           ]
         },
@@ -1612,6 +1613,32 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": ["TASK-002"]
+        }
+      }
+    },
+    "manager-kind-simplification": {
+      "phase": 70,
+      "status": "Planning",
+      "tasks": {
+        "TASK-001": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Not Started",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
         }
       }
     }

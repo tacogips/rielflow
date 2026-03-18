@@ -4,7 +4,7 @@ This document defines terminal UI design for workflow selection and execution in
 
 ## Overview
 
-`oyakata tui` provides:
+`divedra tui` provides:
 - workflow selection from `<workflow-root>`
 - interactive workflow execution
 - runtime user input for `human-input` nodes
@@ -34,14 +34,14 @@ Selection policy:
 ### Startup
 
 Command:
-- `oyakata tui`
-- `oyakata tui --workflow <name>` (skip selector)
-- `oyakata tui --resume-session <id>`
+- `divedra tui`
+- `divedra tui --workflow <name>` (skip selector)
+- `divedra tui --resume-session <id>`
 
 Workflow root resolution:
 1. `--workflow-root`
-2. `OYAKATA_WORKFLOW_ROOT`
-3. `./.oyakata`
+2. `DIVEDRA_WORKFLOW_ROOT`
+3. `./.divedra`
 
 ### Main Layout
 
@@ -56,7 +56,7 @@ Bottom panel:
 ### Human Input Handling
 
 When the execution engine reaches `human-input`:
-1. `oyakata` manager pauses transition.
+1. `divedra` manager pauses transition.
 2. TUI opens input modal (single-line, multi-line, or select form by input schema).
 3. Input is validated.
 4. Resolved payload is written to execution artifact `input.json`.
@@ -65,7 +65,7 @@ When the execution engine reaches `human-input`:
 ## Data and Artifact Integration
 
 Per-node execution output location:
-- `.oyakata-datas/workflow/{workflow_id}/{node}/{node-exec-id}/`
+- `.divedra-datas/workflow/{workflow_id}/{node}/{node-exec-id}/`
 
 TUI behavior:
 - displays active artifact directory for current node run
@@ -85,7 +85,7 @@ TUI behavior:
 
 - On terminal resize: relayout without dropping execution state.
 - On non-interactive terminal: fallback to plain prompt mode with same engine.
-- On TUI crash: session remains recoverable through `session resume` or `oyakata tui --resume-session`.
+- On TUI crash: session remains recoverable through `session resume` or `divedra tui --resume-session`.
 
 ## Implementation Notes
 

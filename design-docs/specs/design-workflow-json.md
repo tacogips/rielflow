@@ -22,13 +22,13 @@ Typical layout:
   <workflow-name>/
     workflow.json
     workflow-vis.json
-    node-oyakata-manager.json
-    node-main-oyakata.json
+    node-divedra-manager.json
+    node-main-divedra.json
     node-workflow-input.json
     node-workflow-output.json
     prompts/
-      oyakata-manager.md
-      main-oyakata.md
+      divedra-manager.md
+      main-divedra.md
       workflow-input.md
       workflow-output.md
 ```
@@ -51,10 +51,10 @@ Current authored shape:
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "oyakataPromptTemplate": "Coordinate {{workflowId}}.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}}.",
     "workerSystemPromptTemplate": "Work only on the current node."
   },
-  "managerNodeId": "oyakata-manager",
+  "managerNodeId": "divedra-manager",
   "subWorkflows": [],
   "subWorkflowConversations": [],
   "nodes": [],
@@ -110,16 +110,22 @@ Current `NodeKind` values:
 - `branch-judge`
 - `loop-judge`
 - `root-manager`
-- `sub-oyakata-manager`
+- `sub-divedra-manager`
 - `manager` as legacy compatibility
 - `input`
 - `output`
+
+Planned simplification:
+
+- the target authored schema is tracked in `design-docs/specs/design-manager-kind-simplification.md`
+- that refactor keeps the root-vs-sub-workflow manager split but renames the nested role to `subworkflow-manager`
+- `design-workflow-json.md` continues to describe the currently implemented schema until that refactor lands
 
 Validation rules:
 
 - `workflow.managerNodeId` must reference a node with kind `root-manager` or legacy `manager`
 - only the root manager may occupy `workflow.managerNodeId`
-- each sub-workflow boundary must reference `sub-oyakata-manager`, `input`, and `output` nodes
+- each sub-workflow boundary must reference `sub-divedra-manager`, `input`, and `output` nodes
 
 ## `CompletionRule`
 
@@ -402,7 +408,7 @@ Current shape:
 ```json
 {
   "nodes": [
-    { "id": "oyakata-manager", "order": 0 }
+    { "id": "divedra-manager", "order": 0 }
   ],
   "uiMeta": {
     "layout": "vertical"
@@ -425,7 +431,7 @@ The runtime does not derive execution order from `order`. It is editor-facing me
 ## Current Compatibility Notes
 
 - `kind: "manager"` is still accepted as a legacy root-manager value
-- `kind: "sub-manager"` is normalized to `sub-oyakata-manager`
+- `kind: "sub-manager"` is normalized to `sub-divedra-manager`
 - `subWorkflows[].inputs` is still read and normalized to `inputSources`
 - backend inference from certain legacy `model` strings remains read-compatible, but explicit `executionBackend` is canonical
 

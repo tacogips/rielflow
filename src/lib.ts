@@ -30,9 +30,9 @@ import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/adapter";
 import type { LoadOptions } from "./workflow/types";
 
-export type OyakataOptions = LoadOptions & SessionStoreOptions;
+export type DivedraOptions = LoadOptions & SessionStoreOptions;
 
-export interface ExecuteWorkflowInput extends OyakataOptions {
+export interface ExecuteWorkflowInput extends DivedraOptions {
   readonly workflowName: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
@@ -42,12 +42,12 @@ export interface ExecuteWorkflowInput extends OyakataOptions {
   readonly defaultTimeoutMs?: number;
 }
 
-export interface ResumeWorkflowInput extends OyakataOptions {
+export interface ResumeWorkflowInput extends DivedraOptions {
   readonly sessionId: string;
   readonly mockScenario?: MockNodeScenario;
 }
 
-export interface RerunWorkflowInput extends OyakataOptions {
+export interface RerunWorkflowInput extends DivedraOptions {
   readonly sourceSessionId: string;
   readonly fromNodeId: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
@@ -76,7 +76,7 @@ export interface CallWorkflowNodeInput extends CallNodeInput {}
 
 export async function inspectWorkflow(
   workflowName: string,
-  options: OyakataOptions = {},
+  options: DivedraOptions = {},
 ): Promise<WorkflowInspectionSummary> {
   const loaded = await loadWorkflowFromDisk(workflowName, options);
   if (!loaded.ok) {
@@ -214,7 +214,7 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
 
 export async function getSession(
   sessionId: string,
-  options: OyakataOptions = {},
+  options: DivedraOptions = {},
 ): Promise<WorkflowSessionState> {
   const loaded = await loadSession(sessionId, options);
   if (!loaded.ok) {
@@ -223,13 +223,13 @@ export async function getSession(
   return loaded.value;
 }
 
-export async function listSessions(options: OyakataOptions = {}) {
+export async function listSessions(options: DivedraOptions = {}) {
   return listRuntimeSessions(options);
 }
 
 export async function getRuntimeSessionView(
   sessionId: string,
-  options: OyakataOptions = {},
+  options: DivedraOptions = {},
 ): Promise<RuntimeSessionView> {
   const session = await getSession(sessionId, options);
   const nodeExecutions = await listRuntimeNodeExecutions(sessionId, options);

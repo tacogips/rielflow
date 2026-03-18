@@ -6,7 +6,7 @@ This document defines the canonical separation between a node's execution interf
 
 `node-{id}.json` must distinguish:
 
-- `executionBackend`: which adapter/interface `oyakata` uses to execute the node
+- `executionBackend`: which adapter/interface `divedra` uses to execute the node
 - `model`: the provider or backend-specific model name passed through that adapter
 
 This avoids the old ambiguous encoding where `model` sometimes meant the execution interface itself.

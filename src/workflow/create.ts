@@ -19,23 +19,23 @@ const TEMPLATE_MODEL = "gpt-5-nano";
 
 interface TemplateNodeDefinition {
   readonly id: string;
-  readonly kind: "root-manager" | "sub-oyakata-manager" | "input" | "output";
+  readonly kind: "root-manager" | "sub-divedra-manager" | "input" | "output";
   readonly prompt: string;
   readonly includeWorkflowId: boolean;
 }
 
 const TEMPLATE_NODE_DEFINITIONS = [
   {
-    id: "oyakata-manager",
+    id: "divedra-manager",
     kind: "root-manager",
     prompt: "Coordinate workflow execution for {{workflowId}}",
     includeWorkflowId: true,
   },
   {
-    id: "main-oyakata",
-    kind: "sub-oyakata-manager",
+    id: "main-divedra",
+    kind: "sub-divedra-manager",
     prompt:
-      "Translate the parent oyakata instruction into this sub-workflow's child work for {{workflowId}}",
+      "Translate the parent divedra instruction into this sub-workflow's child work for {{workflowId}}",
     includeWorkflowId: true,
   },
   {
@@ -170,7 +170,7 @@ export async function createWorkflowTemplate(
       },
     },
     prompts: {
-      oyakataPromptTemplate:
+      divedraPromptTemplate:
         "Coordinate {{workflowId}} so each node and sub-workflow works for a clear reason and returns the value needed downstream.",
       workerSystemPromptTemplate:
         "Work only on the assigned node task, use the provided workflow context, and return the business JSON payload requested by the node.",

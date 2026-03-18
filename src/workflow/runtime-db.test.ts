@@ -11,7 +11,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-runtime-db-test-"),
+    path.join(os.tmpdir(), "divedra-runtime-db-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -32,13 +32,13 @@ async function createWorkflowFixture(
     workflowId: workflowName,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -48,20 +48,20 @@ async function createWorkflowFixture(
         completion: { type: "none" },
       },
     ],
-    edges: [{ from: "oyakata-manager", to: "step-1", when: "always" }],
+    edges: [{ from: "divedra-manager", to: "step-1", when: "always" }],
     loops: [],
     branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "step-1", order: 1 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager {{topic}}",
     variables: { topic: "A" },
@@ -85,13 +85,13 @@ async function createNodeSessionReuseFixture(
     workflowId: workflowName,
     description: "node session reuse fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -114,7 +114,7 @@ async function createNodeSessionReuseFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "step-a", when: "always" },
+      { from: "divedra-manager", to: "step-a", when: "always" },
       { from: "step-a", to: "step-b", when: "always" },
       { from: "step-b", to: "step-c", when: "go_c" },
       { from: "step-c", to: "step-b", when: "always" },
@@ -125,15 +125,15 @@ async function createNodeSessionReuseFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "step-a", order: 1 },
       { id: "step-b", order: 2 },
       { id: "step-c", order: 3 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -218,7 +218,7 @@ describe("runtime-db", () => {
     };
 
     const mockScenario = {
-      "oyakata-manager": {
+      "divedra-manager": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "design" },
@@ -291,7 +291,7 @@ describe("runtime-db", () => {
     };
 
     const mockScenario = {
-      "oyakata-manager": {
+      "divedra-manager": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "design" },
@@ -495,7 +495,7 @@ describe("runtime-db", () => {
     }
 
     const mockScenario = {
-      "oyakata-manager": {
+      "divedra-manager": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "design" },

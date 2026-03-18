@@ -7,10 +7,10 @@
 
 ## Scope
 
-Align `oyakata tui` command-line surface with design startup forms.
+Align `divedra tui` command-line surface with design startup forms.
 
 In scope:
-- `oyakata tui --workflow <name>` support
+- `divedra tui --workflow <name>` support
 - conflict handling when both positional workflow name and `--workflow` are given
 - tests and docs updates
 

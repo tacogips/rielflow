@@ -58,7 +58,7 @@ export async function renderNeoBlessedWorkflowSelector(options: {
   const blessed = await loadBlessedFactory();
   const screen = blessed.screen({
     smartCSR: true,
-    title: "oyakata tui",
+    title: "divedra tui",
   });
 
   const left = blessed.box({

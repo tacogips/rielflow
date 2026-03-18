@@ -11,7 +11,7 @@ import type {
 
 const RESERVED_STRUCTURE_KINDS = new Set<NodeKind>([
   "root-manager",
-  "sub-oyakata-manager",
+  "sub-divedra-manager",
   "input",
   "output",
 ]);
@@ -235,7 +235,7 @@ export function syncSubWorkflowNodeKinds(
   assignedKinds.set(bundle.workflow.managerNodeId, "root-manager");
 
   for (const subWorkflow of bundle.workflow.subWorkflows) {
-    assignedKinds.set(subWorkflow.managerNodeId, "sub-oyakata-manager");
+    assignedKinds.set(subWorkflow.managerNodeId, "sub-divedra-manager");
     assignedKinds.set(subWorkflow.inputNodeId, "input");
     assignedKinds.set(subWorkflow.outputNodeId, "output");
     subWorkflow.nodeIds = normalizeNodeIds(bundle, [

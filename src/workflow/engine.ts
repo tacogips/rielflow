@@ -351,7 +351,7 @@ function buildReservedCandidateSubmissionPath(input: {
 }): string {
   return path.join(
     os.tmpdir(),
-    "oyakata-output-candidates",
+    "divedra-output-candidates",
     input.workflowId,
     input.workflowExecutionId,
     input.nodeId,
@@ -574,7 +574,7 @@ function isManagerNodeKind(
   return (
     kind === "manager" ||
     kind === "root-manager" ||
-    kind === "sub-oyakata-manager"
+    kind === "sub-divedra-manager"
   );
 }
 
@@ -2711,7 +2711,7 @@ export async function runWorkflow(
           createdAt: startedAt,
           updatedAt: endedAt,
           authTokenHash: hashManagerAuthToken(
-            ambientManagerContext.environment.OYAKATA_MANAGER_AUTH_TOKEN,
+            ambientManagerContext.environment.DIVEDRA_MANAGER_AUTH_TOKEN,
           ),
           authTokenExpiresAt: endedAt,
         });
@@ -2951,7 +2951,7 @@ export async function runWorkflow(
         }
 
         if (
-          nodeRef.kind !== "sub-oyakata-manager" &&
+          nodeRef.kind !== "sub-divedra-manager" &&
           (managerControl?.childInputNodeIds.length ?? 0) > 0
         ) {
           nodeStatus = "failed";
@@ -2995,7 +2995,7 @@ export async function runWorkflow(
             communicationCounter: session.communicationCounter,
             communications: session.communications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `invalid manager control at '${nodeId}': only a sub-oyakata-manager can dispatch child input nodes`,
+            lastError: `invalid manager control at '${nodeId}': only a sub-divedra-manager can dispatch child input nodes`,
           };
           await saveSession(failed, options);
           return err({
@@ -3494,7 +3494,7 @@ export async function runWorkflow(
         runtimeVariables: currentRuntimeVariables,
       };
       let managerPlannedInputs = isManagerNodeKind(nodeRef.kind)
-        ? nodeRef.kind === "sub-oyakata-manager"
+        ? nodeRef.kind === "sub-divedra-manager"
           ? [
               ...((managerControl?.overridesChildInputPlanning ?? false)
                 ? (managerControl?.childInputNodeIds ?? [])
@@ -3596,7 +3596,7 @@ export async function runWorkflow(
           ...persistedStarts,
           ...persistedChildInputs,
         ];
-      } else if (nodeRef.kind === "sub-oyakata-manager") {
+      } else if (nodeRef.kind === "sub-divedra-manager") {
         const forwardedPayloads = [{ payloadRef: outputRef, outputRaw }];
         const persistedChildInputs: CommunicationRecord[] = [];
         for (const inputNodeId of managerPlannedInputs) {
@@ -3610,7 +3610,7 @@ export async function runWorkflow(
               toNodeId: inputNodeId,
               routingScope: "intra-sub-workflow",
               deliveryKind: "edge-transition",
-              transitionWhen: `sub-oyakata-manager-input:${inputNodeId}`,
+              transitionWhen: `sub-divedra-manager-input:${inputNodeId}`,
               sourceNodeExecId: forwarded.payloadRef.nodeExecId,
               payloadRef: forwarded.payloadRef,
               outputRaw: forwarded.outputRaw,

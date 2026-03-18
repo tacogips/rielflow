@@ -4,7 +4,7 @@ This document defines the redesign that promotes GraphQL to the canonical contro
 
 ## Overview
 
-The current `oyakata` runtime already has strong domain primitives:
+The current `divedra` runtime already has strong domain primitives:
 
 - workflow definitions and sub-workflow boundaries,
 - workflow-execution/session persistence,
@@ -21,7 +21,7 @@ Today the primary surfaces are:
 
 The requested direction requires:
 
-- a first-class workflow manager interaction surface that `oyakata` LLM nodes can call directly,
+- a first-class workflow manager interaction surface that `divedra` LLM nodes can call directly,
 - communication inspection and replay by `workflowId` + `workflowExecutionId` + `communicationId`,
 - GraphQL as the canonical domain-parameter transport instead of CLI flags or REST route-specific request shapes.
 
@@ -46,21 +46,21 @@ The redesign does conflict with the current surface architecture in these areas:
 2. Browser/server execution APIs historically included REST/JSON route-specific editor flows rather than a single schema-driven control plane.
 3. Manager control is currently expressed as node output content, not as a first-class manager command channel.
 4. There is no stable public concept of a communication query or communication replay API.
-5. The current `oyakata` executable is a runtime entrypoint, not a manager-tool client with ambient execution identity.
+5. The current `divedra` executable is a runtime entrypoint, not a manager-tool client with ambient execution identity.
 
 ### Resolution
 
 The redesign resolves the conflict by changing interface layering, not by replacing the runtime model:
 
 - GraphQL becomes the canonical control-plane API for domain operations.
-- long-term, the CLI becomes a thin GraphQL client; during migration, `oyakata gql` is already transport-thin and legacy execution commands may opt into GraphQL transport incrementally.
+- long-term, the CLI becomes a thin GraphQL client; during migration, `divedra gql` is already transport-thin and legacy execution commands may opt into GraphQL transport incrementally.
 - manager-output `managerControl.actions` becomes a compatibility mode rather than the long-term primary manager control path.
 - mailbox/session artifacts remain durable runtime state and are not replaced by GraphQL.
 
 ## Design Goals
 
 - Make GraphQL the canonical domain API for workflow execution, communication queries, send/replay, and manager inspection.
-- Allow an `oyakata` manager node to call `oyakata gql "<graphql document>"` from inside its LLM/tool environment.
+- Allow an `divedra` manager node to call `divedra gql "<graphql document>"` from inside its LLM/tool environment.
 - Preserve current mailbox and execution auditability.
 - Support communication inspection and communication replay without mutating historical artifacts in place.
 - Keep the existing local-first deployment model.
@@ -74,7 +74,7 @@ The redesign resolves the conflict by changing interface layering, not by replac
 
 ## Canonical API Direction
 
-GraphQL becomes the canonical control-plane endpoint exposed by `oyakata serve`:
+GraphQL becomes the canonical control-plane endpoint exposed by `divedra serve`:
 
 - `POST /graphql`
 - optional GraphQL IDE/introspection only in local development mode
@@ -83,7 +83,7 @@ Rule:
 
 - domain parameters move into GraphQL query/mutation inputs,
 - CLI flags are retained only for transport/bootstrap concerns such as endpoint selection, auth token, output format, and local debug overrides.
-- `oyakata gql` supports GraphQL variables through a single `--variables` option that accepts inline JSON or a file reference syntax such as `@path/to/variables.json`
+- `divedra gql` supports GraphQL variables through a single `--variables` option that accepts inline JSON or a file reference syntax such as `@path/to/variables.json`
 - legacy execution commands may gain GraphQL-backed transport one slice at a time; until that migration completes, some local debug-only flags remain local-only and are not forwarded through GraphQL
 - GraphQL is now the canonical execution/communication/manager control surface, including the served browser workflow-definition, execution, and session flows; `/api/ui-config` remains only as bootstrap metadata outside `/graphql`
 
@@ -101,7 +101,7 @@ GraphQL requests that need to reference images or other local files must not sen
 
 - host absolute paths are not stable across machines
 - host absolute paths are not stable across future containerized node execution
-- Podman or other container runtimes should be able to mount the same Oyakata data directory at a different host path while preserving the logical file reference
+- Podman or other container runtimes should be able to mount the same Divedra data directory at a different host path while preserving the logical file reference
 
 ### Canonical File Reference
 
@@ -114,7 +114,7 @@ GraphQL inputs must use a data-root-relative file reference:
 Recommended layout for user-provided or manager-provided attachments:
 
 ```text
-{oyakataRootDataDir}/files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
+{divedraRootDataDir}/files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
 ```
 
 The GraphQL-visible file reference for that example is:
@@ -126,22 +126,22 @@ files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
 Rules:
 
 - the GraphQL caller passes only the data-root-relative path
-- the runtime resolves the absolute filesystem path from the configured Oyakata root data directory
+- the runtime resolves the absolute filesystem path from the configured Divedra root data directory
 - the GraphQL caller must not pass a host absolute path such as `/home/user/...`
 - the GraphQL caller must not pass `..` path traversal segments
 - the runtime must reject paths that escape the configured root data directory
 - `sendManagerMessage.attachments` must stay within `files/{workflowId}/{workflowExecutionId}/...` for the authenticated manager session's workflow execution
 - manager-scoped attachment references must not read workflow artifacts, session files, or other workflow executions' files elsewhere under the root data directory
-- attachment creation/upload is out of scope for the first iteration; files must already exist under the Oyakata root data directory before the GraphQL request is sent
+- attachment creation/upload is out of scope for the first iteration; files must already exist under the Divedra root data directory before the GraphQL request is sent
 
 ### Configuration
 
-The Oyakata root data directory is resolved from environment variable or config.
+The Divedra root data directory is resolved from environment variable or config.
 
 Design direction:
 
-- introduce `OYAKATA_ROOT_DATA_DIR` as the canonical root-data setting for derived defaults
-- keep `OYAKATA_RUNTIME_ROOT` as a migration-period compatibility alias behind `OYAKATA_ROOT_DATA_DIR`
+- introduce `DIVEDRA_ROOT_DATA_DIR` as the canonical root-data setting for derived defaults
+- keep `DIVEDRA_RUNTIME_ROOT` as a migration-period compatibility alias behind `DIVEDRA_ROOT_DATA_DIR`
 - keep explicit per-surface overrides authoritative for migration compatibility
 - `artifactRoot`, session store paths, attachment paths, and future container-mounted work paths may all be derived from that root when more specific overrides are absent
 
@@ -149,14 +149,14 @@ Precedence:
 
 1. explicit CLI flag for that surface
 2. explicit surface-specific environment variable for that surface
-3. derived path from `OYAKATA_ROOT_DATA_DIR`
+3. derived path from `DIVEDRA_ROOT_DATA_DIR`
 4. built-in default
 
 Initial derived defaults:
 
-- artifact root: `{OYAKATA_ROOT_DATA_DIR}/workflow`
-- session store root: `{OYAKATA_ROOT_DATA_DIR}/sessions`
-- attachments root: `{OYAKATA_ROOT_DATA_DIR}/files`
+- artifact root: `{DIVEDRA_ROOT_DATA_DIR}/workflow`
+- session store root: `{DIVEDRA_ROOT_DATA_DIR}/sessions`
+- attachments root: `{DIVEDRA_ROOT_DATA_DIR}/files`
 
 This keeps file references portable between:
 
@@ -213,7 +213,7 @@ The redesign introduces a manager control plane distinct from mailbox transport.
 ### Separation of Concerns
 
 - mailbox communication remains runtime-owned node-to-node transport
-- manager send is a control-plane request from an `oyakata` manager tool session to the orchestration runtime
+- manager send is a control-plane request from an `divedra` manager tool session to the orchestration runtime
 - a manager send may result in zero or more mailbox communications, node executions, retries, or planner-state updates
 
 This separation avoids overloading a user- or manager-authored freeform message with the same meaning as a durable mailbox artifact.
@@ -235,30 +235,30 @@ This separation avoids overloading a user- or manager-authored freeform message 
 Manager send must be scope-bound:
 
 - root manager may request root-scope actions and sub-workflow starts
-- sub-oyakata-manager may request only actions within its owned sub-workflow
+- sub-divedra-manager may request only actions within its owned sub-workflow
 - worker nodes do not get manager-session credentials
 
 Required ambient identity for LLM-triggered CLI use:
 
-- `OYAKATA_GRAPHQL_ENDPOINT`
-- `OYAKATA_MANAGER_AUTH_TOKEN`
-- `OYAKATA_MANAGER_SESSION_ID`
-- `OYAKATA_WORKFLOW_ID`
-- `OYAKATA_WORKFLOW_EXECUTION_ID`
-- `OYAKATA_MANAGER_NODE_ID`
-- `OYAKATA_MANAGER_NODE_EXEC_ID`
+- `DIVEDRA_GRAPHQL_ENDPOINT`
+- `DIVEDRA_MANAGER_AUTH_TOKEN`
+- `DIVEDRA_MANAGER_SESSION_ID`
+- `DIVEDRA_WORKFLOW_ID`
+- `DIVEDRA_WORKFLOW_EXECUTION_ID`
+- `DIVEDRA_MANAGER_NODE_ID`
+- `DIVEDRA_MANAGER_NODE_EXEC_ID`
 
 The explicit command form requested by the user is supported:
 
 ```bash
-oyakata gql "<graphql document>"
+divedra gql "<graphql document>"
 ```
 
 Resolution rules:
 
 - workflow/domain identifiers are carried inside the GraphQL document variables/input
 - manager node identity and authorization are resolved from ambient manager-session environment and validated against the presented bearer token
-- for HTTP transport, `oyakata gql` forwards `OYAKATA_MANAGER_SESSION_ID` in `X-Oyakata-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
+- for HTTP transport, `divedra gql` forwards `DIVEDRA_MANAGER_SESSION_ID` in `X-Divedra-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
 - local operator/debug mode may allow explicit overrides, but those are not part of the normal LLM-facing contract
 
 ### Manager Token Contract
@@ -270,8 +270,8 @@ Resolution rules:
   - `managerNodeId`
   - `managerNodeExecId`
 - normal GraphQL HTTP transport uses `Authorization: Bearer <token>`
-- normal GraphQL HTTP transport forwards `managerSessionId` in `X-Oyakata-Manager-Session-Id`
-- `OYAKATA_MANAGER_AUTH_TOKEN` is the CLI/env injection path used inside manager tool environments, not a separate authentication mechanism
+- normal GraphQL HTTP transport forwards `managerSessionId` in `X-Divedra-Manager-Session-Id`
+- `DIVEDRA_MANAGER_AUTH_TOKEN` is the CLI/env injection path used inside manager tool environments, not a separate authentication mechanism
 - the token must expire or be revoked when the manager step completes, fails, or is cancelled
 - worker nodes must never inherit this token
 
@@ -466,11 +466,11 @@ Rules:
 
 - root-manager scope may target only root-scope communications
   - effective root scope means both sender and recipient resolve outside any sub-workflow
-- sub-oyakata-manager scope may target only communications that stay entirely within the sub-oyakata-manager's owned sub-workflow
+- sub-divedra-manager scope may target only communications that stay entirely within the sub-divedra-manager's owned sub-workflow
   - effective sub-workflow scope means both sender and recipient resolve to that owned sub-workflow
 - root managers must not replay or retry communications that cross a sub-workflow boundary or operate entirely inside a child sub-workflow
-  - those cases must be handled by re-invoking the sub-workflow or by the owning sub-oyakata-manager
-- sub-oyakata-managers must not replay or retry parent-to-sub-workflow, cross-sub-workflow, or root-scope communications
+  - those cases must be handled by re-invoking the sub-workflow or by the owning sub-divedra-manager
+- sub-divedra-managers must not replay or retry parent-to-sub-workflow, cross-sub-workflow, or root-scope communications
 
 Compatibility rule for previously persisted artifacts:
 
@@ -506,10 +506,10 @@ Normal LLM/tool use omits the manager identity fields because they are resolved 
 For HTTP GraphQL calls, the ambient manager-session context is carried by transport metadata rather than by server-local process state:
 
 - bearer auth stays in `Authorization`
-- `managerSessionId` is forwarded in `X-Oyakata-Manager-Session-Id`
+- `managerSessionId` is forwarded in `X-Divedra-Manager-Session-Id`
 - GraphQL variables keep workflow-domain inputs only
-- the `/graphql` HTTP handler must ignore any server-local `OYAKATA_MANAGER_*` or `OYAKATA_WORKFLOW_*` ambient execution variables for request authentication and scope resolution; only request transport metadata may supply manager scope on the HTTP boundary
-- the `/graphql` HTTP handler must also ignore caller-provided in-process auth/session fallback fields when authenticating an HTTP request; `Authorization` and `X-Oyakata-Manager-Session-Id` remain the only manager-scope carriers on that boundary
+- the `/graphql` HTTP handler must ignore any server-local `DIVEDRA_MANAGER_*` or `DIVEDRA_WORKFLOW_*` ambient execution variables for request authentication and scope resolution; only request transport metadata may supply manager scope on the HTTP boundary
+- the `/graphql` HTTP handler must also ignore caller-provided in-process auth/session fallback fields when authenticating an HTTP request; `Authorization` and `X-Divedra-Manager-Session-Id` remain the only manager-scope carriers on that boundary
 
 ### Typed Action Envelope
 
@@ -581,7 +581,7 @@ Rules:
 When `sendManagerMessage` includes image or file attachments:
 
 - attachments are represented as `DataDirFileRef`
-- the runtime resolves them against `OYAKATA_ROOT_DATA_DIR`
+- the runtime resolves them against `DIVEDRA_ROOT_DATA_DIR`
 - the resolved file must stay inside the configured data root
 - node execution backends must receive the logical attachment content through runtime-prepared inputs, not by being given host absolute paths directly
 
@@ -631,7 +631,7 @@ Concrete direction for the next implementation slice:
   - for manager-message-backed deliveries it is the active `managerNodeExecId`
 - keep replay/retry compatibility by reading the existing communication outbox payload first and falling back to `payloadRef.artifactDir/output.json`
 
-With that widened provenance model in place, `deliver-to-child-input` can be accepted for an owning sub-oyakata-manager because the mailbox delivery now has durable source artifacts even before the manager node publishes its final node output.
+With that widened provenance model in place, `deliver-to-child-input` can be accepted for an owning sub-divedra-manager because the mailbox delivery now has durable source artifacts even before the manager node publishes its final node output.
 
 ### Output Shape
 
@@ -663,7 +663,7 @@ The send mutation must return:
 Two manager-control input modes exist during migration:
 
 1. `managerControl.actions` returned inside node output payload
-2. explicit `sendManagerMessage` via `oyakata gql` control-plane command
+2. explicit `sendManagerMessage` via `divedra gql` control-plane command
 
 ### Priority Rule
 
@@ -689,7 +689,7 @@ Payload-embedded `managerControl.actions` remains a compatibility mechanism and 
 
 Canonical CLI command:
 
-- `oyakata gql "<graphql document>"`
+- `divedra gql "<graphql document>"`
 
 ### Compatibility Commands
 
@@ -709,7 +709,7 @@ But their implementation direction changes:
 
 ### Local Serve Contract
 
-`oyakata serve` continues to host the local control plane.
+`divedra serve` continues to host the local control plane.
 
 Added responsibilities:
 
@@ -717,7 +717,7 @@ Added responsibilities:
 - expose optional GraphQL schema/introspection in local development mode
 - keep `/api/ui-config` as a small browser bootstrap/config endpoint outside GraphQL
 - avoid reintroducing parallel browser workflow/session REST endpoints now that the browser UI already uses GraphQL queries/mutations
-- allow the generic `oyakata gql` CLI client to target the same local endpoint
+- allow the generic `divedra gql` CLI client to target the same local endpoint
 
 ## Data Model Extensions
 
@@ -779,7 +779,7 @@ Recommended migration order:
 2. Add shared application services for communication inspection/retry/replay and manager messaging.
 3. Add manager-message provenance support for manager-authored mailbox sends.
 4. Add GraphQL schema and server integration on top of those services.
-5. Add the generic `oyakata gql` CLI client.
+5. Add the generic `divedra gql` CLI client.
 6. Inject manager-session environment into manager-node executions and update manager prompt guidance.
 7. Keep browser workflow-definition, execution, and session flows aligned on GraphQL now that the REST browser surface has been removed.
 
@@ -796,4 +796,4 @@ Therefore the redesign direction is:
 - make GraphQL canonical,
 - make CLI a generic client over that control plane,
 - add first-class communication inspection and replay,
-- support LLM-triggered `oyakata gql` through ambient manager-session context.
+- support LLM-triggered `divedra gql` through ambient manager-session context.

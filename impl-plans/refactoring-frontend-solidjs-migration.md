@@ -452,7 +452,7 @@ interface UiVerificationCommand {
 **Tasks Completed**: Additional TASK-002 migration-preparation UI copy alignment
 **Tasks In Progress**: TASK-002 tooling and entry migration
 **Blockers**: `solid-js` and `vite-plugin-solid` are still absent from the workspace, so the actual `.tsx` entry/component cutover remains blocked on dependency installation
-**Notes**: Removed framework-specific `oyakata Svelte UI` labeling from the checked-in browser surface and Playwright expectation so the user-facing UI stays product-oriented while the implementation remains in the documented Svelte-to-Solid transition. Re-ran backend tests, frontend typecheck, and production UI build; Playwright remains blocked in this environment because the spawned local serve process cannot bind to `127.0.0.1`.
+**Notes**: Removed framework-specific `divedra Svelte UI` labeling from the checked-in browser surface and Playwright expectation so the user-facing UI stays product-oriented while the implementation remains in the documented Svelte-to-Solid transition. Re-ran backend tests, frontend typecheck, and production UI build; Playwright remains blocked in this environment because the spawned local serve process cannot bind to `127.0.0.1`.
 
 ### Session: 2026-03-09 20:35
 
@@ -578,7 +578,7 @@ interface UiVerificationCommand {
 **Tasks Completed**: Additional TASK-002 verification-only continuation review
 **Tasks In Progress**: TASK-002 tooling and entry migration
 **Blockers**: `solid-js` and `vite-plugin-solid` are still absent from the workspace, so the real `.tsx` entry/component cutover remains blocked on dependency installation. Browser regression remains sandbox-blocked because this environment denies local port binds on `127.0.0.1`.
-**Notes**: Re-checked the current architecture/design against the intended purpose and confirmed the transitional state is still correct: the local server, shared transport contract, and `ui/dist` asset boundary are framework-agnostic while the checked-in UI remains Svelte until the SolidJS cutover can actually be verified. Re-ran `bun test ./src ./ui/src`, `tsc --noEmit`, `bash ./scripts/require-node-tooling.sh node ./scripts/run-ui-typecheck.mjs`, and `bash ./scripts/require-node-tooling.sh node ./scripts/run-ui-build.mjs`; all passed. `bun run test:e2e` still fails here for an environment reason rather than an app reason, and direct `Bun.serve` / Node `listen()` probes reproduce the same local bind restriction outside `oyakata` itself.
+**Notes**: Re-checked the current architecture/design against the intended purpose and confirmed the transitional state is still correct: the local server, shared transport contract, and `ui/dist` asset boundary are framework-agnostic while the checked-in UI remains Svelte until the SolidJS cutover can actually be verified. Re-ran `bun test ./src ./ui/src`, `tsc --noEmit`, `bash ./scripts/require-node-tooling.sh node ./scripts/run-ui-typecheck.mjs`, and `bash ./scripts/require-node-tooling.sh node ./scripts/run-ui-build.mjs`; all passed. `bun run test:e2e` still fails here for an environment reason rather than an app reason, and direct `Bun.serve` / Node `listen()` probes reproduce the same local bind restriction outside `divedra` itself.
 
 ### Session: 2026-03-09 22:30
 
@@ -631,7 +631,7 @@ interface UiVerificationCommand {
 
 **Tasks Completed**: Additional TASK-002 continuation review and serve-startup regression fix
 **Tasks In Progress**: TASK-002 tooling and entry migration
-**Blockers**: `solid-js` and `vite-plugin-solid` are still absent from the workspace, so the real `.tsx` entry/component cutover remains blocked on dependency installation. Browser regression remains sandbox-blocked because this environment denies local port binds on `127.0.0.1` with `EPERM`, including plain Node `listen()` probes outside `oyakata`.
+**Blockers**: `solid-js` and `vite-plugin-solid` are still absent from the workspace, so the real `.tsx` entry/component cutover remains blocked on dependency installation. Browser regression remains sandbox-blocked because this environment denies local port binds on `127.0.0.1` with `EPERM`, including plain Node `listen()` probes outside `divedra`.
 **Notes**: Reviewed the current refactoring diff again and confirmed the architecture still matches the intended purpose, so no design or implementation-plan rewrite was needed in this iteration. Fixed a concrete server-startup regression in `src/server/serve.ts`: the `serve --port 0` path no longer does a separate probe-and-rebind sequence, and instead passes `0` directly to the runtime so ephemeral-port allocation stays runtime-owned when the environment allows it. Updated `src/server/serve.test.ts` to cover the new contract without depending on sandbox networking. Re-ran `bun run test`, `bun run typecheck:server`, and `bun run build:ui`; all passed. `bun run test:e2e` still fails here for an environmental reason because the sandbox rejects local socket binds.
 
 ### Session: 2026-03-09 23:55

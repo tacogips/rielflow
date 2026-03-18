@@ -3,7 +3,7 @@
 This document proposes an additive design for two workflow capabilities:
 
 - a runtime-owned `user-action` node that asks an external human for a decision
-- an `optional` execution mode that lets the owning `oyakata` manager decide whether a ready node should run or be skipped
+- an `optional` execution mode that lets the owning `divedra` manager decide whether a ready node should run or be skipped
 
 ## Overview
 
@@ -68,7 +68,7 @@ Rules:
 
 - omitted `execution.mode` means `required`
 - `optional` currently requires `decisionBy: "owning-manager"`
-- the owning manager is the root manager for root-scope nodes and the sub-oyakata-manager for nodes inside one sub-workflow
+- the owning manager is the root manager for root-scope nodes and the sub-divedra-manager for nodes inside one sub-workflow
 
 ### `node-{id}.json`
 
@@ -471,7 +471,7 @@ interface SkipOptionalNodeAction {
 Scope rules mirror the existing manager ownership rules:
 
 - root manager may decide only root-scope optional nodes
-- sub-oyakata-manager may decide only optional nodes inside its owned sub-workflow
+- sub-divedra-manager may decide only optional nodes inside its owned sub-workflow
 
 GraphQL parity rule:
 

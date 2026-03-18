@@ -1,11 +1,11 @@
 {
   "nodes": [
     {
-      "id": "oyakata-manager",
+      "id": "divedra-manager",
       "order": 0
     },
     {
-      "id": "main-oyakata",
+      "id": "main-divedra",
       "order": 1
     },
     {

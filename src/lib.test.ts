@@ -19,7 +19,7 @@ import { saveSession } from "./workflow/session-store";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-lib-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-lib-test-"));
   tempDirs.push(directory);
   return directory;
 }
@@ -38,13 +38,13 @@ async function createCallNodeFixture(
     workflowId: workflowName,
     description: "call node library fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -60,12 +60,12 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "writer", order: 1 },
     ],
   });
-  await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/claude-code-agent",
     promptTemplate: "manager",
     variables: {},
@@ -89,12 +89,12 @@ afterEach(async () => {
 describe("library api", () => {
   function makeDefaultTemplateScenario(): MockNodeScenario {
     return {
-      "oyakata-manager": {
+      "divedra-manager": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "design" },
       },
-      "main-oyakata": {
+      "main-divedra": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "dispatch" },
@@ -176,7 +176,7 @@ describe("library api", () => {
         sessionId,
         workflowName,
         workflowId: workflowName,
-        initialNodeId: "oyakata-manager",
+        initialNodeId: "divedra-manager",
         runtimeVariables: {},
       }),
       {

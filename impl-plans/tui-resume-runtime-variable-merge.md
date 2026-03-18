@@ -19,7 +19,7 @@
 
 ### Summary
 
-This corrective slice aligns `oyakata tui --resume-session` with the TUI recovery intent:
+This corrective slice aligns `divedra tui --resume-session` with the TUI recovery intent:
 
 - resumed TUI runs must preserve the persisted session runtime variables,
 - `--variables` must layer additive overrides onto that persisted runtime state,

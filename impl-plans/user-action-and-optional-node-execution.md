@@ -196,4 +196,4 @@ export interface ActiveUserActionRef {
 
 - **Previous**: `impl-plans/node-execution-inbox-contract.md`
 - **Next**: None
-- **Depends On**: `impl-plans/node-output-contract-and-validation.md`, `impl-plans/oyakata-manager-prompt-contract.md`, `impl-plans/manager-driven-call-node-runtime.md`
+- **Depends On**: `impl-plans/node-output-contract-and-validation.md`, `impl-plans/divedra-manager-prompt-contract.md`, `impl-plans/manager-driven-call-node-runtime.md`

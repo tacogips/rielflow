@@ -30,13 +30,13 @@ function makeWorkflowBundle(): NormalizedWorkflowBundle {
         maxLoopIterations: 3,
         nodeTimeoutMs: 120000,
       },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -46,19 +46,19 @@ function makeWorkflowBundle(): NormalizedWorkflowBundle {
           completion: { type: "none" },
         },
       ],
-      edges: [{ from: "oyakata-manager", to: "worker-1", when: "always" }],
+      edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
       loops: [],
       branching: { mode: "fan-out" },
     },
     workflowVis: {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "worker-1", order: 1 },
       ],
     },
     nodePayloads: {
-      "oyakata-manager": {
-        id: "oyakata-manager",
+      "divedra-manager": {
+        id: "divedra-manager",
         model: "gpt-5",
         promptTemplate: "Coordinate",
         variables: {},

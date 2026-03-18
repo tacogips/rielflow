@@ -9,7 +9,7 @@ import { saveSession } from "./workflow/session-store";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-cli-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-cli-test-"));
   tempDirs.push(directory);
   return directory;
 }
@@ -24,12 +24,12 @@ afterEach(async () => {
 
 function makeDefaultTemplateScenario(): Readonly<Record<string, unknown>> {
   return {
-    "oyakata-manager": {
+    "divedra-manager": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-oyakata": {
+    "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "dispatch" },
@@ -105,13 +105,13 @@ async function createCallNodeFixture(
     workflowId: workflowName,
     description: "call node cli fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -127,12 +127,12 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "writer", order: 1 },
     ],
   });
-  await writeJson(path.join(workflowDirectory, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/claude-code-agent",
     promptTemplate: "manager",
     variables: {},
@@ -179,7 +179,7 @@ describe("runCli", () => {
         sessionId,
         workflowName,
         workflowId: workflowName,
-        initialNodeId: "oyakata-manager",
+        initialNodeId: "divedra-manager",
         runtimeVariables: {},
       }),
       { sessionStoreRoot },
@@ -475,7 +475,7 @@ describe("runCli", () => {
     expect(progressPayload.status).toBe("paused");
     expect(
       progressPayload.nodeSummaries.some(
-        (entry) => entry.nodeId === "oyakata-manager",
+        (entry) => entry.nodeId === "divedra-manager",
       ),
     ).toBe(true);
 
@@ -539,7 +539,7 @@ describe("runCli", () => {
           requestedUrl = String(input);
           requestedAuthorization = new Headers(init?.headers).get("authorization") ?? "";
           requestedManagerSessionId =
-            new Headers(init?.headers).get("x-oyakata-manager-session-id") ?? "";
+            new Headers(init?.headers).get("x-divedra-manager-session-id") ?? "";
           requestedBody = typeof init?.body === "string" ? init.body : "";
           return createJsonResponse({
             data: {
@@ -550,8 +550,8 @@ describe("runCli", () => {
           });
         },
         env: {
-          OYAKATA_MANAGER_AUTH_TOKEN: "secret",
-          OYAKATA_MANAGER_SESSION_ID: "mgrsess-000001",
+          DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+          DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
         },
       },
     );

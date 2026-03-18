@@ -53,7 +53,7 @@ export interface NodeExecutionMailboxStructure {
 
 export interface NodeExecutionMailboxMeta {
   readonly protocolVersion: 1;
-  readonly mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR";
+  readonly mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR";
   readonly node: {
     readonly workflowId: string;
     readonly workflowDescription: string;
@@ -92,7 +92,7 @@ export interface NodeExecutionMailboxMeta {
   readonly structure?: NodeExecutionMailboxStructure;
   readonly managedChildren?: readonly NodeExecutionMailboxManagedChild[];
   readonly managerControl?: {
-    readonly preferredTransport: "oyakata gql";
+    readonly preferredTransport: "divedra gql";
     readonly fallbackField: "managerControl";
     readonly supportedActions: readonly string[];
     readonly rules: readonly string[];
@@ -139,7 +139,7 @@ function isManagerNodeKind(kind: NodeKind | undefined): boolean {
   return (
     kind === "manager" ||
     kind === "root-manager" ||
-    kind === "sub-oyakata-manager"
+    kind === "sub-divedra-manager"
   );
 }
 
@@ -196,7 +196,7 @@ function buildNodeReason(
   switch (nodeKind) {
     case "root-manager":
       return "Coordinate the overall workflow plan, sub-workflow dispatch, output assessment, and retry decisions.";
-    case "sub-oyakata-manager":
+    case "sub-divedra-manager":
       return ownedSubWorkflow === undefined
         ? "Coordinate the current sub-workflow scope."
         : `Coordinate sub-workflow '${ownedSubWorkflow.id}' and translate parent mailbox input into child-node work.`;
@@ -229,7 +229,7 @@ function buildExpectedReturn(
 
   switch (nodeRef.kind) {
     case "root-manager":
-    case "sub-oyakata-manager":
+    case "sub-divedra-manager":
     case "manager":
       return "Return a manager assessment/plan JSON object that records the current state, what was judged, and what should happen next.";
     case "input":
@@ -401,7 +401,7 @@ export function buildNodeExecutionMailbox(
   );
   const managerControl = isManagerNodeKind(input.nodeRef.kind)
     ? {
-        preferredTransport: "oyakata gql" as const,
+        preferredTransport: "divedra gql" as const,
         fallbackField: "managerControl" as const,
         supportedActions: [
           "start-sub-workflow",
@@ -433,7 +433,7 @@ export function buildNodeExecutionMailbox(
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR",
+      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
       node: {
         workflowId: input.workflow.workflowId,
         workflowDescription: input.workflow.description,
@@ -648,8 +648,8 @@ function renderManagerControlSection(
   }
   return [
     "Manager control payload:",
-    "When `oyakata gql` is available in the execution environment, prefer typed GraphQL manager actions over freeform control prose.",
-    "Use payload `managerControl` only as the compatibility fallback when `oyakata gql` is unavailable for that execution backend.",
+    "When `divedra gql` is available in the execution environment, prefer typed GraphQL manager actions over freeform control prose.",
+    "Use payload `managerControl` only as the compatibility fallback when `divedra gql` is unavailable for that execution backend.",
     "Include workflow assessment in normal JSON fields, and place runtime control decisions under `managerControl`.",
     "Supported actions:",
     ...managerControl.supportedActions.map((action) =>

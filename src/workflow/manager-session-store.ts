@@ -79,22 +79,22 @@ export interface AmbientManagerExecutionContext {
 }
 
 export interface AmbientManagerControlPlaneEnvironment {
-  readonly OYAKATA_GRAPHQL_ENDPOINT: string;
-  readonly OYAKATA_MANAGER_AUTH_TOKEN: string;
-  readonly OYAKATA_MANAGER_SESSION_ID: string;
-  readonly OYAKATA_WORKFLOW_ID: string;
-  readonly OYAKATA_WORKFLOW_EXECUTION_ID: string;
-  readonly OYAKATA_MANAGER_NODE_ID: string;
-  readonly OYAKATA_MANAGER_NODE_EXEC_ID: string;
+  readonly DIVEDRA_GRAPHQL_ENDPOINT: string;
+  readonly DIVEDRA_MANAGER_AUTH_TOKEN: string;
+  readonly DIVEDRA_MANAGER_SESSION_ID: string;
+  readonly DIVEDRA_WORKFLOW_ID: string;
+  readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
+  readonly DIVEDRA_MANAGER_NODE_ID: string;
+  readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
 }
 
 const AMBIENT_MANAGER_ENV_KEYS = [
-  "OYAKATA_MANAGER_AUTH_TOKEN",
-  "OYAKATA_MANAGER_SESSION_ID",
-  "OYAKATA_WORKFLOW_ID",
-  "OYAKATA_WORKFLOW_EXECUTION_ID",
-  "OYAKATA_MANAGER_NODE_ID",
-  "OYAKATA_MANAGER_NODE_EXEC_ID",
+  "DIVEDRA_MANAGER_AUTH_TOKEN",
+  "DIVEDRA_MANAGER_SESSION_ID",
+  "DIVEDRA_WORKFLOW_ID",
+  "DIVEDRA_WORKFLOW_EXECUTION_ID",
+  "DIVEDRA_MANAGER_NODE_ID",
+  "DIVEDRA_MANAGER_NODE_EXEC_ID",
 ] as const;
 
 export interface ManagerSessionStore {
@@ -247,13 +247,13 @@ export function verifyManagerAuthToken(
 export function resolveAmbientManagerExecutionContext(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): AmbientManagerExecutionContext | null {
-  const workflowId = readEnvValue(env, "OYAKATA_WORKFLOW_ID");
+  const workflowId = readEnvValue(env, "DIVEDRA_WORKFLOW_ID");
   const workflowExecutionId = readEnvValue(
     env,
-    "OYAKATA_WORKFLOW_EXECUTION_ID",
+    "DIVEDRA_WORKFLOW_EXECUTION_ID",
   );
-  const managerNodeId = readEnvValue(env, "OYAKATA_MANAGER_NODE_ID");
-  const managerNodeExecId = readEnvValue(env, "OYAKATA_MANAGER_NODE_EXEC_ID");
+  const managerNodeId = readEnvValue(env, "DIVEDRA_MANAGER_NODE_ID");
+  const managerNodeExecId = readEnvValue(env, "DIVEDRA_MANAGER_NODE_EXEC_ID");
 
   if (
     workflowId === undefined ||
@@ -264,8 +264,8 @@ export function resolveAmbientManagerExecutionContext(
     return null;
   }
 
-  const managerSessionId = readEnvValue(env, "OYAKATA_MANAGER_SESSION_ID");
-  const authToken = readEnvValue(env, "OYAKATA_MANAGER_AUTH_TOKEN");
+  const managerSessionId = readEnvValue(env, "DIVEDRA_MANAGER_SESSION_ID");
+  const authToken = readEnvValue(env, "DIVEDRA_MANAGER_AUTH_TOKEN");
   return {
     workflowId,
     workflowExecutionId,
@@ -280,7 +280,7 @@ export function resolveManagerGraphqlEndpoint(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
   return (
-    readEnvValue(env, "OYAKATA_GRAPHQL_ENDPOINT") ?? DEFAULT_GRAPHQL_ENDPOINT
+    readEnvValue(env, "DIVEDRA_GRAPHQL_ENDPOINT") ?? DEFAULT_GRAPHQL_ENDPOINT
   );
 }
 
@@ -294,13 +294,13 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly env?: Readonly<Record<string, string | undefined>>;
 }): AmbientManagerControlPlaneEnvironment {
   return {
-    OYAKATA_GRAPHQL_ENDPOINT: resolveManagerGraphqlEndpoint(input.env),
-    OYAKATA_MANAGER_AUTH_TOKEN: input.authToken,
-    OYAKATA_MANAGER_SESSION_ID: input.managerSessionId,
-    OYAKATA_WORKFLOW_ID: input.workflowId,
-    OYAKATA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
-    OYAKATA_MANAGER_NODE_ID: input.managerNodeId,
-    OYAKATA_MANAGER_NODE_EXEC_ID: input.managerNodeExecId,
+    DIVEDRA_GRAPHQL_ENDPOINT: resolveManagerGraphqlEndpoint(input.env),
+    DIVEDRA_MANAGER_AUTH_TOKEN: input.authToken,
+    DIVEDRA_MANAGER_SESSION_ID: input.managerSessionId,
+    DIVEDRA_WORKFLOW_ID: input.workflowId,
+    DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
+    DIVEDRA_MANAGER_NODE_ID: input.managerNodeId,
+    DIVEDRA_MANAGER_NODE_EXEC_ID: input.managerNodeExecId,
   };
 }
 

@@ -312,23 +312,23 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 function printHelp(io: CliIo): void {
   io.stdout("Usage:");
   io.stdout(
-    "  oyakata workflow <create|validate|inspect|run> <name> [options]",
+    "  divedra workflow <create|validate|inspect|run> <name> [options]",
   );
   io.stdout(
-    "  oyakata session <status|progress|resume> <session-id> [options]",
+    "  divedra session <status|progress|resume> <session-id> [options]",
   );
-  io.stdout("  oyakata session rerun <session-id> <node-id> [options]");
+  io.stdout("  divedra session rerun <session-id> <node-id> [options]");
   io.stdout(
-    "  oyakata tui [workflow-name] [--workflow <name>] [--resume-session <id>] [--variables <path>] [--mock-scenario <path>] [--max-steps <n>]",
-  );
-  io.stdout(
-    "  oyakata serve [workflow-name] [--host <host>] [--port <port>] [--read-only] [--no-exec] [--open]",
+    "  divedra tui [workflow-name] [--workflow <name>] [--resume-session <id>] [--variables <path>] [--mock-scenario <path>] [--max-steps <n>]",
   );
   io.stdout(
-    "  oyakata gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
+    "  divedra serve [workflow-name] [--host <host>] [--port <port>] [--read-only] [--no-exec] [--open]",
   );
   io.stdout(
-    "  oyakata call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
+    "  divedra gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
+  );
+  io.stdout(
+    "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
   );
 }
 
@@ -482,10 +482,10 @@ function resolveGraphqlCliTransport(
     return null;
   }
   const authTokenEnvName =
-    parsedOptions.authTokenEnv ?? "OYAKATA_MANAGER_AUTH_TOKEN";
+    parsedOptions.authTokenEnv ?? "DIVEDRA_MANAGER_AUTH_TOKEN";
   const authToken =
     parsedOptions.authToken ?? env[authTokenEnvName] ?? undefined;
-  const ambientManagerSessionId = env["OYAKATA_MANAGER_SESSION_ID"];
+  const ambientManagerSessionId = env["DIVEDRA_MANAGER_SESSION_ID"];
   const managerSessionId =
     typeof ambientManagerSessionId === "string" &&
     ambientManagerSessionId.length > 0
@@ -974,7 +974,7 @@ export async function runCli(
     const document = parsed.positionals.slice(1).join(" ").trim();
     if (document.length === 0) {
       io.stderr("GraphQL document is required");
-      io.stderr("usage: oyakata gql <graphql-document> [options]");
+      io.stderr("usage: divedra gql <graphql-document> [options]");
       return 2;
     }
 
@@ -989,13 +989,13 @@ export async function runCli(
 
     const endpoint =
       parsed.options.endpoint ??
-      env["OYAKATA_GRAPHQL_ENDPOINT"] ??
+      env["DIVEDRA_GRAPHQL_ENDPOINT"] ??
       DEFAULT_GRAPHQL_ENDPOINT;
     const authTokenEnvName =
-      parsed.options.authTokenEnv ?? "OYAKATA_MANAGER_AUTH_TOKEN";
+      parsed.options.authTokenEnv ?? "DIVEDRA_MANAGER_AUTH_TOKEN";
     const authToken =
       parsed.options.authToken ?? env[authTokenEnvName] ?? undefined;
-    const ambientManagerSessionId = env["OYAKATA_MANAGER_SESSION_ID"];
+    const ambientManagerSessionId = env["DIVEDRA_MANAGER_SESSION_ID"];
     const managerSessionId =
       typeof ambientManagerSessionId === "string" &&
       ambientManagerSessionId.length > 0
@@ -1123,7 +1123,7 @@ export async function runCli(
     ) {
       io.stderr("workflow id, workflow run id, and node id are required");
       io.stderr(
-        "usage: oyakata call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
+        "usage: divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
       );
       return 2;
     }
@@ -1602,7 +1602,7 @@ export async function runCli(
       if (fromNodeId === undefined) {
         io.stderr("node id is required for session rerun");
         io.stderr(
-          "usage: oyakata session rerun <session-id> <node-id> [options]",
+          "usage: divedra session rerun <session-id> <node-id> [options]",
         );
         return 2;
       }

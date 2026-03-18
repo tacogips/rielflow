@@ -28,7 +28,7 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR",
+      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -110,7 +110,7 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(body["nodeExecId"]).toBe("exec-1");
     expect(body["executionMailbox"]).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR",
+        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
         paths: {
           inputPath: "inbox/input.json",
           outputPath: "outbox/output.json",
@@ -191,13 +191,13 @@ describe("ClaudeCodeAgentAdapter", () => {
         ...baseInput,
         ambientManagerContext: {
           environment: {
-            OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-            OYAKATA_MANAGER_AUTH_TOKEN: "secret",
-            OYAKATA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-            OYAKATA_WORKFLOW_ID: "wf",
-            OYAKATA_WORKFLOW_EXECUTION_ID: "sess-1",
-            OYAKATA_MANAGER_NODE_ID: "node-1",
-            OYAKATA_MANAGER_NODE_EXEC_ID: "exec-1",
+            DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+            DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+            DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+            DIVEDRA_WORKFLOW_ID: "wf",
+            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+            DIVEDRA_MANAGER_NODE_ID: "node-1",
+            DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
           },
         },
       },
@@ -212,13 +212,13 @@ describe("ClaudeCodeAgentAdapter", () => {
     >;
     expect(body["ambientManagerContext"]).toEqual({
       environment: {
-        OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-        OYAKATA_MANAGER_AUTH_TOKEN: "secret",
-        OYAKATA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-        OYAKATA_WORKFLOW_ID: "wf",
-        OYAKATA_WORKFLOW_EXECUTION_ID: "sess-1",
-        OYAKATA_MANAGER_NODE_ID: "node-1",
-        OYAKATA_MANAGER_NODE_EXEC_ID: "exec-1",
+        DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+        DIVEDRA_WORKFLOW_ID: "wf",
+        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+        DIVEDRA_MANAGER_NODE_ID: "node-1",
+        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
       },
     });
   });

@@ -11,7 +11,7 @@ function makeWorkflow(): WorkflowJson {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "sw-a",
@@ -34,15 +34,15 @@ function makeWorkflow(): WorkflowJson {
     ],
     nodes: [
       {
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "manager",
         completion: { type: "none" },
       },
       {
         id: "a-manager",
         nodeFile: "node-a-manager.json",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -60,7 +60,7 @@ function makeWorkflow(): WorkflowJson {
       {
         id: "b-manager",
         nodeFile: "node-b-manager.json",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -91,7 +91,7 @@ function makeSession(
     workflowId: "wf",
     status: "running",
     startedAt: "2026-02-24T00:00:00.000Z",
-    queue: ["oyakata-manager"],
+    queue: ["divedra-manager"],
     nodeExecutionCounter: 0,
     nodeExecutionCounts: {},
     loopIterationCounts: {},
@@ -157,13 +157,13 @@ describe("planRootManagerSubWorkflowStarts", () => {
         {
           id: "a-manager",
           nodeFile: "node-a-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
       ],
     } satisfies WorkflowJson;
     const session = makeSession({
-      queue: ["oyakata-manager", "a-manager"],
+      queue: ["divedra-manager", "a-manager"],
       runtimeVariables: { humanInput: { topic: "x" } },
     });
 
@@ -186,7 +186,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
         {
           id: "a-manager",
           nodeFile: "node-a-manager.json",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           completion: { type: "none" },
         },
       ],
@@ -198,7 +198,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
           workflowId: "wf",
           workflowExecutionId: "sess-abc12345",
           communicationId: "comm-000001",
-          fromNodeId: "oyakata-manager",
+          fromNodeId: "divedra-manager",
           toNodeId: "a-manager",
           toSubWorkflowId: "sw-a",
           routingScope: "parent-to-sub-workflow",
@@ -206,9 +206,9 @@ describe("planRootManagerSubWorkflowStarts", () => {
           payloadRef: {
             workflowExecutionId: "sess-abc12345",
             workflowId: "wf",
-            outputNodeId: "oyakata-manager",
+            outputNodeId: "divedra-manager",
             nodeExecId: "exec-000001",
-            artifactDir: "/tmp/oyakata-manager/exec-000001",
+            artifactDir: "/tmp/divedra-manager/exec-000001",
           },
           deliveryKind: "edge-transition",
           transitionWhen: "sub-workflow-start:sw-a",
@@ -285,7 +285,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
 });
 
 describe("planSubWorkflowChildInputs", () => {
-  test("queues the child input for a sub-oyakata-manager that owns a sub-workflow", () => {
+  test("queues the child input for a sub-divedra-manager that owns a sub-workflow", () => {
     const workflow = makeWorkflow();
     const session = makeSession();
     const planned = planSubWorkflowChildInputs({
@@ -307,7 +307,7 @@ describe("planSubWorkflowChildInputs", () => {
   test("does not queue the child input again while it is already queued", () => {
     const workflow = makeWorkflow();
     const session = makeSession({
-      queue: ["oyakata-manager", "a-input"],
+      queue: ["divedra-manager", "a-input"],
     });
     const planned = planSubWorkflowChildInputs({
       workflow: {
@@ -348,7 +348,7 @@ describe("planSubWorkflowChildInputs", () => {
             artifactDir: "/tmp/a-output/exec-000001",
           },
           deliveryKind: "edge-transition",
-          transitionWhen: "sub-oyakata-manager-input:a-input",
+          transitionWhen: "sub-divedra-manager-input:a-input",
           status: "delivered",
           deliveryAttemptIds: ["attempt-000001"],
           activeDeliveryAttemptId: "attempt-000001",

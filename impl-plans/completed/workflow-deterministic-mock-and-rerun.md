@@ -10,7 +10,7 @@
 Add deterministic mock execution control for workflow nodes, improve progress visibility, and support rerun from an arbitrary node using an existing session as baseline.
 
 Out of scope:
-- Upstream changes in external agent repositories unless runtime integration in `oyakata` is insufficient
+- Upstream changes in external agent repositories unless runtime integration in `divedra` is insufficient
 - UI/web visualization changes
 
 ## Modules
@@ -107,7 +107,7 @@ Endpoints:
 
 ### 5. Example Workflow Asset
 
-#### .oyakata/software-auto-pipeline/*
+#### .divedra/software-auto-pipeline/*
 
 **Status**: Completed
 
@@ -125,7 +125,7 @@ Endpoints:
 | Engine rerun | `src/workflow/engine.ts` | COMPLETED | `src/workflow/engine.test.ts` |
 | CLI commands | `src/cli.ts` | COMPLETED | `src/cli.test.ts` |
 | API endpoints | `src/server/api.ts` | COMPLETED | `src/server/api.test.ts` |
-| Example workflow | `.oyakata/software-auto-pipeline/*` | COMPLETED | Exercised via CLI/API run paths |
+| Example workflow | `.divedra/software-auto-pipeline/*` | COMPLETED | Exercised via CLI/API run paths |
 
 ## Dependencies
 
@@ -142,7 +142,7 @@ Endpoints:
 - [x] Session progress inspection command implemented
 - [x] Session rerun-from-node implemented
 - [x] API parity for rerun and mock execution implemented
-- [x] End-to-end sample workflow committed under `.oyakata/`
+- [x] End-to-end sample workflow committed under `.divedra/`
 - [x] Tests and type checking pass
 
 ## Progress Log
@@ -151,4 +151,4 @@ Endpoints:
 **Tasks Completed**: adapter mock scenario support, engine rerun support, CLI progress/rerun/mock options, API rerun/mock support, sample workflow authoring, README updates, test updates
 **Tasks In Progress**: none
 **Blockers**: none
-**Notes**: Upstream agent repositories are not required for deterministic mode because behavior is mocked in `oyakata` adapter layer.
+**Notes**: Upstream agent repositories are not required for deterministic mode because behavior is mocked in `divedra` adapter layer.

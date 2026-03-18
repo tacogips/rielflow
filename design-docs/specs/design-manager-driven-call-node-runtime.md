@@ -1,6 +1,6 @@
 # Manager-Driven Call-Node Runtime
 
-This document defines the near-term runtime direction where one long-lived `oyakata` manager session drives workflow execution by explicitly calling child nodes.
+This document defines the near-term runtime direction where one long-lived `divedra` manager session drives workflow execution by explicitly calling child nodes.
 
 ## Overview
 
@@ -8,7 +8,7 @@ The goal of this design is to simplify orchestration while preserving the parts 
 
 - node roles remain explicitly defined in the workflow
 - execution order and loop structure remain workflow-owned
-- the active `oyakata` manager session decides which node to call next
+- the active `divedra` manager session decides which node to call next
 - the manager prompt must keep workflow order and loop intent explicit without adding a separate runtime order-state machine
 - node output is still accepted and published by the runtime, not by the node itself
 
@@ -47,11 +47,11 @@ The runtime remains responsible for:
 
 ## Approved Component Names
 
-- `Oyakata Session Driver`
+- `Divedra Session Driver`
   - long-lived manager AI session for one workflow run
   - reads workflow state, decides next node, interprets prior results, and decides semantic retries/loop progression
 - `Call-Node API`
-  - constrained manager tool interface used by the `Oyakata Session Driver`
+  - constrained manager tool interface used by the `Divedra Session Driver`
   - transports a node-call request into the runtime
 - `Execution Dispatcher`
   - lifecycle owner for one `call-node` request
@@ -68,7 +68,7 @@ The runtime remains responsible for:
 
 ## Roles and Responsibilities
 
-### Oyakata Session Driver
+### Divedra Session Driver
 
 Responsibilities:
 
@@ -95,7 +95,7 @@ Responsibilities:
 Recommended direction:
 
 - keep GraphQL as the underlying control plane
-- provide `oyakata call-node` as a dedicated wrapper for manager use
+- provide `divedra call-node` as a dedicated wrapper for manager use
 - prefer structured message payloads or file-backed payload input over raw prompt text in argv
 
 ### Execution Dispatcher
@@ -173,7 +173,7 @@ Required behavior:
    - prior candidate summary or reference when useful
    - instruction to regenerate only the structured output
 6. The loop repeats until success or the configured retry budget is exhausted.
-7. If the retry budget is exhausted, the node call fails and control returns to the `Oyakata Session Driver`.
+7. If the retry budget is exhausted, the node call fails and control returns to the `Divedra Session Driver`.
 
 This keeps structured-output reliability without requiring a separate runtime planner.
 
@@ -198,7 +198,7 @@ That means:
 Preferred manager-facing shape:
 
 ```text
-oyakata call-node <workflow-id> <workflow-run-id> <node-id> [structured message input]
+divedra call-node <workflow-id> <workflow-run-id> <node-id> [structured message input]
 ```
 
 Recommended request content:
@@ -246,7 +246,7 @@ sequenceDiagram
     autonumber
     actor U as User / Caller
     participant W as Workflow Definition
-    participant O as Oyakata Session Driver
+    participant O as Divedra Session Driver
     participant C as Call-Node API
     participant E as Execution Dispatcher
     participant A as Node Adapter
@@ -309,6 +309,6 @@ The intended migration direction is:
 
 1. keep workflow JSON and node payload contracts
 2. introduce manager-facing `call-node`
-3. shift next-step policy to the `Oyakata Session Driver`
+3. shift next-step policy to the `Divedra Session Driver`
 4. keep runtime-owned output validation and publication
 5. reduce queue/scheduler responsibilities over time rather than removing durability or output-contract guarantees

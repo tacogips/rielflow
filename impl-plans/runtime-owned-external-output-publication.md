@@ -162,7 +162,7 @@ test("fails deterministically when external output publication cannot persist it
 
 ### 4. Design Consistency References
 
-#### `design-docs/specs/design-oyakata-manager-prompt-contract.md`
+#### `design-docs/specs/design-divedra-manager-prompt-contract.md`
 #### `design-docs/specs/design-runtime-owned-external-output-publication.md`
 
 **Status**: COMPLETED
@@ -301,4 +301,4 @@ bun test
 
 - **Previous**: `impl-plans/node-output-contract-and-validation.md`
 - **Next**: None
-- **Depends On**: `impl-plans/oyakata-manager-prompt-contract.md`, `impl-plans/node-output-contract-and-validation.md`
+- **Depends On**: `impl-plans/divedra-manager-prompt-contract.md`, `impl-plans/node-output-contract-and-validation.md`

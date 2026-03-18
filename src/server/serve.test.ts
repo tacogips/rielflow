@@ -138,7 +138,7 @@ describe("startServe", () => {
         {
           host: "127.0.0.1",
           env: {
-            OYAKATA_SERVE_PORT: "abc",
+            DIVEDRA_SERVE_PORT: "abc",
           },
         },
         {

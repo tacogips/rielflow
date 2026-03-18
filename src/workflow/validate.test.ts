@@ -14,13 +14,13 @@ function makeValidRaw(): {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -30,19 +30,19 @@ function makeValidRaw(): {
           completion: { type: "none" },
         },
       ],
-      edges: [{ from: "oyakata-manager", to: "worker-1", when: "always" }],
+      edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
       loops: [],
       branching: { mode: "fan-out" },
     },
     workflowVis: {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "worker-1", order: 1 },
       ],
     },
     nodePayloads: {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -139,15 +139,15 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("normalizes legacy sub-manager node kind to sub-oyakata-manager", () => {
+  test("normalizes legacy sub-manager node kind to sub-divedra-manager", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -165,7 +165,7 @@ describe("validateWorkflowBundle", () => {
       return;
     }
     expect(result.value.bundle.workflow.nodes[1]?.kind).toBe(
-      "sub-oyakata-manager",
+      "sub-divedra-manager",
     );
     expect(
       result.value.issues.some(
@@ -182,9 +182,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -217,9 +217,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -1019,7 +1019,7 @@ describe("validateWorkflowBundle", () => {
     raw.workflowVis = {
       nodes: [
         { id: "worker-1", x: 200, y: 10, width: 100, height: 80 },
-        { id: "oyakata-manager", x: 10, y: 10, width: 100, height: 80 },
+        { id: "divedra-manager", x: 10, y: 10, width: 100, height: 80 },
       ],
       viewport: { x: 0, y: 0, zoom: 1 },
     };
@@ -1031,7 +1031,7 @@ describe("validateWorkflowBundle", () => {
     }
 
     expect(result.value.workflowVis.nodes).toEqual([
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "worker-1", order: 1 },
     ]);
   });
@@ -1040,7 +1040,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0, indent: 0, color: "manager" },
+        { id: "divedra-manager", order: 0, indent: 0, color: "manager" },
         { id: "worker-1", order: 1, indent: 1, color: "loop-main" },
       ],
     };
@@ -1052,7 +1052,7 @@ describe("validateWorkflowBundle", () => {
     }
 
     expect(result.value.workflowVis.nodes).toEqual([
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "worker-1", order: 1 },
     ]);
   });
@@ -1095,9 +1095,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "task",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -1175,7 +1175,7 @@ describe("validateWorkflowBundle", () => {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [
         {
           id: "sw-a",
@@ -1198,14 +1198,14 @@ describe("validateWorkflowBundle", () => {
       ],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sub-manager-a",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sub-manager-a.json",
           completion: { type: "none" },
         },
@@ -1234,7 +1234,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "sub-manager-a", order: 1 },
         { id: "input-a", order: 2 },
         { id: "output-a", order: 3 },
@@ -1242,8 +1242,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1297,7 +1297,7 @@ describe("validateWorkflowBundle", () => {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [
         {
           id: "sw-a",
@@ -1310,14 +1310,14 @@ describe("validateWorkflowBundle", () => {
       ],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sub-manager-a",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sub-manager-a.json",
           completion: { type: "none" },
         },
@@ -1340,15 +1340,15 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "sub-manager-a", order: 1 },
         { id: "input-a", order: 2 },
         { id: "output-a", order: 3 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1391,7 +1391,7 @@ describe("validateWorkflowBundle", () => {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [
         {
           id: "sw-a",
@@ -1405,14 +1405,14 @@ describe("validateWorkflowBundle", () => {
       ],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sub-manager-a",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sub-manager-a.json",
           completion: { type: "none" },
         },
@@ -1429,14 +1429,14 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "sub-manager-a", order: 1 },
         { id: "sub-output-a", order: 2 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1476,7 +1476,7 @@ describe("validateWorkflowBundle", () => {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [
         {
           id: "sw-a",
@@ -1490,14 +1490,14 @@ describe("validateWorkflowBundle", () => {
       ],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sub-manager-a",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sub-manager-a.json",
           completion: { type: "none" },
         },
@@ -1520,15 +1520,15 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "sub-manager-a", order: 1 },
         { id: "input-a", order: 2 },
         { id: "output-a", order: 3 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1567,13 +1567,13 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects sub-workflow managerNodeId that does not reference a sub-oyakata-manager node", () => {
+  test("rejects sub-workflow managerNodeId that does not reference a sub-divedra-manager node", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       subWorkflows: [
         {
           id: "sw-a",
@@ -1587,9 +1587,9 @@ describe("validateWorkflowBundle", () => {
       ],
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -1617,15 +1617,15 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "plain-manager-a", order: 1 },
         { id: "input-a", order: 2 },
         { id: "output-a", order: 3 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1660,7 +1660,7 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "workflow.subWorkflows[0].managerNodeId" &&
-          issue.message.includes("kind 'sub-oyakata-manager'"),
+          issue.message.includes("kind 'sub-divedra-manager'"),
       ),
     ).toBe(true);
   });
@@ -1669,7 +1669,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "worker-1", order: 0 },
       ],
     };
@@ -1691,7 +1691,7 @@ describe("validateWorkflowBundle", () => {
   test("rejects missing vertical order for any workflow node", () => {
     const raw = makeValidRaw();
     raw.workflowVis = {
-      nodes: [{ id: "oyakata-manager", order: 0 }],
+      nodes: [{ id: "divedra-manager", order: 0 }],
     };
 
     const result = validateWorkflowBundle(raw);
@@ -1712,7 +1712,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "worker-1", order: 1 },
         { id: "ghost", order: 2 },
       ],
@@ -1737,14 +1737,14 @@ describe("validateWorkflowBundle", () => {
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
       prompts: {
-        oyakataPromptTemplate: "Coordinate {{topic}}.",
+        divedraPromptTemplate: "Coordinate {{topic}}.",
         workerSystemPromptTemplate: "Return the node payload for {{topic}}.",
       },
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -1755,7 +1755,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "sw1-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw1-manager.json",
           completion: { type: "none" },
         },
@@ -1773,7 +1773,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "sw2-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw2-manager.json",
           completion: { type: "none" },
         },
@@ -1791,7 +1791,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
       edges: [
-        { from: "oyakata-manager", to: "branch-judge", when: "always" },
+        { from: "divedra-manager", to: "branch-judge", when: "always" },
         { from: "branch-judge", to: "sw1-manager", when: "take_sw1" },
         { from: "sw1-output", to: "sw2-manager", when: "always" },
       ],
@@ -1827,7 +1827,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "branch-judge", order: 1 },
         { id: "sw1-manager", order: 2 },
         { id: "sw1-input", order: 3 },
@@ -1838,8 +1838,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -1893,7 +1893,7 @@ describe("validateWorkflowBundle", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.workflow.prompts?.oyakataPromptTemplate).toBe(
+    expect(result.value.workflow.prompts?.divedraPromptTemplate).toBe(
       "Coordinate {{topic}}.",
     );
     expect(result.value.workflow.prompts?.workerSystemPromptTemplate).toBe(
@@ -1914,14 +1914,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "loop-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-loop-manager.json",
           completion: { type: "none" },
         },
@@ -1938,7 +1938,7 @@ describe("validateWorkflowBundle", () => {
           completion: { type: "none" },
         },
       ],
-      edges: [{ from: "oyakata-manager", to: "loop-manager", when: "always" }],
+      edges: [{ from: "divedra-manager", to: "loop-manager", when: "always" }],
       subWorkflows: [
         {
           id: "loop-body",
@@ -1955,15 +1955,15 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "loop-manager", order: 1 },
         { id: "loop-input", order: 2 },
         { id: "loop-output", order: 3 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2007,14 +2007,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "loop-manager-a",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-loop-manager-a.json",
           completion: { type: "none" },
         },
@@ -2032,7 +2032,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "loop-manager-b",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-loop-manager-b.json",
           completion: { type: "none" },
         },
@@ -2056,9 +2056,9 @@ describe("validateWorkflowBundle", () => {
         },
       ],
       edges: [
-        { from: "oyakata-manager", to: "loop-manager-a", when: "always" },
+        { from: "divedra-manager", to: "loop-manager-a", when: "always" },
         { from: "loop-judge", to: "loop-manager-a", when: "continue_round" },
-        { from: "loop-judge", to: "oyakata-manager", when: "loop_exit" },
+        { from: "loop-judge", to: "divedra-manager", when: "loop_exit" },
       ],
       subWorkflows: [
         {
@@ -2093,7 +2093,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "loop-manager-a", order: 1 },
         { id: "loop-input-a", order: 2 },
         { id: "loop-output-a", order: 3 },
@@ -2104,8 +2104,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2175,9 +2175,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -2188,7 +2188,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "branch-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-branch-manager.json",
           completion: { type: "none" },
         },
@@ -2206,7 +2206,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
       edges: [
-        { from: "oyakata-manager", to: "prepare", when: "always" },
+        { from: "divedra-manager", to: "prepare", when: "always" },
         { from: "prepare", to: "branch-manager", when: "always" },
       ],
       subWorkflows: [
@@ -2224,7 +2224,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "prepare", order: 1 },
         { id: "branch-manager", order: 2 },
         { id: "branch-input", order: 3 },
@@ -2232,8 +2232,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2283,14 +2283,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "loop-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-loop-manager.json",
           completion: { type: "none" },
         },
@@ -2320,9 +2320,9 @@ describe("validateWorkflowBundle", () => {
         },
       ],
       edges: [
-        { from: "oyakata-manager", to: "loop-manager", when: "always" },
+        { from: "divedra-manager", to: "loop-manager", when: "always" },
         { from: "loop-judge", to: "loop-worker", when: "continue_round" },
-        { from: "loop-judge", to: "oyakata-manager", when: "loop_exit" },
+        { from: "loop-judge", to: "divedra-manager", when: "loop_exit" },
       ],
       subWorkflows: [
         {
@@ -2347,7 +2347,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "loop-manager", order: 1 },
         { id: "loop-input", order: 2 },
         { id: "loop-worker", order: 3 },
@@ -2356,8 +2356,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2415,14 +2415,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "a-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-a-manager.json",
           completion: { type: "none" },
         },
@@ -2434,7 +2434,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "a-inner-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-a-inner-manager.json",
           completion: { type: "none" },
         },
@@ -2481,7 +2481,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "a-manager", order: 1 },
         { id: "a-input", order: 2 },
         { id: "a-inner-manager", order: 3 },
@@ -2491,8 +2491,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2545,14 +2545,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "a-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-a-manager.json",
           completion: { type: "none" },
         },
@@ -2564,7 +2564,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "b-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-b-manager.json",
           completion: { type: "none" },
         },
@@ -2611,7 +2611,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "a-manager", order: 1 },
         { id: "a-input", order: 2 },
         { id: "b-manager", order: 3 },
@@ -2621,8 +2621,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2685,9 +2685,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -2698,7 +2698,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "sw-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw-manager.json",
           completion: { type: "none" },
         },
@@ -2730,7 +2730,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "root-worker", order: 1 },
         { id: "sw-manager", order: 2 },
         { id: "sw-input", order: 3 },
@@ -2738,8 +2738,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2790,9 +2790,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -2803,7 +2803,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "sw-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw-manager.json",
           completion: { type: "none" },
         },
@@ -2835,7 +2835,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "root-worker", order: 1 },
         { id: "sw-manager", order: 2 },
         { id: "sw-input", order: 3 },
@@ -2843,8 +2843,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -2885,7 +2885,7 @@ describe("validateWorkflowBundle", () => {
       .map((entry) => `${entry.path}:${entry.message}`)
       .join("\n");
     expect(messages).toContain(
-      "workflow.edges[0].to:cross-scope edge from sub-workflow 'sw' to root scope must target workflow manager 'oyakata-manager', not root node 'root-worker'",
+      "workflow.edges[0].to:cross-scope edge from sub-workflow 'sw' to root scope must target workflow manager 'divedra-manager', not root node 'root-worker'",
     );
   });
 
@@ -2895,14 +2895,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "root-manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "a-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-a-manager.json",
           completion: { type: "none" },
         },
@@ -2920,7 +2920,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "b-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-b-manager.json",
           completion: { type: "none" },
         },
@@ -2961,7 +2961,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "a-manager", order: 1 },
         { id: "a-input", order: 2 },
         { id: "a-output", order: 3 },
@@ -2971,8 +2971,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -3035,9 +3035,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -3054,7 +3054,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
       edges: [
-        { from: "oyakata-manager", to: "loop-judge", when: "always" },
+        { from: "divedra-manager", to: "loop-judge", when: "always" },
         { from: "loop-judge", to: "worker-1", when: "continue_round" },
       ],
       loops: [
@@ -3068,7 +3068,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "loop-judge", order: 1 },
         { id: "worker-1", order: 2 },
       ],
@@ -3100,9 +3100,9 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -3153,7 +3153,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "loop-a-start", order: 1 },
         { id: "loop-b-start", order: 2 },
         { id: "loop-a-judge", order: 3 },
@@ -3205,14 +3205,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "group-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-group-manager.json",
           completion: { type: "none" },
         },
@@ -3243,7 +3243,7 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [
         { from: "loop-judge", to: "loop-start", when: "retry" },
-        { from: "loop-judge", to: "oyakata-manager", when: "exit" },
+        { from: "loop-judge", to: "divedra-manager", when: "exit" },
       ],
       subWorkflows: [
         {
@@ -3272,7 +3272,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "group-manager", order: 1 },
         { id: "group-input", order: 2 },
         { id: "loop-start", order: 3 },
@@ -3331,14 +3331,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sw1-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw1-manager.json",
           completion: { type: "none" },
         },
@@ -3383,15 +3383,15 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", order: 0 },
+        { id: "divedra-manager", order: 0 },
         { id: "sw1-manager", order: 1 },
         { id: "sw1-input", order: 2 },
         { id: "sw1-output", order: 3 },
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},
@@ -3438,14 +3438,14 @@ describe("validateWorkflowBundle", () => {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
           id: "sw1-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw1-manager.json",
           completion: { type: "none" },
         },
@@ -3463,7 +3463,7 @@ describe("validateWorkflowBundle", () => {
         },
         {
           id: "sw2-manager",
-          kind: "sub-oyakata-manager",
+          kind: "sub-divedra-manager",
           nodeFile: "node-sw2-manager.json",
           completion: { type: "none" },
         },
@@ -3512,7 +3512,7 @@ describe("validateWorkflowBundle", () => {
     };
     raw.workflowVis = {
       nodes: [
-        { id: "oyakata-manager", x: 10, y: 10, width: 100, height: 80 },
+        { id: "divedra-manager", x: 10, y: 10, width: 100, height: 80 },
         { id: "sw1-manager", x: 120, y: 10, width: 100, height: 80 },
         { id: "sw1-input", x: 230, y: 10, width: 100, height: 80 },
         { id: "sw1-output", x: 340, y: 10, width: 100, height: 80 },
@@ -3522,8 +3522,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "node-oyakata-manager.json": {
-        id: "oyakata-manager",
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
         model: "tacogips/codex-agent",
         promptTemplate: "manager",
         variables: {},

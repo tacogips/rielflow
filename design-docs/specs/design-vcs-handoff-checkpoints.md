@@ -1,12 +1,12 @@
 # VCS Handoff Checkpoints Design
 
-This document defines how `oyakata` creates deterministic handoff artifacts that can be checkpointed in Git/Jujutsu during long-running workflows.
+This document defines how `divedra` creates deterministic handoff artifacts that can be checkpointed in Git/Jujutsu during long-running workflows.
 
 ## Overview
 
 Goal: improve output-to-next-input reliability by making handoff state explicit and auditable.
 
-`oyakata` continues to use runtime artifacts as the primary execution contract, and VCS as a durability/audit layer.
+`divedra` continues to use runtime artifacts as the primary execution contract, and VCS as a durability/audit layer.
 
 ## Artifact Additions
 

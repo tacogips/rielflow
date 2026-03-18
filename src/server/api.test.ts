@@ -8,7 +8,7 @@ import { createWorkflowTemplate } from "../workflow/create";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-api-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-api-test-"));
   tempDirs.push(directory);
   return directory;
 }
@@ -34,7 +34,7 @@ describe("handleApiRequest", () => {
     });
     expect(uiRes.status).toBe(503);
     expect(uiRes.headers.get("content-type")).toContain("text/html");
-    await expect(uiRes.text()).resolves.toContain("oyakata UI is unavailable");
+    await expect(uiRes.text()).resolves.toContain("divedra UI is unavailable");
 
     const healthRes = await handleApiRequest(
       new Request("http://localhost/healthz"),

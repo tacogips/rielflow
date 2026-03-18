@@ -49,12 +49,12 @@ function makeWorkflowResponse(workflowName = "demo"): WorkflowResponse {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120000,
         },
-        managerNodeId: "oyakata-manager",
+        managerNodeId: "divedra-manager",
         subWorkflows: [],
         nodes: [
           {
-            id: "oyakata-manager",
-            nodeFile: "node-oyakata-manager.json",
+            id: "divedra-manager",
+            nodeFile: "node-divedra-manager.json",
             kind: "root-manager",
             completion: { type: "none" },
           },
@@ -64,11 +64,11 @@ function makeWorkflowResponse(workflowName = "demo"): WorkflowResponse {
         branching: { mode: "fan-out" },
       },
       workflowVis: {
-        nodes: [{ id: "oyakata-manager", order: 0 }],
+        nodes: [{ id: "divedra-manager", order: 0 }],
       },
       nodePayloads: {
-        "oyakata-manager": {
-          id: "oyakata-manager",
+        "divedra-manager": {
+          id: "divedra-manager",
           model: "gpt-5",
           promptTemplate: "Coordinate",
           variables: {},
@@ -365,7 +365,7 @@ describe("api-client GraphQL session transport", () => {
       },
       async: true,
       mockScenario: {
-        "oyakata-manager": {
+        "divedra-manager": {
           provider: "scenario-mock",
           when: {
             always: true,

@@ -9,7 +9,7 @@ import { saveWorkflowToDisk } from "./save";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-save-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-save-test-"));
   tempDirs.push(directory);
   return directory;
 }
@@ -42,12 +42,12 @@ describe("saveWorkflowToDisk", () => {
     }
 
     const originalPayload =
-      loaded.value.bundle.nodePayloads["oyakata-manager"];
-    expect(originalPayload?.promptTemplateFile).toBe("prompts/oyakata-manager.md");
+      loaded.value.bundle.nodePayloads["divedra-manager"];
+    expect(originalPayload?.promptTemplateFile).toBe("prompts/divedra-manager.md");
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
-      "oyakata-manager": {
+      "divedra-manager": {
         ...originalPayload,
         promptTemplate: "Updated manager prompt from save path",
       },
@@ -70,16 +70,16 @@ describe("saveWorkflowToDisk", () => {
     }
 
     const promptFileText = await readFile(
-      path.join(root, "demo", "prompts", "oyakata-manager.md"),
+      path.join(root, "demo", "prompts", "divedra-manager.md"),
       "utf8",
     );
     expect(promptFileText).toBe("Updated manager prompt from save path\n");
 
     const nodeJsonRaw = await readFile(
-      path.join(root, "demo", "node-oyakata-manager.json"),
+      path.join(root, "demo", "node-divedra-manager.json"),
       "utf8",
     );
-    expect(nodeJsonRaw).toContain('"promptTemplateFile": "prompts/oyakata-manager.md"');
+    expect(nodeJsonRaw).toContain('"promptTemplateFile": "prompts/divedra-manager.md"');
     expect(nodeJsonRaw).not.toContain('"promptTemplate":');
 
     const reloaded = await loadWorkflowFromDisk("demo", {
@@ -90,7 +90,7 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["oyakata-manager"]?.promptTemplate).toBe(
+    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
       "Updated manager prompt from save path\n",
     );
   });
@@ -114,8 +114,8 @@ describe("saveWorkflowToDisk", () => {
     }
 
     const originalPayload =
-      loaded.value.bundle.nodePayloads["oyakata-manager"];
-    expect(originalPayload?.promptTemplateFile).toBe("prompts/oyakata-manager.md");
+      loaded.value.bundle.nodePayloads["divedra-manager"];
+    expect(originalPayload?.promptTemplateFile).toBe("prompts/divedra-manager.md");
 
     const strippedPromptPayload = {
       ...originalPayload,
@@ -124,7 +124,7 @@ describe("saveWorkflowToDisk", () => {
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
-      "oyakata-manager": strippedPromptPayload,
+      "divedra-manager": strippedPromptPayload,
     };
 
     const saveResult = await saveWorkflowToDisk(
@@ -144,7 +144,7 @@ describe("saveWorkflowToDisk", () => {
     }
 
     const promptFileText = await readFile(
-      path.join(root, "demo", "prompts", "oyakata-manager.md"),
+      path.join(root, "demo", "prompts", "divedra-manager.md"),
       "utf8",
     );
     expect(promptFileText).toBe(
@@ -177,8 +177,8 @@ describe("saveWorkflowToDisk", () => {
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
-      "oyakata-manager": {
-        ...loaded.value.bundle.nodePayloads["oyakata-manager"],
+      "divedra-manager": {
+        ...loaded.value.bundle.nodePayloads["divedra-manager"],
         promptTemplateFile: "workflow.json",
         promptTemplate: "This must never replace workflow.json",
       },
@@ -203,7 +203,7 @@ describe("saveWorkflowToDisk", () => {
     expect(saveResult.error.code).toBe("VALIDATION");
     expect(saveResult.error.issues?.some(
       (issue) =>
-        issue.path === "nodePayloads.node-oyakata-manager.json.promptTemplateFile" &&
+        issue.path === "nodePayloads.node-divedra-manager.json.promptTemplateFile" &&
         issue.message.includes("must not target canonical workflow definition files"),
     )).toBe(true);
 
@@ -234,13 +234,13 @@ describe("saveWorkflowToDisk", () => {
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
-      "oyakata-manager": {
-        ...loaded.value.bundle.nodePayloads["oyakata-manager"],
+      "divedra-manager": {
+        ...loaded.value.bundle.nodePayloads["divedra-manager"],
         runtimeIsolation: {
           mode: "podman" as const,
           build: {
-            contextPath: "containers/oyakata-manager",
-            dockerfilePath: "containers/oyakata-manager/Dockerfile",
+            contextPath: "containers/divedra-manager",
+            dockerfilePath: "containers/divedra-manager/Dockerfile",
             target: "runtime",
           },
         },
@@ -271,13 +271,13 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["oyakata-manager"]).toMatchObject({
+    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
       nodeType: "container",
       container: {
         runnerKind: "podman",
         build: {
-          contextPath: "containers/oyakata-manager",
-          dockerfilePath: "containers/oyakata-manager/Dockerfile",
+          contextPath: "containers/divedra-manager",
+          dockerfilePath: "containers/divedra-manager/Dockerfile",
           target: "runtime",
         },
       },

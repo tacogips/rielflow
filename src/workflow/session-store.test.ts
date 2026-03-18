@@ -9,7 +9,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-session-store-test-"),
+    path.join(os.tmpdir(), "divedra-session-store-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -24,27 +24,27 @@ afterEach(async () => {
 });
 
 describe("session-store", () => {
-  test("uses .oyakata-datas as default dynamic session store root", async () => {
+  test("uses .divedra-datas as default dynamic session store root", async () => {
     const root = await makeTempDir();
     const resolved = getSessionStoreRoot({ cwd: root });
-    expect(resolved).toBe(path.join(root, ".oyakata-datas", "sessions"));
+    expect(resolved).toBe(path.join(root, ".divedra-datas", "sessions"));
   });
 
-  test("derives the session store root from OYAKATA_ROOT_DATA_DIR", async () => {
+  test("derives the session store root from DIVEDRA_ROOT_DATA_DIR", async () => {
     const resolved = getSessionStoreRoot({
       cwd: "/tmp/project",
       env: {
-        OYAKATA_ROOT_DATA_DIR: "env-data",
+        DIVEDRA_ROOT_DATA_DIR: "env-data",
       },
     });
     expect(resolved).toBe("/tmp/project/env-data/sessions");
   });
 
-  test("accepts OYAKATA_RUNTIME_ROOT as a compatibility alias", async () => {
+  test("accepts DIVEDRA_RUNTIME_ROOT as a compatibility alias", async () => {
     const resolved = getSessionStoreRoot({
       cwd: "/tmp/project",
       env: {
-        OYAKATA_RUNTIME_ROOT: "legacy-data",
+        DIVEDRA_RUNTIME_ROOT: "legacy-data",
       },
     });
     expect(resolved).toBe("/tmp/project/legacy-data/sessions");

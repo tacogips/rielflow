@@ -9,19 +9,19 @@ function makeWorkflow(): WorkflowJson {
     description: "Ship a release safely.",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     prompts: {
-      oyakataPromptTemplate: "Plan {{topic}} carefully.",
+      divedraPromptTemplate: "Plan {{topic}} carefully.",
       workerSystemPromptTemplate: "Execute {{topic}} precisely.",
     },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "main",
         description: "Main delivery path",
-        managerNodeId: "main-oyakata",
+        managerNodeId: "main-divedra",
         inputNodeId: "workflow-input",
         outputNodeId: "workflow-output",
         nodeIds: [
-          "main-oyakata",
+          "main-divedra",
           "workflow-input",
           "implement",
           "workflow-output",
@@ -31,15 +31,15 @@ function makeWorkflow(): WorkflowJson {
     ],
     nodes: [
       {
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
         completion: { type: "none" },
       },
       {
-        id: "main-oyakata",
-        nodeFile: "node-main-oyakata.json",
-        kind: "sub-oyakata-manager",
+        id: "main-divedra",
+        nodeFile: "node-main-divedra.json",
+        kind: "sub-divedra-manager",
         completion: { type: "none" },
       },
       {
@@ -79,14 +79,14 @@ function makeNode(overrides: Partial<NodePayload> = {}): NodePayload {
 
 function makeNodePayloads(): Readonly<Record<string, NodePayload>> {
   return {
-    "oyakata-manager": {
-      id: "oyakata-manager",
+    "divedra-manager": {
+      id: "divedra-manager",
       model: "tacogips/codex-agent",
       promptTemplate: "Plan the overall workflow.",
       variables: {},
     },
-    "main-oyakata": {
-      id: "main-oyakata",
+    "main-divedra": {
+      id: "main-divedra",
       model: "tacogips/codex-agent",
       promptTemplate:
         "Translate the parent instruction into child workflow work.",
@@ -134,7 +134,7 @@ describe("composeExecutionPrompt", () => {
       basePromptText: "Implement the release step.",
       assembledArguments: {
         task: {
-          repository: "oyakata",
+          repository: "divedra",
           target: "release",
         },
       },
@@ -142,7 +142,7 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompt).toContain("Given data:");
-    expect(prompt).toContain('"repository":"oyakata"');
+    expect(prompt).toContain('"repository":"divedra"');
     expect(prompt).toContain('"target":"release"');
   });
 
@@ -150,11 +150,11 @@ describe("composeExecutionPrompt", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef({
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
       }),
-      node: makeNodePayloads()["oyakata-manager"] as NodePayload,
+      node: makeNodePayloads()["divedra-manager"] as NodePayload,
       nodePayloads: makeNodePayloads(),
       runtimeVariables: {
         topic: "release",
@@ -189,7 +189,7 @@ describe("composeExecutionPrompt", () => {
     expect(prompt).toContain("Current sub-workflow scope:");
     expect(prompt).toContain("- Sub-workflow: main");
     expect(prompt).toContain(
-      "- Owned nodes: main-oyakata, workflow-input, workflow-output, implement",
+      "- Owned nodes: main-divedra, workflow-input, workflow-output, implement",
     );
   });
 
@@ -213,7 +213,7 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompt).toContain(
-      "- Owned nodes: main-oyakata, workflow-input, workflow-output, implement",
+      "- Owned nodes: main-divedra, workflow-input, workflow-output, implement",
     );
   });
 
@@ -221,11 +221,11 @@ describe("composeExecutionPrompt", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef({
-        id: "oyakata-manager",
-        nodeFile: "node-oyakata-manager.json",
+        id: "divedra-manager",
+        nodeFile: "node-divedra-manager.json",
         kind: "root-manager",
       }),
-      node: makeNodePayloads()["oyakata-manager"] as NodePayload,
+      node: makeNodePayloads()["divedra-manager"] as NodePayload,
       nodePayloads: makeNodePayloads(),
       runtimeVariables: { topic: "release" },
       basePromptText: "Plan the overall workflow.",
@@ -241,20 +241,20 @@ describe("composeExecutionPrompt", () => {
     expect(prompt).toContain(
       "expectedReturn=Return the completed release package summary.",
     );
-    expect(prompt).not.toContain("- Child node: main-oyakata (sub-oyakata-manager)");
+    expect(prompt).not.toContain("- Child node: main-divedra (sub-divedra-manager)");
     expect(prompt).not.toContain("- Child node: workflow-input (input)");
     expect(prompt).not.toContain("- Child node: workflow-output (output)");
   });
 
-  test("includes managed child node catalog for a sub-oyakata-manager", () => {
+  test("includes managed child node catalog for a sub-divedra-manager", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef({
-        id: "main-oyakata",
-        nodeFile: "node-main-oyakata.json",
-        kind: "sub-oyakata-manager",
+        id: "main-divedra",
+        nodeFile: "node-main-divedra.json",
+        kind: "sub-divedra-manager",
       }),
-      node: makeNodePayloads()["main-oyakata"] as NodePayload,
+      node: makeNodePayloads()["main-divedra"] as NodePayload,
       nodePayloads: makeNodePayloads(),
       runtimeVariables: { topic: "release" },
       basePromptText:
@@ -352,16 +352,16 @@ describe("composeExecutionPrompt", () => {
         ...workflow,
         prompts: {
           ...workflow.prompts,
-          oyakataPromptTemplate:
-            "If inboxCount={{inbox.count}} latestSender={{inbox.latest.fromNodeId}}, prefer oyakata gql.",
+          divedraPromptTemplate:
+            "If inboxCount={{inbox.count}} latestSender={{inbox.latest.fromNodeId}}, prefer divedra gql.",
         },
       },
       nodeRef: makeNodeRef({
-        id: "main-oyakata",
-        nodeFile: "node-main-oyakata.json",
-        kind: "sub-oyakata-manager",
+        id: "main-divedra",
+        nodeFile: "node-main-divedra.json",
+        kind: "sub-divedra-manager",
       }),
-      node: makeNodePayloads()["main-oyakata"] as NodePayload,
+      node: makeNodePayloads()["main-divedra"] as NodePayload,
       nodePayloads: makeNodePayloads(),
       runtimeVariables: {},
       basePromptText:
@@ -369,7 +369,7 @@ describe("composeExecutionPrompt", () => {
       assembledArguments: null,
       upstreamInputs: [
         {
-          fromNodeId: "oyakata-manager",
+          fromNodeId: "divedra-manager",
           transitionWhen: "always",
           communicationId: "comm-000001",
           output: {
@@ -384,7 +384,7 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompt).toContain(
-      "If inboxCount=1 latestSender=oyakata-manager, prefer oyakata gql.",
+      "If inboxCount=1 latestSender=divedra-manager, prefer divedra gql.",
     );
   });
 

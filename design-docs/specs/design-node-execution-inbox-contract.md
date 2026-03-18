@@ -60,9 +60,9 @@ The runtime may mount or expose the mailbox root differently per executor.
 
 Preferred rule:
 
-- the executor sets `OYAKATA_MAILBOX_DIR`
+- the executor sets `DIVEDRA_MAILBOX_DIR`
 - metadata paths are relative to that directory
-- worker code joins `OYAKATA_MAILBOX_DIR` with the relative paths declared in
+- worker code joins `DIVEDRA_MAILBOX_DIR` with the relative paths declared in
   `mailbox/inbox/meta.json`
 
 Example:
@@ -70,7 +70,7 @@ Example:
 ```json
 {
   "protocolVersion": 1,
-  "mailboxDirEnvVar": "OYAKATA_MAILBOX_DIR",
+  "mailboxDirEnvVar": "DIVEDRA_MAILBOX_DIR",
   "paths": {
     "inputPath": "inbox/input.json",
     "inputFilesDir": "inbox/files",
@@ -96,7 +96,7 @@ Example shape:
 ```json
 {
   "protocolVersion": 1,
-  "mailboxDirEnvVar": "OYAKATA_MAILBOX_DIR",
+  "mailboxDirEnvVar": "DIVEDRA_MAILBOX_DIR",
   "node": {
     "workflowId": "release",
     "workflowDescription": "Ship a release safely.",
@@ -170,10 +170,10 @@ All node types use the same semantic contract:
   - prompt composition must be derived from that same compiled contract
 - `command`
   - future executor should expose the same mailbox tree on disk and set
-    `OYAKATA_MAILBOX_DIR`
+    `DIVEDRA_MAILBOX_DIR`
 - `container`
   - future executor should mount the same mailbox tree and set
-    `OYAKATA_MAILBOX_DIR`
+    `DIVEDRA_MAILBOX_DIR`
 
 This keeps worker semantics aligned even if execution mechanisms differ.
 

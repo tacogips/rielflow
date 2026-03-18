@@ -7,7 +7,7 @@ import { atomicWriteJsonFile, atomicWriteTextFile } from "./fs";
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "oyakata-shared-fs-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-shared-fs-"));
   tempDirs.push(directory);
   return directory;
 }

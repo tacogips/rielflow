@@ -1,6 +1,6 @@
-# Oyakata Manager Prompt Contract
+# Divedra Manager Prompt Contract
 
-This document defines the prompt contract for `oyakata` manager execution and the gap between the current deterministic runtime and the target manager-driven orchestration model.
+This document defines the prompt contract for `divedra` manager execution and the gap between the current deterministic runtime and the target manager-driven orchestration model.
 
 ## Overview
 
@@ -17,9 +17,9 @@ What was missing was the prompt contract that makes the manager LLM explicitly a
 - the workflow structure in its current scope,
 - why each child node/sub-workflow is being asked to act,
 - what value each child is expected to return,
-- how parent/sub-oyakata-manager nesting should be interpreted.
+- how parent/sub-divedra-manager nesting should be interpreted.
 
-The prior iteration still left one boundary mismatch: the root `oyakata` received user input from `runtimeVariables.humanInput` rather than from a mailbox-visible external handoff, and completed workflow output was not published through an external mailbox artifact.
+The prior iteration still left one boundary mismatch: the root `divedra` received user input from `runtimeVariables.humanInput` rather than from a mailbox-visible external handoff, and completed workflow output was not published through an external mailbox artifact.
 
 Near-term policy:
 
@@ -34,13 +34,13 @@ Phase 1 adds prompt-level semantics without replacing the deterministic executio
 
 `workflow.json` may provide:
 
-- `prompts.oyakataPromptTemplate`
+- `prompts.divedraPromptTemplate`
 - `prompts.workerSystemPromptTemplate`
 
-The root/sub-oyakata-manager execution prompt becomes:
+The root/sub-divedra-manager execution prompt becomes:
 
-1. default `oyakata system prompt` from a repository markdown asset
-2. workflow-rendered `prompts.oyakataPromptTemplate`
+1. default `divedra system prompt` from a repository markdown asset
+2. workflow-rendered `prompts.divedraPromptTemplate`
 3. runtime-generated workflow context block
 4. node-level `promptTemplate`
 
@@ -67,14 +67,14 @@ The runtime composes prompt context that includes:
 - mailbox/upstream payload summary.
 
 This ensures every node instruction contains the "why" of the work rather than only the task wording.
-It also ensures `oyakata` can inspect the concrete child contracts it is expected to plan, invoke, and assess.
+It also ensures `divedra` can inspect the concrete child contracts it is expected to plan, invoke, and assess.
 
 For the near-term manager-driven runtime direction, this prompt context also carries the main workflow-order discipline:
 
 - the manager should treat the authored workflow order, branch structure, and loop structure as binding instructions
 - the manager should call the next node in that authored order rather than treating child selection as open-ended planning
 - explicit repeated loops in the workflow should be followed as written
-- sub-oyakata managers should stay within their owned child scope
+- sub-divedra managers should stay within their owned child scope
 
 This keeps workflow awareness in the manager prompt rather than requiring a second runtime order-management subsystem.
 
@@ -99,25 +99,25 @@ The runtime now recognizes an optional reserved field in manager output payloads
 Supported action semantics:
 
 - `start-sub-workflow`
-  - root `oyakata` only
+  - root `divedra` only
   - treats a sub-workflow as one child node
   - repeating the same action re-invokes that child sub-workflow as a rerun unit when the manager judges the prior result insufficient
-  - the runtime always delivers the manager output through the owned `sub-oyakata-manager` mailbox
+  - the runtime always delivers the manager output through the owned `sub-divedra-manager` mailbox
 - `deliver-to-child-input`
-  - `sub-oyakata-manager` only
+  - `sub-divedra-manager` only
   - forwards the current manager output through mailbox delivery to its owned input node
   - this is the nested "treat parent instruction like user input" handoff point
 - `retry-node`
   - any manager node
   - re-queues a child node for re-execution after manager assessment judges prior output insufficient
-  - root `oyakata` may retry only root-scope direct child nodes; it must not target nodes owned by a sub-workflow
-  - to re-run a sub-workflow child unit, root `oyakata` repeats `start-sub-workflow` for that `subWorkflowId`
+  - root `divedra` may retry only root-scope direct child nodes; it must not target nodes owned by a sub-workflow
+  - to re-run a sub-workflow child unit, root `divedra` repeats `start-sub-workflow` for that `subWorkflowId`
 
 Override rule:
 
 - when a manager returns `managerControl.actions`, the runtime treats that manager as authoritative for its manager-owned planning category in that execution:
   - root manager: sub-workflow start planning
-  - sub-oyakata-manager: child input forwarding
+  - sub-divedra-manager: child input forwarding
 - if `managerControl` is omitted, the existing deterministic fallback planners remain active
 
 ## Remaining Limitation
@@ -134,9 +134,9 @@ The runtime still uses:
 Structural constraints now enforced by validation/runtime:
 
 - every `subWorkflow` must declare `managerNodeId`
-- `managerNodeId` must reference a `sub-oyakata-manager`
-- a `sub-oyakata-manager` may dispatch only to its owned `inputNodeId`
-- root `oyakata` may not use `retry-node` to pierce into nodes owned by a sub-workflow boundary
+- `managerNodeId` must reference a `sub-divedra-manager`
+- a `sub-divedra-manager` may dispatch only to its owned `inputNodeId`
+- root `divedra` may not use `retry-node` to pierce into nodes owned by a sub-workflow boundary
 
 Manager control is therefore explicit for manager-owned dispatch/retry decisions, but not yet a full replacement for structural workflow semantics.
 
@@ -149,4 +149,4 @@ The root workflow boundary now follows the same mailbox model as nested sub-work
 - when a root-scope `output` node succeeds, its business payload becomes `runtimeVariables.workflowOutput` for later readiness/planning checks
 - session completion publishes the final workflow result to an external mailbox communication artifact, preferring the latest successful root-scope `output` node result when a manager runs again afterward
 
-This keeps parent-to-child and external-to-root handoff semantics aligned: both enter the active `oyakata` scope through mailbox delivery rather than through an out-of-band runtime-only channel.
+This keeps parent-to-child and external-to-root handoff semantics aligned: both enter the active `divedra` scope through mailbox delivery rather than through an out-of-band runtime-only channel.

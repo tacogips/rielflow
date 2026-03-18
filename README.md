@@ -1,6 +1,6 @@
-# oyakata
+# divedra
 
-`oyakata` is a TypeScript/Bun workflow runtime for cooperative multi-agent execution.
+`divedra` is a TypeScript/Bun workflow runtime for cooperative multi-agent execution.
 
 The current implementation executes JSON-defined workflows with:
 
@@ -30,17 +30,17 @@ Workflows live under `<workflow-root>/<workflow-name>/`.
 Typical layout:
 
 ```text
-.oyakata/
+.divedra/
   my-workflow/
     workflow.json
     workflow-vis.json
-    node-oyakata-manager.json
-    node-main-oyakata.json
+    node-divedra-manager.json
+    node-main-divedra.json
     node-workflow-input.json
     node-workflow-output.json
     prompts/
-      oyakata-manager.md
-      main-oyakata.md
+      divedra-manager.md
+      main-divedra.md
       workflow-input.md
       workflow-output.md
 ```
@@ -67,7 +67,7 @@ Current top-level fields:
   - `nodeTimeoutMs`
   - optional `containerRuntime`
 - optional `prompts`
-  - `oyakataPromptTemplate`
+  - `divedraPromptTemplate`
   - `workerSystemPromptTemplate`
 - `managerNodeId`
 - `subWorkflows`
@@ -90,7 +90,7 @@ Current kinds:
 - `branch-judge`: emits booleans used by outgoing branch edges
 - `loop-judge`: emits booleans used by `loops[]`
 - `root-manager`: top-level workflow manager referenced by `workflow.managerNodeId`
-- `sub-oyakata-manager`: manager that owns one sub-workflow boundary
+- `sub-divedra-manager`: manager that owns one sub-workflow boundary
 - `input`: normalizes inbound mailbox/runtime data for a workflow scope
 - `output`: assembles the final payload for a workflow scope
 - `manager`: legacy alias still accepted during transition
@@ -98,7 +98,7 @@ Current kinds:
 Practical meaning:
 
 - `root-manager` starts the workflow run and can auto-start eligible sub-workflows.
-- `sub-oyakata-manager` owns one sub-workflow's internal routing and may deliver work to its child `input` node.
+- `sub-divedra-manager` owns one sub-workflow's internal routing and may deliver work to its child `input` node.
 - `input` nodes turn mailbox/runtime input into clean scope-local payloads.
 - `output` nodes publish the result of a root workflow or sub-workflow boundary.
 - `branch-judge` and `loop-judge` are ordinary executed nodes whose outputs drive control flow.
@@ -260,11 +260,11 @@ Failure and retry behavior:
 
 Default runtime roots:
 
-- workflow definitions: `.oyakata/`
-- runtime data root: `.oyakata-datas/`
-- execution artifacts: `.oyakata-datas/workflow/`
-- session store: `.oyakata-datas/sessions/`
-- runtime DB: `.oyakata-datas/oyakata.db`
+- workflow definitions: `.divedra/`
+- runtime data root: `.divedra-datas/`
+- execution artifacts: `.divedra-datas/workflow/`
+- session store: `.divedra-datas/sessions/`
+- runtime DB: `.divedra-datas/divedra.db`
 
 Per-node execution artifacts:
 
@@ -298,10 +298,10 @@ The repository includes multiple reference bundles under `examples/`.
 
 Runnable mixed-backend reference:
 
-- `examples/claude-oyakata-codex-coding/workflow.json`
-- `examples/claude-oyakata-codex-coding/workflow-vis.json`
-- `examples/claude-oyakata-codex-coding/node-*.json`
-- `examples/claude-oyakata-codex-coding/mock-scenario.json`
+- `examples/claude-divedra-codex-coding/workflow.json`
+- `examples/claude-divedra-codex-coding/workflow-vis.json`
+- `examples/claude-divedra-codex-coding/node-*.json`
+- `examples/claude-divedra-codex-coding/mock-scenario.json`
 
 This bundle shows the recommended split:
 
@@ -313,21 +313,21 @@ This bundle shows the recommended split:
 Validate it:
 
 ```bash
-bun run src/main.ts workflow validate claude-oyakata-codex-coding --workflow-root ./examples
+bun run src/main.ts workflow validate claude-divedra-codex-coding --workflow-root ./examples
 ```
 
 Inspect it:
 
 ```bash
-bun run src/main.ts workflow inspect claude-oyakata-codex-coding --workflow-root ./examples --output json
+bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-root ./examples --output json
 ```
 
 Run it with the bundled deterministic scenario:
 
 ```bash
-bun run src/main.ts workflow run claude-oyakata-codex-coding \
+bun run src/main.ts workflow run claude-divedra-codex-coding \
   --workflow-root ./examples \
-  --mock-scenario ./examples/claude-oyakata-codex-coding/mock-scenario.json \
+  --mock-scenario ./examples/claude-divedra-codex-coding/mock-scenario.json \
   --output json
 ```
 
@@ -366,21 +366,21 @@ bun run src/main.ts workflow inspect node-combinations-showcase --workflow-root 
 
 ## Interfaces
 
-- `oyakata workflow run <workflow-name>`
+- `divedra workflow run <workflow-name>`
   - queue-based workflow execution
-- `oyakata session progress <session-id>`
+- `divedra session progress <session-id>`
   - inspect persisted session state
-- `oyakata session resume <session-id>`
+- `divedra session resume <session-id>`
   - resume a paused session
-- `oyakata session rerun <session-id> <node-id>`
+- `divedra session rerun <session-id> <node-id>`
   - start a new session from a chosen node
-- `oyakata call-node <workflow-id> <workflow-run-id> <node-id>`
+- `divedra call-node <workflow-id> <workflow-run-id> <node-id>`
   - local direct node execution path for an existing workflow run
-- `oyakata serve`
+- `divedra serve`
   - browser UI + local GraphQL control plane
-- `oyakata gql "<document>"`
+- `divedra gql "<document>"`
   - GraphQL client for local manager/control-plane operations
-- `oyakata tui`
+- `divedra tui`
   - terminal UI over the same workflow runtime
 
 ## GraphQL and Browser UI
@@ -389,7 +389,7 @@ The local server serves the browser app and exposes `/graphql`.
 
 Important transport rules:
 
-- `oyakata gql` forwards `OYAKATA_MANAGER_SESSION_ID` as `X-Oyakata-Manager-Session-Id`
+- `divedra gql` forwards `DIVEDRA_MANAGER_SESSION_ID` as `X-Divedra-Manager-Session-Id`
 - manager auth is established from HTTP transport metadata, not from the server process environment
 - `/api/ui-config` remains a small bootstrap endpoint for the browser, while workflow/session domain operations use GraphQL
 
@@ -416,12 +416,12 @@ Primary exports from `src/lib.ts`:
 Minimal example:
 
 ```ts
-import { executeWorkflow, getRuntimeSessionView } from "oyakata";
+import { executeWorkflow, getRuntimeSessionView } from "divedra";
 
 const run = await executeWorkflow({
-  workflowName: "claude-oyakata-codex-coding",
+  workflowName: "claude-divedra-codex-coding",
   workflowRoot: "./examples",
-  artifactRoot: "./.oyakata-datas/workflow",
+  artifactRoot: "./.divedra-datas/workflow",
   runtimeVariables: { humanInput: "Implement the requested change" },
 });
 

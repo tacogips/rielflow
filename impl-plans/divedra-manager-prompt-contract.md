@@ -1,23 +1,23 @@
-# Oyakata Manager Prompt Contract Implementation Plan
+# Divedra Manager Prompt Contract Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-oyakata-manager-prompt-contract.md
+**Design Reference**: design-docs/specs/design-divedra-manager-prompt-contract.md
 **Created**: 2026-03-07
 **Last Updated**: 2026-03-07
 
 ## Design Document Reference
 
-**Source**: `design-docs/specs/design-oyakata-manager-prompt-contract.md`
+**Source**: `design-docs/specs/design-divedra-manager-prompt-contract.md`
 
 ### Summary
 
-Add the missing prompt contract that makes `oyakata` manager execution aware of workflow structure, child-node purpose, expected return values, and mailbox-oriented nesting rules.
+Add the missing prompt contract that makes `divedra` manager execution aware of workflow structure, child-node purpose, expected return values, and mailbox-oriented nesting rules.
 
 ### Scope
 
 **Included**:
 - workflow-level prompt configuration for manager and worker execution
-- repository default markdown asset for the `oyakata system prompt`
+- repository default markdown asset for the `divedra system prompt`
 - runtime prompt composition with workflow/sub-workflow context
 - validation/tests/template updates
 
@@ -35,7 +35,7 @@ Add the missing prompt contract that makes `oyakata` manager execution aware of 
 
 ```typescript
 export interface WorkflowPrompts {
-  readonly oyakataPromptTemplate?: string;
+  readonly divedraPromptTemplate?: string;
   readonly workerSystemPromptTemplate?: string;
 }
 ```
@@ -76,7 +76,7 @@ export function composeExecutionPrompt(input: PromptCompositionInput): string;
 ```
 
 **Checklist**:
-- [x] Add default `oyakata system prompt` markdown asset
+- [x] Add default `divedra system prompt` markdown asset
 - [x] Compose manager prompt from default markdown + workflow prompt + runtime context + node prompt
 - [x] Compose worker prompt from workflow system prompt + runtime context + node prompt
 - [x] Include workflow purpose, reason, expected return, and mailbox/upstream summary
@@ -109,7 +109,7 @@ export function parseManagerControlPayload(
 **Checklist**:
 - [x] Define explicit manager control payload for node/sub-workflow dispatch
 - [x] Define manager-driven retry/re-execution semantics
-- [x] Bind mailbox nested handoff contract to sub `oyakata` instruction envelopes
+- [x] Bind mailbox nested handoff contract to sub `divedra` instruction envelopes
 - [x] Keep deterministic workflow edges/loop semantics as fallback structure
 
 ## Module Status
@@ -132,7 +132,7 @@ export function parseManagerControlPayload(
 ## Completion Criteria
 
 - [x] Workflow schema accepts manager/worker prompt policy
-- [x] Default `oyakata system prompt` exists as a markdown asset in the repository
+- [x] Default `divedra system prompt` exists as a markdown asset in the repository
 - [x] Runtime composes manager and worker prompts with workflow purpose/reason context
 - [x] Tests cover validation, template generation, and runtime prompt composition
 - [x] Runtime dispatch/retry semantics are directly controlled by manager output for manager-owned routing categories
@@ -143,7 +143,7 @@ export function parseManagerControlPayload(
 **Tasks Completed**: Workflow prompt configuration, prompt composition runtime, tests/docs/template updates
 **Tasks In Progress**: Manager control payload design for later iteration
 **Blockers**: None
-**Notes**: The existing runtime already had structural mailbox/sub-workflow semantics but lacked the prompt contract requested for `oyakata` orchestration. This iteration closes that prompt/model gap and records the remaining runtime-control gap explicitly.
+**Notes**: The existing runtime already had structural mailbox/sub-workflow semantics but lacked the prompt contract requested for `divedra` orchestration. This iteration closes that prompt/model gap and records the remaining runtime-control gap explicitly.
 
 ### Session: 2026-03-07 19:15
 **Tasks Completed**: Initial manager control payload runtime, prompt contract update, manager control tests
@@ -167,7 +167,7 @@ export function parseManagerControlPayload(
 **Tasks Completed**: Review follow-up for manager child-contract visibility
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Closed the remaining prompt completeness gap by adding a manager-scoped child catalog. Root `oyakata` now sees sub-workflow handoff/return contracts as child units, and sub `oyakata` now sees the concrete prompt seeds and expected returns for its owned child nodes.
+**Notes**: Closed the remaining prompt completeness gap by adding a manager-scoped child catalog. Root `divedra` now sees sub-workflow handoff/return contracts as child units, and sub `divedra` now sees the concrete prompt seeds and expected returns for its owned child nodes.
 
 ### Session: 2026-03-07 21:35
 **Tasks Completed**: Review follow-up for ownership enforcement and manager scope boundaries
@@ -179,7 +179,7 @@ export function parseManagerControlPayload(
 **Tasks Completed**: Review follow-up for manager given-data visibility
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Closed a remaining prompt-contract gap where root `oyakata` could miss top-level `humanInput` unless a workflow author added custom manager argument bindings. Prompt composition now always surfaces runtime input context as explicit given data for manager review/planning.
+**Notes**: Closed a remaining prompt-contract gap where root `divedra` could miss top-level `humanInput` unless a workflow author added custom manager argument bindings. Prompt composition now always surfaces runtime input context as explicit given data for manager review/planning.
 
 ### Session: 2026-03-07 22:30
 **Tasks Completed**: Review follow-up for explicit sub-workflow rerun contract
@@ -191,7 +191,7 @@ export function parseManagerControlPayload(
 **Tasks Completed**: Review follow-up for parent/sub-workflow retry boundary enforcement
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Closed a boundary leak where root `oyakata` could still target internal sub-workflow nodes through `retry-node`. Runtime parsing now rejects that control path and requires repeated `start-sub-workflow` for parent-level sub-workflow reruns, which keeps the nested mailbox contract consistent.
+**Notes**: Closed a boundary leak where root `divedra` could still target internal sub-workflow nodes through `retry-node`. Runtime parsing now rejects that control path and requires repeated `start-sub-workflow` for parent-level sub-workflow reruns, which keeps the nested mailbox contract consistent.
 
 ### Session: 2026-03-07 23:20
 **Tasks Completed**: Review follow-up for root mailbox boundary consistency
@@ -209,13 +209,13 @@ export function parseManagerControlPayload(
 **Tasks Completed**: Review follow-up for manager-control scope enforcement
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Tightened the manager-control contract so invalid `start-sub-workflow` actions fail during payload parsing instead of surviving until a later runtime guard. This keeps the root-only `oyakata` authority boundary explicit and testable at the parser level.
+**Notes**: Tightened the manager-control contract so invalid `start-sub-workflow` actions fail during payload parsing instead of surviving until a later runtime guard. This keeps the root-only `divedra` authority boundary explicit and testable at the parser level.
 
 ### Session: 2026-03-08 00:20
 **Tasks Completed**: Review follow-up for sub-manager-only child-input forwarding enforcement
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Closed a remaining contract mismatch where `deliver-to-child-input` was documented as a `sub oyakata`-only action but could still pass parser validation for the root manager and fail later at runtime. The parser now rejects that action outside `sub-manager` scope and the unit tests cover the boundary directly.
+**Notes**: Closed a remaining contract mismatch where `deliver-to-child-input` was documented as a `sub divedra`-only action but could still pass parser validation for the root manager and fail later at runtime. The parser now rejects that action outside `sub-manager` scope and the unit tests cover the boundary directly.
 
 ### Session: 2026-03-08 00:40
 **Tasks Completed**: Review follow-up for strict sub-workflow manager typing

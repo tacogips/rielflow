@@ -7,7 +7,7 @@ This document closes the remaining runtime gap between the GraphQL manager contr
 The GraphQL control-plane surface already exists:
 
 - `/graphql` accepts manager-scoped mutations,
-- `oyakata gql` forwards bearer auth and ambient manager-session scope,
+- `divedra gql` forwards bearer auth and ambient manager-session scope,
 - manager-session persistence and auth validation exist.
 
 What was still missing in the runtime was the lifecycle that makes those primitives usable from an actual manager-node execution:
@@ -19,7 +19,7 @@ What was still missing in the runtime was the lifecycle that makes those primiti
 
 ## Runtime Lifecycle
 
-For every non-dry-run manager-node execution (`root-manager` or `sub-oyakata-manager`):
+For every non-dry-run manager-node execution (`root-manager` or `sub-divedra-manager`):
 
 1. The engine allocates a new `managerSessionId` scoped to the current `nodeExecId`.
 2. The engine mints a fresh bearer token and stores only its hash.
@@ -44,13 +44,13 @@ Recommended request shape:
 ```typescript
 interface AdapterAmbientManagerContext {
   readonly environment: {
-    readonly OYAKATA_GRAPHQL_ENDPOINT: string;
-    readonly OYAKATA_MANAGER_AUTH_TOKEN: string;
-    readonly OYAKATA_MANAGER_SESSION_ID: string;
-    readonly OYAKATA_WORKFLOW_ID: string;
-    readonly OYAKATA_WORKFLOW_EXECUTION_ID: string;
-    readonly OYAKATA_MANAGER_NODE_ID: string;
-    readonly OYAKATA_MANAGER_NODE_EXEC_ID: string;
+    readonly DIVEDRA_GRAPHQL_ENDPOINT: string;
+    readonly DIVEDRA_MANAGER_AUTH_TOKEN: string;
+    readonly DIVEDRA_MANAGER_SESSION_ID: string;
+    readonly DIVEDRA_WORKFLOW_ID: string;
+    readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
+    readonly DIVEDRA_MANAGER_NODE_ID: string;
+    readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
   };
 }
 ```
@@ -59,7 +59,7 @@ Rules:
 
 - worker/input/output/judge nodes must not receive this context
 - manager auth tokens must not be written into workflow execution artifacts such as `input.json`
-- CLI-capable backends such as `codex-agent` and `claude-code-agent` may translate the provided environment map into the actual tool-process environment used by `oyakata gql`
+- CLI-capable backends such as `codex-agent` and `claude-code-agent` may translate the provided environment map into the actual tool-process environment used by `divedra gql`
 - official SDK backends may ignore the field safely
 
 ## Security Notes

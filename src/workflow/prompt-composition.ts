@@ -22,8 +22,8 @@ export interface PromptCompositionInput {
   readonly managerMessage?: unknown;
 }
 
-const DEFAULT_OYAKATA_SYSTEM_PROMPT = readFileSync(
-  new URL("./prompts/oyakata-system-prompt.md", import.meta.url),
+const DEFAULT_DIVEDRA_SYSTEM_PROMPT = readFileSync(
+  new URL("./prompts/divedra-system-prompt.md", import.meta.url),
   "utf8",
 ).trim();
 
@@ -31,7 +31,7 @@ function isManagerNodeKind(kind: NodeKind | undefined): boolean {
   return (
     kind === "manager" ||
     kind === "root-manager" ||
-    kind === "sub-oyakata-manager"
+    kind === "sub-divedra-manager"
   );
 }
 
@@ -58,10 +58,10 @@ export function composeExecutionPrompt(input: PromptCompositionInput): string {
     })),
   });
   const workflowPrompt =
-    input.workflow.prompts?.oyakataPromptTemplate === undefined
+    input.workflow.prompts?.divedraPromptTemplate === undefined
       ? ""
       : renderPromptTemplate(
-          input.workflow.prompts.oyakataPromptTemplate,
+          input.workflow.prompts.divedraPromptTemplate,
           mergedVariables,
         ).trim();
   const workerSystemPrompt =
@@ -73,7 +73,7 @@ export function composeExecutionPrompt(input: PromptCompositionInput): string {
         ).trim();
 
   const sections = isManagerNodeKind(input.nodeRef.kind)
-    ? [DEFAULT_OYAKATA_SYSTEM_PROMPT, workflowPrompt]
+    ? [DEFAULT_DIVEDRA_SYSTEM_PROMPT, workflowPrompt]
     : [workerSystemPrompt];
 
   const executionMailbox =

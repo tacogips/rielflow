@@ -1,6 +1,6 @@
 # Runtime-Owned External Output Publication
 
-This document defines how `oyakata` publishes the final workflow result to the external mailbox boundary.
+This document defines how `divedra` publishes the final workflow result to the external mailbox boundary.
 
 ## Overview
 
@@ -188,4 +188,4 @@ The runtime test suite should cover at least these cases:
 
 - `design-docs/specs/design-node-mailbox.md`
 - `design-docs/specs/design-node-output-contract.md`
-- `design-docs/specs/design-oyakata-manager-prompt-contract.md`
+- `design-docs/specs/design-divedra-manager-prompt-contract.md`

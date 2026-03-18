@@ -23,7 +23,7 @@ class OptionalDecisionAdapter implements NodeAdapter {
   ): Promise<
     ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
   > {
-    if (input.nodeId === "oyakata-manager") {
+    if (input.nodeId === "divedra-manager") {
       this.managerCalls += 1;
       return {
         provider: "optional-decision-adapter",
@@ -320,7 +320,7 @@ class NonContractMissingCandidateFileAdapter implements NodeAdapter {
       payload: {},
       candidateFilePath: path.join(
         os.tmpdir(),
-        "oyakata-output-candidates",
+        "divedra-output-candidates",
         input.workflowId,
         input.workflowExecutionId,
         input.nodeId,
@@ -660,7 +660,7 @@ class InvalidManagerControlReusableSessionAdapter implements NodeAdapter {
   ): Promise<
     ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
   > {
-    if (input.nodeId !== "oyakata-manager") {
+    if (input.nodeId !== "divedra-manager") {
       return {
         provider: "test-adapter",
         model: input.node.model,
@@ -757,7 +757,7 @@ class ManagerAmbientContextCaptureAdapter implements NodeAdapter {
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-engine-test-"),
+    path.join(os.tmpdir(), "divedra-engine-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -786,9 +786,9 @@ async function createWorkflowFixture(
   const nodes = withLoop
     ? [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -806,9 +806,9 @@ async function createWorkflowFixture(
       ]
     : [
         {
-          id: "oyakata-manager",
+          id: "divedra-manager",
           kind: "manager",
-          nodeFile: "node-oyakata-manager.json",
+          nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
         {
@@ -821,17 +821,17 @@ async function createWorkflowFixture(
 
   const edges = withLoop
     ? [
-        { from: "oyakata-manager", to: "step-1", when: "always" },
+        { from: "divedra-manager", to: "step-1", when: "always" },
         { from: "step-1", to: "step-1", when: "continue_round" },
         { from: "step-1", to: "done", when: "loop_exit" },
       ]
-    : [{ from: "oyakata-manager", to: "step-1", when: "always" }];
+    : [{ from: "divedra-manager", to: "step-1", when: "always" }];
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes,
     edges,
@@ -851,18 +851,18 @@ async function createWorkflowFixture(
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: withLoop
       ? [
-          { id: "oyakata-manager", order: 0 },
+          { id: "divedra-manager", order: 0 },
           { id: "step-1", order: 1 },
           { id: "done", order: 2 },
         ]
       : [
-          { id: "oyakata-manager", order: 0 },
+          { id: "divedra-manager", order: 0 },
           { id: "step-1", order: 1 },
         ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager {{topic}}",
     variables: { topic: "A" },
@@ -896,13 +896,13 @@ async function createOptionalExecutionFixture(
     workflowId: workflowName,
     description: "optional fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -923,7 +923,7 @@ async function createOptionalExecutionFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "step-1", when: "always" },
+      { from: "divedra-manager", to: "step-1", when: "always" },
       { from: "step-1", to: "done", when: "always" },
     ],
     loops: [],
@@ -932,14 +932,14 @@ async function createOptionalExecutionFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "step-1", order: 1 },
       { id: "done", order: 2 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -969,13 +969,13 @@ async function createUserActionFixture(
     workflowId: workflowName,
     description: "user action fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -985,20 +985,20 @@ async function createUserActionFixture(
         completion: { type: "none" },
       },
     ],
-    edges: [{ from: "oyakata-manager", to: "approval", when: "always" }],
+    edges: [{ from: "divedra-manager", to: "approval", when: "always" }],
     loops: [],
     branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "approval", order: 1 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -1027,13 +1027,13 @@ async function createNodeSessionReuseFixture(
     workflowId: workflowName,
     description: "node session reuse fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1056,7 +1056,7 @@ async function createNodeSessionReuseFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "step-a", when: "always" },
+      { from: "divedra-manager", to: "step-a", when: "always" },
       { from: "step-a", to: "step-b", when: "always" },
       { from: "step-b", to: "step-c", when: "go_c" },
       { from: "step-c", to: "step-b", when: "always" },
@@ -1067,15 +1067,15 @@ async function createNodeSessionReuseFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "step-a", order: 1 },
       { id: "step-b", order: 2 },
       { id: "step-c", order: 3 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -1114,7 +1114,7 @@ async function createSubWorkflowRuntimeFixture(
     workflowId: workflowName,
     description: "sub-workflow fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "sw-a",
@@ -1145,14 +1145,14 @@ async function createSubWorkflowRuntimeFixture(
     ],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
         id: "a-manager",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         nodeFile: "node-a-manager.json",
         completion: { type: "none" },
       },
@@ -1170,7 +1170,7 @@ async function createSubWorkflowRuntimeFixture(
       },
       {
         id: "b-manager",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         nodeFile: "node-b-manager.json",
         completion: { type: "none" },
       },
@@ -1189,9 +1189,9 @@ async function createSubWorkflowRuntimeFixture(
     ],
     edges: [
       { from: "a-input", to: "a-output", when: "always" },
-      { from: "a-output", to: "oyakata-manager", when: "always" },
+      { from: "a-output", to: "divedra-manager", when: "always" },
       { from: "b-input", to: "b-output", when: "always" },
-      { from: "b-output", to: "oyakata-manager", when: "always" },
+      { from: "b-output", to: "divedra-manager", when: "always" },
     ],
     loops: [],
     branching: { mode: "fan-out" },
@@ -1199,7 +1199,7 @@ async function createSubWorkflowRuntimeFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "a-manager", order: 1 },
       { id: "a-input", order: 2 },
       { id: "a-output", order: 3 },
@@ -1209,8 +1209,8 @@ async function createSubWorkflowRuntimeFixture(
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -1264,13 +1264,13 @@ async function createManagerAfterOutputFixture(
     workflowId: workflowName,
     description: "manager-after-output fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1281,8 +1281,8 @@ async function createManagerAfterOutputFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "workflow-output", when: "needs_output" },
-      { from: "workflow-output", to: "oyakata-manager", when: "always" },
+      { from: "divedra-manager", to: "workflow-output", when: "needs_output" },
+      { from: "workflow-output", to: "divedra-manager", when: "always" },
     ],
     loops: [],
     branching: { mode: "fan-out" },
@@ -1290,13 +1290,13 @@ async function createManagerAfterOutputFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "workflow-output", order: 1 },
     ],
   });
 
-  await writeJson(path.join(workflowDir, "node-oyakata-manager.json"), {
-    id: "oyakata-manager",
+  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+    id: "divedra-manager",
     model: "tacogips/codex-agent",
     promptTemplate: "manager",
     variables: {},
@@ -1320,13 +1320,13 @@ async function createSingleRootOutputFixture(
     workflowId: workflowName,
     description: "single-root-output fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1336,19 +1336,19 @@ async function createSingleRootOutputFixture(
         completion: { type: "none" },
       },
     ],
-    edges: [{ from: "oyakata-manager", to: "workflow-output", when: "always" }],
+    edges: [{ from: "divedra-manager", to: "workflow-output", when: "always" }],
     loops: [],
     branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "workflow-output", order: 1 },
     ],
   });
 
-  for (const nodeId of ["oyakata-manager", "workflow-output"]) {
+  for (const nodeId of ["divedra-manager", "workflow-output"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
       model: "tacogips/codex-agent",
@@ -1369,13 +1369,13 @@ async function createMultipleRootOutputsFixture(
     workflowId: workflowName,
     description: "multiple-root-outputs fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1392,7 +1392,7 @@ async function createMultipleRootOutputsFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "first-output", when: "always" },
+      { from: "divedra-manager", to: "first-output", when: "always" },
       { from: "first-output", to: "second-output", when: "always" },
     ],
     loops: [],
@@ -1401,13 +1401,13 @@ async function createMultipleRootOutputsFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "first-output", order: 1 },
       { id: "second-output", order: 2 },
     ],
   });
 
-  for (const nodeId of ["oyakata-manager", "first-output", "second-output"]) {
+  for (const nodeId of ["divedra-manager", "first-output", "second-output"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
       model: "tacogips/codex-agent",
@@ -1428,13 +1428,13 @@ async function createRootOutputThenTaskFixture(
     workflowId: workflowName,
     description: "root-output-then-task fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1451,7 +1451,7 @@ async function createRootOutputThenTaskFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "workflow-output", when: "always" },
+      { from: "divedra-manager", to: "workflow-output", when: "always" },
       { from: "workflow-output", to: "final-task", when: "always" },
     ],
     loops: [],
@@ -1460,13 +1460,13 @@ async function createRootOutputThenTaskFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "workflow-output", order: 1 },
       { id: "final-task", order: 2 },
     ],
   });
 
-  for (const nodeId of ["oyakata-manager", "workflow-output", "final-task"]) {
+  for (const nodeId of ["divedra-manager", "workflow-output", "final-task"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
       model: "tacogips/codex-agent",
@@ -1487,7 +1487,7 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
     workflowId: workflowName,
     description: "workflow-output source fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "oyakata-manager",
+    managerNodeId: "divedra-manager",
     subWorkflows: [
       {
         id: "review-sw",
@@ -1501,9 +1501,9 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
     ],
     nodes: [
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         kind: "root-manager",
-        nodeFile: "node-oyakata-manager.json",
+        nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
@@ -1514,7 +1514,7 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
       },
       {
         id: "review-manager",
-        kind: "sub-oyakata-manager",
+        kind: "sub-divedra-manager",
         nodeFile: "node-review-manager.json",
         completion: { type: "none" },
       },
@@ -1532,8 +1532,8 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
       },
     ],
     edges: [
-      { from: "oyakata-manager", to: "workflow-output", when: "needs_output" },
-      { from: "workflow-output", to: "oyakata-manager", when: "always" },
+      { from: "divedra-manager", to: "workflow-output", when: "needs_output" },
+      { from: "workflow-output", to: "divedra-manager", when: "always" },
       { from: "review-input", to: "review-output", when: "always" },
     ],
     loops: [],
@@ -1542,7 +1542,7 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
 
   await writeJson(path.join(workflowDir, "workflow-vis.json"), {
     nodes: [
-      { id: "oyakata-manager", order: 0 },
+      { id: "divedra-manager", order: 0 },
       { id: "workflow-output", order: 1 },
       { id: "review-manager", order: 2 },
       { id: "review-input", order: 3 },
@@ -1551,7 +1551,7 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
   });
 
   for (const nodeId of [
-    "oyakata-manager",
+    "divedra-manager",
     "workflow-output",
     "review-manager",
     "review-input",
@@ -1626,7 +1626,7 @@ describe("runWorkflow", () => {
     expect(inputJson.promptText).toContain("B");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "OYAKATA_MAILBOX_DIR",
+        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
         paths: {
           inputPath: "inbox/input.json",
           outputPath: "outbox/output.json",
@@ -1634,7 +1634,7 @@ describe("runWorkflow", () => {
       },
     });
     expect(inputJson.upstreamOutputRefs.length).toBe(1);
-    expect(inputJson.upstreamOutputRefs[0]?.fromNodeId).toBe("oyakata-manager");
+    expect(inputJson.upstreamOutputRefs[0]?.fromNodeId).toBe("divedra-manager");
     expect(inputJson.upstreamOutputRefs[0]?.workflowId).toBe("linear");
     expect(inputJson.upstreamOutputRefs[0]?.workflowExecutionId).toBe(
       result.value.session.sessionId,
@@ -1659,7 +1659,7 @@ describe("runWorkflow", () => {
     const mailboxInput = JSON.parse(mailboxInputRaw) as {
       readonly upstream: readonly { communicationId: string }[];
     };
-    expect(mailboxMeta.mailboxDirEnvVar).toBe("OYAKATA_MAILBOX_DIR");
+    expect(mailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
     expect(mailboxMeta.paths.inputPath).toBe("inbox/input.json");
     expect(mailboxMeta.paths.outputPath).toBe("outbox/output.json");
     expect(mailboxInput.upstream[0]?.communicationId).toBe("comm-000001");
@@ -1687,7 +1687,7 @@ describe("runWorkflow", () => {
       result.value.session.sessionId,
     );
     expect(communicationMessageJson.communicationId).toBe("comm-000001");
-    expect(communicationMessageJson.fromNodeId).toBe("oyakata-manager");
+    expect(communicationMessageJson.fromNodeId).toBe("divedra-manager");
     expect(communicationMessageJson.toNodeId).toBe("step-1");
 
     const receiptRaw = await readFile(
@@ -1706,7 +1706,7 @@ describe("runWorkflow", () => {
       "utf8",
     );
     const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("oyakata-manager");
+    expect(receiptJson.deliveredByNodeId).toBe("divedra-manager");
 
     const managerOutputRaw = await readFile(
       path.join(
@@ -1716,7 +1716,7 @@ describe("runWorkflow", () => {
         "executions",
         result.value.session.sessionId,
         "nodes",
-        "oyakata-manager",
+        "divedra-manager",
         "exec-000001",
         "output.json",
       ),
@@ -1732,7 +1732,7 @@ describe("runWorkflow", () => {
         "communications",
         "comm-000001",
         "outbox",
-        "oyakata-manager",
+        "divedra-manager",
         "output.json",
       ),
       "utf8",
@@ -1779,7 +1779,7 @@ describe("runWorkflow", () => {
         sessionId: "sess-optional-execute",
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           { payload: {} },
           {
             payload: {
@@ -1807,7 +1807,7 @@ describe("runWorkflow", () => {
     expect(result.value.session.pendingOptionalNodeDecisions).toEqual([]);
 
     const managerExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     expect(managerExecutions).toHaveLength(2);
 
@@ -1851,7 +1851,7 @@ describe("runWorkflow", () => {
     expect(result.value.session.pendingOptionalNodeDecisions).toEqual([]);
 
     const managerExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     expect(managerExecutions).toHaveLength(2);
 
@@ -1890,7 +1890,7 @@ describe("runWorkflow", () => {
         sessionId: "sess-optional-skip-reason",
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           { payload: {} },
           {
             payload: {
@@ -2194,9 +2194,9 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, "manager-session-failure", false);
 
     await writeJson(
-      path.join(root, "manager-session-failure", "node-oyakata-manager.json"),
+      path.join(root, "manager-session-failure", "node-divedra-manager.json"),
       {
-        id: "oyakata-manager",
+        id: "divedra-manager",
         model: "tacogips/claude-code-agent",
         sessionPolicy: {
           mode: "reuse",
@@ -2233,14 +2233,14 @@ describe("runWorkflow", () => {
     expect(saved.value.status).toBe("failed");
     expect(saved.value.nodeExecutions).toHaveLength(1);
     expect(saved.value.nodeExecutions[0]).toMatchObject({
-      nodeId: "oyakata-manager",
+      nodeId: "divedra-manager",
       nodeExecId: "exec-000001",
       status: "failed",
       backendSessionMode: "new",
       backendSessionId: "backend-manager-1",
     });
-    expect(saved.value.nodeBackendSessions?.["oyakata-manager"]).toMatchObject({
-      nodeId: "oyakata-manager",
+    expect(saved.value.nodeBackendSessions?.["divedra-manager"]).toMatchObject({
+      nodeId: "divedra-manager",
       sessionId: "backend-manager-1",
       lastNodeExecId: "exec-000001",
     });
@@ -2269,21 +2269,21 @@ describe("runWorkflow", () => {
     }
 
     expect(adapter.calls).toHaveLength(2);
-    expect(adapter.calls[0]?.nodeId).toBe("oyakata-manager");
+    expect(adapter.calls[0]?.nodeId).toBe("divedra-manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
-      OYAKATA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-      OYAKATA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-      OYAKATA_WORKFLOW_ID: workflowName,
-      OYAKATA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
-      OYAKATA_MANAGER_NODE_ID: "oyakata-manager",
-      OYAKATA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+      DIVEDRA_WORKFLOW_ID: workflowName,
+      DIVEDRA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
+      DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
     expect(adapter.calls[1]?.nodeId).toBe("step-1");
     expect(adapter.calls[1]?.ambientManagerContext).toBeUndefined();
 
     const managerAuthToken =
       adapter.calls[0]?.ambientManagerContext?.environment
-        .OYAKATA_MANAGER_AUTH_TOKEN;
+        .DIVEDRA_MANAGER_AUTH_TOKEN;
     expect(managerAuthToken).toBeDefined();
     if (managerAuthToken === undefined) {
       throw new Error("manager auth token was not captured");
@@ -2329,7 +2329,7 @@ describe("runWorkflow", () => {
       managerSessionId: "mgrsess-exec-000001",
       workflowId: workflowName,
       workflowExecutionId: "sess-manager-mixed-control-mode",
-      managerNodeId: "oyakata-manager",
+      managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       status: "active",
       createdAt: "2026-03-15T00:00:00.000Z",
@@ -2343,7 +2343,7 @@ describe("runWorkflow", () => {
       workflowName,
       options,
       new ScenarioNodeAdapter({
-        "oyakata-manager": {
+        "divedra-manager": {
           payload: {
             managerControl: {
               actions: [{ type: "retry-node", nodeId: "step-1" }],
@@ -2397,7 +2397,7 @@ describe("runWorkflow", () => {
     const bootstrapCommunication = result.value.session.communications.find(
       (entry) =>
         entry.fromNodeId === "__workflow-input-mailbox__" &&
-        entry.toNodeId === "oyakata-manager" &&
+        entry.toNodeId === "divedra-manager" &&
         entry.deliveryKind === "external-input",
     );
     expect(bootstrapCommunication).toBeDefined();
@@ -2406,7 +2406,7 @@ describe("runWorkflow", () => {
     }
 
     const managerExec = result.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     expect(managerExec).toBeDefined();
     if (managerExec === undefined) {
@@ -2442,7 +2442,7 @@ describe("runWorkflow", () => {
       "utf8",
     );
     const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("oyakata-manager");
+    expect(receiptJson.deliveredByNodeId).toBe("divedra-manager");
 
     const sourceOutputRaw = await readFile(
       path.join(
@@ -2522,7 +2522,7 @@ describe("runWorkflow", () => {
       "utf8",
     );
     const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("oyakata-manager");
+    expect(receiptJson.deliveredByNodeId).toBe("divedra-manager");
 
     const publishedExec = result.value.session.nodeExecutions.find(
       (entry) => entry.nodeId === "workflow-output",
@@ -2550,7 +2550,7 @@ describe("runWorkflow", () => {
         sessionStoreRoot: path.join(root, "sessions"),
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           {
             provider: "scenario-mock",
             when: { needs_output: true },
@@ -2607,7 +2607,7 @@ describe("runWorkflow", () => {
         sessionStoreRoot: path.join(root, "sessions"),
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": {
+        "divedra-manager": {
           provider: "scenario-mock",
           when: { always: true },
           payload: { stage: "dispatch" },
@@ -2669,7 +2669,7 @@ describe("runWorkflow", () => {
         sessionStoreRoot: path.join(root, "sessions"),
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": {
+        "divedra-manager": {
           provider: "scenario-mock",
           when: { always: true },
           payload: { stage: "dispatch" },
@@ -2769,7 +2769,7 @@ describe("runWorkflow", () => {
         sessionStoreRoot: path.join(root, "sessions"),
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           {
             provider: "scenario-mock",
             when: { needs_output: true },
@@ -2834,7 +2834,7 @@ describe("runWorkflow", () => {
       await readFile(workflowPath, "utf8"),
     ) as Record<string, unknown>;
     workflowJson["prompts"] = {
-      oyakataPromptTemplate: "Plan and audit work for {{topic}}.",
+      divedraPromptTemplate: "Plan and audit work for {{topic}}.",
       workerSystemPromptTemplate:
         "Complete the assigned worker step for {{topic}}.",
     };
@@ -2857,7 +2857,7 @@ describe("runWorkflow", () => {
     }
 
     const managerExec = result.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     const workerExec = result.value.session.nodeExecutions.find(
       (entry) => entry.nodeId === "step-1",
@@ -2880,7 +2880,7 @@ describe("runWorkflow", () => {
     const workerInput = JSON.parse(workerInputRaw) as { promptText: string };
 
     expect(managerInput.promptText).toContain(
-      "You are `oyakata`, the orchestration manager",
+      "You are `divedra`, the orchestration manager",
     );
     expect(managerInput.promptText).toContain("Plan and audit work for B.");
     expect(managerInput.promptText).toContain("Execution context:");
@@ -2919,7 +2919,7 @@ describe("runWorkflow", () => {
         {
           targetPath: "task.managerNode",
           source: "node-output",
-          sourceRef: "oyakata-manager",
+          sourceRef: "divedra-manager",
           sourcePath: "output.payload.nodeId",
           required: true,
         },
@@ -2959,7 +2959,7 @@ describe("runWorkflow", () => {
     expect(inputJson.arguments).toEqual({
       task: {
         topic: "B",
-        managerNode: "oyakata-manager",
+        managerNode: "divedra-manager",
       },
     });
   });
@@ -3973,7 +3973,7 @@ describe("runWorkflow", () => {
     );
     expect(firstRequestJson.validationErrors).toEqual([]);
     expect(firstRequestJson.candidatePath).toContain(
-      "/oyakata-output-candidates/",
+      "/divedra-output-candidates/",
     );
     expect(firstRequestJson.candidatePath).toContain(
       "/attempt-000001/candidate.json",
@@ -4000,7 +4000,7 @@ describe("runWorkflow", () => {
     );
     expect(secondRequestJson.validationErrors[0]?.path).toBe("$.summary");
     expect(secondRequestJson.candidatePath).toContain(
-      "/oyakata-output-candidates/",
+      "/divedra-output-candidates/",
     );
     expect(secondRequestJson.candidatePath).toContain(
       "/attempt-000002/candidate.json",
@@ -4401,7 +4401,7 @@ describe("runWorkflow", () => {
     );
     expect(stepExecution).toBeDefined();
     expect(captureAdapter.capturedOutputContract?.candidatePath).toContain(
-      "/oyakata-output-candidates/",
+      "/divedra-output-candidates/",
     );
     expect(captureAdapter.capturedOutputContract?.candidatePath).not.toContain(
       stepExecution?.artifactDir ?? "",
@@ -4576,7 +4576,7 @@ describe("runWorkflow", () => {
     expect(paused.value.session.status).toBe("paused");
 
     const managerExec = paused.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     expect(managerExec).toBeDefined();
     if (managerExec === undefined) {
@@ -4915,7 +4915,7 @@ describe("runWorkflow", () => {
       "executions",
       sessionId,
       "nodes",
-      "oyakata-manager",
+      "divedra-manager",
       "exec-000001",
       "mailbox",
     );
@@ -5017,7 +5017,7 @@ describe("runWorkflow", () => {
     }
     expect(result.value.session.status).toBe("completed");
     const managerExec = result.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "oyakata-manager",
+      (entry) => entry.nodeId === "divedra-manager",
     );
     expect(managerExec).toBeDefined();
     const outputRaw = await readFile(
@@ -5169,7 +5169,7 @@ describe("runWorkflow", () => {
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
       mockScenario: {
-        "oyakata-manager": {
+        "divedra-manager": {
           provider: "scenario-mock",
           when: { always: true },
           payload: { stage: "design" },
@@ -5323,7 +5323,7 @@ describe("runWorkflow", () => {
       (entry) => entry.nodeId,
     );
     expect(executionOrder.indexOf("a-manager")).toBeGreaterThan(
-      executionOrder.indexOf("oyakata-manager"),
+      executionOrder.indexOf("divedra-manager"),
     );
     expect(executionOrder.indexOf("a-input")).toBeGreaterThan(
       executionOrder.indexOf("a-manager"),
@@ -5463,11 +5463,11 @@ describe("runWorkflow", () => {
     const rootReceiptJson = JSON.parse(rootReceiptRaw) as {
       deliveredByNodeId: string;
     };
-    expect(rootReceiptJson.deliveredByNodeId).toBe("oyakata-manager");
+    expect(rootReceiptJson.deliveredByNodeId).toBe("divedra-manager");
 
     const childToRootCommunication = result.value.session.communications.find(
       (entry) =>
-        entry.fromNodeId === "a-output" && entry.toNodeId === "oyakata-manager",
+        entry.fromNodeId === "a-output" && entry.toNodeId === "divedra-manager",
     );
     expect(childToRootCommunication).toBeDefined();
     expect(childToRootCommunication?.routingScope).toBe("cross-sub-workflow");
@@ -5485,7 +5485,7 @@ describe("runWorkflow", () => {
       edges: Array<{ from: string; to: string; when: string }>;
     };
     workflowJson.edges.unshift({
-      from: "oyakata-manager",
+      from: "divedra-manager",
       to: "a-manager",
       when: "always",
     });
@@ -5514,7 +5514,7 @@ describe("runWorkflow", () => {
     const rootToAManagerCommunications =
       result.value.session.communications.filter(
         (entry) =>
-          entry.fromNodeId === "oyakata-manager" &&
+          entry.fromNodeId === "divedra-manager" &&
           entry.toNodeId === "a-manager",
       );
 
@@ -5583,7 +5583,7 @@ describe("runWorkflow", () => {
         "failed to resolve upstream communication",
       );
       expect(resumed.error.message).toContain("comm-");
-      expect(resumed.error.message).toContain("oyakata-manager");
+      expect(resumed.error.message).toContain("divedra-manager");
       expect(resumed.error.message).toContain("a-output");
     }
   });
@@ -5628,7 +5628,7 @@ describe("runWorkflow", () => {
     expect(bInputExecutions).toHaveLength(2);
   });
 
-  test("sub-oyakata-manager forwards its own output to the child input", async () => {
+  test("sub-divedra-manager forwards its own output to the child input", async () => {
     const root = await makeTempDir();
     const workflowName = "subworkflow-manager-forwarding";
     await createSubWorkflowRuntimeFixture(root, workflowName);
@@ -5698,7 +5698,7 @@ describe("runWorkflow", () => {
     expect(inputJson.arguments.routed.marker).toBe("from-b-manager");
   });
 
-  test("sub-oyakata-manager can suppress default child-input forwarding with explicit empty managerControl actions", async () => {
+  test("sub-divedra-manager can suppress default child-input forwarding with explicit empty managerControl actions", async () => {
     const root = await makeTempDir();
     const workflowName = "subworkflow-manager-no-forward";
     await createSubWorkflowRuntimeFixture(root, workflowName);
@@ -5748,7 +5748,7 @@ describe("runWorkflow", () => {
         sessionId: "sess-root-manager-explicit-start",
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           {
             payload: {
               managerControl: {
@@ -5775,7 +5775,7 @@ describe("runWorkflow", () => {
 
     const startCommunication = result.value.session.communications.find(
       (entry) =>
-        entry.fromNodeId === "oyakata-manager" &&
+        entry.fromNodeId === "divedra-manager" &&
         entry.toNodeId === "a-manager" &&
         entry.transitionWhen === "sub-workflow-start:sw-a",
     );
@@ -5796,7 +5796,7 @@ describe("runWorkflow", () => {
         sessionId: "sess-root-manager-explicit-rerun",
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": [
+        "divedra-manager": [
           {
             payload: {
               managerControl: {
@@ -5839,7 +5839,7 @@ describe("runWorkflow", () => {
     const repeatedStartCommunications =
       result.value.session.communications.filter(
         (entry) =>
-          entry.fromNodeId === "oyakata-manager" &&
+          entry.fromNodeId === "divedra-manager" &&
           entry.toNodeId === "a-manager" &&
           entry.transitionWhen === "sub-workflow-start:sw-a",
       );
@@ -5860,7 +5860,7 @@ describe("runWorkflow", () => {
         sessionId: "sess-root-manager-invalid-internal-retry",
       },
       new ScenarioNodeAdapter({
-        "oyakata-manager": {
+        "divedra-manager": {
           payload: {
             managerControl: {
               actions: [{ type: "retry-node", nodeId: "a-input" }],

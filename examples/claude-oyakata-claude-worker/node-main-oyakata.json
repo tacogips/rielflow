@@ -1,9 +1,0 @@
-{
-  "id": "main-oyakata",
-  "executionBackend": "claude-code-agent",
-  "model": "claude-haiku-4-5",
-  "promptTemplateFile": "prompts/main-oyakata.md",
-  "variables": {
-    "workflowId": "claude-oyakata-claude-worker"
-  }
-}

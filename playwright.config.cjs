@@ -3,9 +3,9 @@ const { defineConfig, devices } = require("@playwright/test");
 
 const isCi = process.env["CI"] === "true";
 const baseURL =
-  process.env["OYAKATA_E2E_BASE_URL"] ?? "http://127.0.0.1:43173";
+  process.env["DIVEDRA_E2E_BASE_URL"] ?? "http://127.0.0.1:43173";
 const chromiumExecutablePath = [
-  process.env["OYAKATA_CHROMIUM_EXECUTABLE"],
+  process.env["DIVEDRA_CHROMIUM_EXECUTABLE"],
   "/etc/profiles/per-user/taco/bin/chromium-browser",
   "/run/current-system/sw/bin/chromium-browser",
   "/usr/bin/chromium-browser",

@@ -51,7 +51,7 @@ Current fields:
 
 ### `WorkflowPrompts`
 
-- optional `oyakataPromptTemplate`
+- optional `divedraPromptTemplate`
 - optional `workerSystemPromptTemplate`
 
 ### `WorkflowNodeRef`
@@ -67,7 +67,7 @@ Current `NodeKind`:
 - `branch-judge`
 - `loop-judge`
 - `root-manager`
-- `sub-oyakata-manager`
+- `sub-divedra-manager`
 - `manager`
 - `input`
 - `output`

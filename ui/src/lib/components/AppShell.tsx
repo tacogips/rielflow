@@ -28,7 +28,7 @@ export default function AppShell(props: AppShellProps): JSX.Element {
       <header class="hero hero-surface">
         <div class="hero-copy">
           <p class="eyebrow">Workflow Control Room</p>
-          <h1>oyakata Workflow Editor</h1>
+          <h1>divedra Workflow Editor</h1>
           <p class="lede">{lede}</p>
           <div class="hero-badges">
             <Show when={props.loading}>

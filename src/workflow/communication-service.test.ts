@@ -17,7 +17,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-communication-service-test-"),
+    path.join(os.tmpdir(), "divedra-communication-service-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -25,12 +25,12 @@ async function makeTempDir(): Promise<string> {
 
 function makeDefaultTemplateScenario(): MockNodeScenario {
   return {
-    "oyakata-manager": {
+    "divedra-manager": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-oyakata": {
+    "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "dispatch" },
@@ -90,7 +90,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "oyakata-manager",
+  managerNodeId = "divedra-manager",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -154,7 +154,7 @@ describe("communication-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createCommunicationService({
       idempotencyStore: managerStore,
@@ -243,7 +243,7 @@ describe("communication-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const service = createCommunicationService({
       idempotencyStore: managerStore,
@@ -320,7 +320,7 @@ describe("communication-service", () => {
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
-      "main-oyakata",
+      "main-divedra",
     );
     const managerMessageService = createManagerMessageService({
       now: () => "2026-03-15T04:00:00.000Z",

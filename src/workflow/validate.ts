@@ -126,13 +126,13 @@ function normalizeNodeKind(value: unknown): NodeKind | undefined {
     case "branch-judge":
     case "loop-judge":
     case "root-manager":
-    case "sub-oyakata-manager":
+    case "sub-divedra-manager":
     case "manager":
     case "input":
     case "output":
       return value;
     case "sub-manager":
-      return "sub-oyakata-manager";
+      return "sub-divedra-manager";
     default:
       return undefined;
   }
@@ -1531,18 +1531,18 @@ function normalizeWorkflow(
         ),
       );
     } else {
-      const oyakataPromptTemplateRaw = promptsRaw["oyakataPromptTemplate"];
+      const divedraPromptTemplateRaw = promptsRaw["divedraPromptTemplate"];
       const workerSystemPromptTemplateRaw =
         promptsRaw["workerSystemPromptTemplate"];
 
       if (
-        oyakataPromptTemplateRaw !== undefined &&
-        typeof oyakataPromptTemplateRaw !== "string"
+        divedraPromptTemplateRaw !== undefined &&
+        typeof divedraPromptTemplateRaw !== "string"
       ) {
         issues.push(
           makeIssue(
             "error",
-            "workflow.prompts.oyakataPromptTemplate",
+            "workflow.prompts.divedraPromptTemplate",
             "must be a string when provided",
           ),
         );
@@ -1561,8 +1561,8 @@ function normalizeWorkflow(
       }
 
       prompts = {
-        ...(typeof oyakataPromptTemplateRaw === "string"
-          ? { oyakataPromptTemplate: oyakataPromptTemplateRaw }
+        ...(typeof divedraPromptTemplateRaw === "string"
+          ? { divedraPromptTemplate: divedraPromptTemplateRaw }
           : {}),
         ...(typeof workerSystemPromptTemplateRaw === "string"
           ? { workerSystemPromptTemplate: workerSystemPromptTemplateRaw }
@@ -2903,12 +2903,12 @@ function runSemanticValidation(
       const subManagerNode = bundle.workflow.nodes.find(
         (node) => node.id === subWorkflow.managerNodeId,
       );
-      if (subManagerNode?.kind !== "sub-oyakata-manager") {
+      if (subManagerNode?.kind !== "sub-divedra-manager") {
         issues.push(
           makeIssue(
             "error",
             `workflow.subWorkflows[${index}].managerNodeId`,
-            "must reference a node with kind 'sub-oyakata-manager'",
+            "must reference a node with kind 'sub-divedra-manager'",
           ),
         );
       }

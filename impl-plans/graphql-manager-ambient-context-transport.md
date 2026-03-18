@@ -18,7 +18,7 @@
 
 This plan closes the remaining transport gap between the GraphQL manager control-plane design and the current implementation:
 
-- `oyakata gql` must forward ambient manager-session scope, not only bearer auth
+- `divedra gql` must forward ambient manager-session scope, not only bearer auth
 - `/graphql` must consume that forwarded session scope before falling back to server-local context
 - tests and docs must prove manager-scoped mutations work without embedding `managerSessionId` in GraphQL variables
 
@@ -27,7 +27,7 @@ This plan closes the remaining transport gap between the GraphQL manager control
 **Included**:
 
 - GraphQL transport header constant and request wiring
-- CLI forwarding of ambient `OYAKATA_MANAGER_SESSION_ID`
+- CLI forwarding of ambient `DIVEDRA_MANAGER_SESSION_ID`
 - GraphQL HTTP handler resolution of forwarded manager-session context
 - targeted CLI and server transport tests
 - plan/index bookkeeping for this corrective iteration
@@ -48,7 +48,7 @@ This plan closes the remaining transport gap between the GraphQL manager control
 
 ```typescript
 export const GRAPHQL_MANAGER_SESSION_HEADER =
-  "x-oyakata-manager-session-id";
+  "x-divedra-manager-session-id";
 
 export interface GraphqlClientRequest {
   readonly endpoint: string;
@@ -62,7 +62,7 @@ export interface GraphqlClientRequest {
 
 **Checklist**:
 
-- [x] `oyakata gql` forwards ambient manager session id when present
+- [x] `divedra gql` forwards ambient manager session id when present
 - [x] GraphQL HTTP handler resolves forwarded manager session id before server-local fallback
 - [x] manager-scoped GraphQL operations work without `managerSessionId` in GraphQL input
 
@@ -145,4 +145,4 @@ export interface GraphqlClientRequest {
 **Tasks Completed**: TASK-001, TASK-002
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added `X-Oyakata-Manager-Session-Id` forwarding so ambient manager sessions survive the HTTP boundary between `oyakata gql` and `/graphql`.
+**Notes**: Added `X-Divedra-Manager-Session-Id` forwarding so ambient manager sessions survive the HTTP boundary between `divedra gql` and `/graphql`.

@@ -20,7 +20,7 @@ const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "oyakata-ui-framework-test-"),
+    path.join(os.tmpdir(), "divedra-ui-framework-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -66,13 +66,13 @@ describe("ui-framework tooling guards", () => {
 
   test("resolves package options from the script module location instead of cwd", () => {
     const options = resolvePackageOptionsFromModuleUrl(
-      "file:///tmp/oyakata/scripts/run-ui-typecheck.mjs",
+      "file:///tmp/divedra/scripts/run-ui-typecheck.mjs",
     );
 
     expect(options).toEqual({
-      baseDir: "/tmp/oyakata",
-      packageRoot: "/tmp/oyakata",
-      uiRoot: "/tmp/oyakata/ui",
+      baseDir: "/tmp/divedra",
+      packageRoot: "/tmp/divedra",
+      uiRoot: "/tmp/divedra/ui",
     });
   });
 

@@ -7,7 +7,7 @@
 
 ## Scope
 
-Ensure `oyakata tui --resume-session <id>` is independent from workflow directory listing.
+Ensure `divedra tui --resume-session <id>` is independent from workflow directory listing.
 
 ## Tasks
 

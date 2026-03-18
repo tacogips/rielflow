@@ -72,7 +72,7 @@ Allocator durability contract:
 
 Manager scoping rules:
 - the root workflow manager owns parent-to-sub-workflow and cross-sub-workflow communication
-- each sub-workflow manager (`sub oyakata`) owns communication between nodes inside that sub-workflow
+- each sub-workflow manager (`sub divedra`) owns communication between nodes inside that sub-workflow
 - a cross-boundary communication must terminate at the recipient sub-workflow manager node
 - a callable child workflow receives parent input at its root manager boundary; once the child workflow execution exists, all child-internal mailbox traffic remains inside that child execution's mailbox root
 - workflow validation must reject any edge that crosses workflow scope but targets a child node instead of the recipient manager boundary
@@ -131,8 +131,8 @@ Canonical message envelope:
   "workflowId": "writing-session",
   "workflowExecutionId": "wfexec-000001",
   "communicationId": "comm-000014",
-  "fromNodeId": "parent-oyakata",
-  "toNodeId": "review-sub-oyakata",
+  "fromNodeId": "parent-divedra",
+  "toNodeId": "review-sub-divedra",
   "fromSubWorkflowId": "design-sw",
   "toSubWorkflowId": "review-sw",
   "routingScope": "cross-sub-workflow",
@@ -269,7 +269,7 @@ Execution-local worker mailbox view:
 - That worker mailbox contract is described in
   `design-docs/specs/design-node-execution-inbox-contract.md`.
 - Future `command` and `container` executors should expose that same mailbox
-  contract on disk and set `OYAKATA_MAILBOX_DIR`.
+  contract on disk and set `DIVEDRA_MAILBOX_DIR`.
 - Any worker-visible file attachments for that node execution must appear only
   under the execution-local inbox files directory; they are not read from
   canonical `communications/...` paths.
@@ -386,8 +386,8 @@ Conceptual example:
   "upstreamCommunications": [
     {
       "communicationId": "comm-000014",
-      "fromNodeId": "parent-oyakata",
-      "inboxMessagePath": "{artifact-root}/writing-session/executions/wfexec-000001/communications/comm-000014/inbox/review-sub-oyakata/message.json"
+      "fromNodeId": "parent-divedra",
+      "inboxMessagePath": "{artifact-root}/writing-session/executions/wfexec-000001/communications/comm-000014/inbox/review-sub-divedra/message.json"
     }
   ]
 }
@@ -429,4 +429,4 @@ Recommended normalization:
 
 ## References
 
-See [architecture.md](/g/gits/tacogips/oyakata/design-docs/specs/architecture.md) and [notes.md](/g/gits/tacogips/oyakata/design-docs/specs/notes.md) for the higher-level architectural decision record.
+See [architecture.md](./architecture.md) and [notes.md](./notes.md) for the higher-level architectural decision record.
