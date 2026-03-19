@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan                         | Status   | Design Reference |
 | ---------------------------- | -------- | ---------------- |
+| `workflow-role-unification`  | Planning | `design-unified-workflow-role-model` |
 
 ## Completed Plans
 
@@ -174,7 +175,8 @@ impl-plans/
 | 67    | COMPLETED | Phase 66 |
 | 68    | COMPLETED | Phase 67 |
 | 69    | COMPLETED | Phase 68 |
-| 70    | PLANNING  | Phase 69 |
+| 70    | COMPLETED | Phase 69 |
+| 71    | PLANNING  | Phase 70 |
 
 ### Phase to Plans Mapping
 
@@ -249,6 +251,7 @@ PHASE_TO_PLANS = {
   67: ["impl-plans/example-node-combination-showcase.md"],
   68: ["impl-plans/node-execution-inbox-contract.md"],
   69: ["impl-plans/user-action-and-optional-node-execution.md"],
-  70: ["impl-plans/manager-kind-simplification.md"]
+  70: ["impl-plans/manager-kind-simplification.md"],
+  71: ["impl-plans/workflow-role-unification.md"]
 }
 ```

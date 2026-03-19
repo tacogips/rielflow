@@ -1,5 +1,7 @@
 # Manager Kind Simplification
 
+Historical note: this document is superseded by `design-docs/specs/design-unified-workflow-role-model.md` as of 2026-03-19. It records the earlier root-manager versus subworkflow-manager split only.
+
 This document defines the planned refactor that removes product-branded nested manager kinds from the authored workflow schema while preserving the existing root-vs-sub-workflow execution model.
 
 ## Overview
