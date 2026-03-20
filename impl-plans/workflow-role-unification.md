@@ -1,6 +1,6 @@
 # Workflow Role Unification Implementation Plan
 
-**Status**: Planning
+**Status**: In Progress
 **Design Reference**: design-docs/specs/design-unified-workflow-role-model.md
 **Created**: 2026-03-19
 **Last Updated**: 2026-03-19
@@ -36,7 +36,7 @@ Replace the structural root-manager/subworkflow-manager/input/output workflow mo
 
 #### `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`
 
-**Status**: NOT_STARTED
+**Status**: IN_PROGRESS
 
 ```typescript
 export type NodeRole = "manager" | "worker";
@@ -77,12 +77,13 @@ export interface WorkflowJson {
 ```
 
 **Checklist**:
+
 - [ ] Replace structural node `kind` usage with `role` and `control`
-- [ ] Make `managerNodeId` optional and add `entryNodeId`
-- [ ] Enforce that manager-role nodes stay on the agent execution path
+- [x] Make `managerNodeId` optional and add `entryNodeId`
+- [x] Enforce that manager-role nodes stay on the agent execution path
 - [ ] Remove authored structural sub-workflow boundary fields
-- [ ] Add validation coverage for zero-manager worker-only workflows
-- [ ] Add validation coverage for rejecting multiple managers
+- [x] Add validation coverage for zero-manager worker-only workflows
+- [x] Add validation coverage for rejecting multiple managers
 
 ### 2. Runtime Execution and Workflow Calls
 
@@ -106,6 +107,7 @@ interface WorkflowEntryResolution {
 ```
 
 **Checklist**:
+
 - [ ] Remove root-manager-only start assumptions
 - [ ] Remove subworkflow-manager child-input forwarding semantics
 - [ ] Keep manager execution on the existing agent orchestration path only
@@ -131,6 +133,7 @@ export interface EditableWorkflowCall {
 ```
 
 **Checklist**:
+
 - [ ] Replace manager-kind UI with role UI
 - [ ] Support workflows with no manager in the editor
 - [ ] Hide non-agent node-type controls for manager nodes
@@ -154,6 +157,7 @@ interface VerificationCommandSet {
 ```
 
 **Checklist**:
+
 - [ ] Update architecture and workflow docs to the new role model
 - [ ] Remove tests that assume structural sub-workflow manager/input/output kinds
 - [ ] Add runtime tests for manager-less workflow execution
@@ -162,21 +166,21 @@ interface VerificationCommandSet {
 
 ## Module Status
 
-| Module | File Path | Status | Tests |
-|--------|-----------|--------|-------|
-| Authored schema and validation | `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts` | NOT_STARTED | `bun test src/workflow/validate.test.ts src/workflow/load.test.ts` |
+| Module                               | File Path                                                                                   | Status      | Tests                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------------------------- |
+| Authored schema and validation       | `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`                 | IN_PROGRESS | `bun test src/workflow/validate.test.ts src/workflow/load.test.ts`          |
 | Runtime execution and workflow calls | `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/sub-workflow.ts` | NOT_STARTED | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts` |
-| Editor, templates, and examples | `ui/src/lib/editor-*.ts`, `src/workflow/create.ts`, `examples/**/*.json` | NOT_STARTED | `bun test ui/src/lib/*.test.ts`, targeted E2E |
-| Migration and verification | `design-docs/specs/*.md`, `README.md`, `src/**/*.test.ts`, `ui/src/**/*.test.ts` | NOT_STARTED | `bun run typecheck:server`, `bun run typecheck:ui`, `bun run build:ui` |
+| Editor, templates, and examples      | `ui/src/lib/editor-*.ts`, `src/workflow/create.ts`, `examples/**/*.json`                    | NOT_STARTED | `bun test ui/src/lib/*.test.ts`, targeted E2E                               |
+| Migration and verification           | `design-docs/specs/*.md`, `README.md`, `src/**/*.test.ts`, `ui/src/**/*.test.ts`            | NOT_STARTED | `bun run typecheck:server`, `bun run typecheck:ui`, `bun run build:ui`      |
 
 ## Dependencies
 
-| Feature | Depends On | Status |
-|---------|------------|--------|
-| Authored schema and validation | New role model design | READY |
-| Runtime execution and workflow calls | Authored schema and validation | BLOCKED |
-| Editor, templates, and examples | Authored schema and validation | BLOCKED |
-| Migration and verification | Runtime execution and editor updates | BLOCKED |
+| Feature                              | Depends On                           | Status  |
+| ------------------------------------ | ------------------------------------ | ------- |
+| Authored schema and validation       | New role model design                | READY   |
+| Runtime execution and workflow calls | Authored schema and validation       | BLOCKED |
+| Editor, templates, and examples      | Authored schema and validation       | BLOCKED |
+| Migration and verification           | Runtime execution and editor updates | BLOCKED |
 
 ## Completion Criteria
 
@@ -190,10 +194,25 @@ interface VerificationCommandSet {
 ## Progress Log
 
 ### Session: 2026-03-19 00:00
+
 **Tasks Completed**: Design assessment, implementation plan creation
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: The current codebase has just committed the opposite direction (`root-manager` / `subworkflow-manager` plus structural sub-workflow boundaries). This plan treats the requested `manager` / `worker` / `workflow` model as a schema-and-runtime redesign rather than as a naming cleanup. Manager nodes are now explicitly defined as agent-only coordinators, not generic executable node types.
+
+### Session: 2026-03-19 12:10
+
+**Tasks Completed**: Partial TASK-001
+**Tasks In Progress**: TASK-001
+**Blockers**: Runtime execution still assumes structural root/subworkflow manager boundaries, so authored schema changes remain in compatibility mode until TASK-002 rewires execution.
+**Notes**: Added authored `role`, `control`, `entryNodeId`, and `workflowCalls` support in validation/loading while preserving legacy `kind`-based runtime compatibility. Added validation coverage for manager-less worker-only workflows, multiple manager rejection, workflow call references, and manager agent-path enforcement. Verified with `bun test src/workflow/validate.test.ts src/workflow/load.test.ts` and `bun run typecheck:server`.
+
+### Session: 2026-03-20 00:00
+
+**Tasks Completed**: TASK-001 review hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: `workflowCalls` and manager-less execution remain blocked on TASK-002 runtime work; validation now rejects those authored bundles during the compatibility phase instead of silently accepting them.
+**Notes**: Review found that the runtime still boots from `workflow.managerNodeId` and has no execution path for explicit `workflowCalls`, so the transitional validator now reports those shapes as non-executable. Updated `src/workflow/validate.test.ts` and `src/workflow/load.test.ts` to keep unified role coverage while preventing unsupported bundles from loading as runnable workflows. Verified with `bun test src/workflow/validate.test.ts src/workflow/load.test.ts` and `bun run typecheck:server`.
 
 ## Related Plans
 

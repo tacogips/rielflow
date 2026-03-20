@@ -14,6 +14,10 @@ export type NodeKind =
   | "input"
   | "output";
 
+export type NodeRole = "manager" | "worker";
+
+export type NodeControlKind = "none" | "branch-judge" | "loop-judge";
+
 export type CompletionType =
   | "checklist"
   | "score-threshold"
@@ -45,8 +49,17 @@ export interface WorkflowNodeRef {
   readonly id: string;
   readonly nodeFile: string;
   readonly kind?: NodeKind;
+  readonly role?: NodeRole;
+  readonly control?: NodeControlKind;
   readonly completion?: CompletionRule;
   readonly execution?: WorkflowNodeExecutionPolicy;
+}
+
+export interface WorkflowCallRef {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly callerNodeId: string;
+  readonly resultNodeId?: string;
 }
 
 export interface WorkflowEdge {
@@ -122,6 +135,9 @@ export interface WorkflowJson {
   readonly defaults: WorkflowDefaults;
   readonly prompts?: WorkflowPrompts;
   readonly managerNodeId: string;
+  readonly hasManagerNode?: boolean;
+  readonly entryNodeId?: string;
+  readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly subWorkflows: readonly SubWorkflowRef[];
   readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
   readonly nodes: readonly WorkflowNodeRef[];

@@ -1,0 +1,41 @@
+{
+  "id": "multiply-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/multiply-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return the multiplication stage handoff for the division lane.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "firstFour",
+        "nextOperand",
+        "result",
+        "stage"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "const": "multiply-output"
+        },
+        "firstFour": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "result": {
+          "type": "number"
+        },
+        "nextOperand": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

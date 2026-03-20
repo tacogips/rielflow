@@ -1,0 +1,21 @@
+{
+  "id": "divide-worker",
+  "nodeType": "command",
+  "variables": {
+    "stageName": "divide"
+  },
+  "command": {
+    "scriptPath": "scripts/divide.sh",
+    "argvTemplate": [
+      "--stage",
+      "divide"
+    ],
+    "envTemplate": {
+      "ARITHMETIC_STAGE": "divide"
+    },
+    "workingDirectory": "scripts"
+  },
+  "output": {
+    "description": "Return the division result as a JSON object."
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "add-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/add-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return the addition stage handoff for the multiplication lane.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "firstFour",
+        "nextOperand",
+        "result",
+        "stage"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "const": "add-output"
+        },
+        "firstFour": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "result": {
+          "type": "number"
+        },
+        "nextOperand": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

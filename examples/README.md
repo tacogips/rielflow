@@ -68,6 +68,37 @@ Inspect it:
 bun run src/main.ts workflow inspect node-combinations-showcase --workflow-root ./examples --output json
 ```
 
+### `first-four-arithmetic-pipeline`
+
+Validation-oriented arithmetic pipeline reference:
+
+- accepts a human input string containing at least four space-separated numbers
+- uses only the first four numbers from that input
+- stage 1 uses an `agent` worker to add the first two numbers
+- stage 2 uses a `container` worker configured for `podman` to multiply the
+  stage 1 result by the third number
+- stage 3 uses a `command` worker to divide the stage 2 result by the fourth
+  number
+- managers treat each stage as opaque and only move scoped payloads forward
+
+Important current limitation:
+
+- this bundle is meant for `validate` and `inspect`
+- `command` and `container` nodes are still rejected by `workflow run` in the
+  current runtime, so this example is intentionally not documented as runnable
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate first-four-arithmetic-pipeline --workflow-root ./examples
+```
+
+Inspect it:
+
+```bash
+bun run src/main.ts workflow inspect first-four-arithmetic-pipeline --workflow-root ./examples --output json
+```
+
 ### `claude-divedra-claude-worker`
 
 Reference workflow for the case where a regular task node also uses

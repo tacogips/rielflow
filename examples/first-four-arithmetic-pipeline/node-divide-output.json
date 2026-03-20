@@ -1,0 +1,55 @@
+{
+  "id": "divide-output",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/divide-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return the final arithmetic pipeline result for the caller.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "firstFour",
+        "finalResult",
+        "summary"
+      ],
+      "properties": {
+        "firstFour": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "finalResult": {
+          "type": "number"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "result": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "operation",
+              "result"
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

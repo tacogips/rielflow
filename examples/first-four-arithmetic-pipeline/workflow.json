@@ -1,0 +1,255 @@
+{
+  "workflowId": "first-four-arithmetic-pipeline",
+  "description": "Validation-oriented reference bundle that accepts at least four space-separated numbers, uses the first four only, then chains addition, multiplication, and division across agent, container, and command worker nodes.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000,
+    "containerRuntime": {
+      "runnerKind": "podman"
+    }
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as a three-stage arithmetic pipeline. Managers do not need to know worker internals; they only move the scoped payload to the next stage when dependencies are ready.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "managerNodeId": "divedra-manager",
+  "subWorkflows": [
+    {
+      "id": "add-lane",
+      "description": "Take the first two numbers from human input and produce their sum.",
+      "managerNodeId": "add-manager",
+      "inputNodeId": "add-input",
+      "outputNodeId": "add-output",
+      "nodeIds": [
+        "add-manager",
+        "add-input",
+        "add-worker",
+        "add-output"
+      ],
+      "inputSources": [
+        {
+          "type": "human-input"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    },
+    {
+      "id": "multiply-lane",
+      "description": "Take the addition result and the third number, then multiply them.",
+      "managerNodeId": "multiply-manager",
+      "inputNodeId": "multiply-input",
+      "outputNodeId": "multiply-output",
+      "nodeIds": [
+        "multiply-manager",
+        "multiply-input",
+        "multiply-worker",
+        "multiply-output"
+      ],
+      "inputSources": [
+        {
+          "type": "sub-workflow-output",
+          "subWorkflowId": "add-lane"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    },
+    {
+      "id": "divide-lane",
+      "description": "Take the multiplication result and the fourth number, then divide them and publish the final result.",
+      "managerNodeId": "divide-manager",
+      "inputNodeId": "divide-input",
+      "outputNodeId": "divide-output",
+      "nodeIds": [
+        "divide-manager",
+        "divide-input",
+        "divide-worker",
+        "divide-output"
+      ],
+      "inputSources": [
+        {
+          "type": "sub-workflow-output",
+          "subWorkflowId": "multiply-lane"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "kind": "root-manager",
+      "nodeFile": "node-divedra-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "add-manager",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-add-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "add-input",
+      "kind": "input",
+      "nodeFile": "node-add-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "add-worker",
+      "kind": "task",
+      "nodeFile": "node-add-worker.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "add-output",
+      "kind": "output",
+      "nodeFile": "node-add-output.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "multiply-manager",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-multiply-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "multiply-input",
+      "kind": "input",
+      "nodeFile": "node-multiply-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "multiply-worker",
+      "kind": "task",
+      "nodeFile": "node-multiply-worker.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "multiply-output",
+      "kind": "output",
+      "nodeFile": "node-multiply-output.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "divide-manager",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-divide-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "divide-input",
+      "kind": "input",
+      "nodeFile": "node-divide-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "divide-worker",
+      "kind": "task",
+      "nodeFile": "node-divide-worker.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "divide-output",
+      "kind": "output",
+      "nodeFile": "node-divide-output.json",
+      "completion": {
+        "type": "none"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "divedra-manager",
+      "to": "add-manager",
+      "when": "always"
+    },
+    {
+      "from": "add-manager",
+      "to": "add-input",
+      "when": "always"
+    },
+    {
+      "from": "add-input",
+      "to": "add-worker",
+      "when": "always"
+    },
+    {
+      "from": "add-worker",
+      "to": "add-output",
+      "when": "always"
+    },
+    {
+      "from": "add-output",
+      "to": "multiply-manager",
+      "when": "always"
+    },
+    {
+      "from": "multiply-manager",
+      "to": "multiply-input",
+      "when": "always"
+    },
+    {
+      "from": "multiply-input",
+      "to": "multiply-worker",
+      "when": "always"
+    },
+    {
+      "from": "multiply-worker",
+      "to": "multiply-output",
+      "when": "always"
+    },
+    {
+      "from": "multiply-output",
+      "to": "divide-manager",
+      "when": "always"
+    },
+    {
+      "from": "divide-manager",
+      "to": "divide-input",
+      "when": "always"
+    },
+    {
+      "from": "divide-input",
+      "to": "divide-worker",
+      "when": "always"
+    },
+    {
+      "from": "divide-worker",
+      "to": "divide-output",
+      "when": "always"
+    }
+  ],
+  "loops": [],
+  "branching": {
+    "mode": "fan-out"
+  }
+}

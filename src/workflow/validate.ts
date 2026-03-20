@@ -22,12 +22,14 @@ import {
   type ContainerRunnerKind,
   type JsonObject,
   type CompletionRule,
+  type NodeControlKind,
   type NodeOutputContract,
   type NodeDurability,
   type LoopRule,
   type NodeExecutionBackend,
   type NodeKind,
   type NodePayload,
+  type NodeRole,
   type NodeType,
   type NodeSessionPolicy,
   type NormalizedWorkflowBundle,
@@ -37,6 +39,7 @@ import {
   type SubWorkflowRef,
   type ValidationIssue,
   type VisNode,
+  type WorkflowCallRef,
   type WorkflowEdge,
   type WorkflowJson,
   type WorkflowNodeExecutionPolicy,
@@ -132,6 +135,68 @@ function normalizeNodeKind(value: unknown): NodeKind | undefined {
       return value;
     default:
       return undefined;
+  }
+}
+
+function normalizeNodeRole(value: unknown): NodeRole | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "manager" || value === "worker") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeNodeControlKind(value: unknown): NodeControlKind | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "none" || value === "branch-judge" || value === "loop-judge") {
+    return value;
+  }
+  return undefined;
+}
+
+function deriveRoleAndControlFromKind(kind: NodeKind): {
+  readonly role: NodeRole;
+  readonly control?: NodeControlKind;
+} {
+  switch (kind) {
+    case "root-manager":
+      return { role: "manager" };
+    case "subworkflow-manager":
+    case "branch-judge":
+      return kind === "subworkflow-manager"
+        ? { role: "worker" }
+        : { role: "worker", control: "branch-judge" };
+    case "loop-judge":
+      return { role: "worker", control: "loop-judge" };
+    case "task":
+    case "input":
+    case "output":
+      return { role: "worker" };
+  }
+}
+
+function deriveLegacyKindFromRoleAndControl(
+  role: NodeRole | undefined,
+  control: NodeControlKind | undefined,
+): NodeKind | undefined {
+  if (role === undefined) {
+    return undefined;
+  }
+  if (role === "manager") {
+    return "root-manager";
+  }
+  switch (control) {
+    case "branch-judge":
+      return "branch-judge";
+    case "loop-judge":
+      return "loop-judge";
+    case "none":
+    case undefined:
+      return "task";
   }
 }
 
@@ -911,6 +976,36 @@ function normalizeNodeRef(
     issues,
   );
 
+  const roleRaw = value["role"];
+  const normalizedRole = normalizeNodeRole(roleRaw);
+  let role: WorkflowNodeRef["role"];
+  if (roleRaw !== undefined) {
+    if (normalizedRole === undefined) {
+      issues.push(
+        makeIssue("error", `${path}.role`, "must be 'manager' or 'worker'"),
+      );
+    } else {
+      role = normalizedRole;
+    }
+  }
+
+  const controlRaw = value["control"];
+  const normalizedControl = normalizeNodeControlKind(controlRaw);
+  let control: WorkflowNodeRef["control"];
+  if (controlRaw !== undefined) {
+    if (normalizedControl === undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.control`,
+          "must be 'none', 'branch-judge', or 'loop-judge'",
+        ),
+      );
+    } else if (normalizedControl !== "none") {
+      control = normalizedControl;
+    }
+  }
+
   const kindRaw = value["kind"];
   let kind: WorkflowNodeRef["kind"];
   if (kindRaw !== undefined) {
@@ -921,7 +1016,61 @@ function normalizeNodeRef(
       );
     } else {
       kind = normalizedKind;
+      const derived = deriveRoleAndControlFromKind(normalizedKind);
+      if (role !== undefined && role !== derived.role) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.role`,
+            `must match kind '${normalizedKind}'`,
+          ),
+        );
+      }
+
+      const derivedControl = derived.control;
+      if (
+        control !== undefined &&
+        control !== "none" &&
+        derivedControl !== undefined &&
+        control !== derivedControl
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.control`,
+            `must match kind '${normalizedKind}'`,
+          ),
+        );
+      } else if (
+        control !== undefined &&
+        control !== "none" &&
+        derivedControl === undefined
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.control`,
+            `kind '${normalizedKind}' does not support control '${control}'`,
+          ),
+        );
+      }
     }
+  }
+
+  if (role === undefined && control !== undefined) {
+    role = "worker";
+  }
+  if (kind === undefined) {
+    kind = deriveLegacyKindFromRoleAndControl(role, control);
+  }
+  if (role === "manager" && control !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.control`,
+        "manager-role nodes cannot declare branch or loop control",
+      ),
+    );
   }
 
   if (id === null || nodeFile === null) {
@@ -943,6 +1092,8 @@ function normalizeNodeRef(
     id,
     nodeFile,
     ...(kind === undefined ? {} : { kind }),
+    ...(role === undefined ? {} : { role }),
+    ...(control === undefined ? {} : { control }),
     ...(completion === undefined ? {} : { completion }),
     ...(execution === undefined ? {} : { execution }),
   };
@@ -1127,6 +1278,49 @@ function normalizeLoop(
     exitWhen,
     ...(maxIterations === undefined ? {} : { maxIterations }),
     ...(backoffMs === undefined ? {} : { backoffMs }),
+  };
+}
+
+function normalizeWorkflowCall(
+  value: unknown,
+  index: number,
+  issues: ValidationIssue[],
+): WorkflowCallRef | null {
+  const path = `workflow.workflowCalls[${index}]`;
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return null;
+  }
+
+  const id = readStringField(value, "id", path, issues);
+  const workflowId = readStringField(value, "workflowId", path, issues);
+  const callerNodeId = readStringField(value, "callerNodeId", path, issues);
+
+  const resultNodeIdRaw = value["resultNodeId"];
+  let resultNodeId: string | undefined;
+  if (resultNodeIdRaw !== undefined) {
+    if (typeof resultNodeIdRaw === "string" && resultNodeIdRaw.length > 0) {
+      resultNodeId = resultNodeIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.resultNodeId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  if (id === null || workflowId === null || callerNodeId === null) {
+    return null;
+  }
+
+  return {
+    id,
+    workflowId,
+    callerNodeId,
+    ...(resultNodeId === undefined ? {} : { resultNodeId }),
   };
 }
 
@@ -1473,12 +1667,39 @@ function normalizeWorkflow(
     "workflow",
     issues,
   );
-  const managerNodeId = readStringField(
-    workflow,
-    "managerNodeId",
-    "workflow",
-    issues,
-  );
+  const managerNodeIdRaw = workflow["managerNodeId"];
+  let managerNodeId: string | undefined | null;
+  if (managerNodeIdRaw !== undefined) {
+    if (typeof managerNodeIdRaw === "string" && managerNodeIdRaw.length > 0) {
+      managerNodeId = managerNodeIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.managerNodeId",
+          "must be a non-empty string when provided",
+        ),
+      );
+      managerNodeId = null;
+    }
+  }
+
+  const entryNodeIdRaw = workflow["entryNodeId"];
+  let entryNodeId: string | undefined | null;
+  if (entryNodeIdRaw !== undefined) {
+    if (typeof entryNodeIdRaw === "string" && entryNodeIdRaw.length > 0) {
+      entryNodeId = entryNodeIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.entryNodeId",
+          "must be a non-empty string when provided",
+        ),
+      );
+      entryNodeId = null;
+    }
+  }
 
   const defaultsValue = workflow["defaults"];
   if (!isRecord(defaultsValue)) {
@@ -1560,16 +1781,20 @@ function normalizeWorkflow(
   }
 
   const subWorkflowsRaw = workflow["subWorkflows"];
-  if (!Array.isArray(subWorkflowsRaw)) {
-    issues.push(
-      makeIssue("error", "workflow.subWorkflows", "must be an array"),
-    );
-  }
   const subWorkflows = Array.isArray(subWorkflowsRaw)
     ? subWorkflowsRaw
         .map((entry, index) => normalizeSubWorkflow(entry, index, issues))
         .filter((entry): entry is SubWorkflowRef => entry !== null)
     : [];
+  if (subWorkflowsRaw !== undefined && !Array.isArray(subWorkflowsRaw)) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.subWorkflows",
+        "must be an array when provided",
+      ),
+    );
+  }
 
   const nodesRaw = workflow["nodes"];
   if (!Array.isArray(nodesRaw)) {
@@ -1590,6 +1815,22 @@ function normalizeWorkflow(
         .map((entry, index) => normalizeEdge(entry, index, issues))
         .filter((entry): entry is WorkflowEdge => entry !== null)
     : [];
+
+  const workflowCallsRaw = workflow["workflowCalls"];
+  if (workflowCallsRaw !== undefined && !Array.isArray(workflowCallsRaw)) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.workflowCalls",
+        "must be an array when provided",
+      ),
+    );
+  }
+  const workflowCalls = Array.isArray(workflowCallsRaw)
+    ? workflowCallsRaw
+        .map((entry, index) => normalizeWorkflowCall(entry, index, issues))
+        .filter((entry): entry is WorkflowCallRef => entry !== null)
+    : undefined;
 
   const loopsRaw = workflow["loops"];
   const loops = Array.isArray(loopsRaw)
@@ -1635,13 +1876,55 @@ function normalizeWorkflow(
         .filter((entry): entry is SubWorkflowConversation => entry !== null)
     : undefined;
 
+  const authoredManagerNodeIds = nodes
+    .filter((node) => node.role === "manager")
+    .map((node) => node.id);
+  const hasManagerNode =
+    managerNodeId !== undefined || authoredManagerNodeIds.length > 0;
+  let effectiveManagerNodeId = managerNodeId;
+  if (effectiveManagerNodeId === undefined) {
+    if (authoredManagerNodeIds.length === 1) {
+      effectiveManagerNodeId = authoredManagerNodeIds[0];
+    } else if (
+      authoredManagerNodeIds.length === 0 &&
+      entryNodeId !== undefined
+    ) {
+      effectiveManagerNodeId = entryNodeId;
+    }
+  }
+  let effectiveEntryNodeId = entryNodeId;
+  if (effectiveEntryNodeId === undefined) {
+    effectiveEntryNodeId = effectiveManagerNodeId;
+  }
+
+  if (effectiveManagerNodeId === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.managerNodeId",
+        "is required unless exactly one manager-role node can be inferred or entryNodeId is provided for a manager-less workflow",
+      ),
+    );
+  }
+  if (effectiveEntryNodeId === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.entryNodeId",
+        "is required unless it can be derived from managerNodeId",
+      ),
+    );
+  }
+
   if (
     workflowId === null ||
     description === null ||
     managerNodeId === null ||
+    entryNodeId === null ||
     typeof maxLoopIterations !== "number" ||
     typeof nodeTimeoutMs !== "number" ||
-    !Array.isArray(subWorkflowsRaw)
+    effectiveManagerNodeId === undefined ||
+    effectiveEntryNodeId === undefined
   ) {
     return null;
   }
@@ -1658,11 +1941,14 @@ function normalizeWorkflow(
   }
 
   return {
-    workflowId,
-    description,
+    workflowId: workflowId!,
+    description: description!,
     defaults: { maxLoopIterations, nodeTimeoutMs, containerRuntime },
     ...(prompts === undefined ? {} : { prompts }),
-    managerNodeId,
+    managerNodeId: effectiveManagerNodeId!,
+    hasManagerNode,
+    entryNodeId: effectiveEntryNodeId!,
+    ...(workflowCalls === undefined ? {} : { workflowCalls }),
     subWorkflows,
     ...(subWorkflowConversations === undefined
       ? {}
@@ -2706,6 +2992,9 @@ function runSemanticValidation(
   const rootManagerNodeIds = bundle.workflow.nodes
     .filter((node) => node.kind === "root-manager")
     .map((node) => node.id);
+  const managerRoleNodeIds = bundle.workflow.nodes
+    .filter((node) => node.role === "manager")
+    .map((node) => node.id);
 
   if (!nodeIdSet.has(bundle.workflow.managerNodeId)) {
     issues.push(
@@ -2717,15 +3006,77 @@ function runSemanticValidation(
     );
   }
 
+  if (
+    bundle.workflow.entryNodeId !== undefined &&
+    !nodeIdSet.has(bundle.workflow.entryNodeId)
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.entryNodeId",
+        `must reference an existing node id (${bundle.workflow.entryNodeId})`,
+      ),
+    );
+  }
+
+  if (managerRoleNodeIds.length > 1) {
+    managerRoleNodeIds.forEach((nodeId) => {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.nodes",
+          `node '${nodeId}' cannot use role 'manager' because workflows may define at most one manager node`,
+        ),
+      );
+    });
+  }
+
   const managerNode = bundle.workflow.nodes.find(
     (node) => node.id === bundle.workflow.managerNodeId,
   );
-  if (managerNode?.kind !== "root-manager") {
+  if (
+    managerRoleNodeIds.length === 1 &&
+    managerRoleNodeIds[0] !== bundle.workflow.managerNodeId
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.managerNodeId",
+        `must reference the manager-role node '${managerRoleNodeIds[0]}'`,
+      ),
+    );
+  }
+  if (
+    bundle.workflow.hasManagerNode !== false &&
+    managerNode?.kind !== "root-manager"
+  ) {
     issues.push(
       makeIssue(
         "error",
         "workflow.managerNodeId",
         "must reference a node with kind 'root-manager'",
+      ),
+    );
+  }
+  if (
+    bundle.workflow.hasManagerNode === false &&
+    bundle.workflow.entryNodeId !== undefined &&
+    bundle.workflow.managerNodeId !== bundle.workflow.entryNodeId
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.managerNodeId",
+        "manager-less workflows must derive managerNodeId from entryNodeId during the transition runtime phase",
+      ),
+    );
+  }
+  if (bundle.workflow.hasManagerNode === false) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.entryNodeId",
+        "manager-less workflows are not executable in the current runtime phase",
       ),
     );
   }
@@ -2769,6 +3120,21 @@ function runSemanticValidation(
     }
 
     if (
+      node.role === "manager" &&
+      (payload.nodeType === "command" ||
+        payload.nodeType === "container" ||
+        payload.nodeType === "user-action")
+    ) {
+      issues.push(
+        makeIssue(
+          "error",
+          `nodePayloads.${node.nodeFile}.nodeType`,
+          "manager-role nodes must stay on the agent execution path",
+        ),
+      );
+    }
+
+    if (
       payload.timeoutMs === undefined &&
       bundle.workflow.defaults.nodeTimeoutMs === DEFAULT_NODE_TIMEOUT_MS
     ) {
@@ -2798,6 +3164,48 @@ function runSemanticValidation(
           "error",
           `workflow.edges[${index}].to`,
           "must reference an existing node id",
+        ),
+      );
+    }
+  });
+
+  const workflowCallIdSet = new Set<string>();
+  bundle.workflow.workflowCalls?.forEach((call, index) => {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.workflowCalls",
+        "workflowCalls are not executable in the current runtime phase",
+      ),
+    );
+    if (workflowCallIdSet.has(call.id)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.workflowCalls[${index}].id`,
+          `duplicate workflow call id '${call.id}'`,
+        ),
+      );
+    } else {
+      workflowCallIdSet.add(call.id);
+    }
+
+    if (!nodeIdSet.has(call.callerNodeId)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.workflowCalls[${index}].callerNodeId`,
+          "must reference an existing node id",
+        ),
+      );
+    }
+
+    if (call.resultNodeId !== undefined && !nodeIdSet.has(call.resultNodeId)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.workflowCalls[${index}].resultNodeId`,
+          "must reference an existing node id when provided",
         ),
       );
     }

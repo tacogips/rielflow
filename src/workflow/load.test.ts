@@ -145,7 +145,150 @@ describe("loadWorkflowFromDisk", () => {
     );
   });
 
-  test("preserves podman runtimeIsolation build metadata during load", async () => {
+  test("loads unified role workflows with a manager-role node", async () => {
+    const root = await makeTempDir();
+    const workflowName = "unified-role-workflow";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "sample",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      entryNodeId: "divedra-manager",
+      nodes: [
+        {
+          id: "divedra-manager",
+          role: "manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-2",
+          role: "worker",
+          control: "loop-judge",
+          nodeFile: "node-worker-2.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [
+        { from: "divedra-manager", to: "worker-1", when: "always" },
+        { from: "worker-1", to: "worker-2", when: "always" },
+      ],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [
+        { id: "divedra-manager", order: 0 },
+        { id: "worker-1", order: 1 },
+        { id: "worker-2", order: 2 },
+      ],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
+      model: "gpt-5-nano",
+      executionBackend: "codex-agent",
+      promptTemplate: "manager",
+      variables: {},
+    });
+    await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
+      id: "worker-1",
+      model: "gpt-5-nano",
+      executionBackend: "codex-agent",
+      promptTemplate: "worker",
+      variables: {},
+    });
+    await writeJson(path.join(workflowDirectory, "node-worker-2.json"), {
+      id: "worker-2",
+      model: "gpt-5-nano",
+      executionBackend: "codex-agent",
+      promptTemplate: "judge",
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.managerNodeId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.subWorkflows).toEqual([]);
+    expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("root-manager");
+    expect(result.value.bundle.workflow.nodes[2]?.control).toBe("loop-judge");
+    expect(result.value.bundle.workflow.nodes[2]?.kind).toBe("loop-judge");
+  });
+
+  test("returns validation error for manager-less workflows before runtime support lands", async () => {
+    const root = await makeTempDir();
+    const workflowName = "managerless-workflow";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "sample",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "worker-1",
+      nodes: [
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [{ id: "worker-1", order: 0 }],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
+      id: "worker-1",
+      model: "gpt-5-nano",
+      executionBackend: "codex-agent",
+      promptTemplate: "worker",
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(
+      result.error.issues?.some(
+        (issue) =>
+          issue.path === "workflow.entryNodeId" &&
+          issue.message.includes("not executable"),
+      ),
+    ).toBe(true);
+  });
+
+  test("preserves podman runtimeIsolation build metadata for worker nodes during load", async () => {
     const root = await makeTempDir();
     const workflowName = "podman-build-load";
     const workflowDirectory = path.join(root, workflowName);
@@ -156,12 +299,18 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
+      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
-          kind: "root-manager",
+          role: "manager",
           nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "build-worker",
+          role: "worker",
+          nodeFile: "node-build-worker.json",
           completion: { type: "none" },
         },
       ],
@@ -171,13 +320,24 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
-      nodes: [{ id: "divedra-manager", order: 0 }],
+      nodes: [
+        { id: "divedra-manager", order: 0 },
+        { id: "build-worker", order: 1 },
+      ],
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      model: "gpt-5-nano",
+      executionBackend: "codex-agent",
       promptTemplate: "manager",
+      variables: {},
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-build-worker.json"), {
+      id: "build-worker",
+      model: "tacogips/codex-agent",
+      promptTemplate: "worker",
       variables: {},
       runtimeIsolation: {
         mode: "podman",
@@ -197,7 +357,7 @@ describe("loadWorkflowFromDisk", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
+    expect(result.value.bundle.nodePayloads["build-worker"]).toMatchObject({
       nodeType: "container",
       container: {
         runnerKind: "podman",
@@ -435,8 +595,9 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(
-      result.value.bundle.workflow.nodes.find((node) => node.id === "claude-task")
-        ?.kind,
+      result.value.bundle.workflow.nodes.find(
+        (node) => node.id === "claude-task",
+      )?.kind,
     ).toBe("task");
     expect(
       result.value.bundle.nodePayloads["claude-task"]?.executionBackend,

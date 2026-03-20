@@ -1,0 +1,56 @@
+{
+  "id": "add-input",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "promptTemplateFile": "prompts/add-input.md",
+  "variables": {},
+  "output": {
+    "description": "Return the first four parsed numbers and expose the first two as operands for the addition worker.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "allNumbers",
+        "firstFour",
+        "operands",
+        "stage"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string",
+          "const": "add-input"
+        },
+        "allNumbers": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4
+        },
+        "firstFour": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "operands": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "ignoredTail": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

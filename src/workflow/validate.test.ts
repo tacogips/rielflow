@@ -57,6 +57,78 @@ function makeValidRaw(): {
   };
 }
 
+function makeUnifiedRoleRaw(): {
+  workflow: unknown;
+  workflowVis: unknown;
+  nodePayloads: Record<string, unknown>;
+} {
+  return {
+    workflow: {
+      workflowId: "unified-demo",
+      description: "unified demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      entryNodeId: "divedra-manager",
+      nodes: [
+        {
+          id: "divedra-manager",
+          role: "manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-2",
+          role: "worker",
+          control: "loop-judge",
+          nodeFile: "node-worker-2.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [
+        { from: "divedra-manager", to: "worker-1", when: "always" },
+        { from: "worker-1", to: "worker-2", when: "always" },
+      ],
+      branching: { mode: "fan-out" },
+    },
+    workflowVis: {
+      nodes: [
+        { id: "divedra-manager", order: 0 },
+        { id: "worker-1", order: 1 },
+        { id: "worker-2", order: 2 },
+      ],
+    },
+    nodePayloads: {
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
+        model: "gpt-5-nano",
+        executionBackend: "codex-agent",
+        promptTemplate: "manager",
+        variables: {},
+      },
+      "node-worker-1.json": {
+        id: "worker-1",
+        model: "gpt-5-nano",
+        executionBackend: "codex-agent",
+        promptTemplate: "worker",
+        variables: {},
+      },
+      "node-worker-2.json": {
+        id: "worker-2",
+        model: "gpt-5-nano",
+        executionBackend: "codex-agent",
+        promptTemplate: "judge",
+        variables: {},
+      },
+    },
+  };
+}
+
 describe("validateWorkflowBundle", () => {
   function expectInvalidNodeKind(kind: string): void {
     const raw = makeValidRaw();
@@ -100,6 +172,159 @@ describe("validateWorkflowBundle", () => {
     }
     expect(result.value.workflow.workflowId).toBe("demo");
     expect(result.value.workflow.nodes).toHaveLength(2);
+    expect(result.value.workflow.nodes[0]?.role).toBeUndefined();
+    expect(result.value.workflow.nodes[1]?.role).toBeUndefined();
+  });
+
+  test("accepts unified role schema", () => {
+    const result = validateWorkflowBundle(makeUnifiedRoleRaw());
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.entryNodeId).toBe("divedra-manager");
+    expect(result.value.workflow.nodes[0]?.role).toBe("manager");
+    expect(result.value.workflow.nodes[2]?.control).toBe("loop-judge");
+    expect(result.value.workflow.nodes[2]?.kind).toBe("loop-judge");
+  });
+
+  test("rejects workflowCalls until the runtime implements them", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker-1",
+          resultNodeId: "worker-2",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.workflowCalls" &&
+          issue.message.includes("not executable"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects manager-less worker-only workflows until the runtime supports them", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      managerNodeId: undefined,
+      entryNodeId: "worker-1",
+      nodes: [
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-2",
+          role: "worker",
+          control: "loop-judge",
+          nodeFile: "node-worker-2.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [{ from: "worker-1", to: "worker-2", when: "always" }],
+      workflowCalls: [],
+    };
+    delete (raw.workflow as Record<string, unknown>)["managerNodeId"];
+    delete raw.nodePayloads["node-divedra-manager.json"];
+    raw.workflowVis = {
+      nodes: [
+        { id: "worker-1", order: 0 },
+        { id: "worker-2", order: 1 },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.entryNodeId" &&
+          issue.message.includes("not executable"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects multiple manager-role nodes", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          role: "manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "manager",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some((issue) =>
+        issue.message.includes("at most one manager node"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects manager-role nodes outside the agent execution path", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.nodePayloads["node-divedra-manager.json"] = {
+      id: "divedra-manager",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/manager.sh",
+      },
+      promptTemplate: "manager",
+      variables: {},
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-divedra-manager.json.nodeType" &&
+          issue.message.includes("agent execution path"),
+      ),
+    ).toBe(true);
   });
 
   test("accepts official sdk backend with arbitrary model string", () => {
@@ -319,7 +544,8 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path === "nodePayloads.node-worker-1.json.userAction.messageToolIds" &&
+          issue.path ===
+            "nodePayloads.node-worker-1.json.userAction.messageToolIds" &&
           issue.message.includes("at least one"),
       ),
     ).toBe(true);

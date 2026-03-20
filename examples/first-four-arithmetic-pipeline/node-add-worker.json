@@ -1,0 +1,37 @@
+{
+  "id": "add-worker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5",
+  "promptTemplateFile": "prompts/add-worker.md",
+  "variables": {},
+  "output": {
+    "description": "Return the addition result as a JSON object.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "operation",
+        "operands",
+        "result"
+      ],
+      "properties": {
+        "operation": {
+          "type": "string",
+          "const": "add"
+        },
+        "operands": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "result": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}
