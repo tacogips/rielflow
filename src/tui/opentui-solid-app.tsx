@@ -66,6 +66,26 @@ export function OpenTuiWorkflowAppView(props: OpenTuiWorkflowAppViewProps) {
           />
         </Box>
       </Box>
+      <Box
+        ref={(node) => {
+          props.refs.footerBox = node;
+        }}
+        width="100%"
+        border
+        title=" Shortcuts "
+        borderColor="#5b6670"
+        padding={1}
+        flexGrow={0}
+      >
+        <Text
+          ref={(node) => {
+            props.refs.footerText = node;
+          }}
+          id="footer-text"
+          width="100%"
+          content=""
+        />
+      </Box>
       <PopupLayer refs={props.refs} />
     </Box>
   );

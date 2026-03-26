@@ -74,6 +74,8 @@ export interface OpenTuiMainViewRefs {
   detailSummaryHeader?: TextRenderable;
   detailSummarySelect?: FocusAwareSelectRenderable;
   detailText?: TextRenderable;
+  footerBox?: BoxRenderable;
+  footerText?: TextRenderable;
   filterPopup?: BoxRenderable;
   filterTextarea?: TextareaRenderable;
   helpPopup?: BoxRenderable;

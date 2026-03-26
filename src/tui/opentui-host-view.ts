@@ -21,6 +21,8 @@ const REQUIRED_OPEN_TUI_MAIN_VIEW_REF_KEYS = [
   "detailSummaryHeader",
   "detailSummarySelect",
   "detailText",
+  "footerBox",
+  "footerText",
   "filterPopup",
   "filterTextarea",
   "helpPopup",

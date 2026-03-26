@@ -97,7 +97,7 @@ Workflow preview content:
 - the root manager remains at the top level, while subworkflow managers and their owned nodes render with deeper indentation so workflow ownership reads clearly
 - per-node metadata such as workflow node kind, node type, backend/model when present, and concise node help text derived first from node-level `description`, then from output descriptions or prompt summaries
 - the root manager block shows workflow id
-- the preview pane should not duplicate keybinding hints; shortcuts live in the help popup only
+- the preview pane should not duplicate keybinding hints; the screen footer shows the compact shortcut row while the help popup keeps the expanded guidance
 
 Filtering rules:
 
@@ -132,7 +132,7 @@ Design intent:
 - keep the workflow selector mentally separate from workflow execution history
 - reduce first-screen noise by not showing sessions and nodes before a workflow is chosen
 - reserve the larger lower area for details because inbox/outbox and logs are multi-line artifacts
-- avoid a permanently visible status/help bar; transient guidance lives in a popup opened with `?`
+- keep a single-line shortcut footer visible for the active screen, while expanded guidance still lives in a popup opened with `?`
 - render workflow runs and node executions as two-line rows so status, timestamps, ids, and node names stay readable
 - use color and ASCII badges/separators to make the layout easier to scan without relying on emoji
 
@@ -239,6 +239,8 @@ TUI behavior:
 - when OpenTUI is available, workflow selection happens inside the workspace screen of the unified app rather than through a separate pre-app selector surface
 
 ## Keybindings (Initial)
+
+Each primary screen shows a single-line footer shortcut row summarizing the screen-level keys below the main panes.
 
 ### Workspace Screen
 

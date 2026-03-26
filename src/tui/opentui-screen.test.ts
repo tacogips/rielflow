@@ -3,6 +3,7 @@ import type { LoadedWorkflow } from "../workflow/load";
 import type { NodePayload } from "../workflow/types";
 import {
   buildNodeDefinitionPopupContent,
+  buildOpenTuiFooterShortcutRow,
   buildDetailEscapeStatusMessage,
   buildNodeSelectOptions,
   buildOpenTuiBreadcrumb,
@@ -578,6 +579,44 @@ describe("buildWorkflowHistoryStatusMessage", () => {
         workflowName: "demo-flow",
       }),
     ).toContain("esc closes in-pane viewers before returning to the opener");
+  });
+});
+
+describe("buildOpenTuiFooterShortcutRow", () => {
+  test("returns workspace shortcuts on one line", () => {
+    expect(
+      buildOpenTuiFooterShortcutRow({
+        historyViewMode: "workflow",
+        screenMode: "workspace",
+      }),
+    ).toContain("enter/ctrl-m/l definition");
+  });
+
+  test("returns definition shortcuts on one line", () => {
+    expect(
+      buildOpenTuiFooterShortcutRow({
+        historyViewMode: "workflow",
+        screenMode: "definition",
+      }),
+    ).toContain("enter/ctrl-m node popup");
+  });
+
+  test("returns workflow-history shortcuts on one line", () => {
+    expect(
+      buildOpenTuiFooterShortcutRow({
+        historyViewMode: "workflow",
+        screenMode: "history",
+      }),
+    ).toContain("h nodes->runs/workspace");
+  });
+
+  test("returns subworkflow-history shortcuts on one line", () => {
+    expect(
+      buildOpenTuiFooterShortcutRow({
+        historyViewMode: "subworkflow",
+        screenMode: "history",
+      }),
+    ).toContain("h list->nodes/parent");
   });
 });
 

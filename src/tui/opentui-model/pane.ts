@@ -221,3 +221,72 @@ export function buildWorkflowHistoryStatusMessage(input: {
     "Press q to close this popup.",
   ].join("\n");
 }
+
+export function buildOpenTuiFooterShortcutRow(input: {
+  readonly historyViewMode: HistoryViewMode;
+  readonly screenMode: ScreenMode;
+}): string {
+  if (input.screenMode === "workspace") {
+    return [
+      "j/k move",
+      "/ filter",
+      "enter/ctrl-m/l definition",
+      "n new-run",
+      "y copy workflow id",
+      "r refresh",
+      "? help",
+      "q quit",
+    ].join("  ");
+  }
+
+  if (input.screenMode === "definition") {
+    return [
+      "tab/shift-tab cycle panes",
+      "j/k or arrows move/scroll",
+      "enter/ctrl-m node popup",
+      "l history",
+      "n new-run",
+      "h workspace",
+      "y copy workflow id",
+      "r refresh",
+      "? help",
+      "q quit",
+    ].join("  ");
+  }
+
+  if (input.screenMode === "run") {
+    return [
+      "enter/ctrl-m confirm run",
+      "m mode",
+      "f format JSON",
+      "l history",
+      "h workspace",
+      "r refresh",
+      "? help",
+      "q quit",
+    ].join("  ");
+  }
+
+  return [
+    "tab/shift-tab cycle panes",
+    "j/k or arrows move/scroll",
+    "enter/ctrl-m select/open",
+    input.historyViewMode === "workflow"
+      ? "l runs->nodes/subworkflow"
+      : "l nodes->list/child",
+    input.historyViewMode === "workflow"
+      ? "h nodes->runs/workspace"
+      : "h list->nodes/parent",
+    "e edit",
+    "m mode",
+    "f format",
+    "i/o/g/a/s detail",
+    "n new-run",
+    "R rerun",
+    "u resume",
+    "y copy id",
+    "r refresh",
+    "? help",
+    "q quit",
+  ].join("  ");
+}

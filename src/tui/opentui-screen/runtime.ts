@@ -24,6 +24,7 @@ import type { CliAgentBackend } from "../../workflow/types";
 import {
   buildNodeDefinitionPopupContent,
   buildNodeSelectOptions,
+  buildOpenTuiFooterShortcutRow,
   buildOpenTuiBreadcrumb,
   buildWorkflowDefinitionContent,
   buildWorkflowDefinitionNodeSelectOptions,
@@ -249,6 +250,7 @@ export async function runOpenTuiWorkflowApp(
     detailSummaryHeader,
     detailSummarySelect,
     detailText,
+    footerText,
     filterPopup,
     filterTextarea,
     helpPopup,
@@ -560,6 +562,10 @@ export async function runOpenTuiWorkflowApp(
       ...(currentSelectedWorkflowName === undefined
         ? {}
         : { selectedWorkflowName: currentSelectedWorkflowName }),
+    });
+    footerText.content = buildOpenTuiFooterShortcutRow({
+      historyViewMode: historyViewMode(),
+      screenMode,
     });
     historyHeaderText.content = buildWorkflowHistoryHeader(
       loadedWorkflow,
