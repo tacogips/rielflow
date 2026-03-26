@@ -1,5 +1,6 @@
 import type { OpenTuiMainViewRefs } from "../opentui-solid-components";
 import { Box, FocusSelect, ScrollBox, Text } from "../opentui-solid-components";
+import { OPEN_TUI_SELECT_THEMES } from "../opentui-view-shared";
 
 export interface NodeDetailPaneProps {
   readonly refs: OpenTuiMainViewRefs;
@@ -44,11 +45,19 @@ export function NodeDetailPane(props: NodeDetailPaneProps) {
           flexGrow={1}
           width="100%"
           height="100%"
-          itemSpacing={2}
-          selectedBackgroundColor="#1f3447"
-          selectedTextColor="#f7d774"
-          descriptionColor="#89a5ba"
-          selectedDescriptionColor="#d8e5f2"
+          itemSpacing={OPEN_TUI_SELECT_THEMES.detailSummary.itemSpacing}
+          selectedBackgroundColor={
+            OPEN_TUI_SELECT_THEMES.detailSummary.selectedBackgroundColor
+          }
+          selectedTextColor={
+            OPEN_TUI_SELECT_THEMES.detailSummary.selectedTextColor
+          }
+          descriptionColor={
+            OPEN_TUI_SELECT_THEMES.detailSummary.descriptionColor
+          }
+          selectedDescriptionColor={
+            OPEN_TUI_SELECT_THEMES.detailSummary.selectedDescriptionColor
+          }
         />
         <Text
           ref={(node) => {

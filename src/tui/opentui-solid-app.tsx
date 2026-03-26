@@ -2,6 +2,7 @@ import type { OpenTuiMainViewRefs } from "./opentui-solid-components";
 import { Box, Text, Textarea } from "./opentui-solid-components";
 import { NewRunScreen } from "./components/NewRunScreen";
 import { PopupLayer } from "./components/PopupLayer";
+import { WorkflowDefinitionScreen } from "./components/WorkflowDefinitionScreen";
 import { WorkflowHistoryScreen } from "./components/WorkflowHistoryScreen";
 import { WorkspaceScreen } from "./components/WorkspaceScreen";
 
@@ -30,6 +31,7 @@ export function OpenTuiWorkflowAppView(props: OpenTuiWorkflowAppViewProps) {
         />
       </Box>
       <WorkspaceScreen refs={props.refs} />
+      <WorkflowDefinitionScreen refs={props.refs} />
       <WorkflowHistoryScreen refs={props.refs} />
       <NewRunScreen refs={props.refs} />
       <Box

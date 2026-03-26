@@ -309,7 +309,7 @@ Communication routing scopes:
 
 ## Example Bundles
 
-The repository includes multiple reference bundles under `examples/`.
+The repository includes multiple reference bundles under `examples/`. See `examples/README.md` for the fuller catalog.
 
 Runnable mixed-backend reference:
 
@@ -345,6 +345,46 @@ bun run src/main.ts workflow run claude-divedra-codex-coding \
   --mock-scenario ./examples/claude-divedra-codex-coding/mock-scenario.json \
   --output json
 ```
+
+Runnable same-node session-reuse reference:
+
+- `examples/same-node-session-echo/workflow.json`
+- `examples/same-node-session-echo/workflow-vis.json`
+- `examples/same-node-session-echo/node-*.json`
+- `examples/same-node-session-echo/mock-scenario.json`
+
+This bundle shows:
+
+- one worker node revisited by a self-edge
+- `sessionPolicy.mode = "reuse"` on that worker node
+- first-turn echo followed by second-turn answer on the same node id
+- explicit fallback to `{{inbox.latest.output.echoText}}` so the earlier turn is available in workflow data as well as backend memory
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate same-node-session-echo --workflow-root ./examples
+```
+
+Inspect it:
+
+```bash
+bun run src/main.ts workflow inspect same-node-session-echo --workflow-root ./examples --output json
+```
+
+Run it with the bundled deterministic scenario:
+
+```bash
+bun run src/main.ts workflow run same-node-session-echo \
+  --workflow-root ./examples \
+  --mock-scenario ./examples/same-node-session-echo/mock-scenario.json \
+  --output json
+```
+
+Live execution note:
+
+- the bundled mock scenario demonstrates the repeated same-node graph shape
+- actual backend session continuation still depends on the configured backend returning a reusable session id
 
 Validation-oriented node-authoring showcase:
 

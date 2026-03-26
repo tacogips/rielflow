@@ -19,13 +19,18 @@ import {
   StyledText,
   bold,
   brightCyan,
-  brightGreen,
-  brightMagenta,
   brightWhite,
-  brightYellow,
   dim,
+  fg,
   t,
 } from "@opentui/core";
+import type { OpenTuiRichSelectOption } from "./opentui-view-shared";
+import {
+  resolveOpenTuiNodeKindColor,
+  resolveOpenTuiNodeTypeColor,
+  resolveOpenTuiStatusColor,
+  resolveOpenTuiWorkflowScopeColor,
+} from "./opentui-view-shared";
 
 export interface RuntimeSessionView {
   readonly session: WorkflowSessionState;
@@ -47,7 +52,13 @@ export interface TuiWorkflowInputSyntax {
   readonly summary: string;
 }
 
-export type FocusPane = "detail" | "input" | "nodes" | "sessions" | "workflows";
+export type FocusPane =
+  | "definition"
+  | "detail"
+  | "input"
+  | "nodes"
+  | "sessions"
+  | "workflows";
 
 export type DetailMode =
   | "inbox"
@@ -59,11 +70,111 @@ export type DetailMode =
 
 export type DetailReturnPane = "nodes" | "sessions";
 
-export type ScreenMode = "history" | "run" | "workspace";
+export type ScreenMode = "definition" | "history" | "run" | "workspace";
 
 export type HistoryPaneNavigationMode = "list" | "scroll" | "typing";
 
 export type HistoryViewMode = "subworkflow" | "workflow";
+
+export type OpenTuiDirectionalAction =
+  | {
+      readonly kind: "close-subworkflow";
+    }
+  | {
+      readonly kind: "focus";
+      readonly focusPane: FocusPane;
+      readonly nextDetailMode?: DetailMode;
+      readonly status: string;
+    }
+  | {
+      readonly kind: "none";
+    }
+  | {
+      readonly kind: "open-definition";
+    }
+  | {
+      readonly kind: "open-history";
+    }
+  | {
+      readonly kind: "open-workspace";
+    }
+  | {
+      readonly kind: "open-subworkflow";
+    };
+
+export type OpenTuiHistoryAdvanceAction =
+  | {
+      readonly focusAfterSessionLoad: "detail";
+      readonly kind: "load-session-selection";
+    }
+  | {
+      readonly kind: "load-node-selection";
+    }
+  | {
+      readonly kind: "none";
+    }
+  | {
+      readonly kind: "open-detail-summary-selection";
+    }
+  | {
+      readonly kind: "start-input-editing";
+    };
+
+export type OpenTuiHistoryRevertAction =
+  | {
+      readonly kind: "finish-input-editing";
+      readonly status: string;
+    }
+  | {
+      readonly kind: "focus";
+      readonly focusPane: FocusPane;
+      readonly nextDetailMode: DetailMode;
+      readonly status: string;
+    }
+  | {
+      readonly kind: "none";
+    };
+
+export type OpenTuiPopupKind =
+  | "agent-session"
+  | "filter"
+  | "help"
+  | "node-definition"
+  | "none"
+  | "run-confirm";
+
+export type OpenTuiPopupConfirmAction =
+  | {
+      readonly kind: "apply-filter";
+    }
+  | {
+      readonly kind: "confirm-run";
+    }
+  | {
+      readonly kind: "none";
+    };
+
+export type OpenTuiPopupRevertAction =
+  | {
+      readonly kind: "cancel-filter";
+    }
+  | {
+      readonly kind: "close-agent-session";
+    }
+  | {
+      readonly kind: "close-node-definition";
+    }
+  | {
+      readonly kind: "close-help";
+    }
+  | {
+      readonly kind: "close-run-confirm";
+    }
+  | {
+      readonly kind: "none";
+    };
+
+export type OpenTuiPopupScrollDelta = -1 | 0 | 1;
 
 export interface OpenTuiCopyTarget {
   readonly label: string;
@@ -97,6 +208,8 @@ export interface OpenTuiPaneChromeState {
   readonly selectorPreview: OpenTuiPaneChrome;
   readonly session: OpenTuiPaneChrome;
   readonly workflow: OpenTuiPaneChrome;
+  readonly workflowDefinition: OpenTuiPaneChrome;
+  readonly workflowDefinitionNodes: OpenTuiPaneChrome;
 }
 
 export interface HistoryPaneLabels {
@@ -276,37 +389,230 @@ function resolveNodePurpose(input: {
 }
 
 function buildNodeRowDescription(input: {
-  readonly execution?: NodeExecutionRecord;
-  readonly kind: string;
   readonly purpose?: string;
-  readonly workflowLabel?: string;
+  readonly scopeLabel?: string;
 }): string {
   const parts = [
-    `kind: ${input.kind}`,
-    ...(input.execution === undefined
-      ? []
-      : [`exec: ${input.execution.nodeExecId}`]),
-    ...(input.workflowLabel === undefined
-      ? []
-      : [`workflow: ${input.workflowLabel}`]),
+    `scope: ${input.scopeLabel ?? "root"}`,
     ...(input.purpose === undefined
       ? []
-      : [`purpose: ${truncate(input.purpose, 88)}`]),
+      : [`purpose: ${truncate(input.purpose, 56)}`]),
   ];
   return parts.join("  ");
 }
 
 function buildNodeRowName(input: {
-  readonly execution?: NodeExecutionRecord;
+  readonly indentPrefix?: string;
   readonly nodeId: string;
-  readonly workflowLabel?: string;
 }): string {
-  const workflowSuffix =
-    input.workflowLabel === undefined ? "" : ` -> ${input.workflowLabel}`;
-  if (input.execution === undefined) {
-    return `${input.nodeId}${workflowSuffix}`;
+  return `${input.indentPrefix ?? ""}${input.nodeId}`;
+}
+
+function formatNodeKindLabel(kind: string): string {
+  if (kind === "root-manager") {
+    return "ROOT MANAGER";
   }
-  return `[${input.execution.status.toUpperCase()}] ${input.nodeId}${workflowSuffix}`;
+  if (kind === "subworkflow-manager") {
+    return "SUBFLOW MANAGER";
+  }
+  if (kind === "input") {
+    return "INPUT";
+  }
+  if (kind === "output") {
+    return "OUTPUT";
+  }
+  if (kind === "task") {
+    return "TASK";
+  }
+  return kind.replace(/-/g, " ").toUpperCase();
+}
+
+function formatStatusLabel(status: string): string {
+  return status.replace(/_/g, " ").toUpperCase();
+}
+
+function formatNodeTypeLabel(nodeType: string): string {
+  if (nodeType === "user-action") {
+    return "USER ACTION";
+  }
+  return nodeType.toUpperCase();
+}
+
+function buildNodeTypeDetail(payload: NodePayload | undefined): string | undefined {
+  const nodeType = payload?.nodeType ?? "agent";
+  if (nodeType === "agent") {
+    return (
+      resolveCliAgentBackendForNode(payload) ??
+      payload?.executionBackend ??
+      payload?.model
+    );
+  }
+  if (nodeType === "command") {
+    return payload?.command?.scriptPath;
+  }
+  if (nodeType === "container") {
+    return (
+      payload?.container?.image ??
+      payload?.container?.build?.contextPath ??
+      payload?.container?.runnerKind
+    );
+  }
+  if (nodeType === "user-action") {
+    return "operator reply";
+  }
+  return undefined;
+}
+
+function buildNodeRowTypeLine(input: {
+  readonly kind: string;
+  readonly payload: NodePayload | undefined;
+}): string {
+  const kindLabel = formatNodeKindLabel(input.kind);
+  const nodeType = input.payload?.nodeType ?? "agent";
+  const typeLabel = formatNodeTypeLabel(nodeType);
+  const detail = buildNodeTypeDetail(input.payload);
+  return detail === undefined
+    ? `${kindLabel} | ${typeLabel}`
+    : `${kindLabel} | ${typeLabel}  ${truncate(detail, 40)}`;
+}
+
+interface WorkflowNodeVisualMetadata {
+  readonly indentPrefix: string;
+  readonly scopeColor: string;
+}
+
+function buildWorkflowNodeVisualMetadata(
+  loaded: LoadedWorkflow,
+): ReadonlyMap<string, WorkflowNodeVisualMetadata> {
+  const derivedNodes = deriveWorkflowVisualization({
+    workflow: loaded.bundle.workflow,
+    workflowVis: loaded.bundle.workflowVis,
+  });
+  const nodeKindById = new Map(
+    loaded.bundle.workflow.nodes.map((node) => [node.id, node.kind ?? "task"] as const),
+  );
+  const subworkflowScopeNodeIds = new Set<string>();
+  loaded.bundle.workflow.subWorkflows.forEach((subworkflow) => {
+    subworkflowScopeNodeIds.add(subworkflow.managerNodeId);
+    subworkflowScopeNodeIds.add(subworkflow.inputNodeId);
+    subworkflowScopeNodeIds.add(subworkflow.outputNodeId);
+    subworkflow.nodeIds.forEach((nodeId) => {
+      subworkflowScopeNodeIds.add(nodeId);
+    });
+  });
+  return new Map(
+    derivedNodes.map((entry) => {
+      const kind = nodeKindById.get(entry.id) ?? "task";
+      const indentLevel = resolveWorkflowPreviewIndent({
+        derivedIndent: entry.indent,
+        inSubworkflowScope: subworkflowScopeNodeIds.has(entry.id),
+        kind,
+      });
+      return [
+        entry.id,
+        {
+          indentPrefix: "  ".repeat(indentLevel),
+          scopeColor: resolveOpenTuiWorkflowScopeColor(entry.color),
+        },
+      ] as const;
+    }),
+  );
+}
+
+function resolveWorkflowNodeVisualMetadata(input: {
+  readonly nodeId: string;
+  readonly visualMetadataByNodeId?: ReadonlyMap<string, WorkflowNodeVisualMetadata>;
+}): WorkflowNodeVisualMetadata {
+  return (
+    input.visualMetadataByNodeId?.get(input.nodeId) ?? {
+      indentPrefix: "",
+      scopeColor: resolveOpenTuiWorkflowScopeColor(undefined),
+    }
+  );
+}
+
+function buildNodePreviewContextLine(input: {
+  readonly purpose?: string;
+  readonly scopeLabel?: string;
+}): string {
+  return buildNodeRowDescription({
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+    ...(input.scopeLabel === undefined ? {} : { scopeLabel: input.scopeLabel }),
+  });
+}
+
+function buildPreviewLine(input: {
+  readonly color: string;
+  readonly indentPrefix: string;
+  readonly text: string;
+}): StyledText {
+  return t`${input.indentPrefix}${fg(input.color)(input.text)}\n`;
+}
+
+function buildPreviewSeparator(indentPrefix: string): StyledText {
+  return t`${dim(`${indentPrefix}----------------------------------------\n`)}`;
+}
+
+function buildPreviewFinalSeparator(indentPrefix: string): StyledText {
+  return t`${dim(`${indentPrefix}----------------------------------------`)}`;
+}
+
+function buildPreviewTitleLine(input: {
+  readonly indentPrefix: string;
+  readonly kind: string;
+  readonly nodeId: string;
+}): StyledText {
+  return t`${input.indentPrefix}${fg(resolveOpenTuiNodeKindColor(input.kind))(bold(
+    input.nodeId,
+  ))}\n`;
+}
+
+function buildNodeSelectOption(input: {
+  readonly kind: string;
+  readonly nodeId: string;
+  readonly payload: NodePayload | undefined;
+  readonly purpose?: string;
+  readonly scopeLabel?: string;
+  readonly value: string;
+  readonly visualMetadataByNodeId?: ReadonlyMap<string, WorkflowNodeVisualMetadata>;
+  readonly execution?: NodeExecutionRecord;
+}): OpenTuiRichSelectOption {
+  const nodeType = input.payload?.nodeType ?? "agent";
+  const visualMetadata = resolveWorkflowNodeVisualMetadata({
+    nodeId: input.nodeId,
+    ...(input.visualMetadataByNodeId === undefined
+      ? {}
+      : { visualMetadataByNodeId: input.visualMetadataByNodeId }),
+  });
+  const kindColor = resolveOpenTuiNodeKindColor(input.kind);
+  const typeColor = resolveOpenTuiNodeTypeColor(nodeType);
+  const contextLine = buildNodePreviewContextLine({
+    ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+    ...(input.scopeLabel === undefined ? {} : { scopeLabel: input.scopeLabel }),
+  });
+  return {
+    description: buildNodeRowTypeLine({
+      kind: input.kind,
+      payload: input.payload,
+    }),
+    detailLineColors: [typeColor, visualMetadata.scopeColor],
+    detailLines: [
+      `${visualMetadata.indentPrefix}${buildNodeRowTypeLine({
+        kind: input.kind,
+        payload: input.payload,
+      })}`,
+      `${visualMetadata.indentPrefix}${contextLine}`,
+    ],
+    labelText: buildNodeRowName({
+      indentPrefix: visualMetadata.indentPrefix,
+      nodeId: input.nodeId,
+    }),
+    name: input.nodeId,
+    statusColor: resolveOpenTuiStatusColor(input.execution?.status ?? "pending"),
+    statusLabel: formatStatusLabel(input.execution?.status ?? "pending"),
+    textColor: kindColor,
+    value: input.value,
+  };
 }
 
 function resolveCliAgentBackendForNode(
@@ -487,33 +793,193 @@ export function resolveTabFocusTarget(input: {
   readonly focusPane: FocusPane;
   readonly screenMode: ScreenMode;
 }): FocusPane | undefined {
+  if (input.screenMode === "definition") {
+    if (input.direction === "next") {
+      return input.focusPane === "definition" ? "nodes" : "definition";
+    }
+    return input.focusPane === "nodes" ? "definition" : "nodes";
+  }
   if (input.screenMode !== "history") {
     return undefined;
   }
   if (input.direction === "next") {
-    const nextFocus: Readonly<Record<FocusPane, FocusPane>> = {
+    const nextFocus: Readonly<
+      Record<Exclude<FocusPane, "definition">, FocusPane>
+    > = {
       workflows: "sessions",
       sessions: "nodes",
       nodes: "detail",
       detail: "input",
       input: "sessions",
     };
-    return nextFocus[input.focusPane];
+    return input.focusPane === "definition"
+      ? undefined
+      : nextFocus[input.focusPane];
   }
-  const previousFocus: Readonly<Record<FocusPane, FocusPane>> = {
+  const previousFocus: Readonly<
+    Record<Exclude<FocusPane, "definition">, FocusPane>
+  > = {
     workflows: "input",
     sessions: "input",
     nodes: "sessions",
     detail: "nodes",
     input: "detail",
   };
-  return previousFocus[input.focusPane];
+  return input.focusPane === "definition"
+    ? undefined
+    : previousFocus[input.focusPane];
+}
+
+export function resolveDirectionalNavigationAction(input: {
+  readonly direction: "forward" | "revert";
+  readonly focusPane: FocusPane;
+  readonly historyViewMode: HistoryViewMode;
+  readonly screenMode: ScreenMode;
+}): OpenTuiDirectionalAction {
+  if (input.screenMode === "workspace") {
+    return input.direction === "forward"
+      ? { kind: "open-definition" }
+      : { kind: "none" };
+  }
+
+  if (input.screenMode === "definition") {
+    return input.direction === "forward"
+      ? { kind: "open-history" }
+      : { kind: "open-workspace" };
+  }
+
+  if (input.screenMode === "run") {
+    return input.direction === "forward"
+      ? { kind: "open-history" }
+      : { kind: "open-workspace" };
+  }
+
+  if (input.direction === "forward") {
+    if (input.focusPane === "sessions") {
+      return {
+        kind: "focus",
+        focusPane: "nodes",
+        nextDetailMode: "summary",
+        status:
+          input.historyViewMode === "workflow"
+            ? "Focused nodes for the selected workflow run"
+            : "Focused child workflow list",
+      };
+    }
+    if (input.focusPane === "nodes") {
+      return {
+        kind: "open-subworkflow",
+      };
+    }
+    return { kind: "none" };
+  }
+
+  if (input.focusPane === "nodes") {
+    return {
+      kind: "focus",
+      focusPane: "sessions",
+      nextDetailMode: "summary",
+      status:
+        input.historyViewMode === "workflow"
+          ? "Focused workflow runs"
+          : "Focused workflow nodes",
+    };
+  }
+  if (input.focusPane === "sessions") {
+    return input.historyViewMode === "subworkflow"
+      ? { kind: "close-subworkflow" }
+      : { kind: "open-workspace" };
+  }
+  return { kind: "none" };
+}
+
+export function resolveOpenTuiPopupKind(input: {
+  readonly agentSessionPopupOpen: boolean;
+  readonly confirmPopupOpen: boolean;
+  readonly filterPopupOpen: boolean;
+  readonly helpPopupOpen: boolean;
+  readonly nodeDefinitionPopupOpen: boolean;
+}): OpenTuiPopupKind {
+  if (input.filterPopupOpen) {
+    return "filter";
+  }
+  if (input.helpPopupOpen) {
+    return "help";
+  }
+  if (input.confirmPopupOpen) {
+    return "run-confirm";
+  }
+  if (input.nodeDefinitionPopupOpen) {
+    return "node-definition";
+  }
+  if (input.agentSessionPopupOpen) {
+    return "agent-session";
+  }
+  return "none";
+}
+
+export function resolvePopupConfirmAction(
+  popupKind: OpenTuiPopupKind,
+): OpenTuiPopupConfirmAction {
+  switch (popupKind) {
+    case "filter":
+      return { kind: "apply-filter" };
+    case "run-confirm":
+      return { kind: "confirm-run" };
+    default:
+      return { kind: "none" };
+  }
+}
+
+export function resolvePopupRevertAction(
+  popupKind: OpenTuiPopupKind,
+): OpenTuiPopupRevertAction {
+  switch (popupKind) {
+    case "filter":
+      return { kind: "cancel-filter" };
+    case "help":
+      return { kind: "close-help" };
+    case "run-confirm":
+      return { kind: "close-run-confirm" };
+    case "node-definition":
+      return { kind: "close-node-definition" as const };
+    case "agent-session":
+      return { kind: "close-agent-session" };
+    default:
+      return { kind: "none" };
+  }
+}
+
+export function resolvePopupScrollDelta(input: {
+  readonly key: ShortcutKeyLike;
+  readonly popupKind: OpenTuiPopupKind;
+}): OpenTuiPopupScrollDelta {
+  if (
+    input.popupKind !== "agent-session" &&
+    input.popupKind !== "node-definition"
+  ) {
+    return 0;
+  }
+  if (
+    input.key.name === "down" ||
+    (input.key.name === "j" && !input.key.ctrl && !input.key.meta)
+  ) {
+    return 1;
+  }
+  if (
+    input.key.name === "up" ||
+    (input.key.name === "k" && !input.key.ctrl && !input.key.meta)
+  ) {
+    return -1;
+  }
+  return 0;
 }
 
 export function resolveOpenTuiInternallyHandledListId(input: {
   readonly detailMode: DetailMode;
   readonly detailSummarySelectId: string;
   readonly focusPane: FocusPane;
+  readonly definitionNodeSelectId: string;
   readonly nodeSelectId: string;
   readonly screenMode: ScreenMode;
   readonly sessionSelectId: string;
@@ -521,6 +987,9 @@ export function resolveOpenTuiInternallyHandledListId(input: {
 }): string | undefined {
   if (input.screenMode === "workspace") {
     return input.workflowSelectId;
+  }
+  if (input.screenMode === "definition") {
+    return input.focusPane === "nodes" ? input.definitionNodeSelectId : undefined;
   }
   if (input.screenMode !== "history") {
     return undefined;
@@ -551,6 +1020,22 @@ export function resolveOpenTuiCopyTarget(
       return {
         label: "workflow name",
         value: input.selectedWorkflowName,
+      };
+    }
+    return undefined;
+  }
+
+  if (input.screenMode === "definition") {
+    if (input.focusPane === "nodes" && input.selectedWorkflowNodeId !== undefined) {
+      return {
+        label: "workflow node id",
+        value: input.selectedWorkflowNodeId,
+      };
+    }
+    if (input.loadedWorkflowId !== undefined) {
+      return {
+        label: "workflow id",
+        value: input.loadedWorkflowId,
       };
     }
     return undefined;
@@ -838,6 +1323,86 @@ export function buildDetailEscapeStatusMessage(input: {
     : "Focused workflow nodes";
 }
 
+export function resolveNodeDetailEscape(input: {
+  readonly detailMode: DetailMode;
+  readonly detailReturnPane: DetailReturnPane;
+  readonly historyViewMode: HistoryViewMode;
+}): {
+  readonly nextDetailMode: DetailMode;
+  readonly nextFocusPane: FocusPane;
+  readonly status: string;
+} {
+  if (input.detailMode === "viewer") {
+    return {
+      nextDetailMode: "summary",
+      nextFocusPane: "detail",
+      status: "Focused node detail summary",
+    };
+  }
+
+  return {
+    nextDetailMode: input.detailMode,
+    nextFocusPane: input.detailReturnPane,
+    status: buildDetailEscapeStatusMessage({
+      detailReturnPane: input.detailReturnPane,
+      historyViewMode: input.historyViewMode,
+    }),
+  };
+}
+
+export function resolveHistoryAdvanceAction(input: {
+  readonly detailMode: DetailMode;
+  readonly focusPane: FocusPane;
+}): OpenTuiHistoryAdvanceAction {
+  if (input.focusPane === "sessions") {
+    return {
+      kind: "load-session-selection",
+      focusAfterSessionLoad: "detail",
+    };
+  }
+  if (input.focusPane === "nodes") {
+    return { kind: "load-node-selection" };
+  }
+  if (input.focusPane === "detail") {
+    return input.detailMode === "summary"
+      ? { kind: "open-detail-summary-selection" }
+      : { kind: "none" };
+  }
+  if (input.focusPane === "input") {
+    return { kind: "start-input-editing" };
+  }
+  return { kind: "none" };
+}
+
+export function resolveHistoryRevertAction(input: {
+  readonly detailMode: DetailMode;
+  readonly detailReturnPane: DetailReturnPane;
+  readonly editingInput: boolean;
+  readonly focusPane: FocusPane;
+  readonly historyViewMode: HistoryViewMode;
+}): OpenTuiHistoryRevertAction {
+  if (input.focusPane === "detail") {
+    const escapeResult = resolveNodeDetailEscape({
+      detailMode: input.detailMode,
+      detailReturnPane: input.detailReturnPane,
+      historyViewMode: input.historyViewMode,
+    });
+    return {
+      kind: "focus",
+      focusPane: escapeResult.nextFocusPane,
+      nextDetailMode: escapeResult.nextDetailMode,
+      status: escapeResult.status,
+    };
+  }
+  if (input.focusPane === "input" && input.editingInput) {
+    return {
+      kind: "finish-input-editing",
+      status: "Input edit finished",
+    };
+  }
+  return { kind: "none" };
+}
+
 export function resolveDirectChildSubworkflows(input: {
   readonly parentSubworkflowId: string;
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
@@ -884,6 +1449,8 @@ export function buildOpenTuiBreadcrumb(input: {
           ...(workflowLabel === undefined ? [] : [workflowLabel]),
           ...(input.screenMode === "workspace"
             ? []
+            : input.screenMode === "definition"
+              ? ["definition"]
             : input.screenMode === "run"
               ? ["new-run"]
               : ["history", ...input.subworkflowPath]),
@@ -899,7 +1466,7 @@ export function workflowNamesToSelectOptions(
   readonly value: string;
 }> {
   return workflowNames.map((name) => ({
-    description: "press enter for history or ctrl-m for a new run",
+    description: "press enter/ctrl-m for definition, n for a new run",
     name,
     value: name,
   }));
@@ -945,40 +1512,20 @@ function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
     workflow: loaded.bundle.workflow,
     workflowVis: loaded.bundle.workflowVis,
   });
+  const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(loaded);
   const nodeRefById = new Map(
     loaded.bundle.workflow.nodes.map((node) => [node.id, node] as const),
   );
   const subWorkflowByNodeId = new Map<string, string>();
-  const subWorkflowScopeNodeIds = new Set<string>();
   loaded.bundle.workflow.subWorkflows.forEach((subWorkflow) => {
-    subWorkflowScopeNodeIds.add(subWorkflow.managerNodeId);
-    subWorkflowScopeNodeIds.add(subWorkflow.inputNodeId);
-    subWorkflowScopeNodeIds.add(subWorkflow.outputNodeId);
     subWorkflow.nodeIds.forEach((nodeId) => {
       subWorkflowByNodeId.set(nodeId, subWorkflow.description);
-      subWorkflowScopeNodeIds.add(nodeId);
     });
   });
   const chunks: StyledText["chunks"] = [];
 
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
-  };
-
-  const nodeTitle = (nodeId: string, kind: string) => {
-    if (kind === "root-manager") {
-      return brightMagenta(bold(nodeId));
-    }
-    if (kind === "subworkflow-manager") {
-      return brightCyan(bold(nodeId));
-    }
-    if (kind === "input") {
-      return brightGreen(bold(nodeId));
-    }
-    if (kind === "output") {
-      return brightYellow(bold(nodeId));
-    }
-    return brightWhite(bold(nodeId));
   };
 
   derivedNodes.forEach((entry, index) => {
@@ -988,38 +1535,56 @@ function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
         ? undefined
         : loaded.bundle.nodePayloads[nodeRef.nodeFile];
     const kind = nodeRef?.kind ?? "task";
-    const previewIndent = resolveWorkflowPreviewIndent({
-      derivedIndent: entry.indent,
-      inSubworkflowScope: subWorkflowScopeNodeIds.has(entry.id),
-      kind,
+    const visualMetadata = resolveWorkflowNodeVisualMetadata({
+      nodeId: entry.id,
+      visualMetadataByNodeId,
     });
-    const indent = "  ".repeat(previewIndent);
-    const details = [
-      `type: ${kind}/${payload?.nodeType ?? "agent"}`,
-      ...(payload?.executionBackend === undefined
-        ? []
-        : [`backend: ${payload.executionBackend}`]),
-      ...(payload?.model === undefined ? [] : [`model: ${payload.model}`]),
-    ].join("  ");
     const purpose =
       payload?.description ??
       payload?.output?.description ??
       subWorkflowByNodeId.get(entry.id) ??
       summarizePromptHelp(payload?.promptTemplate);
+    const scopeLabel = subWorkflowByNodeId.get(entry.id);
 
-    append(t`${dim(`${indent}----------------------------------------\n`)}`);
-    append(t`${indent}${nodeTitle(entry.id, kind)}\n`);
-    append(t`${dim(`${indent}${details}\n`)}`);
-    if (purpose !== undefined) {
-      append(t`${indent}${brightWhite("purpose:")} ${purpose}\n`);
-    }
+    append(buildPreviewSeparator(visualMetadata.indentPrefix));
+    append(
+      buildPreviewTitleLine({
+        indentPrefix: visualMetadata.indentPrefix,
+        kind,
+        nodeId: entry.id,
+      }),
+    );
+    append(
+      buildPreviewLine({
+        color: resolveOpenTuiNodeTypeColor(payload?.nodeType),
+        indentPrefix: visualMetadata.indentPrefix,
+        text: buildNodeRowTypeLine({
+          kind,
+          payload,
+        }),
+      }),
+    );
+    append(
+      buildPreviewLine({
+        color: visualMetadata.scopeColor,
+        indentPrefix: visualMetadata.indentPrefix,
+        text: buildNodePreviewContextLine({
+          ...(purpose === undefined ? {} : { purpose }),
+          ...(scopeLabel === undefined ? {} : { scopeLabel }),
+        }),
+      }),
+    );
     if (kind === "root-manager") {
       append(
-        t`${indent}${brightWhite("workflow id:")} ${loaded.bundle.workflow.workflowId}\n`,
+        buildPreviewLine({
+          color: "#dff0e4",
+          indentPrefix: visualMetadata.indentPrefix,
+          text: `workflow id: ${loaded.bundle.workflow.workflowId}`,
+        }),
       );
     }
     if (index === derivedNodes.length - 1) {
-      append(t`${dim(`${indent}----------------------------------------`)}`);
+      append(buildPreviewFinalSeparator(visualMetadata.indentPrefix));
     }
   });
 
@@ -1050,6 +1615,30 @@ export function buildWorkflowSummaryPreview(
   append(t`${brightWhite(bold("Node Structure"))}\n`);
   append(buildWorkflowNodePreview(loadedWorkflow));
   return new StyledText(chunks);
+}
+
+function stringifyJsonForDisplay(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+export function buildWorkflowDefinitionContent(
+  loadedWorkflow: LoadedWorkflow | undefined,
+): string {
+  if (loadedWorkflow === undefined) {
+    return "No workflow loaded.";
+  }
+  return [
+    `Workflow: ${loadedWorkflow.bundle.workflow.workflowId}`,
+    `Workflow name: ${loadedWorkflow.workflowName}`,
+    `Workflow directory: ${loadedWorkflow.workflowDirectory}`,
+    `Artifact root: ${loadedWorkflow.artifactWorkflowRoot}`,
+    "",
+    "workflow.json",
+    stringifyJsonForDisplay(loadedWorkflow.bundle.workflow),
+    "",
+    "workflow-vis.json",
+    stringifyJsonForDisplay(loadedWorkflow.bundle.workflowVis),
+  ].join("\n");
 }
 
 export function buildWorkflowSelectorPreview(input: {
@@ -1083,6 +1672,67 @@ export function buildWorkflowSelectorPreview(input: {
   );
   chunks.push(...buildWorkflowSummaryPreview(previewWorkflow).chunks);
   return new StyledText(chunks);
+}
+
+export function buildWorkflowDefinitionNodeSelectOptions(
+  workflow: LoadedWorkflow | undefined,
+): ReadonlyArray<OpenTuiRichSelectOption> {
+  if (workflow === undefined) {
+    return [];
+  }
+  const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
+  return workflow.bundle.workflow.nodes.map((nodeRef) => {
+    const payload = workflow.bundle.nodePayloads[nodeRef.nodeFile];
+    const purpose = resolveNodePurpose({
+      nodeId: nodeRef.id,
+      payload,
+      workflow: workflow.bundle.workflow,
+    });
+    return buildNodeSelectOption({
+      kind: nodeRef.kind ?? "task",
+      nodeId: nodeRef.id,
+      payload,
+      ...(purpose === undefined ? {} : { purpose }),
+      value: nodeRef.id,
+      visualMetadataByNodeId,
+    });
+  });
+}
+
+export function buildNodeDefinitionPopupContent(input: {
+  readonly loadedWorkflow: LoadedWorkflow | undefined;
+  readonly nodeId: string | undefined;
+}): { readonly body: string; readonly title: string } {
+  if (input.loadedWorkflow === undefined || input.nodeId === undefined) {
+    return {
+      title: " Node Definition ",
+      body: "No workflow node is selected.",
+    };
+  }
+  const nodeRef = input.loadedWorkflow.bundle.workflow.nodes.find(
+    (entry) => entry.id === input.nodeId,
+  );
+  if (nodeRef === undefined) {
+    return {
+      title: ` Node Definition: ${input.nodeId} `,
+      body: `Workflow node '${input.nodeId}' was not found.`,
+    };
+  }
+  const payload = input.loadedWorkflow.bundle.nodePayloads[nodeRef.nodeFile];
+  return {
+    title: ` Node Definition: ${input.nodeId} `,
+    body: [
+      `Workflow: ${input.loadedWorkflow.bundle.workflow.workflowId}`,
+      `Node: ${input.nodeId}`,
+      `Node file: ${nodeRef.nodeFile}`,
+      "",
+      "workflow.json node entry",
+      stringifyJsonForDisplay(nodeRef),
+      "",
+      "node payload",
+      stringifyJsonForDisplay(payload ?? null),
+    ].join("\n"),
+  };
 }
 
 export function buildWorkflowHistoryHeader(
@@ -1131,11 +1781,7 @@ export function buildWorkflowHistoryHeader(
 
 export function buildSessionSelectOptions(
   sessions: readonly RuntimeSessionSummary[],
-): ReadonlyArray<{
-  readonly description: string;
-  readonly name: string;
-  readonly value: string;
-}> {
+): ReadonlyArray<OpenTuiRichSelectOption> {
   if (sessions.length === 0) {
     return [
       {
@@ -1146,8 +1792,11 @@ export function buildSessionSelectOptions(
     ];
   }
   return sessions.map((session) => ({
-    name: `[${session.status.toUpperCase()}] ${session.startedAt}`,
+    labelText: session.startedAt,
+    name: session.startedAt,
     description: `run id: ${session.sessionId}`,
+    statusColor: resolveOpenTuiStatusColor(session.status),
+    statusLabel: formatStatusLabel(session.status),
     value: session.sessionId,
   }));
 }
@@ -1155,17 +1804,14 @@ export function buildSessionSelectOptions(
 export function buildNodeSelectOptions(
   workflow: LoadedWorkflow | undefined,
   session: WorkflowSessionState | undefined,
-): ReadonlyArray<{
-  readonly description: string;
-  readonly name: string;
-  readonly value: string;
-}> {
+): ReadonlyArray<OpenTuiRichSelectOption> {
   if (workflow === undefined || session === undefined) {
     return [];
   }
   if (session.nodeExecutions.length === 0) {
     return [];
   }
+  const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
   return session.nodeExecutions.map((execution) => {
     const kind = resolveNodeKind(workflow.bundle.workflow, execution.nodeId);
     const payload =
@@ -1183,34 +1829,18 @@ export function buildNodeSelectOptions(
       payload,
       workflow: workflow.bundle.workflow,
     });
-    return {
-      name: buildNodeRowName({
-        execution,
-        nodeId: execution.nodeId,
-        ...(owningSubworkflow === undefined
-          ? {}
-          : { workflowLabel: owningSubworkflow.id }),
-      }),
-      description: buildNodeRowDescription(
-        purpose === undefined
-          ? {
-              execution,
-              kind,
-              ...(owningSubworkflow === undefined
-                ? {}
-                : { workflowLabel: owningSubworkflow.id }),
-            }
-          : {
-              execution,
-              kind,
-              purpose,
-              ...(owningSubworkflow === undefined
-                ? {}
-                : { workflowLabel: owningSubworkflow.id }),
-            },
-      ),
+    return buildNodeSelectOption({
+      execution,
+      kind,
+      nodeId: execution.nodeId,
+      payload,
+      ...(purpose === undefined ? {} : { purpose }),
       value: execution.nodeExecId,
-    };
+      visualMetadataByNodeId,
+      ...(owningSubworkflow === undefined
+        ? {}
+        : { scopeLabel: owningSubworkflow.id }),
+    });
   });
 }
 
@@ -1218,11 +1848,7 @@ export function buildSubworkflowNodeSelectOptions(
   workflow: LoadedWorkflow | undefined,
   session: WorkflowSessionState | undefined,
   subworkflowId: string | undefined,
-): ReadonlyArray<{
-  readonly description: string;
-  readonly name: string;
-  readonly value: string;
-}> {
+): ReadonlyArray<OpenTuiRichSelectOption> {
   if (
     workflow === undefined ||
     session === undefined ||
@@ -1236,6 +1862,7 @@ export function buildSubworkflowNodeSelectOptions(
   if (subworkflow === undefined) {
     return [];
   }
+  const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
   return subworkflow.nodeIds.map((nodeId) => {
     const kind = resolveNodeKind(workflow.bundle.workflow, nodeId);
     const execution = findLatestNodeExecution(session, nodeId);
@@ -1244,32 +1871,21 @@ export function buildSubworkflowNodeSelectOptions(
         workflow.bundle.workflow.nodes.find((entry) => entry.id === nodeId)
           ?.nodeFile ?? ""
       ];
-    return {
-      name: buildNodeRowName({
-        ...(execution === undefined ? {} : { execution }),
-        nodeId,
-      }),
-      description: (() => {
-        const purpose = resolveNodePurpose({
-          nodeId,
-          payload,
-          workflow: workflow.bundle.workflow,
-        });
-        return buildNodeRowDescription(
-          purpose === undefined
-            ? {
-                ...(execution === undefined ? {} : { execution }),
-                kind,
-              }
-            : {
-                ...(execution === undefined ? {} : { execution }),
-                kind,
-                purpose,
-              },
-        );
-      })(),
+    const purpose = resolveNodePurpose({
+      nodeId,
+      payload,
+      workflow: workflow.bundle.workflow,
+    });
+    return buildNodeSelectOption({
+      ...(execution === undefined ? {} : { execution }),
+      kind,
+      nodeId,
+      payload,
+      ...(purpose === undefined ? {} : { purpose }),
+      scopeLabel: subworkflow.id,
       value: nodeId,
-    };
+      visualMetadataByNodeId,
+    });
   });
 }
 
@@ -1506,6 +2122,30 @@ export function resolveOpenTuiPaneChrome(input: {
       borderColor: paneBorderColor(workspaceWorkflowsActive),
       title: paneTitle("Workflows", workspaceWorkflowsActive),
     },
+    workflowDefinition: {
+      backgroundColor: paneBackgroundColor(
+        input.screenMode === "definition" && input.focusPane === "definition",
+      ),
+      borderColor: paneBorderColor(
+        input.screenMode === "definition" && input.focusPane === "definition",
+      ),
+      title: paneTitle(
+        "Workflow Definition",
+        input.screenMode === "definition" && input.focusPane === "definition",
+      ),
+    },
+    workflowDefinitionNodes: {
+      backgroundColor: paneBackgroundColor(
+        input.screenMode === "definition" && input.focusPane === "nodes",
+      ),
+      borderColor: paneBorderColor(
+        input.screenMode === "definition" && input.focusPane === "nodes",
+      ),
+      title: paneTitle(
+        "Nodes",
+        input.screenMode === "definition" && input.focusPane === "nodes",
+      ),
+    },
   };
 }
 
@@ -1587,7 +2227,21 @@ export function buildWorkflowHistoryStatusMessage(input: {
       `Screen=workspace  Filter=${input.filterText.length === 0 ? "(none)" : input.filterText}  Matches=${String(
         input.matchesCount,
       )}/${String(input.workflowCount)}  Busy=${String(input.busy)}`,
-      "j/k: move  /: filter  y: copy workflow id  enter or l: history  ctrl-m: new run  r: refresh  ?: help  q: quit",
+      "j/k: move  /: filter  y: copy workflow id  enter/ctrl-m/l: definition  n: new run  r: refresh  ?: help  q: quit",
+      "",
+      "Press q to close this popup.",
+    ].join("\n");
+  }
+  if (input.screenMode === "definition") {
+    return [
+      input.message,
+      "",
+      `Screen=definition  Workflow=${input.workflowName ?? "-"}  Focus=${input.focusPane}  Busy=${String(
+        input.busy,
+      )}`,
+      "tab/shift-tab: cycle definition <-> nodes  j/k or arrows: scroll/move in the focused pane",
+      "nodes: enter/ctrl-m opens the node-definition popup  l: history  n: new run  h: workspace",
+      "r: refresh  ?: help  q: quit",
       "",
       "Press q to close this popup.",
     ].join("\n");
@@ -1613,7 +2267,7 @@ export function buildWorkflowHistoryStatusMessage(input: {
     )}  Busy=${String(input.busy)}`,
     `Input syntax=${input.inputSyntax.summary}`,
     "tab/shift-tab: cycle sessions -> nodes -> detail -> input  enter/ctrl-m: load selection  e: edit input  f: format JSON  m: toggle input mode",
-    "nodes: enter/ctrl-m to node detail  node detail: j/k or arrows stay in-pane, enter/ctrl-m opens the selected JSON viewer or AI session popup, esc returns to nodes",
+    "nodes: enter/ctrl-m to node detail  node detail: j/k or arrows stay in-pane, enter/ctrl-m opens the selected JSON viewer or AI session popup, esc closes in-pane viewers before returning to the opener",
     "n: open new-run screen  y: copy focused id  R: rerun selected node  u: resume selected session  i/o/g/a/s: change detail view",
     input.historyViewMode === "workflow"
       ? "l: workflow runs -> nodes, subworkflow row -> subworkflow view  h: nodes -> workflow runs, workflow runs -> workspace  r: refresh  ?: help  q: quit"

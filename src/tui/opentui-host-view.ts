@@ -16,6 +16,7 @@ const REQUIRED_OPEN_TUI_MAIN_VIEW_REF_KEYS = [
   "breadcrumbText",
   "confirmPopup",
   "confirmText",
+  "definitionScreen",
   "detailScroll",
   "detailSummaryHeader",
   "detailSummarySelect",
@@ -30,6 +31,8 @@ const REQUIRED_OPEN_TUI_MAIN_VIEW_REF_KEYS = [
   "inputRow",
   "inputShell",
   "inputTextarea",
+  "nodeDefinitionPopup",
+  "nodeDefinitionPopupText",
   "nodePane",
   "nodeSelect",
   "runStatusPane",
@@ -43,6 +46,10 @@ const REQUIRED_OPEN_TUI_MAIN_VIEW_REF_KEYS = [
   "sessionPane",
   "sessionSelect",
   "workflowPane",
+  "workflowDefinitionNodePane",
+  "workflowDefinitionNodeSelect",
+  "workflowDefinitionPane",
+  "workflowDefinitionText",
   "workflowSelect",
 ] as const satisfies readonly RequiredOpenTuiMainViewRefKey[];
 
@@ -72,12 +79,27 @@ export function applyOpenTuiPaneChrome(
     | "selectorPreviewScroll"
     | "sessionPane"
     | "workflowPane"
+    | "workflowDefinitionNodePane"
+    | "workflowDefinitionPane"
   >,
   paneChrome: OpenTuiPaneChromeState,
 ): void {
   refs.workflowPane.title = paneChrome.workflow.title;
   refs.workflowPane.borderColor = paneChrome.workflow.borderColor;
   refs.workflowPane.backgroundColor = paneChrome.workflow.backgroundColor;
+
+  refs.workflowDefinitionPane.title = paneChrome.workflowDefinition.title;
+  refs.workflowDefinitionPane.borderColor =
+    paneChrome.workflowDefinition.borderColor;
+  refs.workflowDefinitionPane.backgroundColor =
+    paneChrome.workflowDefinition.backgroundColor;
+
+  refs.workflowDefinitionNodePane.title =
+    paneChrome.workflowDefinitionNodes.title;
+  refs.workflowDefinitionNodePane.borderColor =
+    paneChrome.workflowDefinitionNodes.borderColor;
+  refs.workflowDefinitionNodePane.backgroundColor =
+    paneChrome.workflowDefinitionNodes.backgroundColor;
 
   refs.selectorPreviewScroll.title = paneChrome.selectorPreview.title;
   refs.selectorPreviewScroll.borderColor =

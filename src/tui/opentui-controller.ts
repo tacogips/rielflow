@@ -23,6 +23,7 @@ export interface OpenTuiPopupState {
   readonly agentSessionOpen: boolean;
   readonly filterOpen: boolean;
   readonly helpOpen: boolean;
+  readonly nodeDefinitionOpen: boolean;
   readonly runConfirmationOpen: boolean;
 }
 
@@ -63,6 +64,7 @@ export interface OpenTuiControllerContext {
   readonly getRuntimeSessionView: () => RuntimeSessionView | undefined;
   readonly getScreenMode: () => ScreenMode;
   readonly getSelectedChildSubworkflowId: () => string | undefined;
+  readonly getSelectedDefinitionNodeId: () => string | undefined;
   readonly getSelectedHistoryExecution: () => NodeExecutionRecord | undefined;
   readonly getSelectedManagerSessionId: () => string | undefined;
   readonly getSelectedNodeExecution: () => NodeExecutionRecord | undefined;
@@ -133,7 +135,7 @@ function buildCopyTargetInput(
   const screenMode = context.getScreenMode();
   const historyViewMode = context.getHistoryViewMode();
   const loadedWorkflowId =
-    screenMode === "workspace"
+    screenMode === "workspace" || screenMode === "definition"
       ? context.getSelectedWorkspaceWorkflowId()
       : context.getLoadedWorkflow()?.bundle.workflow.workflowId;
   const selectedNodeExecutionId =
@@ -146,7 +148,10 @@ function buildCopyTargetInput(
       : undefined;
   const selectedWorkflowName = context.getSelectedWorkflowName();
   const selectedSubworkflowId = context.getSelectedChildSubworkflowId();
-  const selectedWorkflowNodeId = context.getSelectedSubworkflowNodeId();
+  const selectedWorkflowNodeId =
+    screenMode === "definition"
+      ? context.getSelectedDefinitionNodeId()
+      : context.getSelectedSubworkflowNodeId();
   return {
     focusPane: context.getFocusPane(),
     screenMode,

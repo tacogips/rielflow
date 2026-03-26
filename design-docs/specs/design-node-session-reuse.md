@@ -1,16 +1,16 @@
-# Node Session Reuse Design
+# Node Session Reuse
 
 This document defines node-local backend session reuse for repeated executions of the same workflow node.
 
 ## Overview
 
-Current workflow execution persists the enclosing `workflowExecutionId`, but each node adapter call is effectively stateless. That does not support patterns where the same node should continue one backend conversation/thread across multiple visits within one workflow run.
-
-Goal:
+Current behavior:
 - keep the default behavior as fresh backend execution per node run
 - allow opt-in node-local backend session reuse
 - persist reusable backend session handles in workflow session state so reuse survives `session resume`
 - keep the backend session handle opaque to the engine
+
+This is implemented in the workflow runtime. A node can run multiple times within one `workflowExecutionId`, request backend-session continuation through `sessionPolicy.mode = "reuse"`, and persist the returned backend session handle for later visits of the same node id.
 
 ## Node Payload Contract
 
@@ -76,6 +76,7 @@ Semantics:
 - If `sessionPolicy.mode = "reuse"` and no stored backend session exists yet, the first execution sends `backendSession.mode = "new"`.
 - If a backend does not support sessions, it may omit `backendSession` in the response; runtime then continues without creating a reusable handle.
 - Stored backend session handles are reused only when the node still resolves to the same execution backend.
+- The bundled mock-scenario path is useful for demonstrating repeated same-node control flow, but backend-session reuse itself still depends on the configured backend returning a reusable `sessionId`.
 
 ## Example
 
@@ -87,3 +88,7 @@ With node `b` configured as `sessionPolicy.mode = "reuse"`:
 4. second `b` execution receives `3` and continues backend session `sess-b-1`
 
 This enables node `b` to remember the prior `2` and respond with the accumulated result `5`, assuming the backend wrapper implements that continuation behavior.
+
+See also:
+
+- `examples/same-node-session-echo/` for a concrete authored bundle that revisits one node twice, first to echo and then to answer on the next visit

@@ -1,5 +1,6 @@
 import type { OpenTuiMainViewRefs } from "../opentui-solid-components";
 import { Box, FocusSelect, Text } from "../opentui-solid-components";
+import { OPEN_TUI_SELECT_THEMES } from "../opentui-view-shared";
 import { NodeDetailPane } from "./NodeDetailPane";
 
 export interface WorkflowHistoryScreenProps {
@@ -60,11 +61,19 @@ export function WorkflowHistoryScreen(props: WorkflowHistoryScreenProps) {
             flexGrow={1}
             width="100%"
             height="100%"
-            itemSpacing={1}
-            selectedBackgroundColor="#1f3447"
-            selectedTextColor="#f7d774"
-            descriptionColor="#89a5ba"
-            selectedDescriptionColor="#d8e5f2"
+            itemSpacing={OPEN_TUI_SELECT_THEMES.historySessions.itemSpacing}
+            selectedBackgroundColor={
+              OPEN_TUI_SELECT_THEMES.historySessions.selectedBackgroundColor
+            }
+            selectedTextColor={
+              OPEN_TUI_SELECT_THEMES.historySessions.selectedTextColor
+            }
+            descriptionColor={
+              OPEN_TUI_SELECT_THEMES.historySessions.descriptionColor
+            }
+            selectedDescriptionColor={
+              OPEN_TUI_SELECT_THEMES.historySessions.selectedDescriptionColor
+            }
           />
         </Box>
         <Box
@@ -89,11 +98,19 @@ export function WorkflowHistoryScreen(props: WorkflowHistoryScreenProps) {
             flexGrow={1}
             width="100%"
             height="100%"
-            itemSpacing={1}
-            selectedBackgroundColor="#243a2d"
-            selectedTextColor="#e8f29a"
-            descriptionColor="#8eb49a"
-            selectedDescriptionColor="#dff0e4"
+            itemSpacing={OPEN_TUI_SELECT_THEMES.historyNodes.itemSpacing}
+            selectedBackgroundColor={
+              OPEN_TUI_SELECT_THEMES.historyNodes.selectedBackgroundColor
+            }
+            selectedTextColor={
+              OPEN_TUI_SELECT_THEMES.historyNodes.selectedTextColor
+            }
+            descriptionColor={
+              OPEN_TUI_SELECT_THEMES.historyNodes.descriptionColor
+            }
+            selectedDescriptionColor={
+              OPEN_TUI_SELECT_THEMES.historyNodes.selectedDescriptionColor
+            }
           />
         </Box>
       </Box>

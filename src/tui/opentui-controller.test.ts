@@ -222,6 +222,7 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     getRuntimeSessionView: () => state.runtimeSessionView,
     getScreenMode: () => state.screenMode,
     getSelectedChildSubworkflowId: () => undefined,
+    getSelectedDefinitionNodeId: () => undefined,
     getSelectedHistoryExecution: () => undefined,
     getSelectedManagerSessionId: () => undefined,
     getSelectedNodeExecution: () => undefined,

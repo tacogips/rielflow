@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
 import type { NodePayload } from "../workflow/types";
 import {
+  buildNodeDefinitionPopupContent,
   buildDetailEscapeStatusMessage,
   buildNodeSelectOptions,
   buildOpenTuiBreadcrumb,
@@ -9,6 +10,7 @@ import {
   buildSubworkflowNodeSelectOptions,
   buildTuiRuntimeVariables,
   buildWorkflowHistoryStatusMessage,
+  buildSessionSelectOptions,
   describeTuiWorkflowInputSyntax,
   deriveEditorTextFromRuntimeVariables,
   detectWorkflowInputMode,
@@ -25,7 +27,16 @@ import {
   resolveSelectedWorkflowName,
   buildWorkflowHistoryHeader,
   buildWorkflowRunStatusContent,
+  buildWorkflowDefinitionNodeSelectOptions,
   buildWorkflowSelectorPreview,
+  resolveDirectionalNavigationAction,
+  resolveHistoryAdvanceAction,
+  resolveHistoryRevertAction,
+  resolveOpenTuiPopupKind,
+  resolveNodeDetailEscape,
+  resolvePopupConfirmAction,
+  resolvePopupRevertAction,
+  resolvePopupScrollDelta,
 } from "./opentui-model";
 import {
   OPEN_TUI_MAIN_PANE_LAYOUT,
@@ -112,7 +123,9 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   };
 }
 
-function plainStyledText(input: { readonly chunks: readonly { text: string }[] }) {
+function plainStyledText(input: {
+  readonly chunks: readonly { text: string }[];
+}) {
   return input.chunks.map((chunk) => chunk.text).join("");
 }
 
@@ -319,7 +332,10 @@ describe("workflow preview text helpers", () => {
     });
 
     const text = plainStyledText(
-      buildWorkflowHistoryHeader(loaded, loaded.bundle.workflow.subWorkflows[0]),
+      buildWorkflowHistoryHeader(
+        loaded,
+        loaded.bundle.workflow.subWorkflows[0],
+      ),
     );
 
     expect(text).toContain("demo");
@@ -460,6 +476,32 @@ describe("describeTuiWorkflowInputSyntax", () => {
 });
 
 describe("buildWorkflowHistoryStatusMessage", () => {
+  test("documents the workflow-definition screen help text", () => {
+    expect(
+      buildWorkflowHistoryStatusMessage({
+        busy: false,
+        detailMode: "summary",
+        editingInput: false,
+        filterText: "",
+        focusPane: "nodes",
+        historyViewMode: "workflow",
+        inputSyntax: {
+          status: "valid",
+          summary: "valid JSON",
+        },
+        matchesCount: 2,
+        message: "Help",
+        screenMode: "definition",
+        workflowCount: 2,
+        workflowInputDetection: {
+          mode: "json",
+          reason: "detected structured input",
+        },
+        workflowName: "demo-flow",
+      }),
+    ).toContain("nodes: enter/ctrl-m opens the node-definition popup");
+  });
+
   test("includes the workflow name in run-screen help text", () => {
     expect(
       buildWorkflowHistoryStatusMessage({
@@ -509,7 +551,33 @@ describe("buildWorkflowHistoryStatusMessage", () => {
         },
         workflowName: "demo-flow",
       }),
-    ).toContain("tab/shift-tab: cycle sessions -> nodes -> detail -> input");
+    ).toContain("enter/ctrl-m: load selection");
+  });
+
+  test("documents that escape closes in-pane viewers before returning", () => {
+    expect(
+      buildWorkflowHistoryStatusMessage({
+        busy: false,
+        detailMode: "summary",
+        editingInput: false,
+        filterText: "",
+        focusPane: "detail",
+        historyViewMode: "workflow",
+        inputSyntax: {
+          status: "valid",
+          summary: "valid JSON",
+        },
+        matchesCount: 2,
+        message: "Help",
+        screenMode: "history",
+        workflowCount: 2,
+        workflowInputDetection: {
+          mode: "json",
+          reason: "detected structured input",
+        },
+        workflowName: "demo-flow",
+      }),
+    ).toContain("esc closes in-pane viewers before returning to the opener");
   });
 });
 
@@ -714,7 +782,194 @@ describe("resolveHistoryPaneNavigationMode", () => {
   });
 });
 
+describe("resolveDirectionalNavigationAction", () => {
+  test("maps workspace forward navigation to opening definition", () => {
+    expect(
+      resolveDirectionalNavigationAction({
+        direction: "forward",
+        focusPane: "workflows",
+        historyViewMode: "workflow",
+        screenMode: "workspace",
+      }),
+    ).toEqual({ kind: "open-definition" });
+  });
+
+  test("maps definition forward navigation to opening history", () => {
+    expect(
+      resolveDirectionalNavigationAction({
+        direction: "forward",
+        focusPane: "nodes",
+        historyViewMode: "workflow",
+        screenMode: "definition",
+      }),
+    ).toEqual({ kind: "open-history" });
+  });
+
+  test("maps history workflow forward navigation from sessions to nodes", () => {
+    expect(
+      resolveDirectionalNavigationAction({
+        direction: "forward",
+        focusPane: "sessions",
+        historyViewMode: "workflow",
+        screenMode: "history",
+      }),
+    ).toEqual({
+      kind: "focus",
+      focusPane: "nodes",
+      nextDetailMode: "summary",
+      status: "Focused nodes for the selected workflow run",
+    });
+  });
+
+  test("maps history subworkflow revert navigation from sessions to closing the scope", () => {
+    expect(
+      resolveDirectionalNavigationAction({
+        direction: "revert",
+        focusPane: "sessions",
+        historyViewMode: "subworkflow",
+        screenMode: "history",
+      }),
+    ).toEqual({ kind: "close-subworkflow" });
+  });
+});
+
+describe("resolveOpenTuiPopupKind", () => {
+  test("prefers the topmost popup in render order", () => {
+    expect(
+      resolveOpenTuiPopupKind({
+        agentSessionPopupOpen: true,
+        confirmPopupOpen: true,
+        filterPopupOpen: true,
+        helpPopupOpen: true,
+        nodeDefinitionPopupOpen: true,
+      }),
+    ).toBe("filter");
+  });
+
+  test("returns node-definition when it is the topmost open popup", () => {
+    expect(
+      resolveOpenTuiPopupKind({
+        agentSessionPopupOpen: true,
+        confirmPopupOpen: false,
+        filterPopupOpen: false,
+        helpPopupOpen: false,
+        nodeDefinitionPopupOpen: true,
+      }),
+    ).toBe("node-definition");
+  });
+
+  test("returns none when no popup is open", () => {
+    expect(
+      resolveOpenTuiPopupKind({
+        agentSessionPopupOpen: false,
+        confirmPopupOpen: false,
+        filterPopupOpen: false,
+        helpPopupOpen: false,
+        nodeDefinitionPopupOpen: false,
+      }),
+    ).toBe("none");
+  });
+});
+
+describe("resolvePopupConfirmAction", () => {
+  test("maps popup confirm actions centrally", () => {
+    expect(resolvePopupConfirmAction("filter")).toEqual({
+      kind: "apply-filter",
+    });
+    expect(resolvePopupConfirmAction("run-confirm")).toEqual({
+      kind: "confirm-run",
+    });
+    expect(resolvePopupConfirmAction("help")).toEqual({ kind: "none" });
+  });
+});
+
+describe("resolvePopupRevertAction", () => {
+  test("maps popup close actions centrally", () => {
+    expect(resolvePopupRevertAction("filter")).toEqual({
+      kind: "cancel-filter",
+    });
+    expect(resolvePopupRevertAction("help")).toEqual({
+      kind: "close-help",
+    });
+    expect(resolvePopupRevertAction("run-confirm")).toEqual({
+      kind: "close-run-confirm",
+    });
+    expect(resolvePopupRevertAction("node-definition")).toEqual({
+      kind: "close-node-definition",
+    });
+    expect(resolvePopupRevertAction("agent-session")).toEqual({
+      kind: "close-agent-session",
+    });
+  });
+});
+
+describe("resolvePopupScrollDelta", () => {
+  test("returns popup scroll movement only for the agent-session popup", () => {
+    expect(
+      resolvePopupScrollDelta({
+        key: {
+          name: "j",
+          shift: false,
+          ctrl: false,
+          meta: false,
+        },
+        popupKind: "agent-session",
+      }),
+    ).toBe(1);
+    expect(
+      resolvePopupScrollDelta({
+        key: {
+          name: "up",
+          shift: false,
+          ctrl: false,
+          meta: false,
+        },
+        popupKind: "agent-session",
+      }),
+    ).toBe(-1);
+    expect(
+      resolvePopupScrollDelta({
+        key: {
+          name: "down",
+          shift: false,
+          ctrl: false,
+          meta: false,
+        },
+        popupKind: "node-definition",
+      }),
+    ).toBe(1);
+    expect(
+      resolvePopupScrollDelta({
+        key: {
+          name: "down",
+          shift: false,
+          ctrl: false,
+          meta: false,
+        },
+        popupKind: "help",
+      }),
+    ).toBe(0);
+  });
+});
+
 describe("resolveTabFocusTarget", () => {
+  test("cycles between definition panes", () => {
+    expect(
+      resolveTabFocusTarget({
+        direction: "next",
+        focusPane: "definition",
+        screenMode: "definition",
+      }),
+    ).toBe("nodes");
+    expect(
+      resolveTabFocusTarget({
+        direction: "previous",
+        focusPane: "nodes",
+        screenMode: "definition",
+      }),
+    ).toBe("definition");
+  });
+
   test("cycles forward across history panes only", () => {
     expect(
       resolveTabFocusTarget({
@@ -810,11 +1065,129 @@ describe("buildDetailEscapeStatusMessage", () => {
   });
 });
 
+describe("resolveNodeDetailEscape", () => {
+  test("closes the in-pane viewer back to node detail summary first", () => {
+    expect(
+      resolveNodeDetailEscape({
+        detailMode: "viewer",
+        detailReturnPane: "nodes",
+        historyViewMode: "workflow",
+      }),
+    ).toEqual({
+      nextDetailMode: "summary",
+      nextFocusPane: "detail",
+      status: "Focused node detail summary",
+    });
+  });
+
+  test("returns to the parent pane from node detail summary", () => {
+    expect(
+      resolveNodeDetailEscape({
+        detailMode: "summary",
+        detailReturnPane: "nodes",
+        historyViewMode: "workflow",
+      }),
+    ).toEqual({
+      nextDetailMode: "summary",
+      nextFocusPane: "nodes",
+      status: "Focused nodes",
+    });
+  });
+});
+
+describe("resolveHistoryAdvanceAction", () => {
+  test("loads the selected session into node detail", () => {
+    expect(
+      resolveHistoryAdvanceAction({
+        detailMode: "summary",
+        focusPane: "sessions",
+      }),
+    ).toEqual({
+      kind: "load-session-selection",
+      focusAfterSessionLoad: "detail",
+    });
+  });
+
+  test("loads the selected node from the node list", () => {
+    expect(
+      resolveHistoryAdvanceAction({
+        detailMode: "summary",
+        focusPane: "nodes",
+      }),
+    ).toEqual({ kind: "load-node-selection" });
+  });
+
+  test("opens the detail-summary selection only from summary mode", () => {
+    expect(
+      resolveHistoryAdvanceAction({
+        detailMode: "summary",
+        focusPane: "detail",
+      }),
+    ).toEqual({ kind: "open-detail-summary-selection" });
+    expect(
+      resolveHistoryAdvanceAction({
+        detailMode: "viewer",
+        focusPane: "detail",
+      }),
+    ).toEqual({ kind: "none" });
+  });
+});
+
+describe("resolveHistoryRevertAction", () => {
+  test("returns node detail to its parent focus", () => {
+    expect(
+      resolveHistoryRevertAction({
+        detailMode: "summary",
+        detailReturnPane: "nodes",
+        editingInput: false,
+        focusPane: "detail",
+        historyViewMode: "workflow",
+      }),
+    ).toEqual({
+      kind: "focus",
+      focusPane: "nodes",
+      nextDetailMode: "summary",
+      status: "Focused nodes",
+    });
+  });
+
+  test("finishes input editing from the history input pane", () => {
+    expect(
+      resolveHistoryRevertAction({
+        detailMode: "summary",
+        detailReturnPane: "nodes",
+        editingInput: true,
+        focusPane: "input",
+        historyViewMode: "workflow",
+      }),
+    ).toEqual({
+      kind: "finish-input-editing",
+      status: "Input edit finished",
+    });
+  });
+});
+
 describe("resolveOpenTuiInternallyHandledListId", () => {
+  test("maps the workflow-definition node pane to its select renderable", () => {
+    expect(
+      resolveOpenTuiInternallyHandledListId({
+        detailMode: "summary",
+        definitionNodeSelectId: "workflow-definition-node-select",
+        detailSummarySelectId: "detail-summary-select",
+        focusPane: "nodes",
+        nodeSelectId: "node-select",
+        screenMode: "definition",
+        sessionSelectId: "sess-select",
+        workflowSelectId: "wf-select",
+      }),
+    ).toBe("workflow-definition-node-select");
+  });
+
   test("maps the history workflow-runs pane to the session select renderable", () => {
     expect(
       resolveOpenTuiInternallyHandledListId({
         detailMode: "summary",
+        definitionNodeSelectId: "workflow-definition-node-select",
         detailSummarySelectId: "detail-summary-select",
         focusPane: "sessions",
         nodeSelectId: "node-select",
@@ -829,6 +1202,7 @@ describe("resolveOpenTuiInternallyHandledListId", () => {
     expect(
       resolveOpenTuiInternallyHandledListId({
         detailMode: "summary",
+        definitionNodeSelectId: "workflow-definition-node-select",
         detailSummarySelectId: "detail-summary-select",
         focusPane: "detail",
         nodeSelectId: "node-select",
@@ -843,6 +1217,7 @@ describe("resolveOpenTuiInternallyHandledListId", () => {
     expect(
       resolveOpenTuiInternallyHandledListId({
         detailMode: "summary",
+        definitionNodeSelectId: "workflow-definition-node-select",
         detailSummarySelectId: "detail-summary-select",
         focusPane: "input",
         nodeSelectId: "node-select",
@@ -855,6 +1230,20 @@ describe("resolveOpenTuiInternallyHandledListId", () => {
 });
 
 describe("resolveOpenTuiCopyTarget", () => {
+  test("copies the selected workflow node id from the definition node pane", () => {
+    expect(
+      resolveOpenTuiCopyTarget({
+        focusPane: "nodes",
+        loadedWorkflowId: "workflow-alpha",
+        screenMode: "definition",
+        selectedWorkflowNodeId: "workflow-input",
+      }),
+    ).toEqual({
+      label: "workflow node id",
+      value: "workflow-input",
+    });
+  });
+
   test("prefers the workflow id in the workspace screen", () => {
     expect(
       resolveOpenTuiCopyTarget({
@@ -923,6 +1312,21 @@ describe("resolveOpenTuiCopyTarget", () => {
 });
 
 describe("buildOpenTuiBreadcrumb", () => {
+  test("renders the workflow-definition breadcrumb", () => {
+    expect(
+      buildOpenTuiBreadcrumb({
+        loadedWorkflow: makeLoadedWorkflow({
+          id: "workflow-input",
+          model: "input-model",
+          promptTemplate: "Normalize the request",
+          variables: {},
+        }),
+        screenMode: "definition",
+        subworkflowPath: [],
+      }),
+    ).toBe("workspace > demo > definition");
+  });
+
   test("renders a nested history breadcrumb for subworkflow navigation", () => {
     expect(
       buildOpenTuiBreadcrumb({
@@ -976,11 +1380,82 @@ describe("buildNodeSelectOptions", () => {
       runtimeVariables: {},
     });
 
-    expect(options[0]?.name).toContain("workflow-input -> delivery");
-    expect(options[0]?.description).toContain("workflow: delivery");
-    expect(options[0]?.description).toContain(
+    expect(options[0]?.name).toContain("workflow-input");
+    expect(
+      (options[0] as { statusLabel?: string } | undefined)?.statusLabel,
+    ).toBe("SUCCEEDED");
+    expect(options[0]?.description).toContain("INPUT | AGENT");
+    expect(
+      (options[0] as { detailLines?: readonly string[] } | undefined)?.detailLines?.[1],
+    ).toContain("scope: delivery");
+    expect(
+      (options[0] as { detailLines?: readonly string[] } | undefined)?.detailLines?.[1],
+    ).toContain(
       "purpose: Normalize the received request",
     );
+  });
+});
+
+describe("buildWorkflowDefinitionNodeSelectOptions", () => {
+  test("lists workflow nodes without requiring runtime execution data", () => {
+    const loaded = makeLoadedWorkflow({
+      id: "workflow-input",
+      description: "Normalize the received request",
+      model: "input-model",
+      promptTemplate: "Normalize the request",
+      variables: {},
+    });
+
+    const options = buildWorkflowDefinitionNodeSelectOptions(loaded);
+
+    expect(options[0]?.value).toBe("divedra-manager");
+    expect(options[1]?.value).toBe("workflow-input");
+    expect(options[1]?.description).toContain("AGENT");
+  });
+});
+
+describe("buildNodeDefinitionPopupContent", () => {
+  test("renders node reference and payload sections", () => {
+    const loaded = makeLoadedWorkflow({
+      id: "workflow-input",
+      description: "Normalize the received request",
+      model: "input-model",
+      promptTemplate: "Normalize the request",
+      variables: {},
+    });
+
+    const popup = buildNodeDefinitionPopupContent({
+      loadedWorkflow: loaded,
+      nodeId: "workflow-input",
+    });
+
+    expect(popup.title).toContain("workflow-input");
+    expect(popup.body).toContain("workflow.json node entry");
+    expect(popup.body).toContain("node payload");
+  });
+});
+
+describe("buildSessionSelectOptions", () => {
+  test("separates and colors the workflow-run status label", () => {
+    const options = buildSessionSelectOptions([
+      {
+        sessionId: "sess-1",
+        workflowName: "demo",
+        workflowId: "demo",
+        status: "completed",
+        startedAt: "2026-03-24T00:00:00.000Z",
+        endedAt: "2026-03-24T00:01:00.000Z",
+        currentNodeId: "workflow-output",
+        nodeExecutionCounter: 2,
+        lastError: null,
+        updatedAt: "2026-03-24T00:01:00.000Z",
+      },
+    ]);
+
+    expect(options[0]?.name).toContain("2026-03-24T00:00:00.000Z");
+    expect(
+      (options[0] as { statusLabel?: string } | undefined)?.statusLabel,
+    ).toBe("COMPLETED");
   });
 });
 
@@ -1026,7 +1501,10 @@ describe("buildSubworkflowNodeSelectOptions", () => {
     );
 
     expect(options[0]?.name).toContain("workflow-input");
-    expect(options[0]?.description).toContain(
+    expect(options[0]?.description).toContain("AGENT");
+    expect(
+      (options[0] as { detailLines?: readonly string[] } | undefined)?.detailLines?.[1],
+    ).toContain(
       "purpose: Normalize the received request",
     );
   });
@@ -1113,6 +1591,25 @@ describe("isAllowedNodeDetailKey", () => {
 });
 
 describe("resolveOpenTuiPaneChrome", () => {
+  test("marks workflow-definition nodes as active on the definition screen", () => {
+    const chrome = resolveOpenTuiPaneChrome({
+      focusPane: "nodes",
+      hasRuntimeSession: false,
+      historyPaneLabels: {
+        header: "Workflow",
+        left: "Workflow Runs",
+        right: "Nodes",
+      },
+      inputMode: "json",
+      inputSyntaxStatus: "valid",
+      screenMode: "definition",
+    });
+
+    expect(chrome.workflowDefinition.title).toBe(" Workflow Definition ");
+    expect(chrome.workflowDefinitionNodes.title).toBe(" >> Nodes << ");
+    expect(chrome.workflowDefinitionNodes.borderColor).toBe("#4fd1ff");
+  });
+
   test("marks node detail as active after history focus moves from nodes to detail", () => {
     const chrome = resolveOpenTuiPaneChrome({
       focusPane: "detail",

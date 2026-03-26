@@ -69,6 +69,7 @@ export interface OpenTuiMainViewRefs {
   breadcrumbText?: TextRenderable;
   confirmPopup?: BoxRenderable;
   confirmText?: TextRenderable;
+  definitionScreen?: BoxRenderable;
   detailScroll?: ScrollBoxRenderable;
   detailSummaryHeader?: TextRenderable;
   detailSummarySelect?: FocusAwareSelectRenderable;
@@ -83,6 +84,8 @@ export interface OpenTuiMainViewRefs {
   inputRow?: BoxRenderable;
   inputShell?: BoxRenderable;
   inputTextarea?: TextareaRenderable;
+  nodeDefinitionPopup?: ScrollBoxRenderable;
+  nodeDefinitionPopupText?: TextRenderable;
   nodePane?: BoxRenderable;
   nodeSelect?: FocusAwareSelectRenderable;
   runStatusPane?: ScrollBoxRenderable;
@@ -96,5 +99,9 @@ export interface OpenTuiMainViewRefs {
   sessionPane?: BoxRenderable;
   sessionSelect?: FocusAwareSelectRenderable;
   workflowPane?: BoxRenderable;
+  workflowDefinitionNodePane?: BoxRenderable;
+  workflowDefinitionNodeSelect?: FocusAwareSelectRenderable;
+  workflowDefinitionPane?: ScrollBoxRenderable;
+  workflowDefinitionText?: TextRenderable;
   workflowSelect?: FocusAwareSelectRenderable;
 }

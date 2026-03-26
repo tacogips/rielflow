@@ -132,6 +132,36 @@ export function PopupLayer(props: PopupLayerProps) {
           content=""
         />
       </ScrollBox>
+      <ScrollBox
+        ref={(node) => {
+          props.refs.nodeDefinitionPopup = node;
+        }}
+        id="node-definition-popup"
+        border
+        title=" Node Definition "
+        backgroundColor={popupBackgroundColor()}
+        width="80%"
+        minWidth={40}
+        height="72%"
+        position="absolute"
+        top="14%"
+        left="10%"
+        zIndex={23}
+        padding={1}
+        visible={false}
+        scrollY
+        focusable
+      >
+        <Text
+          ref={(node) => {
+            props.refs.nodeDefinitionPopupText = node;
+          }}
+          id="node-definition-popup-text"
+          flexGrow={1}
+          width="100%"
+          content=""
+        />
+      </ScrollBox>
     </>
   );
 }

@@ -68,7 +68,7 @@ Workflow root resolution:
 
 ### Screen Model
 
-The TUI uses three primary screens instead of a single always-expanded multi-pane layout.
+The TUI uses four primary screens instead of a single always-expanded multi-pane layout.
 
 A compact breadcrumb bar stays visible at the top of the screen so nested navigation remains legible while moving across workspace, workflow history, new-run, and subworkflow views.
 
@@ -86,8 +86,8 @@ Behavior:
 1. the selector screen is dedicated to choosing a workflow, not browsing sessions and nodes yet
 2. pressing `/` opens a popup filter input
 3. the popup accepts a workflow-name substring filter and immediately narrows the workflow list
-4. `enter` or `l` opens the highlighted workflow in the workflow-history screen
-5. `ctrl-m` opens the new-run screen for the highlighted workflow
+4. `enter`, `ctrl-m`, or `l` opens the highlighted workflow in the workflow-definition screen
+5. `n` opens the new-run screen for the highlighted workflow
 6. pressing `?` opens a help popup, and `q` closes that popup
 
 Workflow preview content:
@@ -145,9 +145,31 @@ Panel-interaction consistency:
 - deeper inspection panes should use `esc` to return focus to the immediate parent pane rather than jumping to a distant screen
 - inverse navigation pairs must stay symmetric; if `enter` deepens into a pane and `esc` returns from it, or `l` moves right and `h` moves left, a deeper pane must not reuse the reverse key for unrelated global navigation
 
+#### Workflow Definition Screen
+
+Shown from the workspace screen via `enter`, `ctrl-m`, or `l`.
+
+Layout:
+
+- Top pane: scrollable workflow-definition detail showing workflow-level JSON and visualization metadata
+- Bottom pane: workflow node list
+
+Behavior:
+
+1. the screen is definition-oriented and does not mix historical runtime state into the main panes
+2. focus enters on the node-list pane so `j` / `k` can immediately move across workflow nodes
+3. `tab` and `shift-tab` cycle focus between the workflow-definition pane and the node-list pane
+4. when the workflow-definition pane is focused, `j` / `k` and arrow keys scroll that pane
+5. when the node-list pane is focused, `j` / `k` and arrow keys move across workflow nodes
+6. `enter` or `ctrl-m` from the node-list pane opens a scrollable popup that shows the selected node's definition
+7. the node-definition popup closes with `esc` or `q` and returns focus to the node-list pane
+8. `l` opens the workflow-history screen for the same workflow
+9. `n` opens the new-run screen for the same workflow
+10. `h` returns to the workspace screen
+
 #### New Workflow Run Screen
 
-Shown from the workspace screen via `ctrl-m`, or from the workflow-history screen via `n`.
+Shown from the workspace screen via `n`, from the workflow-definition screen via `n`, or from the workflow-history screen via `n`.
 
 Layout:
 
@@ -170,7 +192,7 @@ Behavior:
 
 The current TUI does not wait for a runtime pause before collecting input. Instead:
 
-1. entering the workflow-history or new-run screen inspects input-node payloads and bindings
+1. entering the workflow-history, workflow-definition, or new-run screen inspects workflow and input-node payloads as needed for that screen
 2. the editor defaults to `text` or `json` mode based on structured `human-input` hints
 3. the operator can edit the input buffer at any time
 4. the workflow-history screen can open the new-run screen with `n`
@@ -224,9 +246,22 @@ TUI behavior:
 - `/`: open workflow filter popup
 - `y`: copy the highlighted workflow id
 - `?`: open help popup
-- `enter` / `l`: open the highlighted workflow in the workflow-history screen
-- `ctrl-m`: open the highlighted workflow in the new-run screen
+- `enter` / `ctrl-m` / `l`: open the highlighted workflow in the workflow-definition screen
+- `n`: open the highlighted workflow in the new-run screen
 - `r`: refresh workflow list
+- `q`: quit
+
+### Workflow Definition Screen
+
+- `j` / `k`: scroll the workflow-definition pane when it is focused, or move selection within the node-list pane when nodes are focused
+- `tab` / `shift-tab`: cycle focus between workflow definition and nodes
+- `enter` / `ctrl-m`: from nodes, open the selected node-definition popup
+- `y`: copy the selected workflow id
+- `l`: open the workflow-history screen for the current workflow
+- `n`: open the new-run screen for the current workflow
+- `h`: return to the workspace screen
+- `r`: refresh workflow definition and cached workflow state
+- `?`: open help popup
 - `q`: quit
 
 ### Workflow History Screen
@@ -269,6 +304,7 @@ TUI behavior:
 - workflow filter popup: opened by `/`, applied by `enter` or `ctrl-m`, cancelled by `esc`
 - help popup: opened by `?`, closed by `q`
 - run confirmation popup: opened by `enter` or `ctrl-m` on the new-run screen, confirmed by `enter` or `ctrl-m`, cancelled by `esc`
+- workflow node-definition popup: opened by `enter` or `ctrl-m` from the workflow-definition node list, scrollable with `j` / `k` or arrows, and closed by `esc` or `q`
 - node-detail JSON/message viewer: opened by `enter` or `ctrl-m` from node-detail summary as an in-pane detail state and must not steal active-pane status from node detail
 - node-detail AI agent session popup: when the selected summary row points at a persisted `codex-agent` or `claude-code-agent` session, `enter` or `ctrl-m` opens a scrollable popup showing that stored chat history; the popup stays tied to node detail and closes with `esc` or `q`
 

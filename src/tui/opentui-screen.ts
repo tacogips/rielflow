@@ -19,14 +19,14 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../workflow/session";
-import type {
-  RuntimeSessionSummary,
-} from "../workflow/runtime-db";
+import type { RuntimeSessionSummary } from "../workflow/runtime-db";
 import type { CliAgentBackend } from "../workflow/types";
 import {
-  buildDetailEscapeStatusMessage,
+  buildNodeDefinitionPopupContent,
   buildNodeSelectOptions,
   buildOpenTuiBreadcrumb,
+  buildWorkflowDefinitionContent,
+  buildWorkflowDefinitionNodeSelectOptions,
   buildSessionSelectOptions,
   findLatestNodeExecution,
   buildWorkflowHistoryHeader,
@@ -44,6 +44,13 @@ import {
   isDetailJsonViewerSelection,
   normalizeWorkflowFilterText,
   OPEN_TUI_EMPTY_SELECT_VALUE,
+  resolveDirectionalNavigationAction,
+  resolveHistoryAdvanceAction,
+  resolveHistoryRevertAction,
+  resolveOpenTuiPopupKind,
+  resolvePopupConfirmAction,
+  resolvePopupRevertAction,
+  resolvePopupScrollDelta,
   resolveOwningSubWorkflow,
   resolveHistoryPaneLabels,
   resolveHistoryPaneNavigationMode,
@@ -124,6 +131,7 @@ export interface OpenTuiWorkflowAppOptions {
 }
 
 const WORKFLOW_SELECT_ID = "wf-select";
+const DEFINITION_NODE_SELECT_ID = "workflow-definition-node-select";
 const SESSION_SELECT_ID = "sess-select";
 const NODE_SELECT_ID = "node-select";
 const DETAIL_SUMMARY_SELECT_ID = "detail-summary-select";
@@ -236,6 +244,7 @@ export async function runOpenTuiWorkflowApp(
     breadcrumbText,
     confirmPopup,
     confirmText,
+    definitionScreen,
     detailScroll,
     detailSummaryHeader,
     detailSummarySelect,
@@ -249,6 +258,8 @@ export async function runOpenTuiWorkflowApp(
     inputRow,
     inputShell,
     inputTextarea,
+    nodeDefinitionPopup,
+    nodeDefinitionPopupText,
     nodeSelect,
     runStatusText,
     runTopRow,
@@ -256,6 +267,8 @@ export async function runOpenTuiWorkflowApp(
     selectorPreviewText,
     selectorRow,
     sessionSelect,
+    workflowDefinitionNodeSelect,
+    workflowDefinitionText,
     workflowSelect,
   } = mountedRefs;
 
@@ -287,8 +300,11 @@ export async function runOpenTuiWorkflowApp(
   let helpPopupOpen = false;
   let confirmPopupOpen = false;
   let agentSessionPopupOpen = false;
+  let nodeDefinitionPopupOpen = false;
   let agentSessionPopupTextContent = "";
   let agentSessionPopupTitle = " AI Agent Session ";
+  let nodeDefinitionPopupTextContent = "";
+  let nodeDefinitionPopupTitle = " Node Definition ";
   let detailReturnPane: DetailReturnPane = "nodes";
   let detailViewerTitle = "";
   let detailViewerBody = "";
@@ -305,11 +321,12 @@ export async function runOpenTuiWorkflowApp(
   let runPollInFlight = false;
   let isClosed = false;
   let suppressNodeSelectionChange = false;
+  let suppressDefinitionNodeSelectionChange = false;
   let suppressSessionSelectionChange = false;
   let suppressWorkflowSelectionChange = false;
   let lastStatus =
     screenMode === "workspace"
-      ? "Select a workflow, then open history with enter/l or start a new run with ctrl-m."
+      ? "Select a workflow, then open definition with enter/ctrl-m/l or start a new run with n."
       : "Loading TUI state...";
 
   const isEnterKey = (key: KeyEvent): boolean => key.name === "return";
@@ -358,6 +375,14 @@ export async function runOpenTuiWorkflowApp(
   };
 
   const currentSubworkflowId = (): string | undefined => subworkflowPath.at(-1);
+
+  const selectedDefinitionNodeId = (): string | undefined => {
+    const option = workflowDefinitionNodeSelect.getSelectedOption();
+    if (option === null || option.value === OPEN_TUI_EMPTY_SELECT_VALUE) {
+      return undefined;
+    }
+    return String(option.value);
+  };
 
   const currentSubworkflow = ():
     | LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number]
@@ -490,6 +515,7 @@ export async function runOpenTuiWorkflowApp(
   const render = async (): Promise<void> => {
     const preferredSubworkflowNodeId = selectedSubworkflowNodeId();
     const preferredChildSubworkflowId = selectedChildSubworkflowId();
+    const preferredDefinitionNodeId = selectedDefinitionNodeId();
     const activeSubworkflow = currentSubworkflow();
     const historyPaneLabels = resolveHistoryPaneLabels({
       hasRuntimeSession: runtimeSessionView !== undefined,
@@ -503,6 +529,7 @@ export async function runOpenTuiWorkflowApp(
     );
 
     selectorRow.visible = screenMode === "workspace";
+    definitionScreen.visible = screenMode === "definition";
     historyScreen.visible = screenMode === "history";
     runTopRow.visible = screenMode === "run";
     inputRow.visible = screenMode === "history" || screenMode === "run";
@@ -512,6 +539,9 @@ export async function runOpenTuiWorkflowApp(
     agentSessionPopup.visible = agentSessionPopupOpen;
     agentSessionPopup.title = agentSessionPopupTitle;
     agentSessionPopupText.content = agentSessionPopupTextContent;
+    nodeDefinitionPopup.visible = nodeDefinitionPopupOpen;
+    nodeDefinitionPopup.title = nodeDefinitionPopupTitle;
+    nodeDefinitionPopupText.content = nodeDefinitionPopupTextContent;
     const currentSelectedWorkflowName = selectedWorkflowName();
     breadcrumbText.content = buildOpenTuiBreadcrumb({
       loadedWorkflow,
@@ -535,6 +565,7 @@ export async function runOpenTuiWorkflowApp(
       loadedWorkflow,
       activeSubworkflow,
     );
+    workflowDefinitionText.content = buildWorkflowDefinitionContent(loadedWorkflow);
     runWorkflowText.content = buildWorkflowSummaryPreview(loadedWorkflow);
     runStatusText.content = buildWorkflowRunStatusContent({
       loadedWorkflow,
@@ -589,6 +620,27 @@ export async function runOpenTuiWorkflowApp(
       }
     } finally {
       suppressSessionSelectionChange = false;
+    }
+
+    suppressDefinitionNodeSelectionChange = true;
+    try {
+      workflowDefinitionNodeSelect.options = [
+        ...buildWorkflowDefinitionNodeSelectOptions(loadedWorkflow),
+      ];
+      if (workflowDefinitionNodeSelect.options.length === 0) {
+        workflowDefinitionNodeSelect.setSelectedIndex(0);
+      } else {
+        const selectedIndex = workflowDefinitionNodeSelect.options.findIndex(
+          (option) => option.value === preferredDefinitionNodeId,
+        );
+        selectBoundedIndex(
+          workflowDefinitionNodeSelect,
+          selectedIndex < 0 ? 0 : selectedIndex,
+          workflowDefinitionNodeSelect.options.length,
+        );
+      }
+    } finally {
+      suppressDefinitionNodeSelectionChange = false;
     }
 
     suppressNodeSelectionChange = true;
@@ -713,10 +765,16 @@ export async function runOpenTuiWorkflowApp(
         ? helpPopup
         : confirmPopupOpen
           ? confirmPopup
+          : nodeDefinitionPopupOpen
+            ? nodeDefinitionPopup
           : agentSessionPopupOpen
             ? agentSessionPopup
             : screenMode === "workspace"
               ? workflowSelect
+              : screenMode === "definition"
+                ? focusPane === "definition"
+                  ? mountedRefs.workflowDefinitionPane
+                  : workflowDefinitionNodeSelect
               : screenMode === "run"
                 ? inputTextarea
                 : focusPane === "sessions"
@@ -757,7 +815,11 @@ export async function runOpenTuiWorkflowApp(
   };
 
   const isSelectionChangeUiBlocked = (): boolean =>
-    busy || filterPopupOpen || helpPopupOpen || confirmPopupOpen;
+    busy ||
+    filterPopupOpen ||
+    helpPopupOpen ||
+    confirmPopupOpen ||
+    nodeDefinitionPopupOpen;
 
   const clearRunPolling = (): void => {
     if (runPollTimer !== undefined) {
@@ -800,6 +862,7 @@ export async function runOpenTuiWorkflowApp(
     if (sessionId === undefined) {
       runtimeSessionView = undefined;
       agentSessionPopupOpen = false;
+      nodeDefinitionPopupOpen = false;
       managerMessages = [];
       return;
     }
@@ -844,6 +907,7 @@ export async function runOpenTuiWorkflowApp(
         reason: "defaulted because no workflow is selected",
       };
       agentSessionPopupOpen = false;
+      nodeDefinitionPopupOpen = false;
       inputTextarea.setText("");
       return;
     }
@@ -918,6 +982,26 @@ export async function runOpenTuiWorkflowApp(
     });
   };
 
+  const handleDefinitionNodeSelectionChanged = async (): Promise<void> => {
+    if (
+      suppressDefinitionNodeSelectionChange ||
+      screenMode !== "definition" ||
+      focusPane !== "nodes" ||
+      isSelectionChangeUiBlocked()
+    ) {
+      return;
+    }
+    await withBusy("Switching workflow node", async () => {
+      nodeDefinitionPopupOpen = false;
+      const nodeId = selectedDefinitionNodeId();
+      setStatus(
+        nodeId === undefined
+          ? "No workflow node selected"
+          : `Selected workflow node '${nodeId}'`,
+      );
+    });
+  };
+
   const handleNodeSelectionChanged = async (): Promise<void> => {
     if (
       suppressNodeSelectionChange ||
@@ -956,6 +1040,12 @@ export async function runOpenTuiWorkflowApp(
   workflowSelect.on(SelectRenderableEvents.SELECTION_CHANGED, () => {
     void handleWorkflowSelectionChanged();
   });
+  workflowDefinitionNodeSelect.on(
+    SelectRenderableEvents.SELECTION_CHANGED,
+    () => {
+      void handleDefinitionNodeSelectionChanged();
+    },
+  );
   sessionSelect.on(SelectRenderableEvents.SELECTION_CHANGED, () => {
     void handleSessionSelectionChanged();
   });
@@ -970,6 +1060,7 @@ export async function runOpenTuiWorkflowApp(
     filterPopupOpen = true;
     helpPopupOpen = false;
     confirmPopupOpen = false;
+    nodeDefinitionPopupOpen = false;
     setStatus("Editing workflow filter");
     applyFocus("workflows");
   };
@@ -999,6 +1090,7 @@ export async function runOpenTuiWorkflowApp(
     helpPopupOpen = true;
     filterPopupOpen = false;
     confirmPopupOpen = false;
+    nodeDefinitionPopupOpen = false;
     setStatus("Help");
     await render();
     applyFocus(focusPane);
@@ -1023,6 +1115,32 @@ export async function runOpenTuiWorkflowApp(
     agentSessionPopupTextContent = "";
     await render();
     applyFocus("detail");
+  };
+
+  const closeNodeDefinitionPopup = async (): Promise<void> => {
+    nodeDefinitionPopupOpen = false;
+    nodeDefinitionPopupTitle = " Node Definition ";
+    nodeDefinitionPopupTextContent = "";
+    await render();
+    applyFocus("nodes");
+  };
+
+  const openNodeDefinitionPopup = async (): Promise<void> => {
+    const popupContent = buildNodeDefinitionPopupContent({
+      loadedWorkflow,
+      nodeId: selectedDefinitionNodeId(),
+    });
+    nodeDefinitionPopupOpen = true;
+    nodeDefinitionPopupTitle = popupContent.title;
+    nodeDefinitionPopupTextContent = popupContent.body;
+    nodeDefinitionPopup.scrollTop = 0;
+    setStatus(
+      selectedDefinitionNodeId() === undefined
+        ? "No workflow node selected"
+        : `Opened definition for workflow node '${selectedDefinitionNodeId()}'`,
+    );
+    await render();
+    applyFocus("nodes");
   };
 
   const openDetailSummarySelection = async (): Promise<void> => {
@@ -1137,9 +1255,30 @@ export async function runOpenTuiWorkflowApp(
     filterPopupOpen = false;
     helpPopupOpen = false;
     agentSessionPopupOpen = false;
+    nodeDefinitionPopupOpen = false;
     setStatus("Returned to workspace");
     await render();
     applyFocus("workflows");
+  };
+
+  const openDefinitionScreenAction = async (): Promise<void> => {
+    const workflowName = selectedWorkflowName();
+    if (workflowName === undefined) {
+      setStatus("Select a workflow before opening definition");
+      await render();
+      return;
+    }
+    await withBusy(`Loading workflow '${workflowName}'`, async () => {
+      await refreshWorkflow(workflowName);
+      subworkflowPath = [];
+      screenMode = "definition";
+      detailMode = "summary";
+      editingInput = false;
+      agentSessionPopupOpen = false;
+      nodeDefinitionPopupOpen = false;
+      setStatus(`Opened definition for '${workflowName}'`);
+    });
+    applyFocus("nodes");
   };
 
   const openHistoryScreenAction = async (
@@ -1158,6 +1297,7 @@ export async function runOpenTuiWorkflowApp(
       detailMode = "summary";
       editingInput = false;
       agentSessionPopupOpen = false;
+      nodeDefinitionPopupOpen = false;
       setStatus(`Opened history for '${workflowName}'`);
     });
     applyFocus("sessions");
@@ -1177,6 +1317,7 @@ export async function runOpenTuiWorkflowApp(
       screenMode = "run";
       editingInput = true;
       agentSessionPopupOpen = false;
+      nodeDefinitionPopupOpen = false;
       inputTextarea.setText(workflowInputDetection.mode === "json" ? "{}" : "");
       setStatus(`Opened new run for '${workflowName}'`);
     });
@@ -1207,6 +1348,7 @@ export async function runOpenTuiWorkflowApp(
     subworkflowPath = [...subworkflowPath, subworkflowId];
     detailMode = "summary";
     agentSessionPopupOpen = false;
+    nodeDefinitionPopupOpen = false;
     await render();
     applyFocus("sessions");
     setStatus(`Opened subworkflow '${subworkflowId}'`);
@@ -1272,6 +1414,19 @@ export async function runOpenTuiWorkflowApp(
           setStatus("Run screen refreshed");
           return;
         }
+        if (screenMode === "definition") {
+          const preferredWorkflow =
+            loadedWorkflow?.workflowName !== undefined &&
+            workflowNames.includes(loadedWorkflow.workflowName)
+              ? loadedWorkflow.workflowName
+              : workflowNames[0];
+          await refreshWorkflow(
+            preferredWorkflow,
+            runtimeSessionView?.session.sessionId,
+          );
+          setStatus("Workflow definition refreshed");
+          return;
+        }
         const preferredWorkflow =
           loadedWorkflow?.workflowName !== undefined &&
           workflowNames.includes(loadedWorkflow.workflowName)
@@ -1302,6 +1457,7 @@ export async function runOpenTuiWorkflowApp(
     getRuntimeSessionView: () => runtimeSessionView,
     getScreenMode: () => screenMode,
     getSelectedChildSubworkflowId: selectedChildSubworkflowId,
+    getSelectedDefinitionNodeId: selectedDefinitionNodeId,
     getSelectedHistoryExecution: selectedHistoryExecution,
     getSelectedManagerSessionId: selectedManagerSessionId,
     getSelectedNodeExecution: selectedNodeExecution,
@@ -1367,8 +1523,19 @@ export async function runOpenTuiWorkflowApp(
 
   const copyActiveValue = async (): Promise<void> => copyActiveValueImpl();
 
+  const startHistoryInputEditing = (): void => {
+    editingInput = true;
+    applyFocus("input");
+    setStatus(
+      workflowInputDetection.mode === "json"
+        ? "Editing JSON input. Press escape to finish."
+        : "Editing text input. Press escape to finish.",
+    );
+    renderer.requestRender();
+  };
+
   const loadHistoryFocusedSelection = async (input?: {
-    readonly focusDetailAfterSessionLoad?: boolean;
+    readonly focusAfterSessionLoad?: "detail";
   }): Promise<void> => {
     if (focusPane === "sessions") {
       if (historyViewMode() === "subworkflow") {
@@ -1395,7 +1562,7 @@ export async function runOpenTuiWorkflowApp(
         }
       });
       if (
-        input?.focusDetailAfterSessionLoad === true &&
+        input?.focusAfterSessionLoad !== undefined &&
         runtimeSessionView !== undefined
       ) {
         detailMode = "summary";
@@ -1429,14 +1596,7 @@ export async function runOpenTuiWorkflowApp(
     if (focusPane === "detail") {
       return;
     }
-    editingInput = true;
-    applyFocus("input");
-    setStatus(
-      workflowInputDetection.mode === "json"
-        ? "Editing JSON input. Press escape to finish."
-        : "Editing text input. Press escape to finish.",
-    );
-    renderer.requestRender();
+    startHistoryInputEditing();
   };
 
   const moveFocusedList = async (delta: number): Promise<void> => {
@@ -1470,6 +1630,30 @@ export async function runOpenTuiWorkflowApp(
         return;
       }
       await render();
+      return;
+    }
+
+    if (screenMode === "definition" && focusPane === "definition") {
+      mountedRefs.workflowDefinitionPane.scrollBy(delta, "content");
+      renderer.requestRender();
+      return;
+    }
+
+    if (screenMode === "definition" && focusPane === "nodes") {
+      if (delta < 0) {
+        workflowDefinitionNodeSelect.moveUp(1);
+      } else {
+        workflowDefinitionNodeSelect.moveDown(1);
+      }
+      await withBusy("Switching workflow node", async () => {
+        nodeDefinitionPopupOpen = false;
+        const nodeId = selectedDefinitionNodeId();
+        setStatus(
+          nodeId === undefined
+            ? "No workflow node selected"
+            : `Selected workflow node '${nodeId}'`,
+        );
+      });
       return;
     }
 
@@ -1553,6 +1737,93 @@ export async function runOpenTuiWorkflowApp(
     applyFocus("input");
   };
 
+  const executeDirectionalNavigationAction = async (
+    action: ReturnType<typeof resolveDirectionalNavigationAction>,
+  ): Promise<void> => {
+    switch (action.kind) {
+      case "none":
+        return;
+      case "open-definition":
+        await openDefinitionScreenAction();
+        return;
+      case "open-history":
+        await openHistoryScreenAction(
+          screenMode === "workspace"
+            ? selectedWorkflowName()
+            : loadedWorkflow?.workflowName,
+          runPendingSessionId ?? runSessionView?.session.sessionId,
+        );
+        return;
+      case "open-workspace":
+        await openWorkspaceScreen();
+        return;
+      case "focus":
+        if (action.nextDetailMode !== undefined) {
+          detailMode = action.nextDetailMode;
+        }
+        applyFocus(action.focusPane);
+        setStatus(action.status);
+        await render();
+        return;
+      case "open-subworkflow":
+        if (historyViewMode() === "subworkflow") {
+          await openSubworkflowHistory(selectedChildSubworkflowId());
+          return;
+        }
+        await openSubworkflowHistory(
+          loadedWorkflow === undefined
+            ? undefined
+            : resolveOwningSubWorkflow(
+                loadedWorkflow.bundle.workflow,
+                selectedNodeExecution()?.nodeId ?? "",
+              )?.id,
+        );
+        return;
+      case "close-subworkflow":
+        await closeSubworkflowHistory();
+        return;
+    }
+  };
+
+  const executePopupRevertAction = async (
+    action: ReturnType<typeof resolvePopupRevertAction>,
+  ): Promise<void> => {
+    switch (action.kind) {
+      case "cancel-filter":
+        await closeFilterPopup("cancel");
+        return;
+      case "close-help":
+        await closeHelpPopup();
+        return;
+      case "close-run-confirm":
+        await closeConfirmPopup();
+        return;
+      case "close-agent-session":
+        await closeAgentSessionPopup();
+        return;
+      case "close-node-definition":
+        await closeNodeDefinitionPopup();
+        return;
+      case "none":
+        return;
+    }
+  };
+
+  const executePopupConfirmAction = async (
+    action: ReturnType<typeof resolvePopupConfirmAction>,
+  ): Promise<void> => {
+    switch (action.kind) {
+      case "apply-filter":
+        await closeFilterPopup("apply");
+        return;
+      case "confirm-run":
+        await confirmRunAction();
+        return;
+      case "none":
+        return;
+    }
+  };
+
   syncFilteredWorkflowNames(options.initialWorkflowName);
 
   if (screenMode === "history") {
@@ -1595,23 +1866,40 @@ export async function runOpenTuiWorkflowApp(
         return;
       }
 
-      if (filterPopupOpen) {
-        if (key.name === "escape") {
+      const popupKind = resolveOpenTuiPopupKind({
+        agentSessionPopupOpen,
+        confirmPopupOpen,
+        filterPopupOpen,
+        helpPopupOpen,
+        nodeDefinitionPopupOpen,
+      });
+
+      if (popupKind !== "none") {
+        if (
+          key.name === "escape" ||
+          (key.name === "q" && !key.ctrl && !key.meta && popupKind !== "filter")
+        ) {
           key.preventDefault();
-          void closeFilterPopup("cancel");
+          void executePopupRevertAction(resolvePopupRevertAction(popupKind));
           return;
         }
         if (isConfirmKey(key)) {
-          key.preventDefault();
-          void closeFilterPopup("apply");
-          return;
+          const confirmAction = resolvePopupConfirmAction(popupKind);
+          if (confirmAction.kind !== "none") {
+            key.preventDefault();
+            void executePopupConfirmAction(confirmAction);
+            return;
+          }
         }
         if (key.name === "c" && key.ctrl) {
           key.preventDefault();
           complete(130);
           return;
         }
-        if (renderer.currentFocusedRenderable === filterTextarea) {
+        if (
+          popupKind === "filter" &&
+          renderer.currentFocusedRenderable === filterTextarea
+        ) {
           queueMicrotask(() => {
             workflowFilterText = normalizeWorkflowFilterText(
               filterTextarea.plainText,
@@ -1625,76 +1913,21 @@ export async function runOpenTuiWorkflowApp(
             void render();
           });
         }
-        return;
-      }
-
-      if (helpPopupOpen) {
-        if (
-          (key.name === "q" && !key.ctrl && !key.meta) ||
-          key.name === "escape"
-        ) {
+        const popupScrollDelta = resolvePopupScrollDelta({
+          key,
+          popupKind,
+        });
+        if (popupScrollDelta !== 0) {
           key.preventDefault();
-          void closeHelpPopup();
-          return;
-        }
-        if (key.name === "c" && key.ctrl) {
-          key.preventDefault();
-          complete(130);
-        }
-        return;
-      }
-
-      if (confirmPopupOpen) {
-        if (
-          (key.name === "q" && !key.ctrl && !key.meta) ||
-          key.name === "escape"
-        ) {
-          key.preventDefault();
-          void closeConfirmPopup();
-          return;
-        }
-        if (isConfirmKey(key)) {
-          key.preventDefault();
-          void confirmRunAction();
-          return;
-        }
-        if (key.name === "c" && key.ctrl) {
-          key.preventDefault();
-          complete(130);
-        }
-        return;
-      }
-
-      if (agentSessionPopupOpen) {
-        if (
-          (key.name === "q" && !key.ctrl && !key.meta) ||
-          key.name === "escape"
-        ) {
-          key.preventDefault();
-          void closeAgentSessionPopup();
-          return;
-        }
-        if (
-          key.name === "down" ||
-          (key.name === "j" && !key.ctrl && !key.meta)
-        ) {
-          key.preventDefault();
-          agentSessionPopup.scrollBy(1, "content");
+          if (popupKind === "node-definition") {
+            nodeDefinitionPopup.scrollBy(popupScrollDelta, "content");
+          } else {
+            agentSessionPopup.scrollBy(popupScrollDelta, "content");
+          }
           renderer.requestRender();
           return;
         }
-        if (key.name === "up" || (key.name === "k" && !key.ctrl && !key.meta)) {
-          key.preventDefault();
-          agentSessionPopup.scrollBy(-1, "content");
-          renderer.requestRender();
-          return;
-        }
-        if (key.name === "c" && key.ctrl) {
-          key.preventDefault();
-          complete(130);
-        } else {
-          key.preventDefault();
-        }
+        key.preventDefault();
         return;
       }
 
@@ -1748,29 +1981,96 @@ export async function runOpenTuiWorkflowApp(
           void moveFocusedList(-1);
           return;
         }
-        if ((key.name === "l" && !key.ctrl) || isEnterKey(key)) {
+        if (
+          (key.name === "l" && !key.ctrl) ||
+          isEnterKey(key) ||
+          isCtrlMKey(key)
+        ) {
           key.preventDefault();
-          void openHistoryScreenAction(selectedWorkflowName());
+          void executeDirectionalNavigationAction(
+            resolveDirectionalNavigationAction({
+              direction: "forward",
+              focusPane,
+              historyViewMode: historyViewMode(),
+              screenMode,
+            }),
+          );
           return;
         }
-        if (isCtrlMKey(key)) {
+        if (key.name === "n" && !key.ctrl) {
           key.preventDefault();
           void openRunScreenAction();
+          return;
         }
         return;
+      }
+
+      if (screenMode === "definition") {
+        if (key.name === "h" && !key.ctrl) {
+          key.preventDefault();
+          void executeDirectionalNavigationAction(
+            resolveDirectionalNavigationAction({
+              direction: "revert",
+              focusPane,
+              historyViewMode: historyViewMode(),
+              screenMode,
+            }),
+          );
+          return;
+        }
+        if (key.name === "l" && !key.ctrl) {
+          key.preventDefault();
+          void executeDirectionalNavigationAction(
+            resolveDirectionalNavigationAction({
+              direction: "forward",
+              focusPane,
+              historyViewMode: historyViewMode(),
+              screenMode,
+            }),
+          );
+          return;
+        }
+        if (key.name === "n" && !key.ctrl) {
+          key.preventDefault();
+          void openRunScreenAction();
+          return;
+        }
+        if (key.name === "y" && !key.ctrl && !key.meta) {
+          key.preventDefault();
+          void copyActiveValue();
+          return;
+        }
+        if (isConfirmKey(key)) {
+          key.preventDefault();
+          if (focusPane === "nodes") {
+            void openNodeDefinitionPopup();
+          }
+          return;
+        }
       }
 
       if (screenMode === "run") {
         if (key.name === "h" && !key.ctrl) {
           key.preventDefault();
-          void openWorkspaceScreen();
+          void executeDirectionalNavigationAction(
+            resolveDirectionalNavigationAction({
+              direction: "revert",
+              focusPane,
+              historyViewMode: historyViewMode(),
+              screenMode,
+            }),
+          );
           return;
         }
         if (key.name === "l" && !key.ctrl) {
           key.preventDefault();
-          void openHistoryScreenAction(
-            loadedWorkflow?.workflowName,
-            runPendingSessionId ?? runSessionView?.session.sessionId,
+          void executeDirectionalNavigationAction(
+            resolveDirectionalNavigationAction({
+              direction: "forward",
+              focusPane,
+              historyViewMode: historyViewMode(),
+              screenMode,
+            }),
           );
           return;
         }
@@ -1801,30 +2101,32 @@ export async function runOpenTuiWorkflowApp(
         return;
       }
 
-      if (
-        screenMode === "history" &&
-        focusPane === "detail" &&
-        key.name === "escape"
-      ) {
-        key.preventDefault();
-        applyFocus(detailReturnPane);
-        setStatus(
-          buildDetailEscapeStatusMessage({
-            detailReturnPane,
-            historyViewMode: historyViewMode(),
-          }),
-        );
-        void render();
-        return;
-      }
-
-      if (key.name === "escape" && editingInput && focusPane === "input") {
-        key.preventDefault();
-        editingInput = false;
-        applyFocus("input");
-        setStatus("Input edit finished");
-        void render();
-        return;
+      if (key.name === "escape") {
+        const revertAction =
+          screenMode === "history"
+            ? resolveHistoryRevertAction({
+                detailMode,
+                detailReturnPane,
+                editingInput,
+                focusPane,
+                historyViewMode: historyViewMode(),
+              })
+            : { kind: "none" as const };
+        if (revertAction.kind !== "none") {
+          key.preventDefault();
+          if (revertAction.kind === "finish-input-editing") {
+            editingInput = false;
+            applyFocus("input");
+            setStatus(revertAction.status);
+            void render();
+            return;
+          }
+          detailMode = revertAction.nextDetailMode;
+          applyFocus(revertAction.focusPane);
+          setStatus(revertAction.status);
+          void render();
+          return;
+        }
       }
 
       if (editingInput && renderer.currentFocusedRenderable === inputTextarea) {
@@ -1848,6 +2150,7 @@ export async function runOpenTuiWorkflowApp(
         const internallyHandledListId = resolveOpenTuiInternallyHandledListId({
           detailMode,
           detailSummarySelectId: DETAIL_SUMMARY_SELECT_ID,
+          definitionNodeSelectId: DEFINITION_NODE_SELECT_ID,
           focusPane,
           nodeSelectId: NODE_SELECT_ID,
           screenMode,
@@ -1872,6 +2175,7 @@ export async function runOpenTuiWorkflowApp(
         const internallyHandledListId = resolveOpenTuiInternallyHandledListId({
           detailMode,
           detailSummarySelectId: DETAIL_SUMMARY_SELECT_ID,
+          definitionNodeSelectId: DEFINITION_NODE_SELECT_ID,
           focusPane,
           nodeSelectId: NODE_SELECT_ID,
           screenMode,
@@ -1895,22 +2199,31 @@ export async function runOpenTuiWorkflowApp(
 
       if (isEnterKey(key) || isCtrlMKey(key)) {
         key.preventDefault();
-        if (screenMode === "history" && focusPane === "sessions") {
-          void loadHistoryFocusedSelection({
-            focusDetailAfterSessionLoad: true,
-          });
+        if (screenMode !== "history") {
           return;
         }
-        if (
-          screenMode === "history" &&
-          focusPane === "detail" &&
-          detailMode === "summary"
-        ) {
-          void openDetailSummarySelection();
-          return;
+        const advanceAction = resolveHistoryAdvanceAction({
+          detailMode,
+          focusPane,
+        });
+        switch (advanceAction.kind) {
+          case "load-session-selection":
+            void loadHistoryFocusedSelection({
+              focusAfterSessionLoad: advanceAction.focusAfterSessionLoad,
+            });
+            return;
+          case "load-node-selection":
+            void loadHistoryFocusedSelection();
+            return;
+          case "open-detail-summary-selection":
+            void openDetailSummarySelection();
+            return;
+          case "start-input-editing":
+            startHistoryInputEditing();
+            return;
+          case "none":
+            return;
         }
-        void loadHistoryFocusedSelection();
-        return;
       }
 
       if (key.name === "y" && !key.ctrl && !key.meta) {
@@ -1923,32 +2236,20 @@ export async function runOpenTuiWorkflowApp(
         void openRunScreenAction();
         return;
       }
-      if (key.name === "l" && !key.ctrl && focusPane === "sessions") {
+      if (
+        key.name === "l" &&
+        !key.ctrl &&
+        (focusPane === "sessions" || focusPane === "nodes")
+      ) {
         key.preventDefault();
-        detailMode = "summary";
-        applyFocus("nodes");
-        setStatus(
-          historyViewMode() === "workflow"
-            ? "Focused nodes for the selected workflow run"
-            : "Focused child workflow list",
+        void executeDirectionalNavigationAction(
+          resolveDirectionalNavigationAction({
+            direction: "forward",
+            focusPane,
+            historyViewMode: historyViewMode(),
+            screenMode,
+          }),
         );
-        void render();
-        return;
-      }
-      if (key.name === "l" && !key.ctrl && focusPane === "nodes") {
-        key.preventDefault();
-        if (historyViewMode() === "subworkflow") {
-          void openSubworkflowHistory(selectedChildSubworkflowId());
-          return;
-        }
-        const subworkflowId =
-          loadedWorkflow === undefined
-            ? undefined
-            : resolveOwningSubWorkflow(
-                loadedWorkflow.bundle.workflow,
-                selectedNodeExecution()?.nodeId ?? "",
-              )?.id;
-        void openSubworkflowHistory(subworkflowId);
         return;
       }
       if (isOpenTuiRerunKey(key)) {
@@ -1961,31 +2262,16 @@ export async function runOpenTuiWorkflowApp(
         void resumeWorkflowAction();
         return;
       }
-      if (key.name === "h" && !key.ctrl && focusPane === "nodes") {
-        key.preventDefault();
-        detailMode = "summary";
-        applyFocus("sessions");
-        setStatus(
-          historyViewMode() === "workflow"
-            ? "Focused workflow runs"
-            : "Focused workflow nodes",
-        );
-        void render();
-        return;
-      }
-      if (
-        key.name === "h" &&
-        !key.ctrl &&
-        focusPane === "sessions" &&
-        historyViewMode() === "subworkflow"
-      ) {
-        key.preventDefault();
-        void closeSubworkflowHistory();
-        return;
-      }
       if (key.name === "h" && !key.ctrl) {
         key.preventDefault();
-        void openWorkspaceScreen();
+        void executeDirectionalNavigationAction(
+          resolveDirectionalNavigationAction({
+            direction: "revert",
+            focusPane,
+            historyViewMode: historyViewMode(),
+            screenMode,
+          }),
+        );
         return;
       }
       if (key.name === "e" && !key.ctrl) {
