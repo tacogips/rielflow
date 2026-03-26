@@ -1,0 +1,189 @@
+{
+  "workflowId": "codex-codex-euthanasia-debate",
+  "description": "Two codex debate nodes argue the ethics of euthanasia from opposing positions. The runtime alternates conversation turns between the two sub-workflows and stops after 10 turns.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Run {{workflowId}} as a two-sided debate. Start the affirmative lane first, let the negative lane answer, and rely on runtime-managed conversation turns until the 10-turn cap stops the debate.",
+    "workerSystemPromptTemplate": "Return concise business JSON that is useful to the next workflow node."
+  },
+  "managerNodeId": "divedra-manager",
+  "subWorkflows": [
+    {
+      "id": "affirmative-lane",
+      "description": "Affirmative speaker argues in favor of permitting euthanasia under strict safeguards.",
+      "managerNodeId": "affirmative-manager",
+      "inputNodeId": "affirmative-input",
+      "outputNodeId": "affirmative-output",
+      "nodeIds": [
+        "affirmative-manager",
+        "affirmative-input",
+        "affirmative-speaker",
+        "affirmative-output"
+      ],
+      "inputSources": [
+        {
+          "type": "human-input"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    },
+    {
+      "id": "negative-lane",
+      "description": "Negative speaker argues against euthanasia and answers the affirmative case.",
+      "managerNodeId": "negative-manager",
+      "inputNodeId": "negative-input",
+      "outputNodeId": "negative-output",
+      "nodeIds": [
+        "negative-manager",
+        "negative-input",
+        "negative-speaker",
+        "negative-output"
+      ],
+      "inputSources": [
+        {
+          "type": "sub-workflow-output",
+          "subWorkflowId": "affirmative-lane"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    }
+  ],
+  "subWorkflowConversations": [
+    {
+      "id": "debate-rounds",
+      "participants": [
+        "affirmative-lane",
+        "negative-lane"
+      ],
+      "maxTurns": 10,
+      "stopWhen": "never"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "kind": "root-manager",
+      "nodeFile": "node-divedra-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "affirmative-manager",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-affirmative-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "affirmative-input",
+      "kind": "input",
+      "nodeFile": "node-affirmative-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "affirmative-speaker",
+      "kind": "task",
+      "nodeFile": "node-affirmative-speaker.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "affirmative-output",
+      "kind": "output",
+      "nodeFile": "node-affirmative-output.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "negative-manager",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-negative-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "negative-input",
+      "kind": "input",
+      "nodeFile": "node-negative-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "negative-speaker",
+      "kind": "task",
+      "nodeFile": "node-negative-speaker.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "negative-output",
+      "kind": "output",
+      "nodeFile": "node-negative-output.json",
+      "completion": {
+        "type": "none"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "divedra-manager",
+      "to": "affirmative-manager",
+      "when": "always"
+    },
+    {
+      "from": "affirmative-manager",
+      "to": "affirmative-input",
+      "when": "always"
+    },
+    {
+      "from": "affirmative-input",
+      "to": "affirmative-speaker",
+      "when": "always"
+    },
+    {
+      "from": "affirmative-speaker",
+      "to": "affirmative-output",
+      "when": "always"
+    },
+    {
+      "from": "affirmative-output",
+      "to": "negative-manager",
+      "when": "always"
+    },
+    {
+      "from": "negative-manager",
+      "to": "negative-input",
+      "when": "always"
+    },
+    {
+      "from": "negative-input",
+      "to": "negative-speaker",
+      "when": "always"
+    },
+    {
+      "from": "negative-speaker",
+      "to": "negative-output",
+      "when": "always"
+    }
+  ],
+  "loops": [],
+  "branching": {
+    "mode": "fan-out"
+  }
+}

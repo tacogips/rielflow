@@ -158,3 +158,30 @@ bun run src/main.ts workflow run claude-divedra-claude-worker \
   --mock-scenario ./examples/claude-divedra-claude-worker/mock-scenario.json \
   --output json
 ```
+
+### `codex-codex-euthanasia-debate`
+
+Reference debate bundle for the new node-local prompt split:
+
+- two `codex-agent` speaker nodes debate euthanasia from opposing positions
+- the affirmative speaker uses a node-local `systemPromptTemplateFile`
+- the negative speaker uses a different node-local `systemPromptTemplateFile`
+- both speakers use `sessionStartPromptTemplateFile` with the first-turn wrapper format:
+  `##prompt ... ## args ...`
+- `subWorkflowConversations.maxTurns = 10` stops the debate after 10 turns
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate codex-codex-euthanasia-debate --workflow-root ./examples
+```
+
+Inspect it:
+
+```bash
+bun run src/main.ts workflow inspect codex-codex-euthanasia-debate --workflow-root ./examples --output json
+```
+
+Live execution note:
+
+- this bundle depends on the configured `codex-agent` backend honoring the remote request body fields sent by this repository, including `systemPromptText`

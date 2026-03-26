@@ -24,9 +24,9 @@ Workflow definitions live under `<workflow-root>/<workflow-name>/` and are compo
 - `workflow.json`
 - `workflow-vis.json`
 - `node-{id}.json`
-- optional prompt files referenced by `promptTemplateFile`
+- optional prompt files referenced by `systemPromptTemplateFile`, `promptTemplateFile`, and `sessionStartPromptTemplateFile`
 
-The loader resolves prompt files into effective `promptTemplate` text before validation and execution. If `workflow-vis.json` is missing, the loader synthesizes a default vertical order from `workflow.json.nodes`.
+The loader resolves those workflow-local prompt files into effective inline template text before validation and execution. If `workflow-vis.json` is missing, the loader synthesizes a default vertical order from `workflow.json.nodes`.
 
 ### Runtime State Boundary
 
@@ -90,7 +90,8 @@ Responsibilities:
 - merge runtime variables with node variables
 - resolve `argumentBindings`
 - expose inbox/upstream payloads to templates
-- compose manager and worker prompt layers
+- compose manager and worker system prompt layers
+- prepend node-authored session-start prompts only when a backend session is first created
 - inject workflow and sub-workflow structure summaries
 
 The runtime distinguishes:

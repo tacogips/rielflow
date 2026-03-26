@@ -1,0 +1,40 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "affirmative-manager",
+      "order": 1
+    },
+    {
+      "id": "affirmative-input",
+      "order": 2
+    },
+    {
+      "id": "affirmative-speaker",
+      "order": 3
+    },
+    {
+      "id": "affirmative-output",
+      "order": 4
+    },
+    {
+      "id": "negative-manager",
+      "order": 5
+    },
+    {
+      "id": "negative-input",
+      "order": 6
+    },
+    {
+      "id": "negative-speaker",
+      "order": 7
+    },
+    {
+      "id": "negative-output",
+      "order": 8
+    }
+  ]
+}

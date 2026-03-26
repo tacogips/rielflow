@@ -258,8 +258,12 @@ export interface NodePayload {
   readonly model?: string;
   readonly executionBackend?: NodeExecutionBackend;
   readonly sessionPolicy?: NodeSessionPolicy;
+  readonly systemPromptTemplate?: string;
+  readonly systemPromptTemplateFile?: string;
   readonly promptTemplate?: string;
   readonly promptTemplateFile?: string;
+  readonly sessionStartPromptTemplate?: string;
+  readonly sessionStartPromptTemplateFile?: string;
   readonly variables: Readonly<Record<string, unknown>>;
   readonly command?: CommandExecution;
   readonly container?: ContainerExecution;

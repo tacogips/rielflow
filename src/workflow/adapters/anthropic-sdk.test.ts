@@ -31,6 +31,36 @@ const baseContext: AdapterExecutionContext = {
 };
 
 describe("AnthropicSdkAdapter", () => {
+  test("passes systemPromptText as Anthropic system content", async () => {
+    let capturedRequest: Record<string, unknown> | undefined;
+    const adapter = new AnthropicSdkAdapter({
+      clientFactory: () => ({
+        messages: {
+          async create(request) {
+            capturedRequest = request as Record<string, unknown>;
+            return {
+              content: [{ type: "text", text: "hello from anthropic" }],
+            };
+          },
+        },
+      }),
+    });
+    process.env["ANTHROPIC_API_KEY"] = "test-key";
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        systemPromptText: "system",
+      },
+      baseContext,
+    );
+
+    expect(capturedRequest?.["system"]).toBe("system");
+    expect(capturedRequest?.["messages"]).toEqual([
+      { role: "user", content: "hello" },
+    ]);
+  });
+
   test("normalizes successful SDK output", async () => {
     let capturedSignal: AbortSignal | undefined;
     const adapter = new AnthropicSdkAdapter({

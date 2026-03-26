@@ -1,0 +1,7 @@
+{
+  "id": "divedra-manager",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/divedra-manager.md",
+  "variables": {}
+}

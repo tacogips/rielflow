@@ -9,7 +9,7 @@ A workflow bundle is a directory containing:
 - `workflow.json`
 - `workflow-vis.json`
 - one `node-{id}.json` file per referenced node
-- optional prompt files referenced by `promptTemplateFile`
+- optional prompt files referenced by `systemPromptTemplateFile`, `promptTemplateFile`, and `sessionStartPromptTemplateFile`
 
 The runtime validates the authored bundle, resolves prompt files into effective prompt text, and executes the normalized workflow.
 
@@ -330,8 +330,12 @@ Optional:
 - `executionBackend`
 - `model`
 - `sessionPolicy`
+- `systemPromptTemplate`
+- `systemPromptTemplateFile`
 - `promptTemplate`
 - `promptTemplateFile`
+- `sessionStartPromptTemplate`
+- `sessionStartPromptTemplateFile`
 - `command`
 - `container`
 - `durability`
@@ -344,7 +348,9 @@ Optional:
 Important normalization rules:
 
 - omitted `nodeType` defaults to `agent`
+- `systemPromptTemplateFile` is resolved into `systemPromptTemplate` during load
 - `promptTemplateFile` is resolved into `promptTemplate` during load
+- `sessionStartPromptTemplateFile` is resolved into `sessionStartPromptTemplate` during load
 - legacy `prompt` and `variable` aliases remain read-compatible but are not canonical
 
 ### `nodeType`
@@ -387,6 +393,8 @@ Supported modes:
 - `reuse`
 
 `reuse` allows the runtime to request the same backend-managed session for repeated executions of the same node within one workflow run.
+
+When a node also declares `sessionStartPromptTemplate`, that template is rendered only on the first turn of a fresh backend session for that node.
 
 ## Structured Arguments
 

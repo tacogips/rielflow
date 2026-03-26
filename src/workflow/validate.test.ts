@@ -889,6 +889,42 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
+  test("rejects unsafe systemPromptTemplateFile and sessionStartPromptTemplateFile paths", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      model: "tacogips/claude-code-agent",
+      promptTemplate: "worker",
+      systemPromptTemplateFile: "../system.md",
+      sessionStartPromptTemplateFile: "workflow.json",
+      variables: {},
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.node-worker-1.json.systemPromptTemplateFile" &&
+          issue.message.includes("workflow-relative path"),
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.node-worker-1.json.sessionStartPromptTemplateFile" &&
+          issue.message.includes(
+            "must not target canonical workflow definition files",
+          ),
+      ),
+    ).toBe(true);
+  });
+
   test("rejects unsupported node session policy mode", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {

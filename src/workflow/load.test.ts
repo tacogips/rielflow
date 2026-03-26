@@ -771,6 +771,79 @@ describe("loadWorkflowFromDisk", () => {
     ).toBe("Coordinate via prompt file {{workflowId}}\n");
   });
 
+  test("loads node system and session-start templates from workflow-local files", async () => {
+    const root = await makeTempDir();
+    const workflowName = "node-template-files";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(path.join(workflowDirectory, "prompts"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "sample",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      subWorkflows: [],
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [{ id: "divedra-manager", order: 0 }],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
+      model: "tacogips/codex-agent",
+      systemPromptTemplateFile: "prompts/system.md",
+      promptTemplateFile: "prompts/body.md",
+      sessionStartPromptTemplateFile: "prompts/session-start.md",
+      variables: {},
+    });
+    await writeText(
+      path.join(workflowDirectory, "prompts", "system.md"),
+      "System {{workflowId}}",
+    );
+    await writeText(
+      path.join(workflowDirectory, "prompts", "body.md"),
+      "Body {{workflowId}}",
+    );
+    await writeText(
+      path.join(workflowDirectory, "prompts", "session-start.md"),
+      "##prompt\n{{prompt}}\n## args\n{{args}}",
+    );
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const payload = result.value.bundle.nodePayloads["divedra-manager"];
+    expect(payload?.systemPromptTemplateFile).toBe("prompts/system.md");
+    expect(payload?.systemPromptTemplate).toBe("System {{workflowId}}\n");
+    expect(payload?.promptTemplateFile).toBe("prompts/body.md");
+    expect(payload?.promptTemplate).toBe("Body {{workflowId}}\n");
+    expect(payload?.sessionStartPromptTemplateFile).toBe(
+      "prompts/session-start.md",
+    );
+    expect(payload?.sessionStartPromptTemplate).toBe(
+      "##prompt\n{{prompt}}\n## args\n{{args}}\n",
+    );
+  });
+
   test("loads node-level descriptions from node payload files", async () => {
     const root = await makeTempDir();
     const workflowName = "node-description-workflow";

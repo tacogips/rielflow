@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../shared/fs";
+import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
@@ -80,38 +81,39 @@ async function persistNodePayload(input: {
   }
 
   const payload = input.payload as Record<string, unknown>;
-  const promptTemplateFile = payload["promptTemplateFile"];
-  const promptTemplate = payload["promptTemplate"];
+  const persistedPayload = { ...payload };
+  let wroteTemplateFile = false;
 
-  if (
-    typeof promptTemplateFile === "string" &&
-    promptTemplateFile.length > 0 &&
-    typeof promptTemplate === "string"
-  ) {
+  for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
+    const templateFile = payload[spec.fileField];
+    const templateText = payload[spec.textField];
+    if (
+      typeof templateFile !== "string" ||
+      templateFile.length === 0 ||
+      typeof templateText !== "string" ||
+      templateText.length === 0
+    ) {
+      continue;
+    }
+
     const promptFilePath = resolveWorkflowRelativePath(
       input.workflowDirectory,
-      promptTemplateFile,
+      templateFile,
     );
     if (!promptFilePath.ok) {
       throw new Error(promptFilePath.error.message);
     }
     await atomicWriteTextFile(
       promptFilePath.value,
-      `${promptTemplate.trimEnd()}\n`,
+      `${templateText.trimEnd()}\n`,
     );
-
-    const persistedPayload = { ...payload };
-    delete persistedPayload["promptTemplate"];
-    await atomicWriteJsonFile(
-      path.join(input.workflowDirectory, input.nodeFile),
-      persistedPayload,
-    );
-    return;
+    delete persistedPayload[spec.textField];
+    wroteTemplateFile = true;
   }
 
   await atomicWriteJsonFile(
     path.join(input.workflowDirectory, input.nodeFile),
-    input.payload,
+    wroteTemplateFile ? persistedPayload : input.payload,
   );
 }
 
@@ -127,65 +129,65 @@ async function hydratePromptTemplateFilesForValidation(input: {
     }
 
     const payloadRecord = payload as Record<string, unknown>;
-    const promptTemplate = payloadRecord["promptTemplate"];
-    if (typeof promptTemplate === "string" && promptTemplate.length > 0) {
-      continue;
-    }
+    const hydratedPayload = { ...payloadRecord };
+    for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
+      const templateText = payloadRecord[spec.textField];
+      if (typeof templateText === "string" && templateText.length > 0) {
+        continue;
+      }
 
-    const promptTemplateFile = payloadRecord["promptTemplateFile"];
-    if (
-      typeof promptTemplateFile !== "string" ||
-      promptTemplateFile.length === 0
-    ) {
-      continue;
-    }
+      const templateFile = payloadRecord[spec.fileField];
+      if (typeof templateFile !== "string" || templateFile.length === 0) {
+        continue;
+      }
 
-    const resolvedPath = resolveWorkflowRelativePath(
-      input.workflowDirectory,
-      promptTemplateFile,
-    );
-    if (!resolvedPath.ok) {
-      return err({
-        code: "VALIDATION",
-        message: "workflow validation failed",
-        issues: [
-          {
-            severity: "error",
-            path: `bundle.nodePayloads.${nodeFile}.promptTemplateFile`,
-            message: resolvedPath.error.message,
-          },
-        ],
-      });
-    }
-
-    try {
-      hydrated[nodeFile] = {
-        ...payloadRecord,
-        promptTemplate: await readFile(resolvedPath.value, "utf8"),
-      };
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      if (message.includes("ENOENT")) {
+      const resolvedPath = resolveWorkflowRelativePath(
+        input.workflowDirectory,
+        templateFile,
+      );
+      if (!resolvedPath.ok) {
         return err({
           code: "VALIDATION",
           message: "workflow validation failed",
           issues: [
             {
               severity: "error",
-              path: `bundle.nodePayloads.${nodeFile}.promptTemplate`,
-              message:
-                `must be provided inline or by an existing promptTemplateFile '${promptTemplateFile}'`,
+              path: `bundle.nodePayloads.${nodeFile}.${spec.fileField}`,
+              message: resolvedPath.error.message,
             },
           ],
         });
       }
 
-      return err({
-        code: "IO",
-        message:
-          `failed reading promptTemplateFile '${promptTemplateFile}' for validation: ${message}`,
-      });
+      try {
+        hydratedPayload[spec.textField] = await readFile(resolvedPath.value, "utf8");
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        if (message.includes("ENOENT")) {
+          return err({
+            code: "VALIDATION",
+            message: "workflow validation failed",
+            issues: [
+              {
+                severity: "error",
+                path: `bundle.nodePayloads.${nodeFile}.${spec.textField}`,
+                message:
+                  `must be provided inline or by an existing ${spec.fileField} '${templateFile}'`,
+              },
+            ],
+          });
+        }
+
+        return err({
+          code: "IO",
+          message:
+            `failed reading ${spec.fileField} '${templateFile}' for validation: ${message}`,
+        });
+      }
     }
+
+    hydrated[nodeFile] = hydratedPayload;
   }
 
   return ok(hydrated);

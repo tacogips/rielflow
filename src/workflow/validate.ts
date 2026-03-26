@@ -2151,6 +2151,96 @@ function normalizeWorkflowVis(
   };
 }
 
+function normalizeNodeTemplateFields(args: {
+  readonly path: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly issues: ValidationIssue[];
+  readonly templateField: string;
+  readonly templateFileField: string;
+  readonly legacyAliasField?: string;
+}): {
+  readonly template?: string;
+  readonly templateFile?: string;
+} {
+  const templateRaw = args.payload[args.templateField];
+  const templateFileRaw = args.payload[args.templateFileField];
+  const legacyAliasRaw =
+    args.legacyAliasField === undefined
+      ? undefined
+      : args.payload[args.legacyAliasField];
+
+  let template: string | undefined;
+  let templateFile: string | undefined;
+
+  if (templateFileRaw !== undefined) {
+    if (typeof templateFileRaw === "string" && templateFileRaw.length > 0) {
+      if (isSafeWorkflowRelativePath(templateFileRaw)) {
+        if (isReservedWorkflowDefinitionPath(templateFileRaw)) {
+          args.issues.push(
+            makeIssue(
+              "error",
+              `${args.path}.${args.templateFileField}`,
+              "must not target canonical workflow definition files such as workflow.json, workflow-vis.json, or node-*.json",
+            ),
+          );
+        } else {
+          templateFile = templateFileRaw;
+        }
+      } else {
+        args.issues.push(
+          makeIssue(
+            "error",
+            `${args.path}.${args.templateFileField}`,
+            "must be a workflow-relative path without '.' or '..' segments",
+          ),
+        );
+      }
+    } else {
+      args.issues.push(
+        makeIssue(
+          "error",
+          `${args.path}.${args.templateFileField}`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  if (typeof templateRaw === "string" && templateRaw.length > 0) {
+    template = templateRaw;
+  } else if (typeof legacyAliasRaw === "string" && legacyAliasRaw.length > 0) {
+    template = legacyAliasRaw;
+    args.issues.push(
+      makeIssue(
+        "warning",
+        `${args.path}.${args.legacyAliasField ?? args.templateField}`,
+        `legacy field '${args.legacyAliasField}' normalized to '${args.templateField}'`,
+      ),
+    );
+  } else if (templateRaw !== undefined && typeof templateRaw !== "string") {
+    args.issues.push(
+      makeIssue(
+        "error",
+        `${args.path}.${args.templateField}`,
+        "must be a non-empty string when provided",
+      ),
+    );
+  } else if (typeof templateRaw === "string" && templateRaw.length === 0) {
+    args.issues.push(
+      makeIssue(
+        "error",
+        `${args.path}.${args.templateField}`,
+        "must be a non-empty string when provided",
+      ),
+    );
+  }
+
+  return {
+    ...(template === undefined ? {} : { template }),
+    ...(templateFile === undefined ? {} : { templateFile }),
+  };
+}
+
 function normalizeNodePayload(
   nodeId: string,
   nodeFile: string,
@@ -2296,59 +2386,39 @@ function normalizeNodePayload(
     );
   }
 
-  const promptTemplateRaw = payload["promptTemplate"];
-  const promptTemplateFileRaw = payload["promptTemplateFile"];
-  const promptAlias = payload["prompt"];
-  let promptTemplate: string | undefined;
-  let promptTemplateFile: string | undefined;
-  if (promptTemplateFileRaw !== undefined) {
-    if (
-      typeof promptTemplateFileRaw === "string" &&
-      promptTemplateFileRaw.length > 0
-    ) {
-      if (isSafeWorkflowRelativePath(promptTemplateFileRaw)) {
-        if (isReservedWorkflowDefinitionPath(promptTemplateFileRaw)) {
-          issues.push(
-            makeIssue(
-              "error",
-              `${path}.promptTemplateFile`,
-              "must not target canonical workflow definition files such as workflow.json, workflow-vis.json, or node-*.json",
-            ),
-          );
-        } else {
-          promptTemplateFile = promptTemplateFileRaw;
-        }
-      } else {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.promptTemplateFile`,
-            "must be a workflow-relative path without '.' or '..' segments",
-          ),
-        );
-      }
-    } else {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.promptTemplateFile`,
-          "must be a non-empty string when provided",
-        ),
-      );
-    }
-  }
-  if (typeof promptTemplateRaw === "string" && promptTemplateRaw.length > 0) {
-    promptTemplate = promptTemplateRaw;
-  } else if (typeof promptAlias === "string" && promptAlias.length > 0) {
-    promptTemplate = promptAlias;
-    issues.push(
-      makeIssue(
-        "warning",
-        `${path}.prompt`,
-        "legacy field 'prompt' normalized to 'promptTemplate'",
-      ),
-    );
-  } else if (nodeType === "agent") {
+  const normalizedSystemPromptTemplate = normalizeNodeTemplateFields({
+    path,
+    payload,
+    issues,
+    templateField: "systemPromptTemplate",
+    templateFileField: "systemPromptTemplateFile",
+  });
+  const normalizedPromptTemplate = normalizeNodeTemplateFields({
+    path,
+    payload,
+    issues,
+    templateField: "promptTemplate",
+    templateFileField: "promptTemplateFile",
+    legacyAliasField: "prompt",
+  });
+  const normalizedSessionStartPromptTemplate = normalizeNodeTemplateFields({
+    path,
+    payload,
+    issues,
+    templateField: "sessionStartPromptTemplate",
+    templateFileField: "sessionStartPromptTemplateFile",
+  });
+
+  const promptTemplate = normalizedPromptTemplate.template;
+  const promptTemplateFile = normalizedPromptTemplate.templateFile;
+  const systemPromptTemplate = normalizedSystemPromptTemplate.template;
+  const systemPromptTemplateFile =
+    normalizedSystemPromptTemplate.templateFile;
+  const sessionStartPromptTemplate =
+    normalizedSessionStartPromptTemplate.template;
+  const sessionStartPromptTemplateFile =
+    normalizedSessionStartPromptTemplate.templateFile;
+  if (promptTemplate === undefined && nodeType === "agent") {
     issues.push(
       makeIssue(
         "error",
@@ -2668,8 +2738,18 @@ function normalizeNodePayload(
     ...(model === undefined ? {} : { model }),
     ...(executionBackend === undefined ? {} : { executionBackend }),
     ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
+    ...(systemPromptTemplate === undefined ? {} : { systemPromptTemplate }),
+    ...(systemPromptTemplateFile === undefined
+      ? {}
+      : { systemPromptTemplateFile }),
     ...(promptTemplate === undefined ? {} : { promptTemplate }),
     ...(promptTemplateFile === undefined ? {} : { promptTemplateFile }),
+    ...(sessionStartPromptTemplate === undefined
+      ? {}
+      : { sessionStartPromptTemplate }),
+    ...(sessionStartPromptTemplateFile === undefined
+      ? {}
+      : { sessionStartPromptTemplateFile }),
     variables,
     ...(command === undefined ? {} : { command }),
     ...(effectiveContainer === undefined

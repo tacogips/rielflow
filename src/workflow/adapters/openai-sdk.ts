@@ -22,6 +22,7 @@ interface OpenAiResponsesClient {
     request: {
       readonly model: string;
       readonly input: string;
+      readonly instructions?: string;
     },
     options?: {
       readonly signal?: AbortSignal;
@@ -147,6 +148,9 @@ export class OpenAiSdkAdapter implements NodeAdapter {
           {
             model: input.node.model,
             input: input.promptText,
+            ...(input.systemPromptText === undefined
+              ? {}
+              : { instructions: input.systemPromptText }),
           },
           {
             signal: context.signal,

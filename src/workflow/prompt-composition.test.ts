@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { buildNodeExecutionMailbox } from "./node-execution-mailbox";
-import { composeExecutionPrompt } from "./prompt-composition";
+import {
+  composeExecutionPrompt,
+  composeExecutionPrompts,
+} from "./prompt-composition";
 import type { NodePayload, WorkflowJson, WorkflowNodeRef } from "./types";
 
 function makeWorkflow(): WorkflowJson {
@@ -274,118 +277,180 @@ describe("composeExecutionPrompt", () => {
 
   test("renders workflow metadata inside worker system prompts", () => {
     const workflow = makeWorkflow();
-    const prompt = composeExecutionPrompt({
-      workflow: {
-        ...workflow,
-        prompts: {
-          ...workflow.prompts,
-          workerSystemPromptTemplate:
-            "Execute workflow={{workflowId}} purpose={{workflowDescription}} node={{nodeId}} kind={{nodeKind}}.",
+    const prompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow: {
+          ...workflow,
+          prompts: {
+            ...workflow.prompts,
+            workerSystemPromptTemplate:
+              "Execute workflow={{workflowId}} purpose={{workflowDescription}} node={{nodeId}} kind={{nodeKind}}.",
+          },
         },
+        nodeRef: makeNodeRef({
+          id: "workflow-input",
+          nodeFile: "node-workflow-input.json",
+          kind: "input",
+        }),
+        node: makeNodePayloads()["workflow-input"] as NodePayload,
+        nodePayloads: makeNodePayloads(),
+        runtimeVariables: {},
+        basePromptText:
+          "Normalize the received instruction into workflow input.",
+        assembledArguments: null,
+        upstreamInputs: [],
       },
-      nodeRef: makeNodeRef({
-        id: "workflow-input",
-        nodeFile: "node-workflow-input.json",
-        kind: "input",
-      }),
-      node: makeNodePayloads()["workflow-input"] as NodePayload,
-      nodePayloads: makeNodePayloads(),
-      runtimeVariables: {},
-      basePromptText: "Normalize the received instruction into workflow input.",
-      assembledArguments: null,
-      upstreamInputs: [],
+      includeSessionStartPrompt: false,
     });
 
-    expect(prompt).toContain(
+    expect(prompts.systemPromptText).toContain(
       "Execute workflow=wf purpose=Ship a release safely. node=workflow-input kind=input.",
     );
   });
 
   test("does not allow runtime or node variables to override workflow metadata in prompt templates", () => {
     const workflow = makeWorkflow();
-    const prompt = composeExecutionPrompt({
-      workflow: {
-        ...workflow,
-        prompts: {
-          ...workflow.prompts,
-          workerSystemPromptTemplate:
-            "Execute workflow={{workflowId}} purpose={{workflowDescription}} node={{nodeId}} kind={{nodeKind}}.",
+    const prompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow: {
+          ...workflow,
+          prompts: {
+            ...workflow.prompts,
+            workerSystemPromptTemplate:
+              "Execute workflow={{workflowId}} purpose={{workflowDescription}} node={{nodeId}} kind={{nodeKind}}.",
+          },
         },
-      },
-      nodeRef: makeNodeRef({
-        id: "workflow-input",
-        nodeFile: "node-workflow-input.json",
-        kind: "input",
-      }),
-      node: {
-        ...(makeNodePayloads()["workflow-input"] as NodePayload),
-        variables: {
-          workflowId: "spoofed-node-workflow",
-          workflowDescription: "spoofed-node-description",
-          nodeId: "spoofed-node-id",
-          nodeKind: "spoofed-node-kind",
+        nodeRef: makeNodeRef({
+          id: "workflow-input",
+          nodeFile: "node-workflow-input.json",
+          kind: "input",
+        }),
+        node: {
+          ...(makeNodePayloads()["workflow-input"] as NodePayload),
+          variables: {
+            workflowId: "spoofed-node-workflow",
+            workflowDescription: "spoofed-node-description",
+            nodeId: "spoofed-node-id",
+            nodeKind: "spoofed-node-kind",
+          },
         },
+        nodePayloads: makeNodePayloads(),
+        runtimeVariables: {
+          workflowId: "spoofed-runtime-workflow",
+          workflowDescription: "spoofed-runtime-description",
+          nodeId: "spoofed-runtime-node",
+          nodeKind: "spoofed-runtime-kind",
+        },
+        basePromptText:
+          "Normalize the received instruction into workflow input.",
+        assembledArguments: null,
+        upstreamInputs: [],
       },
-      nodePayloads: makeNodePayloads(),
-      runtimeVariables: {
-        workflowId: "spoofed-runtime-workflow",
-        workflowDescription: "spoofed-runtime-description",
-        nodeId: "spoofed-runtime-node",
-        nodeKind: "spoofed-runtime-kind",
-      },
-      basePromptText: "Normalize the received instruction into workflow input.",
-      assembledArguments: null,
-      upstreamInputs: [],
+      includeSessionStartPrompt: false,
     });
 
-    expect(prompt).toContain(
+    expect(prompts.systemPromptText).toContain(
       "Execute workflow=wf purpose=Ship a release safely. node=workflow-input kind=input.",
     );
-    expect(prompt).not.toContain("spoofed-node");
-    expect(prompt).not.toContain("spoofed-runtime");
+    expect(prompts.systemPromptText).not.toContain("spoofed-node");
+    expect(prompts.systemPromptText).not.toContain("spoofed-runtime");
   });
 
   test("renders inbox variables inside workflow-level manager prompts", () => {
     const workflow = makeWorkflow();
-    const prompt = composeExecutionPrompt({
-      workflow: {
-        ...workflow,
-        prompts: {
-          ...workflow.prompts,
-          divedraPromptTemplate:
-            "If inboxCount={{inbox.count}} latestSender={{inbox.latest.fromNodeId}}, prefer divedra gql.",
-        },
-      },
-      nodeRef: makeNodeRef({
-        id: "main-divedra",
-        nodeFile: "node-main-divedra.json",
-        kind: "subworkflow-manager",
-      }),
-      node: makeNodePayloads()["main-divedra"] as NodePayload,
-      nodePayloads: makeNodePayloads(),
-      runtimeVariables: {},
-      basePromptText:
-        "Translate the parent instruction into child workflow work.",
-      assembledArguments: null,
-      upstreamInputs: [
-        {
-          fromNodeId: "divedra-manager",
-          transitionWhen: "always",
-          communicationId: "comm-000001",
-          output: {
-            payload: {
-              request: "ship the release",
-            },
+    const prompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow: {
+          ...workflow,
+          prompts: {
+            ...workflow.prompts,
+            divedraPromptTemplate:
+              "If inboxCount={{inbox.count}} latestSender={{inbox.latest.fromNodeId}}, prefer divedra gql.",
           },
-          outputRaw:
-            "{\"provider\":\"mock\",\"payload\":{\"request\":\"ship the release\"}}\n",
         },
-      ],
+        nodeRef: makeNodeRef({
+          id: "main-divedra",
+          nodeFile: "node-main-divedra.json",
+          kind: "subworkflow-manager",
+        }),
+        node: makeNodePayloads()["main-divedra"] as NodePayload,
+        nodePayloads: makeNodePayloads(),
+        runtimeVariables: {},
+        basePromptText:
+          "Translate the parent instruction into child workflow work.",
+        assembledArguments: null,
+        upstreamInputs: [
+          {
+            fromNodeId: "divedra-manager",
+            transitionWhen: "always",
+            communicationId: "comm-000001",
+            output: {
+              payload: {
+                request: "ship the release",
+              },
+            },
+            outputRaw:
+              "{\"provider\":\"mock\",\"payload\":{\"request\":\"ship the release\"}}\n",
+          },
+        ],
+      },
+      includeSessionStartPrompt: false,
     });
 
-    expect(prompt).toContain(
+    expect(prompts.systemPromptText).toContain(
       "If inboxCount=1 latestSender=divedra-manager, prefer divedra gql.",
     );
+  });
+
+  test("renders node-level system and first-session-only prompts separately", () => {
+    const prompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow: makeWorkflow(),
+        nodeRef: makeNodeRef(),
+        node: makeNode({
+          systemPromptTemplate: "Take the {{stance}} position.",
+          sessionStartPromptTemplate:
+            "##prompt\n{{prompt}}\n## args\n{{args}}",
+          variables: { stance: "affirmative" },
+        }),
+        nodePayloads: makeNodePayloads(),
+        runtimeVariables: { topic: "release" },
+        basePromptText: "Implement the release step.",
+        assembledArguments: {
+          task: {
+            repository: "divedra",
+          },
+        },
+        upstreamInputs: [],
+      },
+      includeSessionStartPrompt: true,
+    });
+
+    expect(prompts.systemPromptText).toContain("Take the affirmative position.");
+    expect(prompts.promptText).toContain("##prompt\nImplement the release step.");
+    expect(prompts.promptText).toContain('"repository":"divedra"');
+  });
+
+  test("omits the first-session-only prompt after the first turn", () => {
+    const prompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow: makeWorkflow(),
+        nodeRef: makeNodeRef(),
+        node: makeNode({
+          sessionStartPromptTemplate: "##prompt\n{{prompt}}\n## args\n{{args}}",
+        }),
+        nodePayloads: makeNodePayloads(),
+        runtimeVariables: { topic: "release" },
+        basePromptText: "Implement the release step.",
+        assembledArguments: {
+          task: "release",
+        },
+        upstreamInputs: [],
+      },
+      includeSessionStartPrompt: false,
+    });
+
+    expect(prompts.promptText).not.toContain("##prompt");
   });
 
   test("applies managerMessage even when a prebuilt execution mailbox is provided", () => {

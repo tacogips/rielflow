@@ -1,0 +1,9 @@
+{
+  "id": "negative-input",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/negative-input.md",
+  "variables": {
+    "stanceLabel": "negative"
+  }
+}

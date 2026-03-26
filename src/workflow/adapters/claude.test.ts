@@ -165,6 +165,45 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(output.backendSession?.sessionId).toBe("backend-claude-1");
   });
 
+  test("forwards systemPromptText while preserving combined promptText compatibility", async () => {
+    const fetchMock = vi
+      .fn(async () => {
+        return new Response(
+          JSON.stringify({
+            provider: "claude-provider",
+            promptText: "system\n\nhello",
+            completionPassed: true,
+            when: { always: true },
+            payload: { ok: true },
+          }),
+          { status: 200 },
+        );
+      })
+      .mockName("fetch-claude-system-prompt");
+    (globalThis as { fetch: typeof fetch }).fetch =
+      fetchMock as unknown as typeof fetch;
+
+    const adapter = new ClaudeCodeAgentAdapter({
+      endpoint: "http://localhost/claude",
+    });
+    await adapter.execute(
+      {
+        ...baseInput,
+        systemPromptText: "system",
+      },
+      baseContext,
+    );
+
+    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
+    const request = calls[0]?.[1] as RequestInit | undefined;
+    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(body["systemPromptText"]).toBe("system");
+    expect(body["promptText"]).toBe("system\n\nhello");
+  });
+
   test("forwards ambient manager context when provided", async () => {
     const fetchMock = vi
       .fn(async () => {

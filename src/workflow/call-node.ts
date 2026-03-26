@@ -35,7 +35,7 @@ import {
   hashManagerAuthToken,
   mintManagerAuthToken,
 } from "./manager-session-store";
-import { composeExecutionPrompt } from "./prompt-composition";
+import { composeExecutionPrompts } from "./prompt-composition";
 import { err, ok, type Result } from "./result";
 import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
 import {
@@ -822,20 +822,6 @@ class ExecutionDispatcher {
         ? {}
         : { managerMessage: input.message }),
     });
-    const promptText = composeExecutionPrompt({
-      workflow,
-      nodeRef,
-      node: agentNodePayload,
-      nodePayloads: loaded.value.bundle.nodePayloads,
-      runtimeVariables: session.runtimeVariables,
-      basePromptText: assembled.promptText,
-      assembledArguments: assembled.arguments,
-      upstreamInputs: [],
-      executionMailbox,
-      ...(input.message === undefined
-        ? {}
-        : { managerMessage: input.message }),
-    });
     try {
       await writeNodeExecutionMailboxArtifacts(artifactDir, executionMailbox);
     } catch (error: unknown) {
@@ -869,6 +855,25 @@ class ExecutionDispatcher {
       session,
       agentNodePayload,
     );
+    const composedPrompts = composeExecutionPrompts({
+      promptComposition: {
+        workflow,
+        nodeRef,
+        node: agentNodePayload,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+        runtimeVariables: session.runtimeVariables,
+        basePromptText: assembled.promptText,
+        assembledArguments: assembled.arguments,
+        upstreamInputs: [],
+        executionMailbox,
+        ...(input.message === undefined
+          ? {}
+          : { managerMessage: input.message }),
+      },
+      includeSessionStartPrompt: backendSession?.mode !== "reuse",
+    });
+    const promptText = composedPrompts.promptText;
+    const systemPromptText = composedPrompts.systemPromptText;
     const requestedBackendSessionMode = backendSession?.mode;
     let backendSessionId = backendSession?.sessionId;
     let backendSessionProvider: string | undefined;
@@ -914,7 +919,17 @@ class ExecutionDispatcher {
       nodeId: input.nodeId,
       nodeExecId,
       model: agentNodePayload.model,
+      ...(agentNodePayload.systemPromptTemplate === undefined
+        ? {}
+        : { systemPromptTemplate: agentNodePayload.systemPromptTemplate }),
       promptTemplate: agentNodePayload.promptTemplate,
+      ...(agentNodePayload.sessionStartPromptTemplate === undefined
+        ? {}
+        : {
+            sessionStartPromptTemplate:
+              agentNodePayload.sessionStartPromptTemplate,
+          }),
+      ...(systemPromptText === undefined ? {} : { systemPromptText }),
       promptText,
       arguments: assembled.arguments,
       variables: mergedVariables,
@@ -950,6 +965,7 @@ class ExecutionDispatcher {
       finalOutputPayload = {
         provider: "dry-run",
         model: agentNodePayload.model,
+        ...(systemPromptText === undefined ? {} : { systemPromptText }),
         promptText,
         completionPassed: true,
         when: { always: true },
@@ -1028,15 +1044,16 @@ class ExecutionDispatcher {
             nodeExecId,
             node: agentNodePayload,
             mergedVariables,
-              promptText: executionPromptText,
-              arguments: assembled.arguments,
-              executionIndex,
-              artifactDir,
-              upstreamCommunicationIds: [],
-              executionMailbox,
-              ...(backendSession === undefined ? {} : { backendSession }),
-              ...(ambientManagerContext === undefined
-                ? {}
+            ...(systemPromptText === undefined ? {} : { systemPromptText }),
+            promptText: executionPromptText,
+            arguments: assembled.arguments,
+            executionIndex,
+            artifactDir,
+            upstreamCommunicationIds: [],
+            executionMailbox,
+            ...(backendSession === undefined ? {} : { backendSession }),
+            ...(ambientManagerContext === undefined
+              ? {}
               : { ambientManagerContext }),
             ...(candidatePath === undefined ||
             agentNodePayload.output === undefined

@@ -2936,13 +2936,19 @@ describe("runWorkflow", () => {
       path.join(workerExec.artifactDir, "input.json"),
       "utf8",
     );
-    const managerInput = JSON.parse(managerInputRaw) as { promptText: string };
-    const workerInput = JSON.parse(workerInputRaw) as { promptText: string };
+    const managerInput = JSON.parse(managerInputRaw) as {
+      promptText: string;
+      systemPromptText?: string;
+    };
+    const workerInput = JSON.parse(workerInputRaw) as {
+      promptText: string;
+      systemPromptText?: string;
+    };
 
-    expect(managerInput.promptText).toContain(
+    expect(managerInput.systemPromptText).toContain(
       "You are `divedra`, the orchestration manager",
     );
-    expect(managerInput.promptText).toContain("Plan and audit work for B.");
+    expect(managerInput.systemPromptText).toContain("Plan and audit work for B.");
     expect(managerInput.promptText).toContain("Execution context:");
     expect(managerInput.promptText).toContain("Given data:");
     expect(managerInput.promptText).toContain("Manager control payload:");
@@ -2950,7 +2956,7 @@ describe("runWorkflow", () => {
     expect(managerInput.promptText).toContain("Node-specific instruction:");
     expect(managerInput.promptText).toContain("manager B");
 
-    expect(workerInput.promptText).toContain(
+    expect(workerInput.systemPromptText).toContain(
       "Complete the assigned worker step for B.",
     );
     expect(workerInput.promptText).toContain("Given data:");

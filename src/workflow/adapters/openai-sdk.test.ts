@@ -31,6 +31,34 @@ const baseContext: AdapterExecutionContext = {
 };
 
 describe("OpenAiSdkAdapter", () => {
+  test("passes systemPromptText as OpenAI instructions", async () => {
+    let capturedRequest: Record<string, unknown> | undefined;
+    const adapter = new OpenAiSdkAdapter({
+      clientFactory: () => ({
+        responses: {
+          async create(request) {
+            capturedRequest = request as Record<string, unknown>;
+            return {
+              output_text: "hello from openai",
+            };
+          },
+        },
+      }),
+    });
+    process.env["OPENAI_API_KEY"] = "test-key";
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        systemPromptText: "system",
+      },
+      baseContext,
+    );
+
+    expect(capturedRequest?.["instructions"]).toBe("system");
+    expect(capturedRequest?.["input"]).toBe("hello");
+  });
+
   test("normalizes successful SDK output", async () => {
     let capturedSignal: AbortSignal | undefined;
     const adapter = new OpenAiSdkAdapter({

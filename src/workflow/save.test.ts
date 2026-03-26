@@ -152,6 +152,101 @@ describe("saveWorkflowToDisk", () => {
     );
   });
 
+  test("persists system and session-start templates back to file-backed prompt fields", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const loaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const updatedNodePayloads = {
+      ...loaded.value.bundle.nodePayloads,
+      "divedra-manager": {
+        ...loaded.value.bundle.nodePayloads["divedra-manager"],
+        systemPromptTemplateFile: "prompts/divedra-manager-system.md",
+        systemPromptTemplate: "Keep the manager role stable.",
+        sessionStartPromptTemplateFile:
+          "prompts/divedra-manager-session-start.md",
+        sessionStartPromptTemplate:
+          "## prompt\n{{prompt}}\n## args\n{{args}}",
+      },
+    };
+
+    const saveResult = await saveWorkflowToDisk(
+      "demo",
+      {
+        workflow: loaded.value.bundle.workflow,
+        workflowVis: loaded.value.bundle.workflowVis,
+        nodePayloads: updatedNodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const systemPromptText = await readFile(
+      path.join(root, "demo", "prompts", "divedra-manager-system.md"),
+      "utf8",
+    );
+    expect(systemPromptText).toBe("Keep the manager role stable.\n");
+
+    const sessionStartPromptText = await readFile(
+      path.join(
+        root,
+        "demo",
+        "prompts",
+        "divedra-manager-session-start.md",
+      ),
+      "utf8",
+    );
+    expect(sessionStartPromptText).toBe("## prompt\n{{prompt}}\n## args\n{{args}}\n");
+
+    const nodeJsonRaw = await readFile(
+      path.join(root, "demo", "node-divedra-manager.json"),
+      "utf8",
+    );
+    expect(nodeJsonRaw).toContain(
+      '"systemPromptTemplateFile": "prompts/divedra-manager-system.md"',
+    );
+    expect(nodeJsonRaw).toContain(
+      '"sessionStartPromptTemplateFile": "prompts/divedra-manager-session-start.md"',
+    );
+    expect(nodeJsonRaw).not.toContain('"systemPromptTemplate":');
+    expect(nodeJsonRaw).not.toContain('"sessionStartPromptTemplate":');
+
+    const reloaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(
+      reloaded.value.bundle.nodePayloads["divedra-manager"]
+        ?.systemPromptTemplate,
+    ).toBe("Keep the manager role stable.\n");
+    expect(
+      reloaded.value.bundle.nodePayloads["divedra-manager"]
+        ?.sessionStartPromptTemplate,
+    ).toBe("## prompt\n{{prompt}}\n## args\n{{args}}\n");
+  });
+
   test("rejects promptTemplateFile values that would overwrite canonical workflow definition files on save", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("demo", {

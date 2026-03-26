@@ -26,6 +26,8 @@ export interface PromptTemplateVariableInput {
   readonly nodeId?: string;
   readonly nodeKind?: NodeKind;
   readonly upstream?: readonly PromptTemplateUpstreamEntry[];
+  readonly prompt?: string;
+  readonly args?: Readonly<Record<string, unknown>> | null;
 }
 
 function buildPromptTemplateInboxContext(
@@ -59,5 +61,8 @@ export function buildPromptTemplateVariables(
     nodeKind: input.nodeKind ?? "task",
     inbox,
     mailbox: inbox,
+    ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
+    ...(input.args === undefined ? {} : { args: input.args }),
+    ...(input.args === undefined ? {} : { arguments: input.args }),
   };
 }

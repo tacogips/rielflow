@@ -23,6 +23,7 @@ interface AnthropicMessagesClient {
     request: {
       readonly model: string;
       readonly max_tokens: number;
+      readonly system?: string;
       readonly messages: ReadonlyArray<{
         readonly role: "user";
         readonly content: string;
@@ -141,6 +142,9 @@ export class AnthropicSdkAdapter implements NodeAdapter {
           {
             model: input.node.model,
             max_tokens: maxTokens,
+            ...(input.systemPromptText === undefined
+              ? {}
+              : { system: input.systemPromptText }),
             messages: [{ role: "user", content: input.promptText }],
           },
           {

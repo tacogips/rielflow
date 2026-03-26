@@ -28,7 +28,7 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
-import { composeExecutionPrompt } from "./prompt-composition";
+import { composeExecutionPrompts } from "./prompt-composition";
 import {
   parseManagerControlPayload,
   type ParsedManagerControl,
@@ -1866,17 +1866,7 @@ export async function runWorkflow(
           assembledArguments: assembled.arguments,
           upstreamInputs,
         });
-        assembledPromptText = composeExecutionPrompt({
-          workflow,
-          nodeRef,
-          node: executionNodePayload,
-          nodePayloads: nodeMap,
-          runtimeVariables: session.runtimeVariables,
-          basePromptText: assembled.promptText,
-          assembledArguments: assembled.arguments,
-          upstreamInputs,
-          executionMailbox,
-        });
+        assembledPromptText = assembled.promptText;
         assembledArguments = assembled.arguments;
       } catch (error: unknown) {
         const message =
@@ -2253,6 +2243,22 @@ export async function runWorkflow(
         session,
         agentNodePayload,
       );
+      const composedPrompts = composeExecutionPrompts({
+        promptComposition: {
+          workflow,
+          nodeRef,
+          node: agentNodePayload,
+          nodePayloads: nodeMap,
+          runtimeVariables: session.runtimeVariables,
+          basePromptText: assembledPromptText,
+          assembledArguments,
+          upstreamInputs,
+          executionMailbox,
+        },
+        includeSessionStartPrompt: backendSession?.mode !== "reuse",
+      });
+      const effectivePromptText = composedPrompts.promptText;
+      const systemPromptText = composedPrompts.systemPromptText;
       const requestedBackendSessionMode = backendSession?.mode;
       let backendSessionId: string | undefined = backendSession?.sessionId;
       let backendSessionProvider: string | undefined;
@@ -2260,6 +2266,17 @@ export async function runWorkflow(
       const inputPayload = {
         ...baseInputPayload,
         model: agentNodePayload.model,
+        ...(agentNodePayload.systemPromptTemplate === undefined
+          ? {}
+          : { systemPromptTemplate: agentNodePayload.systemPromptTemplate }),
+        ...(agentNodePayload.sessionStartPromptTemplate === undefined
+          ? {}
+          : {
+              sessionStartPromptTemplate:
+                agentNodePayload.sessionStartPromptTemplate,
+            }),
+        ...(systemPromptText === undefined ? {} : { systemPromptText }),
+        promptText: effectivePromptText,
         outputContract:
           agentNodePayload.output === undefined
             ? undefined
@@ -2348,7 +2365,8 @@ export async function runWorkflow(
         outputPayload = {
           provider: "dry-run",
           model: agentNodePayload.model,
-          promptText: assembledPromptText,
+          ...(systemPromptText === undefined ? {} : { systemPromptText }),
+          promptText: effectivePromptText,
           completionPassed: true,
           when: { always: true },
           payload: { skippedExecution: true },
@@ -2406,9 +2424,9 @@ export async function runWorkflow(
           }
           const executionPromptText =
             candidatePath === undefined
-              ? assembledPromptText
+              ? effectivePromptText
               : buildOutputPromptText({
-                  basePromptText: assembledPromptText,
+                  basePromptText: effectivePromptText,
                   node: agentNodePayload,
                   candidatePath,
                   validationErrors: outputValidationErrors,
@@ -2458,6 +2476,9 @@ export async function runWorkflow(
                 nodeExecId,
                 node: agentNodePayload,
                 mergedVariables,
+                ...(systemPromptText === undefined
+                  ? {}
+                  : { systemPromptText }),
                 promptText: executionPromptText,
                 arguments: assembledArguments,
                 executionIndex: nextCount,
@@ -2495,7 +2516,7 @@ export async function runWorkflow(
                   finalizedOutput = {
                     provider: "deterministic-local",
                     model: agentNodePayload.model,
-                    promptText: assembledPromptText,
+                    promptText: effectivePromptText,
                     completionPassed: false,
                     when: {},
                     payload: {},
@@ -2514,7 +2535,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: "deterministic-local",
                 model: agentNodePayload.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
                 payload: {},
@@ -2543,7 +2564,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: execution.value.provider,
                 model: execution.value.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
                 payload: {},
@@ -2557,7 +2578,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: execution.value.provider,
                 model: execution.value.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: execution.value.completionPassed,
                 when: execution.value.when,
                 payload: execution.value.payload,
@@ -2597,7 +2618,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: execution.value.provider,
                 model: execution.value.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
                 payload: {},
@@ -2632,7 +2653,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: execution.value.provider,
                 model: execution.value.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: execution.value.completionPassed,
                 when: execution.value.when,
                 payload: candidateResult.value,
@@ -2645,7 +2666,7 @@ export async function runWorkflow(
               finalizedOutput = {
                 provider: execution.value.provider,
                 model: execution.value.model,
-                promptText: assembledPromptText,
+                promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
                 payload: {},
@@ -2664,7 +2685,7 @@ export async function runWorkflow(
         outputPayload = finalizedOutput ?? {
           provider: "deterministic-local",
           model: agentNodePayload.model,
-          promptText: assembledPromptText,
+          promptText: effectivePromptText,
           completionPassed: false,
           when: {},
           payload: {},

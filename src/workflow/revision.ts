@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
 import {
   isSafeWorkflowRelativePath,
   resolveWorkflowRelativePath,
@@ -21,13 +22,13 @@ export function collectPromptTemplateFiles(
         if (typeof payload !== "object" || payload === null) {
           return [];
         }
-        const promptTemplateFile = (payload as Record<string, unknown>)[
-          "promptTemplateFile"
-        ];
-        return typeof promptTemplateFile === "string" &&
-          promptTemplateFile.length > 0
-          ? [promptTemplateFile]
-          : [];
+        const payloadRecord = payload as Record<string, unknown>;
+        return NODE_TEMPLATE_FIELD_SPECS.flatMap((spec) => {
+          const templateFile = payloadRecord[spec.fileField];
+          return typeof templateFile === "string" && templateFile.length > 0
+            ? [templateFile]
+            : [];
+        });
       })
       .sort((a, b) => a.localeCompare(b)),
   )];

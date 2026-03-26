@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
@@ -74,38 +75,37 @@ async function resolvePromptTemplateFileForNode(input: {
   }
 
   const payload = input.rawPayload as Record<string, unknown>;
-  const promptTemplateFile = payload["promptTemplateFile"];
-  if (
-    typeof promptTemplateFile !== "string" ||
-    promptTemplateFile.length === 0
-  ) {
-    return ok(input.rawPayload);
+  const resolvedPayload: Record<string, unknown> = { ...payload };
+  for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
+    const templateFile = payload[spec.fileField];
+    if (typeof templateFile !== "string" || templateFile.length === 0) {
+      continue;
+    }
+
+    const resolvedPath = resolveWorkflowRelativePath(
+      input.workflowDirectory,
+      templateFile,
+    );
+    if (!resolvedPath.ok) {
+      return err({
+        code: "IO",
+        message: resolvedPath.error.message,
+      });
+    }
+
+    const promptText = await readTextFile(resolvedPath.value);
+    if (!promptText.ok) {
+      return err({
+        code: promptText.error.code,
+        message:
+          `failed resolving ${spec.fileField} for '${input.nodeFile}': ${promptText.error.message}`,
+      });
+    }
+
+    resolvedPayload[spec.textField] = promptText.value;
   }
 
-  const resolvedPath = resolveWorkflowRelativePath(
-    input.workflowDirectory,
-    promptTemplateFile,
-  );
-  if (!resolvedPath.ok) {
-    return err({
-      code: "IO",
-      message: resolvedPath.error.message,
-    });
-  }
-
-  const promptText = await readTextFile(resolvedPath.value);
-  if (!promptText.ok) {
-    return err({
-      code: promptText.error.code,
-      message:
-        `failed resolving promptTemplateFile for '${input.nodeFile}': ${promptText.error.message}`,
-    });
-  }
-
-  return ok({
-    ...payload,
-    promptTemplate: promptText.value,
-  });
+  return ok(resolvedPayload);
 }
 
 function buildDefaultWorkflowVis(

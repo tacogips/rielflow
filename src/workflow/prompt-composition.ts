@@ -22,6 +22,11 @@ export interface PromptCompositionInput {
   readonly managerMessage?: unknown;
 }
 
+export interface ComposedExecutionPrompts {
+  readonly systemPromptText?: string;
+  readonly promptText: string;
+}
+
 const DEFAULT_DIVEDRA_SYSTEM_PROMPT = readFileSync(
   new URL("./prompts/divedra-system-prompt.md", import.meta.url),
   "utf8",
@@ -31,14 +36,18 @@ function isManagerNodeKind(kind: NodeKind | undefined): boolean {
   return kind === "root-manager" || kind === "subworkflow-manager";
 }
 
-export function composeExecutionPrompt(input: PromptCompositionInput): string {
-  const mergedVariables = buildPromptTemplateVariables({
+function buildPromptVariables(
+  input: PromptCompositionInput,
+): Readonly<Record<string, unknown>> {
+  return buildPromptTemplateVariables({
     nodeVariables: input.node.variables,
     runtimeVariables: input.runtimeVariables,
     workflowId: input.workflow.workflowId,
     workflowDescription: input.workflow.description,
     nodeId: input.nodeRef.id,
     ...(input.nodeRef.kind === undefined ? {} : { nodeKind: input.nodeRef.kind }),
+    prompt: input.basePromptText,
+    args: input.assembledArguments,
     upstream: input.upstreamInputs.map((entry) => ({
       fromNodeId: entry.fromNodeId,
       ...(entry.fromSubWorkflowId === undefined
@@ -53,50 +62,100 @@ export function composeExecutionPrompt(input: PromptCompositionInput): string {
       ...(entry.outputRaw === undefined ? {} : { outputRaw: entry.outputRaw }),
     })),
   });
+}
+
+function buildExecutionMailbox(
+  input: PromptCompositionInput,
+): NodeExecutionMailbox {
+  return input.executionMailbox === undefined
+    ? buildNodeExecutionMailbox({
+        workflow: input.workflow,
+        nodeRef: input.nodeRef,
+        node: input.node,
+        nodePayloads: input.nodePayloads,
+        runtimeVariables: input.runtimeVariables,
+        basePromptText: input.basePromptText,
+        assembledArguments: input.assembledArguments,
+        upstreamInputs: input.upstreamInputs,
+        ...(input.managerMessage === undefined
+          ? {}
+          : { managerMessage: input.managerMessage }),
+      })
+    : input.managerMessage === undefined
+      ? input.executionMailbox
+      : {
+          ...input.executionMailbox,
+          input: {
+            ...input.executionMailbox.input,
+            managerMessage: input.managerMessage,
+          },
+        };
+}
+
+export function composeExecutionPrompts(input: {
+  readonly promptComposition: PromptCompositionInput;
+  readonly includeSessionStartPrompt: boolean;
+}): ComposedExecutionPrompts {
+  const mergedVariables = buildPromptVariables(input.promptComposition);
   const workflowPrompt =
-    input.workflow.prompts?.divedraPromptTemplate === undefined
+    input.promptComposition.workflow.prompts?.divedraPromptTemplate === undefined
       ? ""
       : renderPromptTemplate(
-          input.workflow.prompts.divedraPromptTemplate,
+          input.promptComposition.workflow.prompts.divedraPromptTemplate,
           mergedVariables,
         ).trim();
   const workerSystemPrompt =
-    input.workflow.prompts?.workerSystemPromptTemplate === undefined
+    input.promptComposition.workflow.prompts?.workerSystemPromptTemplate ===
+    undefined
       ? ""
       : renderPromptTemplate(
-          input.workflow.prompts.workerSystemPromptTemplate,
+          input.promptComposition.workflow.prompts.workerSystemPromptTemplate,
+          mergedVariables,
+        ).trim();
+  const nodeSystemPrompt =
+    input.promptComposition.node.systemPromptTemplate === undefined
+      ? ""
+      : renderPromptTemplate(
+          input.promptComposition.node.systemPromptTemplate,
+          mergedVariables,
+        ).trim();
+  const sessionStartPrompt =
+    !input.includeSessionStartPrompt ||
+    input.promptComposition.node.sessionStartPromptTemplate === undefined
+      ? ""
+      : renderPromptTemplate(
+          input.promptComposition.node.sessionStartPromptTemplate,
           mergedVariables,
         ).trim();
 
-  const sections = isManagerNodeKind(input.nodeRef.kind)
-    ? [DEFAULT_DIVEDRA_SYSTEM_PROMPT, workflowPrompt]
-    : [workerSystemPrompt];
+  const systemSections = isManagerNodeKind(input.promptComposition.nodeRef.kind)
+    ? [DEFAULT_DIVEDRA_SYSTEM_PROMPT, workflowPrompt, nodeSystemPrompt]
+    : [workerSystemPrompt, nodeSystemPrompt];
 
-  const executionMailbox =
-    input.executionMailbox === undefined
-      ? buildNodeExecutionMailbox({
-          workflow: input.workflow,
-          nodeRef: input.nodeRef,
-          node: input.node,
-          nodePayloads: input.nodePayloads,
-          runtimeVariables: input.runtimeVariables,
-          basePromptText: input.basePromptText,
-          assembledArguments: input.assembledArguments,
-          upstreamInputs: input.upstreamInputs,
-          ...(input.managerMessage === undefined
-            ? {}
-            : { managerMessage: input.managerMessage }),
-        })
-      : input.managerMessage === undefined
-        ? input.executionMailbox
-        : {
-            ...input.executionMailbox,
-            input: {
-              ...input.executionMailbox.input,
-              managerMessage: input.managerMessage,
-            },
-          };
-  sections.push(...renderNodeExecutionMailboxPromptSections(executionMailbox));
+  const promptSections = [sessionStartPrompt];
+  promptSections.push(
+    ...renderNodeExecutionMailboxPromptSections(
+      buildExecutionMailbox(input.promptComposition),
+    ),
+  );
 
-  return sections.filter((entry) => entry.trim().length > 0).join("\n\n");
+  return {
+    ...(systemSections.some((entry) => entry.trim().length > 0)
+      ? {
+          systemPromptText: systemSections
+            .filter((entry) => entry.trim().length > 0)
+            .join("\n\n"),
+        }
+      : {}),
+    promptText: promptSections
+      .filter((entry) => entry.trim().length > 0)
+      .join("\n\n"),
+  };
+}
+
+export function composeExecutionPrompt(input: PromptCompositionInput): string {
+  return composeExecutionPrompts({
+    promptComposition: input,
+    includeSessionStartPrompt: false,
+  }).promptText;
 }
