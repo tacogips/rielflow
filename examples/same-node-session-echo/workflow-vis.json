@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "order": 0
+    },
+    {
+      "id": "main-divedra",
+      "order": 1
+    },
+    {
+      "id": "workflow-input",
+      "order": 2
+    },
+    {
+      "id": "echo-session",
+      "order": 3
+    },
+    {
+      "id": "workflow-output",
+      "order": 4
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "echo-session",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-haiku-4-5",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "promptTemplateFile": "prompts/echo-session.md",
+  "sessionStartPromptTemplateFile": "prompts/echo-session-start.md",
+  "variables": {}
+}

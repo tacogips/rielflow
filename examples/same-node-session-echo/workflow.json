@@ -1,0 +1,116 @@
+{
+  "workflowId": "same-node-session-echo",
+  "description": "Reference workflow that revisits one task node so it can first echo the request and then answer on the next visit using the same node id and an opt-in reusable backend session.",
+  "defaults": {
+    "maxLoopIterations": 2,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice: once to echo the normalized request, then again to answer using that echoed content.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Preserve upstream data faithfully and do not invent extra workflow control beyond the current node responsibility."
+  },
+  "managerNodeId": "divedra-manager",
+  "subWorkflows": [
+    {
+      "id": "delivery",
+      "description": "Single lane that normalizes human input, revisits one reusable worker node, and publishes the second-turn answer.",
+      "managerNodeId": "main-divedra",
+      "inputNodeId": "workflow-input",
+      "outputNodeId": "workflow-output",
+      "nodeIds": [
+        "main-divedra",
+        "workflow-input",
+        "echo-session",
+        "workflow-output"
+      ],
+      "inputSources": [
+        {
+          "type": "human-input"
+        }
+      ],
+      "block": {
+        "type": "plain"
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "kind": "root-manager",
+      "nodeFile": "node-divedra-manager.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "main-divedra",
+      "kind": "subworkflow-manager",
+      "nodeFile": "node-main-divedra.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "workflow-input",
+      "kind": "input",
+      "nodeFile": "node-workflow-input.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "echo-session",
+      "kind": "loop-judge",
+      "nodeFile": "node-echo-session.json",
+      "completion": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "workflow-output",
+      "kind": "output",
+      "nodeFile": "node-workflow-output.json",
+      "completion": {
+        "type": "none"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "divedra-manager",
+      "to": "main-divedra",
+      "when": "always"
+    },
+    {
+      "from": "main-divedra",
+      "to": "workflow-input",
+      "when": "always"
+    },
+    {
+      "from": "workflow-input",
+      "to": "echo-session",
+      "when": "always"
+    },
+    {
+      "from": "echo-session",
+      "to": "echo-session",
+      "when": "continue_turn"
+    },
+    {
+      "from": "echo-session",
+      "to": "workflow-output",
+      "when": "loop_exit"
+    }
+  ],
+  "loops": [
+    {
+      "id": "two-turn-echo",
+      "judgeNodeId": "echo-session",
+      "continueWhen": "continue_turn",
+      "exitWhen": "loop_exit"
+    }
+  ],
+  "branching": {
+    "mode": "fan-out"
+  }
+}
