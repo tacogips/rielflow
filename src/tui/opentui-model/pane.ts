@@ -181,15 +181,24 @@ export function resolveOpenTuiShortcutSections(input: {
 }
 
 export function resolveOpenTuiPaneChrome(input: {
+  readonly filterText: string;
   readonly focusPane: FocusPane;
   readonly hasRuntimeSession: boolean;
   readonly historyPaneLabels: HistoryPaneLabels;
   readonly inputMode: TuiWorkflowInputMode;
   readonly inputSyntaxStatus: TuiWorkflowInputSyntax["status"];
+  readonly matchesCount: number;
   readonly screenMode: ScreenMode;
+  readonly workflowCount: number;
 }): OpenTuiPaneChromeState {
   const workspaceWorkflowsActive =
     input.screenMode === "workspace" && input.focusPane === "workflows";
+  const workflowPaneLabel =
+    input.screenMode === "workspace" && input.filterText.length > 0
+      ? `Workflows [filtered ${String(input.matchesCount)}/${String(
+          input.workflowCount,
+        )}]`
+      : "Workflows";
   const inputSyntaxSuffix =
     input.inputMode === "json"
       ? `, ${input.inputSyntaxStatus === "invalid" ? "syntax error" : "syntax ok"}`
@@ -257,13 +266,8 @@ export function resolveOpenTuiPaneChrome(input: {
     },
     selectorPreview: {
       backgroundColor: "transparent",
-      borderColor: paneBorderColor(
-        input.screenMode === "workspace" && !workspaceWorkflowsActive,
-      ),
-      title: paneTitle(
-        "Workflow Preview",
-        input.screenMode === "workspace" && !workspaceWorkflowsActive,
-      ),
+      borderColor: paneBorderColor(false),
+      title: paneTitle("Workflow Preview", false),
     },
     session: {
       backgroundColor: paneBackgroundColor(
@@ -280,7 +284,12 @@ export function resolveOpenTuiPaneChrome(input: {
     workflow: {
       backgroundColor: paneBackgroundColor(workspaceWorkflowsActive),
       borderColor: paneBorderColor(workspaceWorkflowsActive),
-      title: paneTitle("Workflows", workspaceWorkflowsActive),
+      title: paneTitle(workflowPaneLabel, workspaceWorkflowsActive),
+    },
+    workspaceHistory: {
+      backgroundColor: "transparent",
+      borderColor: paneBorderColor(false),
+      title: paneTitle("Latest Run Result", false),
     },
     workflowDefinition: {
       backgroundColor: paneBackgroundColor(

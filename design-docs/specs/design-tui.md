@@ -72,6 +72,65 @@ The TUI uses four primary screens instead of a single always-expanded multi-pane
 
 A compact breadcrumb bar stays visible at the top of the screen so nested navigation remains legible while moving across workspace, workflow history, new-run, and subworkflow views.
 
+### Canonical Window and Pane Names
+
+This document uses the following terminology consistently:
+
+- `window`: an operator-facing full-screen TUI state
+- `screenMode`: the internal implementation identifier for a window
+- `pane`: a bordered region inside a window
+- `popup`: a temporary overlay; popups are not panes and do not create a new window
+
+Window naming is fixed as follows:
+
+| Canonical window name | Internal `screenMode` | Purpose |
+| --- | --- | --- |
+| Workspace Window | `workspace` | choose a workflow before opening definition, history, or run flows |
+| Workflow Definition Window | `definition` | inspect authored workflow-definition files and node payloads |
+| Workflow History Window | `history` | inspect workflow runs, node executions, node detail, and reusable input |
+| New Workflow Run Window | `run` | prepare input, confirm launch, and monitor the newly started run |
+
+Pane naming is fixed as follows:
+
+| Window | Canonical pane name | Current visible title |
+| --- | --- | --- |
+| Workspace Window | Workflow List Pane | `Workflows` |
+| Workspace Window | Workflow Preview Pane | `Workflow Preview` |
+| Workspace Window | Latest Run Result Pane | `Latest Run Result` |
+| Workflow Definition Window | Workflow Definition Pane | `Workflow Definition` |
+| Workflow Definition Window | Workflow Definition Nodes Pane | `Nodes` |
+| Workflow History Window | Workflow Runs Pane | `Workflow Runs` |
+| Workflow History Window | Node Executions Pane | `Nodes` |
+| Workflow History Window | Node Detail Pane | `node detail` |
+| Workflow History Window | Input Pane | `Input` plus the current mode/syntax suffix |
+| Workflow History Window, subworkflow view | Workflow Nodes Pane | `Workflow Nodes` |
+| Workflow History Window, subworkflow view | Workflow List Pane | `Workflow List` |
+| New Workflow Run Window | Workflow Detail Pane | `Workflow Detail` |
+| New Workflow Run Window | Execution Status Pane | `Execution Status` |
+| New Workflow Run Window | Run Input Pane | `Run Input` plus the current mode/syntax suffix |
+
+Shared non-pane chrome is named as follows:
+
+- Breadcrumb Bar: top-of-window location trail across workflow and subworkflow scopes
+- History Header: the titled header box shown above the history panes; its title is `Workflow` in root history mode and `Subworkflow <id>` in nested history mode
+- Shortcut Footer: the single-line footer that summarizes the current window's keybindings
+
+Subworkflow inspection terminology is fixed:
+
+- `subworkflow view` is a mode inside the Workflow History Window, not a separate top-level window
+- entering a child subworkflow changes the history pane titles from `Workflow Runs` / `Nodes` to `Workflow Nodes` / `Workflow List`
+- the Node Detail Pane and Input Pane remain part of the same Workflow History Window during subworkflow inspection
+
+Popup names are fixed as follows:
+
+| Canonical popup name | Current visible title |
+| --- | --- |
+| Workflow Filter Popup | `Filter Workflows` |
+| Help Popup | `Help` |
+| Run Confirmation Popup | `Confirm Run` |
+| Node Definition Popup | `Node Definition` |
+| AI Agent Session Popup | `AI Agent Session` |
+
 #### Workspace Screen
 
 Default screen when `divedra tui` starts without `--workflow` or `--resume-session`.
@@ -79,12 +138,13 @@ Default screen when `divedra tui` starts without `--workflow` or `--resume-sessi
 Layout:
 
 - Left pane: workflow list
-- Right pane: workflow preview showing a visual node summary
+- Top-right pane: workflow preview showing a visual node summary
+- Bottom-right pane: latest run result showing the highlighted workflow's most recent run status and output, with compact execution summary context
 
 Behavior:
 
-1. the selector screen is dedicated to choosing a workflow, not browsing sessions and nodes yet
-2. pressing `/` opens a popup filter input
+1. the workspace screen is dedicated to choosing a workflow, not browsing sessions and nodes yet
+2. pressing `/` opens a popup filter input and focus enters that input immediately on the first keypress
 3. the popup accepts a workflow-name substring filter and immediately narrows the workflow list
 4. `enter`, `ctrl-m`, or `l` opens the highlighted workflow in the workflow-definition screen
 5. `n` opens the new-run screen for the highlighted workflow
@@ -99,10 +159,18 @@ Workflow preview content:
 - the root manager block shows workflow id
 - the preview pane should not duplicate keybinding hints; the screen footer shows the compact shortcut row while the help popup keeps the expanded guidance
 
+Latest run result content:
+
+- total workflow runs for the highlighted workflow
+- aggregate counts for success, failure, running, paused, and cancelled sessions
+- latest run snapshot including session id, status, timestamps, current node, and last error when present
+- latest resolved workflow output preview from the most recent run, or an explicit unavailable note when no output exists yet
+
 Filtering rules:
 
 - filtering is local to the currently loaded workflow name list
 - filter matching is case-insensitive substring matching
+- when a filter is active, the workspace `Workflows` pane title must show that the list is filtered and display the current match count
 - clearing the popup input restores the full workflow list
 - cancelling the popup keeps the previously visible filtered result unchanged
 
@@ -151,7 +219,7 @@ Shown from the workspace screen via `enter`, `ctrl-m`, or `l`.
 
 Layout:
 
-- Top pane: scrollable workflow-definition detail showing workflow-level JSON and visualization metadata
+- Top pane: compact workflow summary showing identity, location, scope, and input-mode hints without rendering raw `workflow.json` or `workflow-vis.json`
 - Bottom pane: workflow node list
 
 Behavior:
@@ -173,9 +241,9 @@ Shown from the workspace screen via `n`, from the workflow-definition screen via
 
 Layout:
 
-- Left pane: workflow detail preview using the same workflow-structure rendering style as the workspace preview
-- Right pane: realtime execution status for the newly launched workflow session
-- Bottom input area: workflow input editor
+- Top-left pane: compact workflow summary showing workflow description plus one-line node purposes
+- Top-right pane: concise execution status for the newly launched workflow session
+- Bottom input area: enlarged workflow input editor that gets the majority of the vertical space on this screen
 
 Behavior:
 

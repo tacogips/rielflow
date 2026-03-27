@@ -1,11 +1,15 @@
 import { describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
 import type { NodePayload } from "../workflow/types";
+import type { RuntimeSessionView } from "./opentui-model";
 import {
   buildOpenTuiFooterShortcutRow,
   buildSummaryJsonSelectOptions,
   buildTuiRuntimeVariables,
+  buildWorkflowDefinitionContent,
   buildWorkflowHistoryStatusMessage,
+  buildWorkflowRunPreview,
+  buildWorkflowSelectorHistorySummary,
   describeTuiWorkflowInputSyntax,
   deriveEditorTextFromRuntimeVariables,
   detectWorkflowInputMode,
@@ -112,6 +116,75 @@ function plainStyledText(input: {
   return input.chunks.map((chunk) => chunk.text).join("");
 }
 
+function makeWorkspaceLatestRunView(): RuntimeSessionView {
+  return {
+    session: {
+      sessionId: "sess-3",
+      workflowName: "demo",
+      workflowId: "demo",
+      status: "running",
+      startedAt: "2026-03-26T00:02:00.000Z",
+      queue: [],
+      currentNodeId: "workflow-output",
+      nodeExecutionCounter: 2,
+      nodeExecutionCounts: {
+        "workflow-input": 1,
+        "workflow-output": 1,
+      },
+      transitions: [],
+      nodeExecutions: [
+        {
+          nodeId: "workflow-input",
+          nodeExecId: "exec-1",
+          status: "succeeded",
+          artifactDir: "/tmp/demo/exec-1",
+          startedAt: "2026-03-26T00:02:00.000Z",
+          endedAt: "2026-03-26T00:02:01.000Z",
+        },
+        {
+          nodeId: "workflow-output",
+          nodeExecId: "exec-2",
+          status: "succeeded",
+          artifactDir: "/tmp/demo/exec-2",
+          startedAt: "2026-03-26T00:02:01.000Z",
+          endedAt: "2026-03-26T00:02:02.000Z",
+        },
+      ],
+      communicationCounter: 0,
+      communications: [],
+      runtimeVariables: {
+        workflowOutput: {
+          summary: "done",
+          score: 0.9,
+        },
+      },
+    },
+    nodeExecutions: [
+      {
+        sessionId: "sess-3",
+        nodeExecId: "exec-2",
+        nodeId: "workflow-output",
+        status: "succeeded",
+        artifactDir: "/tmp/demo/exec-2",
+        startedAt: "2026-03-26T00:02:01.000Z",
+        endedAt: "2026-03-26T00:02:02.000Z",
+        attempt: 1,
+        outputAttemptCount: null,
+        outputValidationErrors: null,
+        backendSessionMode: null,
+        backendSessionId: null,
+        restartedFromNodeExecId: null,
+        inputHash: "in",
+        outputHash: "out",
+        inputJson: "{\"request\":\"ship\"}",
+        outputJson: "{\"summary\":\"done\",\"score\":0.9}",
+        createdAt: "2026-03-26T00:02:02.000Z",
+      },
+    ],
+    nodeLogs: [],
+  };
+}
+
 describe("resolveSelectedWorkflowName", () => {
   test("returns selected workflow when index is in range", () => {
     expect(resolveSelectedWorkflowName(1, ["a", "b", "c"])).toBe("b");
@@ -158,6 +231,49 @@ describe("detectWorkflowInputMode", () => {
     });
 
     expect(detectWorkflowInputMode(loaded).mode).toBe("text");
+  });
+});
+
+describe("buildWorkflowDefinitionContent", () => {
+  test("shows a concise workflow summary without dumping raw workflow json", () => {
+    const loaded = makeLoadedWorkflow({
+      id: "workflow-input",
+      model: "input-model",
+      promptTemplate: "Read the latest human input and summarize it.",
+      variables: {},
+    });
+
+    const content = buildWorkflowDefinitionContent(loaded);
+
+    expect(content).toContain("Workflow: demo");
+    expect(content).toContain("Sub-workflow ids: delivery");
+    expect(content).toContain(
+      "Use the Nodes pane and press enter to inspect an individual node definition.",
+    );
+    expect(content).not.toContain("workflow.json");
+    expect(content).not.toContain("workflow-vis.json");
+  });
+});
+
+describe("buildWorkflowRunPreview", () => {
+  test("shows workflow description and compact node purposes for the run screen", () => {
+    const loaded = makeLoadedWorkflow({
+      id: "workflow-input",
+      description: "Normalize the received request",
+      model: "input-model",
+      promptTemplate: "Read the latest human input and summarize it.",
+      variables: {},
+    });
+
+    const content = plainStyledText(buildWorkflowRunPreview(loaded));
+
+    expect(content).toContain("Description");
+    expect(content).toContain("demo workflow");
+    expect(content).toContain(
+      "- workflow-input (INPUT): Normalize the received request",
+    );
+    expect(content).toContain("- workflow-output (OUTPUT): Return output");
+    expect(content).not.toContain("Node Structure");
   });
 });
 
@@ -303,7 +419,96 @@ describe("workflow preview text helpers", () => {
 
     expect(text).toContain("Workflow: demo");
     expect(text).toContain("Filter: de  Matches: 1/3");
+    expect(text).toContain("Description");
+    expect(text).toContain("demo workflow");
     expect(text).toContain("Node Structure");
+  });
+
+  test("buildWorkflowSelectorHistorySummary shows aggregate workflow run counts", () => {
+    const text = plainStyledText(
+      buildWorkflowSelectorHistorySummary({
+        latestRunSessionView: makeWorkspaceLatestRunView(),
+        selectedWorkflowName: "demo",
+        sessions: [
+          {
+            sessionId: "sess-3",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "running",
+            startedAt: "2026-03-26T00:02:00.000Z",
+            endedAt: null,
+            currentNodeId: "workflow-input",
+            nodeExecutionCounter: 1,
+            lastError: null,
+            updatedAt: "2026-03-26T00:02:10.000Z",
+          },
+          {
+            sessionId: "sess-2",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "failed",
+            startedAt: "2026-03-25T00:01:00.000Z",
+            endedAt: "2026-03-25T00:01:40.000Z",
+            currentNodeId: "workflow-output",
+            nodeExecutionCounter: 2,
+            lastError: "boom",
+            updatedAt: "2026-03-25T00:01:40.000Z",
+          },
+          {
+            sessionId: "sess-1",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "completed",
+            startedAt: "2026-03-24T00:00:00.000Z",
+            endedAt: "2026-03-24T00:00:50.000Z",
+            currentNodeId: "workflow-output",
+            nodeExecutionCounter: 2,
+            lastError: null,
+            updatedAt: "2026-03-24T00:00:50.000Z",
+          },
+        ],
+        workflowFilterText: "",
+      }),
+    );
+
+    expect(text).toContain("Runs: 3");
+    expect(text).toContain("Success: 1");
+    expect(text).toContain("Failed: 1");
+    expect(text).toContain("Running: 1");
+    expect(text).toContain("Latest Run");
+    expect(text).toContain("sessionId: sess-3");
+    expect(text).toContain("status:");
+    expect(text).toContain("Output");
+    expect(text).toContain("\"summary\": \"done\"");
+  });
+
+  test("buildWorkflowSelectorHistorySummary surfaces latest-run load failures clearly", () => {
+    const text = plainStyledText(
+      buildWorkflowSelectorHistorySummary({
+        latestRunStatusError: "database temporarily unavailable",
+        selectedWorkflowName: "demo",
+        sessions: [
+          {
+            sessionId: "sess-3",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "running",
+            startedAt: "2026-03-26T00:02:00.000Z",
+            endedAt: null,
+            currentNodeId: "workflow-input",
+            nodeExecutionCounter: 1,
+            lastError: null,
+            updatedAt: "2026-03-26T00:02:10.000Z",
+          },
+        ],
+        workflowFilterText: "",
+      }),
+    );
+
+    expect(text).toContain(
+      "Latest run details unavailable: database temporarily unavailable",
+    );
+    expect(text).not.toContain("(not available yet)");
   });
 
   test("buildWorkflowHistoryHeader includes subworkflow scope metadata", () => {

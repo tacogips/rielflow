@@ -42,6 +42,8 @@ const REQUIRED_OPEN_TUI_MAIN_VIEW_REF_KEYS = [
   "runTopRow",
   "runWorkflowPane",
   "runWorkflowText",
+  "workspaceHistoryScroll",
+  "workspaceHistoryText",
   "selectorPreviewScroll",
   "selectorPreviewText",
   "selectorRow",
@@ -78,6 +80,7 @@ export function applyOpenTuiPaneChrome(
     | "nodePane"
     | "runStatusPane"
     | "runWorkflowPane"
+    | "workspaceHistoryScroll"
     | "selectorPreviewScroll"
     | "sessionPane"
     | "workflowPane"
@@ -106,6 +109,10 @@ export function applyOpenTuiPaneChrome(
   refs.selectorPreviewScroll.title = paneChrome.selectorPreview.title;
   refs.selectorPreviewScroll.borderColor =
     paneChrome.selectorPreview.borderColor;
+
+  refs.workspaceHistoryScroll.title = paneChrome.workspaceHistory.title;
+  refs.workspaceHistoryScroll.borderColor =
+    paneChrome.workspaceHistory.borderColor;
 
   refs.historyHeaderBox.title = paneChrome.historyHeader.title;
   refs.historyHeaderBox.borderColor = paneChrome.historyHeader.borderColor;

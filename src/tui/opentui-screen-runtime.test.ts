@@ -9,7 +9,6 @@ import {
   formatTimestampForDisplay,
   isAllowedNodeDetailKey,
   resolveOpenTuiPaneChrome,
-  resolveSystemTimeZoneLabel,
   resolveWorkflowPreviewIndent,
 } from "./opentui-model";
 import { focusOpenTuiTarget } from "./opentui-screen";
@@ -337,6 +336,7 @@ describe("isAllowedNodeDetailKey", () => {
 describe("resolveOpenTuiPaneChrome", () => {
   test("marks workflow-definition nodes as active on the definition screen", () => {
     const chrome = resolveOpenTuiPaneChrome({
+      filterText: "",
       focusPane: "nodes",
       hasRuntimeSession: false,
       historyPaneLabels: {
@@ -346,7 +346,9 @@ describe("resolveOpenTuiPaneChrome", () => {
       },
       inputMode: "json",
       inputSyntaxStatus: "valid",
+      matchesCount: 0,
       screenMode: "definition",
+      workflowCount: 0,
     });
 
     expect(chrome.workflowDefinition.title).toBe(" Workflow Definition ");
@@ -356,6 +358,7 @@ describe("resolveOpenTuiPaneChrome", () => {
 
   test("marks node detail as active after history focus moves from nodes to detail", () => {
     const chrome = resolveOpenTuiPaneChrome({
+      filterText: "",
       focusPane: "detail",
       hasRuntimeSession: true,
       historyPaneLabels: {
@@ -365,7 +368,9 @@ describe("resolveOpenTuiPaneChrome", () => {
       },
       inputMode: "json",
       inputSyntaxStatus: "valid",
+      matchesCount: 0,
       screenMode: "history",
+      workflowCount: 0,
     });
 
     expect(chrome.detail.title).toBe(" >> node detail << ");
@@ -376,6 +381,7 @@ describe("resolveOpenTuiPaneChrome", () => {
 
   test("uses the select-a-run node title until a session is loaded", () => {
     const chrome = resolveOpenTuiPaneChrome({
+      filterText: "",
       focusPane: "sessions",
       hasRuntimeSession: false,
       historyPaneLabels: {
@@ -385,10 +391,72 @@ describe("resolveOpenTuiPaneChrome", () => {
       },
       inputMode: "text",
       inputSyntaxStatus: "not-applicable",
+      matchesCount: 0,
       screenMode: "history",
+      workflowCount: 0,
     });
 
     expect(chrome.node.title).toBe(" Nodes (select a run) ");
+  });
+
+  test("shows a persistent filtered indicator on the workspace workflow pane", () => {
+    const chrome = resolveOpenTuiPaneChrome({
+      filterText: "demo",
+      focusPane: "workflows",
+      hasRuntimeSession: false,
+      historyPaneLabels: {
+        header: "Workflow",
+        left: "Workflow Runs",
+        right: "Nodes",
+      },
+      inputMode: "text",
+      inputSyntaxStatus: "not-applicable",
+      matchesCount: 2,
+      screenMode: "workspace",
+      workflowCount: 5,
+    });
+
+    expect(chrome.workflow.title).toBe(" >> Workflows [filtered 2/5] << ");
+  });
+
+  test("includes a dedicated workspace latest-run pane title", () => {
+    const chrome = resolveOpenTuiPaneChrome({
+      filterText: "",
+      focusPane: "workflows",
+      hasRuntimeSession: false,
+      historyPaneLabels: {
+        header: "Workflow",
+        left: "Workflow Runs",
+        right: "Nodes",
+      },
+      inputMode: "text",
+      inputSyntaxStatus: "not-applicable",
+      matchesCount: 0,
+      screenMode: "workspace",
+      workflowCount: 3,
+    });
+
+    expect(chrome.workspaceHistory.title).toBe(" Latest Run Result ");
+  });
+
+  test("keeps workspace preview chrome inactive even when workspace focus is transiently elsewhere", () => {
+    const chrome = resolveOpenTuiPaneChrome({
+      filterText: "",
+      focusPane: "input",
+      hasRuntimeSession: false,
+      historyPaneLabels: {
+        header: "Workflow",
+        left: "Workflow Runs",
+        right: "Nodes",
+      },
+      inputMode: "text",
+      inputSyntaxStatus: "not-applicable",
+      matchesCount: 0,
+      screenMode: "workspace",
+      workflowCount: 3,
+    });
+
+    expect(chrome.selectorPreview.title).toBe(" Workflow Preview ");
   });
 });
 
@@ -451,9 +519,15 @@ describe("buildWorkflowRunStatusContent", () => {
         runtimeSessionView: undefined,
       }),
     ).toContain("No run started yet.");
+    expect(
+      buildWorkflowRunStatusContent({
+        loadedWorkflow: loaded,
+        runtimeSessionView: undefined,
+      }),
+    ).toContain("Description: demo workflow");
   });
 
-  test("shows localized workflow timing and final workflow output when available", () => {
+  test("shows concise workflow timing and final workflow output when available", () => {
     const loaded = makeLoadedWorkflow({
       id: "workflow-input",
       model: "input-model",
@@ -466,9 +540,11 @@ describe("buildWorkflowRunStatusContent", () => {
     });
 
     expect(content).toContain("Final result:");
-    expect(content).toContain(`Timezone: ${resolveSystemTimeZoneLabel()}`);
+    expect(content).toContain("Description: demo workflow");
     expect(content).toContain(
       `Started: ${formatTimestampForDisplay("2026-03-24T00:00:00.000Z")}`,
     );
+    expect(content).toContain("Latest log:");
+    expect(content).not.toContain("Recent logs:");
   });
 });

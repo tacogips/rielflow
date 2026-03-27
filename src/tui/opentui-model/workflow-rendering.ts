@@ -2,8 +2,11 @@ import {
   StyledText,
   bold,
   brightCyan,
+  brightGreen,
+  brightRed,
   brightWhite,
   dim,
+  fg,
   t,
 } from "@opentui/core";
 import type { LoadedWorkflow } from "../../workflow/load";
@@ -40,6 +43,7 @@ import {
   findLatestNodeExecution,
   formatLogEntries,
   formatOptionalTimestampForDisplay,
+  formatNodeKindLabel,
   formatTimestampForDisplay,
   formatStatusLabel,
   hasVisibleText,
@@ -52,8 +56,31 @@ import {
   resolveWorkflowNodeVisualMetadata,
   summarizeJsonBlock,
   summarizePromptHelp,
+  takeFirstLines,
   truncate,
 } from "./shared";
+
+const WORKSPACE_LATEST_RESULT_PREVIEW_LINES = 18;
+
+function formatLatestRunResultForDisplay(input: {
+  readonly latestRunStatusError?: string;
+  readonly result: unknown;
+}): string {
+  if (input.latestRunStatusError !== undefined && input.result === undefined) {
+    return `Latest run details unavailable: ${truncate(input.latestRunStatusError, 120)}`;
+  }
+  if (input.result === undefined) {
+    return "(not available yet)";
+  }
+  if (typeof input.result === "string") {
+    return takeFirstLines(input.result, WORKSPACE_LATEST_RESULT_PREVIEW_LINES);
+  }
+  const serialized = JSON.stringify(input.result, null, 2);
+  return takeFirstLines(
+    serialized ?? String(input.result),
+    WORKSPACE_LATEST_RESULT_PREVIEW_LINES,
+  );
+}
 
 function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
   const derivedNodes = buildWorkflowNodeVisualMetadata(loaded);
@@ -142,6 +169,7 @@ export function buildWorkflowSummaryPreview(
     return t`${dim("Loading workflow detail...")}`;
   }
 
+  const workflow = loadedWorkflow.bundle.workflow;
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -150,14 +178,66 @@ export function buildWorkflowSummaryPreview(
   append(
     t`${dim(
       `Nodes: ${String(
-        loadedWorkflow.bundle.workflow.nodes.length,
+        workflow.nodes.length,
       )}  Sub-workflows: ${String(
-        loadedWorkflow.bundle.workflow.subWorkflows.length,
+        workflow.subWorkflows.length,
       )}`,
-    )}\n\n`,
+    )}`,
   );
+  if (hasVisibleText(workflow.description)) {
+    append(t`\n\n${brightWhite("Description")}\n${workflow.description}`);
+  }
+  append(t`\n\n`);
   append(t`${brightWhite(bold("Node Structure"))}\n`);
   append(buildWorkflowNodePreview(loadedWorkflow));
+  return new StyledText(chunks);
+}
+
+export function buildWorkflowRunPreview(
+  loadedWorkflow: LoadedWorkflow | undefined,
+): StyledText {
+  if (loadedWorkflow === undefined) {
+    return t`${dim("Loading workflow detail...")}`;
+  }
+
+  const workflow = loadedWorkflow.bundle.workflow;
+  const inputDetection = detectWorkflowInputMode(loadedWorkflow);
+  const chunks: StyledText["chunks"] = [];
+  const append = (value: StyledText): void => {
+    chunks.push(...value.chunks);
+  };
+
+  append(
+    t`${brightWhite("Workflow:")} ${bold(loadedWorkflow.workflowName)}\n${dim(
+      `ID: ${workflow.workflowId}  Input: ${inputDetection.mode}  Nodes: ${String(
+        workflow.nodes.length,
+      )}  Sub-workflows: ${String(workflow.subWorkflows.length)}`,
+    )}`,
+  );
+
+  if (hasVisibleText(workflow.description)) {
+    append(t`\n\n${brightWhite("Description")}\n${workflow.description}`);
+  }
+
+  append(t`\n\n${brightWhite("Nodes")}`);
+  workflow.nodes.forEach((nodeRef) => {
+    const payload = loadedWorkflow.bundle.nodePayloads[nodeRef.nodeFile];
+    const purpose =
+      payload?.description ??
+      payload?.output?.description ??
+      summarizePromptHelp(payload?.promptTemplate) ??
+      resolveNodePurpose({
+        nodeId: nodeRef.id,
+        payload,
+        workflow,
+      });
+    append(
+      t`\n- ${nodeRef.id} (${formatNodeKindLabel(nodeRef.kind ?? "task")})${
+        purpose === undefined ? "" : `: ${truncate(purpose, 88)}`
+      }`,
+    );
+  });
+
   return new StyledText(chunks);
 }
 
@@ -171,17 +251,26 @@ export function buildWorkflowDefinitionContent(
   if (loadedWorkflow === undefined) {
     return "No workflow loaded.";
   }
+  const workflow = loadedWorkflow.bundle.workflow;
+  const inputDetection = detectWorkflowInputMode(loadedWorkflow);
+  const subworkflowIds = workflow.subWorkflows.map((entry) => entry.id);
   return [
-    `Workflow: ${loadedWorkflow.bundle.workflow.workflowId}`,
+    `Workflow: ${workflow.workflowId}`,
     `Workflow name: ${loadedWorkflow.workflowName}`,
+    ...(hasVisibleText(workflow.description)
+      ? [`Description: ${workflow.description}`]
+      : []),
     `Workflow directory: ${loadedWorkflow.workflowDirectory}`,
     `Artifact root: ${loadedWorkflow.artifactWorkflowRoot}`,
+    `Manager node: ${workflow.managerNodeId}`,
+    `Nodes: ${String(workflow.nodes.length)}`,
+    `Sub-workflows: ${String(workflow.subWorkflows.length)}`,
+    ...(subworkflowIds.length === 0
+      ? []
+      : [`Sub-workflow ids: ${subworkflowIds.join(", ")}`]),
+    `Input mode hint: ${inputDetection.mode}`,
     "",
-    "workflow.json",
-    stringifyJsonForDisplay(loadedWorkflow.bundle.workflow),
-    "",
-    "workflow-vis.json",
-    stringifyJsonForDisplay(loadedWorkflow.bundle.workflowVis),
+    "Use the Nodes pane and press enter to inspect an individual node definition.",
   ].join("\n");
 }
 
@@ -215,6 +304,113 @@ export function buildWorkflowSelectorPreview(input: {
     )}\n\n`.chunks,
   );
   chunks.push(...buildWorkflowSummaryPreview(previewWorkflow).chunks);
+  return new StyledText(chunks);
+}
+
+export function buildWorkflowSelectorHistorySummary(input: {
+  readonly latestRunSessionView?: RuntimeSessionView;
+  readonly latestRunStatusError?: string;
+  readonly selectedWorkflowName?: string;
+  readonly sessions: readonly RuntimeSessionSummary[];
+  readonly workflowFilterText: string;
+}): StyledText {
+  if (input.selectedWorkflowName === undefined) {
+    return t`${
+      input.workflowFilterText.length === 0
+        ? "No workflow is selected."
+        : `No workflows match filter '${input.workflowFilterText}'.`
+    }`;
+  }
+
+  const counts = input.sessions.reduce(
+    (acc, session) => {
+      switch (session.status) {
+        case "completed":
+          acc.success += 1;
+          break;
+        case "failed":
+          acc.failed += 1;
+          break;
+        case "running":
+          acc.running += 1;
+          break;
+        case "paused":
+          acc.paused += 1;
+          break;
+        case "cancelled":
+          acc.cancelled += 1;
+          break;
+      }
+      return acc;
+    },
+    {
+      cancelled: 0,
+      failed: 0,
+      paused: 0,
+      running: 0,
+      success: 0,
+    },
+  );
+
+  const chunks: StyledText["chunks"] = [];
+  const append = (value: StyledText): void => {
+    chunks.push(...value.chunks);
+  };
+
+  append(
+    t`${brightWhite("Workflow:")} ${bold(input.selectedWorkflowName)}\n${dim(
+      `Runs: ${String(input.sessions.length)}`,
+    )}\n\n`,
+  );
+  append(
+    t`${brightWhite("Summary")}\n${brightGreen(
+      `Success: ${String(counts.success)}`,
+    )}  ${brightRed(`Failed: ${String(counts.failed)}`)}  ${fg("#7fc8ff")(
+      `Running: ${String(counts.running)}`,
+    )}\n${dim(
+      `Paused: ${String(counts.paused)}  Cancelled: ${String(counts.cancelled)}`,
+    )}`,
+  );
+
+  if (input.sessions.length === 0) {
+    append(t`\n\n${dim("No recorded workflow runs for this workflow yet.")}`);
+    return new StyledText(chunks);
+  }
+
+  const latestSession = input.sessions[0];
+  if (latestSession === undefined) {
+    return new StyledText(chunks);
+  }
+  const latestRunResult = resolveWorkflowFinalResult(input.latestRunSessionView);
+  append(
+    t`\n\n${brightWhite("Latest Run")}\n${dim(
+      `sessionId: ${latestSession.sessionId}`,
+    )}\nstatus: ${formatStatusLabel(latestSession.status)}\nstarted: ${formatTimestampForDisplay(
+      latestSession.startedAt,
+    )}\nupdated: ${formatTimestampForDisplay(latestSession.updatedAt)}\nended: ${formatOptionalTimestampForDisplay(
+      latestSession.endedAt,
+    )}\ncurrent node: ${latestSession.currentNodeId ?? "-"}\nnode executions: ${String(
+      latestSession.nodeExecutionCounter,
+    )}`,
+  );
+
+  if (hasVisibleText(latestSession.lastError ?? undefined)) {
+    append(
+      t`\nlast error: ${truncate(latestSession.lastError ?? "", 120)}`,
+    );
+  }
+  if (input.latestRunStatusError !== undefined) {
+    append(t`\nstatus refresh note: ${input.latestRunStatusError}`);
+  }
+  append(
+    t`\n\n${brightWhite("Output")}\n${formatLatestRunResultForDisplay({
+      ...(input.latestRunStatusError === undefined
+        ? {}
+        : { latestRunStatusError: input.latestRunStatusError }),
+      result: latestRunResult,
+    })}`,
+  );
+
   return new StyledText(chunks);
 }
 
@@ -579,6 +775,9 @@ export function buildWorkflowRunStatusContent(input: {
   if (input.runtimeSessionView === undefined) {
     return [
       `Workflow: ${input.loadedWorkflow.workflowName}`,
+      ...(hasVisibleText(input.loadedWorkflow.bundle.workflow.description)
+        ? [`Description: ${input.loadedWorkflow.bundle.workflow.description}`]
+        : []),
       `Input mode: ${detectWorkflowInputMode(input.loadedWorkflow).mode}`,
       `Pending session: ${input.sessionId ?? "(not started)"}`,
       input.statusError ?? "No run started yet.",
@@ -588,19 +787,27 @@ export function buildWorkflowRunStatusContent(input: {
 
   const session = input.runtimeSessionView.session;
   const finalResult = resolveWorkflowFinalResult(input.runtimeSessionView);
+  const latestLog = input.runtimeSessionView.nodeLogs.at(-1);
 
   return [
     `Workflow: ${session.workflowName}`,
-    `Session: ${session.sessionId} status=${session.status}`,
-    `Timezone: ${resolveSystemTimeZoneLabel()}`,
+    `Session: ${session.sessionId}`,
+    `Status: ${formatStatusLabel(session.status)}`,
+    ...(hasVisibleText(input.loadedWorkflow.bundle.workflow.description)
+      ? [`Description: ${input.loadedWorkflow.bundle.workflow.description}`]
+      : []),
     `Started: ${formatTimestampForDisplay(session.startedAt)}`,
     `Ended: ${formatOptionalTimestampForDisplay(session.endedAt)}`,
     `Current node: ${session.currentNodeId ?? "-"}`,
-    `Queue: ${session.queue.join(",") || "-"}`,
     `Node executions: ${String(session.nodeExecutions.length)}`,
     ...(session.lastError === undefined
       ? []
       : [`Last error: ${session.lastError}`]),
+    ...(latestLog === undefined
+      ? []
+      : [
+          `Latest log: ${formatTimestampForDisplay(latestLog.at)} ${latestLog.level.toUpperCase()} ${truncate(latestLog.message, 120)}`,
+        ]),
     ...(input.statusError === undefined
       ? []
       : [`Status refresh note: ${input.statusError}`]),
@@ -611,11 +818,8 @@ export function buildWorkflowRunStatusContent(input: {
             input.completionResult.exitCode,
           )} status=${input.completionResult.status}`,
         ]),
-    "",
-    "Recent logs:",
-    formatLogEntries(input.runtimeSessionView.nodeLogs, 18),
     ...(finalResult === undefined
       ? []
-      : ["", "Final result:", compactJson(finalResult, 4_000)]),
+      : ["Final result:", compactJson(finalResult, 800)]),
   ].join("\n");
 }

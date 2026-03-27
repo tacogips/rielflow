@@ -208,6 +208,7 @@ export interface OpenTuiPaneChromeState {
   readonly selectorPreview: OpenTuiPaneChrome;
   readonly session: OpenTuiPaneChrome;
   readonly workflow: OpenTuiPaneChrome;
+  readonly workspaceHistory: OpenTuiPaneChrome;
   readonly workflowDefinition: OpenTuiPaneChrome;
   readonly workflowDefinitionNodes: OpenTuiPaneChrome;
 }

@@ -31,7 +31,8 @@ import {
   buildSessionSelectOptions,
   findLatestNodeExecution,
   buildWorkflowHistoryHeader,
-  buildWorkflowSummaryPreview,
+  buildWorkflowRunPreview,
+  buildWorkflowSelectorHistorySummary,
   buildWorkflowSelectorPreview,
   buildSubworkflowListOptions,
   buildSubworkflowNodeSelectOptions,
@@ -268,6 +269,7 @@ export async function runOpenTuiWorkflowApp(
     runTopRow,
     runWorkflowText,
     selectorPreviewText,
+    workspaceHistoryText,
     selectorRow,
     sessionSelect,
     workflowDefinitionNodeSelect,
@@ -321,6 +323,8 @@ export async function runOpenTuiWorkflowApp(
   let runExecutionResult: OpenTuiWorkflowActionResult | undefined;
   let runPendingSessionId: string | undefined;
   let runStatusError: string | undefined;
+  let workspaceLatestRunView: RuntimeSessionView | undefined;
+  let workspaceLatestRunError: string | undefined;
   let runPollTimer: ReturnType<typeof setInterval> | undefined;
   let runPollInFlight = false;
   let isClosed = false;
@@ -545,6 +549,8 @@ export async function runOpenTuiWorkflowApp(
     historyScreen.visible = screenMode === "history";
     runTopRow.visible = screenMode === "run";
     inputRow.visible = screenMode === "history" || screenMode === "run";
+    runTopRow.flexGrow = screenMode === "run" ? 8 : 1;
+    inputRow.flexGrow = screenMode === "run" ? 32 : 20;
     filterPopup.visible = filterPopupOpen;
     helpPopup.visible = helpPopupOpen;
     confirmPopup.visible = confirmPopupOpen;
@@ -573,6 +579,19 @@ export async function runOpenTuiWorkflowApp(
         ? {}
         : { selectedWorkflowName: currentSelectedWorkflowName }),
     });
+    workspaceHistoryText.content = buildWorkflowSelectorHistorySummary({
+      ...(workspaceLatestRunError === undefined
+        ? {}
+        : { latestRunStatusError: workspaceLatestRunError }),
+      ...(workspaceLatestRunView === undefined
+        ? {}
+        : { latestRunSessionView: workspaceLatestRunView }),
+      sessions: workflowSessions,
+      workflowFilterText,
+      ...(currentSelectedWorkflowName === undefined
+        ? {}
+        : { selectedWorkflowName: currentSelectedWorkflowName }),
+    });
     footerText.content = buildOpenTuiFooterShortcutRow({
       navigation,
     });
@@ -581,7 +600,7 @@ export async function runOpenTuiWorkflowApp(
       activeSubworkflow,
     );
     workflowDefinitionText.content = buildWorkflowDefinitionContent(loadedWorkflow);
-    runWorkflowText.content = buildWorkflowSummaryPreview(loadedWorkflow);
+    runWorkflowText.content = buildWorkflowRunPreview(loadedWorkflow);
     runStatusText.content = buildWorkflowRunStatusContent({
       loadedWorkflow,
       runtimeSessionView: runSessionView,
@@ -717,12 +736,15 @@ export async function runOpenTuiWorkflowApp(
       workflowInputDetection.mode,
     );
     const paneChrome = resolveOpenTuiPaneChrome({
+      filterText: workflowFilterText,
       focusPane,
       hasRuntimeSession: runtimeSessionView !== undefined,
       historyPaneLabels,
       inputMode: workflowInputDetection.mode,
       inputSyntaxStatus: inputSyntax.status,
+      matchesCount: filteredWorkflowNames.length,
       screenMode,
+      workflowCount: workflowNames.length,
     });
     applyOpenTuiPaneChrome(mountedRefs, paneChrome);
 
@@ -763,6 +785,7 @@ export async function runOpenTuiWorkflowApp(
       subworkflow: currentSubworkflow(),
     });
     const paneChrome = resolveOpenTuiPaneChrome({
+      filterText: workflowFilterText,
       focusPane,
       hasRuntimeSession: runtimeSessionView !== undefined,
       historyPaneLabels,
@@ -771,7 +794,9 @@ export async function runOpenTuiWorkflowApp(
         inputTextarea.plainText,
         workflowInputDetection.mode,
       ).status,
+      matchesCount: filteredWorkflowNames.length,
       screenMode,
+      workflowCount: workflowNames.length,
     });
     applyOpenTuiPaneChrome(mountedRefs, paneChrome);
     const focusTarget: OpenTuiFocusableTarget = filterPopupOpen
@@ -871,6 +896,42 @@ export async function runOpenTuiWorkflowApp(
       await options.loadWorkflowDefinition(workflowName);
   };
 
+  const refreshWorkspaceSelectionData = async (
+    workflowName: string | undefined,
+  ): Promise<void> => {
+    if (workflowName === undefined) {
+      selectorPreviewWorkflow = undefined;
+      workflowSessions = [];
+      workspaceLatestRunView = undefined;
+      workspaceLatestRunError = undefined;
+      return;
+    }
+    workflowSessions = [];
+    workspaceLatestRunView = undefined;
+    workspaceLatestRunError = undefined;
+    const nextSessionsPromise = options.listWorkflowSessions(workflowName);
+    await refreshSelectorPreviewWorkflow(workflowName);
+    workflowSessions = await nextSessionsPromise;
+    const latestSessionId = workflowSessions[0]?.sessionId;
+    if (latestSessionId === undefined) {
+      workspaceLatestRunView = undefined;
+      workspaceLatestRunError = undefined;
+      return;
+    }
+    try {
+      workspaceLatestRunView = await options.loadRuntimeSessionView(
+        latestSessionId,
+      );
+      workspaceLatestRunError = undefined;
+    } catch (error: unknown) {
+      workspaceLatestRunView = undefined;
+      workspaceLatestRunError =
+        error instanceof Error
+          ? error.message
+          : "unknown latest run refresh error";
+    }
+  };
+
   const refreshSessionView = async (
     sessionId: string | undefined,
   ): Promise<void> => {
@@ -915,6 +976,8 @@ export async function runOpenTuiWorkflowApp(
       loadedWorkflow = undefined;
       selectorPreviewWorkflow = undefined;
       workflowSessions = [];
+      workspaceLatestRunView = undefined;
+      workspaceLatestRunError = undefined;
       runtimeSessionView = undefined;
       managerMessages = [];
       workflowInputDetection = {
@@ -954,7 +1017,7 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     await withBusy("Loading workflow preview", async () => {
-      await refreshSelectorPreviewWorkflow(selectedWorkflowName());
+      await refreshWorkspaceSelectionData(selectedWorkflowName());
       setStatus(
         selectedWorkflowName() === undefined
           ? "No workflow selected"
@@ -1068,7 +1131,7 @@ export async function runOpenTuiWorkflowApp(
     void handleNodeSelectionChanged();
   });
 
-  const openFilterPopup = (): void => {
+  const openFilterPopup = async (): Promise<void> => {
     workflowFilterTextBeforePopup = workflowFilterText;
     workflowSelectionBeforePopup = selectedWorkflowName();
     filterTextarea.setText(workflowFilterText);
@@ -1077,6 +1140,7 @@ export async function runOpenTuiWorkflowApp(
     confirmPopupOpen = false;
     nodeDefinitionPopupOpen = false;
     setStatus("Editing workflow filter");
+    await render();
     applyFocus("workflows");
   };
 
@@ -1096,7 +1160,7 @@ export async function runOpenTuiWorkflowApp(
         : `Workflow filter set to '${workflowFilterText}'`,
     );
     await withBusy("Loading workflow preview", async () => {
-      await refreshSelectorPreviewWorkflow(selectedWorkflowName());
+      await refreshWorkspaceSelectionData(selectedWorkflowName());
     });
     applyFocus("workflows");
   };
@@ -1263,6 +1327,8 @@ export async function runOpenTuiWorkflowApp(
   };
 
   const openWorkspaceScreen = async (): Promise<void> => {
+    const workspaceWorkflowName =
+      loadedWorkflow?.workflowName ?? selectedWorkflowName();
     screenMode = "workspace";
     subworkflowPath = [];
     historyReturnsToDefinition = false;
@@ -1272,8 +1338,10 @@ export async function runOpenTuiWorkflowApp(
     helpPopupOpen = false;
     agentSessionPopupOpen = false;
     nodeDefinitionPopupOpen = false;
-    setStatus("Returned to workspace");
-    await render();
+    await withBusy("Loading workflow preview", async () => {
+      await refreshWorkspaceSelectionData(workspaceWorkflowName);
+      setStatus("Returned to workspace");
+    });
     applyFocus("workflows");
   };
 
@@ -1415,7 +1483,7 @@ export async function runOpenTuiWorkflowApp(
         workflowNames = [...(await options.refreshWorkflowNames())];
         if (screenMode === "workspace") {
           syncFilteredWorkflowNames(selectedWorkflowName());
-          await refreshSelectorPreviewWorkflow(selectedWorkflowName());
+          await refreshWorkspaceSelectionData(selectedWorkflowName());
           setStatus("Workflow list refreshed");
           return;
         }
@@ -1641,7 +1709,7 @@ export async function runOpenTuiWorkflowApp(
       }
       if (screenMode === "workspace") {
         await withBusy("Loading workflow preview", async () => {
-          await refreshSelectorPreviewWorkflow(selectedWorkflowName());
+          await refreshWorkspaceSelectionData(selectedWorkflowName());
           setStatus(
             selectedWorkflowName() === undefined
               ? "No workflow selected"
@@ -1865,7 +1933,7 @@ export async function runOpenTuiWorkflowApp(
     }
   } else {
     await withBusy("Loading workflow preview", async () => {
-      await refreshSelectorPreviewWorkflow(selectedWorkflowName());
+      await refreshWorkspaceSelectionData(selectedWorkflowName());
     });
     applyFocus("workflows");
     await render();
@@ -1984,7 +2052,7 @@ export async function runOpenTuiWorkflowApp(
       if (screenMode === "workspace") {
         if (key.name === "/" && !key.ctrl && !key.meta) {
           key.preventDefault();
-          openFilterPopup();
+          void openFilterPopup();
           return;
         }
         if (key.name === "y" && !key.ctrl && !key.meta) {

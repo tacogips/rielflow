@@ -95,6 +95,8 @@ export interface OpenTuiMainViewRefs {
   runTopRow?: BoxRenderable;
   runWorkflowPane?: ScrollBoxRenderable;
   runWorkflowText?: TextRenderable;
+  workspaceHistoryScroll?: ScrollBoxRenderable;
+  workspaceHistoryText?: TextRenderable;
   selectorPreviewScroll?: ScrollBoxRenderable;
   selectorPreviewText?: TextRenderable;
   selectorRow?: BoxRenderable;

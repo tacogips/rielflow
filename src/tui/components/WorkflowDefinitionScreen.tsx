@@ -23,7 +23,7 @@ export function WorkflowDefinitionScreen(props: WorkflowDefinitionScreenProps) {
         id="workflow-definition-scroll"
         width="100%"
         minWidth={20}
-        flexGrow={18}
+        flexGrow={10}
         border
         title=" Workflow Definition "
         borderColor="#5b6670"
@@ -45,7 +45,7 @@ export function WorkflowDefinitionScreen(props: WorkflowDefinitionScreenProps) {
         }}
         width="100%"
         minWidth={20}
-        flexGrow={12}
+        flexGrow={20}
         border
         title=" Nodes "
         borderColor="#5b6670"
