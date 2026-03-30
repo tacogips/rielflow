@@ -8,8 +8,8 @@
         "@anthropic-ai/sdk": "0.78.0",
         "@opentui/core": "0.1.90",
         "@opentui/solid": "0.1.90",
-        "claude-code-agent": "github:tacogips/claude-code-agent#fd9634695b9369902cc1ee01960dd39cbc300b85",
-        "codex-agent": "github:tacogips/codex-agent#23cd34cbec18ae10b1868ec154c088b6a2f1c8c1",
+        "claude-code-agent": "github:tacogips/claude-code-agent#17090d0ff4aff1ab17102aa680c70da90ace9a0e",
+        "codex-agent": "github:tacogips/codex-agent#2781229d65e261ab0d40fb1e33d1301e0fc69014",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
         "openai": "6.27.0",
@@ -91,8 +91,6 @@
     "@dimforge/rapier2d-simd-compat": ["@dimforge/rapier2d-simd-compat@0.17.3", "", {}, "sha512-bijvwWz6NHsNj5e5i1vtd3dU2pDhthSaTUZSh14DUGGKJfw8eMnlWZsxwHBxB/a3AXVNDjL9abuHw1k9FGR+jg=="],
 
     "@elysiajs/cors": ["@elysiajs/cors@1.4.1", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-lQfad+F3r4mNwsxRKbXyJB8Jg43oAOXjRwn7sKUL6bcOW3KjUqUimTS+woNpO97efpzjtDE0tEjGk9DTw8lqTQ=="],
-
-    "@elysiajs/static": ["@elysiajs/static@1.4.7", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-Go4kIXZ0G3iWfkAld07HmLglqIDMVXdyRKBQK/sVEjtpDdjHNb+rUIje73aDTWpZYg4PEVHUpi9v4AlNEwrQug=="],
 
     "@envelop/core": ["@envelop/core@5.5.1", "", { "dependencies": { "@envelop/instrumentation": "^1.0.0", "@envelop/types": "^5.2.1", "@whatwg-node/promise-helpers": "^1.2.4", "tslib": "^2.5.0" } }, "sha512-3DQg8sFskDo386TkL5j12jyRAdip/8yzK3x7YGbZBgobZ4aKXrvDU0GppU0SnmrpQnNaiTUsxBs9LKkwQ/eyvw=="],
 
@@ -396,9 +394,9 @@
 
     "check-error": ["check-error@2.1.3", "", {}, "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA=="],
 
-    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#fd96346", { "dependencies": { "@elysiajs/cors": "1.4.1", "@elysiajs/static": "1.4.7", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-fd96346"],
+    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#17090d0", { "dependencies": { "@elysiajs/cors": "1.4.1", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "graphql": "16.13.1", "graphql-yoga": "5.18.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-17090d0"],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#23cd34c", {}, "tacogips-codex-agent-23cd34c"],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#2781229", { "dependencies": { "graphql": "16.13.1", "graphql-yoga": "5.18.1" } }, "tacogips-codex-agent-2781229"],
 
     "commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
 

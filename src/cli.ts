@@ -1,6 +1,5 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import readline from "node:readline/promises";
-import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -21,6 +20,7 @@ import {
 import { createSessionId, type WorkflowSessionState } from "./workflow/session";
 import { buildInspectionSummary } from "./workflow/inspect";
 import { loadSession } from "./workflow/session-store";
+import { createCommunicationService } from "./workflow/communication-service";
 import { selectTuiRuntimeMode } from "./tui/runtime";
 import type {
   OpenTuiWorkflowActionResult,
@@ -83,6 +83,7 @@ interface ParsedOptions {
   readonly endpoint?: string;
   readonly authToken?: string;
   readonly authTokenEnv?: string;
+  readonly filePath?: string;
   readonly readOnly: boolean;
   readonly noExec: boolean;
   readonly resumeSessionId?: string;
@@ -94,6 +95,15 @@ interface ParsedOptions {
 interface ParsedArgs {
   readonly positionals: string[];
   readonly options: ParsedOptions;
+}
+
+function normalizeCliPositionals(
+  positionals: readonly string[],
+): string[] {
+  if (positionals[0] === "cli" && positionals[1] === "workflow") {
+    return positionals.slice(1);
+  }
+  return [...positionals];
 }
 
 interface GraphqlCliTransportOptions {
@@ -108,6 +118,24 @@ interface RemoteWorkflowRunSummary {
   readonly workflowId: string;
   readonly nodeExecutions: number;
   readonly transitions: number;
+}
+
+interface WorkflowExecutionExport {
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly workflowName: string;
+  readonly status: WorkflowSessionState["status"];
+  readonly exportedAt: string;
+  readonly session: WorkflowSessionState;
+  readonly nodeExecutions: Awaited<
+    ReturnType<typeof listRuntimeNodeExecutions>
+  >;
+  readonly nodeLogs: Awaited<ReturnType<typeof listRuntimeNodeLogs>>;
+  readonly communications: readonly NonNullable<
+    Awaited<
+      ReturnType<ReturnType<typeof createCommunicationService>["getCommunication"]>
+    >
+  >[];
 }
 
 const DEFAULT_IO: CliIo = {
@@ -167,6 +195,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let endpoint: string | undefined;
   let authToken: string | undefined;
   let authTokenEnv: string | undefined;
+  let filePath: string | undefined;
   let readOnly = false;
   let noExec = false;
   let resumeSessionId: string | undefined;
@@ -244,6 +273,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--auth-token-env":
         authTokenEnv = readNext();
         break;
+      case "--file":
+        filePath = readNext();
+        break;
       case "--read-only":
         readOnly = true;
         break;
@@ -285,6 +317,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(endpoint === undefined ? {} : { endpoint }),
       ...(authToken === undefined ? {} : { authToken }),
       ...(authTokenEnv === undefined ? {} : { authTokenEnv }),
+      ...(filePath === undefined ? {} : { filePath }),
       readOnly,
       noExec,
       ...(resumeSessionId === undefined ? {} : { resumeSessionId }),
@@ -298,7 +331,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 function printHelp(io: CliIo): void {
   io.stdout("Usage:");
   io.stdout(
-    "  divedra workflow <create|validate|inspect|run> <name> [options]",
+    "  divedra cli workflow <create|validate|inspect|run> <name> [options]",
   );
   io.stdout(
     "  divedra session <status|progress|resume> <session-id> [options]",
@@ -315,6 +348,9 @@ function printHelp(io: CliIo): void {
   );
   io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
+  );
+  io.stdout(
+    "  divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
   );
 }
 
@@ -453,6 +489,71 @@ export function resolveTuiStartupSelection(input: {
 
 function emitJson(io: CliIo, payload: unknown): void {
   io.stdout(JSON.stringify(payload, null, 2));
+}
+
+function isNonNull<T>(value: T | null): value is T {
+  return value !== null;
+}
+
+async function buildWorkflowExecutionExport(
+  workflowId: string,
+  workflowExecutionId: string,
+  options: CliStorageOptions,
+): Promise<WorkflowExecutionExport> {
+  const loaded = await loadSession(workflowExecutionId, options);
+  if (!loaded.ok) {
+    throw new Error(loaded.error.message);
+  }
+
+  if (loaded.value.workflowId !== workflowId) {
+    throw new Error(
+      `workflow execution '${workflowExecutionId}' does not belong to workflow '${workflowId}'`,
+    );
+  }
+
+  const [nodeExecutions, nodeLogs] = await Promise.all([
+    listRuntimeNodeExecutions(workflowExecutionId, options),
+    listRuntimeNodeLogs(workflowExecutionId, options),
+  ]);
+
+  const communicationService = createCommunicationService();
+  const communications = (
+    await Promise.all(
+      loaded.value.communications
+        .filter((communication) => communication.workflowId === workflowId)
+        .map((communication) =>
+          communicationService.getCommunication(
+            {
+              workflowId,
+              workflowExecutionId,
+              communicationId: communication.communicationId,
+            },
+            options,
+          ),
+        ),
+    )
+  ).filter(isNonNull);
+
+  return {
+    workflowId,
+    workflowExecutionId,
+    workflowName: loaded.value.workflowName,
+    status: loaded.value.status,
+    exportedAt: new Date().toISOString(),
+    session: loaded.value,
+    nodeExecutions,
+    nodeLogs,
+    communications,
+  };
+}
+
+async function writeExportFile(
+  filePath: string,
+  payload: WorkflowExecutionExport,
+): Promise<string> {
+  const resolvedPath = path.resolve(filePath);
+  await writeFile(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return resolvedPath;
 }
 
 function isJsonObjectRecord(
@@ -1306,7 +1407,8 @@ export async function runCli(
   deps: CliDependencies = DEFAULT_DEPS,
 ): Promise<number> {
   const parsed = parseArgs(argv);
-  const [scope, command, target] = parsed.positionals;
+  const positionals = normalizeCliPositionals(parsed.positionals);
+  const [scope, command, target] = positionals;
   const env = resolveCliEnv(deps);
   const inferredRootDataDir = inferRootDataDirFromExplicitStorageRoots({
     ...(parsed.options.artifactRoot === undefined
@@ -1339,7 +1441,7 @@ export async function runCli(
   );
 
   if (scope === "gql") {
-    const document = parsed.positionals.slice(1).join(" ").trim();
+    const document = positionals.slice(1).join(" ").trim();
     if (document.length === 0) {
       io.stderr("GraphQL document is required");
       io.stderr("usage: divedra gql <graphql-document> [options]");
@@ -1472,7 +1574,7 @@ export async function runCli(
   if (scope === "call-node") {
     const workflowId = command;
     const workflowRunId = target;
-    const nodeId = parsed.positionals[3];
+    const nodeId = positionals[3];
     if (
       workflowId === undefined ||
       workflowRunId === undefined ||
@@ -1558,6 +1660,60 @@ export async function runCli(
     return result.value.exitCode;
   }
 
+  if (scope === "export") {
+    const workflowId = command;
+    const workflowRunId = target;
+    if (workflowId === undefined || workflowRunId === undefined) {
+      io.stderr("workflow id and workflow run id are required");
+      io.stderr(
+        "usage: divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
+      );
+      return 2;
+    }
+    if (graphqlCliTransport !== null) {
+      io.stderr("export currently supports local execution only; omit --endpoint");
+      return 2;
+    }
+
+    let payload: WorkflowExecutionExport;
+    try {
+      payload = await buildWorkflowExecutionExport(
+        workflowId,
+        workflowRunId,
+        sharedOptions,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      io.stderr(`export failed: ${message}`);
+      return 1;
+    }
+
+    if (parsed.options.filePath === undefined) {
+      emitJson(io, payload);
+      return 0;
+    }
+
+    try {
+      const savedPath = await writeExportFile(parsed.options.filePath, payload);
+      if (parsed.options.output === "json") {
+        emitJson(io, {
+          filePath: savedPath,
+          workflowId: payload.workflowId,
+          workflowExecutionId: payload.workflowExecutionId,
+          workflowName: payload.workflowName,
+          status: payload.status,
+        });
+      } else {
+        io.stdout(`exported workflow logs to ${savedPath}`);
+      }
+      return 0;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      io.stderr(`failed to write export file: ${message}`);
+      return 1;
+    }
+  }
+
   if (scope === undefined || command === undefined || target === undefined) {
     io.stderr("scope, command, and target are required");
     printHelp(io);
@@ -1623,7 +1779,7 @@ export async function runCli(
           : 1;
       }
 
-      const summary = buildInspectionSummary(loaded.value);
+      const summary = await buildInspectionSummary(loaded.value);
       if (parsed.options.output === "json") {
         emitJson(io, summary);
       } else {
@@ -1636,6 +1792,12 @@ export async function runCli(
         io.stdout(
           `defaults: maxLoopIterations=${summary.defaults.maxLoopIterations}, nodeTimeoutMs=${summary.defaults.nodeTimeoutMs}`,
         );
+        io.stdout(`runtimeReady: ${summary.runtime.ready ? "yes" : "no"}`);
+        for (const requirement of summary.runtime.requirements) {
+          io.stdout(
+            `runtime[${requirement.status}] ${requirement.label}: ${requirement.detail}`,
+          );
+        }
       }
       return 0;
     }
@@ -1954,7 +2116,7 @@ export async function runCli(
     }
 
     if (command === "rerun") {
-      const fromNodeId = parsed.positionals[3];
+      const fromNodeId = positionals[3];
       if (fromNodeId === undefined) {
         io.stderr("node id is required for session rerun");
         io.stderr(

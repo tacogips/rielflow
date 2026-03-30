@@ -161,6 +161,72 @@ async function createCallNodeFixture(
   });
 }
 
+async function createCompletedCliWorkflowRun(root: string): Promise<{
+  readonly workflowName: string;
+  readonly artifactsRoot: string;
+  readonly sessionsRoot: string;
+  readonly sessionId: string;
+}> {
+  const workflowName = "demo";
+  const artifactsRoot = path.join(root, "artifacts");
+  const sessionsRoot = path.join(root, "sessions");
+  const scenarioPath = path.join(root, "scenario.json");
+  const variablesPath = await writeRuntimeVariablesFile(
+    root,
+    "runtime-variables.json",
+    {
+      humanInput: { request: "start demo workflow" },
+    },
+  );
+  await writeFile(
+    scenarioPath,
+    JSON.stringify(makeDefaultTemplateScenario(), null, 2),
+    "utf8",
+  );
+
+  expect(
+    await runCli(
+      ["workflow", "create", workflowName, "--workflow-root", root],
+      createIoCapture().io,
+    ),
+  ).toBe(0);
+
+  const runCapture = createIoCapture();
+  expect(
+    await runCli(
+      [
+        "workflow",
+        "run",
+        workflowName,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--mock-scenario",
+        scenarioPath,
+        "--variables",
+        variablesPath,
+        "--output",
+        "json",
+      ],
+      runCapture.io,
+    ),
+  ).toBe(0);
+
+  const runPayload = JSON.parse(runCapture.stdout.join("\n")) as {
+    sessionId: string;
+  };
+
+  return {
+    workflowName,
+    artifactsRoot,
+    sessionsRoot,
+    sessionId: runPayload.sessionId,
+  };
+}
+
 describe("runCli", () => {
   test("resolveTuiStartupSelection aligns interactive resume with the session workflow", () => {
     expect(
@@ -512,9 +578,67 @@ describe("runCli", () => {
     const parsed = JSON.parse(outputJson) as {
       workflowName: string;
       counts: { nodes: number };
+      runtime: { ready: boolean };
     };
     expect(parsed.workflowName).toBe("demo");
     expect(parsed.counts.nodes).toBe(4);
+    expect(parsed.runtime.ready).toBe(true);
+  });
+
+  test("workflow run fails early when required agent backend transport is unavailable", async () => {
+    const root = await makeTempDir();
+
+    const createCode = await runCli(
+      ["workflow", "create", "demo", "--workflow-root", root],
+      createIoCapture().io,
+    );
+    expect(createCode).toBe(0);
+
+    const capture = createIoCapture();
+    const originalPath = process.env["PATH"];
+    process.env["PATH"] = root;
+    let code: number;
+    try {
+      code = await runCli(
+        ["workflow", "run", "demo", "--workflow-root", root],
+        capture.io,
+      );
+    } finally {
+      process.env["PATH"] = originalPath;
+    }
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("\n")).toContain(
+      "workflow runtime readiness failed",
+    );
+  });
+
+  test("cli workflow run aliases the workflow namespace", async () => {
+    const root = await makeTempDir();
+
+    const createCode = await runCli(
+      ["workflow", "create", "demo", "--workflow-root", root],
+      createIoCapture().io,
+    );
+    expect(createCode).toBe(0);
+
+    const capture = createIoCapture();
+    const originalPath = process.env["PATH"];
+    process.env["PATH"] = root;
+    let code: number;
+    try {
+      code = await runCli(
+        ["cli", "workflow", "run", "demo", "--workflow-root", root],
+        capture.io,
+      );
+    } finally {
+      process.env["PATH"] = originalPath;
+    }
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("\n")).toContain(
+      "workflow runtime readiness failed",
+    );
   });
 
   test("run -> status -> resume flow", async () => {
@@ -733,6 +857,130 @@ describe("runCli", () => {
     expect(rerunPayload.sourceSessionId).toBe(runPayload.sessionId);
     expect(rerunPayload.sessionId).not.toBe(runPayload.sessionId);
     expect(rerunPayload.rerunFromNodeId).toBe("workflow-output");
+  });
+
+  test("export prints workflow execution logs as JSON", async () => {
+    const root = await makeTempDir();
+    const run = await createCompletedCliWorkflowRun(root);
+
+    const exportCapture = createIoCapture();
+    const exportCode = await runCli(
+      [
+        "export",
+        run.workflowName,
+        run.sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        run.artifactsRoot,
+        "--session-store",
+        run.sessionsRoot,
+      ],
+      exportCapture.io,
+    );
+
+    expect(exportCode).toBe(0);
+    const exportPayload = JSON.parse(exportCapture.stdout.join("\n")) as {
+      workflowId: string;
+      workflowExecutionId: string;
+      session: { sessionId: string };
+      nodeExecutions: unknown[];
+      nodeLogs: unknown[];
+      communications: Array<{
+        artifactSnapshot: {
+          inboxMessageJson: string | null;
+          outboxOutputRaw: string | null;
+        };
+      }>;
+    };
+    expect(exportPayload.workflowId).toBe(run.workflowName);
+    expect(exportPayload.workflowExecutionId).toBe(run.sessionId);
+    expect(exportPayload.session.sessionId).toBe(run.sessionId);
+    expect(exportPayload.nodeExecutions.length).toBeGreaterThan(0);
+    expect(exportPayload.nodeLogs.length).toBeGreaterThan(0);
+    expect(exportPayload.communications.length).toBeGreaterThan(0);
+    expect(
+      exportPayload.communications.some(
+        (entry) =>
+          entry.artifactSnapshot.inboxMessageJson !== null &&
+          entry.artifactSnapshot.outboxOutputRaw !== null,
+      ),
+    ).toBe(true);
+  });
+
+  test("export writes workflow execution logs to a file", async () => {
+    const root = await makeTempDir();
+    const run = await createCompletedCliWorkflowRun(root);
+    const exportFilePath = path.join(root, "workflow-export.json");
+
+    const exportCapture = createIoCapture();
+    const exportCode = await runCli(
+      [
+        "export",
+        run.workflowName,
+        run.sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        run.artifactsRoot,
+        "--session-store",
+        run.sessionsRoot,
+        "--file",
+        exportFilePath,
+        "--output",
+        "json",
+      ],
+      exportCapture.io,
+    );
+
+    expect(exportCode).toBe(0);
+    const exportSummary = JSON.parse(exportCapture.stdout.join("\n")) as {
+      filePath: string;
+      workflowExecutionId: string;
+    };
+    expect(exportSummary.filePath).toBe(exportFilePath);
+    expect(exportSummary.workflowExecutionId).toBe(run.sessionId);
+
+    const savedPayload = JSON.parse(
+      await readFile(exportFilePath, "utf8"),
+    ) as {
+      workflowId: string;
+      workflowExecutionId: string;
+      nodeExecutions: unknown[];
+      nodeLogs: unknown[];
+      communications: unknown[];
+    };
+    expect(savedPayload.workflowId).toBe(run.workflowName);
+    expect(savedPayload.workflowExecutionId).toBe(run.sessionId);
+    expect(savedPayload.nodeExecutions.length).toBeGreaterThan(0);
+    expect(savedPayload.nodeLogs.length).toBeGreaterThan(0);
+    expect(savedPayload.communications.length).toBeGreaterThan(0);
+  });
+
+  test("export rejects workflow ids that do not match the workflow run", async () => {
+    const root = await makeTempDir();
+    const run = await createCompletedCliWorkflowRun(root);
+
+    const exportCapture = createIoCapture();
+    const exportCode = await runCli(
+      [
+        "export",
+        "other-workflow",
+        run.sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        run.artifactsRoot,
+        "--session-store",
+        run.sessionsRoot,
+      ],
+      exportCapture.io,
+    );
+
+    expect(exportCode).toBe(1);
+    expect(exportCapture.stderr.join("\n")).toContain(
+      `workflow execution '${run.sessionId}' does not belong to workflow 'other-workflow'`,
+    );
   });
 
   test("workflow run keeps the runtime db aligned with explicit storage roots", async () => {

@@ -1,4 +1,9 @@
 import type { LoadedWorkflow } from "./load";
+import {
+  inspectWorkflowRuntimeReadiness,
+  type WorkflowRuntimeReadiness,
+} from "./runtime-readiness";
+import type { LoadOptions } from "./types";
 
 export interface WorkflowInspectionSummary {
   readonly workflowName: string;
@@ -18,11 +23,13 @@ export interface WorkflowInspectionSummary {
   readonly nodeFiles: readonly string[];
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
+  readonly runtime: WorkflowRuntimeReadiness;
 }
 
-export function buildInspectionSummary(
+export async function buildInspectionSummary(
   loaded: LoadedWorkflow,
-): WorkflowInspectionSummary {
+  options: Pick<LoadOptions, "cwd" | "env"> = {},
+): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
   return {
     workflowName: loaded.workflowName,
@@ -42,5 +49,6 @@ export function buildInspectionSummary(
     nodeFiles: workflow.nodes.map((node) => node.nodeFile),
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,
+    runtime: await inspectWorkflowRuntimeReadiness(loaded.bundle, options),
   };
 }

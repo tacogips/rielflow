@@ -75,123 +75,81 @@ afterEach(() => {
   delete process.env["TEST_CODEX_KEY"];
 });
 
-describe("CodexAgentAdapter", () => {
-  test("calls provider endpoint and normalizes output", async () => {
-    process.env["TEST_CODEX_KEY"] = "secret";
-    const fetchMock = vi.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          provider: "codex-provider",
-          model: "gpt-5-nano",
-          promptText: "hello",
-          completionPassed: true,
-          when: { always: true },
-          payload: { ok: true },
-        }),
-        { status: 200 },
-      );
-    });
-    // explicit reassignment keeps compatibility with this vitest version
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
-      apiKeyEnv: "TEST_CODEX_KEY",
-    });
-
-    const output = await adapter.execute(baseInput, baseContext);
-    expect(output.provider).toBe("codex-provider");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const headers = (request?.headers ?? {}) as Record<string, string>;
-    expect(headers["authorization"]).toBe("Bearer secret");
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["model"]).toBe("gpt-5-nano");
-    expect(body["workflowExecutionId"]).toBe("sess-1");
-    expect(body["nodeExecId"]).toBe("exec-1");
-    expect(body["artifactDir"]).toBe("/tmp/node-1/exec-1");
-    expect(body["executionMailbox"]).toMatchObject({
-      meta: {
-        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
-        paths: {
-          inputPath: "inbox/input.json",
-          outputPath: "outbox/output.json",
-        },
-      },
-    });
-  });
-
-  test("passes backend session hints through the provider contract", async () => {
-    const fetchMock = vi.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          provider: "codex-provider",
-          model: "gpt-5-nano",
-          promptText: "hello",
-          completionPassed: true,
-          when: { always: true },
-          payload: { ok: true },
-          backendSession: { sessionId: "backend-codex-1" },
-        }),
-        { status: 200 },
-      );
-    });
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
-    });
-    const output = await adapter.execute(
+function makeCodexRunnerFixture(input: {
+  readonly sessionId?: string;
+  readonly messages?: readonly unknown[];
+  readonly success?: boolean;
+  readonly exitCode?: number;
+} = {}): {
+  readonly createRunner: ReturnType<typeof vi.fn>;
+  readonly startSession: ReturnType<typeof vi.fn>;
+  readonly resumeSession: ReturnType<typeof vi.fn>;
+  readonly cancel: ReturnType<typeof vi.fn>;
+} {
+  const sessionId = input.sessionId ?? "codex-session-1";
+  const chunks =
+    input.messages ??
+    [
       {
-        ...baseInput,
-        backendSession: {
-          mode: "reuse",
-          sessionId: "backend-codex-1",
+        type: "session_meta",
+        payload: {
+          meta: { id: sessionId },
         },
       },
-      baseContext,
-    );
-
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["backendSession"]).toEqual({
-      mode: "reuse",
-      sessionId: "backend-codex-1",
-    });
-    expect(output.backendSession?.sessionId).toBe("backend-codex-1");
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "local codex reply" }],
+        },
+      },
+    ];
+  const cancel = vi.fn(async () => {
+    return;
   });
+  const session = {
+    sessionId,
+    async *messages(): AsyncGenerator<unknown, void, undefined> {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    },
+    waitForCompletion: vi.fn(async () => ({
+      success: input.success ?? true,
+      exitCode: input.exitCode ?? 0,
+      stats: {
+        startedAt: "2026-03-30T00:00:00.000Z",
+        completedAt: "2026-03-30T00:00:01.000Z",
+        messageCount: chunks.length,
+      },
+    })),
+    cancel,
+  };
 
-  test("forwards systemPromptText while preserving combined promptText compatibility", async () => {
-    const fetchMock = vi.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          provider: "codex-provider",
-          model: "gpt-5-nano",
-          promptText: "system\n\nhello",
-          completionPassed: true,
-          when: { always: true },
-          payload: { ok: true },
-        }),
-        { status: 200 },
-      );
-    });
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
+  const startSession = vi.fn(async () => session);
+  const resumeSession = vi.fn(async () => session);
+  const createRunner = vi.fn(() => ({
+    startSession,
+    resumeSession,
+  }));
 
+  return {
+    createRunner,
+    startSession,
+    resumeSession,
+    cancel,
+  };
+}
+
+describe("CodexAgentAdapter", () => {
+  test("runs locally by default and normalizes plain-text output", async () => {
+    const fixture = makeCodexRunnerFixture();
     const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
+      createRunner: fixture.createRunner,
     });
-    await adapter.execute(
+
+    const output = await adapter.execute(
       {
         ...baseInput,
         systemPromptText: "system",
@@ -199,35 +157,121 @@ describe("CodexAgentAdapter", () => {
       baseContext,
     );
 
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["systemPromptText"]).toBe("system");
-    expect(body["promptText"]).toBe("system\n\nhello");
+    expect(output.provider).toBe("codex-agent");
+    expect(output.model).toBe("gpt-5-nano");
+    expect(output.promptText).toBe("system\n\nhello");
+    expect(output.payload).toEqual({ text: "local codex reply" });
+    expect(output.backendSession?.sessionId).toBe("codex-session-1");
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: "system\n\nhello",
+        model: "gpt-5-nano",
+        streamGranularity: "event",
+      }),
+    );
   });
 
-  test("forwards ambient manager context when provided", async () => {
-    const fetchMock = vi.fn(async () => {
-      return new Response(
-        JSON.stringify({
-          provider: "codex-provider",
-          model: "gpt-5-nano",
-          promptText: "hello",
-          completionPassed: true,
-          when: { always: true },
-          payload: { ok: true },
-        }),
-        { status: 200 },
-      );
+  test("reuses backend sessions for local execution", async () => {
+    const fixture = makeCodexRunnerFixture({
+      sessionId: "backend-codex-1",
+      messages: [
+        {
+          type: "session_meta",
+          payload: {
+            meta: { id: "backend-codex-1" },
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "{\"summary\":\"ok\"}" }],
+          },
+        },
+      ],
     });
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        backendSession: {
+          mode: "reuse",
+          sessionId: "backend-codex-1",
+        },
+        output: {
+          maxValidationAttempts: 2,
+          attempt: 1,
+          candidatePath: "/tmp/candidate.json",
+          validationErrors: [],
+          publication: {
+            owner: "runtime",
+            finalArtifactWrite: "runtime-only",
+            mailboxWrite: "runtime-only-after-validation",
+            candidateSubmission: "inline-json-or-reserved-candidate-file",
+            futureCommunicationIdsExposed: false,
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.resumeSession).toHaveBeenCalledWith(
+      "backend-codex-1",
+      "hello",
+      expect.objectContaining({
+        model: "gpt-5-nano",
+        streamGranularity: "event",
+      }),
+    );
+    expect(output.payload).toEqual({ summary: "ok" });
+    expect(output.backendSession?.sessionId).toBe("backend-codex-1");
+  });
+
+  test("injects ambient manager env during local session startup", async () => {
+    let observedGraphqlEndpoint: string | undefined;
+    const fixture = makeCodexRunnerFixture();
+    fixture.createRunner.mockImplementation(() => ({
+      startSession: vi.fn(async () => {
+        observedGraphqlEndpoint = process.env["DIVEDRA_GRAPHQL_ENDPOINT"];
+        return {
+          sessionId: "codex-session-ambient",
+          messages: async function* () {
+            yield {
+              type: "session_meta",
+              payload: { meta: { id: "codex-session-ambient" } },
+            };
+            yield {
+              type: "response_item",
+              payload: {
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: "ambient ok" }],
+              },
+            };
+          },
+          waitForCompletion: async () => ({
+            success: true,
+            exitCode: 0,
+            stats: {
+              startedAt: "2026-03-30T00:00:00.000Z",
+              completedAt: "2026-03-30T00:00:01.000Z",
+              messageCount: 2,
+            },
+          }),
+          cancel: async () => {
+            return;
+          },
+        };
+      }),
+      resumeSession: vi.fn(),
+    }));
 
     const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
+      createRunner: fixture.createRunner,
     });
     await adapter.execute(
       {
@@ -247,41 +291,58 @@ describe("CodexAgentAdapter", () => {
       baseContext,
     );
 
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["ambientManagerContext"]).toEqual({
-      environment: {
-        DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-        DIVEDRA_WORKFLOW_ID: "wf",
-        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-        DIVEDRA_MANAGER_NODE_ID: "node-1",
-        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
-      },
-    });
+    expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
+    expect(process.env["DIVEDRA_GRAPHQL_ENDPOINT"]).toBeUndefined();
   });
 
-  test("maps blocked responses to policy_blocked", async () => {
-    (globalThis as { fetch: typeof fetch }).fetch = vi
-      .fn(async () => {
-        return new Response("blocked", { status: 403 });
-      })
-      .mockName("fetch-blocked") as unknown as typeof fetch;
-
+  test("maps invalid structured output to invalid_output", async () => {
+    const fixture = makeCodexRunnerFixture({
+      messages: [
+        {
+          type: "session_meta",
+          payload: {
+            meta: { id: "codex-session-1" },
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "not json" }],
+          },
+        },
+      ],
+    });
     const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
+      createRunner: fixture.createRunner,
     });
+
     await expect(
-      adapter.execute(baseInput, baseContext),
-    ).rejects.toHaveProperty("code", "policy_blocked");
+      adapter.execute(
+        {
+          ...baseInput,
+          output: {
+            maxValidationAttempts: 2,
+            attempt: 1,
+            candidatePath: "/tmp/candidate.json",
+            validationErrors: [],
+            publication: {
+              owner: "runtime",
+              finalArtifactWrite: "runtime-only",
+              mailboxWrite: "runtime-only-after-validation",
+              candidateSubmission: "inline-json-or-reserved-candidate-file",
+              futureCommunicationIdsExposed: false,
+            },
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.toHaveProperty("code", "invalid_output");
   });
 
-  test("omits artifactDir from contract-enabled requests", async () => {
+  test("supports the legacy endpoint fallback", async () => {
+    process.env["TEST_CODEX_KEY"] = "secret";
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -300,67 +361,11 @@ describe("CodexAgentAdapter", () => {
 
     const adapter = new CodexAgentAdapter({
       endpoint: "http://localhost/codex",
+      apiKeyEnv: "TEST_CODEX_KEY",
     });
-    await adapter.execute(
-      {
-        ...baseInput,
-        output: {
-          maxValidationAttempts: 2,
-          attempt: 1,
-          candidatePath: "/tmp/candidate.json",
-          validationErrors: [],
-          publication: {
-            owner: "runtime",
-            finalArtifactWrite: "runtime-only",
-            mailboxWrite: "runtime-only-after-validation",
-            candidateSubmission: "inline-json-or-reserved-candidate-file",
-            futureCommunicationIdsExposed: false,
-          },
-        },
-      },
-      baseContext,
-    );
 
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["artifactDir"]).toBeUndefined();
-    expect(body["output"]).toBeDefined();
-  });
-
-  test("retries transient provider failures with bounded attempts", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(
-        async () => new Response("temporary failure", { status: 500 }),
-      )
-      .mockImplementationOnce(
-        async () =>
-          new Response(
-            JSON.stringify({
-              provider: "codex-provider",
-              model: "gpt-5-nano",
-              promptText: "hello",
-              completionPassed: true,
-              when: { always: true },
-              payload: { ok: true },
-            }),
-            { status: 200 },
-          ),
-      );
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new CodexAgentAdapter({
-      endpoint: "http://localhost/codex",
-      maxAttempts: 2,
-      retryDelayMs: 0,
-    });
-    const result = await adapter.execute(baseInput, baseContext);
-    expect(result.provider).toBe("codex-provider");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const output = await adapter.execute(baseInput, baseContext);
+    expect(output.provider).toBe("codex-provider");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

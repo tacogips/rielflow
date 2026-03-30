@@ -1,9 +1,10 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   callWorkflowNode,
+  createWorkflowExecutionClient,
   executeWorkflow,
   getRuntimeSessionView,
   getSession,
@@ -129,8 +130,17 @@ describe("library api", () => {
     };
     const mockScenario = makeDefaultTemplateScenario();
 
-    const summary = await inspectWorkflow("demo", options);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 405 }));
+    let summary;
+    try {
+      summary = await inspectWorkflow("demo", options);
+    } finally {
+      fetchSpy.mockRestore();
+    }
     expect(summary.workflowName).toBe("demo");
+    expect(summary.runtime.ready).toBe(true);
 
     const paused = await executeWorkflow({
       workflowName: "demo",
@@ -204,5 +214,117 @@ describe("library api", () => {
     expect(result.sessionId).toBe(sessionId);
     expect(result.status).toBe("succeeded");
     expect(result.output["payload"]).toEqual({ summary: "library ok" });
+  });
+
+  test("executes a fixed workflow through the library client", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const client = createWorkflowExecutionClient({
+      workflowName: "demo",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      cwd: root,
+    });
+
+    const result = await client.execute({
+      input: {
+        humanInput: {
+          request: "start demo workflow from fixed client",
+        },
+      },
+      mockScenario: makeDefaultTemplateScenario(),
+    });
+
+    expect(result.workflowName).toBe("demo");
+    expect(result.workflowExecutionId).toBe(result.sessionId);
+    expect(result.status).toBe("completed");
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("executes a fixed workflow through the endpoint-backed library client", async () => {
+    const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+      const payload = JSON.parse(String(init?.body)) as {
+        variables: {
+          input: {
+            workflowName: string;
+            runtimeVariables: Readonly<Record<string, unknown>>;
+            async: boolean;
+            dryRun: boolean;
+          };
+        };
+      };
+      expect(payload.variables.input.workflowName).toBe("demo");
+      expect(payload.variables.input.runtimeVariables).toEqual({
+        humanInput: {
+          request: "remote fixed client",
+        },
+      });
+      expect(payload.variables.input.async).toBe(true);
+      expect(payload.variables.input.dryRun).toBe(true);
+      return new Response(
+        JSON.stringify({
+          data: {
+            executeWorkflow: {
+              workflowExecutionId: "sess-remote-fixed",
+              sessionId: "sess-remote-fixed",
+              status: "running",
+              accepted: true,
+              exitCode: null,
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      );
+    }) as typeof fetch;
+
+    const client = createWorkflowExecutionClient({
+      workflowName: "demo",
+      endpoint: "http://example.test/graphql",
+      fetchImpl,
+    });
+
+    const result = await client.execute({
+      input: {
+        humanInput: {
+          request: "remote fixed client",
+        },
+      },
+      async: true,
+      dryRun: true,
+    });
+
+    expect(result.workflowName).toBe("demo");
+    expect(result.workflowExecutionId).toBe("sess-remote-fixed");
+    expect(result.sessionId).toBe("sess-remote-fixed");
+    expect(result.status).toBe("running");
+    expect(result.accepted).toBe(true);
+    expect(result.exitCode).toBeUndefined();
+  });
+
+  test("rejects mixed input and runtimeVariables in the fixed workflow client", async () => {
+    const client = createWorkflowExecutionClient({
+      workflowName: "demo",
+      endpoint: "http://example.test/graphql",
+      fetchImpl: vi.fn() as typeof fetch,
+    });
+
+    await expect(
+      client.execute({
+        input: { humanInput: { request: "one" } },
+        runtimeVariables: { humanInput: { request: "two" } },
+      }),
+    ).rejects.toThrow("use only one of input or runtimeVariables");
   });
 });

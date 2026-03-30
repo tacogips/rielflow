@@ -37,6 +37,7 @@ import {
 } from "./manager-session-store";
 import { composeExecutionPrompts } from "./prompt-composition";
 import { err, ok, type Result } from "./result";
+import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
 import {
   loadSession,
@@ -724,6 +725,28 @@ class ExecutionDispatcher {
         exitCode: 1,
         message: `workflow '${session.workflowName}' resolved to workflowId '${loaded.value.bundle.workflow.workflowId}', not '${input.workflowId}'`,
       });
+    }
+    if (
+      this.#adapter instanceof DispatchingNodeAdapter &&
+      input.mockScenario === undefined &&
+      input.dryRun !== true
+    ) {
+      const readiness = await inspectWorkflowRuntimeReadiness(
+        loaded.value.bundle,
+        {
+          ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+          ...(input.env === undefined ? {} : { env: input.env }),
+          onlyNodeIds: new Set([input.nodeId]),
+        },
+      );
+      if (!readiness.ready) {
+        return err({
+          session,
+          exitCode: 1,
+          message:
+            `workflow runtime readiness failed: ${readiness.blockers.join("; ")}`,
+        });
+      }
     }
 
     const workflow = loaded.value.bundle.workflow;

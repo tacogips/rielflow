@@ -36,6 +36,7 @@ import {
 import { err, ok, type Result } from "./result";
 import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
 import { executeConversationRound } from "./conversation";
+import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
   buildAmbientManagerControlPlaneEnvironment,
   createManagerSessionStore,
@@ -1466,6 +1467,23 @@ export async function runWorkflow(
     (options.mockScenario === undefined
       ? new DispatchingNodeAdapter()
       : new ScenarioNodeAdapter(options.mockScenario));
+  if (
+    adapter === undefined &&
+    options.mockScenario === undefined &&
+    options.dryRun !== true
+  ) {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      loaded.value.bundle,
+      options,
+    );
+    if (!readiness.ready) {
+      return err({
+        exitCode: 1,
+        message:
+          `workflow runtime readiness failed: ${readiness.blockers.join("; ")}`,
+      });
+    }
+  }
   const cancellationProbe =
     guards?.cancellationProbe ??
     ({

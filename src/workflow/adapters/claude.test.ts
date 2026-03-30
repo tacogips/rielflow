@@ -74,8 +74,215 @@ afterEach(() => {
   (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
 });
 
+function makeClaudeRunnerFixture(input: {
+  readonly sessionId?: string;
+  readonly messages?: readonly object[];
+  readonly success?: boolean;
+} = {}): {
+  readonly createRunner: ReturnType<typeof vi.fn>;
+  readonly startSession: ReturnType<typeof vi.fn>;
+  readonly resumeSession: ReturnType<typeof vi.fn>;
+} {
+  const sessionId = input.sessionId ?? "claude-session-1";
+  const messages =
+    input.messages ??
+    [
+      {
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "local claude reply" }],
+        },
+      },
+    ];
+
+  const session = {
+    sessionId,
+    async *messages(): AsyncGenerator<object, void, undefined> {
+      for (const message of messages) {
+        yield message;
+      }
+    },
+    waitForCompletion: vi.fn(async () => ({
+      success: input.success ?? true,
+      stats: {
+        startedAt: "2026-03-30T00:00:00.000Z",
+        completedAt: "2026-03-30T00:00:01.000Z",
+        toolCallCount: 0,
+        messageCount: messages.length,
+      },
+    })),
+    cancel: vi.fn(async () => {
+      return;
+    }),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+  };
+
+  const startSession = vi.fn(async () => session);
+  const resumeSession = vi.fn(async () => session);
+  const createRunner = vi.fn(() => ({
+    startSession,
+    resumeSession,
+  }));
+
+  return {
+    createRunner,
+    startSession,
+    resumeSession,
+  };
+}
+
 describe("ClaudeCodeAgentAdapter", () => {
-  test("normalizes successful provider response", async () => {
+  test("runs locally by default and keeps system prompt separate", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        systemPromptText: "system",
+      },
+      baseContext,
+    );
+
+    expect(output.provider).toBe("claude-code-agent");
+    expect(output.model).toBe("claude-opus-4-1");
+    expect(output.promptText).toBe("system\n\nhello");
+    expect(output.payload).toEqual({ text: "local claude reply" });
+    expect(output.backendSession?.sessionId).toBe("claude-session-1");
+    expect(fixture.startSession).toHaveBeenCalledWith({
+      prompt: "hello",
+      projectPath: process.cwd(),
+      systemPrompt: "system",
+    });
+  });
+
+  test("reuses backend sessions for local execution", async () => {
+    const fixture = makeClaudeRunnerFixture({
+      sessionId: "backend-claude-1",
+      messages: [
+        {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "{\"summary\":\"ok\"}" }],
+          },
+        },
+      ],
+    });
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        backendSession: {
+          mode: "reuse",
+          sessionId: "backend-claude-1",
+        },
+        output: {
+          maxValidationAttempts: 2,
+          attempt: 1,
+          candidatePath: "/tmp/candidate.json",
+          validationErrors: [],
+          publication: {
+            owner: "runtime",
+            finalArtifactWrite: "runtime-only",
+            mailboxWrite: "runtime-only-after-validation",
+            candidateSubmission: "inline-json-or-reserved-candidate-file",
+            futureCommunicationIdsExposed: false,
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.resumeSession).toHaveBeenCalledWith(
+      "backend-claude-1",
+      "hello",
+      undefined,
+    );
+    expect(output.payload).toEqual({ summary: "ok" });
+    expect(output.backendSession?.sessionId).toBe("backend-claude-1");
+  });
+
+  test("passes ambient manager env into the local runner", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        ambientManagerContext: {
+          environment: {
+            DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+            DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+            DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+            DIVEDRA_WORKFLOW_ID: "wf",
+            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+            DIVEDRA_MANAGER_NODE_ID: "node-1",
+            DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+        }),
+      }),
+    );
+  });
+
+  test("maps invalid structured output to invalid_output", async () => {
+    const fixture = makeClaudeRunnerFixture({
+      messages: [
+        {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "not json" }],
+          },
+        },
+      ],
+    });
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await expect(
+      adapter.execute(
+        {
+          ...baseInput,
+          output: {
+            maxValidationAttempts: 2,
+            attempt: 1,
+            candidatePath: "/tmp/candidate.json",
+            validationErrors: [],
+            publication: {
+              owner: "runtime",
+              finalArtifactWrite: "runtime-only",
+              mailboxWrite: "runtime-only-after-validation",
+              candidateSubmission: "inline-json-or-reserved-candidate-file",
+              futureCommunicationIdsExposed: false,
+            },
+          },
+        },
+        baseContext,
+      ),
+    ).rejects.toHaveProperty("code", "invalid_output");
+  });
+
+  test("supports the legacy endpoint fallback", async () => {
     const fetchMock = vi
       .fn(async () => {
         return new Response(
@@ -97,268 +304,8 @@ describe("ClaudeCodeAgentAdapter", () => {
       endpoint: "http://localhost/claude",
     });
     const output = await adapter.execute(baseInput, baseContext);
+
     expect(output.provider).toBe("claude-provider");
-    expect(output.model).toBe("claude-opus-4-1");
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["model"]).toBe("claude-opus-4-1");
-    expect(body["workflowExecutionId"]).toBe("sess-1");
-    expect(body["nodeExecId"]).toBe("exec-1");
-    expect(body["executionMailbox"]).toMatchObject({
-      meta: {
-        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
-        paths: {
-          inputPath: "inbox/input.json",
-          outputPath: "outbox/output.json",
-        },
-      },
-    });
-  });
-
-  test("passes backend session hints through the provider contract", async () => {
-    const fetchMock = vi
-      .fn(async () => {
-        return new Response(
-          JSON.stringify({
-            provider: "claude-provider",
-            promptText: "hello",
-            completionPassed: true,
-            when: { always: true },
-            payload: { ok: true },
-            backendSession: { sessionId: "backend-claude-1" },
-          }),
-          { status: 200 },
-        );
-      })
-      .mockName("fetch-claude-backend-session");
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-    });
-    const output = await adapter.execute(
-      {
-        ...baseInput,
-        backendSession: {
-          mode: "reuse",
-          sessionId: "backend-claude-1",
-        },
-      },
-      baseContext,
-    );
-
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["backendSession"]).toEqual({
-      mode: "reuse",
-      sessionId: "backend-claude-1",
-    });
-    expect(output.backendSession?.sessionId).toBe("backend-claude-1");
-  });
-
-  test("forwards systemPromptText while preserving combined promptText compatibility", async () => {
-    const fetchMock = vi
-      .fn(async () => {
-        return new Response(
-          JSON.stringify({
-            provider: "claude-provider",
-            promptText: "system\n\nhello",
-            completionPassed: true,
-            when: { always: true },
-            payload: { ok: true },
-          }),
-          { status: 200 },
-        );
-      })
-      .mockName("fetch-claude-system-prompt");
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-    });
-    await adapter.execute(
-      {
-        ...baseInput,
-        systemPromptText: "system",
-      },
-      baseContext,
-    );
-
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["systemPromptText"]).toBe("system");
-    expect(body["promptText"]).toBe("system\n\nhello");
-  });
-
-  test("forwards ambient manager context when provided", async () => {
-    const fetchMock = vi
-      .fn(async () => {
-        return new Response(
-          JSON.stringify({
-            provider: "claude-provider",
-            promptText: "hello",
-            completionPassed: true,
-            when: { always: true },
-            payload: { ok: true },
-          }),
-          { status: 200 },
-        );
-      })
-      .mockName("fetch-claude-manager-context");
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-    });
-    await adapter.execute(
-      {
-        ...baseInput,
-        ambientManagerContext: {
-          environment: {
-            DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-            DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-            DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-            DIVEDRA_WORKFLOW_ID: "wf",
-            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_MANAGER_NODE_ID: "node-1",
-            DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
-          },
-        },
-      },
-      baseContext,
-    );
-
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["ambientManagerContext"]).toEqual({
-      environment: {
-        DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-        DIVEDRA_WORKFLOW_ID: "wf",
-        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-        DIVEDRA_MANAGER_NODE_ID: "node-1",
-        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
-      },
-    });
-  });
-
-  test("maps invalid response body to invalid_output", async () => {
-    (globalThis as { fetch: typeof fetch }).fetch = vi
-      .fn(async () => {
-        return new Response(JSON.stringify({ provider: "claude-provider" }), {
-          status: 200,
-        });
-      })
-      .mockName("fetch-claude-invalid") as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-    });
-    await expect(
-      adapter.execute(baseInput, baseContext),
-    ).rejects.toHaveProperty("code", "invalid_output");
-  });
-
-  test("omits artifactDir from contract-enabled requests", async () => {
-    const fetchMock = vi
-      .fn(async () => {
-        return new Response(
-          JSON.stringify({
-            provider: "claude-provider",
-            promptText: "hello",
-            completionPassed: true,
-            when: { always: true },
-            payload: { ok: true },
-          }),
-          { status: 200 },
-        );
-      })
-      .mockName("fetch-claude-contract");
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-    });
-    await adapter.execute(
-      {
-        ...baseInput,
-        output: {
-          maxValidationAttempts: 2,
-          attempt: 1,
-          candidatePath: "/tmp/candidate.json",
-          validationErrors: [],
-          publication: {
-            owner: "runtime",
-            finalArtifactWrite: "runtime-only",
-            mailboxWrite: "runtime-only-after-validation",
-            candidateSubmission: "inline-json-or-reserved-candidate-file",
-            futureCommunicationIdsExposed: false,
-          },
-        },
-      },
-      baseContext,
-    );
-
-    const calls = (fetchMock as { mock: { calls: unknown[][] } }).mock.calls;
-    const request = calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(request?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body["artifactDir"]).toBeUndefined();
-    expect(body["output"]).toBeDefined();
-  });
-
-  test("retries transient provider failures with bounded attempts", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(
-        async () => new Response("temporary failure", { status: 500 }),
-      )
-      .mockImplementationOnce(
-        async () =>
-          new Response(
-            JSON.stringify({
-              provider: "claude-provider",
-              promptText: "hello",
-              completionPassed: true,
-              when: { always: true },
-              payload: { ok: true },
-            }),
-            { status: 200 },
-          ),
-      );
-    (globalThis as { fetch: typeof fetch }).fetch =
-      fetchMock as unknown as typeof fetch;
-
-    const adapter = new ClaudeCodeAgentAdapter({
-      endpoint: "http://localhost/claude",
-      maxAttempts: 2,
-      retryDelayMs: 0,
-    });
-    const result = await adapter.execute(baseInput, baseContext);
-    expect(result.provider).toBe("claude-provider");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
