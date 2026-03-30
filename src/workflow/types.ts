@@ -326,6 +326,21 @@ export interface NormalizedWorkflowBundle {
   readonly nodePayloads: Readonly<Record<string, NodePayload>>;
 }
 
+export function getNormalizedNodePayload(
+  bundle: Pick<NormalizedWorkflowBundle, "workflow" | "nodePayloads">,
+  nodeId: string,
+): NodePayload | undefined {
+  const payload = bundle.nodePayloads[nodeId];
+  if (payload !== undefined) {
+    return payload;
+  }
+
+  const nodeFile = bundle.workflow.nodes.find(
+    (entry) => entry.id === nodeId,
+  )?.nodeFile;
+  return nodeFile === undefined ? undefined : bundle.nodePayloads[nodeFile];
+}
+
 export interface LoadOptions {
   readonly workflowRoot?: string;
   readonly artifactRoot?: string;

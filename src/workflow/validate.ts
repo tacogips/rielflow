@@ -5,6 +5,13 @@ import {
   isSafeWorkflowRelativePath,
 } from "./prompt-template-file";
 import {
+  INLINE_NODE_FIELD,
+  isSupportedNodeFilePath,
+  normalizeWorkflowRelativeJsonPath,
+  remapAuthoredNodePayloadsByNodeFile,
+  synthesizeInlineNodeFile,
+} from "./authored-node";
+import {
   isCliAgentBackend,
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
@@ -965,7 +972,37 @@ function normalizeNodeRef(
   }
 
   const id = readStringField(value, "id", path, issues);
-  const nodeFile = readStringField(value, "nodeFile", path, issues);
+  const nodeFileRaw = value["nodeFile"];
+  const inlineNodeRaw = value[INLINE_NODE_FIELD];
+  let nodeFile: string | null = null;
+  if (nodeFileRaw === undefined) {
+    if (inlineNodeRaw === undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.nodeFile`,
+          "is required unless node is provided inline",
+        ),
+      );
+    } else if (id !== null) {
+      nodeFile = synthesizeInlineNodeFile(id);
+    }
+  } else if (typeof nodeFileRaw !== "string" || nodeFileRaw.length === 0) {
+    issues.push(
+      makeIssue("error", `${path}.nodeFile`, "must be a non-empty string"),
+    );
+  } else {
+    nodeFile = normalizeWorkflowRelativeJsonPath(nodeFileRaw);
+  }
+  if (nodeFileRaw !== undefined && inlineNodeRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.${INLINE_NODE_FIELD}`,
+        "must be omitted when nodeFile is provided",
+      ),
+    );
+  }
   const completion = normalizeCompletion(
     value["completion"],
     `${path}.completion`,
@@ -1135,9 +1172,13 @@ function normalizeNodeRef(
       makeIssue("error", `${path}.id`, "must match ^[a-z0-9][a-z0-9-]{1,63}$"),
     );
   }
-  if (nodeFile !== `node-${id}.json`) {
+  if (!isSupportedNodeFilePath(id, nodeFile)) {
     issues.push(
-      makeIssue("error", `${path}.nodeFile`, `must equal node-${id}.json`),
+      makeIssue(
+        "error",
+        `${path}.nodeFile`,
+        `must be a workflow-relative path whose basename equals node-${id}.json`,
+      ),
     );
   }
 
@@ -4348,6 +4389,10 @@ export function validateWorkflowBundleDetailed(
   raw: RawBundle,
 ): Result<ValidationSuccessDetails, readonly ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
+  const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
+    raw.workflow,
+    raw.nodePayloads,
+  );
 
   const workflow = normalizeWorkflow(raw.workflow, issues);
   const workflowVis = normalizeWorkflowVis(raw.workflowVis, issues);
@@ -4355,7 +4400,7 @@ export function validateWorkflowBundleDetailed(
   const nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null) {
     workflow.nodes.forEach((node) => {
-      const payloadRaw = raw.nodePayloads[node.nodeFile];
+      const payloadRaw = nodePayloadsRaw[node.nodeFile];
       if (payloadRaw === undefined) {
         issues.push(
           makeIssue(

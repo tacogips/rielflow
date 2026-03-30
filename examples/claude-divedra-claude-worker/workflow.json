@@ -13,27 +13,27 @@
     {
       "id": "divedra-manager",
       "role": "manager",
-      "nodeFile": "node-divedra-manager.json"
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "main-divedra",
       "group": "delivery",
-      "nodeFile": "node-main-divedra.json"
+      "nodeFile": "nodes/node-main-divedra.json"
     },
     {
       "id": "workflow-input",
       "group": "delivery",
-      "nodeFile": "node-workflow-input.json"
+      "nodeFile": "nodes/node-workflow-input.json"
     },
     {
       "id": "claude-task",
       "group": "delivery",
-      "nodeFile": "node-claude-task.json"
+      "nodeFile": "nodes/node-claude-task.json"
     },
     {
       "id": "workflow-output",
       "group": "delivery",
-      "nodeFile": "node-workflow-output.json"
+      "nodeFile": "nodes/node-workflow-output.json"
     }
   ]
 }

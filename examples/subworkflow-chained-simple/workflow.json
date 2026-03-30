@@ -13,47 +13,47 @@
     {
       "id": "divedra-manager",
       "role": "manager",
-      "nodeFile": "node-divedra-manager.json"
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "alpha-manager",
       "group": "alpha-lane",
-      "nodeFile": "node-alpha-manager.json"
+      "nodeFile": "workflows/alpha/nodes/node-alpha-manager.json"
     },
     {
       "id": "alpha-input",
       "group": "alpha-lane",
-      "nodeFile": "node-alpha-input.json"
+      "nodeFile": "workflows/alpha/nodes/node-alpha-input.json"
     },
     {
       "id": "alpha-worker",
       "group": "alpha-lane",
-      "nodeFile": "node-alpha-worker.json"
+      "nodeFile": "workflows/alpha/nodes/node-alpha-worker.json"
     },
     {
       "id": "alpha-output",
       "group": "alpha-lane",
-      "nodeFile": "node-alpha-output.json"
+      "nodeFile": "workflows/alpha/nodes/node-alpha-output.json"
     },
     {
       "id": "beta-manager",
       "group": "beta-lane",
-      "nodeFile": "node-beta-manager.json"
+      "nodeFile": "workflows/beta/nodes/node-beta-manager.json"
     },
     {
       "id": "beta-input",
       "group": "beta-lane",
-      "nodeFile": "node-beta-input.json"
+      "nodeFile": "workflows/beta/nodes/node-beta-input.json"
     },
     {
       "id": "beta-worker",
       "group": "beta-lane",
-      "nodeFile": "node-beta-worker.json"
+      "nodeFile": "workflows/beta/nodes/node-beta-worker.json"
     },
     {
       "id": "beta-output",
       "group": "beta-lane",
-      "nodeFile": "node-beta-output.json"
+      "nodeFile": "workflows/beta/nodes/node-beta-output.json"
     }
   ]
 }

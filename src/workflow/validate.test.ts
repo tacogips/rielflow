@@ -189,6 +189,134 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.workflow.description).toBe("");
   });
 
+  test("accepts inline node payload authoring when nodeFile is omitted", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          completion: { type: "none" },
+          node: {
+            id: "divedra-manager",
+            model: "gpt-5-nano",
+            executionBackend: "codex-agent",
+            promptTemplate: "manager",
+            variables: {},
+          },
+        },
+        {
+          id: "worker-1",
+          kind: "task",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-divedra-manager.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.nodes[0]?.nodeFile).toBe(
+      "nodes/node-divedra-manager.json",
+    );
+    expect(result.value.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
+      "manager",
+    );
+  });
+
+  test("keeps inline-authored node payloads authoritative during direct validation", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          completion: { type: "none" },
+          node: {
+            id: "divedra-manager",
+            model: "gpt-5-nano",
+            executionBackend: "codex-agent",
+            promptTemplate: "inline manager",
+            variables: {},
+          },
+        },
+        {
+          id: "worker-1",
+          kind: "task",
+          nodeFile: "node-worker-1.json",
+          completion: { type: "none" },
+        },
+      ],
+    };
+    raw.nodePayloads["nodes/node-divedra-manager.json"] = {
+      id: "divedra-manager",
+      model: "gpt-5-mini",
+      executionBackend: "codex-agent",
+      promptTemplate: "stale external payload",
+      sessionStartPromptTemplate: "stale first-turn prompt",
+      variables: {},
+    };
+    delete raw.nodePayloads["node-divedra-manager.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
+      "inline manager",
+    );
+    expect(
+      result.value.nodePayloads["divedra-manager"],
+    ).not.toHaveProperty("sessionStartPromptTemplate");
+  });
+
+  test("accepts workflow-relative node payload paths under nodes/", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "nodes/node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          kind: "task",
+          nodeFile: "nodes/node-worker-1.json",
+          completion: { type: "none" },
+        },
+      ],
+    };
+    raw.nodePayloads = {
+      "nodes/node-divedra-manager.json": raw.nodePayloads["node-divedra-manager.json"],
+      "nodes/node-worker-1.json": raw.nodePayloads["node-worker-1.json"],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.nodes[0]?.nodeFile).toBe(
+      "nodes/node-divedra-manager.json",
+    );
+    expect(result.value.workflow.nodes[1]?.nodeFile).toBe(
+      "nodes/node-worker-1.json",
+    );
+  });
+
   test("rejects empty workflow descriptions when provided", () => {
     const raw = makeValidRaw();
     raw.workflow = {

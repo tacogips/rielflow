@@ -18,6 +18,7 @@ import type {
   RuntimeNodeLogEntry,
   RuntimeSessionSummary,
 } from "../../workflow/runtime-db";
+import { getNormalizedNodePayload } from "../../workflow/types";
 import type { OpenTuiRichSelectOption } from "../opentui-view-shared";
 import { resolveOpenTuiNodeTypeColor, resolveOpenTuiStatusColor } from "../opentui-view-shared";
 import { detectWorkflowInputMode } from "./input";
@@ -104,7 +105,7 @@ function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
     const payload =
       nodeRef === undefined
         ? undefined
-        : loaded.bundle.nodePayloads[nodeRef.nodeFile];
+        : getNormalizedNodePayload(loaded.bundle, nodeRef.id);
     const kind = nodeRef?.kind ?? "task";
     const visualMetadata = resolveWorkflowNodeVisualMetadata({
       nodeId,
@@ -221,7 +222,10 @@ export function buildWorkflowRunPreview(
 
   append(t`\n\n${brightWhite("Nodes")}`);
   workflow.nodes.forEach((nodeRef) => {
-    const payload = loadedWorkflow.bundle.nodePayloads[nodeRef.nodeFile];
+    const payload = getNormalizedNodePayload(
+      loadedWorkflow.bundle,
+      nodeRef.id,
+    );
     const purpose =
       payload?.description ??
       payload?.output?.description ??
@@ -422,7 +426,7 @@ export function buildWorkflowDefinitionNodeSelectOptions(
   }
   const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
   return workflow.bundle.workflow.nodes.map((nodeRef) => {
-    const payload = workflow.bundle.nodePayloads[nodeRef.nodeFile];
+    const payload = getNormalizedNodePayload(workflow.bundle, nodeRef.id);
     const purpose = resolveNodePurpose({
       nodeId: nodeRef.id,
       payload,
@@ -458,7 +462,10 @@ export function buildNodeDefinitionPopupContent(input: {
       body: `Workflow node '${input.nodeId}' was not found.`,
     };
   }
-  const payload = input.loadedWorkflow.bundle.nodePayloads[nodeRef.nodeFile];
+  const payload = getNormalizedNodePayload(
+    input.loadedWorkflow.bundle,
+    nodeRef.id,
+  );
   return {
     title: ` Node Definition: ${input.nodeId} `,
     body: [
@@ -557,12 +564,10 @@ export function buildNodeSelectOptions(
   const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
   return session.nodeExecutions.map((execution) => {
     const kind = resolveNodeKind(workflow.bundle.workflow, execution.nodeId);
-    const payload =
-      workflow.bundle.nodePayloads[
-        workflow.bundle.workflow.nodes.find(
-          (entry) => entry.id === execution.nodeId,
-        )?.nodeFile ?? ""
-      ];
+    const payload = getNormalizedNodePayload(
+      workflow.bundle,
+      execution.nodeId,
+    );
     const owningSubworkflow = resolveOwningSubWorkflow(
       workflow.bundle.workflow,
       execution.nodeId,
@@ -609,11 +614,7 @@ export function buildSubworkflowNodeSelectOptions(
   return subworkflow.nodeIds.map((nodeId) => {
     const kind = resolveNodeKind(workflow.bundle.workflow, nodeId);
     const execution = findLatestNodeExecution(session, nodeId);
-    const payload =
-      workflow.bundle.nodePayloads[
-        workflow.bundle.workflow.nodes.find((entry) => entry.id === nodeId)
-          ?.nodeFile ?? ""
-      ];
+    const payload = getNormalizedNodePayload(workflow.bundle, nodeId);
     const purpose = resolveNodePurpose({
       nodeId,
       payload,

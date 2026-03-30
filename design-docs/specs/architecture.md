@@ -23,10 +23,13 @@ Workflow definitions live under `<workflow-root>/<workflow-name>/` and are compo
 
 - `workflow.json`
 - `workflow-vis.json`
-- `node-{id}.json`
+- referenced node payload JSON files
+  - default location: `nodes/node-{id}.json`
+  - authors may also place payloads in workflow-relative nested paths such as `workflows/<lane>/nodes/node-{id}.json`
+  - when `workflow.json.nodes[].nodeFile` is omitted, the authored inline `workflow.json.nodes[].node` payload is normalized to `nodes/node-{id}.json`
 - optional prompt files referenced by `systemPromptTemplateFile`, `promptTemplateFile`, and `sessionStartPromptTemplateFile`
 
-The loader resolves those workflow-local prompt files into effective inline template text before validation and execution. If `workflow-vis.json` is missing, the loader synthesizes a default vertical order from `workflow.json.nodes`.
+The loader resolves those workflow-local prompt files into effective inline template text before validation and execution, normalizes inline-authored node payloads to stable workflow-relative paths, and allows `workflow-vis.json` to be omitted by synthesizing a default vertical order from `workflow.json.nodes`.
 
 ### Runtime State Boundary
 
@@ -68,6 +71,7 @@ Responsibilities:
 
 - read workflow bundle files
 - resolve `promptTemplateFile`
+- normalize inline node authoring and workflow-relative node payload paths
 - normalize legacy aliases where still supported
 - validate node kinds, sub-workflow boundaries, edges, loops, and payload shapes
 

@@ -70,7 +70,7 @@
     {
       "id": "divedra-manager",
       "kind": "root-manager",
-      "nodeFile": "node-divedra-manager.json",
+      "nodeFile": "nodes/node-divedra-manager.json",
       "completion": {
         "type": "none"
       }
@@ -78,7 +78,7 @@
     {
       "id": "affirmative-manager",
       "kind": "subworkflow-manager",
-      "nodeFile": "node-affirmative-manager.json",
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-manager.json",
       "completion": {
         "type": "none"
       }
@@ -86,7 +86,7 @@
     {
       "id": "affirmative-input",
       "kind": "input",
-      "nodeFile": "node-affirmative-input.json",
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-input.json",
       "completion": {
         "type": "none"
       }
@@ -94,7 +94,7 @@
     {
       "id": "affirmative-speaker",
       "kind": "task",
-      "nodeFile": "node-affirmative-speaker.json",
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-speaker.json",
       "completion": {
         "type": "none"
       }
@@ -102,7 +102,7 @@
     {
       "id": "affirmative-output",
       "kind": "output",
-      "nodeFile": "node-affirmative-output.json",
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-output.json",
       "completion": {
         "type": "none"
       }
@@ -110,7 +110,7 @@
     {
       "id": "negative-manager",
       "kind": "subworkflow-manager",
-      "nodeFile": "node-negative-manager.json",
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-manager.json",
       "completion": {
         "type": "none"
       }
@@ -118,7 +118,7 @@
     {
       "id": "negative-input",
       "kind": "input",
-      "nodeFile": "node-negative-input.json",
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-input.json",
       "completion": {
         "type": "none"
       }
@@ -126,7 +126,7 @@
     {
       "id": "negative-speaker",
       "kind": "task",
-      "nodeFile": "node-negative-speaker.json",
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-speaker.json",
       "completion": {
         "type": "none"
       }
@@ -134,7 +134,7 @@
     {
       "id": "negative-output",
       "kind": "output",
-      "nodeFile": "node-negative-output.json",
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-output.json",
       "completion": {
         "type": "none"
       }

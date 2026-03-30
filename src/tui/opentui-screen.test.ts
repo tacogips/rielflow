@@ -92,14 +92,14 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
       },
       nodePayloads: {
-        "node-divedra-manager.json": {
+        "divedra-manager": {
           id: "divedra-manager",
           model: "manager-model",
           promptTemplate: "Manage the workflow",
           variables: {},
         },
-        "node-workflow-input.json": inputNodePayload,
-        "node-workflow-output.json": {
+        "workflow-input": inputNodePayload,
+        "workflow-output": {
           id: "workflow-output",
           model: "output-model",
           promptTemplate: "Return output",

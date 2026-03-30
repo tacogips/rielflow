@@ -16,67 +16,67 @@
     {
       "id": "divedra-manager",
       "role": "manager",
-      "nodeFile": "node-divedra-manager.json"
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "command-manager",
       "group": "command-lane",
-      "nodeFile": "node-command-manager.json"
+      "nodeFile": "nodes/node-command-manager.json"
     },
     {
       "id": "command-input",
       "group": "command-lane",
-      "nodeFile": "node-command-input.json"
+      "nodeFile": "nodes/node-command-input.json"
     },
     {
       "id": "command-worker",
       "group": "command-lane",
-      "nodeFile": "node-command-worker.json"
+      "nodeFile": "nodes/node-command-worker.json"
     },
     {
       "id": "command-output",
       "group": "command-lane",
-      "nodeFile": "node-command-output.json"
+      "nodeFile": "nodes/node-command-output.json"
     },
     {
       "id": "container-manager",
       "group": "container-lane",
-      "nodeFile": "node-container-manager.json"
+      "nodeFile": "nodes/node-container-manager.json"
     },
     {
       "id": "container-input",
       "group": "container-lane",
-      "nodeFile": "node-container-input.json"
+      "nodeFile": "nodes/node-container-input.json"
     },
     {
       "id": "container-worker",
       "group": "container-lane",
-      "nodeFile": "node-container-worker.json"
+      "nodeFile": "nodes/node-container-worker.json"
     },
     {
       "id": "container-output",
       "group": "container-lane",
-      "nodeFile": "node-container-output.json"
+      "nodeFile": "nodes/node-container-output.json"
     },
     {
       "id": "foreach-manager",
       "group": "foreach-loop",
-      "nodeFile": "node-foreach-manager.json"
+      "nodeFile": "nodes/node-foreach-manager.json"
     },
     {
       "id": "foreach-input",
       "group": "foreach-loop",
-      "nodeFile": "node-foreach-input.json"
+      "nodeFile": "nodes/node-foreach-input.json"
     },
     {
       "id": "foreach-worker",
       "group": "foreach-loop",
-      "nodeFile": "node-foreach-worker.json"
+      "nodeFile": "nodes/node-foreach-worker.json"
     },
     {
       "id": "foreach-judge",
       "group": "foreach-loop",
-      "nodeFile": "node-foreach-judge.json",
+      "nodeFile": "nodes/node-foreach-judge.json",
       "repeat": {
         "while": "continue_items",
         "restartAt": "foreach-manager",
@@ -86,7 +86,7 @@
     {
       "id": "foreach-output",
       "group": "foreach-loop",
-      "nodeFile": "node-foreach-output.json"
+      "nodeFile": "nodes/node-foreach-output.json"
     }
   ]
 }

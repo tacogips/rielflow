@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
+import {
+  INLINE_NODE_FIELD,
+  resolveAuthoredNodeFileReference,
+  resolveWorkflowRelativeNodeFilePath,
+} from "./authored-node";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
@@ -199,28 +204,54 @@ export async function loadWorkflowFromDisk(
   }
 
   const workflowNodes = (
-    workflowRaw.value as { nodes: Array<{ nodeFile?: unknown }> }
+    workflowRaw.value as { nodes: Array<Record<string, unknown>> }
   ).nodes;
   const nodePayloads: Record<string, unknown> = {};
 
-  for (const node of workflowNodes) {
-    if (typeof node.nodeFile !== "string") {
+  for (const [index, node] of workflowNodes.entries()) {
+    const nodeFile = resolveAuthoredNodeFileReference(node);
+    if (nodeFile === undefined) {
       continue;
     }
-    const nodeFilePath = path.join(workflowDirectory, node.nodeFile);
-    const nodeRaw = await readJsonFile(nodeFilePath);
-    if (!nodeRaw.ok) {
-      return err(nodeRaw.error);
+
+    const inlineNodePayload = node[INLINE_NODE_FIELD];
+    let rawPayload: unknown;
+    if (typeof node["nodeFile"] === "string") {
+      const nodeFilePath = resolveWorkflowRelativeNodeFilePath(
+        workflowDirectory,
+        nodeFile,
+      );
+      if (!nodeFilePath.ok) {
+        return err({
+          code: "VALIDATION",
+          message: "workflow validation failed",
+          issues: [
+            {
+              severity: "error",
+              path: `workflow.nodes[${index}].nodeFile`,
+              message: nodeFilePath.error.message,
+            },
+          ],
+        });
+      }
+      const nodeRaw = await readJsonFile(nodeFilePath.value);
+      if (!nodeRaw.ok) {
+        return err(nodeRaw.error);
+      }
+      rawPayload = nodeRaw.value;
+    } else {
+      rawPayload = inlineNodePayload;
     }
+
     const resolvedNodeRaw = await resolvePromptTemplateFileForNode({
       workflowDirectory,
-      nodeFile: node.nodeFile,
-      rawPayload: nodeRaw.value,
+      nodeFile,
+      rawPayload,
     });
     if (!resolvedNodeRaw.ok) {
       return err(resolvedNodeRaw.error);
     }
-    nodePayloads[node.nodeFile] = resolvedNodeRaw.value;
+    nodePayloads[nodeFile] = resolvedNodeRaw.value;
   }
 
   const validation = validateWorkflowBundle({

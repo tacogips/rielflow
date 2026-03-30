@@ -334,6 +334,176 @@ describe("loadWorkflowFromDisk", () => {
     expect(result.value.bundle.workflow.description).toBe("");
   });
 
+  test("loads inline node payloads when nodeFile is omitted", async () => {
+    const root = await makeTempDir();
+    const workflowName = "inline-node-workflow";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(path.join(workflowDirectory, "prompts"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "inline",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      subWorkflows: [],
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          completion: { type: "none" },
+          node: {
+            id: "divedra-manager",
+            model: "gpt-5-nano",
+            executionBackend: "codex-agent",
+            promptTemplateFile: "prompts/divedra-manager.md",
+            variables: {},
+          },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [{ id: "divedra-manager", order: 0 }],
+    });
+    await writeText(
+      path.join(workflowDirectory, "prompts", "divedra-manager.md"),
+      "inline manager prompt",
+    );
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.nodes[0]?.nodeFile).toBe(
+      "nodes/node-divedra-manager.json",
+    );
+    expect(result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
+      "inline manager prompt\n",
+    );
+  });
+
+  test("loads node payload files from nodes/ paths", async () => {
+    const root = await makeTempDir();
+    const workflowName = "nested-node-path-workflow";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "nested nodes",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      subWorkflows: [],
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "nodes/node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [{ id: "divedra-manager", order: 0 }],
+    });
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-divedra-manager.json"),
+      {
+        id: "divedra-manager",
+        model: "gpt-5-nano",
+        executionBackend: "codex-agent",
+        promptTemplate: "nested manager",
+        variables: {},
+      },
+    );
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.nodes[0]?.nodeFile).toBe(
+      "nodes/node-divedra-manager.json",
+    );
+    expect(result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
+      "nested manager",
+    );
+  });
+
+  test("rejects nodeFile paths that escape the workflow directory before reading them", async () => {
+    const root = await makeTempDir();
+    const workflowName = "unsafe-node-path-workflow";
+    const workflowDirectory = path.join(root, workflowName);
+    const externalDirectory = path.join(root, "external");
+    await mkdir(workflowDirectory, { recursive: true });
+    await mkdir(externalDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "unsafe",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "divedra-manager",
+      subWorkflows: [],
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "../external/node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+    await writeJson(path.join(workflowDirectory, "workflow-vis.json"), {
+      nodes: [{ id: "divedra-manager", order: 0 }],
+    });
+    await writeFile(
+      path.join(externalDirectory, "node-divedra-manager.json"),
+      "{ invalid json }\n",
+      "utf8",
+    );
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual([
+      {
+        severity: "error",
+        path: "workflow.nodes[0].nodeFile",
+        message:
+          "nodeFile '../external/node-divedra-manager.json' must be a workflow-relative path without '.' or '..' segments",
+      },
+    ]);
+  });
+
   test("loads unified role workflows with a manager-role node", async () => {
     const root = await makeTempDir();
     const workflowName = "unified-role-workflow";
@@ -896,7 +1066,7 @@ describe("loadWorkflowFromDisk", () => {
     );
   });
 
-  test("loads the claude worker example with an explicit claude-code-agent task node", async () => {
+  test("loads the claude worker example with an explicit claude-code-agent worker node", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const result = await loadWorkflowFromDisk("claude-divedra-claude-worker", {
       workflowRoot: path.resolve(process.cwd(), "examples"),
@@ -911,8 +1081,8 @@ describe("loadWorkflowFromDisk", () => {
     expect(
       result.value.bundle.workflow.nodes.find(
         (node) => node.id === "claude-task",
-      )?.kind,
-    ).toBe("task");
+      )?.nodeFile,
+    ).toBe("nodes/node-claude-task.json");
     expect(
       result.value.bundle.nodePayloads["claude-task"]?.executionBackend,
     ).toBe("claude-code-agent");

@@ -10,14 +10,14 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 ### Subcommands
 
-- `workflow create <name>`
-  - Create `<workflow-root>/<name>/` with `workflow.json`, `workflow-vis.json`, and template `node-{id}.json`.
-- `workflow validate <name>`
+- `cli workflow create <name>`
+  - Create `<workflow-root>/<name>/` with `workflow.json`, `workflow-vis.json`, prompt templates, and default `nodes/node-{id}.json` payload files.
+- `cli workflow validate <name>`
   - Validate `<workflow-root>/<name>/` structure and semantic constraints.
-- `workflow inspect <name>`
+- `cli workflow inspect <name>`
   - Print normalized node graph, fan-out branch rules, loop defaults, timeout defaults, and node file references.
-- `workflow run <name>`
-  - Execute `<workflow-root>/<name>/workflow.json` and referenced `node-{id}.json` files.
+- `cli workflow run <name>`
+  - Execute `<workflow-root>/<name>/workflow.json` and all referenced workflow-local node payload files.
 - `session progress <session-id>`
   - Show queue, execution counts, and per-node restart/execution summary.
 - `session status <session-id>`
@@ -28,6 +28,8 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Start a new run from a chosen node in an existing session.
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
   - Execute one node directly against an existing run context for local debugging.
+- `export <workflow-id> <workflow-run-id>`
+  - Export the persisted workflow run logs as JSON to stdout or to a file.
 - `gql <graphql-document>`
   - Execute a GraphQL query or mutation against the canonical control-plane endpoint.
   - Manager-node LLM/tool use should call GraphQL mutations such as `sendManagerMessage` through this command rather than dedicated domain subcommands.
@@ -64,6 +66,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--auth-token-env`      | string        | `DIVEDRA_MANAGER_AUTH_TOKEN`                                      | Environment variable used to resolve GraphQL auth token                                                                                                    |
 | `--message-json`        | string        | none                                                              | Inline JSON payload for `call-node`                                                                                                                        |
 | `--message-file`        | string (path) | none                                                              | JSON payload file for `call-node`                                                                                                                          |
+| `--file`                | string (path) | none                                                              | Output file path for `export`; when omitted, the export JSON is written to stdout                                                                          |
 | `--host`                | string        | `127.0.0.1`                                                       | Bind address for `serve`                                                                                                                                   |
 | `--port`                | number        | `43173`                                                           | Listen port for `serve`                                                                                                                                    |
 | `--read-only`           | boolean       | `false`                                                           | Disable write/update operations in `serve` mode                                                                                                            |

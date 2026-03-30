@@ -1,5 +1,8 @@
 import type { LoadedWorkflow } from "../../workflow/load";
-import type { NodePayload } from "../../workflow/types";
+import {
+  getNormalizedNodePayload,
+  type NodePayload,
+} from "../../workflow/types";
 import type {
   TuiWorkflowInputDetection,
   TuiWorkflowInputMode,
@@ -82,7 +85,7 @@ export function detectWorkflowInputMode(
   );
   const inputPayloads = workflow.nodes
     .filter((node) => node.kind === "input" || inputNodeIds.has(node.id))
-    .map((node) => loaded.bundle.nodePayloads[node.nodeFile])
+    .map((node) => getNormalizedNodePayload(loaded.bundle, node.id))
     .filter((payload): payload is NodePayload => payload !== undefined);
 
   if (inputPayloads.some(payloadExpectsJsonInput)) {

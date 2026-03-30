@@ -7,6 +7,7 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../workflow/session";
+import { getNormalizedNodePayload } from "../workflow/types";
 import type {
   DetailMode,
   DetailAgentSessionSelection,
@@ -325,7 +326,7 @@ export async function buildHistoryDetailPaneState(input: {
   const payload =
     nodeRef === undefined
       ? undefined
-      : input.loadedWorkflow.bundle.nodePayloads[nodeRef.nodeFile];
+      : getNormalizedNodePayload(input.loadedWorkflow.bundle, nodeRef.id);
   const agentSessionSelection = resolveAgentSessionSummarySelection({
     execution: input.selectedNodeExecution,
     payload,

@@ -76,7 +76,7 @@ describe("saveWorkflowToDisk", () => {
     expect(promptFileText).toBe("Updated manager prompt from save path\n");
 
     const nodeJsonRaw = await readFile(
-      path.join(root, "demo", "node-divedra-manager.json"),
+      path.join(root, "demo", "nodes", "node-divedra-manager.json"),
       "utf8",
     );
     expect(nodeJsonRaw).toContain('"promptTemplateFile": "prompts/divedra-manager.md"');
@@ -217,7 +217,7 @@ describe("saveWorkflowToDisk", () => {
     expect(sessionStartPromptText).toBe("## prompt\n{{prompt}}\n## args\n{{args}}\n");
 
     const nodeJsonRaw = await readFile(
-      path.join(root, "demo", "node-divedra-manager.json"),
+      path.join(root, "demo", "nodes", "node-divedra-manager.json"),
       "utf8",
     );
     expect(nodeJsonRaw).toContain(
@@ -298,7 +298,8 @@ describe("saveWorkflowToDisk", () => {
     expect(saveResult.error.code).toBe("VALIDATION");
     expect(saveResult.error.issues?.some(
       (issue) =>
-        issue.path === "nodePayloads.node-divedra-manager.json.promptTemplateFile" &&
+        issue.path ===
+          "nodePayloads.nodes/node-divedra-manager.json.promptTemplateFile" &&
         issue.message.includes("must not target canonical workflow definition files"),
     )).toBe(true);
 
@@ -307,6 +308,193 @@ describe("saveWorkflowToDisk", () => {
       "utf8",
     );
     expect(workflowJsonAfter).toBe(originalWorkflowJson);
+  });
+
+  test("accepts inline-authored workflow nodes and persists synthesized nodes/ payload files", async () => {
+    const root = await makeTempDir();
+
+    const saveResult = await saveWorkflowToDisk(
+      "inline-demo",
+      {
+        workflow: {
+          workflowId: "inline-demo",
+          description: "inline demo",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          managerNodeId: "divedra-manager",
+          subWorkflows: [],
+          nodes: [
+            {
+              id: "divedra-manager",
+              kind: "root-manager",
+              completion: { type: "none" },
+              node: {
+                id: "divedra-manager",
+                executionBackend: "codex-agent",
+                model: "gpt-5-nano",
+                promptTemplate: "inline manager",
+                variables: {},
+              },
+            },
+          ],
+          edges: [],
+          loops: [],
+          branching: { mode: "fan-out" },
+        },
+        workflowVis: {
+          nodes: [{ id: "divedra-manager", order: 0 }],
+        },
+        nodePayloads: {},
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonRaw = await readFile(
+      path.join(root, "inline-demo", "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonRaw).toContain('"nodeFile": "nodes/node-divedra-manager.json"');
+
+    const nodeJsonRaw = await readFile(
+      path.join(root, "inline-demo", "nodes", "node-divedra-manager.json"),
+      "utf8",
+    );
+    expect(nodeJsonRaw).toContain('"promptTemplate": "inline manager"');
+
+    const reloaded = await loadWorkflowFromDisk("inline-demo", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
+      "inline manager",
+    );
+  });
+
+  test("prefers inline-authored node payloads over stale id-keyed nodePayloads on save", async () => {
+    const root = await makeTempDir();
+
+    const saveResult = await saveWorkflowToDisk(
+      "inline-demo",
+      {
+        workflow: {
+          workflowId: "inline-demo",
+          description: "inline demo",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          managerNodeId: "divedra-manager",
+          subWorkflows: [],
+          nodes: [
+            {
+              id: "divedra-manager",
+              kind: "root-manager",
+              completion: { type: "none" },
+              node: {
+                id: "divedra-manager",
+                executionBackend: "codex-agent",
+                model: "gpt-5-nano",
+                promptTemplate: "inline manager",
+                variables: {},
+              },
+            },
+          ],
+          edges: [],
+          loops: [],
+          branching: { mode: "fan-out" },
+        },
+        workflowVis: {
+          nodes: [{ id: "divedra-manager", order: 0 }],
+        },
+        nodePayloads: {
+          "divedra-manager": {
+            id: "divedra-manager",
+            executionBackend: "codex-agent",
+            model: "gpt-5-mini",
+            promptTemplate: "stale manager payload",
+            sessionStartPromptTemplate: "stale first-turn prompt",
+            variables: {},
+          },
+        },
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const nodeJsonRaw = await readFile(
+      path.join(root, "inline-demo", "nodes", "node-divedra-manager.json"),
+      "utf8",
+    );
+    expect(nodeJsonRaw).toContain('"promptTemplate": "inline manager"');
+    expect(nodeJsonRaw).not.toContain("stale manager payload");
+    expect(nodeJsonRaw).not.toContain("stale first-turn prompt");
+  });
+
+  test("ignores unreferenced node payload template files when computing save revisions", async () => {
+    const root = await makeTempDir();
+
+    const saveResult = await saveWorkflowToDisk(
+      "inline-demo",
+      {
+        workflow: {
+          workflowId: "inline-demo",
+          description: "inline demo",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          managerNodeId: "divedra-manager",
+          subWorkflows: [],
+          nodes: [
+            {
+              id: "divedra-manager",
+              kind: "root-manager",
+              completion: { type: "none" },
+              node: {
+                id: "divedra-manager",
+                executionBackend: "codex-agent",
+                model: "gpt-5-nano",
+                promptTemplate: "inline manager",
+                variables: {},
+              },
+            },
+          ],
+          edges: [],
+          loops: [],
+          branching: { mode: "fan-out" },
+        },
+        workflowVis: {
+          nodes: [{ id: "divedra-manager", order: 0 }],
+        },
+        nodePayloads: {
+          "obsolete-worker": {
+            id: "obsolete-worker",
+            executionBackend: "codex-agent",
+            model: "gpt-5-mini",
+            promptTemplateFile: "prompts/missing-obsolete-worker.md",
+            variables: {},
+          },
+        },
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    expect(saveResult.value.revision).toMatch(/^sha256:/u);
   });
 
   test("preserves podman runtimeIsolation metadata across save and reload", async () => {

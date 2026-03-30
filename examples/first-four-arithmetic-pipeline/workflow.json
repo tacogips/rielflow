@@ -16,67 +16,67 @@
     {
       "id": "divedra-manager",
       "role": "manager",
-      "nodeFile": "node-divedra-manager.json"
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "add-manager",
       "group": "add-stage",
-      "nodeFile": "node-add-manager.json"
+      "nodeFile": "workflows/add/nodes/node-add-manager.json"
     },
     {
       "id": "add-input",
       "group": "add-stage",
-      "nodeFile": "node-add-input.json"
+      "nodeFile": "workflows/add/nodes/node-add-input.json"
     },
     {
       "id": "add-worker",
       "group": "add-stage",
-      "nodeFile": "node-add-worker.json"
+      "nodeFile": "workflows/add/nodes/node-add-worker.json"
     },
     {
       "id": "add-output",
       "group": "add-stage",
-      "nodeFile": "node-add-output.json"
+      "nodeFile": "workflows/add/nodes/node-add-output.json"
     },
     {
       "id": "multiply-manager",
       "group": "multiply-stage",
-      "nodeFile": "node-multiply-manager.json"
+      "nodeFile": "workflows/multiply/nodes/node-multiply-manager.json"
     },
     {
       "id": "multiply-input",
       "group": "multiply-stage",
-      "nodeFile": "node-multiply-input.json"
+      "nodeFile": "workflows/multiply/nodes/node-multiply-input.json"
     },
     {
       "id": "multiply-worker",
       "group": "multiply-stage",
-      "nodeFile": "node-multiply-worker.json"
+      "nodeFile": "workflows/multiply/nodes/node-multiply-worker.json"
     },
     {
       "id": "multiply-output",
       "group": "multiply-stage",
-      "nodeFile": "node-multiply-output.json"
+      "nodeFile": "workflows/multiply/nodes/node-multiply-output.json"
     },
     {
       "id": "divide-manager",
       "group": "divide-stage",
-      "nodeFile": "node-divide-manager.json"
+      "nodeFile": "workflows/divide/nodes/node-divide-manager.json"
     },
     {
       "id": "divide-input",
       "group": "divide-stage",
-      "nodeFile": "node-divide-input.json"
+      "nodeFile": "workflows/divide/nodes/node-divide-input.json"
     },
     {
       "id": "divide-worker",
       "group": "divide-stage",
-      "nodeFile": "node-divide-worker.json"
+      "nodeFile": "workflows/divide/nodes/node-divide-worker.json"
     },
     {
       "id": "divide-output",
       "group": "divide-stage",
-      "nodeFile": "node-divide-output.json"
+      "nodeFile": "workflows/divide/nodes/node-divide-output.json"
     }
   ]
 }

@@ -59,7 +59,7 @@ const TEMPLATE_NODE_DEFINITIONS = [
 ];
 
 function templateNodeFileName(nodeId: string): string {
-  return `node-${nodeId}.json`;
+  return `nodes/node-${nodeId}.json`;
 }
 
 function createTemplateWorkflowNode(definition: TemplateNodeDefinition): {
@@ -112,10 +112,12 @@ function createTemplatePromptFile(definition: TemplateNodeDefinition): {
 }
 
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
 async function writeText(filePath: string, text: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${text.trimEnd()}\n`, "utf8");
 }
 

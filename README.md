@@ -54,10 +54,15 @@ Typical layout:
   my-workflow/
     workflow.json
     workflow-vis.json
-    node-divedra-manager.json
-    node-main-divedra.json
-    node-workflow-input.json
-    node-workflow-output.json
+    nodes/
+      node-divedra-manager.json
+      node-main-divedra.json
+      node-workflow-input.json
+      node-workflow-output.json
+    workflows/
+      review/
+        nodes/
+          node-review-manager.json
     prompts/
       divedra-manager.md
       main-divedra.md
@@ -69,8 +74,14 @@ Files:
 
 - `workflow.json`: canonical workflow structure and control-flow definition
 - `workflow-vis.json`: authored visualization ordering metadata
-- `node-{id}.json`: per-node execution payload
+- `nodes/node-{id}.json`: default location for per-node execution payloads
+- `workflows/*/nodes/node-{id}.json`: optional nested layout for grouped lanes
+  or reusable authoring assets inside one bundle
 - `prompts/*.md`: optional prompt bodies referenced by `promptTemplateFile`
+
+Node payload file paths are always resolved relative to the top-level workflow
+directory, so nested `workflows/*/nodes/` payloads can still reuse shared
+parent-level prompt files or scripts.
 
 Implementation note:
 
@@ -102,6 +113,10 @@ When authored `edges` are omitted, the loader normalizes the workflow into a
 sequential edge list based on node order. When authored `managerNodeId` is
 omitted, the loader may infer it from exactly one manager-role node.
 
+When `workflow.nodes[].nodeFile` is omitted, the author may provide the node
+payload inline as `workflow.nodes[].node`. The loader normalizes that authored
+form to an internal `nodes/node-{id}.json` path for validation/runtime use.
+
 Fields such as `workflowType`, `nodeGroups`, and workflow-ref child workflows
 are not part of the current authored schema, even though older docs mentioned
 them.
@@ -130,7 +145,7 @@ Practical meaning:
 - `output` nodes publish the result of a root workflow or sub-workflow boundary.
 - `branch-judge` and `loop-judge` are ordinary executed nodes whose outputs drive control flow.
 
-## `node-{id}.json`
+## Node Payloads
 
 Current node payload fields:
 
@@ -251,7 +266,7 @@ Current implementation behavior:
 
 This is the current `workflow run` sequence in `src/workflow/engine.ts`.
 
-1. The loader resolves `workflow.json`, `workflow-vis.json`, all `node-{id}.json` files, and any `promptTemplateFile` references.
+1. The loader resolves `workflow.json`, `workflow-vis.json`, all referenced node payload files, and any `promptTemplateFile` references.
 2. A session is created with the initial queue entry set to `workflow.managerNodeId`.
 3. If `runtimeVariables.humanInput` is present, the runtime writes an external-mailbox input artifact and delivers it to the root manager as the first communication.
 4. The engine pops the next node id from the queue, loads upstream communications for that node, assembles input bindings, and composes the final prompt text.
@@ -343,19 +358,19 @@ This bundle shows the recommended split:
 Validate it:
 
 ```bash
-bun run src/main.ts workflow validate claude-divedra-codex-coding --workflow-root ./examples
+bun run src/main.ts cli workflow validate claude-divedra-codex-coding --workflow-root ./examples
 ```
 
 Inspect it:
 
 ```bash
-bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-root ./examples --output json
+bun run src/main.ts cli workflow inspect claude-divedra-codex-coding --workflow-root ./examples --output json
 ```
 
 Run it with the bundled deterministic scenario:
 
 ```bash
-bun run src/main.ts workflow run claude-divedra-codex-coding \
+bun run src/main.ts cli workflow run claude-divedra-codex-coding \
   --workflow-root ./examples \
   --mock-scenario ./examples/claude-divedra-codex-coding/mock-scenario.json \
   --output json
@@ -365,32 +380,33 @@ Runnable same-node session-reuse reference:
 
 - `examples/same-node-session-echo/workflow.json`
 - `examples/same-node-session-echo/workflow-vis.json`
-- `examples/same-node-session-echo/node-*.json`
+- `examples/same-node-session-echo/nodes/node-*.json`
 - `examples/same-node-session-echo/mock-scenario.json`
 
 This bundle shows:
 
-- one worker node revisited by a self-edge
+- one worker node revisited by node-local `repeat`
 - `sessionPolicy.mode = "reuse"` on that worker node
 - first-turn echo followed by second-turn answer on the same node id
 - explicit fallback to `{{inbox.latest.output.echoText}}` so the earlier turn is available in workflow data as well as backend memory
+- an inline-authored root manager payload in `workflow.json`
 
 Validate it:
 
 ```bash
-bun run src/main.ts workflow validate same-node-session-echo --workflow-root ./examples
+bun run src/main.ts cli workflow validate same-node-session-echo --workflow-root ./examples
 ```
 
 Inspect it:
 
 ```bash
-bun run src/main.ts workflow inspect same-node-session-echo --workflow-root ./examples --output json
+bun run src/main.ts cli workflow inspect same-node-session-echo --workflow-root ./examples --output json
 ```
 
 Run it with the bundled deterministic scenario:
 
 ```bash
-bun run src/main.ts workflow run same-node-session-echo \
+bun run src/main.ts cli workflow run same-node-session-echo \
   --workflow-root ./examples \
   --mock-scenario ./examples/same-node-session-echo/mock-scenario.json \
   --output json
@@ -405,7 +421,7 @@ Runnable node-authoring showcase with a bundled deterministic scenario:
 
 - `examples/node-combinations-showcase/workflow.json`
 - `examples/node-combinations-showcase/workflow-vis.json`
-- `examples/node-combinations-showcase/node-*.json`
+- `examples/node-combinations-showcase/nodes/node-*.json`
 - `examples/node-combinations-showcase/prompts/*.md`
 
 This bundle keeps the graph small while showing:
@@ -426,19 +442,19 @@ Current limitation:
 Validate it:
 
 ```bash
-bun run src/main.ts workflow validate node-combinations-showcase --workflow-root ./examples
+bun run src/main.ts cli workflow validate node-combinations-showcase --workflow-root ./examples
 ```
 
 Inspect it:
 
 ```bash
-bun run src/main.ts workflow inspect node-combinations-showcase --workflow-root ./examples --output json
+bun run src/main.ts cli workflow inspect node-combinations-showcase --workflow-root ./examples --output json
 ```
 
 Run it with the bundled deterministic scenario:
 
 ```bash
-bun run src/main.ts workflow run node-combinations-showcase \
+bun run src/main.ts cli workflow run node-combinations-showcase \
   --workflow-root ./examples \
   --mock-scenario ./examples/node-combinations-showcase/mock-scenario.json \
   --output json
@@ -446,11 +462,11 @@ bun run src/main.ts workflow run node-combinations-showcase \
 
 ## Interfaces
 
-- `divedra workflow run <workflow-name>`
+- `divedra cli workflow run <workflow-name>`
   - queue-based workflow execution
-- `divedra workflow inspect <workflow-name>`
+- `divedra cli workflow inspect <workflow-name>`
   - print normalized workflow structure and defaults
-- `divedra workflow validate <workflow-name>`
+- `divedra cli workflow validate <workflow-name>`
   - validate authored workflow bundle files
 - `divedra session progress <session-id>`
   - inspect persisted session progress summary
@@ -462,6 +478,8 @@ bun run src/main.ts workflow run node-combinations-showcase \
   - start a new session from a chosen node
 - `divedra call-node <workflow-id> <workflow-run-id> <node-id>`
   - local direct node execution path for an existing workflow run
+- `divedra export <workflow-id> <workflow-run-id>`
+  - export persisted workflow-run logs as JSON to stdout or `--file <path>`
 - `divedra serve`
   - local GraphQL control plane and health endpoint
 - `divedra gql "<document>"`

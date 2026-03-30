@@ -1,4 +1,7 @@
 import { isJsonObject, type JsonObject } from "../shared/json";
+import {
+  remapAuthoredNodePayloadsByNodeFile,
+} from "../workflow/authored-node";
 import { jsonBodyObject, optionalStringField } from "./api-request";
 
 export interface ParsedWorkflowBundleRequest {
@@ -109,30 +112,8 @@ export function readWorkflowValidationBundle(
 export function remapNodePayloadsForValidation(
   bundle: ParsedWorkflowBundleRequest,
 ): JsonObject {
-  const workflowNodes = bundle.workflow["nodes"];
-  if (!Array.isArray(workflowNodes)) {
-    return bundle.nodePayloads;
-  }
-
-  const remapped: Record<string, unknown> = { ...bundle.nodePayloads };
-  for (const entry of workflowNodes) {
-    if (!isJsonObject(entry)) {
-      continue;
-    }
-
-    const nodeId = typeof entry["id"] === "string" ? entry["id"] : undefined;
-    const nodeFile =
-      typeof entry["nodeFile"] === "string" ? entry["nodeFile"] : undefined;
-    if (nodeId === undefined || nodeFile === undefined) {
-      continue;
-    }
-
-    const payload =
-      bundle.nodePayloads[nodeFile] ?? bundle.nodePayloads[nodeId];
-    if (payload !== undefined) {
-      remapped[nodeFile] = payload;
-    }
-  }
-
-  return remapped;
+  return remapAuthoredNodePayloadsByNodeFile(
+    bundle.workflow,
+    bundle.nodePayloads,
+  ) as JsonObject;
 }

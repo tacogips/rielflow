@@ -2,6 +2,10 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../shared/fs";
 import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
+import {
+  remapAuthoredNodePayloadsByNodeFile,
+  resolveAuthoredNodeFileReference,
+} from "./authored-node";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
@@ -36,35 +40,60 @@ export interface SaveWorkflowFailure {
   readonly currentRevision?: string;
 }
 
-function buildNodePayloadMapForValidation(
+function collectReferencedNodePayloads(input: {
+  readonly workflow: {
+    readonly nodes: readonly {
+      readonly id: string;
+      readonly nodeFile: string;
+    }[];
+  };
+  readonly nodePayloads: Readonly<Record<string, unknown>>;
+}): Readonly<Record<string, unknown>> {
+  const referencedPayloads: Record<string, unknown> = {};
+  for (const node of input.workflow.nodes) {
+    const payload =
+      input.nodePayloads[node.nodeFile] ?? input.nodePayloads[node.id];
+    if (payload !== undefined) {
+      referencedPayloads[node.nodeFile] = payload;
+    }
+  }
+  return referencedPayloads;
+}
+
+function collectAuthoredReferencedNodePayloads(
   workflow: unknown,
   nodePayloads: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
   if (typeof workflow !== "object" || workflow === null) {
     return nodePayloads;
   }
+
   const nodesRaw = (workflow as Record<string, unknown>)["nodes"];
   if (!Array.isArray(nodesRaw)) {
     return nodePayloads;
   }
-  const mapped: Record<string, unknown> = { ...nodePayloads };
+
+  const referencedPayloads: Record<string, unknown> = {};
   for (const node of nodesRaw) {
     if (typeof node !== "object" || node === null) {
       continue;
     }
-    const nodeObj = node as Record<string, unknown>;
-    const id = typeof nodeObj["id"] === "string" ? nodeObj["id"] : undefined;
-    const nodeFile =
-      typeof nodeObj["nodeFile"] === "string" ? nodeObj["nodeFile"] : undefined;
-    if (!id || !nodeFile) {
+
+    const nodeRecord = node as Record<string, unknown>;
+    const nodeId =
+      typeof nodeRecord["id"] === "string" ? nodeRecord["id"] : undefined;
+    const nodeFile = resolveAuthoredNodeFileReference(nodeRecord);
+    if (!nodeId || nodeFile === undefined) {
       continue;
     }
-    const payload = nodePayloads[nodeFile] ?? nodePayloads[id];
+
+    const payload = nodePayloads[nodeFile] ?? nodePayloads[nodeId];
     if (payload !== undefined) {
-      mapped[nodeFile] = payload;
+      referencedPayloads[nodeFile] = payload;
     }
   }
-  return mapped;
+
+  return referencedPayloads;
 }
 
 async function persistNodePayload(input: {
@@ -205,15 +234,19 @@ export async function saveWorkflowToDisk(
     });
   }
 
-  const normalizedNodePayloads = buildNodePayloadMapForValidation(
+  const normalizedNodePayloads = remapAuthoredNodePayloadsByNodeFile(
     input.workflow,
     input.nodePayloads,
+  );
+  const authoredReferencedNodePayloads = collectAuthoredReferencedNodePayloads(
+    input.workflow,
+    normalizedNodePayloads,
   );
   const roots = resolveEffectiveRoots(options);
   const workflowDirectory = path.join(roots.workflowRoot, workflowName);
   const validationNodePayloads = await hydratePromptTemplateFilesForValidation({
     workflowDirectory,
-    nodePayloads: normalizedNodePayloads,
+    nodePayloads: authoredReferencedNodePayloads,
   });
   if (!validationNodePayloads.ok) {
     return err(validationNodePayloads.error);
@@ -236,11 +269,15 @@ export async function saveWorkflowToDisk(
   const nodeFiles = validation.value.workflow.nodes.map(
     (node) => node.nodeFile,
   );
+  const referencedNodePayloads = collectReferencedNodePayloads({
+    workflow: validation.value.workflow,
+    nodePayloads: normalizedNodePayloads,
+  });
 
   const currentRevision = await computeWorkflowRevisionFromFiles(
     workflowDirectory,
     nodeFiles,
-    collectPromptTemplateFiles(normalizedNodePayloads),
+    collectPromptTemplateFiles(referencedNodePayloads),
   );
   if (input.expectedRevision !== undefined) {
     if (
@@ -299,7 +336,7 @@ export async function saveWorkflowToDisk(
   const revision = await computeWorkflowRevisionFromFiles(
     workflowDirectory,
     nodeFiles,
-    collectPromptTemplateFiles(normalizedNodePayloads),
+    collectPromptTemplateFiles(referencedNodePayloads),
   );
   if (!revision.ok) {
     return err({ code: "IO", message: revision.error.message });

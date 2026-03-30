@@ -95,4 +95,59 @@ describe("workflow revision prompt file tracking", () => {
 
     expect(secondRevision.value).not.toBe(firstRevision.value);
   });
+
+  test("supports workflow-relative node payload paths under nodes/", async () => {
+    const workflowDirectory = await makeTempDir();
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      '{"workflowId":"wf"}\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "workflow-vis.json"),
+      '{"nodes":[]}\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      '{"id":"manager"}\n',
+      "utf8",
+    );
+
+    const revision = await computeWorkflowRevisionFromFiles(
+      workflowDirectory,
+      ["nodes/node-manager.json"],
+    );
+    expect(revision.ok).toBe(true);
+  });
+
+  test("rejects node payload paths that escape the workflow directory", async () => {
+    const workflowDirectory = await makeTempDir();
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      '{"workflowId":"wf"}\n',
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "workflow-vis.json"),
+      '{"nodes":[]}\n',
+      "utf8",
+    );
+
+    const revision = await computeWorkflowRevisionFromFiles(
+      workflowDirectory,
+      ["../nodes/node-manager.json"],
+    );
+    expect(revision.ok).toBe(false);
+    if (revision.ok) {
+      return;
+    }
+
+    expect(revision.error.code).toBe("IO");
+    expect(revision.error.message).toContain(
+      "must be a workflow-relative path without '.' or '..' segments",
+    );
+  });
 });

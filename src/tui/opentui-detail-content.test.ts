@@ -54,13 +54,13 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
         ],
       },
       nodePayloads: {
-        "node-manager.json": {
+        manager: {
           id: "manager",
           model: "manager-model",
           promptTemplate: "Manage the workflow",
           variables: {},
         },
-        "node-worker.json": workerPayload,
+        worker: workerPayload,
       },
     },
   };

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveWorkflowRelativeNodeFilePath } from "./authored-node";
 import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
 import {
   isSafeWorkflowRelativePath,
@@ -54,6 +55,7 @@ export async function computeWorkflowRevisionFromFiles(
       });
     }
   }
+  const nodeFileSet = new Set(sortedNodeFiles);
   const extraFileSet = new Set(sortedExtraFiles);
   const files = [
     "workflow.json",
@@ -67,7 +69,9 @@ export async function computeWorkflowRevisionFromFiles(
     for (const fileName of files) {
       const filePath = extraFileSet.has(fileName)
         ? resolveWorkflowRelativePath(workflowDirectory, fileName)
-        : ok(path.join(workflowDirectory, fileName));
+        : nodeFileSet.has(fileName)
+          ? resolveWorkflowRelativeNodeFilePath(workflowDirectory, fileName)
+          : ok(path.join(workflowDirectory, fileName));
       if (!filePath.ok) {
         return err({
           code: "IO",
