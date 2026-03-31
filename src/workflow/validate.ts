@@ -11,6 +11,7 @@ import {
   remapAuthoredNodePayloadsByNodeFile,
   synthesizeInlineNodeFile,
 } from "./authored-node";
+import { isSafeWorkflowId } from "./paths";
 import {
   isCliAgentBackend,
   normalizeCliAgentBackend,
@@ -1917,14 +1918,20 @@ function normalizeWorkflow(
     "workflow",
     issues,
   );
+  if (workflowId !== null && !isSafeWorkflowId(workflowId)) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.workflowId",
+        "must start with an alphanumeric character and contain only letters, digits, hyphens, or underscores",
+      ),
+    );
+  }
   const descriptionRaw = workflow["description"];
   let description: string | null;
   if (descriptionRaw === undefined) {
     description = "";
-  } else if (
-    typeof descriptionRaw === "string" &&
-    descriptionRaw.length > 0
-  ) {
+  } else if (typeof descriptionRaw === "string" && descriptionRaw.length > 0) {
     description = descriptionRaw;
   } else {
     issues.push(
@@ -2127,8 +2134,7 @@ function normalizeWorkflow(
     );
   }
 
-  const edges =
-    authoredEdges ?? synthesizeSequentialEdges({ nodes, issues });
+  const edges = authoredEdges ?? synthesizeSequentialEdges({ nodes, issues });
   const repeatLoops = synthesizeRepeatLoops(nodes);
   const loops =
     authoredLoops === undefined
@@ -2695,8 +2701,7 @@ function normalizeNodePayload(
   const promptTemplate = normalizedPromptTemplate.template;
   const promptTemplateFile = normalizedPromptTemplate.templateFile;
   const systemPromptTemplate = normalizedSystemPromptTemplate.template;
-  const systemPromptTemplateFile =
-    normalizedSystemPromptTemplate.templateFile;
+  const systemPromptTemplateFile = normalizedSystemPromptTemplate.templateFile;
   const sessionStartPromptTemplate =
     normalizedSessionStartPromptTemplate.template;
   const sessionStartPromptTemplateFile =

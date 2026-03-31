@@ -26,12 +26,13 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
 async function createWorkflowFixture(
   root: string,
   workflowName: string,
+  workflowId = workflowName,
 ): Promise<void> {
   const workflowDir = path.join(root, workflowName);
   await mkdir(workflowDir, { recursive: true });
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
-    workflowId: workflowName,
+    workflowId,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
@@ -110,8 +111,8 @@ afterEach(async () => {
 describe("deleteWorkflowHistory", () => {
   test("deletes session files, runtime rows, and artifacts only for the selected workflow", async () => {
     const root = await makeTempDir();
-    await createWorkflowFixture(root, "alpha");
-    await createWorkflowFixture(root, "beta");
+    await createWorkflowFixture(root, "alpha", "alpha-id");
+    await createWorkflowFixture(root, "beta", "beta-id");
 
     const options = makeWorkflowOptions(root);
     const alphaSessionIds: string[] = [];
@@ -163,7 +164,7 @@ describe("deleteWorkflowHistory", () => {
       const alphaAttachmentDir = path.join(
         options.rootDataDir,
         "files",
-        "alpha",
+        "alpha-id",
         sessionId,
       );
       await mkdir(alphaAttachmentDir, { recursive: true });
@@ -176,7 +177,7 @@ describe("deleteWorkflowHistory", () => {
     const alphaOrphanAttachmentDir = path.join(
       options.rootDataDir,
       "files",
-      "alpha",
+      "alpha-id",
       "sess-alpha-orphan",
     );
     await mkdir(alphaOrphanAttachmentDir, { recursive: true });
@@ -189,7 +190,7 @@ describe("deleteWorkflowHistory", () => {
     const betaAttachmentDir = path.join(
       options.rootDataDir,
       "files",
-      "beta",
+      "beta-id",
       betaResult.value.session.sessionId,
     );
     await mkdir(betaAttachmentDir, { recursive: true });
@@ -202,7 +203,7 @@ describe("deleteWorkflowHistory", () => {
     const managerStore = createManagerSessionStore(options);
     await managerStore.createOrResumeSession({
       managerSessionId: "mgrsess-alpha-orphan",
-      workflowId: "alpha",
+      workflowId: "alpha-id",
       workflowExecutionId: "sess-alpha-orphan",
       managerNodeId: "divedra-manager",
       managerNodeExecId: "exec-alpha-orphan",
@@ -213,20 +214,20 @@ describe("deleteWorkflowHistory", () => {
       authTokenExpiresAt: "2026-03-31T00:00:00.000Z",
     });
 
-    const alphaArtifactRoot = path.join(options.artifactRoot, "alpha");
-    const betaArtifactRoot = path.join(options.artifactRoot, "beta");
+    const alphaArtifactRoot = path.join(options.artifactRoot, "alpha-id");
+    const betaArtifactRoot = path.join(options.artifactRoot, "beta-id");
     await expectPathToExist(alphaArtifactRoot);
     await expectPathToExist(betaArtifactRoot);
 
     const deleted = await deleteWorkflowHistory({
       ...options,
-      workflowId: "alpha",
+      workflowId: "alpha-id",
       workflowName: "alpha",
     });
 
     expect(deleted).toEqual({
       deletedSessionCount: 2,
-      workflowId: "alpha",
+      workflowId: "alpha-id",
       workflowName: "alpha",
     });
 
@@ -236,16 +237,18 @@ describe("deleteWorkflowHistory", () => {
     }
     expect(
       (await listRuntimeSessions(options)).filter(
-        (session) => session.workflowId === "alpha",
+        (session) => session.workflowId === "alpha-id",
       ),
     ).toHaveLength(0);
     expect(
       (await listRuntimeSessions(options)).filter(
-        (session) => session.workflowId === "beta",
+        (session) => session.workflowId === "beta-id",
       ),
     ).toHaveLength(1);
     await expectPathToBeMissing(alphaArtifactRoot);
-    await expectPathToBeMissing(path.join(options.rootDataDir, "files", "alpha"));
+    await expectPathToBeMissing(
+      path.join(options.rootDataDir, "files", "alpha-id"),
+    );
     await expectPathToExist(betaArtifactRoot);
     await expectPathToExist(betaAttachmentDir);
     expect(await managerStore.loadSession("mgrsess-alpha-orphan")).toBeNull();
@@ -274,9 +277,12 @@ describe("deleteWorkflowHistory", () => {
       `${pausedSession.sessionId}.json`,
     );
     const artifactRoot = path.join(options.artifactRoot, "alpha");
-    await mkdir(path.join(artifactRoot, "executions", pausedSession.sessionId), {
-      recursive: true,
-    });
+    await mkdir(
+      path.join(artifactRoot, "executions", pausedSession.sessionId),
+      {
+        recursive: true,
+      },
+    );
 
     await expect(
       deleteWorkflowHistory({
@@ -284,7 +290,9 @@ describe("deleteWorkflowHistory", () => {
         workflowId: "alpha",
         workflowName: "alpha",
       }),
-    ).rejects.toThrow(/cannot delete workflow history while sessions are active/);
+    ).rejects.toThrow(
+      /cannot delete workflow history while sessions are active/,
+    );
 
     await expectPathToExist(sessionFilePath);
     await expectPathToExist(artifactRoot);

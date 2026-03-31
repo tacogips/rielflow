@@ -50,7 +50,7 @@ describe("session-history", () => {
     const roots = resolveEffectiveRoots(options);
     const executionDir = path.join(
       roots.artifactRoot,
-      "demo",
+      "demo-id",
       "executions",
       session.sessionId,
     );
@@ -162,7 +162,7 @@ describe("session-history", () => {
     const roots = resolveEffectiveRoots(options);
     const executionDir = path.join(
       roots.artifactRoot,
-      "demo",
+      "demo-id",
       "executions",
       session.sessionId,
     );
@@ -209,9 +209,9 @@ describe("session-history", () => {
     expect(
       await managerStore.loadSession("mgrsess-history-paused-001"),
     ).not.toBeNull();
-    await expect(Bun.file(path.join(executionDir, "output.json")).exists()).resolves.toBe(
-      true,
-    );
+    await expect(
+      Bun.file(path.join(executionDir, "output.json")).exists(),
+    ).resolves.toBe(true);
     await expect(
       Bun.file(path.join(attachmentDir, "attachment.txt")).exists(),
     ).resolves.toBe(true);
@@ -242,7 +242,7 @@ describe("session-history", () => {
     const roots = resolveEffectiveRoots(options);
     const executionDir = path.join(
       roots.artifactRoot,
-      "demo",
+      "demo-id",
       "executions",
       session.sessionId,
     );
@@ -270,9 +270,9 @@ describe("session-history", () => {
     ).rejects.toThrow(/while it is paused/);
 
     expect(await listRuntimeSessions(options)).toHaveLength(1);
-    await expect(Bun.file(path.join(executionDir, "output.json")).exists()).resolves.toBe(
-      true,
-    );
+    await expect(
+      Bun.file(path.join(executionDir, "output.json")).exists(),
+    ).resolves.toBe(true);
     await expect(
       Bun.file(path.join(attachmentDir, "attachment.txt")).exists(),
     ).resolves.toBe(true);
@@ -300,7 +300,7 @@ describe("session-history", () => {
     const roots = resolveEffectiveRoots(options);
     const executionDir = path.join(
       roots.artifactRoot,
-      "demo",
+      "demo-id",
       "executions",
       session.sessionId,
     );
@@ -329,9 +329,9 @@ describe("session-history", () => {
 
     expect((await loadSession(session.sessionId, options)).ok).toBe(true);
     expect(await listRuntimeSessions(options)).toHaveLength(1);
-    await expect(Bun.file(path.join(executionDir, "output.json")).exists()).resolves.toBe(
-      true,
-    );
+    await expect(
+      Bun.file(path.join(executionDir, "output.json")).exists(),
+    ).resolves.toBe(true);
     await expect(
       Bun.file(path.join(attachmentDir, "attachment.txt")).exists(),
     ).resolves.toBe(true);

@@ -106,6 +106,7 @@ Optional:
 
 Validation rules:
 
+- `workflowId` is a filesystem namespace key for runtime artifacts and attachments, so it must start with an alphanumeric character and then contain only letters, digits, hyphens, or underscores
 - when provided, `description` must be a non-empty string
 - when omitted, the normalized runtime bundle uses `description: ""`
 - `loops`
@@ -437,9 +438,7 @@ Current shape:
 
 ```json
 {
-  "nodes": [
-    { "id": "divedra-manager", "order": 0 }
-  ],
+  "nodes": [{ "id": "divedra-manager", "order": 0 }],
   "uiMeta": {
     "layout": "vertical"
   }

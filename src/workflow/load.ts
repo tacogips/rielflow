@@ -8,7 +8,11 @@ import {
 } from "./authored-node";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
-import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
+import {
+  isSafeWorkflowName,
+  resolveEffectiveRoots,
+  resolveWorkflowScopedPath,
+} from "./paths";
 import { validateWorkflowBundle } from "./validate";
 import type {
   LoadOptions,
@@ -268,13 +272,29 @@ export async function loadWorkflowFromDisk(
     });
   }
 
+  const artifactWorkflowRoot = resolveWorkflowScopedPath(
+    roots.artifactRoot,
+    validation.value.workflow.workflowId,
+  );
+  if (artifactWorkflowRoot === undefined) {
+    return err({
+      code: "VALIDATION",
+      message: "workflow validation failed",
+      issues: [
+        {
+          severity: "error",
+          path: "workflow.workflowId",
+          message:
+            "must start with an alphanumeric character and contain only letters, digits, hyphens, or underscores",
+        },
+      ],
+    });
+  }
+
   return ok({
     workflowName,
     workflowDirectory,
-    artifactWorkflowRoot: path.join(
-      roots.artifactRoot,
-      validation.value.workflow.workflowId,
-    ),
+    artifactWorkflowRoot,
     bundle: validation.value,
   });
 }

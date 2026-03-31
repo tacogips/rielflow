@@ -3,12 +3,9 @@ import { createManagerSessionStore } from "./manager-session-store";
 import {
   resolveAttachmentRoot,
   resolveEffectiveRoots,
-  resolveSafeScopedPath,
+  resolveWorkflowScopedPath,
 } from "./paths";
-import {
-  deleteRuntimeSession,
-  loadRuntimeSessionSummary,
-} from "./runtime-db";
+import { deleteRuntimeSession, loadRuntimeSessionSummary } from "./runtime-db";
 import type { SessionStatus } from "./session";
 import {
   deleteSession,
@@ -22,15 +19,8 @@ export interface DeleteWorkflowSessionHistoryInput {
   readonly workflowName: string;
 }
 
-function isNonTerminalSessionStatus(
-  status: SessionStatus,
-): boolean {
+function isNonTerminalSessionStatus(status: SessionStatus): boolean {
   return status === "paused" || status === "running";
-}
-
-interface ResolvedWorkflowSessionHistoryTarget {
-  readonly workflowId: string;
-  readonly workflowName: string;
 }
 
 function assertMatchingWorkflowIdentity(input: {
@@ -49,11 +39,14 @@ function assertMatchingWorkflowIdentity(input: {
   }
 }
 
-async function ensureDeletionAllowed(
+async function resolveDeletionWorkflowId(
   input: DeleteWorkflowSessionHistoryInput,
   options: SessionStoreOptions,
-): Promise<ResolvedWorkflowSessionHistoryTarget> {
-  const runtimeSummary = await loadRuntimeSessionSummary(input.sessionId, options);
+): Promise<string> {
+  const runtimeSummary = await loadRuntimeSessionSummary(
+    input.sessionId,
+    options,
+  );
   if (runtimeSummary !== null) {
     assertMatchingWorkflowIdentity({
       actualWorkflowId: runtimeSummary.workflowId,
@@ -81,30 +74,21 @@ async function ensureDeletionAllowed(
         `cannot delete workflow run '${input.sessionId}' while it is ${persistedSessionResult.value.status}`,
       );
     }
-    return {
-      workflowId: persistedSessionResult.value.workflowId,
-      workflowName: persistedSessionResult.value.workflowName,
-    };
+    return persistedSessionResult.value.workflowId;
   }
 
   if (runtimeSummary !== null) {
-    return {
-      workflowId: runtimeSummary.workflowId,
-      workflowName: runtimeSummary.workflowName,
-    };
+    return runtimeSummary.workflowId;
   }
 
-  return {
-    workflowId: input.workflowId,
-    workflowName: input.workflowName,
-  };
+  return input.workflowId;
 }
 
 export async function deleteWorkflowSessionHistory(
   input: DeleteWorkflowSessionHistoryInput,
   options: SessionStoreOptions = {},
 ): Promise<void> {
-  const target = await ensureDeletionAllowed(input, options);
+  const workflowId = await resolveDeletionWorkflowId(input, options);
 
   const deletedSession = await deleteSession(input.sessionId, options);
   if (!deletedSession.ok && deletedSession.error.code !== "NOT_FOUND") {
@@ -120,9 +104,9 @@ export async function deleteWorkflowSessionHistory(
   const attachmentRoot = resolveAttachmentRoot(options);
   const pathsToDelete: string[] = [];
 
-  const executionRoot = resolveSafeScopedPath(
+  const executionRoot = resolveWorkflowScopedPath(
     roots.artifactRoot,
-    target.workflowName,
+    workflowId,
     "executions",
     input.sessionId,
   );
@@ -130,9 +114,9 @@ export async function deleteWorkflowSessionHistory(
     pathsToDelete.push(executionRoot);
   }
 
-  const attachmentDirectory = resolveSafeScopedPath(
+  const attachmentDirectory = resolveWorkflowScopedPath(
     attachmentRoot,
-    target.workflowId,
+    workflowId,
     input.sessionId,
   );
   if (attachmentDirectory !== undefined) {

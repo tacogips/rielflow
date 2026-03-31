@@ -3,7 +3,7 @@ import { loadWorkflowFromDisk } from "./load";
 import { createManagerSessionStore } from "./manager-session-store";
 import {
   resolveAttachmentRoot,
-  resolveSafeScopedPath,
+  resolveWorkflowScopedPath,
 } from "./paths";
 import { listRuntimeSessions } from "./runtime-db";
 import {
@@ -108,7 +108,7 @@ export async function deleteWorkflowHistory(
     force: true,
     recursive: true,
   });
-  const attachmentWorkflowRoot = resolveSafeScopedPath(
+  const attachmentWorkflowRoot = resolveWorkflowScopedPath(
     resolveAttachmentRoot(input),
     workflowId,
   );

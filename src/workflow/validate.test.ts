@@ -189,6 +189,27 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.workflow.description).toBe("");
   });
 
+  test("rejects workflow ids that are unsafe for runtime filesystem namespaces", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowId: "../demo",
+    };
+
+    const result = validateWorkflowBundleDetailed(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toContainEqual({
+      severity: "error",
+      path: "workflow.workflowId",
+      message:
+        "must start with an alphanumeric character and contain only letters, digits, hyphens, or underscores",
+    });
+  });
+
   test("accepts inline node payload authoring when nodeFile is omitted", () => {
     const raw = makeValidRaw();
     raw.workflow = {
@@ -274,9 +295,9 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
       "inline manager",
     );
-    expect(
-      result.value.nodePayloads["divedra-manager"],
-    ).not.toHaveProperty("sessionStartPromptTemplate");
+    expect(result.value.nodePayloads["divedra-manager"]).not.toHaveProperty(
+      "sessionStartPromptTemplate",
+    );
   });
 
   test("accepts workflow-relative node payload paths under nodes/", () => {
@@ -299,7 +320,8 @@ describe("validateWorkflowBundle", () => {
       ],
     };
     raw.nodePayloads = {
-      "nodes/node-divedra-manager.json": raw.nodePayloads["node-divedra-manager.json"],
+      "nodes/node-divedra-manager.json":
+        raw.nodePayloads["node-divedra-manager.json"],
       "nodes/node-worker-1.json": raw.nodePayloads["node-worker-1.json"],
     };
 
@@ -531,7 +553,9 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "workflow.edges" &&
-          issue.message.includes("repeat is supported only when workflow.edges is omitted"),
+          issue.message.includes(
+            "repeat is supported only when workflow.edges is omitted",
+          ),
       ),
     ).toBe(true);
   });

@@ -10,6 +10,8 @@ import {
   inferRootDataDirFromExplicitStorageRoots,
   resolveAttachmentRoot,
   resolveEffectiveRoots,
+  resolveSafeScopedPath,
+  resolveWorkflowScopedPath,
 } from "./paths";
 
 const tempDirs: string[] = [];
@@ -197,6 +199,33 @@ describe("inferRootDataDirFromExplicitStorageRoots", () => {
         sessionStoreRoot: "/var/sessions",
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("resolveSafeScopedPath", () => {
+  test("allows child paths when the scoped root is the filesystem root", () => {
+    const filesystemRoot = path.parse(process.cwd()).root;
+    expect(resolveSafeScopedPath(filesystemRoot, "safe-child")).toBe(
+      path.join(filesystemRoot, "safe-child"),
+    );
+  });
+
+  test("rejects unsafe path segments", () => {
+    expect(resolveSafeScopedPath("/tmp/root", "..")).toBeUndefined();
+    expect(resolveSafeScopedPath("/tmp/root", "nested/path")).toBeUndefined();
+    expect(resolveSafeScopedPath("/tmp/root", "")).toBeUndefined();
+  });
+});
+
+describe("resolveWorkflowScopedPath", () => {
+  test("scopes safe workflow ids under the target root", () => {
+    expect(resolveWorkflowScopedPath("/tmp/root", "demo-id", "executions")).toBe(
+      path.join("/tmp/root", "demo-id", "executions"),
+    );
+  });
+
+  test("rejects unsafe workflow ids before joining filesystem paths", () => {
+    expect(resolveWorkflowScopedPath("/tmp/root", "../demo")).toBeUndefined();
   });
 });
 

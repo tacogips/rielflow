@@ -117,6 +117,11 @@ When `workflow.nodes[].nodeFile` is omitted, the author may provide the node
 payload inline as `workflow.nodes[].node`. The loader normalizes that authored
 form to an internal `nodes/node-{id}.json` path for validation/runtime use.
 
+`workflowId` is the runtime namespace key for artifacts, attachment files, and
+workflow-execution storage. Authored workflow ids must therefore start with an
+alphanumeric character and then use only letters, digits, hyphens, or
+underscores.
+
 Fields such as `workflowType`, `nodeGroups`, and workflow-ref child workflows
 are not part of the current authored schema, even though older docs mentioned
 them.

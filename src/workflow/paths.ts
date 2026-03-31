@@ -63,6 +63,42 @@ export function resolveAttachmentRoot(options: LoadOptions = {}): string {
   return attachmentRoot;
 }
 
+export function resolveSafeScopedPath(
+  root: string,
+  ...segments: readonly string[]
+): string | undefined {
+  if (
+    segments.some(
+      (segment) =>
+        segment.length === 0 ||
+        segment === "." ||
+        segment === ".." ||
+        segment.includes("/") ||
+        segment.includes("\\"),
+    )
+  ) {
+    return undefined;
+  }
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(resolvedRoot, ...segments);
+  const relative = path.relative(resolvedRoot, resolvedTarget);
+  return relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+    ? resolvedTarget
+    : undefined;
+}
+
+export function resolveWorkflowScopedPath(
+  root: string,
+  workflowId: string,
+  ...segments: readonly string[]
+): string | undefined {
+  return isSafeWorkflowId(workflowId)
+    ? resolveSafeScopedPath(root, workflowId, ...segments)
+    : undefined;
+}
+
 export function resolveEffectiveRoots(
   options: LoadOptions = {},
 ): EffectiveRoots {
@@ -79,17 +115,12 @@ export function resolveEffectiveRoots(
     options.artifactRoot ??
     env["DIVEDRA_ARTIFACT_ROOT"] ??
     path.join(rootDataDir, ROOT_DATA_WORKFLOW_SUBDIR);
-  const attachmentRoot =
-    env["DIVEDRA_ATTACHMENT_ROOT"] !== undefined &&
-    env["DIVEDRA_ATTACHMENT_ROOT"] !== ""
-      ? resolveRootPath(env["DIVEDRA_ATTACHMENT_ROOT"], cwd)
-      : path.join(rootDataDir, ROOT_DATA_FILES_SUBDIR);
 
   return {
     workflowRoot: resolveRootPath(workflowRoot, cwd),
     artifactRoot: resolveRootPath(artifactRoot, cwd),
     rootDataDir,
-    attachmentRoot,
+    attachmentRoot: resolveAttachmentRoot(options),
   };
 }
 
@@ -142,12 +173,21 @@ export function encodeProjectPathForDivedraScope(absolutePath: string): string {
  */
 export function computeDefaultRootDataDir(cwd: string): string {
   const encoded = encodeProjectPathForDivedraScope(cwd);
-  return path.join(os.homedir(), ".divedra", "project", encoded, "divedra-artifact");
+  return path.join(
+    os.homedir(),
+    ".divedra",
+    "project",
+    encoded,
+    "divedra-artifact",
+  );
+}
+
+const SAFE_WORKFLOW_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-_]{0,63}$/;
+
+export function isSafeWorkflowId(workflowId: string): boolean {
+  return SAFE_WORKFLOW_TOKEN_PATTERN.test(workflowId);
 }
 
 export function isSafeWorkflowName(workflowName: string): boolean {
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9-_]{0,63}$/.test(workflowName)) {
-    return false;
-  }
-  return !workflowName.includes("..");
+  return isSafeWorkflowId(workflowName);
 }
