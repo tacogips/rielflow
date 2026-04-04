@@ -6,7 +6,6 @@ import {
   type NodeAdapter,
 } from "../adapter";
 import type { AgentNodePayload, NodeExecutionBackend } from "../types";
-import { normalizeCliAgentBackend } from "../backend";
 import {
   AnthropicSdkAdapter,
   type AnthropicSdkAdapterConfig,
@@ -28,13 +27,9 @@ export function resolveNodeExecutionBackend(
   if (node.executionBackend !== undefined) {
     return node.executionBackend;
   }
-  const legacyCliBackend = normalizeCliAgentBackend(node.model);
-  if (legacyCliBackend !== null) {
-    return legacyCliBackend;
-  }
   throw new AdapterExecutionError(
     "provider_error",
-    `node '${node.id}' requires executionBackend when model '${node.model}' is not a tacogips CLI-wrapper backend`,
+    `node '${node.id}' requires explicit executionBackend`,
   );
 }
 

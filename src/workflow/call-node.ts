@@ -27,7 +27,9 @@ import {
 import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
+  type NodeExecutionMailbox,
 } from "./node-execution-mailbox";
+import { executeNativeNode } from "./native-node-executor";
 import { loadWorkflowFromDisk } from "./load";
 import {
   buildAmbientManagerControlPlaneEnvironment,
@@ -338,6 +340,84 @@ async function executeAdapterWithTimeout(
         error instanceof Error
           ? error.message
           : "unknown adapter execution failure",
+    });
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function executeNativeNodeWithTimeout(input: {
+  readonly workflowDirectory: string;
+  readonly artifactWorkflowRoot: string;
+  readonly workflowId: string;
+  readonly workflowDescription: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly node: NodePayload;
+  readonly workflowDefaults: WorkflowJson["defaults"];
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly mergedVariables: Readonly<Record<string, unknown>>;
+  readonly arguments: Readonly<Record<string, unknown>> | null;
+  readonly artifactDir: string;
+  readonly executionMailbox: NodeExecutionMailbox;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly timeoutMs: number;
+}): Promise<Result<AdapterExecutionOutput, { code: string; message: string }>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new AdapterExecutionError("timeout", "native node execution timed out"),
+      );
+    }, input.timeoutMs);
+  });
+
+  try {
+    const output = await Promise.race([
+      executeNativeNode(
+        {
+          workflowDirectory: input.workflowDirectory,
+          artifactWorkflowRoot: input.artifactWorkflowRoot,
+          workflowId: input.workflowId,
+          workflowDescription: input.workflowDescription,
+          workflowExecutionId: input.workflowExecutionId,
+          nodeId: input.nodeId,
+          nodeExecId: input.nodeExecId,
+          node: input.node,
+          workflowDefaults: input.workflowDefaults,
+          runtimeVariables: input.runtimeVariables,
+          mergedVariables: input.mergedVariables,
+          arguments: input.arguments,
+          artifactDir: input.artifactDir,
+          executionMailbox: input.executionMailbox,
+          ...(input.env === undefined ? {} : { env: input.env }),
+        },
+        {
+          timeoutMs: input.timeoutMs,
+          signal: controller.signal,
+        },
+      ),
+      timeoutPromise,
+    ]);
+    return ok(output);
+  } catch (error: unknown) {
+    if (error instanceof AdapterExecutionError) {
+      return err({ code: error.code, message: error.message });
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return err({ code: "timeout", message: "native node execution timed out" });
+    }
+    return err({
+      code: "provider_error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "unknown native node execution failure",
     });
   } finally {
     if (timer !== undefined) {
@@ -751,20 +831,6 @@ class ExecutionDispatcher {
         message: `node '${input.nodeId}' requests nodeType='user-action', but direct call-node execution is not supported`,
       });
     }
-    if (nodePayload.nodeType === "command") {
-      return err({
-        session,
-        exitCode: 1,
-        message: `node '${input.nodeId}' requests nodeType='command', but command execution is not implemented yet`,
-      });
-    }
-    if (nodePayload.nodeType === "container") {
-      return err({
-        session,
-        exitCode: 1,
-        message: `node '${input.nodeId}' requests nodeType='container', but container execution is not implemented yet`,
-      });
-    }
 
     if (
       this.#adapter instanceof DispatchingNodeAdapter &&
@@ -789,11 +855,17 @@ class ExecutionDispatcher {
       }
     }
     const agentNodePayload = asAgentNodePayload(nodePayload);
-    if (agentNodePayload === null) {
+    const nativeNodePayload =
+      agentNodePayload === null &&
+      (nodePayload.nodeType === "command" || nodePayload.nodeType === "container")
+        ? nodePayload
+        : null;
+    const executionNodePayload = agentNodePayload ?? nodePayload;
+    if (agentNodePayload === null && nativeNodePayload === null) {
       return err({
         session,
         exitCode: 1,
-        message: `node '${input.nodeId}' is missing agent execution fields`,
+        message: `node '${input.nodeId}' is missing executable node fields`,
       });
     }
 
@@ -811,13 +883,13 @@ class ExecutionDispatcher {
     await mkdir(artifactDir, { recursive: true });
 
     const mergedVariables = {
-      ...agentNodePayload.variables,
+      ...executionNodePayload.variables,
       ...session.runtimeVariables,
     };
 
     const assembled = assembleNodeInput({
       runtimeVariables: session.runtimeVariables,
-      node: agentNodePayload,
+      node: executionNodePayload,
       workflowId: workflow.workflowId,
       workflowDescription: workflow.description,
       ...(nodeRef.kind === undefined ? {} : { nodeKind: nodeRef.kind }),
@@ -836,7 +908,7 @@ class ExecutionDispatcher {
     const executionMailbox = buildNodeExecutionMailbox({
       workflow,
       nodeRef,
-      node: agentNodePayload,
+      node: executionNodePayload,
       nodePayloads: loaded.value.bundle.nodePayloads,
       runtimeVariables: session.runtimeVariables,
       basePromptText: assembled.promptText,
@@ -871,19 +943,19 @@ class ExecutionDispatcher {
       });
     }
     const timeoutMs = resolveTimeoutMs(
-      agentNodePayload,
+      executionNodePayload,
       workflow.defaults.nodeTimeoutMs,
       input.defaultTimeoutMs,
     );
-    let backendSession = resolveRequestedBackendSession(
-      session,
-      agentNodePayload,
-    );
+    let backendSession =
+      agentNodePayload === null
+        ? undefined
+        : resolveRequestedBackendSession(session, agentNodePayload);
     const composedPrompts = composeExecutionPrompts({
       promptComposition: {
         workflow,
         nodeRef,
-        node: agentNodePayload,
+        node: executionNodePayload,
         nodePayloads: loaded.value.bundle.nodePayloads,
         runtimeVariables: session.runtimeVariables,
         basePromptText: assembled.promptText,
@@ -894,7 +966,8 @@ class ExecutionDispatcher {
           ? {}
           : { managerMessage: input.message }),
       },
-      includeSessionStartPrompt: backendSession?.mode !== "reuse",
+      includeSessionStartPrompt:
+        agentNodePayload !== null && backendSession?.mode !== "reuse",
     });
     const promptText = composedPrompts.promptText;
     const systemPromptText = composedPrompts.systemPromptText;
@@ -942,12 +1015,13 @@ class ExecutionDispatcher {
       workflowId: workflow.workflowId,
       nodeId: input.nodeId,
       nodeExecId,
-      model: agentNodePayload.model,
-      ...(agentNodePayload.systemPromptTemplate === undefined
+      nodeType: executionNodePayload.nodeType ?? "agent",
+      ...(agentNodePayload === null ? {} : { model: agentNodePayload.model }),
+      ...(agentNodePayload?.systemPromptTemplate === undefined
         ? {}
         : { systemPromptTemplate: agentNodePayload.systemPromptTemplate }),
-      promptTemplate: agentNodePayload.promptTemplate,
-      ...(agentNodePayload.sessionStartPromptTemplate === undefined
+      promptTemplate: executionNodePayload.promptTemplate,
+      ...(agentNodePayload?.sessionStartPromptTemplate === undefined
         ? {}
         : {
             sessionStartPromptTemplate:
@@ -961,13 +1035,13 @@ class ExecutionDispatcher {
       upstreamCommunications: [],
       executionMailbox,
       outputContract:
-        agentNodePayload.output === undefined
+        executionNodePayload.output === undefined
           ? undefined
           : {
-              description: agentNodePayload.output.description,
-              jsonSchema: agentNodePayload.output.jsonSchema,
+              description: executionNodePayload.output.description,
+              jsonSchema: executionNodePayload.output.jsonSchema,
               maxValidationAttempts:
-                resolveOutputValidationAttempts(agentNodePayload),
+                resolveOutputValidationAttempts(executionNodePayload),
               publication: buildOutputPublicationPolicy(),
             },
       ...(backendSession === undefined ? {} : { backendSession }),
@@ -988,7 +1062,9 @@ class ExecutionDispatcher {
     if (input.dryRun === true) {
       finalOutputPayload = {
         provider: "dry-run",
-        model: agentNodePayload.model,
+        model:
+          agentNodePayload?.model ??
+          `${executionNodePayload.nodeType ?? "agent"}-dry-run`,
         ...(systemPromptText === undefined ? {} : { systemPromptText }),
         promptText,
         completionPassed: true,
@@ -996,11 +1072,11 @@ class ExecutionDispatcher {
         payload: { skippedExecution: true },
       };
     } else {
-      const maxAttempts = resolveOutputValidationAttempts(agentNodePayload);
+      const maxAttempts = resolveOutputValidationAttempts(executionNodePayload);
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         outputAttemptCount = attempt;
         const outputAttemptId =
-          agentNodePayload.output === undefined
+          executionNodePayload.output === undefined
             ? undefined
             : nextOutputAttemptId(attempt);
         const attemptDir =
@@ -1020,7 +1096,7 @@ class ExecutionDispatcher {
             ? undefined
             : path.join(attemptDir, "candidate.json");
         const candidatePath =
-          outputAttemptId === undefined
+          outputAttemptId === undefined || agentNodePayload === null
             ? undefined
             : buildReservedCandidateSubmissionPath({
                 workflowId: workflow.workflowId,
@@ -1039,7 +1115,7 @@ class ExecutionDispatcher {
           await rm(candidatePath, { force: true });
         }
         const executionPromptText =
-          candidatePath === undefined
+          candidatePath === undefined || agentNodePayload === null
             ? promptText
             : buildOutputPromptText({
                 basePromptText: promptText,
@@ -1059,55 +1135,75 @@ class ExecutionDispatcher {
           });
         }
 
-        const execution = await executeAdapterWithTimeout(
-          this.#adapter,
-          {
-            workflowId: workflow.workflowId,
-            workflowExecutionId: session.sessionId,
-            nodeId: input.nodeId,
-            nodeExecId,
-            node: agentNodePayload,
-            mergedVariables,
-            ...(systemPromptText === undefined ? {} : { systemPromptText }),
-            promptText: executionPromptText,
-            arguments: assembled.arguments,
-            executionIndex,
-            artifactDir,
-            upstreamCommunicationIds: [],
-            executionMailbox,
-            ...(backendSession === undefined ? {} : { backendSession }),
-            ...(ambientManagerContext === undefined
-              ? {}
-              : { ambientManagerContext }),
-            ...(candidatePath === undefined ||
-            agentNodePayload.output === undefined
-              ? {}
-              : {
-                  output: {
-                    ...(agentNodePayload.output.description === undefined
-                      ? {}
-                      : { description: agentNodePayload.output.description }),
-                    ...(agentNodePayload.output.jsonSchema === undefined
-                      ? {}
-                      : { jsonSchema: agentNodePayload.output.jsonSchema }),
-                    maxValidationAttempts: maxAttempts,
-                    attempt,
-                    candidatePath,
-                    validationErrors: formatOutputValidationErrors(
-                      outputValidationErrors,
-                    ),
-                    publication: buildOutputPublicationPolicy(),
-                  },
-                }),
-          },
-          timeoutMs,
-        );
+        const execution =
+          agentNodePayload !== null
+            ? await executeAdapterWithTimeout(
+                this.#adapter,
+                {
+                  workflowId: workflow.workflowId,
+                  workflowExecutionId: session.sessionId,
+                  nodeId: input.nodeId,
+                  nodeExecId,
+                  node: agentNodePayload,
+                  mergedVariables,
+                  ...(systemPromptText === undefined ? {} : { systemPromptText }),
+                  promptText: executionPromptText,
+                  arguments: assembled.arguments,
+                  executionIndex,
+                  artifactDir,
+                  upstreamCommunicationIds: [],
+                  executionMailbox,
+                  ...(backendSession === undefined ? {} : { backendSession }),
+                  ...(ambientManagerContext === undefined
+                    ? {}
+                    : { ambientManagerContext }),
+                  ...(candidatePath === undefined ||
+                  agentNodePayload.output === undefined
+                    ? {}
+                    : {
+                        output: {
+                          ...(agentNodePayload.output.description === undefined
+                            ? {}
+                            : { description: agentNodePayload.output.description }),
+                          ...(agentNodePayload.output.jsonSchema === undefined
+                            ? {}
+                            : { jsonSchema: agentNodePayload.output.jsonSchema }),
+                          maxValidationAttempts: maxAttempts,
+                          attempt,
+                          candidatePath,
+                          validationErrors: formatOutputValidationErrors(
+                            outputValidationErrors,
+                          ),
+                          publication: buildOutputPublicationPolicy(),
+                        },
+                      }),
+                },
+                timeoutMs,
+              )
+            : await executeNativeNodeWithTimeout({
+                workflowDirectory: loaded.value.workflowDirectory,
+                artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
+                workflowId: workflow.workflowId,
+                workflowDescription: workflow.description,
+                workflowExecutionId: session.sessionId,
+                nodeId: input.nodeId,
+                nodeExecId,
+                node: executionNodePayload,
+                workflowDefaults: workflow.defaults,
+                runtimeVariables: session.runtimeVariables,
+                mergedVariables,
+                arguments: assembled.arguments,
+                artifactDir,
+                executionMailbox,
+                ...(input.env === undefined ? {} : { env: input.env }),
+                timeoutMs,
+              });
 
         try {
           if (!execution.ok) {
             if (
               execution.error.code === "invalid_output" &&
-              agentNodePayload.output !== undefined &&
+              executionNodePayload.output !== undefined &&
               validationPath !== undefined
             ) {
               outputValidationErrors = [
@@ -1124,7 +1220,9 @@ class ExecutionDispatcher {
               nodeStatus = "failed";
               finalOutputPayload = {
                 provider: "deterministic-local",
-                model: agentNodePayload.model,
+                model:
+                  agentNodePayload?.model ??
+                  (executionNodePayload.nodeType ?? "node"),
                 promptText,
                 completionPassed: false,
                 when: {},
@@ -1138,7 +1236,9 @@ class ExecutionDispatcher {
               execution.error.code === "timeout" ? "timed_out" : "failed";
             finalOutputPayload = {
               provider: "deterministic-local",
-              model: agentNodePayload.model,
+              model:
+                agentNodePayload?.model ??
+                (executionNodePayload.nodeType ?? "node"),
               promptText,
               completionPassed: false,
               when: {},
@@ -1157,7 +1257,7 @@ class ExecutionDispatcher {
             backendSessionId = execution.value.backendSession.sessionId;
           }
           if (
-            agentNodePayload.output === undefined &&
+            executionNodePayload.output === undefined &&
             execution.value.candidateFilePath !== undefined
           ) {
             outputValidationErrors = [
@@ -1178,7 +1278,7 @@ class ExecutionDispatcher {
           }
 
           const validation = await this.#validator.validate({
-            node: agentNodePayload,
+            node: executionNodePayload,
             execution: execution.value,
             ...(candidatePath === undefined
               ? {}
@@ -1269,20 +1369,23 @@ class ExecutionDispatcher {
         : { backendSessionMode: requestedBackendSessionMode }),
     };
 
-    const nextNodeBackendSessions = persistNodeBackendSession({
-      session,
-      node: agentNodePayload,
-      nodeExecId,
-      provider:
-        backendSessionProvider ??
-        finalOutputPayload?.["provider"]?.toString() ??
-        "unknown-provider",
-      endedAt,
-      backendSession,
-      ...(backendSessionId === undefined
-        ? {}
-        : { returnedSessionId: backendSessionId }),
-    });
+    const nextNodeBackendSessions =
+      agentNodePayload === null
+        ? session.nodeBackendSessions ?? {}
+        : persistNodeBackendSession({
+            session,
+            node: agentNodePayload,
+            nodeExecId,
+            provider:
+              backendSessionProvider ??
+              finalOutputPayload?.["provider"]?.toString() ??
+              "unknown-provider",
+            endedAt,
+            backendSession,
+            ...(backendSessionId === undefined
+              ? {}
+              : { returnedSessionId: backendSessionId }),
+          });
 
     if (managerSessionId !== undefined && ambientManagerContext !== undefined) {
       await managerSessionStore.createOrResumeSession({
@@ -1350,7 +1453,7 @@ class ExecutionDispatcher {
       outputRef = await this.#publisher.publish({
         workflow,
         session,
-        node: agentNodePayload,
+        node: executionNodePayload,
         nodeExecution,
         artifactDir,
         inputJson,
@@ -1369,7 +1472,7 @@ class ExecutionDispatcher {
         status: nodeStatus,
         startedAt,
         endedAt,
-        model: agentNodePayload.model,
+        model: executionNodePayload.model,
         timeoutMs,
         ...(outputAttemptCount === 1 ? {} : { outputAttemptCount }),
         ...(outputValidationErrors.length === 0

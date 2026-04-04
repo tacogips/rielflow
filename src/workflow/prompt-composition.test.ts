@@ -73,7 +73,8 @@ function makeWorkflow(): WorkflowJson {
 function makeNode(overrides: Partial<NodePayload> = {}): NodePayload {
   return {
     id: "implement",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "Implement the release step.",
     variables: {},
     ...overrides,
@@ -84,27 +85,31 @@ function makeNodePayloads(): Readonly<Record<string, NodePayload>> {
   return {
     "divedra-manager": {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "Plan the overall workflow.",
       variables: {},
     },
     "main-divedra": {
       id: "main-divedra",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate:
         "Translate the parent instruction into child workflow work.",
       variables: {},
     },
     "workflow-input": {
       id: "workflow-input",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "Normalize the received instruction into workflow input.",
       variables: {},
     },
     implement: makeNode(),
     "workflow-output": {
       id: "workflow-output",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "Assemble the final workflow output.",
       variables: {},
       output: {

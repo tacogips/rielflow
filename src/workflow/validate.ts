@@ -13,7 +13,6 @@ import {
 } from "./authored-node";
 import { isSafeWorkflowId } from "./paths";
 import {
-  isCliAgentBackend,
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
 } from "./backend";
@@ -80,6 +79,12 @@ function requiresSeparatedModel(
   executionBackend: NodeExecutionBackend | undefined,
 ): executionBackend is NodeExecutionBackend {
   return executionBackend !== undefined;
+}
+
+function isLegacyCliModelIdentifier(value: unknown): value is string {
+  return (
+    value === "tacogips/codex-agent" || value === "tacogips/claude-code-agent"
+  );
 }
 
 function isNodeSessionMode(value: unknown): value is NodeSessionPolicy["mode"] {
@@ -295,7 +300,6 @@ function normalizeContainerBuild(
   const allowedKeys = new Set([
     "contextPath",
     "containerfilePath",
-    "dockerfilePath",
     "target",
   ]);
   for (const key of Object.keys(value)) {
@@ -321,48 +325,50 @@ function normalizeContainerBuild(
     );
   }
 
-  const normalizeBuildPath = (
-    key: "containerfilePath" | "dockerfilePath",
-  ): string | undefined => {
-    const rawValue = value[key];
-    if (rawValue === undefined) {
-      return undefined;
-    }
-    if (typeof rawValue !== "string" || rawValue.length === 0) {
+  const containerfilePathRaw = value["containerfilePath"];
+  let containerfilePath: string | undefined;
+  if (containerfilePathRaw !== undefined) {
+    if (
+      typeof containerfilePathRaw !== "string" ||
+      containerfilePathRaw.length === 0
+    ) {
       issues.push(
         makeIssue(
           "error",
-          `${path}.${key}`,
+          `${path}.containerfilePath`,
           "must be a non-empty string when provided",
         ),
       );
-      return undefined;
-    }
-    if (!isSafeWorkflowRelativePath(rawValue)) {
+    } else if (!isSafeWorkflowRelativePath(containerfilePathRaw)) {
       issues.push(
         makeIssue(
           "error",
-          `${path}.${key}`,
+          `${path}.containerfilePath`,
           "must be a workflow-relative path without '.' or '..' segments",
         ),
       );
-      return undefined;
-    }
-    if (isReservedWorkflowDefinitionPath(rawValue)) {
+    } else if (isReservedWorkflowDefinitionPath(containerfilePathRaw)) {
       issues.push(
         makeIssue(
           "error",
-          `${path}.${key}`,
+          `${path}.containerfilePath`,
           "must not target canonical workflow definition files such as workflow.json or node-*.json",
         ),
       );
-      return undefined;
+    } else {
+      containerfilePath = containerfilePathRaw;
     }
-    return rawValue;
-  };
+  }
 
-  const containerfilePath = normalizeBuildPath("containerfilePath");
-  const dockerfilePath = normalizeBuildPath("dockerfilePath");
+  if (value["dockerfilePath"] !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.dockerfilePath`,
+        "legacy field 'dockerfilePath' is not supported; use 'containerfilePath'",
+      ),
+    );
+  }
   const targetRaw = value["target"];
   let target: string | undefined;
   if (targetRaw !== undefined) {
@@ -386,7 +392,6 @@ function normalizeContainerBuild(
   return {
     contextPath,
     ...(containerfilePath === undefined ? {} : { containerfilePath }),
-    ...(dockerfilePath === undefined ? {} : { dockerfilePath }),
     ...(target === undefined ? {} : { target }),
   };
 }
@@ -851,58 +856,6 @@ function normalizeNodeDurability(
     mode: modeRaw,
     ...(mountPath === undefined ? {} : { mountPath }),
   };
-}
-
-function normalizeLegacyRuntimeIsolationToContainer(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-): ContainerExecution | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return undefined;
-  }
-
-  const modeRaw = value["mode"];
-  if (modeRaw === "host") {
-    issues.push(
-      makeIssue(
-        "warning",
-        path,
-        "legacy runtimeIsolation.mode='host' is ignored; omit runtimeIsolation in new workflows",
-      ),
-    );
-    return undefined;
-  }
-  if (modeRaw !== "podman") {
-    issues.push(
-      makeIssue("error", `${path}.mode`, "must be 'host' or 'podman'"),
-    );
-    return undefined;
-  }
-
-  const normalized = normalizeContainerExecution(
-    {
-      runnerKind: "podman",
-      ...(value["image"] === undefined ? {} : { image: value["image"] }),
-      ...(value["build"] === undefined ? {} : { build: value["build"] }),
-    },
-    path,
-    issues,
-  );
-  if (normalized !== undefined) {
-    issues.push(
-      makeIssue(
-        "warning",
-        path,
-        "legacy runtimeIsolation normalized to container metadata",
-      ),
-    );
-  }
-  return normalized;
 }
 
 function normalizeCompletion(
@@ -1617,17 +1570,16 @@ function normalizeSubWorkflow(
     );
   }
 
-  const inputSourcesAlias = value["inputs"];
-  const inputSourcesRaw = value["inputSources"] ?? inputSourcesAlias;
-  if (value["inputSources"] === undefined && inputSourcesAlias !== undefined) {
+  if (value["inputs"] !== undefined) {
     issues.push(
       makeIssue(
-        "warning",
+        "error",
         `${path}.inputs`,
-        "legacy field 'inputs' normalized to 'inputSources'; update workflow JSON to canonical schema",
+        "legacy field 'inputs' is not supported; use 'inputSources'",
       ),
     );
   }
+  const inputSourcesRaw = value["inputSources"];
   if (!Array.isArray(inputSourcesRaw)) {
     issues.push(makeIssue("error", `${path}.inputSources`, "must be an array"));
   }
@@ -1725,17 +1677,16 @@ function normalizeSubWorkflowConversation(
   const id = readStringField(value, "id", path, issues);
   const stopWhen = readStringField(value, "stopWhen", path, issues);
 
-  const participantsAlias = value["participantsIds"];
-  const participantsRaw = value["participants"] ?? participantsAlias;
-  if (value["participants"] === undefined && participantsAlias !== undefined) {
+  if (value["participantsIds"] !== undefined) {
     issues.push(
       makeIssue(
-        "warning",
+        "error",
         `${path}.participantsIds`,
-        "legacy field 'participantsIds' normalized to 'participants'; update workflow JSON to canonical schema",
+        "legacy field 'participantsIds' is not supported; use 'participants'",
       ),
     );
   }
+  const participantsRaw = value["participants"];
   if (!Array.isArray(participantsRaw)) {
     issues.push(makeIssue("error", `${path}.participants`, "must be an array"));
   }
@@ -2252,17 +2203,12 @@ function normalizeNodeTemplateFields(args: {
   readonly issues: ValidationIssue[];
   readonly templateField: string;
   readonly templateFileField: string;
-  readonly legacyAliasField?: string;
 }): {
   readonly template?: string;
   readonly templateFile?: string;
 } {
   const templateRaw = args.payload[args.templateField];
   const templateFileRaw = args.payload[args.templateFileField];
-  const legacyAliasRaw =
-    args.legacyAliasField === undefined
-      ? undefined
-      : args.payload[args.legacyAliasField];
 
   let template: string | undefined;
   let templateFile: string | undefined;
@@ -2303,15 +2249,6 @@ function normalizeNodeTemplateFields(args: {
 
   if (typeof templateRaw === "string" && templateRaw.length > 0) {
     template = templateRaw;
-  } else if (typeof legacyAliasRaw === "string" && legacyAliasRaw.length > 0) {
-    template = legacyAliasRaw;
-    args.issues.push(
-      makeIssue(
-        "warning",
-        `${args.path}.${args.legacyAliasField ?? args.templateField}`,
-        `legacy field '${args.legacyAliasField}' normalized to '${args.templateField}'`,
-      ),
-    );
   } else if (templateRaw !== undefined && typeof templateRaw !== "string") {
     args.issues.push(
       makeIssue(
@@ -2379,22 +2316,16 @@ function normalizeNodePayload(
     `${path}.container`,
     issues,
   );
-  const legacyContainer = normalizeLegacyRuntimeIsolationToContainer(
-    payload["runtimeIsolation"],
-    `${path}.runtimeIsolation`,
-    issues,
-  );
-  if (container !== undefined && legacyContainer !== undefined) {
+  if (payload["runtimeIsolation"] !== undefined) {
     issues.push(
       makeIssue(
         "error",
-        path,
-        "must not declare both container and legacy runtimeIsolation",
+        `${path}.runtimeIsolation`,
+        "legacy field 'runtimeIsolation' is not supported; use 'container'",
       ),
     );
   }
-  const effectiveContainer = container ?? legacyContainer;
-  if (effectiveContainer !== undefined && nodeTypeRaw === undefined) {
+  if (container !== undefined && nodeTypeRaw === undefined) {
     nodeType = "container";
   }
 
@@ -2419,18 +2350,6 @@ function normalizeNodePayload(
       normalizeNodeExecutionBackend(executionBackendRaw);
     if (normalizedExecutionBackend !== null) {
       executionBackend = normalizedExecutionBackend;
-      if (
-        typeof executionBackendRaw === "string" &&
-        executionBackendRaw !== normalizedExecutionBackend
-      ) {
-        issues.push(
-          makeIssue(
-            "warning",
-            `${path}.executionBackend`,
-            `legacy executionBackend '${executionBackendRaw}' normalized to '${normalizedExecutionBackend}'`,
-          ),
-        );
-      }
     } else {
       issues.push(
         makeIssue(
@@ -2440,29 +2359,12 @@ function normalizeNodePayload(
         ),
       );
     }
-  } else if (
-    nodeType === "agent" &&
-    model !== undefined &&
-    !isCliAgentBackend(model)
-  ) {
+  } else if (nodeType === "agent") {
     issues.push(
       makeIssue(
         "error",
         `${path}.executionBackend`,
-        "is required when model is not one of the tacogips CLI-wrapper backend identifiers",
-      ),
-    );
-  } else if (
-    nodeType === "agent" &&
-    model !== undefined &&
-    executionBackend === undefined &&
-    isCliAgentBackend(model)
-  ) {
-    issues.push(
-      makeIssue(
-        "warning",
-        `${path}.model`,
-        "legacy CLI backend identifier encoded in model; prefer explicit executionBackend plus a provider model name",
+        "is required for agent nodes",
       ),
     );
   }
@@ -2470,7 +2372,7 @@ function normalizeNodePayload(
     nodeType === "agent" &&
     model !== undefined &&
     requiresSeparatedModel(executionBackend) &&
-    normalizeCliAgentBackend(model) !== null
+    (normalizeCliAgentBackend(model) !== null || isLegacyCliModelIdentifier(model))
   ) {
     issues.push(
       makeIssue(
@@ -2494,7 +2396,6 @@ function normalizeNodePayload(
     issues,
     templateField: "promptTemplate",
     templateFileField: "promptTemplateFile",
-    legacyAliasField: "prompt",
   });
   const normalizedSessionStartPromptTemplate = normalizeNodeTemplateFields({
     path,
@@ -2523,21 +2424,29 @@ function normalizeNodePayload(
   }
 
   const variablesRaw = payload["variables"];
-  const variablesAlias = payload["variable"];
   let variables: UnknownRecord | null = null;
   if (isRecord(variablesRaw)) {
     variables = variablesRaw;
-  } else if (isRecord(variablesAlias)) {
-    variables = variablesAlias;
-    issues.push(
-      makeIssue(
-        "warning",
-        `${path}.variable`,
-        "legacy field 'variable' normalized to 'variables'",
-      ),
-    );
   } else {
     issues.push(makeIssue("error", `${path}.variables`, "must be an object"));
+  }
+  if (payload["prompt"] !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.prompt`,
+        "legacy field 'prompt' is not supported; use 'promptTemplate'",
+      ),
+    );
+  }
+  if (payload["variable"] !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.variable`,
+        "legacy field 'variable' is not supported; use 'variables'",
+      ),
+    );
   }
 
   const descriptionRaw = payload["description"];
@@ -2712,7 +2621,7 @@ function normalizeNodePayload(
       ),
     );
   }
-  if (nodeType === "container" && effectiveContainer === undefined) {
+  if (nodeType === "container" && container === undefined) {
     issues.push(
       makeIssue(
         "error",
@@ -2784,7 +2693,7 @@ function normalizeNodePayload(
       ),
     );
   }
-  if (nodeType === "user-action" && effectiveContainer !== undefined) {
+  if (nodeType === "user-action" && container !== undefined) {
     issues.push(
       makeIssue(
         "error",
@@ -2846,9 +2755,7 @@ function normalizeNodePayload(
       : { sessionStartPromptTemplateFile }),
     variables,
     ...(command === undefined ? {} : { command }),
-    ...(effectiveContainer === undefined
-      ? {}
-      : { container: effectiveContainer }),
+    ...(container === undefined ? {} : { container }),
     ...(durability === undefined ? {} : { durability }),
     ...(userAction === undefined ? {} : { userAction }),
     ...(argumentsTemplate === undefined ? {} : { argumentsTemplate }),
@@ -3275,7 +3182,7 @@ function runSemanticValidation(
       makeIssue(
         "error",
         "workflow.managerNodeId",
-        "manager-less workflows must derive managerNodeId from entryNodeId during the transition runtime phase",
+        "manager-less workflows must set managerNodeId equal to entryNodeId",
       ),
     );
   }
@@ -3284,7 +3191,7 @@ function runSemanticValidation(
       makeIssue(
         "error",
         "workflow.entryNodeId",
-        "manager-less workflows are not executable in the current runtime phase",
+        "manager-less workflows are not supported",
       ),
     );
   }

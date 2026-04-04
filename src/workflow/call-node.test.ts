@@ -61,14 +61,16 @@ async function createCallNodeFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "manager",
     variables: {},
   });
 
   await writeJson(path.join(workflowDir, "node-writer.json"), {
     id: "writer",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "write a structured review",
     variables: {},
     output: {
@@ -565,7 +567,7 @@ describe("callNode", () => {
     );
   });
 
-  test("rejects podman-isolated nodes until Podman execution is implemented", async () => {
+  test("fails container node execution when the configured runner is unavailable", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
@@ -575,14 +577,14 @@ describe("callNode", () => {
     await createCallNodeFixture(root, workflowName);
     await writeJson(path.join(root, workflowName, "node-writer.json"), {
       id: "writer",
-      model: "tacogips/codex-agent",
-      promptTemplate: "write a structured review",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
+        runnerPath: "/definitely/missing/podman",
         build: {
           contextPath: "containers/writer",
-          dockerfilePath: "containers/writer/Dockerfile",
+          containerfilePath: "containers/writer/Containerfile",
         },
       },
       output: {
@@ -616,8 +618,7 @@ describe("callNode", () => {
     if (result.ok) {
       return;
     }
-    expect(result.error.message).toContain("nodeType='container'");
-    expect(result.error.message).toContain("not implemented yet");
+    expect(result.error.message).toContain("workflow runtime readiness failed");
   });
 
   test("normalizes plain-text manager messages in mailbox input artifacts", async () => {

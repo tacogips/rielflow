@@ -135,7 +135,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
   });
 
-  test("reports container runner problems and unsupported container execution", async () => {
+  test("reports container runner problems and container executor availability", async () => {
     const readiness = await inspectWorkflowRuntimeReadiness(
       makeBundle({
         "container-worker": {
@@ -167,7 +167,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       findRequirement(readiness.requirements, "node-executor:container"),
     ).toMatchObject({
       kind: "node-executor",
-      status: "unsupported",
+      status: "available",
       sourceNodeIds: ["container-worker"],
     });
   });

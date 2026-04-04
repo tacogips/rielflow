@@ -7,10 +7,10 @@ workflow-local Containerfile/Dockerfile path.
 
 ## Overview
 
-The current runtime does not execute container nodes yet, but workflow authoring
-already needs a canonical, validated place to declare how a future
-container-backed execution should obtain its image and which container runner
-should be used by default.
+The current runtime executes container nodes through the native node executor,
+and workflow authoring needs a canonical, validated place to declare how
+container-backed execution obtains its image and which container runner should
+be used by default.
 
 The design goals for this slice are:
 
@@ -20,8 +20,6 @@ The design goals for this slice are:
 - allow workflow-local build metadata when image publication is not yet part of
   the workflow author's process
 - reject invalid or ambiguous container configuration during workflow validation
-- fail clearly at runtime if a workflow attempts to execute a container
-  node before the executor exists
 - keep manager-owned mailbox routing separate from worker-visible container I/O surfaces
 - align container worker I/O with the same execution inbox/outbox contract used by other node types
 
@@ -103,9 +101,7 @@ or:
   segments
 - `build.containerfilePath`, when provided, must also be workflow-relative
   without `.` or `..` segments
-- legacy `build.dockerfilePath` may be accepted as an alias for
-  `build.containerfilePath`
-- `build.containerfilePath` and legacy `build.dockerfilePath` must not target
+- `build.containerfilePath` must not target
   canonical workflow definition files
   such as `workflow.json` or `node-*.json`
 - `build.target`, when provided, must be a non-empty string
@@ -149,21 +145,19 @@ build policy.
 However, requiring every container workflow author to pre-publish an image is too
 heavy for local development. The optional `build` block provides a canonical
 place for workflow-local build metadata, including `containerfilePath`, without
-forcing all nodes into a Dockerfile-driven model. The legacy `dockerfilePath`
-name may still be read for compatibility, but new authored workflows should use
-`containerfilePath`.
+forcing all nodes into a Dockerfile-driven model.
 
-## Runtime Behavior In This Slice
+## Runtime Behavior
 
-This slice does not introduce container execution itself.
-
-Near-term runtime behavior:
+Current runtime behavior:
 
 - workflow validation accepts and preserves the container metadata
-- runtime execution rejects container nodes with a clear unsupported error
-
-This avoids silent no-op behavior or accidental host execution when authors have
-explicitly asked for container execution.
+- `runWorkflow()` and `call-node` execute container nodes through the native
+  executor
+- the runtime prepares mailbox bind mounts, optional workspace and durable
+  mounts, and captures `stdout.log` / `stderr.log`
+- runner availability remains an environment/readiness concern rather than a
+  schema concern
 
 ## Future Executor Shape
 

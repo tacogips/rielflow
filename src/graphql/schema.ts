@@ -45,7 +45,6 @@ import { createSessionId } from "../workflow/session";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
 import { validateWorkflowBundleDetailed } from "../workflow/validate";
 import { deriveWorkflowVisualization } from "../workflow/visualization";
-import { remapNodePayloadsForValidation } from "../server/api-workflow-bundle";
 import type {
   CreateWorkflowDefinitionInput,
   CommunicationConnection,
@@ -317,8 +316,9 @@ async function validateWorkflowDefinitionMutation(
 ): Promise<ValidateWorkflowDefinitionPayload> {
   if (input.bundle !== undefined) {
     const validation = validateWorkflowBundleDetailed({
-      workflow: input.bundle.workflow,
-      nodePayloads: remapNodePayloadsForValidation(input.bundle),
+      workflow: input.bundle.workflow as unknown as Readonly<Record<string, unknown>>,
+      nodePayloads:
+        input.bundle.nodePayloads as unknown as Readonly<Record<string, unknown>>,
     });
     if (!validation.ok) {
       return {

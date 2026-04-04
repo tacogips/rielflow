@@ -217,7 +217,6 @@ export interface CommandExecution {
 export interface ContainerBuild {
   readonly contextPath: string;
   readonly containerfilePath?: string;
-  readonly dockerfilePath?: string;
   readonly target?: string;
 }
 

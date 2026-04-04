@@ -71,7 +71,6 @@ Responsibilities:
 - read workflow bundle files
 - resolve `promptTemplateFile`
 - normalize inline node authoring and workflow-relative node payload paths
-- normalize legacy aliases where still supported
 - validate node kinds, sub-workflow boundaries, edges, loops, and payload shapes
 
 Important validation facts:
@@ -120,7 +119,7 @@ Responsibilities:
 Current implementation status:
 
 - `agent` nodes execute
-- `command` and `container` node types are schema-authorable but not executable in `runWorkflow()`
+- `command` and `container` nodes execute through the native node executor
 
 ### Session and Communication Model
 
@@ -379,7 +378,6 @@ Manager sessions are minted per manager-node execution and expire when that node
 
 ## Current Limitations
 
-- `runWorkflow()` does not execute `command` or `container` nodes yet
 - the main runtime remains queue-based; the local `call-node` path is not the whole orchestration model
 - `LoopRule.backoffMs` exists in schema, but loop backoff is not currently applied directly by the main engine
 - node ordering lives in `workflow.json.nodes[]`, and runtime execution derives semantics from that canonical definition

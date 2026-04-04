@@ -45,8 +45,6 @@ export function resolveRootDataDir(options: LoadOptions = {}): string {
   const rootDataDir =
     options.rootDataDir ??
     env["DIVEDRA_ARTIFACT_DIR"] ??
-    env["DIVEDRA_ROOT_DATA_DIR"] ??
-    env["DIVEDRA_RUNTIME_ROOT"] ??
     computeDefaultRootDataDir(scopedProjectRoot);
   return resolveRootPath(rootDataDir, cwd);
 }

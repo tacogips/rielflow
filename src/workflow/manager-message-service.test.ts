@@ -171,7 +171,8 @@ async function createOptionalDecisionWorkflowFixture(
       file: "node-divedra-manager.json",
       payload: {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
@@ -180,7 +181,8 @@ async function createOptionalDecisionWorkflowFixture(
       file: "node-step-1.json",
       payload: {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "optional step 1",
         variables: {},
       },
@@ -189,7 +191,8 @@ async function createOptionalDecisionWorkflowFixture(
       file: "node-step-2.json",
       payload: {
         id: "step-2",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "optional step 2",
         variables: {},
       },

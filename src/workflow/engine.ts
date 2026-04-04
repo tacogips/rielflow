@@ -28,6 +28,7 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
+import { executeNativeNode } from "./native-node-executor";
 import { composeExecutionPrompts } from "./prompt-composition";
 import {
   parseManagerControlPayload,
@@ -74,6 +75,7 @@ import type {
   LoopRule,
   NodePayload,
   SubWorkflowRef,
+  WorkflowDefaults,
   WorkflowEdge,
   WorkflowJson,
 } from "./types";
@@ -250,6 +252,90 @@ async function executeAdapterWithTimeout(
         error instanceof Error
           ? error.message
           : "unknown adapter execution failure",
+    });
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function executeNativeNodeWithTimeout(input: {
+  readonly workflowDirectory: string;
+  readonly artifactWorkflowRoot: string;
+  readonly workflowId: string;
+  readonly workflowDescription: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly node: NodePayload;
+  readonly workflowDefaults: WorkflowDefaults;
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly mergedVariables: Readonly<Record<string, unknown>>;
+  readonly arguments: Readonly<Record<string, unknown>> | null;
+  readonly artifactDir: string;
+  readonly executionMailbox: ReturnType<typeof buildNodeExecutionMailbox>;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly timeoutMs: number;
+}): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new AdapterExecutionError("timeout", "native node execution timed out"),
+      );
+    }, input.timeoutMs);
+  });
+
+  try {
+    const output = await Promise.race([
+      executeNativeNode(
+        {
+          workflowDirectory: input.workflowDirectory,
+          artifactWorkflowRoot: input.artifactWorkflowRoot,
+          workflowId: input.workflowId,
+          workflowDescription: input.workflowDescription,
+          workflowExecutionId: input.workflowExecutionId,
+          nodeId: input.nodeId,
+          nodeExecId: input.nodeExecId,
+          node: input.node,
+          workflowDefaults: input.workflowDefaults,
+          runtimeVariables: input.runtimeVariables,
+          mergedVariables: input.mergedVariables,
+          arguments: input.arguments,
+          artifactDir: input.artifactDir,
+          executionMailbox: input.executionMailbox,
+          ...(input.env === undefined ? {} : { env: input.env }),
+        },
+        {
+          timeoutMs: input.timeoutMs,
+          signal: controller.signal,
+        },
+      ),
+      timeoutPromise,
+    ]);
+    return ok(output);
+  } catch (error: unknown) {
+    if (error instanceof AdapterExecutionError) {
+      return err({
+        code: error.code,
+        message: error.message,
+      });
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return err({
+        code: "timeout",
+        message: "native node execution timed out",
+      });
+    }
+    return err({
+      code: "provider_error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "unknown native node execution failure",
     });
   } finally {
     if (timer !== undefined) {
@@ -1720,47 +1806,15 @@ export async function runWorkflow(
       nodePayload,
       options.mockScenario?.[nodeId] !== undefined,
     );
-    if (
-      nodePayload.nodeType === "command" &&
-      executableNodePayload === null
-    ) {
-      const failed: WorkflowSessionState = {
-        ...session,
-        queue,
-        status: "failed",
-        currentNodeId: nodeId,
-        endedAt: nowIso(),
-        lastError: `node '${nodeId}' requests nodeType='command', but command execution is not implemented yet`,
-      };
-      await saveSession(failed, options);
-      return err({
-        exitCode: 1,
-        message:
-          failed.lastError ?? "unsupported command node execution request",
-      });
-    }
-    if (
-      nodePayload.nodeType === "container" &&
-      executableNodePayload === null
-    ) {
-      const failed: WorkflowSessionState = {
-        ...session,
-        queue,
-        status: "failed",
-        currentNodeId: nodeId,
-        endedAt: nowIso(),
-        lastError: `node '${nodeId}' requests nodeType='container', but container execution is not implemented yet`,
-      };
-      await saveSession(failed, options);
-      return err({
-        exitCode: 1,
-        message:
-          failed.lastError ?? "unsupported container node execution request",
-      });
-    }
     const agentNodePayload = executableNodePayload;
+    const nativeNodePayload =
+      executableNodePayload === null &&
+      (nodePayload.nodeType === "command" || nodePayload.nodeType === "container")
+        ? nodePayload
+        : null;
     if (
       agentNodePayload === null &&
+      nativeNodePayload === null &&
       nodePayload.nodeType !== "user-action" &&
       !skipOptionalNode
     ) {
@@ -2241,7 +2295,7 @@ export async function runWorkflow(
         break;
       }
 
-      if (agentNodePayload === null) {
+      if (agentNodePayload === null && nativeNodePayload === null) {
         const failed: WorkflowSessionState = {
           ...session,
           queue,
@@ -2253,19 +2307,19 @@ export async function runWorkflow(
         await saveSession(failed, options);
         return err({
           exitCode: 1,
-          message: failed.lastError ?? "invalid agent node payload",
+          message: failed.lastError ?? "invalid node execution payload",
         });
       }
 
-      let backendSession = resolveRequestedBackendSession(
-        session,
-        agentNodePayload,
-      );
+      let backendSession =
+        agentNodePayload === null
+          ? undefined
+          : resolveRequestedBackendSession(session, agentNodePayload);
       const composedPrompts = composeExecutionPrompts({
         promptComposition: {
           workflow,
           nodeRef,
-          node: agentNodePayload,
+          node: executionNodePayload,
           nodePayloads: nodeMap,
           runtimeVariables: session.runtimeVariables,
           basePromptText: assembledPromptText,
@@ -2273,7 +2327,8 @@ export async function runWorkflow(
           upstreamInputs,
           executionMailbox,
         },
-        includeSessionStartPrompt: backendSession?.mode !== "reuse",
+        includeSessionStartPrompt:
+          agentNodePayload !== null && backendSession?.mode !== "reuse",
       });
       const effectivePromptText = composedPrompts.promptText;
       const systemPromptText = composedPrompts.systemPromptText;
@@ -2283,11 +2338,12 @@ export async function runWorkflow(
 
       const inputPayload = {
         ...baseInputPayload,
-        model: agentNodePayload.model,
-        ...(agentNodePayload.systemPromptTemplate === undefined
+        nodeType: executionNodePayload.nodeType ?? "agent",
+        ...(agentNodePayload === null ? {} : { model: agentNodePayload.model }),
+        ...(agentNodePayload?.systemPromptTemplate === undefined
           ? {}
           : { systemPromptTemplate: agentNodePayload.systemPromptTemplate }),
-        ...(agentNodePayload.sessionStartPromptTemplate === undefined
+        ...(agentNodePayload?.sessionStartPromptTemplate === undefined
           ? {}
           : {
               sessionStartPromptTemplate:
@@ -2296,13 +2352,13 @@ export async function runWorkflow(
         ...(systemPromptText === undefined ? {} : { systemPromptText }),
         promptText: effectivePromptText,
         outputContract:
-          agentNodePayload.output === undefined
+          executionNodePayload.output === undefined
             ? undefined
             : {
-                description: agentNodePayload.output.description,
-                jsonSchema: agentNodePayload.output.jsonSchema,
+                description: executionNodePayload.output.description,
+                jsonSchema: executionNodePayload.output.jsonSchema,
                 maxValidationAttempts:
-                  resolveOutputValidationAttempts(agentNodePayload),
+                  resolveOutputValidationAttempts(executionNodePayload),
                 publication: buildOutputPublicationPolicy(),
               },
         ...(backendSession === undefined ? {} : { backendSession }),
@@ -2315,7 +2371,7 @@ export async function runWorkflow(
 
       const startedAt = nowIso();
       const timeoutMs = resolveTimeoutMs(
-        agentNodePayload,
+        executionNodePayload,
         workflow.defaults.nodeTimeoutMs,
         options.defaultTimeoutMs,
       );
@@ -2382,7 +2438,9 @@ export async function runWorkflow(
       if (options.dryRun === true) {
         outputPayload = {
           provider: "dry-run",
-          model: agentNodePayload.model,
+          model:
+            agentNodePayload?.model ??
+            `${executionNodePayload.nodeType ?? "agent"}-dry-run`,
           ...(systemPromptText === undefined ? {} : { systemPromptText }),
           promptText: effectivePromptText,
           completionPassed: true,
@@ -2391,9 +2449,9 @@ export async function runWorkflow(
         };
       } else {
         let finalizedOutput: Readonly<Record<string, unknown>> | undefined;
-        const hasOutputContract = agentNodePayload.output !== undefined;
+        const hasOutputContract = executionNodePayload.output !== undefined;
         const maxOutputAttempts = hasOutputContract
-          ? resolveOutputValidationAttempts(agentNodePayload)
+          ? resolveOutputValidationAttempts(executionNodePayload)
           : 1;
 
         for (
@@ -2414,7 +2472,7 @@ export async function runWorkflow(
               ? undefined
               : path.join(attemptDir, "candidate.json");
           const candidatePath =
-            outputAttemptId === undefined
+            outputAttemptId === undefined || agentNodePayload === null
               ? undefined
               : buildReservedCandidateSubmissionPath({
                   workflowId: workflow.workflowId,
@@ -2441,7 +2499,7 @@ export async function runWorkflow(
             await rm(candidatePath, { force: true });
           }
           const executionPromptText =
-            candidatePath === undefined
+            candidatePath === undefined || agentNodePayload === null
               ? effectivePromptText
               : buildOutputPromptText({
                   basePromptText: effectivePromptText,
@@ -2464,13 +2522,19 @@ export async function runWorkflow(
             const contractCandidatePath = hasOutputContract
               ? candidatePath
               : undefined;
-            if (hasOutputContract && contractCandidatePath === undefined) {
+            if (
+              hasOutputContract &&
+              agentNodePayload !== null &&
+              contractCandidatePath === undefined
+            ) {
               throw new Error(
                 "candidate path must exist when node.output is configured",
               );
             }
             const adapterOutputContract =
-              !hasOutputContract || agentNodePayload.output === undefined
+              !hasOutputContract ||
+              agentNodePayload === null ||
+              agentNodePayload.output === undefined
                 ? undefined
                 : {
                     ...(agentNodePayload.output.description === undefined
@@ -2485,34 +2549,54 @@ export async function runWorkflow(
                     validationErrors: retryValidationFeedback,
                     publication: buildOutputPublicationPolicy(),
                   };
-            const execution = await executeAdapterWithTimeout(
-              effectiveAdapter,
-              {
-                workflowId: workflow.workflowId,
-                workflowExecutionId: session.sessionId,
-                nodeId,
-                nodeExecId,
-                node: agentNodePayload,
-                mergedVariables,
-                ...(systemPromptText === undefined
-                  ? {}
-                  : { systemPromptText }),
-                promptText: executionPromptText,
-                arguments: assembledArguments,
-                executionIndex: nextCount,
-                artifactDir,
-                upstreamCommunicationIds,
-                executionMailbox,
-                ...(backendSession === undefined ? {} : { backendSession }),
-                ...(ambientManagerContext === undefined
-                  ? {}
-                  : { ambientManagerContext }),
-                ...(adapterOutputContract === undefined
-                  ? {}
-                  : { output: adapterOutputContract }),
-              },
-              timeoutMs,
-            );
+            const execution =
+              agentNodePayload !== null
+                ? await executeAdapterWithTimeout(
+                    effectiveAdapter,
+                    {
+                      workflowId: workflow.workflowId,
+                      workflowExecutionId: session.sessionId,
+                      nodeId,
+                      nodeExecId,
+                      node: agentNodePayload,
+                      mergedVariables,
+                      ...(systemPromptText === undefined
+                        ? {}
+                        : { systemPromptText }),
+                      promptText: executionPromptText,
+                      arguments: assembledArguments,
+                      executionIndex: nextCount,
+                      artifactDir,
+                      upstreamCommunicationIds,
+                      executionMailbox,
+                      ...(backendSession === undefined ? {} : { backendSession }),
+                      ...(ambientManagerContext === undefined
+                        ? {}
+                        : { ambientManagerContext }),
+                      ...(adapterOutputContract === undefined
+                        ? {}
+                        : { output: adapterOutputContract }),
+                    },
+                    timeoutMs,
+                  )
+                : await executeNativeNodeWithTimeout({
+                    workflowDirectory: loaded.value.workflowDirectory,
+                    artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
+                    workflowId: workflow.workflowId,
+                    workflowDescription: workflow.description,
+                    workflowExecutionId: session.sessionId,
+                    nodeId,
+                    nodeExecId,
+                    node: executionNodePayload,
+                    workflowDefaults: workflow.defaults,
+                    runtimeVariables: session.runtimeVariables,
+                    mergedVariables,
+                    arguments: assembledArguments,
+                    artifactDir,
+                    executionMailbox,
+                    ...(options.env === undefined ? {} : { env: options.env }),
+                    timeoutMs,
+                  });
 
             if (!execution.ok) {
               if (
@@ -2533,7 +2617,9 @@ export async function runWorkflow(
                   nodeStatus = "failed";
                   finalizedOutput = {
                     provider: "deterministic-local",
-                    model: agentNodePayload.model,
+                    model:
+                      agentNodePayload?.model ??
+                      (executionNodePayload.nodeType ?? "node"),
                     promptText: effectivePromptText,
                     completionPassed: false,
                     when: {},
@@ -2552,7 +2638,9 @@ export async function runWorkflow(
                 execution.error.code === "timeout" ? "timed_out" : "failed";
               finalizedOutput = {
                 provider: "deterministic-local",
-                model: agentNodePayload.model,
+                model:
+                  agentNodePayload?.model ??
+                  (executionNodePayload.nodeType ?? "node"),
                 promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
@@ -2603,16 +2691,13 @@ export async function runWorkflow(
               };
               break;
             }
-            if (contractCandidatePath === undefined) {
-              throw new Error(
-                "candidate path must exist when resolving contract output",
-              );
-            }
-
-            const candidateResult = await resolveCandidatePayload({
-              expectedCandidatePath: contractCandidatePath,
-              execution: execution.value,
-            });
+            const candidateResult =
+              contractCandidatePath === undefined
+                ? ok(execution.value.payload)
+                : await resolveCandidatePayload({
+                    expectedCandidatePath: contractCandidatePath,
+                    execution: execution.value,
+                  });
             if (!candidateResult.ok) {
               outputValidationErrors = [
                 { path: "$", message: candidateResult.error.message },
@@ -2651,7 +2736,7 @@ export async function runWorkflow(
             if (candidateArtifactPath !== undefined) {
               await writeJsonFile(candidateArtifactPath, candidateResult.value);
             }
-            const schema = agentNodePayload.output?.jsonSchema;
+            const schema = executionNodePayload.output?.jsonSchema;
             const validationErrors =
               schema === undefined
                 ? []
@@ -2702,7 +2787,9 @@ export async function runWorkflow(
 
         outputPayload = finalizedOutput ?? {
           provider: "deterministic-local",
-          model: agentNodePayload.model,
+          model:
+            agentNodePayload?.model ??
+            (executionNodePayload.nodeType ?? "node"),
           promptText: effectivePromptText,
           completionPassed: false,
           when: {},
@@ -2712,20 +2799,23 @@ export async function runWorkflow(
       }
 
       const endedAt = nowIso();
-      const nextNodeBackendSessions = persistNodeBackendSession({
-        session,
-        node: agentNodePayload,
-        nodeExecId,
-        provider:
-          backendSessionProvider ??
-          outputPayload["provider"]?.toString() ??
-          "unknown-provider",
-        endedAt,
-        backendSession,
-        ...(backendSessionId === undefined
-          ? {}
-          : { returnedSessionId: backendSessionId }),
-      });
+      const nextNodeBackendSessions =
+        agentNodePayload === null
+          ? session.nodeBackendSessions ?? {}
+          : persistNodeBackendSession({
+              session,
+              node: agentNodePayload,
+              nodeExecId,
+              provider:
+                backendSessionProvider ??
+                outputPayload["provider"]?.toString() ??
+                "unknown-provider",
+              endedAt,
+              backendSession,
+              ...(backendSessionId === undefined
+                ? {}
+                : { returnedSessionId: backendSessionId }),
+            });
       const buildNodeExecutionRecord = (
         status: NodeExecutionRecord["status"] = nodeStatus,
       ): NodeExecutionRecord => ({
@@ -3248,7 +3338,7 @@ export async function runWorkflow(
         status: nodeStatus,
         startedAt,
         endedAt,
-        model: agentNodePayload.model,
+        model: executionNodePayload.model,
         timeoutMs,
         restartAttempt,
         outputAttemptCount,

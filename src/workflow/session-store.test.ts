@@ -73,26 +73,6 @@ describe("session-store", () => {
     expect(resolved).toBe("/tmp/project/env-data/sessions");
   });
 
-  test("derives the session store root from DIVEDRA_ROOT_DATA_DIR (legacy)", async () => {
-    const resolved = getSessionStoreRoot({
-      cwd: "/tmp/project",
-      env: {
-        DIVEDRA_ROOT_DATA_DIR: "env-data",
-      },
-    });
-    expect(resolved).toBe("/tmp/project/env-data/sessions");
-  });
-
-  test("accepts DIVEDRA_RUNTIME_ROOT as a compatibility alias", async () => {
-    const resolved = getSessionStoreRoot({
-      cwd: "/tmp/project",
-      env: {
-        DIVEDRA_RUNTIME_ROOT: "legacy-data",
-      },
-    });
-    expect(resolved).toBe("/tmp/project/legacy-data/sessions");
-  });
-
   test("save/load roundtrip", async () => {
     const root = await makeTempDir();
     const session = createSessionState({

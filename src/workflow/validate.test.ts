@@ -36,13 +36,15 @@ function makeValidRaw(): {
     nodePayloads: {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-worker-1.json": {
         id: "worker-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "worker",
         variables: {},
       },
@@ -596,7 +598,7 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "workflow.entryNodeId" &&
-          issue.message.includes("not executable"),
+          issue.message.includes("not supported"),
       ),
     ).toBe(true);
   });
@@ -706,7 +708,7 @@ describe("validateWorkflowBundle", () => {
     );
   });
 
-  test("normalizes legacy tacogips executionBackend alias to canonical short name", () => {
+  test("rejects non-canonical executionBackend identifiers", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
@@ -717,18 +719,15 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundleDetailed(raw);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
-    expect(result.value.bundle.nodePayloads["worker-1"]?.executionBackend).toBe(
-      "claude-code-agent",
-    );
     expect(
-      result.value.issues.some(
+      result.error.some(
         (issue) =>
           issue.path === "nodePayloads.node-worker-1.json.executionBackend" &&
-          issue.message.includes("normalized"),
+          issue.message.includes("must be codex-agent"),
       ),
     ).toBe(true);
   });
@@ -933,7 +932,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       sessionPolicy: {
         mode: "reuse",
       },
@@ -951,15 +951,14 @@ describe("validateWorkflowBundle", () => {
     );
   });
 
-  test("accepts podman runtimeIsolation with a prebuilt image", () => {
+  test("accepts canonical container nodes with a prebuilt image", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
-      promptTemplate: "worker",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
         image: "ghcr.io/example/reviewer:latest",
       },
     };
@@ -978,18 +977,17 @@ describe("validateWorkflowBundle", () => {
     });
   });
 
-  test("accepts podman runtimeIsolation build metadata with dockerfilePath", () => {
+  test("accepts canonical container build metadata with containerfilePath", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
-      promptTemplate: "worker",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
         build: {
           contextPath: "containers/reviewer",
-          dockerfilePath: "containers/reviewer/Dockerfile",
+          containerfilePath: "containers/reviewer/Containerfile",
           target: "runtime",
         },
       },
@@ -1006,7 +1004,7 @@ describe("validateWorkflowBundle", () => {
         runnerKind: "podman",
         build: {
           contextPath: "containers/reviewer",
-          dockerfilePath: "containers/reviewer/Dockerfile",
+          containerfilePath: "containers/reviewer/Containerfile",
           target: "runtime",
         },
       },
@@ -1045,11 +1043,12 @@ describe("validateWorkflowBundle", () => {
     });
   });
 
-  test("rejects podman runtimeIsolation when both image and build are provided", () => {
+  test("rejects legacy runtimeIsolation fields", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       runtimeIsolation: {
@@ -1070,23 +1069,22 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "nodePayloads.node-worker-1.json.runtimeIsolation" &&
-          issue.message.includes("exactly one"),
+          issue.message.includes("not supported"),
       ),
     ).toBe(true);
   });
 
-  test("rejects unsafe podman dockerfilePath", () => {
+  test("rejects unsafe containerfilePath", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
-      promptTemplate: "worker",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
         build: {
           contextPath: "containers/reviewer",
-          dockerfilePath: "../Dockerfile",
+          containerfilePath: "../Containerfile",
         },
       },
     };
@@ -1100,24 +1098,53 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path ===
-            "nodePayloads.node-worker-1.json.runtimeIsolation.build.dockerfilePath" &&
+            "nodePayloads.node-worker-1.json.container.build.containerfilePath" &&
           issue.message.includes("workflow-relative path"),
       ),
     ).toBe(true);
   });
 
-  test("rejects podman dockerfilePath values that target canonical workflow definition files", () => {
+  test("rejects legacy dockerfilePath", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
-      promptTemplate: "worker",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
         build: {
           contextPath: "containers/reviewer",
-          dockerfilePath: "workflow.json",
+          dockerfilePath: "containers/reviewer/Dockerfile",
+        },
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.node-worker-1.json.container.build.dockerfilePath" &&
+          issue.message.includes("not supported"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects containerfilePath values that target canonical workflow definition files", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      id: "worker-1",
+      nodeType: "container",
+      variables: {},
+      container: {
+        runnerKind: "podman",
+        build: {
+          contextPath: "containers/reviewer",
+          containerfilePath: "workflow.json",
         },
       },
     };
@@ -1131,7 +1158,7 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path ===
-            "nodePayloads.node-worker-1.json.runtimeIsolation.build.dockerfilePath" &&
+            "nodePayloads.node-worker-1.json.container.build.containerfilePath" &&
           issue.message.includes(
             "must not target canonical workflow definition files",
           ),
@@ -1143,7 +1170,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       promptTemplateFile: "../outside.md",
       variables: {},
@@ -1167,7 +1195,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       promptTemplateFile: "workflow.json",
       variables: {},
@@ -1193,7 +1222,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       systemPromptTemplateFile: "../system.md",
       sessionStartPromptTemplateFile: "workflow.json",
@@ -1229,7 +1259,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       sessionPolicy: {
         mode: "shared",
       },
@@ -1250,12 +1281,12 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects tacogips cli-wrapper identifiers with official sdk backends", () => {
+  test("rejects tacogips cli-wrapper identifiers with explicit backends", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/codex-agent",
       executionBackend: "official/openai-sdk",
+      model: "tacogips/codex-agent",
       promptTemplate: "worker",
       variables: {},
     };
@@ -1274,12 +1305,12 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects tacogips cli-wrapper identifiers with explicit tacogips backends", () => {
+  test("rejects non-canonical backend aliases even when model is legacy-branded", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/codex-agent",
       executionBackend: "tacogips/codex-agent",
+      model: "tacogips/codex-agent",
       promptTemplate: "worker",
       variables: {},
     };
@@ -1292,13 +1323,13 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path === "nodePayloads.node-worker-1.json.model" &&
-          issue.message.includes("provider or backend-specific model name"),
+          issue.path === "nodePayloads.node-worker-1.json.executionBackend" &&
+          issue.message.includes("must be codex-agent"),
       ),
     ).toBe(true);
   });
 
-  test("requires executionBackend for non-tacogips model strings", () => {
+  test("requires executionBackend for agent nodes", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
@@ -1320,7 +1351,7 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("warns when legacy cli backend identifier is encoded in model", () => {
+  test("does not emit compatibility warnings for canonical payloads", () => {
     const result = validateWorkflowBundleDetailed(makeValidRaw());
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -1329,32 +1360,41 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.value.issues.some(
         (issue) =>
-          issue.path === "nodePayloads.node-worker-1.json.model" &&
-          issue.message.includes("legacy CLI backend identifier"),
+          issue.message.includes("legacy") ||
+          issue.message.includes("not supported; use"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  test("normalizes legacy prompt and variable fields", () => {
+  test("rejects legacy prompt and variable fields", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       prompt: "legacy prompt",
       variable: { name: "legacy" },
     };
 
     const result = validateWorkflowBundle(raw);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
-    expect(result.value.nodePayloads["worker-1"]?.promptTemplate).toBe(
-      "legacy prompt",
-    );
-    expect(result.value.nodePayloads["worker-1"]?.variables).toEqual({
-      name: "legacy",
-    });
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.prompt" &&
+          issue.message.includes("not supported"),
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "nodePayloads.node-worker-1.json.variable" &&
+          issue.message.includes("not supported"),
+      ),
+    ).toBe(true);
   });
 
   test("accepts node-level descriptions", () => {
@@ -1362,7 +1402,8 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
       description: "Summarize the diff and propose the next action.",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
     };
@@ -1382,7 +1423,8 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
       description: "   ",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
     };
@@ -1405,7 +1447,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1436,7 +1479,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1460,7 +1504,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1486,7 +1531,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {},
@@ -1512,7 +1558,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1541,7 +1588,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1571,7 +1619,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1599,7 +1648,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1627,7 +1677,8 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.nodePayloads["node-worker-1.json"] = {
       id: "worker-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "worker",
       variables: {},
       output: {
@@ -1746,7 +1797,8 @@ describe("validateWorkflowBundle", () => {
     };
     raw.nodePayloads["node-shadow-manager.json"] = {
       id: "shadow-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "shadow manager",
       variables: {},
     };
@@ -1833,31 +1885,36 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sub-manager-a.json": {
         id: "sub-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sub-manager-a",
         variables: {},
       },
       "node-input-a.json": {
         id: "input-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "input-a",
         variables: {},
       },
       "node-output-a.json": {
         id: "output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "output-a",
         variables: {},
       },
       "node-output-b.json": {
         id: "output-b",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "output-b",
         variables: {},
       },
@@ -1930,25 +1987,29 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sub-manager-a.json": {
         id: "sub-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sub-manager-a",
         variables: {},
       },
       "node-input-a.json": {
         id: "input-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "input-a",
         variables: {},
       },
       "node-output-a.json": {
         id: "output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "output-a",
         variables: {},
       },
@@ -2011,19 +2072,22 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sub-manager-a.json": {
         id: "sub-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sub-manager-a",
         variables: {},
       },
       "node-sub-output-a.json": {
         id: "sub-output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sub-output-a",
         variables: {},
       },
@@ -2095,25 +2159,29 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sub-manager-a.json": {
         id: "sub-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sub-manager-a",
         variables: {},
       },
       "node-input-a.json": {
         id: "input-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "input-a",
         variables: {},
       },
       "node-output-a.json": {
         id: "output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "output-a",
         variables: {},
       },
@@ -2184,25 +2252,29 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-plain-manager-a.json": {
         id: "plain-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "plain-manager-a",
         variables: {},
       },
       "node-input-a.json": {
         id: "input-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "input-a",
         variables: {},
       },
       "node-output-a.json": {
         id: "output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "output-a",
         variables: {},
       },
@@ -2319,49 +2391,57 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sw1-manager.json": {
         id: "sw1-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "m1",
         variables: {},
       },
       "node-branch-judge.json": {
         id: "branch-judge",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "judge",
         variables: {},
       },
       "node-sw1-input.json": {
         id: "sw1-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "in1",
         variables: {},
       },
       "node-sw1-output.json": {
         id: "sw1-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "out1",
         variables: {},
       },
       "node-sw2-manager.json": {
         id: "sw2-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "m2",
         variables: {},
       },
       "node-sw2-input.json": {
         id: "sw2-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "in2",
         variables: {},
       },
       "node-sw2-output.json": {
         id: "sw2-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "out2",
         variables: {},
       },
@@ -2435,25 +2515,29 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-loop-manager.json": {
         id: "loop-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-manager",
         variables: {},
       },
       "node-loop-input.json": {
         id: "loop-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-input",
         variables: {},
       },
       "node-loop-output.json": {
         id: "loop-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-output",
         variables: {},
       },
@@ -2565,49 +2649,57 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-loop-manager-a.json": {
         id: "loop-manager-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-manager-a",
         variables: {},
       },
       "node-loop-input-a.json": {
         id: "loop-input-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-input-a",
         variables: {},
       },
       "node-loop-output-a.json": {
         id: "loop-output-a",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-output-a",
         variables: {},
       },
       "node-loop-manager-b.json": {
         id: "loop-manager-b",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-manager-b",
         variables: {},
       },
       "node-loop-input-b.json": {
         id: "loop-input-b",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-input-b",
         variables: {},
       },
       "node-loop-output-b.json": {
         id: "loop-output-b",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-output-b",
         variables: {},
       },
       "node-loop-judge.json": {
         id: "loop-judge",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-judge",
         variables: {},
       },
@@ -2684,31 +2776,36 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-prepare.json": {
         id: "prepare",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "prepare",
         variables: {},
       },
       "node-branch-manager.json": {
         id: "branch-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "branch-manager",
         variables: {},
       },
       "node-branch-input.json": {
         id: "branch-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "branch-input",
         variables: {},
       },
       "node-branch-output.json": {
         id: "branch-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "branch-output",
         variables: {},
       },
@@ -2798,37 +2895,43 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-loop-manager.json": {
         id: "loop-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-manager",
         variables: {},
       },
       "node-loop-input.json": {
         id: "loop-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-input",
         variables: {},
       },
       "node-loop-output.json": {
         id: "loop-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-output",
         variables: {},
       },
       "node-loop-worker.json": {
         id: "loop-worker",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-worker",
         variables: {},
       },
       "node-loop-judge.json": {
         id: "loop-judge",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "loop-judge",
         variables: {},
       },
@@ -2922,43 +3025,50 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-a-manager.json": {
         id: "a-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-manager",
         variables: {},
       },
       "node-a-input.json": {
         id: "a-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-in",
         variables: {},
       },
       "node-a-inner-manager.json": {
         id: "a-inner-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-inner-manager",
         variables: {},
       },
       "node-a-inner-input.json": {
         id: "a-inner-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-inner-in",
         variables: {},
       },
       "node-a-inner-output.json": {
         id: "a-inner-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-inner-out",
         variables: {},
       },
       "node-a-output.json": {
         id: "a-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-out",
         variables: {},
       },
@@ -3041,43 +3151,50 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-a-manager.json": {
         id: "a-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-manager",
         variables: {},
       },
       "node-a-input.json": {
         id: "a-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-in",
         variables: {},
       },
       "node-a-output.json": {
         id: "a-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-out",
         variables: {},
       },
       "node-b-manager.json": {
         id: "b-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-manager",
         variables: {},
       },
       "node-b-input.json": {
         id: "b-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-in",
         variables: {},
       },
       "node-b-output.json": {
         id: "b-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-out",
         variables: {},
       },
@@ -3149,31 +3266,36 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-root-worker.json": {
         id: "root-worker",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "root-worker",
         variables: {},
       },
       "node-sw-manager.json": {
         id: "sw-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-manager",
         variables: {},
       },
       "node-sw-input.json": {
         id: "sw-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-input",
         variables: {},
       },
       "node-sw-output.json": {
         id: "sw-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-output",
         variables: {},
       },
@@ -3245,31 +3367,36 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-root-worker.json": {
         id: "root-worker",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "root-worker",
         variables: {},
       },
       "node-sw-manager.json": {
         id: "sw-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-manager",
         variables: {},
       },
       "node-sw-input.json": {
         id: "sw-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-input",
         variables: {},
       },
       "node-sw-output.json": {
         id: "sw-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw-output",
         variables: {},
       },
@@ -3362,43 +3489,50 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-a-manager.json": {
         id: "a-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-manager",
         variables: {},
       },
       "node-a-input.json": {
         id: "a-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-input",
         variables: {},
       },
       "node-a-output.json": {
         id: "a-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "a-output",
         variables: {},
       },
       "node-b-manager.json": {
         id: "b-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-manager",
         variables: {},
       },
       "node-b-input.json": {
         id: "b-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-input",
         variables: {},
       },
       "node-b-output.json": {
         id: "b-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "b-output",
         variables: {},
       },
@@ -3465,7 +3599,8 @@ describe("validateWorkflowBundle", () => {
     };
     raw.nodePayloads["node-loop-judge.json"] = {
       id: "loop-judge",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "judge",
       variables: {},
     };
@@ -3543,25 +3678,29 @@ describe("validateWorkflowBundle", () => {
     };
     raw.nodePayloads["node-loop-a-start.json"] = {
       id: "loop-a-start",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-a-start",
       variables: {},
     };
     raw.nodePayloads["node-loop-b-start.json"] = {
       id: "loop-b-start",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-b-start",
       variables: {},
     };
     raw.nodePayloads["node-loop-a-judge.json"] = {
       id: "loop-a-judge",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-a-judge",
       variables: {},
     };
     raw.nodePayloads["node-loop-b-judge.json"] = {
       id: "loop-b-judge",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-b-judge",
       variables: {},
     };
@@ -3653,31 +3792,36 @@ describe("validateWorkflowBundle", () => {
     };
     raw.nodePayloads["node-group-manager.json"] = {
       id: "group-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "group-manager",
       variables: {},
     };
     raw.nodePayloads["node-group-input.json"] = {
       id: "group-input",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "group-input",
       variables: {},
     };
     raw.nodePayloads["node-loop-start.json"] = {
       id: "loop-start",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-start",
       variables: {},
     };
     raw.nodePayloads["node-group-output.json"] = {
       id: "group-output",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "group-output",
       variables: {},
     };
     raw.nodePayloads["node-loop-judge.json"] = {
       id: "loop-judge",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "loop-judge",
       variables: {},
     };
@@ -3755,25 +3899,29 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sw1-manager.json": {
         id: "sw1-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw1-manager",
         variables: {},
       },
       "node-sw1-input.json": {
         id: "sw1-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw1-input",
         variables: {},
       },
       "node-sw1-output.json": {
         id: "sw1-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "sw1-output",
         variables: {},
       },
@@ -3795,7 +3943,7 @@ describe("validateWorkflowBundle", () => {
     );
   });
 
-  test("normalizes legacy sub-workflow aliases inputs and participantsIds", () => {
+  test("rejects legacy sub-workflow aliases inputs and participantsIds", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -3876,58 +4024,74 @@ describe("validateWorkflowBundle", () => {
     raw.nodePayloads = {
       "node-divedra-manager.json": {
         id: "divedra-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "manager",
         variables: {},
       },
       "node-sw1-manager.json": {
         id: "sw1-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "m1",
         variables: {},
       },
       "node-sw1-input.json": {
         id: "sw1-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "in1",
         variables: {},
       },
       "node-sw1-output.json": {
         id: "sw1-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "out1",
         variables: {},
       },
       "node-sw2-manager.json": {
         id: "sw2-manager",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "m2",
         variables: {},
       },
       "node-sw2-input.json": {
         id: "sw2-input",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "in2",
         variables: {},
       },
       "node-sw2-output.json": {
         id: "sw2-output",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "out2",
         variables: {},
       },
     };
 
     const result = validateWorkflowBundle(raw);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
-    expect(result.value.workflow.subWorkflows[0]?.inputSources[0]?.type).toBe(
-      "human-input",
-    );
     expect(
-      result.value.workflow.subWorkflowConversations?.[0]?.participants,
-    ).toEqual(["sw1", "sw2"]);
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflows[0].inputs" &&
+          issue.message.includes("not supported"),
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "workflow.subWorkflowConversations[0].participantsIds" &&
+          issue.message.includes("not supported"),
+      ),
+    ).toBe(true);
   });
 });

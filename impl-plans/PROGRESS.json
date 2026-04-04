@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-03-30T12:47:57Z",
+  "lastUpdated": "2026-04-04T00:00:00Z",
   "phases": {
     "1": { "status": "COMPLETED" },
     "2": { "status": "COMPLETED" },
@@ -80,7 +80,8 @@
     "77": { "status": "COMPLETED" },
     "78": { "status": "COMPLETED" },
     "79": { "status": "COMPLETED" },
-    "80": { "status": "COMPLETED" }
+    "80": { "status": "COMPLETED" },
+    "81": { "status": "IN_PROGRESS" }
   },
   "plans": {
     "workflow-core-and-validation": {
@@ -1936,6 +1937,32 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": ["TASK-001"]
+        }
+      }
+    },
+    "v2-cutover-command-container-runtime": {
+      "phase": 81,
+      "status": "In Progress",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "In Progress",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
         }
       }
     }

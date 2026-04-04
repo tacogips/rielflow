@@ -1,4 +1,4 @@
 FROM alpine:3.21
 
 WORKDIR /workspace
-CMD ["sh", "-lc", "echo node-combinations-showcase container lane placeholder"]
+CMD ["sh", "-lc", "mkdir -p \"$DIVEDRA_MAILBOX_DIR/outbox\" && printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}' > \"$DIVEDRA_MAILBOX_DIR/outbox/output.json\""]

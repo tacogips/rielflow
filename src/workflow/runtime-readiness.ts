@@ -307,8 +307,8 @@ function collectRequirements(
 ): {
   readonly agentBackends: readonly AgentBackendRequirementCandidate[];
   readonly containerRunners: readonly ContainerRunnerRequirementCandidate[];
-  readonly unsupportedCommandNodeIds: readonly string[];
-  readonly unsupportedContainerNodeIds: readonly string[];
+  readonly commandNodeIds: readonly string[];
+  readonly containerNodeIds: readonly string[];
 } {
   const agentBackends = new Map<
     NodeExecutionBackend,
@@ -318,8 +318,8 @@ function collectRequirements(
     string,
     { runnerKind: ContainerRunnerKind; runnerPath?: string; nodeIds: Set<string> }
   >();
-  const unsupportedCommandNodeIds = new Set<string>();
-  const unsupportedContainerNodeIds = new Set<string>();
+  const commandNodeIds = new Set<string>();
+  const containerNodeIds = new Set<string>();
   const defaults = bundle.workflow.defaults.containerRuntime;
 
   for (const [nodeId, node] of Object.entries(bundle.nodePayloads)) {
@@ -341,12 +341,12 @@ function collectRequirements(
     }
 
     if (node.nodeType === "command") {
-      unsupportedCommandNodeIds.add(nodeId);
+      commandNodeIds.add(nodeId);
       continue;
     }
 
     if (node.nodeType === "container") {
-      unsupportedContainerNodeIds.add(nodeId);
+      containerNodeIds.add(nodeId);
       const runnerKind =
         node.container?.runnerKind ??
         defaults?.runnerKind ??
@@ -374,8 +374,8 @@ function collectRequirements(
       ...(entry.runnerPath === undefined ? {} : { runnerPath: entry.runnerPath }),
       sourceNodeIds: toSortedArray(entry.nodeIds),
     })),
-    unsupportedCommandNodeIds: toSortedArray(unsupportedCommandNodeIds),
-    unsupportedContainerNodeIds: toSortedArray(unsupportedContainerNodeIds),
+    commandNodeIds: toSortedArray(commandNodeIds),
+    containerNodeIds: toSortedArray(containerNodeIds),
   };
 }
 
@@ -423,29 +423,29 @@ export async function inspectWorkflowRuntimeReadiness(
     requirements.push(await probeContainerRunner(candidate, options));
   }
 
-  if (collected.unsupportedCommandNodeIds.length > 0) {
+  if (collected.commandNodeIds.length > 0) {
     requirements.push({
       id: "node-executor:command",
       kind: "node-executor",
       label: "command node execution",
-      status: "unsupported",
+      status: "available",
       detail:
-        `command nodes are validated but not executable in the current runtime; ` +
-        `nodes=${buildSourceNodeList(collected.unsupportedCommandNodeIds)}`,
-      sourceNodeIds: collected.unsupportedCommandNodeIds,
+        `command node execution is built into the local runtime; ` +
+        `nodes=${buildSourceNodeList(collected.commandNodeIds)}`,
+      sourceNodeIds: collected.commandNodeIds,
     });
   }
 
-  if (collected.unsupportedContainerNodeIds.length > 0) {
+  if (collected.containerNodeIds.length > 0) {
     requirements.push({
       id: "node-executor:container",
       kind: "node-executor",
       label: "container node execution",
-      status: "unsupported",
+      status: "available",
       detail:
-        `container nodes are validated but not executable in the current runtime; ` +
-        `nodes=${buildSourceNodeList(collected.unsupportedContainerNodeIds)}`,
-      sourceNodeIds: collected.unsupportedContainerNodeIds,
+        `container node execution is built into the local runtime; ` +
+        `nodes=${buildSourceNodeList(collected.containerNodeIds)}`,
+      sourceNodeIds: collected.containerNodeIds,
     });
   }
 

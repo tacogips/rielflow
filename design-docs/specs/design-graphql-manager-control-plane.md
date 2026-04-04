@@ -157,8 +157,7 @@ The Divedra root data directory is resolved from environment variable or config.
 Design direction:
 
 - introduce `DIVEDRA_ARTIFACT_DIR` as the canonical root-data setting for derived defaults
-- keep `DIVEDRA_ROOT_DATA_DIR` and `DIVEDRA_RUNTIME_ROOT` as migration-period compatibility aliases behind `DIVEDRA_ARTIFACT_DIR`
-- keep explicit per-surface overrides authoritative for migration compatibility
+- keep explicit per-surface overrides authoritative
 - `artifactRoot`, session store paths, attachment paths, and future container-mounted work paths may all be derived from that root when more specific overrides are absent
 
 Precedence:

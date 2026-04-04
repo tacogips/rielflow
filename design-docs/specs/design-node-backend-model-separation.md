@@ -41,23 +41,19 @@ Legacy workflow files remain read-compatible:
 ```json
 {
   "id": "implement",
-  "model": "tacogips/claude-code-agent",
+  "executionBackend": "claude-code-agent",
+  "model": "claude-opus-4-1",
   "promptTemplate": "Implement {{feature}}.",
   "variables": {}
 }
 ```
-
-Legacy interpretation:
-
-- if `executionBackend` is omitted and `model` is `tacogips/codex-agent` or `tacogips/claude-code-agent`, runtime derives the backend from `model`
-- validators and editor UX should treat this as legacy compatibility mode, not as the canonical authoring pattern
 
 ## Authoring Policy
 
 - New workflow templates must write explicit `executionBackend`
 - Browser/editor defaults must prefer explicit `executionBackend`
 - Documentation must describe `model` as a model name, not a backend identifier
-- Validation should warn when a workflow uses the legacy backend-in-model encoding
+- Validation should reject backend identifiers encoded in `model`
 
 ## Non-Goals
 

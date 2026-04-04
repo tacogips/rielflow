@@ -29,12 +29,12 @@ Current execution support by node type:
 
 - `agent`: implemented
 - `user-action`: implemented as a pause-and-resume runtime state
-- `command`: validated, but live execution is not implemented yet
-- `container`: validated, but live execution is not implemented yet
+- `command`: implemented
+- `container`: implemented
 
 Additional authored shapes that are recognized but not fully executable:
 
-- `workflowCalls`: validated, but not executable in the current runtime phase
+- `workflowCalls`: validated, but not executable
 
 ## Quick Start
 
@@ -79,10 +79,9 @@ Launch the terminal UI:
 bun run src/main.ts tui
 ```
 
-Compatibility note:
+CLI note:
 
-- `bun run src/main.ts cli workflow ...` is still accepted as a compatibility alias
-- the direct form `bun run src/main.ts workflow ...` is the simpler way to invoke the current CLI
+- use the direct form `bun run src/main.ts workflow ...`
 
 ## CLI Surface
 
@@ -311,8 +310,6 @@ working directory is treated as the project root.
 Root runtime data resolves from, in order:
 
 - `DIVEDRA_ARTIFACT_DIR`
-- `DIVEDRA_ROOT_DATA_DIR`
-- `DIVEDRA_RUNTIME_ROOT`
 - otherwise `~/.divedra/project/<encoded-project-root>/divedra-artifact/`
 
 By default, the root data directory contributes these locations:
@@ -360,12 +357,12 @@ Recommended starting point:
 
 - `claude-divedra-codex-coding` shows the preferred mixed-backend split with manager nodes on `claude-code-agent` and implementation work on `codex-agent`
 
-Examples that intentionally document current runtime limits:
+Examples that exercise the full node surface:
 
 - `node-combinations-showcase`
 - `first-four-arithmetic-pipeline`
 
-Those bundles validate authored `command` and `container` node shapes and can be exercised with deterministic mock scenarios, but live command/container execution is not implemented yet.
+Those bundles exercise authored `command` and `container` nodes directly and can also be run with deterministic mock scenarios.
 
 ## Library API
 

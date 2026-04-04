@@ -526,7 +526,7 @@ describe("saveWorkflowToDisk", () => {
     await expect(readFile(workflowVisPath, "utf8")).rejects.toThrow(/ENOENT/u);
   });
 
-  test("preserves podman runtimeIsolation metadata across save and reload", async () => {
+  test("preserves canonical container metadata across save and reload", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("demo", {
       workflowRoot: root,
@@ -548,11 +548,12 @@ describe("saveWorkflowToDisk", () => {
       ...loaded.value.bundle.nodePayloads,
       "divedra-manager": {
         ...loaded.value.bundle.nodePayloads["divedra-manager"],
-        runtimeIsolation: {
-          mode: "podman" as const,
+        nodeType: "container" as const,
+        container: {
+          runnerKind: "podman" as const,
           build: {
             contextPath: "containers/divedra-manager",
-            dockerfilePath: "containers/divedra-manager/Dockerfile",
+            containerfilePath: "containers/divedra-manager/Containerfile",
             target: "runtime",
           },
         },
@@ -588,7 +589,7 @@ describe("saveWorkflowToDisk", () => {
         runnerKind: "podman",
         build: {
           contextPath: "containers/divedra-manager",
-          dockerfilePath: "containers/divedra-manager/Dockerfile",
+          containerfilePath: "containers/divedra-manager/Containerfile",
           target: "runtime",
         },
       },

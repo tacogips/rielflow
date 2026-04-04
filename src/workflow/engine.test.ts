@@ -851,14 +851,16 @@ async function createWorkflowFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager {{topic}}",
     variables: { topic: "A" },
   });
 
   await writeJson(path.join(workflowDir, "node-step-1.json"), {
     id: "step-1",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "step {{topic}}",
     variables: {},
   });
@@ -866,7 +868,8 @@ async function createWorkflowFixture(
   if (withLoop) {
     await writeJson(path.join(workflowDir, "node-done.json"), {
       id: "done",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "done",
       variables: {},
     });
@@ -920,19 +923,22 @@ async function createOptionalExecutionFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-1.json"), {
     id: "step-1",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "optional task",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-done.json"), {
     id: "done",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "done",
     variables: {},
   });
@@ -972,7 +978,8 @@ async function createUserActionFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
@@ -1040,19 +1047,22 @@ async function createNodeSessionReuseFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-a.json"), {
     id: "step-a",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "return 2",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-b.json"), {
     id: "step-b",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     sessionPolicy: {
       mode: "reuse",
     },
@@ -1061,7 +1071,8 @@ async function createNodeSessionReuseFixture(
   });
   await writeJson(path.join(workflowDir, "node-step-c.json"), {
     id: "step-c",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "return 3",
     variables: {},
   });
@@ -1163,43 +1174,50 @@ async function createSubWorkflowRuntimeFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-a-manager.json"), {
     id: "a-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "a-manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-a-input.json"), {
     id: "a-input",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "a-input",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-a-output.json"), {
     id: "a-output",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "a-output",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-b-manager.json"), {
     id: "b-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "b-manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-b-input.json"), {
     id: "b-input",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "b-input",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-b-output.json"), {
     id: "b-output",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "b-output",
     variables: {},
   });
@@ -1242,13 +1260,15 @@ async function createManagerAfterOutputFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-workflow-output.json"), {
     id: "workflow-output",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "workflow-output",
     variables: {},
   });
@@ -1289,7 +1309,8 @@ async function createSingleRootOutputFixture(
   for (const nodeId of ["divedra-manager", "workflow-output"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: nodeId,
       variables: {},
     });
@@ -1340,7 +1361,8 @@ async function createMultipleRootOutputsFixture(
   for (const nodeId of ["divedra-manager", "first-output", "second-output"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: nodeId,
       variables: {},
     });
@@ -1391,7 +1413,8 @@ async function createRootOutputThenTaskFixture(
   for (const nodeId of ["divedra-manager", "workflow-output", "final-task"]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: nodeId,
       variables: {},
     });
@@ -1471,7 +1494,8 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
   ]) {
     await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
       id: nodeId,
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: nodeId,
       variables: {},
     });
@@ -1921,17 +1945,17 @@ describe("runWorkflow", () => {
     expect(resumed.value.session.nodeExecutions).toHaveLength(1);
   });
 
-  test("rejects podman-isolated nodes until Podman execution is implemented", async () => {
+  test("fails container node execution when the configured runner is unavailable", async () => {
     const root = await makeTempDir();
     const workflowName = "podman-isolation-unsupported";
     await createWorkflowFixture(root, workflowName, false);
     await writeJson(path.join(root, workflowName, "node-step-1.json"), {
       id: "step-1",
-      model: "tacogips/claude-code-agent",
-      promptTemplate: "step {{topic}}",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
+        runnerPath: "/definitely/missing/podman",
         image: "ghcr.io/example/step-1:latest",
       },
     });
@@ -1949,8 +1973,7 @@ describe("runWorkflow", () => {
     if (result.ok) {
       return;
     }
-    expect(result.error.message).toContain("nodeType='container'");
-    expect(result.error.message).toContain("not implemented yet");
+    expect(result.error.message).toContain("adapter failure at 'step-1'");
   });
 
   test("reuses a node-local backend session across repeated executions in one workflow run", async () => {
@@ -2058,7 +2081,8 @@ describe("runWorkflow", () => {
       path.join(root, "explicit-new-session-policy", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         sessionPolicy: {
           mode: "new",
         },
@@ -2109,7 +2133,8 @@ describe("runWorkflow", () => {
       path.join(root, "manager-session-failure", "node-divedra-manager.json"),
       {
         id: "divedra-manager",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         sessionPolicy: {
           mode: "reuse",
         },
@@ -2882,7 +2907,8 @@ describe("runWorkflow", () => {
 
     await writeJson(path.join(root, "assembled-input", "node-step-1.json"), {
       id: "step-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "step {{topic}}",
       variables: {},
       argumentsTemplate: { task: { topic: "", managerNode: "" } },
@@ -2949,7 +2975,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-retry", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3041,7 +3068,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-session-retry", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         sessionPolicy: {
           mode: "reuse",
         },
@@ -3109,7 +3137,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-scenario-retry", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3177,7 +3206,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-file-retry", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3256,7 +3286,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-stale-candidate", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "step stale file",
         variables: {},
         output: {
@@ -3342,7 +3373,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-description-retry", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3420,7 +3452,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3461,7 +3494,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-fail", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3549,7 +3583,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3632,7 +3667,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3707,7 +3743,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3796,7 +3833,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-prompt", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -3887,7 +3925,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-request-artifacts", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: { topic: "audit" },
         output: {
@@ -4005,7 +4044,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-boundary", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -4068,7 +4108,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-compact-feedback", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -4124,7 +4165,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-file-path", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -4287,7 +4329,8 @@ describe("runWorkflow", () => {
     );
     await writeJson(nodeFile, {
       id: "step-1",
-      model: "tacogips/claude-code-agent",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
       promptTemplate: "step",
       variables: {},
       output: {
@@ -4340,7 +4383,8 @@ describe("runWorkflow", () => {
       path.join(root, "output-contract-staging-path", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -4401,7 +4445,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step",
         variables: {},
         output: {
@@ -4450,7 +4495,8 @@ describe("runWorkflow", () => {
       ),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step",
         variables: {},
         output: {
@@ -4493,7 +4539,8 @@ describe("runWorkflow", () => {
       path.join(root, "missing-required-binding", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         argumentsTemplate: {},
@@ -5656,7 +5703,8 @@ describe("runWorkflow", () => {
     await createSubWorkflowRuntimeFixture(root, workflowName);
     await writeJson(path.join(root, workflowName, "node-b-input.json"), {
       id: "b-input",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "b-input",
       variables: {},
       argumentsTemplate: { routed: { marker: "" } },
@@ -5909,7 +5957,8 @@ describe("runWorkflow", () => {
     await createSubWorkflowRuntimeFixture(root, workflowName);
     await writeJson(path.join(root, workflowName, "node-b-manager.json"), {
       id: "b-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "b-manager",
       variables: {},
       argumentsTemplate: {},

@@ -58,13 +58,15 @@ async function createWorkflowFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-1.json"), {
     id: "step-1",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "step",
     variables: {},
   });

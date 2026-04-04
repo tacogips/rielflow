@@ -350,7 +350,7 @@ Important normalization rules:
 - `systemPromptTemplateFile` is resolved into `systemPromptTemplate` during load
 - `promptTemplateFile` is resolved into `promptTemplate` during load
 - `sessionStartPromptTemplateFile` is resolved into `sessionStartPromptTemplate` during load
-- legacy `prompt` and `variable` aliases remain read-compatible but are not canonical
+- legacy prompt/variable aliases are rejected; authored JSON must use the canonical field names
 
 ### `nodeType`
 
@@ -362,8 +362,7 @@ Current supported authored values:
 
 Current execution reality:
 
-- only `agent` nodes run in `runWorkflow()`
-- `command` and `container` nodes are validated but rejected during execution
+- `agent`, `command`, and `container` nodes run in `runWorkflow()`
 
 ### `executionBackend`
 
@@ -437,8 +436,9 @@ The runtime and editor derive indent/color from workflow graph structure rather 
 
 ## Current Compatibility Notes
 
-- `subWorkflows[].inputs` is still read and normalized to `inputSources`
-- backend inference from certain legacy `model` strings remains read-compatible, but explicit `executionBackend` is canonical
+- `subWorkflows[].inputs` is rejected; authored JSON must use `inputSources`
+- `subWorkflowConversations[].participantsIds` is rejected; authored JSON must use `participants`
+- `executionBackend` is required for agent nodes; backend identifiers encoded in `model` are rejected
 
 ## Current Non-Goals
 
@@ -447,8 +447,6 @@ These are not part of the current authored workflow format:
 - concurrent `nodeGroups`
 - `workflowType`
 - workflow-ref child workflow execution
-- runtime execution of `command` nodes
-- runtime execution of `container` nodes
 
 ## References
 

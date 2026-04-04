@@ -74,13 +74,15 @@ async function createWorkflowFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager {{topic}}",
     variables: { topic: "A" },
   });
   await writeJson(path.join(workflowDir, "node-step-1.json"), {
     id: "step-1",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "step {{topic}}",
     variables: {},
   });
@@ -137,19 +139,22 @@ async function createNodeSessionReuseFixture(
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-a.json"), {
     id: "step-a",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "return 2",
     variables: {},
   });
   await writeJson(path.join(workflowDir, "node-step-b.json"), {
     id: "step-b",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     sessionPolicy: {
       mode: "reuse",
     },
@@ -158,7 +163,8 @@ async function createNodeSessionReuseFixture(
   });
   await writeJson(path.join(workflowDir, "node-step-c.json"), {
     id: "step-c",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "return 3",
     variables: {},
   });
@@ -265,7 +271,8 @@ describe("runtime-db", () => {
       path.join(root, "sqlite-output-contract", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {
@@ -415,7 +422,8 @@ describe("runtime-db", () => {
       path.join(root, "sqlite-output-contract-migration", "node-step-1.json"),
       {
         id: "step-1",
-        model: "tacogips/claude-code-agent",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
         promptTemplate: "step {{topic}}",
         variables: {},
         output: {

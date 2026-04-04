@@ -158,7 +158,7 @@ Schema-level container types exist:
 Current implementation note:
 
 - these shapes are validated and persisted
-- the main workflow engine still rejects `nodeType: "container"` during execution
+- the main workflow engine executes `nodeType: "container"` through the native node executor
 
 ## Normalized Load-Time Model
 
@@ -170,7 +170,7 @@ Current implementation note:
 Normalization behavior:
 
 - prompt files are resolved into effective `promptTemplate`
-- selected legacy non-manager fields may be normalized during load, but legacy manager kinds are rejected
+- transition-era prompt/backend/sub-workflow aliases are rejected; legacy manager kinds are also rejected
 - `workflow.json.nodes[]` order is canonical and requires no separate visualization file
 
 ## Session Model

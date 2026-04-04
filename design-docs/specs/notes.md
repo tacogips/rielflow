@@ -63,7 +63,7 @@ Implicit transitions are avoided.
 - Manager-message provenance: manager-authored mailbox sends now use discriminated `payloadRef` provenance so node-output-backed and manager-message-backed communications stay replay/retry compatible under one durable artifact model.
 - File/image reference portability: GraphQL must use data-root-relative file references resolved under `DIVEDRA_ARTIFACT_DIR`, never host absolute paths. This is required for future container node execution with bind-mounted or synchronized data volumes regardless of whether the selected runner is Podman, Docker, nerdctl, or Apple container.
 - Manager attachment scope: manager-scoped GraphQL attachments are not just root-data-relative; they must stay inside the authenticated execution's `files/{workflowId}/{workflowExecutionId}/...` namespace so manager messages cannot read unrelated workflow artifacts or session files.
-- Root-data migration note: `DIVEDRA_ARTIFACT_DIR` is the canonical root data directory; `DIVEDRA_ROOT_DATA_DIR` and `DIVEDRA_RUNTIME_ROOT` remain compatibility aliases.
+- Root-data note: `DIVEDRA_ARTIFACT_DIR` is the canonical root data directory for derived workflow artifacts, session state, attachments, and the runtime database.
 - Manager kind naming direction: the authored workflow schema should keep an explicit root-vs-sub-workflow manager split, but the nested kind should be neutral (`subworkflow-manager`) instead of product-branded (`sub-divedra-manager`). Detailed scope is tracked in `design-docs/specs/design-manager-kind-simplification.md`.
 - Workflow role unification direction: future design work should collapse authored node roles to `manager` and `worker`, make workflow managers optional, and treat called workflows as ordinary workflows rather than as structural sub-workflow boundaries. This supersedes the manager-kind split direction for future architecture work. Detailed scope is tracked in `design-docs/specs/design-unified-workflow-role-model.md`.
 - Workflow JSON simplification direction: future design work may go further and make `workflow.json` linear-by-default, remove required `edges[]`, replace `subWorkflows[]` with node-owned workflow-call semantics, and use node-local skip/repeat controls instead of general graph authoring for common cases. Detailed scope is tracked in `design-docs/specs/design-simplified-workflow-json.md`.
@@ -76,7 +76,7 @@ Implicit transitions are avoided.
 - Manager control-mode exclusivity: each manager execution persists one authoritative control source, so `sendManagerMessage` and payload `managerControl` cannot both drive the same manager step; the control-mode claim itself must be atomic at the storage boundary.
 - Node output ingestion contract: ordinary node completion is runtime-captured in the execution path itself, not discovered by periodic scanning for `output.json` files. File watching is only an adapter-local fallback for special external backends and must still feed results back into the runtime-owned completion path.
 - Timeout inspection fallback: if the normal transition/notification path fails, Divedra still needs a deterministic inspection path for node `status`, published `output.json`, `meta.json`, and timeout/failure messages via GraphQL `nodeExecution(...)` or internal runtime-db/session helpers.
-- Container runtime contract: future container nodes may declare either a prebuilt `image` or a workflow-local `build` block with `contextPath` and optional `containerfilePath`/legacy `dockerfilePath`, plus workflow-level runner defaults. The additive authoring and validation rules are specified in `design-docs/specs/design-container-runtime-contract.md`.
+- Container runtime contract: container nodes may declare either a prebuilt `image` or a workflow-local `build` block with `contextPath` and optional `containerfilePath`, plus workflow-level runner defaults. Runtime behavior and authoring rules are specified in `design-docs/specs/design-container-runtime-contract.md`.
 - User escalation contract: add `nodeType: "user-action"` as a runtime-owned human interaction executor that fans out through registered message/notification tools selected by logical tool id, validates the normalized reply against the node `output` contract, and resumes the paused workflow on acceptance. Optional node execution should be modeled separately as manager-owned scheduler policy on `workflow.json.nodes[]` rather than as a node payload executor concern. See `design-docs/specs/design-user-action-and-optional-node-execution.md`.
 
 ### Completion-First Progression
@@ -104,8 +104,7 @@ This supports quality gates in collaborative writing workflows.
 
 - Existing workflow-run `sessionId` in runtime/session-store code is the old name for `workflowExecutionId`.
 - New design docs must use `workflowExecutionId` for workflow-run scope and `agentSessionId` for worker retry scope.
-- Bare `sessionId` is allowed only as a temporary compatibility alias in existing APIs and persisted workflow-run state.
-- Compatibility window is fixed: keep `sessionId` alias support through `2026-09-30`, then remove it in the first subsequent minor release.
+- New API and persistence changes should not introduce fresh `sessionId` surface area for workflow runs.
 
 ### Documentation Cleanup Note
 

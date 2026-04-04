@@ -7,8 +7,8 @@
   "command": {
     "scriptPath": "scripts/divide.sh",
     "argvTemplate": [
-      "--stage",
-      "divide"
+      "{{arguments.operands.0}}",
+      "{{arguments.operands.1}}"
     ],
     "envTemplate": {
       "ARITHMETIC_STAGE": "divide"

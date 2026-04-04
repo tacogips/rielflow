@@ -95,15 +95,15 @@ function makeClaudeRunner() {
 }
 
 describe("resolveNodeExecutionBackend", () => {
-  test("derives canonical short backend from legacy model alias when executionBackend is omitted", () => {
-    expect(
+  test("requires explicit executionBackend", () => {
+    expect(() =>
       resolveNodeExecutionBackend({
         id: "node-1",
-        model: "tacogips/codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "test",
         variables: {},
       }),
-    ).toBe("codex-agent");
+    ).toThrow("requires explicit executionBackend");
   });
 });
 
@@ -147,7 +147,7 @@ describe("DispatchingNodeAdapter", () => {
     expect(output.payload["text"]).toBe("hello from openai");
   });
 
-  test("routes to codex-agent backend from legacy model alias when executionBackend is omitted", async () => {
+  test("routes to codex-agent backend when explicitly selected", async () => {
     const fixture = makeCodexRunner();
     const adapter = new DispatchingNodeAdapter({
       codexAgent: { createRunner: fixture.createRunner },
@@ -159,7 +159,8 @@ describe("DispatchingNodeAdapter", () => {
       nodeExecId: "exec-1",
       node: {
         id: "node-1",
-        model: "tacogips/codex-agent",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
         promptTemplate: "test",
         variables: {},
       },

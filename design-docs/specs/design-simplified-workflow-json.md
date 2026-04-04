@@ -1,7 +1,8 @@
 # Simplified Workflow JSON
 
-This document proposes a simplified authored `workflow.json` model for Divedra.
-It is a vNext design proposal, not a description of the current implementation.
+This document records the simplification principles behind the current authored
+`workflow.json` direction in Divedra. Where examples in this document differ
+from the executable product, the runtime validator and README are canonical.
 
 ## Overview
 

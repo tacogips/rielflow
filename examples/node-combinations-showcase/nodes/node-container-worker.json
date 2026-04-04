@@ -14,7 +14,7 @@
       "-lc"
     ],
     "argsTemplate": [
-      "echo container showcase lane"
+      "mkdir -p \"$DIVEDRA_MAILBOX_DIR/outbox\" && printf '%s\\n' '{\"lane\":\"container\",\"summary\":\"node-combinations-showcase container lane placeholder\"}' > \"$DIVEDRA_MAILBOX_DIR/outbox/output.json\""
     ],
     "envTemplate": {
       "SHOWCASE_LANE": "container"

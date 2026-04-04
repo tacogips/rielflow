@@ -88,42 +88,6 @@ describe("resolveEffectiveRoots", () => {
     ).toBe("/tmp/project/env-data/files");
   });
 
-  test("derives artifact and attachment roots from DIVEDRA_ROOT_DATA_DIR (legacy)", () => {
-    const resolved = resolveEffectiveRoots({
-      env: {
-        DIVEDRA_ROOT_DATA_DIR: "env-data",
-      },
-      cwd: "/tmp/project",
-    });
-
-    expect(resolved.rootDataDir).toBe("/tmp/project/env-data");
-    expect(resolved.artifactRoot).toBe("/tmp/project/env-data/workflow");
-    expect(resolved.attachmentRoot).toBe("/tmp/project/env-data/files");
-  });
-
-  test("DIVEDRA_ARTIFACT_DIR wins over DIVEDRA_ROOT_DATA_DIR", () => {
-    const resolved = resolveEffectiveRoots({
-      env: {
-        DIVEDRA_ARTIFACT_DIR: "artifact-wins",
-        DIVEDRA_ROOT_DATA_DIR: "root-loses",
-      },
-      cwd: "/tmp/project",
-    });
-    expect(resolved.rootDataDir).toBe("/tmp/project/artifact-wins");
-  });
-
-  test("accepts DIVEDRA_RUNTIME_ROOT as a compatibility alias", () => {
-    const resolved = resolveEffectiveRoots({
-      env: {
-        DIVEDRA_RUNTIME_ROOT: "legacy-data",
-      },
-      cwd: "/tmp/project",
-    });
-
-    expect(resolved.rootDataDir).toBe("/tmp/project/legacy-data");
-    expect(resolved.artifactRoot).toBe("/tmp/project/legacy-data/workflow");
-  });
-
   test("walks up parent directories to find the nearest .divedra project root", async () => {
     const root = await makeTempDir();
     const nestedCwd = path.join(root, "packages", "feature", "src");
@@ -289,7 +253,8 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "manager",
       variables: {},
     });
@@ -640,12 +605,12 @@ describe("loadWorkflowFromDisk", () => {
       result.error.issues?.some(
         (issue) =>
           issue.path === "workflow.entryNodeId" &&
-          issue.message.includes("not executable"),
+          issue.message.includes("not supported"),
       ),
     ).toBe(true);
   });
 
-  test("preserves podman runtimeIsolation build metadata for worker nodes during load", async () => {
+  test("preserves canonical container build metadata for worker nodes during load", async () => {
     const root = await makeTempDir();
     const workflowName = "podman-build-load";
     const workflowDirectory = path.join(root, workflowName);
@@ -686,14 +651,13 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-build-worker.json"), {
       id: "build-worker",
-      model: "tacogips/codex-agent",
-      promptTemplate: "worker",
+      nodeType: "container",
       variables: {},
-      runtimeIsolation: {
-        mode: "podman",
+      container: {
+        runnerKind: "podman",
         build: {
           contextPath: "containers/manager",
-          dockerfilePath: "containers/manager/Dockerfile",
+          containerfilePath: "containers/manager/Containerfile",
           target: "runtime",
         },
       },
@@ -713,7 +677,7 @@ describe("loadWorkflowFromDisk", () => {
         runnerKind: "podman",
         build: {
           contextPath: "containers/manager",
-          dockerfilePath: "containers/manager/Dockerfile",
+          containerfilePath: "containers/manager/Containerfile",
           target: "runtime",
         },
       },
@@ -780,13 +744,15 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "manager",
       variables: {},
     });
     await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
       id: "worker-1",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "worker",
       variables: {},
     });
@@ -892,7 +858,8 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplateFile: "prompts/divedra-manager.md",
       variables: {},
     });
@@ -946,7 +913,8 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       systemPromptTemplateFile: "prompts/system.md",
       promptTemplateFile: "prompts/body.md",
       sessionStartPromptTemplateFile: "prompts/session-start.md",
@@ -1016,7 +984,8 @@ describe("loadWorkflowFromDisk", () => {
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
       description: "Coordinate the workflow and route work to downstream lanes.",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplate: "manager",
       variables: {},
     });
@@ -1091,7 +1060,8 @@ describe("loadWorkflowFromDisk", () => {
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
       id: "divedra-manager",
-      model: "tacogips/codex-agent",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
       promptTemplateFile: "workflow.json",
       variables: {},
     });

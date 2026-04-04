@@ -5,7 +5,8 @@ import type { NodePayload } from "./types";
 function makeNode(overrides: Partial<NodePayload> = {}): NodePayload {
   return {
     id: "step-1",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
     promptTemplate: "hello {{topic}}",
     variables: { topic: "default-topic" },
     ...overrides,

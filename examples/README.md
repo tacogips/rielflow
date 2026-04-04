@@ -18,7 +18,7 @@ Most example bundles now use the simplified authored shape:
 
 Current exception:
 
-- `codex-codex-euthanasia-debate` still uses the legacy sub-workflow structure
+- `codex-codex-euthanasia-debate` still uses the structural sub-workflow form
   because `subWorkflowConversations` has not yet been migrated to the
   simplified format
 

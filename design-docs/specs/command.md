@@ -82,8 +82,6 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `DIVEDRA_SERVE_HOST`            | No       | `127.0.0.1`                                                  | Default bind address for `serve`                                                                                                                                                                                                           |
 | `DIVEDRA_SERVE_PORT`            | No       | `43173`                                                      | Default listen port for `serve`                                                                                                                                                                                                            |
 | `DIVEDRA_ARTIFACT_DIR`          | No       | `~/.divedra/project/<encoded-project-root>/divedra-artifact` | Canonical root data directory: sessions, `workflow/`, `files/`, `divedra.db`; when no explicit root is set, `divedra` first walks upward to find the nearest ancestor containing `.divedra` and uses that project root for default scoping |
-| `DIVEDRA_ROOT_DATA_DIR`         | No       | (unused if `DIVEDRA_ARTIFACT_DIR` set)                       | Legacy alias for `DIVEDRA_ARTIFACT_DIR`                                                                                                                                                                                                    |
-| `DIVEDRA_RUNTIME_ROOT`          | No       | compatibility alias                                          | Legacy alias for `DIVEDRA_ARTIFACT_DIR`                                                                                                                                                                                                    |
 | `DIVEDRA_GRAPHQL_ENDPOINT`      | No       | local serve endpoint                                         | Default GraphQL endpoint for CLI manager/control-plane commands                                                                                                                                                                            |
 | `DIVEDRA_MANAGER_AUTH_TOKEN`    | No       | none                                                         | Manager-session auth token for `divedra gql` and GraphQL control-plane mutations                                                                                                                                                           |
 | `DIVEDRA_MANAGER_SESSION_ID`    | No       | none                                                         | Ambient manager session id forwarded by `divedra gql` to `/graphql` for manager-scoped requests                                                                                                                                            |
@@ -103,7 +101,7 @@ Artifact root resolution order:
 
 1. `--artifact-root`
 2. `DIVEDRA_ARTIFACT_ROOT`
-3. `DIVEDRA_ARTIFACT_DIR/workflow` (or legacy `DIVEDRA_ROOT_DATA_DIR` / `DIVEDRA_RUNTIME_ROOT`)
+3. `DIVEDRA_ARTIFACT_DIR/workflow`
 4. computed default: `{resolved DIVEDRA_ARTIFACT_DIR}/workflow` where `DIVEDRA_ARTIFACT_DIR` defaults to `~/.divedra/project/<encoded-project-root>/divedra-artifact`
    - the encoded project root is the nearest ancestor containing `.divedra`, otherwise the current working directory
 

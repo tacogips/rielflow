@@ -1,16 +1,9 @@
 import type { CliAgentBackend, NodeExecutionBackend } from "./types";
 
-type CliAgentBackendAlias =
-  | CliAgentBackend
-  | "tacogips/codex-agent"
-  | "tacogips/claude-code-agent";
-
-const CLI_AGENT_BACKEND_ALIASES = {
+const CLI_AGENT_BACKENDS = {
   "codex-agent": "codex-agent",
-  "tacogips/codex-agent": "codex-agent",
   "claude-code-agent": "claude-code-agent",
-  "tacogips/claude-code-agent": "claude-code-agent",
-} as const satisfies Record<CliAgentBackendAlias, CliAgentBackend>;
+} as const satisfies Record<CliAgentBackend, CliAgentBackend>;
 
 const NATIVE_NODE_EXECUTION_BACKENDS = new Set<NodeExecutionBackend>([
   "official/openai-sdk",
@@ -23,12 +16,10 @@ export function normalizeCliAgentBackend(
   if (typeof value !== "string") {
     return null;
   }
-  return CLI_AGENT_BACKEND_ALIASES[value as CliAgentBackendAlias] ?? null;
+  return CLI_AGENT_BACKENDS[value as CliAgentBackend] ?? null;
 }
 
-export function isCliAgentBackend(
-  value: unknown,
-): value is CliAgentBackendAlias {
+export function isCliAgentBackend(value: unknown): value is CliAgentBackend {
   return normalizeCliAgentBackend(value) !== null;
 }
 

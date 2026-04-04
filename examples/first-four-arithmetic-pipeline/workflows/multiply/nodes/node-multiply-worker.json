@@ -14,8 +14,7 @@
       "-lc"
     ],
     "argsTemplate": [
-      "/app/multiply.sh \"$@\"",
-      "--"
+      "/app/multiply.sh \"{{arguments.operands.0}}\" \"{{arguments.operands.1}}\""
     ],
     "envTemplate": {
       "ARITHMETIC_STAGE": "multiply"
