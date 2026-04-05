@@ -12,6 +12,8 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 - `cli workflow create <name>`
   - Create `<workflow-root>/<name>/` with `workflow.json`, prompt templates, and default `nodes/node-{id}.json` payload files.
+  - The current starter template uses a `claude-code-agent` manager node and a `codex-agent` worker node.
+  - `--worker-only` switches the starter to a manager-less template whose explicit `entryNodeId` points at `main-worker`.
 - `cli workflow validate <name>`
   - Validate `<workflow-root>/<name>/` structure and semantic constraints.
 - `cli workflow inspect <name>`
@@ -49,6 +51,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 | Flag                    | Type          | Default                                                           | Description                                                                                                                                                |
 | ----------------------- | ------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--worker-only`         | boolean       | `false`                                                           | For `workflow create`: scaffold a manager-less starter whose explicit entry node is `main-worker`                                                         |
 | `--variables`           | string        | none                                                              | For legacy execution commands: JSON file supplying runtime prompt variables. For `divedra gql`: inline GraphQL variables JSON or `@path/to/variables.json` |
 | `--workflow-root`       | string (path) | nearest ancestor `./.divedra`                                     | Root directory containing workflow definitions                                                                                                             |
 | `--artifact-root`       | string (path) | derived from `DIVEDRA_ARTIFACT_DIR` (see env) / `{root}/workflow` | Root directory for execution artifacts                                                                                                                     |

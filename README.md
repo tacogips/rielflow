@@ -21,6 +21,8 @@ Current runtime behavior:
 - authored `edges` remain supported, but when omitted the loader synthesizes sequential edges
 - workflows persist session state, node execution artifacts, communications, and runtime indexes
 - manager nodes run inside the queue-based engine rather than replacing it with a pure external orchestrator
+- authored workflows may use role-based nodes (`manager` / `worker`) and may omit a manager when `entryNodeId` is explicit
+- manager-less workflows execute today, but the normalized runtime still derives an internal effective manager/entry identity for compatibility
 - root and sub-workflow boundaries still exist through `managerNodeId`, `subWorkflows`, and related mailbox routing
 - `repeat` on a node is supported in the simplified ordered format and synthesizes loop semantics
 - `user-action` nodes are supported and pause execution until an external reply resolves the action
@@ -34,7 +36,7 @@ Current execution support by node type:
 
 Additional authored shapes that are recognized but not fully executable:
 
-- `workflowCalls`: validated, but not executable
+- `workflowCalls`: loadable and valid as authored workflow metadata, but runtime readiness blocks execution until workflow-call runtime support lands
 
 ## Quick Start
 
@@ -101,11 +103,14 @@ Primary commands implemented in `src/cli.ts`:
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
 - `export <workflow-id> <workflow-run-id>`
 
+`workflow create <name>` scaffolds a role-based starter with a `claude-code-agent` manager node and a `codex-agent` worker node. Pass `--worker-only` to scaffold a manager-less starter whose explicit `entryNodeId` points at `main-worker`.
+
 Useful options:
 
 - `--workflow-root`
 - `--artifact-root`
 - `--session-store`
+- `--worker-only`
 - `--variables <path>`
 - `--mock-scenario <path>`
 - `--output json`
@@ -136,6 +141,7 @@ Defaults:
 The GraphQL schema currently includes:
 
 - workflow-definition queries and mutations
+- `createWorkflowDefinition` accepts the same starter template split as the CLI: the default managed starter or `templateMode: WORKER_ONLY`
 - workflow execution queries
 - execution mutations for run, resume, rerun, and cancel
 - communication replay/retry operations
@@ -182,14 +188,10 @@ Typical layout:
     workflow.json
     nodes/
       node-divedra-manager.json
-      node-main-divedra.json
-      node-workflow-input.json
-      node-workflow-output.json
+      node-main-worker.json
     prompts/
       divedra-manager.md
-      main-divedra.md
-      workflow-input.md
-      workflow-output.md
+      main-worker.md
     workflows/
       review/
         nodes/
@@ -214,6 +216,7 @@ Current top-level authored fields include:
 - `defaults`
 - `prompts`
 - `managerNodeId`
+- `entryNodeId`
 - `workflowCalls`
 - `subWorkflows`
 - `subWorkflowConversations`
@@ -226,6 +229,7 @@ Relevant current behavior:
 
 - if `edges` are omitted, sequential edges are synthesized from node order
 - if exactly one manager-role node exists, `managerNodeId` may be inferred
+- if no manager exists, `entryNodeId` is required and the runtime starts there
 - inline node payload authoring is supported through `workflow.nodes[].node` when `nodeFile` is omitted
 - `workflowId` is the runtime namespace key for artifacts and session storage, so it must be filesystem-safe
 
@@ -250,6 +254,11 @@ Current `kind` values:
 - `subworkflow-manager`
 - `input`
 - `output`
+
+Role-based authoring note:
+
+- `role` is the authored direction of travel: `manager` or `worker`
+- `kind` still appears in normalized runtime structures while the engine retains structural sub-workflow compatibility paths
 
 ## Node Payloads
 

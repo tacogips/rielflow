@@ -6,7 +6,10 @@ import type {
   WorkflowResponse,
 } from "../shared/ui-contract";
 import { runWorkflow } from "../workflow/engine";
-import { createWorkflowTemplate } from "../workflow/create";
+import {
+  createWorkflowTemplate,
+  type CreateWorkflowTemplateMode,
+} from "../workflow/create";
 import { buildInspectionSummary } from "../workflow/inspect";
 import { loadWorkflowFromDisk } from "../workflow/load";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "../workflow/paths";
@@ -264,7 +267,11 @@ async function createWorkflowDefinitionMutation(
   if (!isSafeWorkflowName(input.workflowName)) {
     throw new Error(`invalid workflow name '${input.workflowName}'`);
   }
-  const created = await createWorkflowTemplate(input.workflowName, context);
+  const templateMode = normalizeCreateWorkflowTemplateMode(input.templateMode);
+  const created = await createWorkflowTemplate(input.workflowName, {
+    ...context,
+    ...(templateMode === undefined ? {} : { templateMode }),
+  });
   if (!created.ok) {
     throw new Error(created.error.message);
   }
@@ -273,6 +280,18 @@ async function createWorkflowDefinitionMutation(
     throw new Error(`workflow '${created.value.workflowName}' was not found after creation`);
   }
   return loaded;
+}
+
+function normalizeCreateWorkflowTemplateMode(
+  value: CreateWorkflowDefinitionInput["templateMode"],
+): CreateWorkflowTemplateMode | undefined {
+  if (value === undefined || value === "managed" || value === "MANAGED") {
+    return value === undefined ? undefined : "managed";
+  }
+  if (value === "worker-only" || value === "WORKER_ONLY") {
+    return "worker-only";
+  }
+  throw new Error(`unsupported workflow template mode '${value}'`);
 }
 
 async function saveWorkflowDefinitionMutation(

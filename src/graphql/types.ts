@@ -1,4 +1,5 @@
 import type { MockNodeScenario } from "../workflow/adapter";
+import type { CreateWorkflowTemplateMode } from "../workflow/create";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
 import type {
   SaveWorkflowResponse,
@@ -171,8 +172,14 @@ export interface ExecuteWorkflowInput {
   readonly defaultTimeoutMs?: number;
 }
 
+export type GraphqlWorkflowTemplateMode =
+  | CreateWorkflowTemplateMode
+  | "MANAGED"
+  | "WORKER_ONLY";
+
 export interface CreateWorkflowDefinitionInput {
   readonly workflowName: string;
+  readonly templateMode?: GraphqlWorkflowTemplateMode;
 }
 
 export interface SaveWorkflowDefinitionInput {

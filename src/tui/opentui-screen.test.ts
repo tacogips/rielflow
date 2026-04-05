@@ -245,6 +245,54 @@ describe("buildWorkflowDefinitionContent", () => {
     );
     expect(content).not.toContain("workflow.json");
   });
+
+  test("shows entry-node details for worker-only workflows", () => {
+    const loaded: LoadedWorkflow = {
+      workflowName: "worker-only",
+      workflowDirectory: "/tmp/worker-only",
+      artifactWorkflowRoot: "/tmp/artifacts/worker-only",
+      bundle: {
+        workflow: {
+          workflowId: "worker-only",
+          description: "worker-only workflow",
+          defaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120_000,
+          },
+          managerNodeId: "worker-1",
+          hasManagerNode: false,
+          entryNodeId: "worker-1",
+          subWorkflows: [],
+          nodes: [
+            {
+              id: "worker-1",
+              kind: "task",
+              role: "worker",
+              nodeFile: "node-worker-1.json",
+              completion: { type: "none" },
+            },
+          ],
+          edges: [],
+          loops: [],
+          branching: { mode: "fan-out" },
+        },
+        nodePayloads: {
+          "worker-1": {
+            id: "worker-1",
+            executionBackend: "codex-agent",
+            model: "gpt-5",
+            promptTemplate: "do the work",
+            variables: {},
+          },
+        },
+      },
+    };
+
+    const content = buildWorkflowDefinitionContent(loaded);
+
+    expect(content).toContain("Manager node: (none; worker-only workflow)");
+    expect(content).toContain("Entry node: worker-1");
+  });
 });
 
 describe("buildWorkflowRunPreview", () => {

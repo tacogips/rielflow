@@ -14,7 +14,7 @@ import {
   collectPromptTemplateFiles,
   computeWorkflowRevisionFromFiles,
 } from "./revision";
-import type { LoadOptions } from "./types";
+import type { LoadOptions, WorkflowJson, WorkflowNodeRef } from "./types";
 
 export interface SaveWorkflowInput {
   readonly workflow: unknown;
@@ -40,6 +40,195 @@ export interface SaveWorkflowFailure {
 }
 
 const LEGACY_WORKFLOW_VISUALIZATION_FILE = "workflow-vis.json";
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOwnKey(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): boolean {
+  return value !== undefined && Object.hasOwn(value, key);
+}
+
+function stripPersistedWorkflowNodeCompatibilityFields(
+  node: unknown,
+): unknown {
+  if (typeof node !== "object" || node === null) {
+    return node;
+  }
+
+  const nodeRecord = { ...(node as Record<string, unknown>) };
+  if (nodeRecord["role"] !== undefined) {
+    delete nodeRecord["kind"];
+  }
+  return nodeRecord;
+}
+
+function stripPersistedWorkflowCompatibilityFields(
+  workflow: unknown,
+): unknown {
+  if (typeof workflow !== "object" || workflow === null) {
+    return workflow;
+  }
+
+  const workflowRecord = { ...(workflow as Record<string, unknown>) };
+  const hasManagerNode = workflowRecord["hasManagerNode"];
+  delete workflowRecord["hasManagerNode"];
+  if (hasManagerNode === false) {
+    delete workflowRecord["managerNodeId"];
+  }
+
+  const nodesRaw = workflowRecord["nodes"];
+  if (Array.isArray(nodesRaw)) {
+    workflowRecord["nodes"] = nodesRaw.map(
+      stripPersistedWorkflowNodeCompatibilityFields,
+    );
+  }
+
+  return workflowRecord;
+}
+
+function createPersistedWorkflowNode(
+  node: WorkflowNodeRef,
+  authoredNode: Record<string, unknown> | undefined,
+): Readonly<Record<string, unknown>> {
+  if (authoredNode === undefined) {
+    return {
+      id: node.id,
+      nodeFile: node.nodeFile,
+      ...(node.role === undefined && node.kind !== undefined
+        ? { kind: node.kind }
+        : {}),
+      ...(node.role === undefined ? {} : { role: node.role }),
+      ...(node.control === undefined ? {} : { control: node.control }),
+      ...(node.completion === undefined ? {} : { completion: node.completion }),
+      ...(node.execution === undefined ? {} : { execution: node.execution }),
+      ...(node.group === undefined ? {} : { group: node.group }),
+      ...(node.repeat === undefined ? {} : { repeat: node.repeat }),
+    };
+  }
+
+  return {
+    id: node.id,
+    nodeFile: node.nodeFile,
+    ...(hasOwnKey(authoredNode, "kind") && node.kind !== undefined
+      ? { kind: node.kind }
+      : {}),
+    ...(hasOwnKey(authoredNode, "role") && node.role !== undefined
+      ? { role: node.role }
+      : {}),
+    ...(hasOwnKey(authoredNode, "control") && node.control !== undefined
+      ? { control: node.control }
+      : {}),
+    ...(hasOwnKey(authoredNode, "completion") && node.completion !== undefined
+      ? { completion: node.completion }
+      : {}),
+    ...(hasOwnKey(authoredNode, "execution") && node.execution !== undefined
+      ? { execution: node.execution }
+      : {}),
+    ...(hasOwnKey(authoredNode, "group") && node.group !== undefined
+      ? { group: node.group }
+      : {}),
+    ...(hasOwnKey(authoredNode, "repeat") && node.repeat !== undefined
+      ? { repeat: node.repeat }
+      : {}),
+  };
+}
+
+function createPersistedWorkflowDefaults(input: {
+  readonly workflow: WorkflowJson;
+  readonly authoredWorkflow: Record<string, unknown> | undefined;
+}): Readonly<Record<string, unknown>> {
+  const authoredDefaults = isRecord(input.authoredWorkflow?.["defaults"])
+    ? input.authoredWorkflow["defaults"]
+    : undefined;
+  return {
+    maxLoopIterations: input.workflow.defaults.maxLoopIterations,
+    nodeTimeoutMs: input.workflow.defaults.nodeTimeoutMs,
+    ...(hasOwnKey(authoredDefaults, "containerRuntime")
+      ? { containerRuntime: input.workflow.defaults.containerRuntime }
+      : {}),
+  };
+}
+
+function buildAuthoredWorkflowNodesById(
+  authoredWorkflow: Record<string, unknown> | undefined,
+): ReadonlyMap<string, Record<string, unknown>> {
+  const authoredNodes = authoredWorkflow?.["nodes"];
+  if (!Array.isArray(authoredNodes)) {
+    return new Map();
+  }
+
+  return new Map(
+    authoredNodes.flatMap((node) => {
+      if (!isRecord(node) || typeof node["id"] !== "string") {
+        return [];
+      }
+      return [[node["id"], node] as const];
+    }),
+  );
+}
+
+function createPersistedWorkflowJson(input: {
+  readonly workflow: WorkflowJson;
+  readonly authoredWorkflow: unknown;
+}): Readonly<Record<string, unknown>> {
+  const authoredWorkflow = isRecord(input.authoredWorkflow)
+    ? input.authoredWorkflow
+    : undefined;
+  const authoredNodesById = buildAuthoredWorkflowNodesById(authoredWorkflow);
+
+  return {
+    workflowId: input.workflow.workflowId,
+    ...(hasOwnKey(authoredWorkflow, "description")
+      ? { description: input.workflow.description }
+      : {}),
+    defaults: createPersistedWorkflowDefaults({
+      workflow: input.workflow,
+      authoredWorkflow,
+    }),
+    ...(hasOwnKey(authoredWorkflow, "prompts") &&
+    input.workflow.prompts !== undefined
+      ? { prompts: input.workflow.prompts }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "managerNodeId") &&
+    input.workflow.hasManagerNode !== false
+      ? { managerNodeId: input.workflow.managerNodeId }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "entryNodeId") &&
+    input.workflow.entryNodeId !== undefined
+      ? { entryNodeId: input.workflow.entryNodeId }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "workflowCalls") &&
+    input.workflow.workflowCalls !== undefined
+      ? { workflowCalls: input.workflow.workflowCalls }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "subWorkflows")
+      ? { subWorkflows: input.workflow.subWorkflows }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "subWorkflowConversations") &&
+    input.workflow.subWorkflowConversations !== undefined
+      ? { subWorkflowConversations: input.workflow.subWorkflowConversations }
+      : {}),
+    nodes: input.workflow.nodes.map((node) =>
+      createPersistedWorkflowNode(node, authoredNodesById.get(node.id)),
+    ),
+    ...(hasOwnKey(authoredWorkflow, "edges")
+      ? { edges: input.workflow.edges }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "loops") &&
+    input.workflow.loops !== undefined
+      ? { loops: input.workflow.loops }
+      : {}),
+    ...(hasOwnKey(authoredWorkflow, "branching")
+      ? { branching: input.workflow.branching }
+      : {}),
+  };
+}
 
 function collectReferencedNodePayloads(input: {
   readonly workflow: {
@@ -235,12 +424,15 @@ export async function saveWorkflowToDisk(
     });
   }
 
-  const normalizedNodePayloads = remapAuthoredNodePayloadsByNodeFile(
+  const authoredWorkflow = stripPersistedWorkflowCompatibilityFields(
     input.workflow,
+  );
+  const normalizedNodePayloads = remapAuthoredNodePayloadsByNodeFile(
+    authoredWorkflow,
     input.nodePayloads,
   );
   const authoredReferencedNodePayloads = collectAuthoredReferencedNodePayloads(
-    input.workflow,
+    authoredWorkflow,
     normalizedNodePayloads,
   );
   const roots = resolveEffectiveRoots(options);
@@ -254,7 +446,7 @@ export async function saveWorkflowToDisk(
   }
 
   const validation = validateWorkflowBundle({
-    workflow: input.workflow,
+    workflow: authoredWorkflow,
     nodePayloads: validationNodePayloads.value,
   });
 
@@ -293,10 +485,14 @@ export async function saveWorkflowToDisk(
   }
 
   try {
+    const persistedWorkflow = createPersistedWorkflowJson({
+      workflow: validation.value.workflow,
+      authoredWorkflow,
+    });
     await mkdir(workflowDirectory, { recursive: true });
     await atomicWriteJsonFile(
       path.join(workflowDirectory, "workflow.json"),
-      validation.value.workflow,
+      persistedWorkflow,
     );
     for (const node of validation.value.workflow.nodes) {
       const payload =

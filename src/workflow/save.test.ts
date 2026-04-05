@@ -23,6 +23,229 @@ afterEach(async () => {
 });
 
 describe("saveWorkflowToDisk", () => {
+  test("preserves role-based authored workflow shape for managed templates", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const loaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const saveResult = await saveWorkflowToDisk(
+      "demo",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(root, "demo", "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).not.toContain('"hasManagerNode"');
+    expect(workflowJsonText).not.toContain('"kind"');
+    expect(workflowJsonText).toContain('"role": "manager"');
+    expect(workflowJsonText).toContain('"role": "worker"');
+  });
+
+  test("keeps worker-only workflows authored without compatibility manager fields on save", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("solo", {
+      workflowRoot: root,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const loaded = await loadWorkflowFromDisk("solo", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const saveResult = await saveWorkflowToDisk(
+      "solo",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(root, "solo", "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).not.toContain('"hasManagerNode"');
+    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).not.toContain('"kind"');
+    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"role": "worker"');
+
+    const reloaded = await loadWorkflowFromDisk("solo", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(reloaded.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(reloaded.value.bundle.workflow.managerNodeId).toBe("main-worker");
+    expect(reloaded.value.bundle.workflow.entryNodeId).toBe("main-worker");
+  });
+
+  test("preserves omitted normalized workflow fields instead of leaking compatibility defaults on save", async () => {
+    const root = await makeTempDir();
+
+    const saveResult = await saveWorkflowToDisk(
+      "minimal-managed",
+      {
+        workflow: {
+          workflowId: "minimal-managed",
+          defaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          nodes: [
+            {
+              id: "divedra-manager",
+              role: "manager",
+              nodeFile: "nodes/node-divedra-manager.json",
+            },
+            {
+              id: "decision",
+              nodeFile: "nodes/node-decision.json",
+              control: "branch-judge",
+            },
+            {
+              id: "main-worker",
+              role: "worker",
+              nodeFile: "nodes/node-main-worker.json",
+            },
+          ],
+        },
+        nodePayloads: {
+          "nodes/node-divedra-manager.json": {
+            id: "divedra-manager",
+            executionBackend: "claude-code-agent",
+            model: "claude-opus-4-1",
+            promptTemplate: "Coordinate the workflow",
+            variables: {},
+          },
+          "nodes/node-decision.json": {
+            id: "decision",
+            executionBackend: "codex-agent",
+            model: "gpt-5-nano",
+            promptTemplate: "Decide whether more work is needed",
+            variables: {},
+          },
+          "nodes/node-main-worker.json": {
+            id: "main-worker",
+            executionBackend: "codex-agent",
+            model: "gpt-5-nano",
+            promptTemplate: "Do the work",
+            variables: {},
+          },
+        },
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJson = JSON.parse(
+      await readFile(path.join(root, "minimal-managed", "workflow.json"), "utf8"),
+    ) as {
+      readonly defaults: Readonly<Record<string, unknown>>;
+      readonly nodes: readonly Readonly<Record<string, unknown>>[];
+      readonly description?: string;
+      readonly managerNodeId?: string;
+      readonly entryNodeId?: string;
+      readonly edges?: unknown;
+      readonly loops?: unknown;
+      readonly branching?: unknown;
+      readonly subWorkflows?: unknown;
+      readonly subWorkflowConversations?: unknown;
+      readonly workflowCalls?: unknown;
+    };
+
+    expect(workflowJson.description).toBeUndefined();
+    expect(workflowJson.managerNodeId).toBeUndefined();
+    expect(workflowJson.entryNodeId).toBeUndefined();
+    expect(workflowJson.defaults["containerRuntime"]).toBeUndefined();
+    expect(workflowJson.subWorkflows).toBeUndefined();
+    expect(workflowJson.subWorkflowConversations).toBeUndefined();
+    expect(workflowJson.workflowCalls).toBeUndefined();
+    expect(workflowJson.edges).toBeUndefined();
+    expect(workflowJson.loops).toBeUndefined();
+    expect(workflowJson.branching).toBeUndefined();
+
+    const savedManagerNode = workflowJson.nodes[0];
+    const savedDecisionNode = workflowJson.nodes[1];
+    expect(savedManagerNode).toMatchObject({
+      id: "divedra-manager",
+      role: "manager",
+    });
+    expect(savedDecisionNode?.["role"]).toBeUndefined();
+    expect(savedDecisionNode).toMatchObject({
+      id: "decision",
+      control: "branch-judge",
+    });
+
+    const reloaded = await loadWorkflowFromDisk("minimal-managed", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(reloaded.value.bundle.workflow.managerNodeId).toBe("divedra-manager");
+    expect(reloaded.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
+    expect(reloaded.value.bundle.workflow.edges).toEqual([
+      { from: "divedra-manager", to: "decision", when: "always" },
+      { from: "decision", to: "main-worker", when: "always" },
+    ]);
+    expect(reloaded.value.bundle.workflow.nodes[1]).toMatchObject({
+      id: "decision",
+      role: "worker",
+      control: "branch-judge",
+    });
+  });
+
   test("persists promptTemplate back to promptTemplateFile-backed prompt files", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("demo", {
@@ -546,14 +769,14 @@ describe("saveWorkflowToDisk", () => {
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
-      "divedra-manager": {
-        ...loaded.value.bundle.nodePayloads["divedra-manager"],
+      "main-worker": {
+        ...loaded.value.bundle.nodePayloads["main-worker"],
         nodeType: "container" as const,
         container: {
           runnerKind: "podman" as const,
           build: {
-            contextPath: "containers/divedra-manager",
-            containerfilePath: "containers/divedra-manager/Containerfile",
+            contextPath: "containers/main-worker",
+            containerfilePath: "containers/main-worker/Containerfile",
             target: "runtime",
           },
         },
@@ -583,13 +806,13 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
+    expect(reloaded.value.bundle.nodePayloads["main-worker"]).toMatchObject({
       nodeType: "container",
       container: {
         runnerKind: "podman",
         build: {
-          contextPath: "containers/divedra-manager",
-          containerfilePath: "containers/divedra-manager/Containerfile",
+          contextPath: "containers/main-worker",
+          containerfilePath: "containers/main-worker/Containerfile",
           target: "runtime",
         },
       },

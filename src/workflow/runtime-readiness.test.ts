@@ -28,6 +28,14 @@ async function writeExecutable(
 
 function makeBundle(
   nodePayloads: Readonly<Record<string, NodePayload>>,
+  options: {
+    readonly workflowCalls?: readonly {
+      readonly id: string;
+      readonly workflowId: string;
+      readonly callerNodeId: string;
+      readonly resultNodeId?: string;
+    }[];
+  } = {},
 ): NormalizedWorkflowBundle {
   const nodeIds = Object.keys(nodePayloads);
   const managerNodeId = nodeIds[0] ?? "node-1";
@@ -41,6 +49,9 @@ function makeBundle(
         nodeTimeoutMs: 120_000,
       },
       managerNodeId,
+      ...(options.workflowCalls === undefined
+        ? {}
+        : { workflowCalls: options.workflowCalls }),
       subWorkflows: [],
       nodes: nodeIds.map((id, index) => ({
         id,
@@ -169,6 +180,44 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       kind: "node-executor",
       status: "available",
       sourceNodeIds: ["container-worker"],
+    });
+  });
+
+  test("reports workflow-call execution as unsupported until the runtime implements it", async () => {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle(
+        {
+          writer: {
+            id: "writer",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/write.sh",
+            },
+          },
+        },
+        {
+          workflowCalls: [
+            {
+              id: "call-review",
+              workflowId: "review-flow",
+              callerNodeId: "writer",
+            },
+          ],
+        },
+      ),
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "workflow-feature:workflowCalls",
+      ),
+    ).toMatchObject({
+      kind: "workflow-feature",
+      status: "unsupported",
+      sourceNodeIds: ["writer"],
     });
   });
 });

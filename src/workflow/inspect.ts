@@ -9,7 +9,9 @@ export interface WorkflowInspectionSummary {
   readonly workflowName: string;
   readonly workflowId: string;
   readonly description: string;
-  readonly managerNodeId: string;
+  readonly hasManagerNode: boolean;
+  readonly managerNodeId?: string;
+  readonly entryNodeId: string;
   readonly defaults: {
     readonly maxLoopIterations: number;
     readonly nodeTimeoutMs: number;
@@ -31,11 +33,14 @@ export async function buildInspectionSummary(
   options: Pick<LoadOptions, "cwd" | "env"> = {},
 ): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
+  const hasManagerNode = workflow.hasManagerNode !== false;
   return {
     workflowName: loaded.workflowName,
     workflowId: workflow.workflowId,
     description: workflow.description,
-    managerNodeId: workflow.managerNodeId,
+    hasManagerNode,
+    ...(hasManagerNode ? { managerNodeId: workflow.managerNodeId } : {}),
+    entryNodeId: workflow.entryNodeId ?? workflow.managerNodeId,
     defaults: {
       maxLoopIterations: workflow.defaults.maxLoopIterations,
       nodeTimeoutMs: workflow.defaults.nodeTimeoutMs,

@@ -99,14 +99,17 @@ tasks:
 
   nix-bin:
     desc: Build the default flake package and open a shell with its bin dir prepended to PATH (pass a command after `--` to run it instead)
+    interactive: true
+    env:
+      TASK_NIX_BIN_ARGS: '{{.CLI_ARGS}}'
     cmds:
       - |
         set -euo pipefail
         result_path="$(nix build .#default --print-out-paths --no-link | tail -n 1)"
         export PATH="${result_path}/bin:${PATH}"
 
-        if [ -n "{{.CLI_ARGS}}" ]; then
-          exec "${SHELL:-bash}" -lc '{{.CLI_ARGS}}'
+        if [ -n "${TASK_NIX_BIN_ARGS}" ]; then
+          exec bash -lc "${TASK_NIX_BIN_ARGS}"
         fi
 
         echo "Temporary PATH includes ${result_path}/bin"

@@ -11,6 +11,7 @@ Most example bundles now use the simplified authored shape:
 - ordered `nodes[]` are the canonical flow
 - authored `edges` are omitted
 - authored `subWorkflows` are omitted
+- worker-only bundles use explicit `entryNodeId` instead of an authored manager
 - repeat-style examples use node-local `repeat`
 - node payload files live under `nodes/` by default
 - grouped lane payloads may live under `workflows/*/nodes/`
@@ -23,6 +24,36 @@ Current exception:
   simplified format
 
 ## Available Examples
+
+### `worker-only-single-step`
+
+Minimal runnable reference for a manager-less workflow:
+
+- no authored `managerNodeId`
+- explicit `entryNodeId: "main-worker"`
+- one `codex-agent` worker node runs directly from workflow start
+- includes a deterministic mock scenario for validate/inspect/run demos
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate worker-only-single-step --workflow-root ./examples
+```
+
+Inspect it:
+
+```bash
+bun run src/main.ts workflow inspect worker-only-single-step --workflow-root ./examples --output json
+```
+
+Run it with the bundled deterministic scenario:
+
+```bash
+bun run src/main.ts workflow run worker-only-single-step \
+  --workflow-root ./examples \
+  --mock-scenario ./examples/worker-only-single-step/mock-scenario.json \
+  --output json
+```
 
 ### `subworkflow-chained-simple`
 

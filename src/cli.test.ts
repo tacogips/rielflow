@@ -37,20 +37,10 @@ function makeDefaultTemplateScenario(): Readonly<Record<string, unknown>> {
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-divedra": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "dispatch" },
-    },
-    "workflow-input": {
+    "main-worker": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "implement" },
-    },
-    "workflow-output": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "review" },
     },
   };
 }
@@ -132,13 +122,15 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDirectory, "node-writer.json"), {
     id: "writer",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
     promptTemplate: "writer",
     variables: {},
     output: {
@@ -152,6 +144,53 @@ async function createCallNodeFixture(
         },
       },
     },
+  });
+}
+
+async function createManagerlessWorkflowFixture(
+  workflowRoot: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDirectory = path.join(workflowRoot, workflowName);
+  await mkdir(workflowDirectory, { recursive: true });
+
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: workflowName,
+    description: "worker-only cli fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryNodeId: "worker-1",
+    subWorkflows: [],
+    nodes: [
+      {
+        id: "worker-1",
+        role: "worker",
+        nodeFile: "node-worker-1.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "worker-2",
+        role: "worker",
+        nodeFile: "node-worker-2.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [{ from: "worker-1", to: "worker-2", when: "always" }],
+    loops: [],
+    branching: { mode: "fan-out" },
+  });
+  await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
+    id: "worker-1",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "step 1",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDirectory, "node-worker-2.json"), {
+    id: "worker-2",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "step 2",
+    variables: {},
   });
 }
 
@@ -571,12 +610,91 @@ describe("runCli", () => {
     const outputJson = inspectCapture.stdout.join("\n");
     const parsed = JSON.parse(outputJson) as {
       workflowName: string;
+      entryNodeId: string;
+      managerNodeId?: string;
       counts: { nodes: number };
       runtime: { ready: boolean };
     };
     expect(parsed.workflowName).toBe("demo");
-    expect(parsed.counts.nodes).toBe(4);
+    expect(parsed.entryNodeId).toBe("divedra-manager");
+    expect(parsed.managerNodeId).toBe("divedra-manager");
+    expect(parsed.counts.nodes).toBe(2);
     expect(parsed.runtime.ready).toBe(true);
+  });
+
+  test("create --worker-only scaffolds a manager-less starter", async () => {
+    const root = await makeTempDir();
+
+    const createCapture = createIoCapture();
+    const createCode = await runCli(
+      [
+        "workflow",
+        "create",
+        "solo",
+        "--workflow-root",
+        root,
+        "--worker-only",
+      ],
+      createCapture.io,
+    );
+    expect(createCode).toBe(0);
+
+    const inspectCapture = createIoCapture();
+    const inspectCode = await runCli(
+      [
+        "workflow",
+        "inspect",
+        "solo",
+        "--workflow-root",
+        root,
+        "--output",
+        "json",
+      ],
+      inspectCapture.io,
+    );
+    expect(inspectCode).toBe(0);
+
+    const parsed = JSON.parse(inspectCapture.stdout.join("\n")) as {
+      entryNodeId: string;
+      hasManagerNode: boolean;
+      managerNodeId?: string;
+      counts: { nodes: number };
+    };
+    expect(parsed.hasManagerNode).toBe(false);
+    expect(parsed.managerNodeId).toBeUndefined();
+    expect(parsed.entryNodeId).toBe("main-worker");
+    expect(parsed.counts.nodes).toBe(1);
+  });
+
+  test("inspect reports worker-only workflows without an authored manager node", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "worker-only");
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "inspect",
+        "worker-only",
+        "--workflow-root",
+        root,
+        "--output",
+        "json",
+      ],
+      capture.io,
+    );
+    expect(code).toBe(0);
+
+    const parsed = JSON.parse(capture.stdout.join("\n")) as {
+      entryNodeId: string;
+      hasManagerNode: boolean;
+      managerNodeId?: string;
+      counts: { nodes: number };
+    };
+    expect(parsed.hasManagerNode).toBe(false);
+    expect(parsed.managerNodeId).toBeUndefined();
+    expect(parsed.entryNodeId).toBe("worker-1");
+    expect(parsed.counts.nodes).toBe(2);
   });
 
   test("workflow run fails early when required agent backend transport is unavailable", async () => {
@@ -828,7 +946,7 @@ describe("runCli", () => {
         "session",
         "rerun",
         runPayload.sessionId,
-        "workflow-output",
+        "main-worker",
         "--workflow-root",
         root,
         "--artifact-root",
@@ -850,7 +968,7 @@ describe("runCli", () => {
     };
     expect(rerunPayload.sourceSessionId).toBe(runPayload.sessionId);
     expect(rerunPayload.sessionId).not.toBe(runPayload.sessionId);
-    expect(rerunPayload.rerunFromNodeId).toBe("workflow-output");
+    expect(rerunPayload.rerunFromNodeId).toBe("main-worker");
   });
 
   test("export prints workflow execution logs as JSON", async () => {

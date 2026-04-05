@@ -532,7 +532,7 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects workflowCalls until the runtime implements them", () => {
+  test("accepts workflowCalls as authored metadata", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -547,21 +547,22 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
       return;
     }
 
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.workflowCalls" &&
-          issue.message.includes("not executable"),
-      ),
-    ).toBe(true);
+    expect(result.value.workflow.workflowCalls).toEqual([
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "worker-1",
+        resultNodeId: "worker-2",
+      },
+    ]);
   });
 
-  test("rejects manager-less worker-only workflows until the runtime supports them", () => {
+  test("accepts manager-less worker-only workflows with explicit entryNodeId", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -589,18 +590,14 @@ describe("validateWorkflowBundle", () => {
     delete raw.nodePayloads["node-divedra-manager.json"];
 
     const result = validateWorkflowBundle(raw);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
       return;
     }
 
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.entryNodeId" &&
-          issue.message.includes("not supported"),
-      ),
-    ).toBe(true);
+    expect(result.value.workflow.hasManagerNode).toBe(false);
+    expect(result.value.workflow.managerNodeId).toBe("worker-1");
+    expect(result.value.workflow.entryNodeId).toBe("worker-1");
   });
 
   test("rejects multiple manager-role nodes", () => {

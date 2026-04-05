@@ -14,49 +14,68 @@ export interface CreateWorkflowFailure {
   readonly message: string;
 }
 
-const TEMPLATE_EXECUTION_BACKEND = "codex-agent";
-const TEMPLATE_MODEL = "gpt-5-nano";
+export type CreateWorkflowTemplateMode = "managed" | "worker-only";
+
+export interface CreateWorkflowTemplateOptions extends LoadOptions {
+  readonly templateMode?: CreateWorkflowTemplateMode;
+}
 
 interface TemplateNodeDefinition {
   readonly id: string;
-  readonly kind: "root-manager" | "subworkflow-manager" | "input" | "output";
+  readonly role: "manager" | "worker";
+  readonly executionBackend: "claude-code-agent" | "codex-agent";
+  readonly model: string;
   readonly prompt: string;
   readonly includeWorkflowId: boolean;
 }
 
-const TEMPLATE_NODE_DEFINITIONS = [
+interface TemplateDefinition {
+  readonly nodes: readonly TemplateNodeDefinition[];
+  readonly workflowPrompts: {
+    readonly divedraPromptTemplate?: string;
+    readonly workerSystemPromptTemplate?: string;
+  };
+  readonly managerNodeId?: string;
+  readonly entryNodeId: string;
+  readonly edges: readonly {
+    readonly from: string;
+    readonly to: string;
+    readonly when: "always";
+  }[];
+}
+
+const MANAGED_TEMPLATE_NODE_DEFINITIONS = [
   {
     id: "divedra-manager",
-    kind: "root-manager",
+    role: "manager",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     prompt: "Coordinate workflow execution for {{workflowId}}",
     includeWorkflowId: true,
   },
   {
-    id: "main-divedra",
-    kind: "subworkflow-manager",
-    prompt:
-      "Translate the parent divedra instruction into this sub-workflow's child work for {{workflowId}}",
+    id: "main-worker",
+    role: "worker",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    prompt: "Complete the assigned workflow step for {{workflowId}}",
     includeWorkflowId: true,
-  },
-  {
-    id: "workflow-input",
-    kind: "input",
-    prompt:
-      "Normalize the received sub-workflow instruction into workflow input",
-    includeWorkflowId: false,
-  },
-  {
-    id: "workflow-output",
-    kind: "output",
-    prompt: "Finalize workflow output",
-    includeWorkflowId: false,
   },
 ] as const satisfies readonly [
   TemplateNodeDefinition,
   TemplateNodeDefinition,
-  TemplateNodeDefinition,
-  TemplateNodeDefinition,
 ];
+
+const WORKER_ONLY_TEMPLATE_NODE_DEFINITIONS = [
+  {
+    id: "main-worker",
+    role: "worker",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    prompt: "Complete the assigned workflow step for {{workflowId}}",
+    includeWorkflowId: true,
+  },
+] as const satisfies readonly [TemplateNodeDefinition];
 
 function templateNodeFileName(nodeId: string): string {
   return `nodes/node-${nodeId}.json`;
@@ -64,13 +83,13 @@ function templateNodeFileName(nodeId: string): string {
 
 function createTemplateWorkflowNode(definition: TemplateNodeDefinition): {
   readonly id: string;
-  readonly kind: TemplateNodeDefinition["kind"];
+  readonly role: TemplateNodeDefinition["role"];
   readonly nodeFile: string;
   readonly completion: { readonly type: "none" };
 } {
   return {
     id: definition.id,
-    kind: definition.kind,
+    role: definition.role,
     nodeFile: templateNodeFileName(definition.id),
     completion: { type: "none" },
   };
@@ -83,8 +102,8 @@ function createTemplateNodePayload(
   readonly fileName: string;
   readonly payload: {
     readonly id: string;
-    readonly executionBackend: typeof TEMPLATE_EXECUTION_BACKEND;
-    readonly model: typeof TEMPLATE_MODEL;
+    readonly executionBackend: TemplateNodeDefinition["executionBackend"];
+    readonly model: string;
     readonly promptTemplateFile: string;
     readonly variables: Readonly<Record<string, string>>;
   };
@@ -93,8 +112,8 @@ function createTemplateNodePayload(
     fileName: templateNodeFileName(definition.id),
     payload: {
       id: definition.id,
-      executionBackend: TEMPLATE_EXECUTION_BACKEND,
-      model: TEMPLATE_MODEL,
+      executionBackend: definition.executionBackend,
+      model: definition.model,
       promptTemplateFile: `prompts/${definition.id}.md`,
       variables: definition.includeWorkflowId ? { workflowId } : {},
     },
@@ -111,6 +130,37 @@ function createTemplatePromptFile(definition: TemplateNodeDefinition): {
   };
 }
 
+function resolveTemplateDefinition(
+  mode: CreateWorkflowTemplateMode,
+): TemplateDefinition {
+  if (mode === "worker-only") {
+    const [workerNode] = WORKER_ONLY_TEMPLATE_NODE_DEFINITIONS;
+    return {
+      nodes: WORKER_ONLY_TEMPLATE_NODE_DEFINITIONS,
+      workflowPrompts: {
+        workerSystemPromptTemplate:
+          "Work only on the assigned node task, use the provided workflow context, and return the business JSON payload requested by the node.",
+      },
+      entryNodeId: workerNode.id,
+      edges: [],
+    };
+  }
+
+  const [managerNode, workerNode] = MANAGED_TEMPLATE_NODE_DEFINITIONS;
+  return {
+    nodes: MANAGED_TEMPLATE_NODE_DEFINITIONS,
+    workflowPrompts: {
+      divedraPromptTemplate:
+        "Coordinate {{workflowId}} so each node works for a clear reason and returns the value needed downstream.",
+      workerSystemPromptTemplate:
+        "Work only on the assigned node task, use the provided workflow context, and return the business JSON payload requested by the node.",
+    },
+    managerNodeId: managerNode.id,
+    entryNodeId: managerNode.id,
+    edges: [{ from: managerNode.id, to: workerNode.id, when: "always" }],
+  };
+}
+
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -123,7 +173,7 @@ async function writeText(filePath: string, text: string): Promise<void> {
 
 export async function createWorkflowTemplate(
   workflowName: string,
-  options: LoadOptions = {},
+  options: CreateWorkflowTemplateOptions = {},
 ): Promise<Result<CreateWorkflowSuccess, CreateWorkflowFailure>> {
   if (!isSafeWorkflowName(workflowName)) {
     return err({
@@ -154,12 +204,9 @@ export async function createWorkflowTemplate(
   }
 
   const workflowId = workflowName;
-  const [managerNode, mainManagerNode, inputNode, outputNode] =
-    TEMPLATE_NODE_DEFINITIONS;
-  const managerId = managerNode.id;
-  const mainManagerId = mainManagerNode.id;
-  const inputId = inputNode.id;
-  const outputId = outputNode.id;
+  const templateDefinition = resolveTemplateDefinition(
+    options.templateMode ?? "managed",
+  );
 
   const workflowJson = {
     workflowId,
@@ -171,35 +218,22 @@ export async function createWorkflowTemplate(
         runnerKind: "podman",
       },
     },
-    prompts: {
-      divedraPromptTemplate:
-        "Coordinate {{workflowId}} so each node and sub-workflow works for a clear reason and returns the value needed downstream.",
-      workerSystemPromptTemplate:
-        "Work only on the assigned node task, use the provided workflow context, and return the business JSON payload requested by the node.",
-    },
-    managerNodeId: managerId,
-    subWorkflows: [
-      {
-        id: "main",
-        description: "Main sub-workflow",
-        managerNodeId: mainManagerId,
-        inputNodeId: inputId,
-        outputNodeId: outputId,
-        nodeIds: [mainManagerId, inputId, outputId],
-        inputSources: [{ type: "human-input" }],
-        block: { type: "plain" },
-      },
-    ],
-    nodes: TEMPLATE_NODE_DEFINITIONS.map(createTemplateWorkflowNode),
-    edges: [{ from: inputId, to: outputId, when: "always" }],
+    prompts: templateDefinition.workflowPrompts,
+    ...(templateDefinition.managerNodeId === undefined
+      ? {}
+      : { managerNodeId: templateDefinition.managerNodeId }),
+    entryNodeId: templateDefinition.entryNodeId,
+    subWorkflows: [],
+    nodes: templateDefinition.nodes.map(createTemplateWorkflowNode),
+    edges: templateDefinition.edges,
     loops: [],
     branching: { mode: "fan-out" },
   };
 
-  const nodePayloads = TEMPLATE_NODE_DEFINITIONS.map((definition) =>
+  const nodePayloads = templateDefinition.nodes.map((definition) =>
     createTemplateNodePayload(definition, workflowId),
   );
-  const promptFiles = TEMPLATE_NODE_DEFINITIONS.map(createTemplatePromptFile);
+  const promptFiles = templateDefinition.nodes.map(createTemplatePromptFile);
 
   try {
     await writeJson(

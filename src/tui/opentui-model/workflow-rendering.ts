@@ -171,6 +171,11 @@ export function buildWorkflowSummaryPreview(
   }
 
   const workflow = loadedWorkflow.bundle.workflow;
+  const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
+  const managerLabel =
+    workflow.hasManagerNode === false
+      ? "none"
+      : workflow.managerNodeId;
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -182,7 +187,7 @@ export function buildWorkflowSummaryPreview(
         workflow.nodes.length,
       )}  Sub-workflows: ${String(
         workflow.subWorkflows.length,
-      )}`,
+      )}  Entry: ${entryNodeId}  Manager: ${managerLabel}`,
     )}`,
   );
   if (hasVisibleText(workflow.description)) {
@@ -203,6 +208,11 @@ export function buildWorkflowRunPreview(
 
   const workflow = loadedWorkflow.bundle.workflow;
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
+  const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
+  const managerLabel =
+    workflow.hasManagerNode === false
+      ? "none"
+      : workflow.managerNodeId;
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -210,7 +220,7 @@ export function buildWorkflowRunPreview(
 
   append(
     t`${brightWhite("Workflow:")} ${bold(loadedWorkflow.workflowName)}\n${dim(
-      `ID: ${workflow.workflowId}  Input: ${inputDetection.mode}  Nodes: ${String(
+      `ID: ${workflow.workflowId}  Entry: ${entryNodeId}  Manager: ${managerLabel}  Input: ${inputDetection.mode}  Nodes: ${String(
         workflow.nodes.length,
       )}  Sub-workflows: ${String(workflow.subWorkflows.length)}`,
     )}`,
@@ -266,7 +276,12 @@ export function buildWorkflowDefinitionContent(
       : []),
     `Workflow directory: ${loadedWorkflow.workflowDirectory}`,
     `Artifact root: ${loadedWorkflow.artifactWorkflowRoot}`,
-    `Manager node: ${workflow.managerNodeId}`,
+    `Manager node: ${
+      workflow.hasManagerNode === false
+        ? "(none; worker-only workflow)"
+        : workflow.managerNodeId
+    }`,
+    `Entry node: ${workflow.entryNodeId ?? workflow.managerNodeId}`,
     `Nodes: ${String(workflow.nodes.length)}`,
     `Sub-workflows: ${String(workflow.subWorkflows.length)}`,
     ...(subworkflowIds.length === 0

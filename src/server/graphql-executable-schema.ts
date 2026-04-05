@@ -26,7 +26,9 @@ const GRAPHQL_SCHEMA_TEXT = `
     workflowName: String!
     workflowId: String!
     description: String!
-    managerNodeId: String!
+    hasManagerNode: Boolean!
+    managerNodeId: String
+    entryNodeId: String!
     defaults: WorkflowDefaults!
     counts: WorkflowCounts!
     nodeFiles: [String!]!
@@ -314,8 +316,14 @@ const GRAPHQL_SCHEMA_TEXT = `
     defaultTimeoutMs: Int
   }
 
+  enum WorkflowTemplateMode {
+    MANAGED
+    WORKER_ONLY
+  }
+
   input CreateWorkflowDefinitionInput {
     workflowName: String!
+    templateMode: WorkflowTemplateMode
   }
 
   input SaveWorkflowDefinitionInput {

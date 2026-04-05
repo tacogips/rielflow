@@ -3186,15 +3186,6 @@ function runSemanticValidation(
       ),
     );
   }
-  if (bundle.workflow.hasManagerNode === false) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.entryNodeId",
-        "manager-less workflows are not supported",
-      ),
-    );
-  }
   rootManagerNodeIds.forEach((nodeId) => {
     if (nodeId === bundle.workflow.managerNodeId) {
       return;
@@ -3286,13 +3277,6 @@ function runSemanticValidation(
 
   const workflowCallIdSet = new Set<string>();
   bundle.workflow.workflowCalls?.forEach((call, index) => {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.workflowCalls",
-        "workflowCalls are not executable in the current runtime phase",
-      ),
-    );
     if (workflowCallIdSet.has(call.id)) {
       issues.push(
         makeIssue(

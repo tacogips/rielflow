@@ -2,6 +2,13 @@
 
 This document defines the current authored workflow bundle format implemented by `src/workflow/types.ts`, `src/workflow/load.ts`, and `src/workflow/validate.ts`.
 
+Important distinction:
+
+- authored `workflow.json` files may use the newer role-based surface and may omit several fields in the simplified ordered-node form
+- the normalized runtime bundle still materializes compatibility fields such as an effective `managerNodeId`, `subWorkflows`, synthesized `edges`, and `branching`
+- `src/workflow/types.ts` currently models that normalized runtime shape more closely than the raw authored JSON
+- save/edit surfaces should persist authored workflow JSON, not leak compatibility-only fields such as `hasManagerNode`, an effective manager id for worker-only workflows, or derived structural `kind` values for role-authored nodes
+
 ## Overview
 
 A workflow bundle is a directory containing:
@@ -14,27 +21,25 @@ The runtime validates the authored bundle, resolves prompt files into effective 
 
 ## Directory Layout
 
-Typical layout:
+Typical managed layout:
 
 ```text
 <workflow-root>/
   <workflow-name>/
     workflow.json
-    node-divedra-manager.json
-    node-main-divedra.json
-    node-workflow-input.json
-    node-workflow-output.json
+    nodes/
+      node-divedra-manager.json
+      node-main-worker.json
     prompts/
       divedra-manager.md
-      main-divedra.md
-      workflow-input.md
-      workflow-output.md
+      main-worker.md
 ```
 
 Notes:
 
 - `workflow.json.nodes[]` order is canonical for editor and runtime vertical ordering.
 - runtime execution artifacts are written outside the workflow-definition directory under the configured artifact root.
+- worker-only workflows are also valid and may omit `managerNodeId` when `entryNodeId` names the first worker node.
 
 ## `node-{id}.json`
 
@@ -71,14 +76,44 @@ Current authored shape:
     "workerSystemPromptTemplate": "Work only on the current node."
   },
   "managerNodeId": "divedra-manager",
-  "subWorkflows": [],
   "subWorkflowConversations": [],
-  "nodes": [],
-  "edges": [],
-  "loops": [],
-  "branching": {
-    "mode": "fan-out"
-  }
+  "entryNodeId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "role": "manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "main-worker",
+      "role": "worker",
+      "nodeFile": "nodes/node-main-worker.json"
+    }
+  ]
+}
+```
+
+Current minimal worker-only authored shape:
+
+```json
+{
+  "workflowId": "worker-only-example",
+  "description": "One worker starts directly from an explicit entry node.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Work only on the current node."
+  },
+  "entryNodeId": "main-worker",
+  "nodes": [
+    {
+      "id": "main-worker",
+      "role": "worker",
+      "nodeFile": "nodes/node-main-worker.json"
+    }
+  ]
 }
 ```
 
@@ -89,25 +124,33 @@ Required:
 - `workflowId: string`
 - `defaults.maxLoopIterations: number`
 - `defaults.nodeTimeoutMs: number`
-- `managerNodeId: string`
-- `subWorkflows: SubWorkflowRef[]`
 - `nodes: WorkflowNodeRef[]`
-- `edges: WorkflowEdge[]`
-- `branching.mode: "fan-out"`
 
 Optional:
 
 - `description: string`
 - `defaults.containerRuntime`
 - `prompts`
+- `managerNodeId`
+- `entryNodeId`
+- `workflowCalls`
+- `subWorkflows`
 - `subWorkflowConversations`
+- `edges`
+- `loops`
+- `branching`
 
 Validation rules:
 
 - `workflowId` is a filesystem namespace key for runtime artifacts and attachments, so it must start with an alphanumeric character and then contain only letters, digits, hyphens, or underscores
 - when provided, `description` must be a non-empty string
 - when omitted, the normalized runtime bundle uses `description: ""`
-- `loops`
+- if exactly one manager-role node exists, `managerNodeId` may be inferred
+- if no manager exists, `entryNodeId` is required
+- omitted `edges` are synthesized sequentially from node order
+- omitted `subWorkflows`, `subWorkflowConversations`, `loops`, and `workflowCalls` normalize to empty arrays
+- omitted `branching` normalizes to `{ "mode": "fan-out" }`
+- authored `workflowCalls` are part of the accepted authored schema, but the current runtime still reports them as an execution-time readiness blocker until workflow-call execution is implemented
 
 Not part of the current schema:
 
@@ -123,8 +166,24 @@ Older documents mentioned those concepts, but they are not current authored fiel
 
 - `id: string`
 - `nodeFile: string`
+- optional `role: "manager" | "worker"`
+- optional `control: "none" | "branch-judge" | "loop-judge"`
 - optional `kind: NodeKind`
 - optional `completion: CompletionRule`
+- optional `group`
+- optional `repeat`
+
+Recommended authored direction:
+
+- use `role` for manager-versus-worker intent
+- use `control` for judge semantics
+- omit structural `kind` in newly authored ordered-node workflows
+
+Current compatibility note:
+
+- the validator still accepts structural `kind` metadata where the current runtime needs it
+- the normalized runtime continues to derive structural `kind` values such as `root-manager`, `subworkflow-manager`, `input`, and `output`
+- grouped ordered-node examples still rely on those normalized structural semantics until explicit `workflowCalls` replace structural sub-workflow routing
 
 Current `NodeKind` values:
 
@@ -136,17 +195,11 @@ Current `NodeKind` values:
 - `input`
 - `output`
 
-Current manager-kind naming:
-
-- the authored schema uses `root-manager` and `subworkflow-manager`
-- legacy manager-kind aliases are rejected by validation
-- the rationale for the rename is documented in `design-docs/specs/design-manager-kind-simplification.md`
-
 Validation rules:
 
-- `workflow.managerNodeId` must reference a node with kind `root-manager`
-- only the root manager may occupy `workflow.managerNodeId`
-- each sub-workflow boundary must reference `subworkflow-manager`, `input`, and `output` nodes
+- manager-role nodes must stay on the agent execution path
+- `workflow.managerNodeId`, when present, must resolve to the effective root manager in the normalized runtime bundle
+- structural sub-workflow validation still applies when `subWorkflows[]` are authored
 
 ## `CompletionRule`
 
@@ -230,6 +283,8 @@ Implementation note:
 - `backoffMs` is validated as schema, but the current engine does not apply direct loop sleeping from that field.
 
 ## `SubWorkflowRef`
+
+`subWorkflows[]` remains part of the current compatibility surface, but it is no longer the recommended authoring direction for new simple workflows. Prefer the ordered-node role-based form unless a feature still depends on structural grouped-lane routing.
 
 Current shape:
 

@@ -876,6 +876,94 @@ async function createWorkflowFixture(
   }
 }
 
+async function createManagerlessWorkflowFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "managerless fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryNodeId: "step-1",
+    nodes: [
+      {
+        id: "step-1",
+        role: "worker",
+        nodeFile: "node-step-1.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "step-2",
+        role: "worker",
+        nodeFile: "node-step-2.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [{ from: "step-1", to: "step-2", when: "always" }],
+    branching: { mode: "fan-out" },
+  });
+
+  await writeJson(path.join(workflowDir, "node-step-1.json"), {
+    id: "step-1",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
+    promptTemplate: "step 1 {{topic}}",
+    variables: {},
+  });
+
+  await writeJson(path.join(workflowDir, "node-step-2.json"), {
+    id: "step-2",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
+    promptTemplate: "step 2",
+    variables: {},
+  });
+}
+
+async function createWorkflowCallFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "workflow call fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryNodeId: "writer",
+    workflowCalls: [
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "writer",
+      },
+    ],
+    nodes: [
+      {
+        id: "writer",
+        role: "worker",
+        nodeFile: "node-writer.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [],
+    branching: { mode: "fan-out" },
+  });
+
+  await writeJson(path.join(workflowDir, "node-writer.json"), {
+    id: "writer",
+    nodeType: "command",
+    command: {
+      scriptPath: "scripts/write.sh",
+    },
+    variables: {},
+  });
+}
+
 async function createOptionalExecutionFixture(
   root: string,
   workflowName: string,
@@ -1503,6 +1591,53 @@ async function createWorkflowOutputDrivenSubWorkflowFixture(
 }
 
 describe("runWorkflow", () => {
+  test("executes manager-less workflows from entryNodeId", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "managerless");
+
+    const result = await runWorkflow(
+      "managerless",
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: { topic: "managerless" },
+      },
+      deterministicAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.exitCode).toBe(0);
+    expect(result.value.session.status).toBe("completed");
+    expect(result.value.session.nodeExecutions.map((entry) => entry.nodeId)).toEqual([
+      "step-1",
+      "step-2",
+    ]);
+  });
+
+  test("fails early when authored workflowCalls need unsupported runtime execution", async () => {
+    const root = await makeTempDir();
+    await createWorkflowCallFixture(root, "workflow-call-fixture");
+
+    const result = await runWorkflow("workflow-call-fixture", {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.message).toContain("workflow runtime readiness failed");
+    expect(result.error.message).toContain("workflow-call execution");
+  });
+
   test("executes linear workflow and writes artifacts", async () => {
     const root = await makeTempDir();
     await createWorkflowFixture(root, "linear", false);

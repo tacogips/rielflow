@@ -1,9 +1,9 @@
 # V2 Cutover And Command/Container Runtime Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: design-docs/specs/architecture.md#execution-boundary, design-docs/specs/design-container-runtime-contract.md, design-docs/specs/design-node-execution-inbox-contract.md
 **Created**: 2026-04-04
-**Last Updated**: 2026-04-04
+**Last Updated**: 2026-04-05
 
 ## Summary
 
@@ -25,7 +25,7 @@ Out of scope:
 
 #### `src/workflow/native-node-executor.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 interface NativeNodeExecutionInput {
@@ -56,11 +56,11 @@ interface NativeNodeExecutionResult {
 ```
 
 **Checklist**:
-- [ ] Implement command node execution
-- [ ] Implement container node execution
-- [ ] Capture stdout/stderr logs
-- [ ] Read worker output from mailbox outbox
-- [ ] Unit tests
+- [x] Implement command node execution
+- [x] Implement container node execution
+- [x] Capture stdout/stderr logs
+- [x] Read worker output from mailbox outbox
+- [x] Unit tests
 
 ### 2. Engine And Call-Node Integration
 
@@ -68,14 +68,14 @@ interface NativeNodeExecutionResult {
 #### `src/workflow/call-node.ts`
 #### `src/workflow/runtime-readiness.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 **Checklist**:
-- [ ] Use native executors for `command` and `container`
-- [ ] Remove unsupported runtime rejection paths
-- [ ] Update readiness checks for command/container executors
-- [ ] Preserve output-validation flow
-- [ ] Unit tests
+- [x] Use native executors for `command` and `container`
+- [x] Remove unsupported runtime rejection paths
+- [x] Update readiness checks for command/container executors
+- [x] Preserve output-validation flow
+- [x] Unit tests
 
 ### 3. Canonical Schema Cleanup
 
@@ -83,14 +83,14 @@ interface NativeNodeExecutionResult {
 #### `src/workflow/validate.ts`
 #### `src/workflow/adapters/dispatch.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 **Checklist**:
-- [ ] Remove legacy backend aliases
-- [ ] Remove legacy prompt/variable alias normalization
-- [ ] Remove legacy sub-workflow alias normalization
-- [ ] Remove transition-only validation messaging
-- [ ] Unit tests
+- [x] Remove legacy backend aliases
+- [x] Remove legacy prompt/variable alias normalization
+- [x] Remove legacy sub-workflow alias normalization
+- [x] Remove transition-only validation messaging
+- [x] Unit tests
 
 ### 4. Canonical Docs And Examples
 
@@ -99,21 +99,21 @@ interface NativeNodeExecutionResult {
 #### `design-docs/specs/*.md`
 #### `examples/**`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 **Checklist**:
-- [ ] Remove “not implemented yet” command/container wording
-- [ ] Remove transition/legacy wording that conflicts with the canonical model
-- [ ] Update examples to use mailbox/outbox-compatible command/container workers
-- [ ] Keep docs aligned with actual runtime behavior
+- [x] Remove “not implemented yet” command/container wording
+- [x] Remove transition/legacy wording that conflicts with the canonical model
+- [x] Update examples to use mailbox/outbox-compatible command/container workers
+- [x] Keep docs aligned with actual runtime behavior
 
 ## Completion Criteria
 
-- [ ] `command` nodes execute in the workflow engine and `call-node`
-- [ ] `container` nodes execute in the workflow engine and `call-node`
-- [ ] Transition-era legacy authoring aliases are removed from validation
-- [ ] README/examples/design docs describe one canonical runtime model
-- [ ] Targeted tests pass
+- [x] `command` nodes execute in the workflow engine and `call-node`
+- [x] `container` nodes execute in the workflow engine and `call-node`
+- [x] Transition-era legacy authoring aliases are removed from validation
+- [x] README/examples/design docs describe one canonical runtime model
+- [x] Targeted tests pass
 
 ## Progress Log
 
@@ -123,3 +123,10 @@ interface NativeNodeExecutionResult {
 **Tasks In Progress**: Runtime and schema cutover analysis
 **Blockers**: None
 **Notes**: The repository still mixes canonical ordered-node authoring with transition-era compatibility. This pass will converge runtime, validator, tests, and docs.
+
+### Session: 2026-04-05
+
+**Tasks Completed**: TASK-002, TASK-003, TASK-004
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Verified the runtime cutover landed in code: native command/container execution, engine and call-node integration, stricter canonical validation, and docs/example alignment are present. Validation was confirmed with `bun test src/workflow/validate.test.ts src/workflow/adapters/dispatch.test.ts src/workflow/runtime-readiness.test.ts src/workflow/call-node.test.ts src/workflow/engine.test.ts` and `bun run typecheck`.

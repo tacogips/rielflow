@@ -73,6 +73,7 @@ interface ParsedOptions {
   readonly workflowRoot?: string;
   readonly artifactRoot?: string;
   readonly sessionStoreRoot?: string;
+  readonly workerOnly: boolean;
   readonly output: "text" | "json";
   readonly variablesPath?: string;
   readonly mockScenarioPath?: string;
@@ -185,6 +186,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let workflowRoot: string | undefined;
   let artifactRoot: string | undefined;
   let sessionStoreRoot: string | undefined;
+  let workerOnly = false;
   let output: "text" | "json" = "text";
   let variablesPath: string | undefined;
   let dryRun = false;
@@ -234,6 +236,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--session-store":
         sessionStoreRoot = readNext();
+        break;
+      case "--worker-only":
+        workerOnly = true;
         break;
       case "--variables":
         variablesPath = readNext();
@@ -307,6 +312,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(workflowRoot === undefined ? {} : { workflowRoot }),
       ...(artifactRoot === undefined ? {} : { artifactRoot }),
       ...(sessionStoreRoot === undefined ? {} : { sessionStoreRoot }),
+      workerOnly,
       ...(variablesPath === undefined ? {} : { variablesPath }),
       ...(mockScenarioPath === undefined ? {} : { mockScenarioPath }),
       output,
@@ -354,6 +360,9 @@ function printHelp(io: CliIo): void {
   io.stdout(
     "  divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
   );
+  io.stdout("");
+  io.stdout("Create options:");
+  io.stdout("  --worker-only  Scaffold a manager-less starter workflow");
 }
 
 function formatValidationIssues(
@@ -1741,7 +1750,12 @@ export async function runCli(
 
   if (scope === "workflow") {
     if (command === "create") {
-      const created = await createWorkflowTemplate(target, sharedOptions);
+      const created = await createWorkflowTemplate(target, {
+        ...sharedOptions,
+        ...(parsed.options.workerOnly
+          ? { templateMode: "worker-only" as const }
+          : {}),
+      });
       if (!created.ok) {
         io.stderr(created.error.message);
         return created.error.code === "INVALID_WORKFLOW_NAME" ? 2 : 1;
@@ -1804,7 +1818,10 @@ export async function runCli(
       } else {
         io.stdout(`workflow: ${summary.workflowName}`);
         io.stdout(`workflowId: ${summary.workflowId}`);
-        io.stdout(`managerNodeId: ${summary.managerNodeId}`);
+        io.stdout(
+          `managerNodeId: ${summary.managerNodeId ?? "(none; worker-only workflow)"}`,
+        );
+        io.stdout(`entryNodeId: ${summary.entryNodeId}`);
         io.stdout(
           `nodes: ${summary.counts.nodes}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}`,
         );

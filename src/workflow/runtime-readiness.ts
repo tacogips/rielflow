@@ -20,7 +20,11 @@ export type WorkflowRuntimeRequirementStatus =
 
 export interface WorkflowRuntimeRequirement {
   readonly id: string;
-  readonly kind: "agent-backend" | "container-runner" | "node-executor";
+  readonly kind:
+    | "agent-backend"
+    | "container-runner"
+    | "node-executor"
+    | "workflow-feature";
   readonly label: string;
   readonly status: WorkflowRuntimeRequirementStatus;
   readonly detail: string;
@@ -48,6 +52,12 @@ interface AgentBackendRequirementCandidate {
 interface ContainerRunnerRequirementCandidate {
   readonly runnerKind: ContainerRunnerKind;
   readonly runnerPath?: string;
+  readonly sourceNodeIds: readonly string[];
+}
+
+interface WorkflowCallRequirementCandidate {
+  readonly callIds: readonly string[];
+  readonly targetWorkflowIds: readonly string[];
   readonly sourceNodeIds: readonly string[];
 }
 
@@ -307,6 +317,7 @@ function collectRequirements(
 ): {
   readonly agentBackends: readonly AgentBackendRequirementCandidate[];
   readonly containerRunners: readonly ContainerRunnerRequirementCandidate[];
+  readonly workflowCall?: WorkflowCallRequirementCandidate;
   readonly commandNodeIds: readonly string[];
   readonly containerNodeIds: readonly string[];
 } {
@@ -321,6 +332,9 @@ function collectRequirements(
   const commandNodeIds = new Set<string>();
   const containerNodeIds = new Set<string>();
   const defaults = bundle.workflow.defaults.containerRuntime;
+  const relevantWorkflowCalls = (bundle.workflow.workflowCalls ?? []).filter(
+    (call) => onlyNodeIds === undefined || onlyNodeIds.has(call.callerNodeId),
+  );
 
   for (const [nodeId, node] of Object.entries(bundle.nodePayloads)) {
     if (onlyNodeIds !== undefined && !onlyNodeIds.has(nodeId)) {
@@ -374,6 +388,19 @@ function collectRequirements(
       ...(entry.runnerPath === undefined ? {} : { runnerPath: entry.runnerPath }),
       sourceNodeIds: toSortedArray(entry.nodeIds),
     })),
+    ...(relevantWorkflowCalls.length === 0
+      ? {}
+      : {
+          workflowCall: {
+            callIds: relevantWorkflowCalls.map((call) => call.id),
+            targetWorkflowIds: toSortedArray(
+              relevantWorkflowCalls.map((call) => call.workflowId),
+            ),
+            sourceNodeIds: toSortedArray(
+              relevantWorkflowCalls.map((call) => call.callerNodeId),
+            ),
+          },
+        }),
     commandNodeIds: toSortedArray(commandNodeIds),
     containerNodeIds: toSortedArray(containerNodeIds),
   };
@@ -421,6 +448,20 @@ export async function inspectWorkflowRuntimeReadiness(
 
   for (const candidate of collected.containerRunners) {
     requirements.push(await probeContainerRunner(candidate, options));
+  }
+
+  if (collected.workflowCall !== undefined) {
+    requirements.push({
+      id: "workflow-feature:workflowCalls",
+      kind: "workflow-feature",
+      label: "workflow-call execution",
+      status: "unsupported",
+      detail:
+        `authored workflowCalls are loadable, but executable workflow-call runtime is not implemented yet; ` +
+        `calls=${collected.workflowCall.callIds.join(", ")}; ` +
+        `targetWorkflows=${collected.workflowCall.targetWorkflowIds.join(", ")}`,
+      sourceNodeIds: collected.workflowCall.sourceNodeIds,
+    });
   }
 
   if (collected.commandNodeIds.length > 0) {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -41,20 +41,10 @@ function makeDefaultTemplateScenario(): MockNodeScenario {
       when: { always: true },
       payload: { stage: "design" },
     },
-    "main-divedra": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "dispatch" },
-    },
-    "workflow-input": {
+    "main-worker": {
       provider: "scenario-mock",
       when: { always: true },
       payload: { stage: "implement" },
-    },
-    "workflow-output": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "review" },
     },
   };
 }
@@ -90,6 +80,26 @@ async function createCompletedWorkflowFixture(root: string) {
   return { options, session: result.value.session };
 }
 
+async function createWorkerOnlyWorkflowFixture(root: string) {
+  const created = await createWorkflowTemplate("solo", {
+    workflowRoot: root,
+    templateMode: "worker-only",
+  });
+  expect(created.ok).toBe(true);
+  if (!created.ok) {
+    throw new Error(created.error.message);
+  }
+
+  return {
+    options: {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    },
+  };
+}
+
 async function createManagerSession(root: string, workflowExecutionId: string) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -99,7 +109,7 @@ async function createManagerSession(root: string, workflowExecutionId: string) {
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerNodeId: "main-divedra",
+    managerNodeId: "divedra-manager",
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -125,7 +135,9 @@ describe("GraphQL HTTP transport", () => {
             query WorkflowByName($workflowName: String!) {
               workflow(workflowName: $workflowName) {
                 workflowId
+                hasManagerNode
                 managerNodeId
+                entryNodeId
                 counts {
                   nodes
                 }
@@ -145,9 +157,59 @@ describe("GraphQL HTTP transport", () => {
       data: {
         workflow: {
           workflowId: "demo",
+          hasManagerNode: true,
           managerNodeId: "divedra-manager",
+          entryNodeId: "divedra-manager",
           counts: {
-            nodes: 4,
+            nodes: 2,
+          },
+        },
+      },
+    });
+  });
+
+  test("returns nullable managerNodeId for worker-only workflows over /graphql", async () => {
+    const root = await makeTempDir();
+    const { options } = await createWorkerOnlyWorkflowFixture(root);
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkflowByName($workflowName: String!) {
+              workflow(workflowName: $workflowName) {
+                workflowId
+                hasManagerNode
+                managerNodeId
+                entryNodeId
+                counts {
+                  nodes
+                }
+              }
+            }
+          `,
+          variables: {
+            workflowName: "solo",
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        workflow: {
+          workflowId: "solo",
+          hasManagerNode: false,
+          managerNodeId: null,
+          entryNodeId: "main-worker",
+          counts: {
+            nodes: 1,
           },
         },
       },
@@ -558,6 +620,78 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
+  test("creates worker-only workflow definitions over /graphql", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+
+    const createResponse = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            mutation CreateWorkflowDefinition($input: CreateWorkflowDefinitionInput!) {
+              createWorkflowDefinition(input: $input) {
+                workflowName
+                bundle
+              }
+            }
+          `,
+          variables: {
+            input: {
+              workflowName: "solo",
+              templateMode: "WORKER_ONLY",
+            },
+          },
+        }),
+      }),
+      options,
+    );
+    expect(createResponse.status).toBe(200);
+    const createJson = (await createResponse.json()) as {
+      readonly data: {
+        readonly createWorkflowDefinition: {
+          readonly workflowName: string;
+          readonly bundle: {
+            readonly workflow: {
+              readonly hasManagerNode: boolean;
+              readonly managerNodeId: string;
+              readonly entryNodeId: string;
+            };
+          };
+        };
+      };
+    };
+    expect(createJson).toMatchObject({
+      data: {
+        createWorkflowDefinition: {
+          workflowName: "solo",
+          bundle: {
+            workflow: {
+              hasManagerNode: false,
+              managerNodeId: "main-worker",
+              entryNodeId: "main-worker",
+            },
+          },
+        },
+      },
+    });
+
+    const workflowJsonText = await readFile(
+      path.join(root, "solo", "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+  });
+
   test("authenticates manager mutations over /graphql with bearer auth", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
@@ -589,8 +723,8 @@ describe("GraphQL HTTP transport", () => {
               workflowId: "demo",
               workflowExecutionId: session.sessionId,
               managerSessionId: "mgrsess-000001",
-              message: "Retry the workflow input node.",
-              actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+              message: "Retry the main worker node.",
+              actions: [{ type: "retry-node", nodeId: "main-worker" }],
               idempotencyKey: "idem-http-send",
             },
           },
@@ -605,11 +739,11 @@ describe("GraphQL HTTP transport", () => {
         sendManagerMessage: {
           accepted: true,
           managerSessionId: "mgrsess-000001",
-          queuedNodeIds: ["workflow-input"],
+          queuedNodeIds: ["main-worker"],
           parsedIntent: [
             {
               kind: "retry-node",
-              targetId: "workflow-input",
+              targetId: "main-worker",
             },
           ],
         },
@@ -644,8 +778,8 @@ describe("GraphQL HTTP transport", () => {
             input: {
               workflowId: "demo",
               workflowExecutionId: session.sessionId,
-              message: "Retry the workflow input node.",
-              actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+              message: "Retry the main worker node.",
+              actions: [{ type: "retry-node", nodeId: "main-worker" }],
               idempotencyKey: "idem-http-ambient-send",
             },
           },
@@ -660,7 +794,7 @@ describe("GraphQL HTTP transport", () => {
         sendManagerMessage: {
           accepted: true,
           managerSessionId: "mgrsess-000001",
-          queuedNodeIds: ["workflow-input"],
+          queuedNodeIds: ["main-worker"],
         },
       },
     });
@@ -689,8 +823,8 @@ describe("GraphQL HTTP transport", () => {
             input: {
               workflowId: "demo",
               workflowExecutionId: session.sessionId,
-              message: "Retry the workflow input node.",
-              actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+              message: "Retry the main worker node.",
+              actions: [{ type: "retry-node", nodeId: "main-worker" }],
               idempotencyKey: "idem-http-no-env-fallback",
             },
           },
@@ -703,7 +837,7 @@ describe("GraphQL HTTP transport", () => {
           DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
           DIVEDRA_WORKFLOW_ID: "demo",
           DIVEDRA_WORKFLOW_EXECUTION_ID: session.sessionId,
-          DIVEDRA_MANAGER_NODE_ID: "main-divedra",
+          DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
           DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
         },
       },
@@ -744,8 +878,8 @@ describe("GraphQL HTTP transport", () => {
             input: {
               workflowId: "demo",
               workflowExecutionId: session.sessionId,
-              message: "Retry the workflow input node.",
-              actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+              message: "Retry the main worker node.",
+              actions: [{ type: "retry-node", nodeId: "main-worker" }],
               idempotencyKey: "idem-http-no-context-fallback",
             },
           },
@@ -795,8 +929,8 @@ describe("GraphQL HTTP transport", () => {
           input: {
             workflowId: "demo",
             workflowExecutionId: session.sessionId,
-            message: "Retry the workflow input node.",
-            actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+            message: "Retry the main worker node.",
+            actions: [{ type: "retry-node", nodeId: "main-worker" }],
             idempotencyKey: "idem-direct-context-auth",
           },
         },
@@ -807,7 +941,7 @@ describe("GraphQL HTTP transport", () => {
       sendManagerMessage: {
         accepted: true,
         managerSessionId: "mgrsess-000001",
-        queuedNodeIds: ["workflow-input"],
+        queuedNodeIds: ["main-worker"],
       },
     });
   });

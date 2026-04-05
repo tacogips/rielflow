@@ -1,0 +1,19 @@
+{
+  "workflowId": "worker-only-single-step",
+  "description": "Minimal manager-less reference workflow that starts directly at one worker node through explicit entryNodeId authoring.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
+  },
+  "entryNodeId": "main-worker",
+  "nodes": [
+    {
+      "id": "main-worker",
+      "role": "worker",
+      "nodeFile": "nodes/node-main-worker.json"
+    }
+  ]
+}

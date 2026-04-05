@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -559,7 +559,7 @@ describe("loadWorkflowFromDisk", () => {
     expect(result.value.bundle.workflow.nodes[2]?.kind).toBe("loop-judge");
   });
 
-  test("returns validation error for manager-less workflows before runtime support lands", async () => {
+  test("loads manager-less workflows with an explicit entry node", async () => {
     const root = await makeTempDir();
     const workflowName = "managerless-workflow";
     const workflowDirectory = path.join(root, workflowName);
@@ -595,19 +595,73 @@ describe("loadWorkflowFromDisk", () => {
       artifactRoot: path.join(root, "artifacts"),
     });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
       return;
     }
 
-    expect(result.error.code).toBe("VALIDATION");
-    expect(
-      result.error.issues?.some(
-        (issue) =>
-          issue.path === "workflow.entryNodeId" &&
-          issue.message.includes("not supported"),
-      ),
-    ).toBe(true);
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryNodeId).toBe("worker-1");
+    expect(result.value.bundle.workflow.managerNodeId).toBe("worker-1");
+    expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("task");
+  });
+
+  test("loads authored workflowCalls for later runtime-readiness checks", async () => {
+    const root = await makeTempDir();
+    const workflowName = "workflow-call-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow call fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "writer",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      branching: { mode: "fan-out" },
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.workflowCalls).toEqual([
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "writer",
+      },
+    ]);
   });
 
   test("preserves canonical container build metadata for worker nodes during load", async () => {
@@ -772,9 +826,9 @@ describe("loadWorkflowFromDisk", () => {
     ]);
   });
 
-  test("loads newly created templates with root-manager kind", async () => {
+  test("loads newly created templates with explicit entry and role-based nodes", async () => {
     const root = await makeTempDir();
-    const created = await createWorkflowTemplate("template-root-manager", {
+    const created = await createWorkflowTemplate("template-role-workflow", {
       workflowRoot: root,
     });
     expect(created.ok).toBe(true);
@@ -782,7 +836,7 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    const result = await loadWorkflowFromDisk("template-root-manager", {
+    const result = await loadWorkflowFromDisk("template-role-workflow", {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -793,29 +847,21 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflow.nodes[0]?.id).toBe("divedra-manager");
-    expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("root-manager");
+    expect(result.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.nodes[0]?.role).toBe("manager");
+    expect(result.value.bundle.workflow.nodes[1]?.role).toBe("worker");
     expect(
       result.value.bundle.workflow.prompts?.divedraPromptTemplate,
     ).toContain("Coordinate");
     expect(
       result.value.bundle.workflow.prompts?.workerSystemPromptTemplate,
     ).toContain("assigned node task");
-    expect(result.value.bundle.workflow.subWorkflows[0]?.managerNodeId).toBe(
-      "main-divedra",
-    );
-    expect(result.value.bundle.workflow.subWorkflows[0]?.nodeIds).toEqual([
-      "main-divedra",
-      "workflow-input",
-      "workflow-output",
-    ]);
-    expect(result.value.bundle.workflow.subWorkflows[0]?.inputSources).toEqual([
-      { type: "human-input" },
-    ]);
+    expect(result.value.bundle.workflow.subWorkflows).toEqual([]);
     expect(
       result.value.bundle.nodePayloads["divedra-manager"]?.executionBackend,
-    ).toBe("codex-agent");
+    ).toBe("claude-code-agent");
     expect(result.value.bundle.nodePayloads["divedra-manager"]?.model).toBe(
-      "gpt-5-nano",
+      "claude-opus-4-1",
     );
     expect(
       result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplateFile,
@@ -824,11 +870,55 @@ describe("loadWorkflowFromDisk", () => {
       result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate,
     ).toContain("Coordinate workflow execution");
     expect(
-      result.value.bundle.nodePayloads["workflow-output"]?.executionBackend,
+      result.value.bundle.nodePayloads["main-worker"]?.executionBackend,
     ).toBe("codex-agent");
-    expect(result.value.bundle.nodePayloads["workflow-output"]?.model).toBe(
+    expect(result.value.bundle.nodePayloads["main-worker"]?.model).toBe(
       "gpt-5-nano",
     );
+  });
+
+  test("creates worker-only starter templates without an authored manager", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("template-worker-only", {
+      workflowRoot: root,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(root, "template-worker-only", "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+
+    const result = await loadWorkflowFromDisk("template-worker-only", {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(result.value.bundle.workflow.managerNodeId).toBe("main-worker");
+    expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
+      "main-worker",
+    ]);
+    expect(result.value.bundle.workflow.prompts?.divedraPromptTemplate).toBe(
+      undefined,
+    );
+    expect(
+      result.value.bundle.workflow.prompts?.workerSystemPromptTemplate,
+    ).toContain("assigned node task");
+    expect(
+      result.value.bundle.nodePayloads["main-worker"]?.executionBackend,
+    ).toBe("codex-agent");
   });
 
   test("loads promptTemplate from a workflow-local promptTemplateFile", async () => {
@@ -1031,6 +1121,31 @@ describe("loadWorkflowFromDisk", () => {
     expect(
       result.value.bundle.nodePayloads["claude-task"]?.promptTemplate,
     ).toContain("Use the normalized request");
+  });
+
+  test("loads the worker-only example without an authored manager node", async () => {
+    const artifactRoot = path.join(await makeTempDir(), "artifacts");
+    const result = await loadWorkflowFromDisk("worker-only-single-step", {
+      workflowRoot: path.resolve(process.cwd(), "examples"),
+      artifactRoot,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
+      "main-worker",
+    ]);
+    expect(
+      result.value.bundle.nodePayloads["main-worker"]?.executionBackend,
+    ).toBe("codex-agent");
+    expect(result.value.bundle.nodePayloads["main-worker"]?.promptTemplate).toContain(
+      "Complete the assigned workflow step",
+    );
   });
 
   test("rejects promptTemplateFile values that target canonical workflow definition files", async () => {

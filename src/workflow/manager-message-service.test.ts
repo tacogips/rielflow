@@ -31,6 +31,21 @@ function makeDefaultTemplateScenario(): MockNodeScenario {
       when: { always: true },
       payload: { stage: "design" },
     },
+    "main-worker": {
+      provider: "scenario-mock",
+      when: { always: true },
+      payload: { stage: "implement" },
+    },
+  };
+}
+
+function makeGroupedWorkflowScenario(): MockNodeScenario {
+  return {
+    "divedra-manager": {
+      provider: "scenario-mock",
+      when: { always: true },
+      payload: { stage: "design" },
+    },
     "main-divedra": {
       provider: "scenario-mock",
       when: { always: true },
@@ -80,6 +95,127 @@ async function createCompletedWorkflowFixture(root: string) {
       },
     },
     mockScenario: makeDefaultTemplateScenario(),
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  return { options, session: result.value.session };
+}
+
+async function createCompletedGroupedWorkflowFixture(root: string) {
+  const workflowDir = path.join(root, "demo");
+  await mkdir(workflowDir, { recursive: true });
+  await writeFile(
+    path.join(workflowDir, "workflow.json"),
+    `${JSON.stringify(
+      {
+        workflowId: "demo",
+        description: "grouped manager-message fixture",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        prompts: {
+          divedraPromptTemplate: "Coordinate {{workflowId}}",
+          workerSystemPromptTemplate:
+            "Work only on the current node responsibility.",
+        },
+        managerNodeId: "divedra-manager",
+        subWorkflows: [
+          {
+            id: "main",
+            description: "Main sub-workflow",
+            managerNodeId: "main-divedra",
+            inputNodeId: "workflow-input",
+            outputNodeId: "workflow-output",
+            nodeIds: ["main-divedra", "workflow-input", "workflow-output"],
+            inputSources: [{ type: "human-input" }],
+            block: { type: "plain" },
+          },
+        ],
+        nodes: [
+          {
+            id: "divedra-manager",
+            kind: "root-manager",
+            nodeFile: "node-divedra-manager.json",
+          },
+          {
+            id: "main-divedra",
+            kind: "subworkflow-manager",
+            nodeFile: "node-main-divedra.json",
+          },
+          {
+            id: "workflow-input",
+            kind: "input",
+            nodeFile: "node-workflow-input.json",
+          },
+          {
+            id: "workflow-output",
+            kind: "output",
+            nodeFile: "node-workflow-output.json",
+          },
+        ],
+        edges: [{ from: "workflow-input", to: "workflow-output", when: "always" }],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const nodePayloads = {
+    "node-divedra-manager.json": {
+      id: "divedra-manager",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "manager",
+      variables: {},
+    },
+    "node-main-divedra.json": {
+      id: "main-divedra",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "main manager",
+      variables: {},
+    },
+    "node-workflow-input.json": {
+      id: "workflow-input",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "input",
+      variables: {},
+    },
+    "node-workflow-output.json": {
+      id: "workflow-output",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "output",
+      variables: {},
+    },
+  } as const;
+
+  await Promise.all(
+    Object.entries(nodePayloads).map(([fileName, payload]) =>
+      writeFile(
+        path.join(workflowDir, fileName),
+        `${JSON.stringify(payload, null, 2)}\n`,
+        "utf8",
+      ),
+    ),
+  );
+
+  const options = {
+    workflowRoot: root,
+    artifactRoot: path.join(root, "artifacts"),
+    rootDataDir: path.join(root, "data"),
+    cwd: root,
+  };
+  const result = await runWorkflow("demo", {
+    ...options,
+    runtimeVariables: {
+      humanInput: {
+        request: "start demo workflow",
+      },
+    },
+    mockScenario: makeGroupedWorkflowScenario(),
   });
   expect(result.ok).toBe(true);
   if (!result.ok) {
@@ -255,11 +391,7 @@ describe("manager-message-service", () => {
   test("canonicalizes idempotent manager-message inputs before hashing", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "main-divedra",
-    );
+    const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:00:00.000Z",
       managerSessionStore: managerStore,
@@ -284,8 +416,8 @@ describe("manager-message-service", () => {
         workflowId: "demo",
         workflowExecutionId: session.sessionId,
         managerSessionId: "mgrsess-000001",
-        message: "  Retry the input stage after review.  ",
-        actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+        message: "  Retry the worker stage after review.  ",
+        actions: [{ type: "retry-node", nodeId: "main-worker" }],
         attachments: [
           {
             path: `files/demo/${session.sessionId}/attachments/./brief.txt`,
@@ -298,7 +430,7 @@ describe("manager-message-service", () => {
     );
 
     expect(accepted.accepted).toBe(true);
-    expect(accepted.queuedNodeIds).toEqual(["workflow-input"]);
+    expect(accepted.queuedNodeIds).toEqual(["main-worker"]);
     expect(accepted.createdCommunicationIds).toEqual([]);
     expect(accepted.parsedIntent[0]?.kind).toBe("retry-node");
 
@@ -308,15 +440,15 @@ describe("manager-message-service", () => {
       return;
     }
     expect(loaded.value.status).toBe("running");
-    expect(loaded.value.queue).toContain("workflow-input");
+    expect(loaded.value.queue).toContain("main-worker");
 
     const replayed = await service.sendManagerMessage(
       {
         workflowId: "demo",
         workflowExecutionId: session.sessionId,
         managerSessionId: "mgrsess-000001",
-        message: "Retry the input stage after review.",
-        actions: [{ type: "retry-node", nodeId: "workflow-input" }],
+        message: "Retry the worker stage after review.",
+        actions: [{ type: "retry-node", nodeId: "main-worker" }],
         attachments: [
           {
             path: `files/demo/${session.sessionId}/attachments/brief.txt`,
@@ -333,17 +465,13 @@ describe("manager-message-service", () => {
     expect(messages).toHaveLength(1);
     const persistedSession = await managerStore.loadSession("mgrsess-000001");
     expect(persistedSession?.controlMode).toBe("graphql-manager-message");
-    expect(messages[0]?.message).toBe("Retry the input stage after review.");
+    expect(messages[0]?.message).toBe("Retry the worker stage after review.");
   });
 
   test("allocates collision-safe managerMessageIds for concurrent manager notes", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "main-divedra",
-    );
+    const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:30:00.000Z",
       managerSessionStore: managerStore,
@@ -388,11 +516,7 @@ describe("manager-message-service", () => {
   test("rejects attachments outside the current workflow execution namespace", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "main-divedra",
-    );
+    const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T01:45:00.000Z",
       managerSessionStore: managerStore,
@@ -439,7 +563,9 @@ describe("manager-message-service", () => {
 
   test("replays a communication from a manager message with canonicalized action idempotency", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedWorkflowFixture(root);
+    const { options, session } = await createCompletedGroupedWorkflowFixture(
+      root,
+    );
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
@@ -518,7 +644,9 @@ describe("manager-message-service", () => {
 
   test("rejects replay actions outside the subworkflow-manager owned communication scope", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedWorkflowFixture(root);
+    const { options, session } = await createCompletedGroupedWorkflowFixture(
+      root,
+    );
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
@@ -566,7 +694,9 @@ describe("manager-message-service", () => {
 
   test("accepts queue-only start-sub-workflow actions without mailbox materialization", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedWorkflowFixture(root);
+    const { options, session } = await createCompletedGroupedWorkflowFixture(
+      root,
+    );
     const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T02:30:00.000Z",
@@ -690,7 +820,9 @@ describe("manager-message-service", () => {
 
   test("delivers manager-authored child-input messages with durable provenance", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedWorkflowFixture(root);
+    const { options, session } = await createCompletedGroupedWorkflowFixture(
+      root,
+    );
     const managerStore = await createManagerSession(
       root,
       session.sessionId,

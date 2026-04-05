@@ -75,7 +75,11 @@ Responsibilities:
 
 Important validation facts:
 
-- `root-manager`, `subworkflow-manager`, `input`, and `output` are structural roles enforced by validation
+- authored workflows may use `role: "manager" | "worker"` plus `control`
+- worker-only workflows are valid when `entryNodeId` is explicit
+- authored `workflowCalls` are accepted and loaded, but current runtime readiness marks them unsupported before execution starts
+- the validator still normalizes authored roles into legacy structural `kind` values and an effective runtime `managerNodeId` so the current engine can execute transitional bundles
+- `root-manager`, `subworkflow-manager`, `input`, and `output` remain the structural roles enforced by the current runtime compatibility layer
 - cross-scope edges must target manager boundaries
 - `branching.mode` is currently fixed to `fan-out`
 
@@ -101,7 +105,7 @@ The runtime distinguishes:
 - node `kind`: structural role
 - node `nodeType`: execution flavor
 
-That separation is fundamental to the current design.
+That separation is still fundamental to the current runtime design, even though authored workflow design is moving toward `role` plus `control` rather than structural `kind`.
 
 ### Adapter Layer
 
@@ -221,6 +225,12 @@ Current implementation status:
 
 ## Runtime Node Roles
 
+Current authored direction:
+
+- `role: "manager"` or `role: "worker"`
+- optional `control: "branch-judge" | "loop-judge" | "none"`
+- `entryNodeId` may be the authored entry when a workflow has no manager
+
 Current structural node kinds:
 
 - `task`
@@ -230,6 +240,8 @@ Current structural node kinds:
 - `subworkflow-manager`
 - `input`
 - `output`
+
+The engine still executes against these normalized structural kinds today. Manager-less authored workflows currently work by normalizing the authored `entryNodeId` into an effective runtime entry/manager identity, while structural sub-workflow boundaries remain in place until workflow-call execution replaces them.
 
 Role split:
 

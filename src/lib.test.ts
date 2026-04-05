@@ -61,13 +61,15 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
     id: "divedra-manager",
-    model: "tacogips/claude-code-agent",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
     promptTemplate: "manager",
     variables: {},
   });
   await writeJson(path.join(workflowDirectory, "node-writer.json"), {
     id: "writer",
-    model: "tacogips/codex-agent",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
     promptTemplate: "writer",
     variables: {},
   });
@@ -89,20 +91,10 @@ describe("library api", () => {
         when: { always: true },
         payload: { stage: "design" },
       },
-      "main-divedra": {
-        provider: "scenario-mock",
-        when: { always: true },
-        payload: { stage: "dispatch" },
-      },
-      "workflow-input": {
+      "main-worker": {
         provider: "scenario-mock",
         when: { always: true },
         payload: { stage: "implement" },
-      },
-      "workflow-output": {
-        provider: "scenario-mock",
-        when: { always: true },
-        payload: { stage: "review" },
       },
     };
   }
