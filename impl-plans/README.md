@@ -24,8 +24,8 @@ impl-plans/
 
 ## Active Plans
 
-| Plan                          | Status      | Design Reference                     |
-| ----------------------------- | ----------- | ------------------------------------ |
+| Plan                                           | Status      | Design Reference                     |
+| ---------------------------------------------- | ----------- | ------------------------------------ |
 | `workflow-role-unification-structural-cleanup` | In Progress | `design-unified-workflow-role-model` |
 
 ## Completed Plans
@@ -33,11 +33,15 @@ impl-plans/
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
 | `root-data-dir-project-root-scoping`               | 2026-03-26 | `command`, `architecture`                                                                           |
+| `hook-command-review-follow-up`                    | 2026-04-09 | `design-hook-command`                                                                               |
+| `hook-command-cross-vendor-alignment`              | 2026-04-09 | `design-hook-command`, `command`                                                                    |
+| `hook-command-hardening`                           | 2026-04-09 | `design-hook-command`, `command`                                                                    |
+| `hook-command`                                     | 2026-04-09 | `design-hook-command`, `command`                                                                    |
 | `workflow-role-unification`                        | 2026-04-05 | `design-unified-workflow-role-model`                                                                |
 | `tui-solid-runtime-fallback-hardening`             | 2026-03-26 | `design-tui`, `architecture`                                                                        |
 | `tui-opentui-solid-migration`                      | 2026-03-26 | `design-tui`, `command`                                                                             |
 | `tui-workflow-browser-and-json-input`              | 2026-03-26 | `design-tui`                                                                                        |
-| `remove-web-ui`                                   | 2026-03-24 | `command`                                                                                           |
+| `remove-web-ui`                                    | 2026-03-24 | `command`                                                                                           |
 | `manager-kind-simplification`                      | 2026-03-18 | `design-manager-kind-simplification`, `design-workflow-json`                                        |
 | `workflow-core-and-validation`                     | 2026-02-23 | `design-data-model`, `design-workflow-json`, `architecture`                                         |
 | `workflow-cli-mvp`                                 | 2026-02-23 | `command`, `design-workflow-json`                                                                   |
@@ -185,6 +189,10 @@ impl-plans/
 | 71    | COMPLETED   | Phase 70   |
 | 72    | COMPLETED   | Phase 71   |
 | 82    | IN_PROGRESS | Phase 71   |
+| 83    | COMPLETED   | Phase 71   |
+| 84    | COMPLETED   | Phase 83   |
+| 85    | COMPLETED   | Phase 84   |
+| 86    | COMPLETED   | Phase 85   |
 
 ### Phase to Plans Mapping
 
@@ -258,6 +266,10 @@ PHASE_TO_PLANS = {
   66: ["impl-plans/graphql-library-rest-surface-simplification.md"],
   67: ["impl-plans/example-node-combination-showcase.md"],
   68: ["impl-plans/node-execution-inbox-contract.md"],
+  83: ["impl-plans/hook-command.md"],
+  84: ["impl-plans/hook-command-hardening.md"],
+  85: ["impl-plans/hook-command-cross-vendor-alignment.md"],
+  86: ["impl-plans/hook-command-review-follow-up.md"],
   69: ["impl-plans/user-action-and-optional-node-execution.md"],
   70: ["impl-plans/manager-kind-simplification.md"],
   71: ["impl-plans/workflow-role-unification.md", "impl-plans/tui-workflow-browser-and-json-input.md"],

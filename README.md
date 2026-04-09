@@ -102,6 +102,7 @@ Primary commands implemented in `src/cli.ts`:
 - `tui [workflow-name]`
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
 - `export <workflow-id> <workflow-run-id>`
+- `hook [--vendor claude-code|codex]`
 
 `workflow create <name>` scaffolds a role-based starter with a `claude-code-agent` manager node and a `codex-agent` worker node. The generated `workflow.json` prefers the authored-minimal surface and omits compatibility/default fields such as empty `subWorkflows`, synthesized `edges`, default `branching`, and node-level `completion: { "type": "none" }` unless they are needed. Pass `--worker-only` to scaffold a manager-less starter whose explicit `entryNodeId` points at `main-worker`.
 

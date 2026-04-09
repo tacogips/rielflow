@@ -48,12 +48,18 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Start interactive terminal UI for workflow selection and execution.
   - Interactive OpenTUI mode opens the unified workspace/history/run app directly; workflow selection happens inside that workspace screen.
   - Supports runtime user input for human-input nodes during execution.
+- `hook [--vendor claude-code|codex]`
+  - Receive agent backend hook payloads via stdin, detect vendor and event type, dispatch to registered handler.
+  - Both Claude Code and Codex pipe a JSON object to stdin; the command parses it, validates the shared transport fields (`session_id`, `cwd`, `hook_event_name`), resolves the vendor (from `--vendor` flag or best-effort detection), identifies the `hook_event_name`, and calls the matching handler.
+  - All handlers are initially noop (return empty JSON `{}`).
+  - Exit 0 with JSON on stdout for success; exit 2 with reason on stderr to block.
+  - Supporting design: `design-docs/specs/design-hook-command.md`.
 
 ### Flags and Options
 
 | Flag                    | Type          | Default                                                           | Description                                                                                                                                                |
 | ----------------------- | ------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--worker-only`         | boolean       | `false`                                                           | For `workflow create`: scaffold a manager-less starter whose explicit entry node is `main-worker`                                                         |
+| `--worker-only`         | boolean       | `false`                                                           | For `workflow create`: scaffold a manager-less starter whose explicit entry node is `main-worker`                                                          |
 | `--variables`           | string        | none                                                              | For legacy execution commands: JSON file supplying runtime prompt variables. For `divedra gql`: inline GraphQL variables JSON or `@path/to/variables.json` |
 | `--workflow-root`       | string (path) | nearest ancestor `./.divedra`                                     | Root directory containing workflow definitions                                                                                                             |
 | `--artifact-root`       | string (path) | derived from `DIVEDRA_ARTIFACT_DIR` (see env) / `{root}/workflow` | Root directory for execution artifacts                                                                                                                     |
@@ -76,6 +82,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--port`                | number        | `43173`                                                           | Listen port for `serve`                                                                                                                                    |
 | `--read-only`           | boolean       | `false`                                                           | Disable write/update operations in `serve` mode                                                                                                            |
 | `--no-exec`             | boolean       | `false`                                                           | Compatibility flag parsed by `serve`; current GraphQL schema does not yet enforce execution blocking from this flag                                        |
+| `--vendor`              | string        | auto-detect                                                       | For `hook`: explicit vendor identifier (`claude-code` or `codex`); when omitted, detected heuristically from payload fields                                |
 
 ### Environment Variables
 

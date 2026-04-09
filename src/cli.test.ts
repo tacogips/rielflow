@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -226,20 +233,26 @@ async function createWorkflowCallInspectFixture(
       },
     ],
   });
-  await writeJson(path.join(workflowDirectory, "nodes", "node-divedra-manager.json"), {
-    id: "divedra-manager",
-    executionBackend: "claude-code-agent",
-    model: "claude-opus-4-1",
-    promptTemplate: "manage the workflow",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDirectory, "nodes", "node-main-worker.json"), {
-    id: "main-worker",
-    executionBackend: "codex-agent",
-    model: "gpt-5",
-    promptTemplate: "do the work",
-    variables: {},
-  });
+  await writeJson(
+    path.join(workflowDirectory, "nodes", "node-divedra-manager.json"),
+    {
+      id: "divedra-manager",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "manage the workflow",
+      variables: {},
+    },
+  );
+  await writeJson(
+    path.join(workflowDirectory, "nodes", "node-main-worker.json"),
+    {
+      id: "main-worker",
+      executionBackend: "codex-agent",
+      model: "gpt-5",
+      promptTemplate: "do the work",
+      variables: {},
+    },
+  );
 
   const reviewDirectory = path.join(workflowRoot, "review");
   await mkdir(path.join(reviewDirectory, "nodes"), { recursive: true });
@@ -698,14 +711,7 @@ describe("runCli", () => {
 
     const createCapture = createIoCapture();
     const createCode = await runCli(
-      [
-        "workflow",
-        "create",
-        "solo",
-        "--workflow-root",
-        root,
-        "--worker-only",
-      ],
+      ["workflow", "create", "solo", "--workflow-root", root, "--worker-only"],
       createCapture.io,
     );
     expect(createCode).toBe(0);
@@ -1192,9 +1198,7 @@ describe("runCli", () => {
     expect(exportSummary.filePath).toBe(exportFilePath);
     expect(exportSummary.workflowExecutionId).toBe(run.sessionId);
 
-    const savedPayload = JSON.parse(
-      await readFile(exportFilePath, "utf8"),
-    ) as {
+    const savedPayload = JSON.parse(await readFile(exportFilePath, "utf8")) as {
       workflowId: string;
       workflowExecutionId: string;
       nodeExecutions: unknown[];
@@ -2496,5 +2500,73 @@ describe("runCli", () => {
     );
     expect(statusPayload.runtimeVariables.resumeNote).toBe("from-file");
     expect(statusPayload.runtimeVariables.resumedFromSessionId).toBe(sessionId);
+  });
+
+  test("hook command reads stdin and returns noop JSON", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(["hook", "--vendor", "codex"], capture.io, {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 43173,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      readStdin: async () =>
+        JSON.stringify({
+          session_id: "sess-hook-001",
+          transcript_path: "/tmp/divedra/transcript.jsonl",
+          cwd: "/tmp/divedra",
+          hook_event_name: "PreToolUse",
+          tool_name: "exec_command",
+          tool_input: {},
+          tool_use_id: "tool-001",
+        }),
+    });
+
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(JSON.parse(capture.stdout.join("\n"))).toEqual({});
+  });
+
+  test("hook command rejects invalid vendor values", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(["hook", "--vendor", "bad-vendor"], capture.io, {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 43173,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      readStdin: async () => "{}",
+    });
+
+    expect(code).toBe(2);
+    expect(capture.stdout).toEqual([]);
+    expect(capture.stderr).toEqual([
+      "invalid --vendor value 'bad-vendor'; expected 'claude-code' or 'codex'",
+    ]);
+  });
+
+  test("hook command rejects positional arguments", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(["hook", "extra-arg"], capture.io, {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 43173,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      readStdin: async () => "",
+    });
+
+    expect(code).toBe(2);
+    expect(capture.stdout).toEqual([]);
+    expect(capture.stderr).toEqual([
+      "hook does not accept positional arguments",
+      "usage: divedra hook [--vendor claude-code|codex]",
+    ]);
   });
 });

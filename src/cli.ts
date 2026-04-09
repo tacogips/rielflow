@@ -7,6 +7,9 @@ import {
   executeGraphqlRequest,
   type GraphqlClientResponse,
 } from "./graphql/client";
+import { parseHookVendorOption } from "./hook/detect-vendor";
+import { createReadHookStdin, runHookCommand } from "./hook/index";
+import { SUPPORTED_HOOK_VENDORS } from "./hook/types";
 import { startServe, type StartedServe } from "./server/serve";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
@@ -57,6 +60,7 @@ export interface CliDependencies {
   readonly waitForServeShutdown?: (started: StartedServe) => Promise<void>;
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly readStdin?: () => Promise<string>;
   readonly runOpenTuiWorkflowApp?: (
     options: OpenTuiWorkflowAppOptions,
   ) => Promise<number>;
@@ -93,6 +97,7 @@ interface ParsedOptions {
   readonly workflowName?: string;
   readonly messageJson?: string;
   readonly messageFile?: string;
+  readonly vendor?: string;
 }
 
 interface ParsedArgs {
@@ -100,9 +105,7 @@ interface ParsedArgs {
   readonly options: ParsedOptions;
 }
 
-function normalizeCliPositionals(
-  positionals: readonly string[],
-): string[] {
+function normalizeCliPositionals(positionals: readonly string[]): string[] {
   if (positionals[0] === "cli" && positionals[1] === "workflow") {
     return positionals.slice(1);
   }
@@ -136,10 +139,17 @@ interface WorkflowExecutionExport {
   readonly nodeLogs: Awaited<ReturnType<typeof listRuntimeNodeLogs>>;
   readonly communications: readonly NonNullable<
     Awaited<
-      ReturnType<ReturnType<typeof createCommunicationService>["getCommunication"]>
+      ReturnType<
+        ReturnType<typeof createCommunicationService>["getCommunication"]
+      >
     >
   >[];
 }
+
+const HOOK_VENDOR_USAGE = SUPPORTED_HOOK_VENDORS.join("|");
+const HOOK_VENDOR_EXPECTED = SUPPORTED_HOOK_VENDORS.map(
+  (vendor) => `'${vendor}'`,
+).join(" or ");
 
 const DEFAULT_IO: CliIo = {
   stdout: (line: string) => console.log(line),
@@ -150,6 +160,7 @@ const DEFAULT_DEPS: CliDependencies = {
   startServe,
   isInteractiveTerminal: () =>
     process.stdin.isTTY === true && process.stdout.isTTY === true,
+  readStdin: createReadHookStdin(process.stdin),
   waitForServeShutdown: async (_started: StartedServe) => {
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -206,6 +217,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let workflowName: string | undefined;
   let messageJson: string | undefined;
   let messageFile: string | undefined;
+  let vendor: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -301,6 +313,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--message-file":
         messageFile = readNext();
         break;
+      case "--vendor":
+        vendor = readNext();
+        break;
       default:
         break;
     }
@@ -332,6 +347,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(workflowName === undefined ? {} : { workflowName }),
       ...(messageJson === undefined ? {} : { messageJson }),
       ...(messageFile === undefined ? {} : { messageFile }),
+      ...(vendor === undefined ? {} : { vendor }),
     },
   };
 }
@@ -357,6 +373,7 @@ function printHelp(io: CliIo): void {
   io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
   );
+  io.stdout(`  divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
   io.stdout(
     "  divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
   );
@@ -563,7 +580,11 @@ async function writeExportFile(
   payload: WorkflowExecutionExport,
 ): Promise<string> {
   const resolvedPath = path.resolve(filePath);
-  await writeFile(resolvedPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeFile(
+    resolvedPath,
+    `${JSON.stringify(payload, null, 2)}\n`,
+    "utf8",
+  );
   return resolvedPath;
 }
 
@@ -866,7 +887,8 @@ export function resolveCliHomeDir(
     process.env["USERPROFILE"],
   ];
   const explicitHome = candidates.find(
-    (candidate): candidate is string => candidate !== undefined && candidate.length > 0,
+    (candidate): candidate is string =>
+      candidate !== undefined && candidate.length > 0,
   );
   if (explicitHome !== undefined) {
     return explicitHome;
@@ -885,7 +907,10 @@ export function createOpenTuiWorkflowAppOptions(
   const loadWorkflowDefinitionOrThrow = async (
     workflowName: string,
   ): Promise<LoadedWorkflow> => {
-    const loaded = await loadWorkflowFromDisk(workflowName, input.sharedOptions);
+    const loaded = await loadWorkflowFromDisk(
+      workflowName,
+      input.sharedOptions,
+    );
     if (!loaded.ok) {
       throw new Error(loaded.error.message);
     }
@@ -939,13 +964,11 @@ export function createOpenTuiWorkflowAppOptions(
         input.sharedOptions,
       ),
     deleteWorkflowHistory: async ({ workflowId, workflowName }) =>
-      deleteWorkflowHistoryForWorkflow(
-        {
-          workflowId,
-          workflowName,
-          ...input.sharedOptions,
-        },
-      ),
+      deleteWorkflowHistoryForWorkflow({
+        workflowId,
+        workflowName,
+        ...input.sharedOptions,
+      }),
     loadManagerSessionMessages: async (managerSessionId) =>
       createManagerSessionStore(input.sharedOptions).listMessages(
         managerSessionId,
@@ -964,8 +987,7 @@ export function createOpenTuiWorkflowAppOptions(
       });
     },
     executeWorkflow: async ({ workflowName, runtimeVariables }) => {
-      const loadedWorkflow =
-        await loadWorkflowDefinitionOrThrow(workflowName);
+      const loadedWorkflow = await loadWorkflowDefinitionOrThrow(workflowName);
       return input.startLocalTuiWorkflow({
         workflowName,
         sessionId: createSessionId({
@@ -1532,6 +1554,33 @@ export async function runCli(
     }
   }
 
+  if (scope === "hook") {
+    if (command !== undefined) {
+      io.stderr("hook does not accept positional arguments");
+      io.stderr(`usage: divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
+      return 2;
+    }
+
+    const explicitVendor = parseHookVendorOption(parsed.options.vendor);
+    if (parsed.options.vendor !== undefined && explicitVendor === undefined) {
+      io.stderr(
+        `invalid --vendor value '${parsed.options.vendor}'; expected ${HOOK_VENDOR_EXPECTED}`,
+      );
+      return 2;
+    }
+
+    return runHookCommand({
+      deps: {
+        readStdin:
+          deps.readStdin ??
+          DEFAULT_DEPS.readStdin ??
+          createReadHookStdin(process.stdin),
+      },
+      ...(explicitVendor === undefined ? {} : { explicitVendor }),
+      io,
+    });
+  }
+
   if (scope === "serve") {
     try {
       const started = await deps.startServe({
@@ -1699,7 +1748,9 @@ export async function runCli(
       return 2;
     }
     if (graphqlCliTransport !== null) {
-      io.stderr("export currently supports local execution only; omit --endpoint");
+      io.stderr(
+        "export currently supports local execution only; omit --endpoint",
+      );
       return 2;
     }
 
