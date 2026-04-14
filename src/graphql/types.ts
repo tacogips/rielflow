@@ -13,6 +13,7 @@ import type {
   RetryCommunicationDeliveryResult,
 } from "../workflow/communication-service";
 import type { WorkflowInspectionSummary } from "../workflow/inspect";
+import type { DeleteWorkflowHistoryResult } from "../workflow/history";
 import type {
   ManagerControlAction,
 } from "../workflow/manager-control";
@@ -244,6 +245,24 @@ export interface CancelWorkflowExecutionPayload {
   readonly status: WorkflowSessionState["status"];
 }
 
+export interface DeleteWorkflowHistoryInput {
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
+export interface DeleteWorkflowSessionHistoryInput {
+  readonly sessionId: string;
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
+export interface DeleteWorkflowSessionHistoryPayload {
+  readonly deleted: boolean;
+  readonly workflowExecutionId: string;
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
 export interface SendManagerMessageInput {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
@@ -377,6 +396,14 @@ export interface GraphqlMutationRoot {
     input: CancelWorkflowExecutionInput,
     context?: GraphqlRequestContext,
   ): Promise<CancelWorkflowExecutionPayload>;
+  deleteWorkflowHistory(
+    input: DeleteWorkflowHistoryInput,
+    context?: GraphqlRequestContext,
+  ): Promise<DeleteWorkflowHistoryResult>;
+  deleteWorkflowSessionHistory(
+    input: DeleteWorkflowSessionHistoryInput,
+    context?: GraphqlRequestContext,
+  ): Promise<DeleteWorkflowSessionHistoryPayload>;
 }
 
 export interface GraphqlSchema {

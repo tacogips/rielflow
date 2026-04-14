@@ -7,9 +7,13 @@ import type {
 } from "../shared/ui-contract";
 import { runWorkflow } from "../workflow/engine";
 import { createWorkflowTemplate } from "../workflow/create";
+import { deleteWorkflowHistory } from "../workflow/history";
 import { buildInspectionSummary } from "../workflow/inspect";
 import { loadWorkflowFromDisk } from "../workflow/load";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "../workflow/paths";
+import {
+  deleteWorkflowSessionHistory,
+} from "../workflow/session-history";
 import {
   collectPromptTemplateFiles,
   computeWorkflowRevisionFromFiles,
@@ -87,6 +91,9 @@ import type {
   CommunicationsQueryInput,
   CancelWorkflowExecutionInput,
   CancelWorkflowExecutionPayload,
+  DeleteWorkflowHistoryInput,
+  DeleteWorkflowSessionHistoryInput,
+  DeleteWorkflowSessionHistoryPayload,
 } from "./types";
 
 function nowIso(): string {
@@ -954,6 +961,45 @@ async function cancelWorkflowExecutionMutation(
   };
 }
 
+async function deleteWorkflowHistoryMutation(
+  input: DeleteWorkflowHistoryInput,
+  context: GraphqlRequestContext,
+) {
+  if (context.readOnly === true) {
+    throw new Error("read-only mode enabled");
+  }
+  return deleteWorkflowHistory(
+    {
+      workflowId: input.workflowId,
+      workflowName: input.workflowName,
+      ...context,
+    },
+  );
+}
+
+async function deleteWorkflowSessionHistoryMutation(
+  input: DeleteWorkflowSessionHistoryInput,
+  context: GraphqlRequestContext,
+): Promise<DeleteWorkflowSessionHistoryPayload> {
+  if (context.readOnly === true) {
+    throw new Error("read-only mode enabled");
+  }
+  await deleteWorkflowSessionHistory(
+    {
+      sessionId: input.sessionId,
+      workflowId: input.workflowId,
+      workflowName: input.workflowName,
+    },
+    context,
+  );
+  return {
+    deleted: true,
+    workflowExecutionId: input.sessionId,
+    workflowId: input.workflowId,
+    workflowName: input.workflowName,
+  };
+}
+
 export function createGraphqlSchema(
   deps: GraphqlSchemaDependencies = {},
 ): GraphqlSchema {
@@ -1211,6 +1257,20 @@ export function createGraphqlSchema(
         context: GraphqlRequestContext = {},
       ): Promise<CancelWorkflowExecutionPayload> {
         return cancelWorkflowExecutionMutation(input, context);
+      },
+
+      async deleteWorkflowHistory(
+        input: DeleteWorkflowHistoryInput,
+        context: GraphqlRequestContext = {},
+      ) {
+        return deleteWorkflowHistoryMutation(input, context);
+      },
+
+      async deleteWorkflowSessionHistory(
+        input: DeleteWorkflowSessionHistoryInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<DeleteWorkflowSessionHistoryPayload> {
+        return deleteWorkflowSessionHistoryMutation(input, context);
       },
     },
   };

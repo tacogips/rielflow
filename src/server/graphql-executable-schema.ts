@@ -278,6 +278,19 @@ const GRAPHQL_SCHEMA_TEXT = `
     status: String!
   }
 
+  type DeleteWorkflowHistoryPayload {
+    deletedSessionCount: Int!
+    workflowId: String!
+    workflowName: String!
+  }
+
+  type DeleteWorkflowSessionHistoryPayload {
+    deleted: Boolean!
+    workflowExecutionId: String!
+    workflowId: String!
+    workflowName: String!
+  }
+
   type SendManagerMessagePayload {
     accepted: Boolean!
     managerMessageId: String!
@@ -345,6 +358,17 @@ const GRAPHQL_SCHEMA_TEXT = `
 
   input CancelWorkflowExecutionInput {
     workflowExecutionId: String!
+  }
+
+  input DeleteWorkflowHistoryInput {
+    workflowId: String!
+    workflowName: String!
+  }
+
+  input DeleteWorkflowSessionHistoryInput {
+    sessionId: String!
+    workflowId: String!
+    workflowName: String!
   }
 
   input SendManagerMessageInput {
@@ -429,6 +453,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     retryCommunicationDelivery(input: RetryCommunicationDeliveryInput!): RetryCommunicationDeliveryPayload!
     replayCommunication(input: ReplayCommunicationInput!): ReplayCommunicationPayload!
     cancelWorkflowExecution(input: CancelWorkflowExecutionInput!): CancelWorkflowExecutionPayload!
+    deleteWorkflowHistory(input: DeleteWorkflowHistoryInput!): DeleteWorkflowHistoryPayload!
+    deleteWorkflowSessionHistory(input: DeleteWorkflowSessionHistoryInput!): DeleteWorkflowSessionHistoryPayload!
   }
 `;
 
@@ -716,6 +742,31 @@ export function createExecutableGraphqlSchema(
           context: GraphqlRequestContext,
         ) {
           return schema.mutation.cancelWorkflowExecution(args.input, context);
+        },
+        deleteWorkflowHistory(
+          _parent: unknown,
+          args: {
+            readonly input: {
+              readonly workflowId: string;
+              readonly workflowName: string;
+            };
+          },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.deleteWorkflowHistory(args.input, context);
+        },
+        deleteWorkflowSessionHistory(
+          _parent: unknown,
+          args: {
+            readonly input: {
+              readonly sessionId: string;
+              readonly workflowId: string;
+              readonly workflowName: string;
+            };
+          },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.deleteWorkflowSessionHistory(args.input, context);
         },
       },
     },
