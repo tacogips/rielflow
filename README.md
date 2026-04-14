@@ -81,6 +81,23 @@ Launch the terminal UI:
 bun run src/main.ts tui
 ```
 
+Run `divedra` directly from the flake on Linux or Darwin:
+
+```bash
+nix run github:tacogips/divedra -- --help
+```
+
+Install the flake package into your user profile:
+
+```bash
+nix profile install github:tacogips/divedra
+```
+
+The flake `default` package is a lightweight `divedra` wrapper that bootstraps a
+writable Bun workspace under `~/.cache/divedra/nix/` on first launch. The full
+tool bundle remains available as `.#dev-tools`, and `nix develop` still provides
+the full development environment.
+
 CLI note:
 
 - use the direct form `bun run src/main.ts workflow ...`

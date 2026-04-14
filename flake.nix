@@ -42,12 +42,57 @@
 
         ];
 
+        divedraCli = pkgs.writeShellApplication {
+          name = "divedra";
+          runtimeInputs = devPackages;
+          text = ''
+            set -euo pipefail
+
+            source_dir="${self}"
+            cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/divedra/nix"
+            runtime_root="$cache_root/$(basename "$source_dir")"
+            runtime_src="$runtime_root/src"
+            ready_file="$runtime_root/.bun-ready"
+
+            mkdir -p "$cache_root"
+
+            if [ ! -f "$ready_file" ]; then
+              rm -rf "$runtime_root"
+              mkdir -p "$runtime_src"
+              cp -R "$source_dir"/. "$runtime_src"
+              chmod -R u+w "$runtime_root"
+              (
+                cd "$runtime_src"
+                bun install --frozen-lockfile
+              )
+              touch "$ready_file"
+            fi
+
+            cd "$runtime_src"
+            exec bun run src/main.ts "$@"
+          '';
+          meta = {
+            description = "TypeScript/Bun workflow runtime for cooperative multi-agent execution";
+            homepage = "https://github.com/tacogips/divedra";
+            mainProgram = "divedra";
+            license = pkgs.lib.licenses.mit;
+            platforms = pkgs.lib.platforms.unix;
+          };
+        };
+
       in
       {
-        packages.default = pkgs.buildEnv {
+        packages.default = divedraCli;
+
+        packages.dev-tools = pkgs.buildEnv {
           name = "divedra-dev-tools";
           paths = devPackages;
           pathsToLink = [ "/bin" ];
+        };
+
+        apps.default = {
+          type = "app";
+          program = "${divedraCli}/bin/divedra";
         };
 
         devShells.default = pkgs.mkShell {
