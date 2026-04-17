@@ -1120,15 +1120,15 @@ describe("runCli", () => {
     expect(rerunPayload.rerunFromNodeId).toBe("main-worker");
   });
 
-  test("export prints workflow execution logs as JSON", async () => {
+  test("session export prints workflow execution logs as JSON", async () => {
     const root = await makeTempDir();
     const run = await createCompletedCliWorkflowRun(root);
 
     const exportCapture = createIoCapture();
     const exportCode = await runCli(
       [
+        "session",
         "export",
-        run.workflowName,
         run.sessionId,
         "--workflow-root",
         root,
@@ -1169,7 +1169,7 @@ describe("runCli", () => {
     ).toBe(true);
   });
 
-  test("export writes workflow execution logs to a file", async () => {
+  test("session export writes workflow execution logs to a file", async () => {
     const root = await makeTempDir();
     const run = await createCompletedCliWorkflowRun(root);
     const exportFilePath = path.join(root, "workflow-export.json");
@@ -1177,8 +1177,8 @@ describe("runCli", () => {
     const exportCapture = createIoCapture();
     const exportCode = await runCli(
       [
+        "session",
         "export",
-        run.workflowName,
         run.sessionId,
         "--workflow-root",
         root,
@@ -1216,7 +1216,7 @@ describe("runCli", () => {
     expect(savedPayload.communications.length).toBeGreaterThan(0);
   });
 
-  test("export rejects workflow ids that do not match the workflow run", async () => {
+  test("top-level export is not a supported command", async () => {
     const root = await makeTempDir();
     const run = await createCompletedCliWorkflowRun(root);
 
@@ -1224,7 +1224,7 @@ describe("runCli", () => {
     const exportCode = await runCli(
       [
         "export",
-        "other-workflow",
+        run.workflowName,
         run.sessionId,
         "--workflow-root",
         root,
@@ -1237,9 +1237,42 @@ describe("runCli", () => {
     );
 
     expect(exportCode).toBe(1);
-    expect(exportCapture.stderr.join("\n")).toContain(
-      `workflow execution '${run.sessionId}' does not belong to workflow 'other-workflow'`,
+    expect(exportCapture.stderr.join("\n")).toContain("unknown scope: export");
+  });
+
+  test("session logs prints runtime node logs as jsonl", async () => {
+    const root = await makeTempDir();
+    const run = await createCompletedCliWorkflowRun(root);
+
+    const logsCapture = createIoCapture();
+    const logsCode = await runCli(
+      [
+        "session",
+        "logs",
+        run.sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        run.artifactsRoot,
+        "--session-store",
+        run.sessionsRoot,
+        "--format",
+        "jsonl",
+      ],
+      logsCapture.io,
     );
+
+    expect(logsCode).toBe(0);
+    const lines = logsCapture.stdout.filter((line) => line.length > 0);
+    expect(lines.length).toBeGreaterThan(0);
+    const firstLog = JSON.parse(lines[0] ?? "{}") as {
+      sessionId: string;
+      nodeId: string;
+      message: string;
+    };
+    expect(firstLog.sessionId).toBe(run.sessionId);
+    expect(firstLog.nodeId).toBeTruthy();
+    expect(firstLog.message).toContain("finished with status");
   });
 
   test("workflow run keeps the runtime db aligned with explicit storage roots", async () => {

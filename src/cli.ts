@@ -81,6 +81,7 @@ interface ParsedOptions {
   readonly workingDirectory?: string;
   readonly workerOnly: boolean;
   readonly output: "text" | "json";
+  readonly format?: "text" | "json" | "jsonl";
   readonly variablesPath?: string;
   readonly mockScenarioPath?: string;
   readonly dryRun: boolean;
@@ -148,6 +149,10 @@ interface WorkflowExecutionExport {
   >[];
 }
 
+type RuntimeNodeLogEntry = Awaited<
+  ReturnType<typeof listRuntimeNodeLogs>
+>[number];
+
 const HOOK_VENDOR_USAGE = SUPPORTED_HOOK_VENDORS.join("|");
 const HOOK_VENDOR_EXPECTED = SUPPORTED_HOOK_VENDORS.map(
   (vendor) => `'${vendor}'`,
@@ -202,6 +207,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let workingDirectory: string | undefined;
   let workerOnly = false;
   let output: "text" | "json" = "text";
+  let format: "text" | "json" | "jsonl" | undefined;
   let variablesPath: string | undefined;
   let dryRun = false;
   let mockScenarioPath: string | undefined;
@@ -266,6 +272,17 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         const maybeOutput = readNext();
         if (maybeOutput === "json" || maybeOutput === "text") {
           output = maybeOutput;
+        }
+        break;
+      }
+      case "--format": {
+        const maybeFormat = readNext();
+        if (
+          maybeFormat === "json" ||
+          maybeFormat === "jsonl" ||
+          maybeFormat === "text"
+        ) {
+          format = maybeFormat;
         }
         break;
       }
@@ -336,6 +353,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(sessionStoreRoot === undefined ? {} : { sessionStoreRoot }),
       ...(workingDirectory === undefined ? {} : { workingDirectory }),
       workerOnly,
+      ...(format === undefined ? {} : { format }),
       ...(variablesPath === undefined ? {} : { variablesPath }),
       ...(mockScenarioPath === undefined ? {} : { mockScenarioPath }),
       output,
@@ -366,7 +384,7 @@ function printHelp(io: CliIo): void {
     "  divedra cli workflow <create|validate|inspect|run> <name> [options]",
   );
   io.stdout(
-    "  divedra session <status|progress|resume> <session-id> [options]",
+    "  divedra session <status|progress|resume|export|logs> <session-id> [options]",
   );
   io.stdout("  divedra session rerun <session-id> <node-id> [options]");
   io.stdout(
@@ -382,12 +400,13 @@ function printHelp(io: CliIo): void {
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
   );
   io.stdout(`  divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
-  io.stdout(
-    "  divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
-  );
   io.stdout("");
   io.stdout("Create options:");
   io.stdout("  --worker-only  Scaffold a manager-less starter workflow");
+  io.stdout("");
+  io.stdout("Session options:");
+  io.stdout("  export --file <path>     Write workflow run export JSON to a file");
+  io.stdout("  logs --format <format>   Print node logs as text, json, or jsonl");
 }
 
 function formatValidationIssues(
@@ -532,7 +551,6 @@ function isNonNull<T>(value: T | null): value is T {
 }
 
 async function buildWorkflowExecutionExport(
-  workflowId: string,
   workflowExecutionId: string,
   options: CliStorageOptions,
 ): Promise<WorkflowExecutionExport> {
@@ -540,12 +558,7 @@ async function buildWorkflowExecutionExport(
   if (!loaded.ok) {
     throw new Error(loaded.error.message);
   }
-
-  if (loaded.value.workflowId !== workflowId) {
-    throw new Error(
-      `workflow execution '${workflowExecutionId}' does not belong to workflow '${workflowId}'`,
-    );
-  }
+  const workflowId = loaded.value.workflowId;
 
   const [nodeExecutions, nodeLogs] = await Promise.all([
     listRuntimeNodeExecutions(workflowExecutionId, options),
@@ -593,6 +606,43 @@ async function writeExportFile(
     `${JSON.stringify(payload, null, 2)}\n`,
     "utf8",
   );
+  return resolvedPath;
+}
+
+function formatRuntimeNodeLogLine(entry: RuntimeNodeLogEntry): string {
+  return [
+    entry.at,
+    entry.level,
+    entry.nodeId ?? "-",
+    entry.nodeExecId ?? "-",
+    entry.message,
+  ].join("\t");
+}
+
+function serializeRuntimeNodeLogs(
+  entries: readonly RuntimeNodeLogEntry[],
+  format: "text" | "json" | "jsonl",
+): string {
+  switch (format) {
+    case "json":
+      return `${JSON.stringify(entries, null, 2)}\n`;
+    case "jsonl":
+      return entries.length === 0
+        ? ""
+        : `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`;
+    case "text":
+      return entries.length === 0
+        ? ""
+        : `${entries.map(formatRuntimeNodeLogLine).join("\n")}\n`;
+  }
+}
+
+async function writeTextFile(
+  filePath: string,
+  content: string,
+): Promise<string> {
+  const resolvedPath = path.resolve(filePath);
+  await writeFile(resolvedPath, content, "utf8");
   return resolvedPath;
 }
 
@@ -1776,62 +1826,6 @@ export async function runCli(
     return result.value.exitCode;
   }
 
-  if (scope === "export") {
-    const workflowId = command;
-    const workflowRunId = target;
-    if (workflowId === undefined || workflowRunId === undefined) {
-      io.stderr("workflow id and workflow run id are required");
-      io.stderr(
-        "usage: divedra export <workflow-id> <workflow-run-id> [--file <path>] [options]",
-      );
-      return 2;
-    }
-    if (graphqlCliTransport !== null) {
-      io.stderr(
-        "export currently supports local execution only; omit --endpoint",
-      );
-      return 2;
-    }
-
-    let payload: WorkflowExecutionExport;
-    try {
-      payload = await buildWorkflowExecutionExport(
-        workflowId,
-        workflowRunId,
-        sharedOptions,
-      );
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      io.stderr(`export failed: ${message}`);
-      return 1;
-    }
-
-    if (parsed.options.filePath === undefined) {
-      emitJson(io, payload);
-      return 0;
-    }
-
-    try {
-      const savedPath = await writeExportFile(parsed.options.filePath, payload);
-      if (parsed.options.output === "json") {
-        emitJson(io, {
-          filePath: savedPath,
-          workflowId: payload.workflowId,
-          workflowExecutionId: payload.workflowExecutionId,
-          workflowName: payload.workflowName,
-          status: payload.status,
-        });
-      } else {
-        io.stdout(`exported workflow logs to ${savedPath}`);
-      }
-      return 0;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      io.stderr(`failed to write export file: ${message}`);
-      return 1;
-    }
-  }
-
   if (scope === undefined || command === undefined || target === undefined) {
     io.stderr("scope, command, and target are required");
     printHelp(io);
@@ -2377,6 +2371,110 @@ export async function runCli(
         io.stdout(`status: ${result.value.session.status}`);
       }
       return result.value.exitCode;
+    }
+
+    if (command === "export") {
+      if (graphqlCliTransport !== null) {
+        io.stderr(
+          "session export currently supports local execution only; omit --endpoint",
+        );
+        return 2;
+      }
+
+      let payload: WorkflowExecutionExport;
+      try {
+        payload = await buildWorkflowExecutionExport(target, sharedOptions);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`session export failed: ${message}`);
+        return 1;
+      }
+
+      if (parsed.options.filePath === undefined) {
+        emitJson(io, payload);
+        return 0;
+      }
+
+      try {
+        const savedPath = await writeExportFile(
+          parsed.options.filePath,
+          payload,
+        );
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            filePath: savedPath,
+            workflowId: payload.workflowId,
+            workflowExecutionId: payload.workflowExecutionId,
+            workflowName: payload.workflowName,
+            status: payload.status,
+          });
+        } else {
+          io.stdout(`exported workflow run to ${savedPath}`);
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`failed to write session export file: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "logs") {
+      if (graphqlCliTransport !== null) {
+        io.stderr(
+          "session logs currently supports local execution only; omit --endpoint",
+        );
+        return 2;
+      }
+      const session = await loadSession(target, sharedOptions);
+      if (!session.ok) {
+        io.stderr(session.error.message);
+        return 1;
+      }
+
+      const logs = await listRuntimeNodeLogs(target, sharedOptions);
+      const format = parsed.options.format ?? parsed.options.output;
+      const serialized = serializeRuntimeNodeLogs(logs, format);
+
+      if (parsed.options.filePath !== undefined) {
+        try {
+          const savedPath = await writeTextFile(
+            parsed.options.filePath,
+            serialized,
+          );
+          if (parsed.options.output === "json") {
+            emitJson(io, {
+              filePath: savedPath,
+              sessionId: target,
+              workflowId: session.value.workflowId,
+              workflowName: session.value.workflowName,
+              logCount: logs.length,
+              format,
+            });
+          } else {
+            io.stdout(`exported session logs to ${savedPath}`);
+          }
+          return 0;
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : "unknown error";
+          io.stderr(`failed to write session logs file: ${message}`);
+          return 1;
+        }
+      }
+
+      if (format === "json") {
+        emitJson(io, logs);
+      } else {
+        serialized
+          .trimEnd()
+          .split("\n")
+          .filter((line) => line.length > 0)
+          .forEach((line) => io.stdout(line));
+      }
+      return 0;
     }
 
     io.stderr(`unknown session command: ${command}`);

@@ -33,10 +33,14 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `session rerun <session-id> <node-id>`
   - Start a new run from a chosen node in an existing session.
   - Accepts `--working-dir` / `--working-directory` to override the workflow execution working directory for the rerun.
+- `session export <session-id>`
+  - Export the persisted workflow run as JSON to stdout or to a file.
+  - Includes session state, runtime node execution rows, runtime node logs, and communication snapshots.
+- `session logs <session-id>`
+  - Print runtime node logs for a persisted session.
+  - Accepts `--format text|json|jsonl`; defaults to text unless `--output json` is used.
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
   - Execute one node directly against an existing run context for local debugging.
-- `export <workflow-id> <workflow-run-id>`
-  - Export the persisted workflow run logs as JSON to stdout or to a file.
 - `gql <graphql-document>`
   - Execute a GraphQL query or mutation against the canonical control-plane endpoint.
   - Manager-node LLM/tool use should call GraphQL mutations such as `sendManagerMessage` through this command rather than dedicated domain subcommands.

@@ -114,11 +114,12 @@ Primary commands implemented in `src/cli.ts`:
 - `session progress <session-id>`
 - `session resume <session-id>`
 - `session rerun <session-id> <node-id>`
+- `session export <session-id>`
+- `session logs <session-id>`
 - `serve [workflow-name]`
 - `gql <graphql-document>`
 - `tui [workflow-name]`
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
-- `export <workflow-id> <workflow-run-id>`
 - `hook [--vendor claude-code|codex]`
 
 `workflow create <name>` scaffolds a role-based starter with a `claude-code-agent` manager node and a `codex-agent` worker node. The generated `workflow.json` prefers the authored-minimal surface and omits compatibility/default fields such as empty `subWorkflows`, synthesized `edges`, default `branching`, and node-level `completion: { "type": "none" }` unless they are needed. Pass `--worker-only` to scaffold a manager-less starter whose explicit `entryNodeId` points at `main-worker`.
@@ -132,6 +133,7 @@ Useful options:
 - `--variables <path>`
 - `--mock-scenario <path>`
 - `--output json`
+- `--format text|json|jsonl` for `session logs`
 
 `workflow inspect` surfaces the active cross-workflow count as `workflowCalls`
 and labels any remaining structural compatibility count as
@@ -144,7 +146,7 @@ and labels any remaining structural compatibility count as
 Remote execution support:
 
 - `workflow run`, `session resume`, and `session rerun` can target a remote control plane with `--endpoint`
-- `call-node` and `export` are local-only today
+- `call-node`, `session export`, and `session logs` are local-only today
 - `--mock-scenario` is local-only and cannot be combined with `--endpoint`
 
 ## GraphQL Control Plane
