@@ -78,14 +78,31 @@ export interface AdapterExecutionOutput {
   readonly payload: Readonly<Record<string, unknown>>;
   readonly backendSession?: AdapterBackendSessionOutput;
   readonly candidateFilePath?: string;
+  readonly processLogs?: readonly AdapterProcessLog[];
+}
+
+export interface AdapterProcessLog {
+  readonly stream: "stdout" | "stderr";
+  readonly text: string;
+  readonly label?: string;
 }
 
 export class AdapterExecutionError extends Error {
   readonly code: AdapterFailureCode;
+  readonly processLogs?: readonly AdapterProcessLog[];
 
-  constructor(code: AdapterFailureCode, message: string) {
+  constructor(
+    code: AdapterFailureCode,
+    message: string,
+    options: {
+      readonly processLogs?: readonly AdapterProcessLog[];
+    } = {},
+  ) {
     super(message);
     this.code = code;
+    if (options.processLogs !== undefined) {
+      this.processLogs = options.processLogs;
+    }
   }
 }
 

@@ -1,7 +1,15 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { AdapterExecutionError } from "./adapter";
 import { executeNativeNode } from "./native-node-executor";
 
 const tempDirs: string[] = [];
@@ -142,6 +150,267 @@ describe("executeNativeNode", () => {
     );
 
     await expectPayloadCwd(output.payload, workflowWorkingDirectory);
+  });
+
+  test("returns command stdout and stderr as process log attachments", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "write-logs.sh"),
+      [
+        "#!/bin/sh",
+        'echo "native stdout line"',
+        'echo "native stderr line" >&2',
+        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath: "scripts/write-logs.sh",
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.processLogs).toEqual([
+      { stream: "stdout", text: "native stdout line\n" },
+      { stream: "stderr", text: "native stderr line\n" },
+    ]);
+  });
+
+  test("attaches command logs to invalid mailbox output failures", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "missing-output.sh"),
+      ["#!/bin/sh", 'echo "stdout before invalid output"', ""].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/missing-output.sh",
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_output",
+      processLogs: [
+        { stream: "stdout", text: "stdout before invalid output\n" },
+      ],
+    } satisfies Partial<AdapterExecutionError>);
+  });
+
+  test("attaches and writes command logs for non-zero exits", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "fail.sh"),
+      [
+        "#!/bin/sh",
+        'echo "stdout before failure"',
+        'echo "stderr before failure" >&2',
+        "exit 2",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "scripts/fail.sh",
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "provider_error",
+      processLogs: [
+        { stream: "stdout", text: "stdout before failure\n" },
+        { stream: "stderr", text: "stderr before failure\n" },
+      ],
+    } satisfies Partial<AdapterExecutionError>);
+
+    await expect(
+      readFile(path.join(artifactDir, "stdout.log"), "utf8"),
+    ).resolves.toBe("stdout before failure\n");
+    await expect(
+      readFile(path.join(artifactDir, "stderr.log"), "utf8"),
+    ).resolves.toBe("stderr before failure\n");
+  });
+
+  test("keeps successful container build logs when the later run fails", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    const runnerPath = path.join(workflowDirectory, "fake-runner.sh");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    await mkdir(path.join(workflowDirectory, "container-context"), {
+      recursive: true,
+    });
+    await writeFile(
+      runnerPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'if [ "$1" = "build" ]; then',
+        '  echo "build stdout"',
+        '  echo "build stderr" >&2',
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "run" ]; then',
+        '  echo "run stdout before failure"',
+        '  echo "run stderr before failure" >&2',
+        "  exit 2",
+        "fi",
+        "exit 64",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "container",
+            variables: {},
+            container: {
+              runnerKind: "docker",
+              runnerPath,
+              build: {
+                contextPath: "container-context",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "provider_error",
+      processLogs: [
+        { stream: "stdout", text: "build stdout\n", label: "build" },
+        { stream: "stderr", text: "build stderr\n", label: "build" },
+        { stream: "stdout", text: "run stdout before failure\n" },
+        { stream: "stderr", text: "run stderr before failure\n" },
+      ],
+    } satisfies Partial<AdapterExecutionError>);
   });
 
   test("resolves node-level relative working directory from the workflow working directory", async () => {

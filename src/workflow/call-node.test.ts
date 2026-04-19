@@ -9,6 +9,7 @@ import {
   type NodeAdapter,
 } from "./adapter";
 import { callNode } from "./call-node";
+import { listRuntimeNodeLogs } from "./runtime-db";
 import { createSessionState } from "./session";
 import { loadSession, saveSession } from "./session-store";
 
@@ -632,6 +633,71 @@ describe("callNode", () => {
     expect(result.error.message).toContain(
       "direct call-node execution is not supported",
     );
+  });
+
+  test("persists native command process logs for direct node calls", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const rootDataDir = path.join(root, "data");
+    const workflowName = "call-node-command-logs";
+    const sessionId = "sess-call-node-command-logs";
+
+    await createCallNodeFixture(root, workflowName);
+    const scriptsDir = path.join(root, workflowName, "scripts");
+    await mkdir(scriptsDir, { recursive: true });
+    await writeFile(
+      path.join(scriptsDir, "write-output.sh"),
+      [
+        "#!/bin/sh",
+        'echo "call-node command stdout"',
+        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+    await writeJson(path.join(root, workflowName, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      variables: {},
+      command: {
+        scriptPath: "scripts/write-output.sh",
+      },
+    });
+    await createCallNodeSession({
+      workflowName,
+      sessionId,
+      sessionStoreRoot,
+    });
+
+    const result = await callNode({
+      workflowRoot: root,
+      artifactRoot: artifactsRoot,
+      rootDataDir,
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      nodeId: "writer",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const logs = await listRuntimeNodeLogs(sessionId, {
+      workflowRoot: root,
+      artifactRoot: artifactsRoot,
+      rootDataDir,
+    });
+    expect(
+      logs.some(
+        (entry) =>
+          entry.nodeId === "writer" &&
+          entry.message.includes("stdout") &&
+          entry.message.includes("call-node command stdout"),
+      ),
+    ).toBe(true);
   });
 
   test("fails deterministically when execution mailbox artifacts cannot be persisted", async () => {

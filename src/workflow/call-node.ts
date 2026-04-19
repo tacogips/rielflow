@@ -7,14 +7,18 @@ import {
   atomicWriteTextFile as writeRawTextFile,
 } from "../shared/fs";
 import {
-  AdapterExecutionError,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
   type AdapterExecutionInput,
   type AdapterExecutionOutput,
+  type AdapterProcessLog,
   type MockNodeScenario,
   type NodeAdapter,
 } from "./adapter";
+import {
+  executeAdapterWithTimeout,
+  executeNativeNodeWithTimeout,
+} from "./adapter-execution";
 import {
   DispatchingNodeAdapter,
   resolveNodeExecutionBackend,
@@ -27,9 +31,7 @@ import {
 import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
-  type NodeExecutionMailbox,
 } from "./node-execution-mailbox";
-import { executeNativeNode } from "./native-node-executor";
 import { loadWorkflowFromDisk } from "./load";
 import {
   buildAmbientManagerControlPlaneEnvironment,
@@ -41,7 +43,10 @@ import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import { composeExecutionPrompts } from "./prompt-composition";
 import { err, ok, type Result } from "./result";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
-import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
+import {
+  saveNodeExecutionToRuntimeDb,
+  saveProcessLogsToRuntimeDb,
+} from "./runtime-db";
 import {
   loadSession,
   saveSession,
@@ -301,135 +306,6 @@ async function resolveCandidatePayload(input: {
     });
   }
   return readCandidatePayloadFromFile(resolvedPath);
-}
-
-async function executeAdapterWithTimeout(
-  adapter: NodeAdapter,
-  input: AdapterExecutionInput,
-  timeoutMs: number,
-): Promise<Result<AdapterExecutionOutput, { code: string; message: string }>> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(
-        new AdapterExecutionError("timeout", "adapter execution timed out"),
-      );
-    }, timeoutMs);
-  });
-
-  try {
-    const output = await Promise.race([
-      adapter.execute(input, {
-        timeoutMs,
-        signal: controller.signal,
-      }),
-      timeoutPromise,
-    ]);
-    return ok(output);
-  } catch (error: unknown) {
-    if (error instanceof AdapterExecutionError) {
-      return err({ code: error.code, message: error.message });
-    }
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return err({ code: "timeout", message: "adapter execution timed out" });
-    }
-    return err({
-      code: "provider_error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "unknown adapter execution failure",
-    });
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
-}
-
-async function executeNativeNodeWithTimeout(input: {
-  readonly workflowDirectory: string;
-  readonly workflowWorkingDirectory: string;
-  readonly artifactWorkflowRoot: string;
-  readonly workflowId: string;
-  readonly workflowDescription: string;
-  readonly workflowExecutionId: string;
-  readonly nodeId: string;
-  readonly nodeExecId: string;
-  readonly node: NodePayload;
-  readonly workflowDefaults: WorkflowJson["defaults"];
-  readonly runtimeVariables: Readonly<Record<string, unknown>>;
-  readonly mergedVariables: Readonly<Record<string, unknown>>;
-  readonly arguments: Readonly<Record<string, unknown>> | null;
-  readonly artifactDir: string;
-  readonly executionMailbox: NodeExecutionMailbox;
-  readonly env?: Readonly<Record<string, string | undefined>>;
-  readonly timeoutMs: number;
-}): Promise<Result<AdapterExecutionOutput, { code: string; message: string }>> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(
-        new AdapterExecutionError("timeout", "native node execution timed out"),
-      );
-    }, input.timeoutMs);
-  });
-
-  try {
-    const output = await Promise.race([
-      executeNativeNode(
-        {
-          workflowDirectory: input.workflowDirectory,
-          workflowWorkingDirectory: input.workflowWorkingDirectory,
-          artifactWorkflowRoot: input.artifactWorkflowRoot,
-          workflowId: input.workflowId,
-          workflowDescription: input.workflowDescription,
-          workflowExecutionId: input.workflowExecutionId,
-          nodeId: input.nodeId,
-          nodeExecId: input.nodeExecId,
-          node: input.node,
-          workflowDefaults: input.workflowDefaults,
-          runtimeVariables: input.runtimeVariables,
-          mergedVariables: input.mergedVariables,
-          arguments: input.arguments,
-          artifactDir: input.artifactDir,
-          executionMailbox: input.executionMailbox,
-          ...(input.env === undefined ? {} : { env: input.env }),
-        },
-        {
-          timeoutMs: input.timeoutMs,
-          signal: controller.signal,
-        },
-      ),
-      timeoutPromise,
-    ]);
-    return ok(output);
-  } catch (error: unknown) {
-    if (error instanceof AdapterExecutionError) {
-      return err({ code: error.code, message: error.message });
-    }
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return err({
-        code: "timeout",
-        message: "native node execution timed out",
-      });
-    }
-    return err({
-      code: "provider_error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "unknown native node execution failure",
-    });
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
 }
 
 function resolveRequestedBackendSession(
@@ -1079,6 +955,7 @@ class ExecutionDispatcher {
     let outputValidationErrors: readonly JsonSchemaValidationError[] = [];
     let outputAttemptCount = 1;
     let finalOutputPayload: Readonly<Record<string, unknown>> | undefined;
+    let processLogs: readonly AdapterProcessLog[] = [];
 
     if (input.dryRun === true) {
       finalOutputPayload = {
@@ -1234,6 +1111,10 @@ class ExecutionDispatcher {
 
         try {
           if (!execution.ok) {
+            processLogs = [
+              ...processLogs,
+              ...(execution.error.processLogs ?? []),
+            ];
             if (
               execution.error.code === "invalid_output" &&
               executionNodePayload.output !== undefined &&
@@ -1284,6 +1165,10 @@ class ExecutionDispatcher {
           }
 
           backendSessionProvider = execution.value.provider;
+          processLogs = [
+            ...processLogs,
+            ...(execution.value.processLogs ?? []),
+          ];
           if (execution.value.backendSession?.sessionId !== undefined) {
             backendSession = {
               mode: "reuse",
@@ -1387,6 +1272,20 @@ class ExecutionDispatcher {
     }
 
     const endedAt = nowIso();
+    try {
+      await saveProcessLogsToRuntimeDb(
+        {
+          sessionId: session.sessionId,
+          nodeId: input.nodeId,
+          nodeExecId,
+          processLogs,
+          at: endedAt,
+        },
+        input,
+      );
+    } catch {
+      // runtime DB process logs are best-effort
+    }
     const nodeExecution: NodeExecutionRecord = {
       nodeId: input.nodeId,
       nodeExecId,

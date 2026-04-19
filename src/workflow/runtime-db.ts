@@ -7,7 +7,11 @@ import type {
   SessionStatus,
   WorkflowSessionState,
 } from "./session";
+import type { AdapterProcessLog } from "./adapter";
 import type { LoadOptions } from "./types";
+
+type RuntimeNodeLogLevel = "info" | "warning" | "error";
+const PROCESS_LOG_MESSAGE_TEXT_LIMIT = 500;
 
 interface RuntimeNodeExecutionRow {
   readonly sessionId: string;
@@ -76,6 +80,26 @@ export interface RuntimeNodeLogEntry {
   readonly at: string;
 }
 
+interface RuntimeNodeLogInput {
+  readonly sessionId: string;
+  readonly nodeExecId?: string;
+  readonly nodeId?: string;
+  readonly level: RuntimeNodeLogLevel;
+  readonly message: string;
+  readonly payload?: unknown;
+  readonly at?: string;
+}
+
+interface PersistedRuntimeNodeLogRow {
+  readonly sessionId: string;
+  readonly nodeExecId: string | null;
+  readonly nodeId: string | null;
+  readonly level: RuntimeNodeLogLevel;
+  readonly message: string;
+  readonly payloadJson: string | null;
+  readonly at: string;
+}
+
 export function resolveRuntimeDbPath(options: LoadOptions): string {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
@@ -114,7 +138,9 @@ interface RuntimeSessionRow {
   readonly updated_at: string;
 }
 
-function toRuntimeSessionSummary(row: RuntimeSessionRow): RuntimeSessionSummary {
+function toRuntimeSessionSummary(
+  row: RuntimeSessionRow,
+): RuntimeSessionSummary {
   return {
     sessionId: row.session_id,
     workflowName: row.workflow_name,
@@ -203,6 +229,34 @@ function ensureSchema(db: Database): void {
   }
 }
 
+function insertNodeLog(db: Database, row: PersistedRuntimeNodeLogRow): void {
+  const stmt = db.prepare(`
+    INSERT INTO node_logs (session_id, node_exec_id, node_id, level, message, payload_json, at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    row.sessionId,
+    row.nodeExecId,
+    row.nodeId,
+    row.level,
+    row.message,
+    row.payloadJson,
+    row.at,
+  );
+}
+
+function toNodeLogRow(row: RuntimeNodeLogInput): PersistedRuntimeNodeLogRow {
+  return {
+    sessionId: row.sessionId,
+    nodeExecId: row.nodeExecId ?? null,
+    nodeId: row.nodeId ?? null,
+    level: row.level,
+    message: row.message,
+    payloadJson: row.payload === undefined ? null : JSON.stringify(row.payload),
+    at: row.at ?? new Date().toISOString(),
+  };
+}
+
 export async function saveSessionSnapshotToRuntimeDb(
   session: WorkflowSessionState,
   options: LoadOptions = {},
@@ -279,23 +333,83 @@ export async function saveNodeExecutionToRuntimeDb(
       now,
     );
 
-    const logStmt = db.prepare(`
-      INSERT INTO node_logs (session_id, node_exec_id, node_id, level, message, payload_json, at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    logStmt.run(
-      row.sessionId,
-      row.nodeExecId,
-      row.nodeId,
-      row.status === "succeeded" ? "info" : "warning",
-      `node ${row.nodeId} finished with status ${row.status}`,
-      JSON.stringify({
-        inputHash: row.inputHash,
-        outputHash: row.outputHash,
-        artifactDir: row.artifactDir,
+    insertNodeLog(
+      db,
+      toNodeLogRow({
+        sessionId: row.sessionId,
+        nodeExecId: row.nodeExecId,
+        nodeId: row.nodeId,
+        level: row.status === "succeeded" ? "info" : "warning",
+        message: `node ${row.nodeId} finished with status ${row.status}`,
+        payload: {
+          inputHash: row.inputHash,
+          outputHash: row.outputHash,
+          artifactDir: row.artifactDir,
+        },
+        at: row.endedAt,
       }),
-      row.endedAt,
     );
+  });
+}
+
+function summarizeProcessLogText(text: string): string {
+  const trimmed = text.trimEnd();
+  if (trimmed.length <= PROCESS_LOG_MESSAGE_TEXT_LIMIT) {
+    return trimmed;
+  }
+  const omittedCount = trimmed.length - PROCESS_LOG_MESSAGE_TEXT_LIMIT;
+  return `${trimmed.slice(
+    0,
+    PROCESS_LOG_MESSAGE_TEXT_LIMIT,
+  )}... [truncated ${String(omittedCount)} chars]`;
+}
+
+function formatProcessLogMessage(input: {
+  readonly nodeId: string;
+  readonly log: AdapterProcessLog;
+}): string {
+  const label =
+    input.log.label === undefined || input.log.label.length === 0
+      ? ""
+      : `${input.log.label} `;
+  return `node ${input.nodeId} ${label}${input.log.stream}: ${summarizeProcessLogText(input.log.text)}`;
+}
+
+export async function saveProcessLogsToRuntimeDb(
+  input: {
+    readonly sessionId: string;
+    readonly nodeId: string;
+    readonly nodeExecId: string;
+    readonly processLogs: readonly AdapterProcessLog[];
+    readonly at: string;
+  },
+  options: LoadOptions = {},
+): Promise<void> {
+  if (input.processLogs.length === 0) {
+    return;
+  }
+  await withDatabase(options, (db) => {
+    const insertLogs = db.transaction((logs: readonly AdapterProcessLog[]) => {
+      for (const log of logs) {
+        insertNodeLog(
+          db,
+          toNodeLogRow({
+            sessionId: input.sessionId,
+            nodeId: input.nodeId,
+            nodeExecId: input.nodeExecId,
+            level: log.stream === "stderr" ? "warning" : "info",
+            message: formatProcessLogMessage({ nodeId: input.nodeId, log }),
+            payload: {
+              stream: log.stream,
+              text: log.text,
+              ...(log.label === undefined ? {} : { label: log.label }),
+            },
+            at: input.at,
+          }),
+        );
+      }
+    });
+    insertLogs(input.processLogs);
   });
 }
 

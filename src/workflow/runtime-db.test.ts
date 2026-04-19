@@ -5,7 +5,12 @@ import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 import type { NodeAdapter } from "./adapter";
 import { runWorkflow } from "./engine";
-import { deleteRuntimeSession, resolveRuntimeDbPath } from "./runtime-db";
+import {
+  deleteRuntimeSession,
+  listRuntimeNodeLogs,
+  resolveRuntimeDbPath,
+  saveProcessLogsToRuntimeDb,
+} from "./runtime-db";
 
 const tempDirs: string[] = [];
 
@@ -289,10 +294,7 @@ describe("runtime-db", () => {
       },
     );
 
-    const options = makeRuntimeDbOptions(
-      root,
-      "sess-sqlite-output-contract",
-    );
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-output-contract");
 
     const mockScenario = {
       "divedra-manager": {
@@ -412,6 +414,33 @@ describe("runtime-db", () => {
     } finally {
       db.close();
     }
+  });
+
+  test("stores concise process log messages with full text in payload JSON", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-process-logs");
+    const longText = `${"x".repeat(600)}\n`;
+
+    await saveProcessLogsToRuntimeDb(
+      {
+        sessionId: "sess-sqlite-process-logs",
+        nodeId: "step-1",
+        nodeExecId: "exec-000001",
+        processLogs: [{ stream: "stdout", text: longText }],
+        at: "2026-04-20T00:00:00.000Z",
+      },
+      options,
+    );
+
+    const logs = await listRuntimeNodeLogs("sess-sqlite-process-logs", options);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.message).toContain("[truncated 100 chars]");
+    expect(logs[0]?.message).not.toContain("x".repeat(600));
+    const payload = JSON.parse(logs[0]?.payloadJson ?? "{}") as {
+      readonly text?: string;
+    };
+    expect(payload.text).toBe(longText);
   });
 
   test("migrates legacy node_executions tables before persisting output validation metadata", async () => {
@@ -591,7 +620,9 @@ describe("runtime-db", () => {
       expect(
         (
           db
-            .query("SELECT count(*) as count FROM sessions WHERE session_id = ?")
+            .query(
+              "SELECT count(*) as count FROM sessions WHERE session_id = ?",
+            )
             .get("sess-sqlite-delete-session") as { count: number }
         ).count,
       ).toBe(0);
@@ -607,7 +638,9 @@ describe("runtime-db", () => {
       expect(
         (
           db
-            .query("SELECT count(*) as count FROM node_logs WHERE session_id = ?")
+            .query(
+              "SELECT count(*) as count FROM node_logs WHERE session_id = ?",
+            )
             .get("sess-sqlite-delete-session") as { count: number }
         ).count,
       ).toBe(0);

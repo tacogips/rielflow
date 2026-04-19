@@ -7,14 +7,18 @@ import {
   atomicWriteTextFile as writeRawTextFile,
 } from "../shared/fs";
 import {
-  AdapterExecutionError,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
   type AdapterExecutionInput,
   type AdapterExecutionOutput,
+  type AdapterProcessLog,
   type MockNodeScenario,
   type NodeAdapter,
 } from "./adapter";
+import {
+  executeAdapterWithTimeout,
+  executeNativeNodeWithTimeout,
+} from "./adapter-execution";
 import { DispatchingNodeAdapter } from "./adapters/dispatch";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
 import { assembleNodeInput } from "./input-assembly";
@@ -28,7 +32,6 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
-import { executeNativeNode } from "./native-node-executor";
 import { composeExecutionPrompts } from "./prompt-composition";
 import {
   parseManagerControlPayload,
@@ -40,7 +43,10 @@ import {
   isSubworkflowManagerNodeRef,
 } from "./node-role";
 import { err, ok, type Result } from "./result";
-import { saveNodeExecutionToRuntimeDb } from "./runtime-db";
+import {
+  saveNodeExecutionToRuntimeDb,
+  saveProcessLogsToRuntimeDb,
+} from "./runtime-db";
 import { executeConversationRound } from "./conversation";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
@@ -84,7 +90,6 @@ import type {
   LoopRule,
   NodePayload,
   SubWorkflowRef,
-  WorkflowDefaults,
   WorkflowEdge,
   WorkflowJson,
 } from "./types";
@@ -172,15 +177,6 @@ interface OutputArtifact {
   readonly raw: string;
 }
 
-interface AdapterExecutionFailure {
-  readonly code:
-    | "provider_error"
-    | "timeout"
-    | "invalid_output"
-    | "policy_blocked";
-  readonly message: string;
-}
-
 function nextNodeExecId(counter: number): string {
   return `exec-${String(counter).padStart(6, "0")}`;
 }
@@ -216,144 +212,6 @@ function evaluateEdge(
   output: Readonly<Record<string, unknown>>,
 ): boolean {
   return evaluateBranch({ when: edge.when, output });
-}
-
-async function executeAdapterWithTimeout(
-  adapter: NodeAdapter,
-  input: AdapterExecutionInput,
-  timeoutMs: number,
-): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(
-        new AdapterExecutionError("timeout", "adapter execution timed out"),
-      );
-    }, timeoutMs);
-  });
-
-  try {
-    const output = await Promise.race([
-      adapter.execute(input, {
-        timeoutMs,
-        signal: controller.signal,
-      }),
-      timeoutPromise,
-    ]);
-    return ok(output);
-  } catch (error: unknown) {
-    if (error instanceof AdapterExecutionError) {
-      return err({
-        code: error.code,
-        message: error.message,
-      });
-    }
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return err({
-        code: "timeout",
-        message: "adapter execution timed out",
-      });
-    }
-    return err({
-      code: "provider_error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "unknown adapter execution failure",
-    });
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
-}
-
-async function executeNativeNodeWithTimeout(input: {
-  readonly workflowDirectory: string;
-  readonly workflowWorkingDirectory: string;
-  readonly artifactWorkflowRoot: string;
-  readonly workflowId: string;
-  readonly workflowDescription: string;
-  readonly workflowExecutionId: string;
-  readonly nodeId: string;
-  readonly nodeExecId: string;
-  readonly node: NodePayload;
-  readonly workflowDefaults: WorkflowDefaults;
-  readonly runtimeVariables: Readonly<Record<string, unknown>>;
-  readonly mergedVariables: Readonly<Record<string, unknown>>;
-  readonly arguments: Readonly<Record<string, unknown>> | null;
-  readonly artifactDir: string;
-  readonly executionMailbox: ReturnType<typeof buildNodeExecutionMailbox>;
-  readonly env?: Readonly<Record<string, string | undefined>>;
-  readonly timeoutMs: number;
-}): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(
-        new AdapterExecutionError("timeout", "native node execution timed out"),
-      );
-    }, input.timeoutMs);
-  });
-
-  try {
-    const output = await Promise.race([
-      executeNativeNode(
-        {
-          workflowDirectory: input.workflowDirectory,
-          workflowWorkingDirectory: input.workflowWorkingDirectory,
-          artifactWorkflowRoot: input.artifactWorkflowRoot,
-          workflowId: input.workflowId,
-          workflowDescription: input.workflowDescription,
-          workflowExecutionId: input.workflowExecutionId,
-          nodeId: input.nodeId,
-          nodeExecId: input.nodeExecId,
-          node: input.node,
-          workflowDefaults: input.workflowDefaults,
-          runtimeVariables: input.runtimeVariables,
-          mergedVariables: input.mergedVariables,
-          arguments: input.arguments,
-          artifactDir: input.artifactDir,
-          executionMailbox: input.executionMailbox,
-          ...(input.env === undefined ? {} : { env: input.env }),
-        },
-        {
-          timeoutMs: input.timeoutMs,
-          signal: controller.signal,
-        },
-      ),
-      timeoutPromise,
-    ]);
-    return ok(output);
-  } catch (error: unknown) {
-    if (error instanceof AdapterExecutionError) {
-      return err({
-        code: error.code,
-        message: error.message,
-      });
-    }
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return err({
-        code: "timeout",
-        message: "native node execution timed out",
-      });
-    }
-    return err({
-      code: "provider_error",
-      message:
-        error instanceof Error
-          ? error.message
-          : "unknown native node execution failure",
-    });
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
-  }
 }
 
 async function persistTerminalSessionState(
@@ -2791,6 +2649,7 @@ async function runWorkflowInternal(
       let nodeStatus: NodeExecutionRecord["status"] = "succeeded";
       let outputValidationErrors: readonly JsonSchemaValidationError[] = [];
       let outputAttemptCount = 1;
+      let processLogs: readonly AdapterProcessLog[] = [];
 
       if (options.dryRun === true) {
         outputPayload = {
@@ -2963,6 +2822,10 @@ async function runWorkflowInternal(
                   });
 
             if (!execution.ok) {
+              processLogs = [
+                ...processLogs,
+                ...(execution.error.processLogs ?? []),
+              ];
               if (
                 execution.error.code === "invalid_output" &&
                 hasOutputContract &&
@@ -3017,6 +2880,10 @@ async function runWorkflowInternal(
             }
 
             backendSessionProvider = execution.value.provider;
+            processLogs = [
+              ...processLogs,
+              ...(execution.value.processLogs ?? []),
+            ];
             if (execution.value.backendSession?.sessionId !== undefined) {
               backendSession = {
                 mode: "reuse",
@@ -3164,6 +3031,20 @@ async function runWorkflowInternal(
       }
 
       const endedAt = nowIso();
+      try {
+        await saveProcessLogsToRuntimeDb(
+          {
+            sessionId: session.sessionId,
+            nodeId,
+            nodeExecId,
+            processLogs,
+            at: endedAt,
+          },
+          options,
+        );
+      } catch {
+        // runtime DB process logs are best-effort
+      }
       const nextNodeBackendSessions =
         agentNodePayload === null
           ? (session.nodeBackendSessions ?? {})

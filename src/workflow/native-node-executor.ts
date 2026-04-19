@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { AdapterExecutionError, type AdapterExecutionOutput } from "./adapter";
+import {
+  AdapterExecutionError,
+  type AdapterExecutionOutput,
+  type AdapterProcessLog,
+} from "./adapter";
 import type { NodeExecutionMailbox } from "./node-execution-mailbox";
 import { buildPromptTemplateVariables } from "./prompt-template-context";
 import { renderPromptTemplate } from "./render";
@@ -134,6 +138,7 @@ async function runSpawnedProcess(input: {
           new AdapterExecutionError(
             "timeout",
             "native node execution timed out",
+            { processLogs: buildProcessLogAttachments({ stdout, stderr }) },
           ),
         );
       });
@@ -176,11 +181,104 @@ async function runSpawnedProcess(input: {
             signal === null
               ? `native node execution exited with code ${String(code ?? "unknown")}`
               : `native node execution exited via signal ${signal}`,
+            { processLogs: buildProcessLogAttachments({ stdout, stderr }) },
           ),
         );
       });
     });
   });
+}
+
+async function readMailboxOutputPayload(
+  mailboxDir: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const outputPath = path.join(mailboxDir, "outbox", "output.json");
+  let raw: string;
+  try {
+    raw = await readFile(outputPath, "utf8");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `native node did not produce mailbox output at '${outputPath}': ${message}`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "unknown parse error";
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `mailbox output '${outputPath}' must be valid JSON: ${message}`,
+    );
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `mailbox output '${outputPath}' must be a JSON object`,
+    );
+  }
+  return parsed as Readonly<Record<string, unknown>>;
+}
+
+function buildNativeOutput(input: {
+  readonly provider: string;
+  readonly model: string;
+  readonly promptText: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly processLogs?: readonly AdapterProcessLog[];
+}): AdapterExecutionOutput {
+  return {
+    provider: input.provider,
+    model: input.model,
+    promptText: input.promptText,
+    completionPassed: true,
+    when: { always: true },
+    payload: input.payload,
+    ...(input.processLogs === undefined
+      ? {}
+      : { processLogs: input.processLogs }),
+  };
+}
+
+function buildProcessLogAttachments(
+  result: SpawnedProcessResult,
+  label?: string,
+): readonly AdapterProcessLog[] {
+  return [
+    ...(result.stdout.length === 0
+      ? []
+      : [
+          {
+            stream: "stdout",
+            text: result.stdout,
+            ...(label === undefined ? {} : { label }),
+          } as const,
+        ]),
+    ...(result.stderr.length === 0
+      ? []
+      : [
+          {
+            stream: "stderr",
+            text: result.stderr,
+            ...(label === undefined ? {} : { label }),
+          } as const,
+        ]),
+  ];
+}
+
+function labelProcessLogs(
+  logs: readonly AdapterProcessLog[],
+  label: string,
+): readonly AdapterProcessLog[] {
+  return logs.map((log) => ({
+    ...log,
+    label: log.label ?? label,
+  }));
 }
 
 async function writeProcessLogs(input: {
@@ -205,55 +303,67 @@ async function writeProcessLogs(input: {
   ]);
 }
 
-async function readMailboxOutputPayload(
-  mailboxDir: string,
-): Promise<Readonly<Record<string, unknown>>> {
-  const outputPath = path.join(mailboxDir, "outbox", "output.json");
-  let raw: string;
-  try {
-    raw = await readFile(outputPath, "utf8");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown error";
-    throw new AdapterExecutionError(
-      "invalid_output",
-      `native node did not produce mailbox output at '${outputPath}': ${message}`,
-    );
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown parse error";
-    throw new AdapterExecutionError(
-      "invalid_output",
-      `mailbox output '${outputPath}' must be valid JSON: ${message}`,
-    );
-  }
-
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new AdapterExecutionError(
-      "invalid_output",
-      `mailbox output '${outputPath}' must be a JSON object`,
-    );
-  }
-  return parsed as Readonly<Record<string, unknown>>;
+async function writeProcessLogAttachments(input: {
+  readonly artifactDir: string;
+  readonly processLogs: readonly AdapterProcessLog[];
+  readonly prefix?: string;
+}): Promise<void> {
+  await writeProcessLogs({
+    artifactDir: input.artifactDir,
+    stdout: input.processLogs
+      .filter((log) => log.stream === "stdout")
+      .map((log) => log.text)
+      .join(""),
+    stderr: input.processLogs
+      .filter((log) => log.stream === "stderr")
+      .map((log) => log.text)
+      .join(""),
+    ...(input.prefix === undefined ? {} : { prefix: input.prefix }),
+  });
 }
 
-function buildNativeOutput(input: {
-  readonly provider: string;
-  readonly model: string;
-  readonly promptText: string;
-  readonly payload: Readonly<Record<string, unknown>>;
-}): AdapterExecutionOutput {
-  return {
-    provider: input.provider,
-    model: input.model,
-    promptText: input.promptText,
-    completionPassed: true,
-    when: { always: true },
-    payload: input.payload,
-  };
+async function runLoggedSpawnedProcess(input: {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly context: NativeNodeExecutionContext;
+  readonly artifactDir: string;
+  readonly logPrefix?: string;
+}): Promise<SpawnedProcessResult> {
+  try {
+    const result = await runSpawnedProcess({
+      command: input.command,
+      args: input.args,
+      cwd: input.cwd,
+      env: input.env,
+      context: input.context,
+    });
+    await writeProcessLogs({
+      artifactDir: input.artifactDir,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ...(input.logPrefix === undefined ? {} : { prefix: input.logPrefix }),
+    });
+    return result;
+  } catch (error: unknown) {
+    if (
+      error instanceof AdapterExecutionError &&
+      error.processLogs !== undefined
+    ) {
+      await writeProcessLogAttachments({
+        artifactDir: input.artifactDir,
+        processLogs: error.processLogs,
+        ...(input.logPrefix === undefined ? {} : { prefix: input.logPrefix }),
+      });
+      if (input.logPrefix !== undefined) {
+        throw new AdapterExecutionError(error.code, error.message, {
+          processLogs: labelProcessLogs(error.processLogs, input.logPrefix),
+        });
+      }
+    }
+    throw error;
+  }
 }
 
 function isContainerRunnerWithDockerCli(
@@ -269,14 +379,16 @@ function isContainerRunnerWithDockerCli(
 function resolveContainerRunner(input: {
   readonly container: ContainerExecution;
   readonly defaults: WorkflowDefaults["containerRuntime"];
-}): { readonly runnerKind: ContainerRunnerKind; readonly runnerCommand: string } {
+}): {
+  readonly runnerKind: ContainerRunnerKind;
+  readonly runnerCommand: string;
+} {
   const runnerKind =
-    input.container.runnerKind ??
-    input.defaults?.runnerKind ??
-    "podman";
+    input.container.runnerKind ?? input.defaults?.runnerKind ?? "podman";
   return {
     runnerKind,
-    runnerCommand: input.container.runnerPath ?? input.defaults?.runnerPath ?? runnerKind,
+    runnerCommand:
+      input.container.runnerPath ?? input.defaults?.runnerPath ?? runnerKind,
   };
 }
 
@@ -305,7 +417,7 @@ async function buildContainerImage(input: {
   readonly context: NativeNodeExecutionContext;
   readonly imageTag: string;
   readonly env: NodeJS.ProcessEnv;
-}): Promise<void> {
+}): Promise<readonly AdapterProcessLog[]> {
   if (!isContainerRunnerWithDockerCli(input.runnerKind)) {
     throw new AdapterExecutionError(
       "policy_blocked",
@@ -313,7 +425,10 @@ async function buildContainerImage(input: {
     );
   }
 
-  const contextPath = path.join(input.workflowDirectory, input.build.contextPath);
+  const contextPath = path.join(
+    input.workflowDirectory,
+    input.build.contextPath,
+  );
   const buildArgs = ["build", "-t", input.imageTag];
   if (input.build.containerfilePath !== undefined) {
     buildArgs.push(
@@ -326,19 +441,28 @@ async function buildContainerImage(input: {
   }
   buildArgs.push(contextPath);
 
-  const result = await runSpawnedProcess({
+  const result = await runLoggedSpawnedProcess({
     command: input.runnerCommand,
     args: buildArgs,
     cwd: input.workflowDirectory,
     env: input.env,
     context: input.context,
-  });
-  await writeProcessLogs({
     artifactDir: input.artifactDir,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    prefix: "build",
+    logPrefix: "build",
   });
+  return buildProcessLogAttachments(result, "build");
+}
+
+function mergeProcessLogsIntoAdapterError(
+  error: unknown,
+  processLogs: readonly AdapterProcessLog[],
+): unknown {
+  if (error instanceof AdapterExecutionError && processLogs.length > 0) {
+    return new AdapterExecutionError(error.code, error.message, {
+      processLogs: [...processLogs, ...(error.processLogs ?? [])],
+    });
+  }
+  return error;
 }
 
 async function executeCommandNode(
@@ -366,34 +490,38 @@ async function executeCommandNode(
     nodeExecId: input.nodeExecId,
     ...(input.env === undefined ? {} : { ambientEnv: input.env }),
   });
-  const scriptPath = path.join(input.workflowDirectory, commandConfig.scriptPath);
+  const scriptPath = path.join(
+    input.workflowDirectory,
+    commandConfig.scriptPath,
+  );
   const cwd = resolveNodeExecutionWorkingDirectory(
     input.workflowWorkingDirectory,
     input.node.workingDirectory ?? commandConfig.workingDirectory,
   );
-  const command =
-    path.extname(scriptPath) === ".sh" ? "sh" : scriptPath;
+  const command = path.extname(scriptPath) === ".sh" ? "sh" : scriptPath;
   const args = command === "sh" ? [scriptPath, ...argv] : [...argv];
 
-  const result = await runSpawnedProcess({
+  const result = await runLoggedSpawnedProcess({
     command,
     args,
     cwd,
     env: childEnv,
     context,
-  });
-  await writeProcessLogs({
     artifactDir: input.artifactDir,
-    stdout: result.stdout,
-    stderr: result.stderr,
   });
+  const processLogs = buildProcessLogAttachments(result);
 
-  return buildNativeOutput({
-    provider: "native-command",
-    model: `command:${path.basename(commandConfig.scriptPath)}`,
-    promptText: input.executionMailbox.meta.objective.instruction,
-    payload: await readMailboxOutputPayload(mailboxDir),
-  });
+  try {
+    return buildNativeOutput({
+      provider: "native-command",
+      model: `command:${path.basename(commandConfig.scriptPath)}`,
+      promptText: input.executionMailbox.meta.objective.instruction,
+      payload: await readMailboxOutputPayload(mailboxDir),
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
 }
 
 async function executeContainerNode(
@@ -410,7 +538,10 @@ async function executeContainerNode(
 
   const mailboxDir = path.join(input.artifactDir, "mailbox");
   const variables = resolveTemplateVariables(input);
-  const renderedArgs = renderTemplateEntries(containerConfig.argsTemplate, variables);
+  const renderedArgs = renderTemplateEntries(
+    containerConfig.argsTemplate,
+    variables,
+  );
   const renderedEnv = renderTemplateMap(containerConfig.envTemplate, variables);
   const { runnerKind, runnerCommand } = resolveContainerRunner({
     container: containerConfig,
@@ -462,7 +593,10 @@ async function executeContainerNode(
     runArgs.push("--cpus", String(containerConfig.resources.cpuMax));
   }
   if (containerConfig.resources?.memoryMaxMb !== undefined) {
-    runArgs.push("--memory", `${String(containerConfig.resources.memoryMaxMb)}m`);
+    runArgs.push(
+      "--memory",
+      `${String(containerConfig.resources.memoryMaxMb)}m`,
+    );
   }
   if (containerConfig.resources?.pidsMax !== undefined) {
     runArgs.push("--pids-limit", String(containerConfig.resources.pidsMax));
@@ -475,6 +609,7 @@ async function executeContainerNode(
   }
 
   let image = containerConfig.image;
+  let buildProcessLogs: readonly AdapterProcessLog[] = [];
   if (image === undefined) {
     const build = containerConfig.build;
     if (build === undefined) {
@@ -489,7 +624,7 @@ async function executeContainerNode(
       nodeId: input.nodeId,
       nodeExecId: input.nodeExecId,
     });
-    await buildContainerImage({
+    buildProcessLogs = await buildContainerImage({
       workflowDirectory: input.workflowDirectory,
       artifactDir: input.artifactDir,
       runnerKind,
@@ -504,40 +639,56 @@ async function executeContainerNode(
     });
   }
 
-  if (containerConfig.entrypoint !== undefined && containerConfig.entrypoint.length > 0) {
+  if (
+    containerConfig.entrypoint !== undefined &&
+    containerConfig.entrypoint.length > 0
+  ) {
     runArgs.push("--entrypoint", containerConfig.entrypoint[0] ?? "");
   }
   runArgs.push(image);
-  if (containerConfig.entrypoint !== undefined && containerConfig.entrypoint.length > 1) {
+  if (
+    containerConfig.entrypoint !== undefined &&
+    containerConfig.entrypoint.length > 1
+  ) {
     runArgs.push(...containerConfig.entrypoint.slice(1));
   }
   runArgs.push(...renderedArgs);
 
-  const result = await runSpawnedProcess({
-    command: runnerCommand,
-    args: runArgs,
-    cwd: resolveNodeExecutionWorkingDirectory(
-      input.workflowWorkingDirectory,
-      input.node.workingDirectory,
-    ),
-    env: {
-      ...process.env,
-      ...(input.env === undefined ? {} : input.env),
-    },
-    context,
-  });
-  await writeProcessLogs({
-    artifactDir: input.artifactDir,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
+  let result: SpawnedProcessResult;
+  try {
+    result = await runLoggedSpawnedProcess({
+      command: runnerCommand,
+      args: runArgs,
+      cwd: resolveNodeExecutionWorkingDirectory(
+        input.workflowWorkingDirectory,
+        input.node.workingDirectory,
+      ),
+      env: {
+        ...process.env,
+        ...(input.env === undefined ? {} : input.env),
+      },
+      context,
+      artifactDir: input.artifactDir,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, buildProcessLogs);
+  }
+  const processLogs = [
+    ...buildProcessLogs,
+    ...buildProcessLogAttachments(result),
+  ];
 
-  return buildNativeOutput({
-    provider: `native-container:${runnerKind}`,
-    model: image,
-    promptText: input.executionMailbox.meta.objective.instruction,
-    payload: await readMailboxOutputPayload(mailboxDir),
-  });
+  try {
+    return buildNativeOutput({
+      provider: `native-container:${runnerKind}`,
+      model: image,
+      promptText: input.executionMailbox.meta.objective.instruction,
+      payload: await readMailboxOutputPayload(mailboxDir),
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
 }
 
 export async function executeNativeNode(

@@ -11,6 +11,7 @@ import {
 import type { NodeAdapter } from "./adapter";
 import { runWorkflow } from "./engine";
 import { createManagerSessionStore } from "./manager-session-store";
+import { listRuntimeNodeLogs } from "./runtime-db";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 
 const tempDirs: string[] = [];
@@ -1796,16 +1797,17 @@ describe("runWorkflow", () => {
     }
 
     expect(result.value.exitCode).toBe(0);
-    expect(result.value.session.nodeExecutions.map((entry) => entry.nodeId)).toEqual([
-      "writer",
-      "review-result",
-    ]);
+    expect(
+      result.value.session.nodeExecutions.map((entry) => entry.nodeId),
+    ).toEqual(["writer", "review-result"]);
     const workflowCallCommunication = result.value.session.communications.find(
       (entry) => entry.transitionWhen === "workflow-call:call-review",
     );
     expect(workflowCallCommunication).toBeDefined();
     expect(workflowCallCommunication?.toNodeId).toBe("review-result");
-    expect(workflowCallCommunication?.payloadRef.workflowId).toBe("review-flow");
+    expect(workflowCallCommunication?.payloadRef.workflowId).toBe(
+      "review-flow",
+    );
   });
 
   test("fails early when workflow-call targets are missing", async () => {
@@ -1883,11 +1885,9 @@ describe("runWorkflow", () => {
     }
 
     expect(result.value.exitCode).toBe(0);
-    expect(result.value.session.nodeExecutions.map((entry) => entry.nodeId)).toEqual([
-      "divedra-manager",
-      "draft-write",
-      "apply-review",
-    ]);
+    expect(
+      result.value.session.nodeExecutions.map((entry) => entry.nodeId),
+    ).toEqual(["divedra-manager", "draft-write", "apply-review"]);
     const workflowCallCommunication = result.value.session.communications.find(
       (entry) => entry.transitionWhen === "workflow-call:call-review",
     );
@@ -3336,7 +3336,9 @@ describe("runWorkflow", () => {
     expect(managerInput.promptText).toContain(
       "Explicit `workflowCalls` run automatically from authored caller nodes",
     );
-    expect(managerInput.promptText).not.toContain('"type":"start-sub-workflow"');
+    expect(managerInput.promptText).not.toContain(
+      '"type":"start-sub-workflow"',
+    );
     expect(managerInput.promptText).not.toContain(
       '"type":"deliver-to-child-input"',
     );
@@ -5724,6 +5726,157 @@ describe("runWorkflow", () => {
     expect(outputJson.provider).toBe("scenario-mock");
     expect(outputJson.payload.finalResult).toBe(45);
     expect(outputJson.payload.summary).toContain("45");
+  });
+
+  test("persists native command stdout in runtime node logs", async () => {
+    const root = await makeTempDir();
+    const workflowName = "command-stdout-log";
+    const workflowDir = path.join(root, workflowName);
+    const scriptsDir = path.join(workflowDir, "scripts");
+    await mkdir(scriptsDir, { recursive: true });
+    await writeJson(path.join(workflowDir, "workflow.json"), {
+      workflowId: workflowName,
+      description: "command stdout log fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "command-worker",
+      nodes: [
+        {
+          id: "command-worker",
+          kind: "task",
+          nodeFile: "node-command-worker.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      branching: { mode: "fan-out" },
+    });
+    await writeJson(path.join(workflowDir, "node-command-worker.json"), {
+      id: "command-worker",
+      nodeType: "command",
+      variables: {},
+      command: {
+        scriptPath: "scripts/write-output.sh",
+      },
+    });
+    await writeFile(
+      path.join(scriptsDir, "write-output.sh"),
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'echo "hello from command-worker stdout"',
+        'echo "hello from command-worker stderr" >&2',
+        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+
+    const result = await runWorkflow(workflowName, options);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const logs = await listRuntimeNodeLogs(
+      result.value.session.sessionId,
+      options,
+    );
+    const stdoutLog = logs.find(
+      (entry) =>
+        entry.nodeId === "command-worker" &&
+        entry.nodeExecId !== null &&
+        entry.message.includes("stdout") &&
+        entry.message.includes("hello from command-worker stdout"),
+    );
+    expect(stdoutLog).toBeDefined();
+    expect(stdoutLog?.level).toBe("info");
+    expect(stdoutLog?.payloadJson).not.toBeNull();
+    const payload = JSON.parse(stdoutLog?.payloadJson ?? "{}") as {
+      stream?: string;
+      text?: string;
+    };
+    expect(payload.stream).toBe("stdout");
+    expect(payload.text).toContain("hello from command-worker stdout");
+    const stderrLog = logs.find(
+      (entry) =>
+        entry.nodeId === "command-worker" &&
+        entry.nodeExecId !== null &&
+        entry.message.includes("stderr") &&
+        entry.message.includes("hello from command-worker stderr"),
+    );
+    expect(stderrLog?.level).toBe("warning");
+  });
+
+  test("persists native command stdout captured before timeout", async () => {
+    const root = await makeTempDir();
+    const workflowName = "command-timeout-log";
+    const workflowDir = path.join(root, workflowName);
+    const scriptsDir = path.join(workflowDir, "scripts");
+    await mkdir(scriptsDir, { recursive: true });
+    await writeJson(path.join(workflowDir, "workflow.json"), {
+      workflowId: workflowName,
+      description: "command timeout log fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 50 },
+      entryNodeId: "command-worker",
+      nodes: [
+        {
+          id: "command-worker",
+          kind: "task",
+          nodeFile: "node-command-worker.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      branching: { mode: "fan-out" },
+    });
+    await writeJson(path.join(workflowDir, "node-command-worker.json"), {
+      id: "command-worker",
+      nodeType: "command",
+      variables: {},
+      command: {
+        scriptPath: "scripts/timeout.sh",
+      },
+    });
+    await writeFile(
+      path.join(scriptsDir, "timeout.sh"),
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'echo "stdout before timeout"',
+        "sleep 1",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+    const sessionId = "sess-command-timeout-log";
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      sessionId,
+    };
+
+    const result = await runWorkflow(workflowName, options);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    const logs = await listRuntimeNodeLogs(sessionId, options);
+    expect(
+      logs.some(
+        (entry) =>
+          entry.nodeId === "command-worker" &&
+          entry.message.includes("stdout") &&
+          entry.message.includes("stdout before timeout"),
+      ),
+    ).toBe(true);
   });
 
   test("can rerun from a specific node based on a prior session", async () => {
