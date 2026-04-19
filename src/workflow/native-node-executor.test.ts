@@ -413,6 +413,80 @@ describe("executeNativeNode", () => {
     } satisfies Partial<AdapterExecutionError>);
   });
 
+  test("forwards only explicit workflow env into container processes", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    const runnerPath = path.join(workflowDirectory, "fake-runner.sh");
+    const capturedArgsPath = path.join(workflowDirectory, "runner-args.txt");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    await writeFile(
+      runnerPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf "%s\\n" "$@" > "$CAPTURED_ARGS_PATH"',
+        'mkdir -p "$DIVEDRA_TEST_MAILBOX_HOST/outbox"',
+        `printf '{"summary":"done"}\n' > "$DIVEDRA_TEST_MAILBOX_HOST/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "container",
+          variables: {
+            explicitValue: "mapped",
+          },
+          container: {
+            runnerKind: "docker",
+            runnerPath,
+            image: "example-image",
+            envTemplate: {
+              EXPLICIT_ENV: "{{explicitValue}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir,
+        executionMailbox: makeExecutionMailbox(),
+        env: {
+          CAPTURED_ARGS_PATH: capturedArgsPath,
+          DIVEDRA_TEST_MAILBOX_HOST: path.join(artifactDir, "mailbox"),
+          SHOULD_NOT_ENTER_CONTAINER: "host-secret",
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.payload).toEqual({ summary: "done" });
+    const capturedArgs = await readFile(capturedArgsPath, "utf8");
+    expect(capturedArgs).toContain("EXPLICIT_ENV=mapped");
+    expect(capturedArgs).toContain("DIVEDRA_MAILBOX_DIR=/mailbox");
+    expect(capturedArgs).not.toContain("SHOULD_NOT_ENTER_CONTAINER");
+    expect(capturedArgs).not.toContain("host-secret");
+  });
+
   test("resolves node-level relative working directory from the workflow working directory", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");

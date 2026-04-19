@@ -9,8 +9,10 @@ import {
   deleteRuntimeSession,
   listRuntimeNodeLogs,
   resolveRuntimeDbPath,
+  saveCommunicationEventToRuntimeDb,
   saveProcessLogsToRuntimeDb,
 } from "./runtime-db";
+import type { CommunicationRecord } from "./session";
 
 const tempDirs: string[] = [];
 
@@ -441,6 +443,107 @@ describe("runtime-db", () => {
       readonly text?: string;
     };
     expect(payload.text).toBe(longText);
+  });
+
+  test("logs communication event status without implying failed delivery succeeded", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-communication-log");
+    const communication = {
+      workflowId: "wf-communication-log",
+      workflowExecutionId: "sess-sqlite-communication-log",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-sub-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-sqlite-communication-log",
+        workflowId: "wf-communication-log",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivery_failed",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      failureReason: "inbox write failed",
+      artifactDir: path.join(
+        root,
+        "artifacts",
+        "communications",
+        "comm-000001",
+      ),
+    } satisfies CommunicationRecord;
+
+    await saveCommunicationEventToRuntimeDb(communication, options);
+
+    const logs = await listRuntimeNodeLogs(
+      "sess-sqlite-communication-log",
+      options,
+    );
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.level).toBe("warning");
+    expect(logs[0]?.message).toContain("status delivery_failed");
+    expect(logs[0]?.message).not.toContain("delivered communication");
+    const payload = JSON.parse(logs[0]?.payloadJson ?? "{}") as {
+      readonly status?: string;
+    };
+    expect(payload.status).toBe("delivery_failed");
+  });
+
+  test("logs delivered communication events with explicit delivered status", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(
+      root,
+      "sess-sqlite-delivered-communication-log",
+    );
+    const communication = {
+      workflowId: "wf-delivered-communication-log",
+      workflowExecutionId: "sess-sqlite-delivered-communication-log",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-sub-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-sqlite-delivered-communication-log",
+        workflowId: "wf-delivered-communication-log",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(
+        root,
+        "artifacts",
+        "communications",
+        "comm-000001",
+      ),
+    } satisfies CommunicationRecord;
+
+    await saveCommunicationEventToRuntimeDb(communication, options);
+
+    const logs = await listRuntimeNodeLogs(
+      "sess-sqlite-delivered-communication-log",
+      options,
+    );
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.level).toBe("info");
+    expect(logs[0]?.message).toContain("communication comm-000001");
+    expect(logs[0]?.message).toContain("status delivered");
   });
 
   test("migrates legacy node_executions tables before persisting output validation metadata", async () => {

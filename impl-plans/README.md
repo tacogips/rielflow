@@ -32,6 +32,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `container-runtime-env-isolation`                  | 2026-04-20 | `design-container-runtime-contract`                                                                 |
 | `root-data-dir-project-root-scoping`               | 2026-03-26 | `command`, `architecture`                                                                           |
 | `workflow-execution-working-directory`             | 2026-04-12 | `design-workflow-working-directory`, `command`, `architecture`                                      |
 | `hook-command-review-follow-up`                    | 2026-04-09 | `design-hook-command`                                                                               |
@@ -194,6 +195,7 @@ impl-plans/
 | 84    | COMPLETED   | Phase 83   |
 | 85    | COMPLETED   | Phase 84   |
 | 86    | COMPLETED   | Phase 85   |
+| 89    | COMPLETED   | Phase 88   |
 
 ### Phase to Plans Mapping
 
@@ -275,6 +277,7 @@ PHASE_TO_PLANS = {
   70: ["impl-plans/manager-kind-simplification.md"],
   71: ["impl-plans/workflow-role-unification.md", "impl-plans/tui-workflow-browser-and-json-input.md"],
   72: ["impl-plans/completed/tui-opentui-solid-migration.md", "impl-plans/completed/tui-solid-runtime-fallback-hardening.md", "impl-plans/completed/remove-web-ui.md", "impl-plans/completed/root-data-dir-project-root-scoping.md"],
-  82: ["impl-plans/workflow-role-unification-structural-cleanup.md"]
+  82: ["impl-plans/workflow-role-unification-structural-cleanup.md"],
+  89: ["impl-plans/container-runtime-env-isolation.md"]
 }
 ```

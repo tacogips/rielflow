@@ -420,7 +420,8 @@ function formatCommunicationEventMessage(
   return [
     `transition ${communication.fromNodeId} -> ${communication.toNodeId}`,
     `when ${communication.transitionWhen}`,
-    `delivered communication ${communication.communicationId}`,
+    `communication ${communication.communicationId}`,
+    `status ${communication.status}`,
     `as ${communication.deliveryKind}`,
   ].join(" ");
 }
@@ -436,8 +437,7 @@ export async function saveCommunicationEventToRuntimeDb(
         sessionId: communication.workflowExecutionId,
         nodeId: communication.fromNodeId,
         nodeExecId: communication.sourceNodeExecId,
-        level:
-          communication.status === "delivery_failed" ? "warning" : "info",
+        level: communication.status === "delivery_failed" ? "warning" : "info",
         message: formatCommunicationEventMessage(communication),
         payload: {
           eventType: "communication",

@@ -83,25 +83,67 @@ function renderTemplateMap(
   );
 }
 
-function buildChildEnv(input: {
+interface DivedraExecutionEnvInput {
   readonly mailboxDir: string;
-  readonly renderedEnv: Readonly<Record<string, string>>;
-  readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
   readonly nodeExecId: string;
-}): NodeJS.ProcessEnv {
+}
+
+function buildDivedraExecutionEnv(
+  input: DivedraExecutionEnvInput,
+): Readonly<Record<string, string>> {
   return {
-    ...process.env,
-    ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
-    ...input.renderedEnv,
     DIVEDRA_MAILBOX_DIR: input.mailboxDir,
     DIVEDRA_WORKFLOW_ID: input.workflowId,
     DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
     DIVEDRA_NODE_ID: input.nodeId,
     DIVEDRA_NODE_EXEC_ID: input.nodeExecId,
   };
+}
+
+function buildCommandEnv(
+  input: DivedraExecutionEnvInput & {
+    readonly renderedEnv: Readonly<Record<string, string>>;
+    readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
+  },
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
+    ...input.renderedEnv,
+    ...buildDivedraExecutionEnv(input),
+  };
+}
+
+function buildRunnerEnv(input: {
+  readonly ambientEnv?: Readonly<Record<string, string | undefined>>;
+}): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...(input.ambientEnv === undefined ? {} : input.ambientEnv),
+  };
+}
+
+function buildContainerEnv(
+  input: DivedraExecutionEnvInput & {
+    readonly renderedEnv: Readonly<Record<string, string>>;
+  },
+): Readonly<Record<string, string>> {
+  return {
+    ...input.renderedEnv,
+    ...buildDivedraExecutionEnv(input),
+  };
+}
+
+function appendContainerEnvArgs(
+  runArgs: string[],
+  env: Readonly<Record<string, string>>,
+): void {
+  for (const [key, value] of Object.entries(env)) {
+    runArgs.push("-e", `${key}=${value}`);
+  }
 }
 
 async function runSpawnedProcess(input: {
@@ -481,7 +523,7 @@ async function executeCommandNode(
   const variables = resolveTemplateVariables(input);
   const argv = renderTemplateEntries(commandConfig.argvTemplate, variables);
   const renderedEnv = renderTemplateMap(commandConfig.envTemplate, variables);
-  const childEnv = buildChildEnv({
+  const childEnv = buildCommandEnv({
     mailboxDir,
     renderedEnv,
     workflowId: input.workflowId,
@@ -548,14 +590,13 @@ async function executeContainerNode(
     defaults: input.workflowDefaults.containerRuntime,
   });
 
-  const childEnv = buildChildEnv({
+  const containerEnv = buildContainerEnv({
     mailboxDir: "/mailbox",
     renderedEnv,
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
     nodeExecId: input.nodeExecId,
-    ...(input.env === undefined ? {} : { ambientEnv: input.env }),
   });
 
   const runArgs = ["run", "--rm"];
@@ -601,12 +642,7 @@ async function executeContainerNode(
   if (containerConfig.resources?.pidsMax !== undefined) {
     runArgs.push("--pids-limit", String(containerConfig.resources.pidsMax));
   }
-  for (const [key, value] of Object.entries(childEnv)) {
-    if (value === undefined) {
-      continue;
-    }
-    runArgs.push("-e", `${key}=${value}`);
-  }
+  appendContainerEnvArgs(runArgs, containerEnv);
 
   let image = containerConfig.image;
   let buildProcessLogs: readonly AdapterProcessLog[] = [];
@@ -632,10 +668,9 @@ async function executeContainerNode(
       build,
       context,
       imageTag: image,
-      env: {
-        ...process.env,
-        ...(input.env === undefined ? {} : input.env),
-      },
+      env: buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
     });
   }
 
@@ -663,10 +698,9 @@ async function executeContainerNode(
         input.workflowWorkingDirectory,
         input.node.workingDirectory,
       ),
-      env: {
-        ...process.env,
-        ...(input.env === undefined ? {} : input.env),
-      },
+      env: buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
       context,
       artifactDir: input.artifactDir,
     });

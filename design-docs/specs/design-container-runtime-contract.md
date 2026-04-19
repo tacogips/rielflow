@@ -79,7 +79,7 @@ or:
       "memoryMaxMb": 512
     },
     "envTemplate": {
-      "TASK_ROLE": "{{variables.role}}"
+      "TASK_ROLE": "{{role}}"
     }
   }
 }
@@ -129,6 +129,14 @@ or:
 - `durability` is distinct from `sessionPolicy`; it is workload-managed
   filesystem persistence, not runtime-managed conversational session reuse
 - `stdout` and `stderr` are captured as logs only
+- container process environment is explicit:
+  - the container receives rendered `container.envTemplate` values
+  - the runtime injects `DIVEDRA_MAILBOX_DIR`, `DIVEDRA_WORKFLOW_ID`,
+    `DIVEDRA_WORKFLOW_EXECUTION_ID`, `DIVEDRA_NODE_ID`, and
+    `DIVEDRA_NODE_EXEC_ID`
+  - ambient host environment variables are available to the runner process
+    itself, but are not forwarded into the container unless the workflow
+    author explicitly maps them through `envTemplate`
 - `workspace.mode = "ephemeral"` may expose a writable scratch mount, typically
   at `/workspace`
 - `networkPolicy` may be `disabled` or `egress-allowed`
