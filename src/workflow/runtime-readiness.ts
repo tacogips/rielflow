@@ -4,6 +4,12 @@ import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
 import { loadWorkflowByIdFromDisk } from "./load";
 import {
+  MAIL_GATEWAY_ADDON_NAME,
+  MAIL_GATEWAY_READ_ADDON_NAME,
+  X_GATEWAY_ADDON_NAME,
+  X_GATEWAY_READ_ADDON_NAME,
+} from "./node-addons";
+import {
   asAgentNodePayload,
   DEFAULT_CONTAINER_RUNNER_KIND,
   type ContainerRunnerKind,
@@ -24,6 +30,7 @@ export interface WorkflowRuntimeRequirement {
   readonly kind:
     | "agent-backend"
     | "container-runner"
+    | "environment-variable"
     | "node-executor"
     | "workflow-feature";
   readonly label: string;
@@ -52,6 +59,7 @@ interface AgentBackendRequirementCandidate {
 interface ContainerRunnerRequirementCandidate {
   readonly runnerKind: ContainerRunnerKind;
   readonly runnerPath?: string;
+  readonly dockerCliRequired?: boolean;
   readonly sourceNodeIds: readonly string[];
 }
 
@@ -59,6 +67,12 @@ interface WorkflowCallRequirementCandidate {
   readonly rootWorkflowId: string;
   readonly callIds: readonly string[];
   readonly targetWorkflowIds: readonly string[];
+  readonly sourceNodeIds: readonly string[];
+}
+
+interface AddonEnvRequirementCandidate {
+  readonly envName: string;
+  readonly addonEnvNames: readonly string[];
   readonly sourceNodeIds: readonly string[];
 }
 
@@ -355,14 +369,47 @@ function probeEnvConfiguredBackend(input: {
   };
 }
 
+function probeRequiredAddonEnv(
+  candidate: AddonEnvRequirementCandidate,
+  env: Readonly<Record<string, string | undefined>> | undefined,
+): WorkflowRuntimeRequirement {
+  const value = resolveConfiguredEnvValue(undefined, candidate.envName, env);
+  const addonEnvSummary = candidate.addonEnvNames.join(", ");
+  return {
+    id: `environment-variable:addon:${candidate.envName}`,
+    kind: "environment-variable",
+    label: `${candidate.envName} add-on environment source`,
+    status: value === undefined ? "unavailable" : "available",
+    detail:
+      value === undefined
+        ? `required add-on environment source ${candidate.envName} is not set; addonEnv=${addonEnvSummary}`
+        : `required add-on environment source ${candidate.envName} is configured; addonEnv=${addonEnvSummary}`,
+    sourceNodeIds: candidate.sourceNodeIds,
+  };
+}
+
 async function probeContainerRunner(
   candidate: ContainerRunnerRequirementCandidate,
   options: Pick<RequirementProbeOptions, "cwd" | "env">,
 ): Promise<WorkflowRuntimeRequirement> {
+  if (
+    candidate.dockerCliRequired === true &&
+    !isDockerCliContainerRunner(candidate.runnerKind)
+  ) {
+    return {
+      id: buildContainerRunnerRequirementId(candidate),
+      kind: "container-runner",
+      label: `${candidate.runnerKind} container runner`,
+      status: "unsupported",
+      detail: `runner kind '${candidate.runnerKind}' is not supported for Docker-compatible add-on execution`,
+      sourceNodeIds: candidate.sourceNodeIds,
+    };
+  }
+
   const command = candidate.runnerPath ?? candidate.runnerKind;
   const versionResult = await runCommand(command, ["--version"], options);
   return {
-    id: `container-runner:${candidate.runnerKind}:${candidate.runnerPath ?? "default"}`,
+    id: buildContainerRunnerRequirementId(candidate),
     kind: "container-runner",
     label: `${candidate.runnerKind} container runner`,
     status: versionResult.ok ? "available" : "unavailable",
@@ -373,12 +420,67 @@ async function probeContainerRunner(
   };
 }
 
+function isDockerCliContainerRunner(
+  runnerKind: ContainerRunnerKind,
+): runnerKind is "podman" | "docker" | "nerdctl" {
+  return (
+    runnerKind === "podman" ||
+    runnerKind === "docker" ||
+    runnerKind === "nerdctl"
+  );
+}
+
+function buildContainerRunnerRequirementId(
+  candidate: ContainerRunnerRequirementCandidate,
+): string {
+  return [
+    "container-runner",
+    candidate.runnerKind,
+    candidate.runnerPath ?? "default",
+    ...(candidate.dockerCliRequired === true ? ["docker-cli"] : []),
+  ].join(":");
+}
+
+function addContainerRunnerCandidate(
+  candidates: Map<
+    string,
+    {
+      runnerKind: ContainerRunnerKind;
+      runnerPath?: string;
+      dockerCliRequired?: boolean;
+      nodeIds: Set<string>;
+    }
+  >,
+  input: {
+    readonly nodeId: string;
+    readonly runnerKind: ContainerRunnerKind;
+    readonly runnerPath?: string;
+    readonly dockerCliRequired?: boolean;
+  },
+): void {
+  const key = buildContainerRunnerRequirementId({
+    runnerKind: input.runnerKind,
+    ...(input.runnerPath === undefined ? {} : { runnerPath: input.runnerPath }),
+    ...(input.dockerCliRequired === true ? { dockerCliRequired: true } : {}),
+    sourceNodeIds: [],
+  });
+  const existing = candidates.get(key) ?? {
+    runnerKind: input.runnerKind,
+    ...(input.runnerPath === undefined ? {} : { runnerPath: input.runnerPath }),
+    ...(input.dockerCliRequired === true ? { dockerCliRequired: true } : {}),
+    nodeIds: new Set<string>(),
+  };
+  existing.nodeIds.add(input.nodeId);
+  candidates.set(key, existing);
+}
+
 function collectRequirements(
   bundle: NormalizedWorkflowBundle,
   onlyNodeIds: ReadonlySet<string> | undefined,
 ): {
   readonly agentBackends: readonly AgentBackendRequirementCandidate[];
   readonly containerRunners: readonly ContainerRunnerRequirementCandidate[];
+  readonly addonEnvSources: readonly AddonEnvRequirementCandidate[];
   readonly workflowCall?: WorkflowCallRequirementCandidate;
   readonly commandNodeIds: readonly string[];
   readonly containerNodeIds: readonly string[];
@@ -392,6 +494,14 @@ function collectRequirements(
     {
       runnerKind: ContainerRunnerKind;
       runnerPath?: string;
+      dockerCliRequired?: boolean;
+      nodeIds: Set<string>;
+    }
+  >();
+  const addonEnvSources = new Map<
+    string,
+    {
+      addonEnvNames: Set<string>;
       nodeIds: Set<string>;
     }
   >();
@@ -432,14 +542,46 @@ function collectRequirements(
         defaults?.runnerKind ??
         DEFAULT_CONTAINER_RUNNER_KIND;
       const runnerPath = node.container?.runnerPath ?? defaults?.runnerPath;
-      const key = `${runnerKind}:${runnerPath ?? ""}`;
-      const existing = containerRunners.get(key) ?? {
+      addContainerRunnerCandidate(containerRunners, {
+        nodeId,
         runnerKind,
         ...(runnerPath === undefined ? {} : { runnerPath }),
-        nodeIds: new Set<string>(),
-      };
-      existing.nodeIds.add(nodeId);
-      containerRunners.set(key, existing);
+      });
+      continue;
+    }
+
+    if (
+      node.addon?.name === X_GATEWAY_READ_ADDON_NAME ||
+      node.addon?.name === X_GATEWAY_ADDON_NAME ||
+      node.addon?.name === MAIL_GATEWAY_READ_ADDON_NAME ||
+      node.addon?.name === MAIL_GATEWAY_ADDON_NAME
+    ) {
+      const runnerKind =
+        node.addon.config.runnerKind ??
+        defaults?.runnerKind ??
+        DEFAULT_CONTAINER_RUNNER_KIND;
+      const runnerPath = node.addon.config.runnerPath ?? defaults?.runnerPath;
+      addContainerRunnerCandidate(containerRunners, {
+        nodeId,
+        runnerKind,
+        ...(runnerPath === undefined ? {} : { runnerPath }),
+        dockerCliRequired: true,
+      });
+
+      for (const [addonEnvName, binding] of Object.entries(
+        node.addon.env ?? {},
+      )) {
+        if (binding.required === false) {
+          continue;
+        }
+        const existing = addonEnvSources.get(binding.fromEnv) ?? {
+          addonEnvNames: new Set<string>(),
+          nodeIds: new Set<string>(),
+        };
+        existing.addonEnvNames.add(addonEnvName);
+        existing.nodeIds.add(nodeId);
+        addonEnvSources.set(binding.fromEnv, existing);
+      }
     }
   }
 
@@ -454,6 +596,12 @@ function collectRequirements(
       ...(entry.runnerPath === undefined
         ? {}
         : { runnerPath: entry.runnerPath }),
+      ...(entry.dockerCliRequired === true ? { dockerCliRequired: true } : {}),
+      sourceNodeIds: toSortedArray(entry.nodeIds),
+    })),
+    addonEnvSources: [...addonEnvSources.entries()].map(([envName, entry]) => ({
+      envName,
+      addonEnvNames: toSortedArray(entry.addonEnvNames),
       sourceNodeIds: toSortedArray(entry.nodeIds),
     })),
     ...(relevantWorkflowCalls.length === 0
@@ -517,6 +665,10 @@ export async function inspectWorkflowRuntimeReadiness(
 
   for (const candidate of collected.containerRunners) {
     requirements.push(await probeContainerRunner(candidate, options));
+  }
+
+  for (const candidate of collected.addonEnvSources) {
+    requirements.push(probeRequiredAddonEnv(candidate, options.env));
   }
 
   if (collected.workflowCall !== undefined) {

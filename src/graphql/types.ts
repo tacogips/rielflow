@@ -44,7 +44,9 @@ import type {
 } from "../workflow/types";
 import type { CommunicationService } from "../workflow/communication-service";
 
-export interface GraphqlRequestContext extends SessionStoreOptions {
+export interface GraphqlRequestContext
+  extends LoadOptions,
+    SessionStoreOptions {
   readonly authToken?: string;
   readonly managerSessionId?: string;
   readonly readOnly?: boolean;

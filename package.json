@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
   "type": "module",
-  "main": "dist/main.js",
-  "module": "dist/main.js",
-  "types": "dist/main.d.ts",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
+  "types": "dist/lib.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/main.d.ts",
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
+    },
+    "./cli": {
       "import": "./dist/main.js",
       "default": "./dist/main.js"
     }
@@ -16,7 +20,7 @@
   "scripts": {
     "dev": "bun run --watch src/main.ts",
     "build": "bun run build:server && bun run build:web",
-    "build:server": "bun build src/main.ts --outdir dist --target bun",
+    "build:server": "bun build src/main.ts src/lib.ts --outdir dist --target bun && tsc -p tsconfig.build.json --emitDeclarationOnly && rm -rf dist/prompts && cp -R src/workflow/prompts dist/prompts",
     "build:web": "bun scripts/build-web.mjs",
     "typecheck:server": "tsc --noEmit",
     "start": "bun run src/main.ts",

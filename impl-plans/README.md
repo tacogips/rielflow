@@ -31,6 +31,23 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `third-party-addon-async-resolution`               | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-definition-registry`            | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-ergonomics`            | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-unhandled-return`      | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-editor-revision`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-graphql-validation`             | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-package-root-entrypoint`        | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`, `architecture`                                   |
+| `third-party-addon-public-api`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-validation`            | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolution`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `mail-gateway-addons`                              | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-authored-payload-guard`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-worker-role-validation`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-addon`                                  | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-read-env-readiness`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-read-addon`                             | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `agent-worker-addons`                              | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
 | `workflow-role-unification-structural-cleanup`     | 2026-04-20 | `design-unified-workflow-role-model`                                                                |
 | `event-reply-dispatch-persistence`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
 | `event-chat-reply-webhook-example`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
@@ -214,6 +231,20 @@ impl-plans/
 | 99    | COMPLETED   | Phase 98   |
 | 100   | COMPLETED   | Phase 99   |
 | 101   | COMPLETED   | Phase 99   |
+| 102   | COMPLETED   | Phase 101  |
+| 103   | COMPLETED   | Phase 98   |
+| 104   | COMPLETED   | Phase 103  |
+| 105   | COMPLETED   | Phase 103  |
+| 106   | COMPLETED   | Phase 98   |
+| 107   | COMPLETED   | Phase 106  |
+| 108   | COMPLETED   | Phase 105  |
+| 109   | COMPLETED   | Phase 98   |
+| 110   | COMPLETED   | Phase 109  |
+| 111   | COMPLETED   | Phase 110  |
+| 112   | COMPLETED   | Phase 111  |
+| 113   | COMPLETED   | Phase 111  |
+| 114   | COMPLETED   | Phase 111  |
+| 115   | COMPLETED   | Phase 114  |
 
 ### Phase to Plans Mapping
 
@@ -307,6 +338,20 @@ PHASE_TO_PLANS = {
   98: ["impl-plans/node-addon-chat-reply-worker.md"],
   99: ["impl-plans/event-reply-dispatcher.md"],
   100: ["impl-plans/event-chat-reply-webhook-example.md"],
-  101: ["impl-plans/event-reply-dispatch-persistence.md"]
+  101: ["impl-plans/event-reply-dispatch-persistence.md"],
+  102: ["impl-plans/agent-worker-addons.md"],
+  103: ["impl-plans/x-gateway-read-addon.md"],
+  104: ["impl-plans/x-gateway-read-env-readiness.md"],
+  105: ["impl-plans/x-gateway-addon.md"],
+  106: ["impl-plans/node-addon-worker-role-validation.md"],
+  107: ["impl-plans/node-addon-authored-payload-guard.md"],
+  108: ["impl-plans/mail-gateway-addons.md"],
+  109: ["impl-plans/third-party-addon-resolution.md"],
+  110: ["impl-plans/third-party-addon-resolver-validation.md"],
+  111: ["impl-plans/third-party-addon-public-api.md"],
+  112: ["impl-plans/third-party-addon-payload-shape-guard.md"],
+  113: ["impl-plans/third-party-addon-package-root-entrypoint.md"],
+  114: ["impl-plans/third-party-addon-graphql-validation.md"],
+  115: ["impl-plans/third-party-addon-editor-revision.md"]
 }
 ```

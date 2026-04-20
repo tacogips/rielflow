@@ -13,7 +13,7 @@ import {
   resolveEffectiveRoots,
   resolveWorkflowScopedPath,
 } from "./paths";
-import { validateWorkflowBundle } from "./validate";
+import { validateWorkflowBundleAsync } from "./validate";
 import type {
   LoadOptions,
   NormalizedWorkflowBundle,
@@ -231,10 +231,13 @@ export async function loadWorkflowFromDisk(
     nodePayloads[nodeFile] = resolvedNodeRaw.value;
   }
 
-  const validation = validateWorkflowBundle({
-    workflow: workflowRaw.value,
-    nodePayloads,
-  });
+  const validation = await validateWorkflowBundleAsync(
+    {
+      workflow: workflowRaw.value,
+      nodePayloads,
+    },
+    options,
+  );
 
   if (!validation.ok) {
     return err({

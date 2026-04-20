@@ -45,10 +45,48 @@ export interface WorkflowNodeExecutionPolicy {
   readonly decisionBy?: "owning-manager";
 }
 
+export interface WorkflowNodeAddonEnvBinding {
+  readonly fromEnv: string;
+  readonly required?: boolean;
+}
+
 export interface WorkflowNodeAddonRef {
   readonly name: string;
   readonly version?: string;
   readonly config?: Readonly<Record<string, unknown>>;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface NodeAddonResolveInput {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+}
+
+export interface NodeAddonResolveResult {
+  readonly payload?: NodePayload;
+  readonly issues?: readonly ValidationIssue[];
+}
+
+export type NodeAddonPayloadResolver = (
+  input: NodeAddonResolveInput,
+) => NodeAddonResolveResult | undefined;
+
+export type Awaitable<T> = T | Promise<T>;
+
+export type AsyncNodeAddonPayloadResolver = (
+  input: NodeAddonResolveInput,
+) => Awaitable<NodeAddonResolveResult | undefined>;
+
+export type NodeAddonDefinitionResolver = (
+  input: NodeAddonResolveInput,
+) => Awaitable<NodeAddonResolveResult>;
+
+export interface NodeAddonDefinition {
+  readonly name: string;
+  readonly version?: string;
+  readonly resolve: NodeAddonDefinitionResolver;
 }
 
 export interface WorkflowNodeRepeatPolicy {
@@ -310,6 +348,47 @@ export interface ChatReplyWorkerConfig {
   readonly onMissingTarget?: "fail" | "intent-only" | "dry-run";
 }
 
+export interface XGatewayReadAddonConfig {
+  readonly queryTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface XGatewayAddonConfig {
+  readonly documentTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface MailGatewayReadAddonConfig {
+  readonly queryTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface MailGatewayAddonConfig {
+  readonly documentTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface AgentWorkerAddonConfig {
+  readonly model: string;
+  readonly promptTemplate: string;
+  readonly systemPromptTemplate?: string;
+  readonly sessionStartPromptTemplate?: string;
+  readonly sessionPolicy?: NodeSessionPolicy;
+  readonly timeoutMs?: number;
+}
+
 export interface ChatReplyDispatchTarget {
   readonly sourceId: string;
   readonly provider: string;
@@ -350,9 +429,66 @@ export interface ResolvedChatReplyWorkerAddon {
   readonly name: "divedra/chat-reply-worker";
   readonly version: "1";
   readonly config: ChatReplyWorkerConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
 }
 
-export type ResolvedNodeAddon = ResolvedChatReplyWorkerAddon;
+export interface ResolvedXGatewayReadAddon {
+  readonly name: "divedra/x-gateway-read";
+  readonly version: "1";
+  readonly config: XGatewayReadAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedXGatewayAddon {
+  readonly name: "divedra/x-gateway";
+  readonly version: "1";
+  readonly config: XGatewayAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedMailGatewayReadAddon {
+  readonly name: "divedra/mail-gateway-read";
+  readonly version: "1";
+  readonly config: MailGatewayReadAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedMailGatewayAddon {
+  readonly name: "divedra/mail-gateway";
+  readonly version: "1";
+  readonly config: MailGatewayAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedCodexWorkerAddon {
+  readonly name: "divedra/codex-worker";
+  readonly version: "1";
+  readonly config: AgentWorkerAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedClaudeCodeWorkerAddon {
+  readonly name: "divedra/claude-code-worker";
+  readonly version: "1";
+  readonly config: AgentWorkerAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export type ResolvedAgentWorkerAddon =
+  | ResolvedCodexWorkerAddon
+  | ResolvedClaudeCodeWorkerAddon;
+
+export type ResolvedNodeAddon =
+  | ResolvedChatReplyWorkerAddon
+  | ResolvedXGatewayReadAddon
+  | ResolvedXGatewayAddon
+  | ResolvedMailGatewayReadAddon
+  | ResolvedMailGatewayAddon
+  | ResolvedAgentWorkerAddon;
 
 export interface NodePayload {
   readonly id: string;
@@ -433,6 +569,9 @@ export interface LoadOptions {
   readonly rootDataDir?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
+  readonly nodeAddons?: readonly NodeAddonDefinition[];
+  readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
+  readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
 }
 
 export interface EffectiveRoots {

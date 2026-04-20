@@ -10,9 +10,10 @@ import {
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
-import { validateWorkflowBundle } from "./validate";
+import { validateWorkflowBundleAsync } from "./validate";
 import {
   collectPromptTemplateFiles,
+  collectWorkflowRevisionNodeFiles,
   computeWorkflowRevisionFromFiles,
 } from "./revision";
 import type {
@@ -942,10 +943,13 @@ export async function saveWorkflowToDisk(
     return err(validationNodePayloads.error);
   }
 
-  const validation = validateWorkflowBundle({
-    workflow: authoredWorkflow,
-    nodePayloads: validationNodePayloads.value,
-  });
+  const validation = await validateWorkflowBundleAsync(
+    {
+      workflow: authoredWorkflow,
+      nodePayloads: validationNodePayloads.value,
+    },
+    options,
+  );
 
   if (!validation.ok) {
     return err({
@@ -955,9 +959,7 @@ export async function saveWorkflowToDisk(
     });
   }
 
-  const nodeFiles = validation.value.workflow.nodes.flatMap((node) =>
-    node.addon === undefined ? [node.nodeFile] : [],
-  );
+  const nodeFiles = collectWorkflowRevisionNodeFiles(validation.value.workflow);
   const referencedNodePayloads = collectReferencedNodePayloads({
     workflow: validation.value.workflow,
     nodePayloads: normalizedNodePayloads,

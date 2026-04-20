@@ -3,6 +3,7 @@ import {
   inspectWorkflowRuntimeReadiness,
   type WorkflowRuntimeReadiness,
 } from "./runtime-readiness";
+import { collectWorkflowRevisionNodeFiles } from "./revision";
 import type { LoadOptions } from "./types";
 
 export interface WorkflowInspectionSummary {
@@ -89,7 +90,7 @@ export async function buildInspectionSummary(
       workflowCalls: workflow.workflowCalls?.length ?? 0,
       legacySubWorkflows: workflow.subWorkflows.length,
     },
-    nodeFiles: workflow.nodes.map((node) => node.nodeFile),
+    nodeFiles: collectWorkflowRevisionNodeFiles(workflow),
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,
     runtime: await inspectWorkflowRuntimeReadiness(loaded.bundle, options),

@@ -13,7 +13,13 @@ import {
   saveEventReplyDispatchToRuntimeDb,
   saveHookEventToRuntimeDb,
 } from "../workflow/runtime-db";
+import type {
+  NodeAddonDefinition,
+  NodeAddonPayloadResolver,
+  NormalizedWorkflowBundle,
+} from "../workflow/types";
 import { createGraphqlSchema } from "./schema";
+import type { GraphqlRequestContext } from "./types";
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -49,6 +55,65 @@ function makeDefaultTemplateScenario(): MockNodeScenario {
       when: { always: true },
       payload: { stage: "implement" },
     },
+  };
+}
+
+function createThirdPartyAddonResolver(): NodeAddonPayloadResolver {
+  return (input) =>
+    input.addon.name === "acme/echo-worker"
+      ? {
+          issues: [],
+          payload: {
+            id: input.nodeId,
+            executionBackend: "official/openai-sdk",
+            model: "gpt-5-nano",
+            promptTemplate: "Echo {{message}}",
+            variables: input.addon.inputs ?? {},
+          },
+        }
+      : { issues: [] };
+}
+
+function createAsyncThirdPartyAddonDefinition(): NodeAddonDefinition {
+  return {
+    name: "acme/echo-worker",
+    version: "1",
+    resolve: async (input) => ({
+      payload: {
+        id: input.nodeId,
+        executionBackend: "official/openai-sdk",
+        model: "gpt-5-nano",
+        promptTemplate: "Echo {{message}}",
+        variables: input.addon.inputs ?? {},
+      },
+    }),
+  };
+}
+
+function createThirdPartyAddonBundle(): NormalizedWorkflowBundle {
+  return {
+    workflow: {
+      workflowId: "third-party-addon",
+      description: "third-party add-on GraphQL validation fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "addon-worker",
+      nodes: [
+        {
+          id: "addon-worker",
+          role: "worker",
+          addon: {
+            name: "acme/echo-worker",
+            version: "1",
+            inputs: { message: "from addon" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    } as unknown as NormalizedWorkflowBundle["workflow"],
+    nodePayloads: {},
   };
 }
 
@@ -721,6 +786,90 @@ describe("createGraphqlSchema", () => {
     );
     expect(validation.valid).toBe(false);
     expect(validation.issues?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  test("passes third-party add-on resolvers through GraphQL validation", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    const options: GraphqlRequestContext = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      nodeAddonResolvers: [createThirdPartyAddonResolver()],
+    };
+
+    const validation = await schema.mutation.validateWorkflowDefinition(
+      {
+        workflowName: "third-party-addon",
+        bundle: createThirdPartyAddonBundle(),
+      },
+      options,
+    );
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues?.some((issue) => issue.severity === "error") ?? false,
+    ).toBe(false);
+  });
+
+  test("passes async third-party add-on definitions through GraphQL validation", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    const options: GraphqlRequestContext = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      nodeAddons: [createAsyncThirdPartyAddonDefinition()],
+    };
+
+    const validation = await schema.mutation.validateWorkflowDefinition(
+      {
+        workflowName: "third-party-addon",
+        bundle: createThirdPartyAddonBundle(),
+      },
+      options,
+    );
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues?.some((issue) => issue.severity === "error") ?? false,
+    ).toBe(false);
+  });
+
+  test("computes workflow definition revisions for third-party add-on refs", async () => {
+    const root = await makeTempDir();
+    const workflowName = "third-party-addon";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(createThirdPartyAddonBundle().workflow, null, 2)}\n`,
+      "utf8",
+    );
+
+    const schema = createGraphqlSchema();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      nodeAddonResolvers: [createThirdPartyAddonResolver()],
+    };
+
+    const definition = await schema.query.workflowDefinition(
+      { workflowName },
+      options,
+    );
+    expect(definition?.revision).toMatch(/^sha256:/u);
+    expect(definition?.bundle.nodePayloads["addon-worker"]).toMatchObject({
+      executionBackend: "official/openai-sdk",
+      variables: { message: "from addon" },
+    });
+
+    const inspection = await schema.query.workflow({ workflowName }, options);
+    expect(inspection?.nodeFiles).toEqual([]);
   });
 
   test("creates worker-only workflow definitions through the schema mutation", async () => {

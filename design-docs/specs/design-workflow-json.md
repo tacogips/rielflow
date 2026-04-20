@@ -205,10 +205,13 @@ Current `NodeKind` values:
 Validation rules:
 
 - a node reference must provide exactly one of `nodeFile` or `addon`
-- `addon` references are resolved from the built-in node add-on catalog into an
-  effective node payload during load/validation
-- first-iteration add-ons are worker-only and built-in-only; manager-role add-on
-  references are rejected
+- `divedra/*` `addon` references are resolved from the built-in node add-on
+  catalog into an effective node payload during load/validation
+- non-`divedra/` add-on references are resolved only through explicit
+  host-provided resolver functions passed through the library/server load,
+  validation, save, and execution options; workflow loading does not fetch
+  third-party packages or registry metadata
+- current add-ons are worker-only; manager-role add-on references are rejected
 - manager-role nodes must stay on the agent execution path
 - `workflow.managerNodeId`, when present, must resolve to the effective root manager in the normalized runtime bundle
 - structural sub-workflow validation still applies when `subWorkflows[]` are authored
@@ -230,6 +233,9 @@ Object form:
     "config": {
       "textTemplate": "{{inbox.latest.output.payload.text}}",
       "visibility": "public"
+    },
+    "inputs": {
+      "replyPrefix": "Answer"
     }
   }
 }
@@ -242,13 +248,39 @@ Rules:
   explicit object form in authoring tools
 - unknown add-on names or unsupported versions fail validation
 - `addon.config` is validated by the selected add-on descriptor
+- `addon.env`, when present, maps add-on environment variable names to divedra
+  runtime environment variable names for add-ons whose descriptors support
+  explicit environment bindings; no ambient environment variables are forwarded
+  implicitly. Required source variables are reported by runtime readiness before
+  execution, and empty required values are treated as unavailable; optional
+  bindings set `required: false`
+- `addon.inputs`, when present, is copied into the resolved node payload
+  `variables`
+- add-on node references must author `role: "worker"` explicitly; compatibility
+  inference from `kind`, `control`, or `repeat` does not satisfy the add-on
+  worker-only contract
 - save/edit surfaces preserve the authored `addon` reference rather than writing
   generated node payload JSON
 
-Initial built-in add-on:
+Initial built-in add-ons:
 
 - `divedra/chat-reply-worker`: worker node that replies to the chat event target
   in `runtimeVariables.event` through the event reply adapter registry
+- `divedra/codex-worker`: worker node that resolves to an `agent` payload using
+  `executionBackend: "codex-agent"`
+- `divedra/claude-code-worker`: worker node that resolves to an `agent` payload
+  using `executionBackend: "claude-code-agent"`
+- `divedra/x-gateway-read`: worker node that runs the read-only
+  `x-gateway-reader graphql query` surface in a Docker-compatible container
+- `divedra/x-gateway`: worker node that runs the full `x-gateway graphql query`
+  surface for intentional query or mutation documents in a Docker-compatible
+  container
+- `divedra/mail-gateway-read`: worker node that runs the read-only
+  `mail-gateway-reader graphql --query` surface in a Docker-compatible
+  container
+- `divedra/mail-gateway`: worker node that runs the full
+  `mail-gateway graphql --query` surface for intentional query or send-mutation
+  documents in a Docker-compatible container
 
 Detailed design:
 `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.

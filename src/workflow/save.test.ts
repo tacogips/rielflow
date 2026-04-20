@@ -167,6 +167,9 @@ describe("saveWorkflowToDisk", () => {
                   textTemplate: "{{inbox.latest.output.payload.text}}",
                   onMissingTarget: "intent-only",
                 },
+                inputs: {
+                  prefix: "Result",
+                },
               },
             },
           ],
@@ -220,6 +223,8 @@ describe("saveWorkflowToDisk", () => {
     );
     expect(workflowJsonText).toContain('"addon"');
     expect(workflowJsonText).toContain('"divedra/chat-reply-worker"');
+    expect(workflowJsonText).toContain('"inputs"');
+    expect(workflowJsonText).toContain('"prefix": "Result"');
     expect(workflowJsonText).not.toContain(
       '"nodeFile": "nodes/node-reply.json"',
     );

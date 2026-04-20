@@ -17,13 +17,19 @@ import {
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
 } from "./backend";
-import { resolveBuiltinNodeAddonPayload } from "./node-addons";
+import {
+  createAsyncNodeAddonRegistry,
+  createNodeAddonRegistry,
+  resolveNodeAddonPayload,
+  resolveNodeAddonPayloadAsync,
+} from "./node-addons";
 import {
   DEFAULT_CONTAINER_RUNNER_KIND,
   DEFAULT_MAX_LOOP_ITERATIONS,
   DEFAULT_NODE_TIMEOUT_MS,
   NODE_ID_PATTERN,
   type ArgumentBinding,
+  type AsyncNodeAddonPayloadResolver,
   type CommandExecution,
   type ContainerBuild,
   type ContainerExecution,
@@ -32,6 +38,8 @@ import {
   type JsonObject,
   type CompletionRule,
   type NodeControlKind,
+  type NodeAddonDefinition,
+  type NodeAddonPayloadResolver,
   type NodeOutputContract,
   type NodeDurability,
   type LoopRule,
@@ -51,6 +59,7 @@ import {
   type WorkflowEdge,
   type WorkflowJson,
   type WorkflowNodeExecutionPolicy,
+  type WorkflowNodeAddonEnvBinding,
   type WorkflowNodeAddonRef,
   type WorkflowNodeRepeatPolicy,
   type WorkflowNodeRef,
@@ -61,6 +70,12 @@ import {
 interface RawBundle {
   readonly workflow: unknown;
   readonly nodePayloads: Readonly<Record<string, unknown>>;
+}
+
+export interface WorkflowValidationOptions {
+  readonly nodeAddons?: readonly NodeAddonDefinition[];
+  readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
+  readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -909,6 +924,99 @@ function normalizeCompletion(
   return { type: typeValue };
 }
 
+const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isValidEnvVarName(value: string): boolean {
+  return ENV_VAR_NAME_PATTERN.test(value);
+}
+
+function normalizeWorkflowNodeAddonEnvBinding(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeAddonEnvBinding | undefined {
+  if (typeof value === "string") {
+    if (value.length === 0 || !isValidEnvVarName(value)) {
+      issues.push(
+        makeIssue("error", path, "must be a valid environment variable name"),
+      );
+      return undefined;
+    }
+    return { fromEnv: value };
+  }
+
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be a string or object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["fromEnv", "required"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue("error", `${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const fromEnv = value["fromEnv"];
+  if (typeof fromEnv !== "string" || !isValidEnvVarName(fromEnv)) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.fromEnv`,
+        "must be a valid environment variable name",
+      ),
+    );
+    return undefined;
+  }
+
+  const required = value["required"];
+  if (required !== undefined && typeof required !== "boolean") {
+    issues.push(makeIssue("error", `${path}.required`, "must be a boolean"));
+  }
+
+  return {
+    fromEnv,
+    ...(typeof required === "boolean" && !required ? { required } : {}),
+  };
+}
+
+function normalizeWorkflowNodeAddonEnv(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): Readonly<Record<string, WorkflowNodeAddonEnvBinding>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const bindings: Record<string, WorkflowNodeAddonEnvBinding> = {};
+  for (const [targetEnv, bindingValue] of Object.entries(value)) {
+    if (!isValidEnvVarName(targetEnv)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${targetEnv}`,
+          "target must be a valid environment variable name",
+        ),
+      );
+      continue;
+    }
+    const binding = normalizeWorkflowNodeAddonEnvBinding(
+      bindingValue,
+      `${path}.${targetEnv}`,
+      issues,
+    );
+    if (binding !== undefined) {
+      bindings[targetEnv] = binding;
+    }
+  }
+  return bindings;
+}
+
 function normalizeWorkflowNodeAddonRef(
   value: unknown,
   path: string,
@@ -931,7 +1039,7 @@ function normalizeWorkflowNodeAddonRef(
     return undefined;
   }
 
-  const allowedKeys = new Set(["name", "version", "config"]);
+  const allowedKeys = new Set(["name", "version", "config", "env", "inputs"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(makeIssue("error", `${path}.${key}`, "is not supported"));
@@ -955,6 +1063,15 @@ function normalizeWorkflowNodeAddonRef(
   if (configRaw !== undefined && !isRecord(configRaw)) {
     issues.push(makeIssue("error", `${path}.config`, "must be an object"));
   }
+  const env = normalizeWorkflowNodeAddonEnv(
+    value["env"],
+    `${path}.env`,
+    issues,
+  );
+  const inputsRaw = value["inputs"];
+  if (inputsRaw !== undefined && !isRecord(inputsRaw)) {
+    issues.push(makeIssue("error", `${path}.inputs`, "must be an object"));
+  }
 
   if (name === null) {
     return undefined;
@@ -964,6 +1081,8 @@ function normalizeWorkflowNodeAddonRef(
     name,
     ...(version === undefined ? {} : { version }),
     ...(isRecord(configRaw) ? { config: configRaw } : {}),
+    ...(env === undefined ? {} : { env }),
+    ...(isRecord(inputsRaw) ? { inputs: inputsRaw } : {}),
   };
 }
 
@@ -1206,6 +1325,15 @@ function normalizeNodeRef(
         "error",
         `${path}.control`,
         "manager-role nodes cannot declare branch or loop control",
+      ),
+    );
+  }
+  if (addon !== undefined && roleRaw === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "add-on nodes must declare role 'worker'",
       ),
     );
   }
@@ -2419,27 +2547,39 @@ function normalizeNodeTemplateFields(args: {
   };
 }
 
-function normalizeNodePayload(
-  nodeId: string,
-  nodeFile: string,
-  payload: unknown,
-  issues: ValidationIssue[],
-): NodePayload | null {
-  const path = `nodePayloads.${nodeFile}`;
+function normalizeNodePayload(input: {
+  readonly nodeId: string;
+  readonly nodeFile: string;
+  readonly payload: unknown;
+  readonly issues: ValidationIssue[];
+  readonly path?: string;
+}): NodePayload | null {
+  const path = input.path ?? `nodePayloads.${input.nodeFile}`;
+  const payload = input.payload;
+  const issues = input.issues;
   if (!isRecord(payload)) {
     issues.push(makeIssue("error", path, "must be an object"));
     return null;
   }
 
   const id = readStringField(payload, "id", path, issues);
-  if (id !== null && id !== nodeId) {
-    issues.push(makeIssue("error", `${path}.id`, `must equal ${nodeId}`));
+  if (id !== null && id !== input.nodeId) {
+    issues.push(makeIssue("error", `${path}.id`, `must equal ${input.nodeId}`));
   }
 
   let nodeType: NodeType = "agent";
   const nodeTypeRaw = payload["nodeType"];
   if (nodeTypeRaw !== undefined) {
-    if (isNodeType(nodeTypeRaw)) {
+    if (nodeTypeRaw === "addon") {
+      nodeType = "addon";
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.nodeType`,
+          "nodeType 'addon' is runtime-owned; author add-ons with workflow.nodes[].addon",
+        ),
+      );
+    } else if (isNodeType(nodeTypeRaw)) {
       nodeType = nodeTypeRaw;
     } else {
       issues.push(
@@ -2880,6 +3020,7 @@ function normalizeNodePayload(
   if (
     id === null ||
     variables === null ||
+    nodeType === "addon" ||
     (nodeType === "agent" &&
       (model === undefined || promptTemplate === undefined))
   ) {
@@ -4190,8 +4331,101 @@ function runSemanticValidation(
   }
 }
 
+function validateResolvedAddonPayload(input: {
+  readonly authoredAddonName: string;
+  readonly expectedNodeId: string;
+  readonly payload: unknown;
+  readonly path: string;
+  readonly issues: ValidationIssue[];
+}): boolean {
+  const payload = input.payload;
+  let valid = true;
+  if (!isRecord(payload)) {
+    input.issues.push(
+      makeIssue("error", `${input.path}.payload`, "must be an object"),
+    );
+    return false;
+  }
+  if (payload["id"] !== input.expectedNodeId) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.id`,
+        `resolved add-on payload id must be '${input.expectedNodeId}'`,
+      ),
+    );
+    valid = false;
+  }
+  if (
+    !input.authoredAddonName.startsWith("divedra/") &&
+    payload["nodeType"] === "addon"
+  ) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.nodeType`,
+        "third-party add-on resolvers must return an ordinary agent, command, container, or user-action payload",
+      ),
+    );
+    valid = false;
+  }
+  if (
+    !input.authoredAddonName.startsWith("divedra/") &&
+    payload["addon"] !== undefined
+  ) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.addon`,
+        "third-party add-on resolvers must not return runtime add-on metadata",
+      ),
+    );
+    valid = false;
+  }
+  return valid;
+}
+
+function resolveSyncNodeAddonResolvers(
+  options: WorkflowValidationOptions,
+  issues: ValidationIssue[],
+): readonly NodeAddonPayloadResolver[] | undefined {
+  if (
+    options.asyncNodeAddonResolvers !== undefined &&
+    options.asyncNodeAddonResolvers.length > 0
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.nodes",
+        "async node add-on resolvers require validateWorkflowBundleAsync or loadWorkflowFromDisk",
+      ),
+    );
+  }
+
+  return options.nodeAddons === undefined || options.nodeAddons.length === 0
+    ? options.nodeAddonResolvers
+    : [
+        ...(options.nodeAddonResolvers ?? []),
+        createNodeAddonRegistry(options.nodeAddons),
+      ];
+}
+
+function resolveAsyncNodeAddonResolvers(
+  options: WorkflowValidationOptions,
+): readonly AsyncNodeAddonPayloadResolver[] | undefined {
+  const resolvers: AsyncNodeAddonPayloadResolver[] = [
+    ...(options.nodeAddonResolvers ?? []),
+    ...(options.asyncNodeAddonResolvers ?? []),
+  ];
+  if (options.nodeAddons !== undefined && options.nodeAddons.length > 0) {
+    resolvers.push(createAsyncNodeAddonRegistry(options.nodeAddons));
+  }
+  return resolvers.length === 0 ? undefined : resolvers;
+}
+
 export function validateWorkflowBundleDetailed(
   raw: RawBundle,
+  options: WorkflowValidationOptions = {},
 ): Result<ValidationSuccessDetails, readonly ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
   const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
@@ -4201,18 +4435,46 @@ export function validateWorkflowBundleDetailed(
 
   const workflow = normalizeWorkflow(raw.workflow, issues);
 
+  const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
+
   const nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null) {
     workflow.nodes.forEach((node, index) => {
       if (node.addon !== undefined) {
-        const resolved = resolveBuiltinNodeAddonPayload({
+        const resolved = resolveNodeAddonPayload({
           nodeId: node.id,
           addon: node.addon,
           path: `workflow.nodes[${index}].addon`,
+          ...(nodeAddonResolvers === undefined
+            ? {}
+            : { thirdPartyResolvers: nodeAddonResolvers }),
         });
-        issues.push(...resolved.issues);
-        if (resolved.payload !== undefined) {
-          nodePayloads[node.id] = resolved.payload;
+        issues.push(...(resolved.issues ?? []));
+        if (
+          resolved.payload !== undefined &&
+          validateResolvedAddonPayload({
+            authoredAddonName: node.addon.name,
+            expectedNodeId: node.id,
+            payload: resolved.payload,
+            path: `workflow.nodes[${index}].addon`,
+            issues,
+          })
+        ) {
+          if (node.addon.name.startsWith("divedra/")) {
+            nodePayloads[node.id] = resolved.payload;
+            return;
+          }
+
+          const normalizedPayload = normalizeNodePayload({
+            nodeId: node.id,
+            nodeFile: node.nodeFile,
+            payload: resolved.payload,
+            issues,
+            path: `workflow.nodes[${index}].addon.payload`,
+          });
+          if (normalizedPayload !== null) {
+            nodePayloads[node.id] = normalizedPayload;
+          }
         }
         return;
       }
@@ -4228,12 +4490,12 @@ export function validateWorkflowBundleDetailed(
         );
         return;
       }
-      const payload = normalizeNodePayload(
-        node.id,
-        node.nodeFile,
-        payloadRaw,
+      const payload = normalizeNodePayload({
+        nodeId: node.id,
+        nodeFile: node.nodeFile,
+        payload: payloadRaw,
         issues,
-      );
+      });
       if (payload !== null) {
         nodePayloads[node.id] = payload;
       }
@@ -4258,8 +4520,118 @@ export function validateWorkflowBundleDetailed(
   return ok({ bundle, issues });
 }
 
-export function validateWorkflowBundle(raw: RawBundle): ValidationResult {
-  const validation = validateWorkflowBundleDetailed(raw);
+export async function validateWorkflowBundleDetailedAsync(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): Promise<Result<ValidationSuccessDetails, readonly ValidationIssue[]>> {
+  const issues: ValidationIssue[] = [];
+  const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
+    raw.workflow,
+    raw.nodePayloads,
+  );
+
+  const workflow = normalizeWorkflow(raw.workflow, issues);
+  const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
+
+  const nodePayloads: Record<string, NodePayload> = {};
+  if (workflow !== null) {
+    for (const [index, node] of workflow.nodes.entries()) {
+      if (node.addon !== undefined) {
+        const resolved = await resolveNodeAddonPayloadAsync({
+          nodeId: node.id,
+          addon: node.addon,
+          path: `workflow.nodes[${index}].addon`,
+          ...(nodeAddonResolvers === undefined
+            ? {}
+            : { thirdPartyResolvers: nodeAddonResolvers }),
+        });
+        issues.push(...(resolved.issues ?? []));
+        if (
+          resolved.payload !== undefined &&
+          validateResolvedAddonPayload({
+            authoredAddonName: node.addon.name,
+            expectedNodeId: node.id,
+            payload: resolved.payload,
+            path: `workflow.nodes[${index}].addon`,
+            issues,
+          })
+        ) {
+          if (node.addon.name.startsWith("divedra/")) {
+            nodePayloads[node.id] = resolved.payload;
+            continue;
+          }
+
+          const normalizedPayload = normalizeNodePayload({
+            nodeId: node.id,
+            nodeFile: node.nodeFile,
+            payload: resolved.payload,
+            issues,
+            path: `workflow.nodes[${index}].addon.payload`,
+          });
+          if (normalizedPayload !== null) {
+            nodePayloads[node.id] = normalizedPayload;
+          }
+        }
+        continue;
+      }
+
+      const payloadRaw = nodePayloadsRaw[node.nodeFile];
+      if (payloadRaw === undefined) {
+        issues.push(
+          makeIssue(
+            "error",
+            `nodePayloads.${node.nodeFile}`,
+            "node payload file is missing",
+          ),
+        );
+        continue;
+      }
+      const payload = normalizeNodePayload({
+        nodeId: node.id,
+        nodeFile: node.nodeFile,
+        payload: payloadRaw,
+        issues,
+      });
+      if (payload !== null) {
+        nodePayloads[node.id] = payload;
+      }
+    }
+  }
+
+  if (workflow === null) {
+    return err(issues);
+  }
+
+  const bundle: NormalizedWorkflowBundle = {
+    workflow,
+    nodePayloads,
+  };
+
+  runSemanticValidation(bundle, issues);
+  const allErrors = issues.filter((entry) => entry.severity === "error");
+  if (allErrors.length > 0) {
+    return err(issues);
+  }
+
+  return ok({ bundle, issues });
+}
+
+export function validateWorkflowBundle(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): ValidationResult {
+  const validation = validateWorkflowBundleDetailed(raw, options);
+  if (!validation.ok) {
+    return err(validation.error);
+  }
+  return ok(validation.value.bundle);
+}
+
+export async function validateWorkflowBundleAsync(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): Promise<ValidationResult> {
+  const validation = await validateWorkflowBundleDetailedAsync(raw, options);
   if (!validation.ok) {
     return err(validation.error);
   }

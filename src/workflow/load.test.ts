@@ -13,6 +13,7 @@ import {
   resolveSafeScopedPath,
   resolveWorkflowScopedPath,
 } from "./paths";
+import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./types";
 
 const tempDirs: string[] = [];
 
@@ -1134,6 +1135,117 @@ describe("loadWorkflowFromDisk", () => {
     expect(
       result.value.bundle.nodePayloads["claude-task"]?.promptTemplate,
     ).toContain("Use the normalized request");
+  });
+
+  test("loads third-party add-on refs when a resolver is provided", async () => {
+    const root = await makeTempDir();
+    const workflowName = "third-party-addon";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "worker-1",
+      nodes: [
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "acme/echo-worker",
+            inputs: { message: "loaded" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+
+    const resolver: NodeAddonPayloadResolver = (input) =>
+      input.addon.name === "acme/echo-worker"
+        ? {
+            issues: [],
+            payload: {
+              id: input.nodeId,
+              model: "gpt-5-nano",
+              executionBackend: "official/openai-sdk",
+              promptTemplate: "Echo {{message}}",
+              variables: input.addon.inputs ?? {},
+            },
+          }
+        : { issues: [] };
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      nodeAddonResolvers: [resolver],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.nodePayloads["worker-1"]).toMatchObject({
+      executionBackend: "official/openai-sdk",
+      variables: { message: "loaded" },
+    });
+  });
+
+  test("loads third-party add-on refs when an async definition is provided", async () => {
+    const root = await makeTempDir();
+    const workflowName = "async-third-party-addon";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "worker-1",
+      nodes: [
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "acme/async-echo-worker",
+            version: "1",
+            inputs: { message: "loaded async" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+
+    const addon: NodeAddonDefinition = {
+      name: "acme/async-echo-worker",
+      version: "1",
+      resolve: async (input) => ({
+        payload: {
+          id: input.nodeId,
+          model: "gpt-5-nano",
+          executionBackend: "official/openai-sdk",
+          promptTemplate: "Echo {{message}}",
+          variables: input.addon.inputs ?? {},
+        },
+      }),
+    };
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      nodeAddons: [addon],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.nodePayloads["worker-1"]).toMatchObject({
+      executionBackend: "official/openai-sdk",
+      variables: { message: "loaded async" },
+    });
   });
 
   test("loads the worker-only example without an authored manager node", async () => {

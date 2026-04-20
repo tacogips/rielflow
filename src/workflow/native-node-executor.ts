@@ -11,6 +11,10 @@ import type { NodeExecutionMailbox } from "./node-execution-mailbox";
 import { buildPromptTemplateVariables } from "./prompt-template-context";
 import { renderPromptTemplate } from "./render";
 import { resolveNodeExecutionWorkingDirectory } from "./working-directory";
+import {
+  DEFAULT_MAIL_GATEWAY_IMAGE,
+  DEFAULT_X_GATEWAY_IMAGE,
+} from "./node-addons";
 import type {
   ChatReplyDispatcher,
   ChatReplyDispatchRequest,
@@ -20,10 +24,20 @@ import type {
   ContainerRunnerKind,
   JsonObject,
   NodePayload,
-  ResolvedNodeAddon,
+  ResolvedMailGatewayAddon,
+  ResolvedMailGatewayReadAddon,
+  ResolvedChatReplyWorkerAddon,
+  ResolvedXGatewayAddon,
+  ResolvedXGatewayReadAddon,
+  WorkflowNodeAddonEnvBinding,
   WorkflowDefaults,
 } from "./types";
 import { atomicWriteTextFile } from "../shared/fs";
+
+const X_GATEWAY_READ_BINARY = "x-gateway-reader";
+const X_GATEWAY_BINARY = "x-gateway";
+const MAIL_GATEWAY_READ_BINARY = "mail-gateway-reader";
+const MAIL_GATEWAY_BINARY = "mail-gateway";
 
 interface NativeNodeExecutionContext {
   readonly timeoutMs: number;
@@ -151,6 +165,15 @@ function appendContainerEnvArgs(
 ): void {
   for (const [key, value] of Object.entries(env)) {
     runArgs.push("-e", `${key}=${value}`);
+  }
+}
+
+function appendContainerEnvNameArgs(
+  runArgs: string[],
+  env: Readonly<Record<string, string>>,
+): void {
+  for (const key of Object.keys(env)) {
+    runArgs.push("-e", key);
   }
 }
 
@@ -846,7 +869,7 @@ function resolveChatReplyStatus(input: {
 function buildChatReplyDispatchRequest(input: {
   readonly target: ChatReplyDispatchTarget;
   readonly text: string;
-  readonly addon: ResolvedNodeAddon;
+  readonly addon: ResolvedChatReplyWorkerAddon;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
@@ -883,7 +906,7 @@ function buildChatReplyIdempotencyKey(input: {
 
 async function executeChatReplyAddonNode(
   input: NativeNodeExecutionInput,
-  addon: ResolvedNodeAddon,
+  addon: ResolvedChatReplyWorkerAddon,
 ): Promise<AdapterExecutionOutput> {
   const variables = resolveTemplateVariables(input);
   const renderedText = renderPromptTemplate(
@@ -978,8 +1001,447 @@ async function executeChatReplyAddonNode(
   };
 }
 
+function resolveAddonEnv(input: {
+  readonly addonName: string;
+  readonly nodeId: string;
+  readonly bindings: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly sourceEnv?: Readonly<Record<string, string | undefined>>;
+}): Readonly<Record<string, string>> {
+  const sourceEnv = input.sourceEnv ?? process.env;
+  const resolved: Record<string, string> = {};
+  for (const [targetEnv, binding] of Object.entries(input.bindings)) {
+    const value = sourceEnv[binding.fromEnv];
+    if (value === undefined || value.length === 0) {
+      if (binding.required === false) {
+        continue;
+      }
+      throw new AdapterExecutionError(
+        "provider_error",
+        `node '${input.nodeId}' cannot run ${input.addonName} because required environment variable '${binding.fromEnv}' is not set for add-on env '${targetEnv}'`,
+      );
+    }
+    resolved[targetEnv] = value;
+  }
+  return resolved;
+}
+
+function parseXGatewayJsonOutput(input: {
+  readonly stdout: string;
+  readonly nodeId: string;
+}): Readonly<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.stdout) as unknown;
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "unknown parse error";
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' x-gateway output must be valid JSON: ${message}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' x-gateway output must be a JSON object`,
+    );
+  }
+  return parsed as Readonly<Record<string, unknown>>;
+}
+
+function resolveXGatewayRunner(input: {
+  readonly addon: ResolvedXGatewayReadAddon | ResolvedXGatewayAddon;
+  readonly defaults: WorkflowDefaults["containerRuntime"];
+}): {
+  readonly runnerKind: ContainerRunnerKind;
+  readonly runnerCommand: string;
+} {
+  const runnerKind =
+    input.addon.config.runnerKind ?? input.defaults?.runnerKind ?? "podman";
+  if (!isContainerRunnerWithDockerCli(runnerKind)) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `container runner '${runnerKind}' is not supported for ${input.addon.name}`,
+    );
+  }
+  return {
+    runnerKind,
+    runnerCommand:
+      input.addon.config.runnerPath ?? input.defaults?.runnerPath ?? runnerKind,
+  };
+}
+
+function parseMailGatewayJsonOutput(input: {
+  readonly stdout: string;
+  readonly nodeId: string;
+}): Readonly<Record<string, unknown>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.stdout) as unknown;
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "unknown parse error";
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' mail-gateway output must be valid JSON: ${message}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' mail-gateway output must be a JSON object`,
+    );
+  }
+  return parsed as Readonly<Record<string, unknown>>;
+}
+
+function resolveMailGatewayRunner(input: {
+  readonly addon: ResolvedMailGatewayReadAddon | ResolvedMailGatewayAddon;
+  readonly defaults: WorkflowDefaults["containerRuntime"];
+}): {
+  readonly runnerKind: ContainerRunnerKind;
+  readonly runnerCommand: string;
+} {
+  const runnerKind =
+    input.addon.config.runnerKind ?? input.defaults?.runnerKind ?? "podman";
+  if (!isContainerRunnerWithDockerCli(runnerKind)) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `container runner '${runnerKind}' is not supported for ${input.addon.name}`,
+    );
+  }
+  return {
+    runnerKind,
+    runnerCommand:
+      input.addon.config.runnerPath ?? input.defaults?.runnerPath ?? runnerKind,
+  };
+}
+
+async function executeXGatewayReadAddonNode(
+  input: NativeNodeExecutionInput,
+  addon: ResolvedXGatewayReadAddon,
+  context: NativeNodeExecutionContext,
+): Promise<AdapterExecutionOutput> {
+  const variables = resolveTemplateVariables(input);
+  const renderedQuery = renderPromptTemplate(
+    addon.config.queryTemplate,
+    variables,
+  ).trim();
+  if (renderedQuery.length === 0) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' rendered an empty x-gateway query`,
+    );
+  }
+
+  const mappedEnv =
+    addon.env === undefined
+      ? {}
+      : resolveAddonEnv({
+          addonName: addon.name,
+          nodeId: input.nodeId,
+          bindings: addon.env,
+          ...(input.env === undefined ? {} : { sourceEnv: input.env }),
+        });
+  const { runnerKind, runnerCommand } = resolveXGatewayRunner({
+    addon,
+    defaults: input.workflowDefaults.containerRuntime,
+  });
+  const image = addon.config.image ?? DEFAULT_X_GATEWAY_IMAGE;
+  const runArgs = ["run", "--rm"];
+  if (addon.config.networkPolicy === "disabled") {
+    runArgs.push("--network", "none");
+  }
+  appendContainerEnvNameArgs(runArgs, mappedEnv);
+  runArgs.push(
+    image,
+    X_GATEWAY_READ_BINARY,
+    "graphql",
+    "query",
+    renderedQuery,
+    "--json",
+  );
+
+  const result = await runLoggedSpawnedProcess({
+    command: runnerCommand,
+    args: runArgs,
+    cwd: resolveNodeExecutionWorkingDirectory(
+      input.workflowWorkingDirectory,
+      input.node.workingDirectory,
+    ),
+    env: {
+      ...buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
+      ...mappedEnv,
+    },
+    context,
+    artifactDir: input.artifactDir,
+  });
+  const processLogs = buildProcessLogAttachments(result);
+
+  try {
+    return buildNativeOutput({
+      provider: `native-addon:x-gateway-read:${runnerKind}`,
+      model: image,
+      promptText: renderedQuery,
+      payload: {
+        xGateway: parseXGatewayJsonOutput({
+          stdout: result.stdout,
+          nodeId: input.nodeId,
+        }),
+      },
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
+}
+
+async function executeXGatewayAddonNode(
+  input: NativeNodeExecutionInput,
+  addon: ResolvedXGatewayAddon,
+  context: NativeNodeExecutionContext,
+): Promise<AdapterExecutionOutput> {
+  const variables = resolveTemplateVariables(input);
+  const renderedDocument = renderPromptTemplate(
+    addon.config.documentTemplate,
+    variables,
+  ).trim();
+  if (renderedDocument.length === 0) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' rendered an empty x-gateway document`,
+    );
+  }
+
+  const mappedEnv =
+    addon.env === undefined
+      ? {}
+      : resolveAddonEnv({
+          addonName: addon.name,
+          nodeId: input.nodeId,
+          bindings: addon.env,
+          ...(input.env === undefined ? {} : { sourceEnv: input.env }),
+        });
+  const { runnerKind, runnerCommand } = resolveXGatewayRunner({
+    addon,
+    defaults: input.workflowDefaults.containerRuntime,
+  });
+  const image = addon.config.image ?? DEFAULT_X_GATEWAY_IMAGE;
+  const runArgs = ["run", "--rm"];
+  if (addon.config.networkPolicy === "disabled") {
+    runArgs.push("--network", "none");
+  }
+  appendContainerEnvNameArgs(runArgs, mappedEnv);
+  runArgs.push(
+    image,
+    X_GATEWAY_BINARY,
+    "graphql",
+    "query",
+    renderedDocument,
+    "--json",
+  );
+
+  const result = await runLoggedSpawnedProcess({
+    command: runnerCommand,
+    args: runArgs,
+    cwd: resolveNodeExecutionWorkingDirectory(
+      input.workflowWorkingDirectory,
+      input.node.workingDirectory,
+    ),
+    env: {
+      ...buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
+      ...mappedEnv,
+    },
+    context,
+    artifactDir: input.artifactDir,
+  });
+  const processLogs = buildProcessLogAttachments(result);
+
+  try {
+    return buildNativeOutput({
+      provider: `native-addon:x-gateway:${runnerKind}`,
+      model: image,
+      promptText: renderedDocument,
+      payload: {
+        xGateway: parseXGatewayJsonOutput({
+          stdout: result.stdout,
+          nodeId: input.nodeId,
+        }),
+      },
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
+}
+
+async function executeMailGatewayReadAddonNode(
+  input: NativeNodeExecutionInput,
+  addon: ResolvedMailGatewayReadAddon,
+  context: NativeNodeExecutionContext,
+): Promise<AdapterExecutionOutput> {
+  const variables = resolveTemplateVariables(input);
+  const renderedQuery = renderPromptTemplate(
+    addon.config.queryTemplate,
+    variables,
+  ).trim();
+  if (renderedQuery.length === 0) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' rendered an empty mail-gateway query`,
+    );
+  }
+
+  const mappedEnv =
+    addon.env === undefined
+      ? {}
+      : resolveAddonEnv({
+          addonName: addon.name,
+          nodeId: input.nodeId,
+          bindings: addon.env,
+          ...(input.env === undefined ? {} : { sourceEnv: input.env }),
+        });
+  const { runnerKind, runnerCommand } = resolveMailGatewayRunner({
+    addon,
+    defaults: input.workflowDefaults.containerRuntime,
+  });
+  const image = addon.config.image ?? DEFAULT_MAIL_GATEWAY_IMAGE;
+  const runArgs = ["run", "--rm"];
+  if (addon.config.networkPolicy === "disabled") {
+    runArgs.push("--network", "none");
+  }
+  appendContainerEnvNameArgs(runArgs, mappedEnv);
+  runArgs.push(
+    image,
+    MAIL_GATEWAY_READ_BINARY,
+    "graphql",
+    "--query",
+    renderedQuery,
+  );
+
+  const result = await runLoggedSpawnedProcess({
+    command: runnerCommand,
+    args: runArgs,
+    cwd: resolveNodeExecutionWorkingDirectory(
+      input.workflowWorkingDirectory,
+      input.node.workingDirectory,
+    ),
+    env: {
+      ...buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
+      ...mappedEnv,
+    },
+    context,
+    artifactDir: input.artifactDir,
+  });
+  const processLogs = buildProcessLogAttachments(result);
+
+  try {
+    return buildNativeOutput({
+      provider: `native-addon:mail-gateway-read:${runnerKind}`,
+      model: image,
+      promptText: renderedQuery,
+      payload: {
+        mailGateway: parseMailGatewayJsonOutput({
+          stdout: result.stdout,
+          nodeId: input.nodeId,
+        }),
+      },
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
+}
+
+async function executeMailGatewayAddonNode(
+  input: NativeNodeExecutionInput,
+  addon: ResolvedMailGatewayAddon,
+  context: NativeNodeExecutionContext,
+): Promise<AdapterExecutionOutput> {
+  const variables = resolveTemplateVariables(input);
+  const renderedDocument = renderPromptTemplate(
+    addon.config.documentTemplate,
+    variables,
+  ).trim();
+  if (renderedDocument.length === 0) {
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' rendered an empty mail-gateway document`,
+    );
+  }
+
+  const mappedEnv =
+    addon.env === undefined
+      ? {}
+      : resolveAddonEnv({
+          addonName: addon.name,
+          nodeId: input.nodeId,
+          bindings: addon.env,
+          ...(input.env === undefined ? {} : { sourceEnv: input.env }),
+        });
+  const { runnerKind, runnerCommand } = resolveMailGatewayRunner({
+    addon,
+    defaults: input.workflowDefaults.containerRuntime,
+  });
+  const image = addon.config.image ?? DEFAULT_MAIL_GATEWAY_IMAGE;
+  const runArgs = ["run", "--rm"];
+  if (addon.config.networkPolicy === "disabled") {
+    runArgs.push("--network", "none");
+  }
+  appendContainerEnvNameArgs(runArgs, mappedEnv);
+  runArgs.push(
+    image,
+    MAIL_GATEWAY_BINARY,
+    "graphql",
+    "--query",
+    renderedDocument,
+  );
+
+  const result = await runLoggedSpawnedProcess({
+    command: runnerCommand,
+    args: runArgs,
+    cwd: resolveNodeExecutionWorkingDirectory(
+      input.workflowWorkingDirectory,
+      input.node.workingDirectory,
+    ),
+    env: {
+      ...buildRunnerEnv({
+        ...(input.env === undefined ? {} : { ambientEnv: input.env }),
+      }),
+      ...mappedEnv,
+    },
+    context,
+    artifactDir: input.artifactDir,
+  });
+  const processLogs = buildProcessLogAttachments(result);
+
+  try {
+    return buildNativeOutput({
+      provider: `native-addon:mail-gateway:${runnerKind}`,
+      model: image,
+      promptText: renderedDocument,
+      payload: {
+        mailGateway: parseMailGatewayJsonOutput({
+          stdout: result.stdout,
+          nodeId: input.nodeId,
+        }),
+      },
+      processLogs,
+    });
+  } catch (error: unknown) {
+    throw mergeProcessLogsIntoAdapterError(error, processLogs);
+  }
+}
+
 async function executeAddonNode(
   input: NativeNodeExecutionInput,
+  context: NativeNodeExecutionContext,
 ): Promise<AdapterExecutionOutput> {
   const addon = input.node.addon;
   if (addon === undefined) {
@@ -991,6 +1453,19 @@ async function executeAddonNode(
   switch (addon.name) {
     case "divedra/chat-reply-worker":
       return await executeChatReplyAddonNode(input, addon);
+    case "divedra/x-gateway-read":
+      return await executeXGatewayReadAddonNode(input, addon, context);
+    case "divedra/x-gateway":
+      return await executeXGatewayAddonNode(input, addon, context);
+    case "divedra/mail-gateway-read":
+      return await executeMailGatewayReadAddonNode(input, addon, context);
+    case "divedra/mail-gateway":
+      return await executeMailGatewayAddonNode(input, addon, context);
+    default:
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        `node '${input.nodeId}' declares add-on '${addon.name}' that does not use a native add-on executor`,
+      );
   }
 }
 
@@ -1004,7 +1479,7 @@ export async function executeNativeNode(
     case "container":
       return await executeContainerNode(input, context);
     case "addon":
-      return await executeAddonNode(input);
+      return await executeAddonNode(input, context);
     default:
       throw new AdapterExecutionError(
         "policy_blocked",

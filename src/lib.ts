@@ -392,6 +392,13 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -451,6 +458,13 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -496,6 +510,13 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -637,6 +658,24 @@ export type {
   GraphqlSchema,
   GraphqlSchemaDependencies,
 };
+export type {
+  AsyncNodeAddonPayloadResolver,
+  LoadOptions,
+  NodeAddonDefinition,
+  NodeAddonDefinitionResolver,
+  NodeAddonPayloadResolver,
+  NodeAddonResolveInput,
+  NodeAddonResolveResult,
+  NodePayload,
+  ValidationIssue,
+  WorkflowNodeAddonRef,
+} from "./workflow/types";
+export {
+  createAsyncNodeAddonPayloadResolver,
+  createAsyncNodeAddonRegistry,
+  createNodeAddonPayloadResolver,
+  createNodeAddonRegistry,
+} from "./workflow/node-addons";
 export { loadWorkflowFromDisk } from "./workflow/load";
 export { runWorkflow } from "./workflow/engine";
 export { callNode } from "./workflow/call-node";

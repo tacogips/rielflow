@@ -33,10 +33,24 @@ Current execution support by node type:
 - `user-action`: implemented as a pause-and-resume runtime state
 - `command`: implemented
 - `container`: implemented
+- `addon`: implemented for built-in runtime-provided worker add-ons and
+  host-provided third-party addon definitions or resolvers
 
 Additional authored shapes:
 
 - `workflowCalls`: executable workflow-to-workflow invocations. The caller's business payload is exposed to the callee as `runtimeVariables.workflowCall.input`, and `resultNodeId` can receive the callee result through a runtime-owned `workflow-call:<id>` communication.
+- `nodes[].addon`: worker add-on references that resolve to effective node
+  payloads while save/edit surfaces preserve the authored add-on reference.
+  Current built-ins include `divedra/chat-reply-worker`,
+  `divedra/codex-worker`, `divedra/claude-code-worker`,
+  `divedra/x-gateway-read`, `divedra/x-gateway`,
+  `divedra/mail-gateway-read`, and `divedra/mail-gateway`. Non-`divedra/`
+  add-ons require explicit host-provided add-on definitions or resolver
+  functions; workflow loading does not fetch packages or registry metadata.
+  Add-on registration helpers and resolver-facing types are exported from the
+  package root for host applications and third-party add-on packages. Add-on
+  definitions may resolve synchronously or asynchronously when loaded through
+  the normal disk/execution path.
 
 ## Quick Start
 
@@ -439,7 +453,11 @@ Those bundles exercise authored `command` and `container` nodes directly and can
 
 ## Library API
 
-Primary exports from `src/lib.ts`:
+The package root (`import ... from "divedra"`) resolves to the library entry
+implemented by `src/lib.ts`. The CLI entry remains available in source form via
+`bun run src/main.ts ...` and as the build subpath `divedra/cli`.
+
+Primary package-root exports:
 
 - `inspectWorkflow()`
 - `executeWorkflow()`
@@ -450,6 +468,18 @@ Primary exports from `src/lib.ts`:
 - `getRuntimeSessionView()`
 - `callWorkflowNode()`
 - `createWorkflowExecutionClient()`
+- `createNodeAddonPayloadResolver()`
+- `createNodeAddonRegistry()`
+- `createAsyncNodeAddonPayloadResolver()`
+- `createAsyncNodeAddonRegistry()`
+- `NodeAddonDefinition`
+- `AsyncNodeAddonPayloadResolver`
+- `NodeAddonPayloadResolver`
+- `NodeAddonResolveInput`
+- `NodeAddonResolveResult`
+- `WorkflowNodeAddonRef`
+- `NodePayload`
+- `ValidationIssue`
 - `runCli()`
 - `startServe()`
 - `handleApiRequest()`

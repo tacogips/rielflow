@@ -103,15 +103,37 @@ authored add-on reference.
 
 Initial scope:
 
-- built-in-only `divedra/*` add-ons
+- runtime-provided `divedra/*` add-ons
+- third-party add-on references through host-provided resolver functions; these
+  are local process integrations and do not perform package or network
+  resolution during workflow load
 - no network resolution at workflow load time
-- `divedra/chat-reply-worker` as the first built-in add-on
+- `divedra/chat-reply-worker` for provider-neutral event replies
+- `divedra/codex-worker` and `divedra/claude-code-worker` for reusable
+  agent-backed worker nodes
+- `divedra/x-gateway-read` for read-only x-gateway GraphQL inspection through
+  an explicit container runner binding
+- `divedra/x-gateway` for intentional x-gateway GraphQL query or mutation
+  execution, including X post mutations, through the same explicit container
+  runner and environment binding model
+- `divedra/mail-gateway-read` and `divedra/mail-gateway` for read-only mail
+  inspection and intentional mail send mutations through the same explicit
+  container runner and environment binding model
 - add-on nodes remain ordinary worker nodes after resolution
+- `divedra/` is reserved for runtime-provided add-ons; third-party add-ons use
+  non-`divedra/` names such as `vendor/name`
 
 The chat reply worker creates provider-neutral reply requests from
 `runtimeVariables.event` and dispatches them through the event reply adapter
 registry. Provider SDKs and credentials remain in the event layer, not in the
-workflow engine.
+workflow engine. Add-ons that need invocation-specific values use
+`addon.inputs`, and only descriptors that explicitly consume environment
+bindings accept `addon.env`. Host applications can pass add-on resolvers through
+workflow load, validation, save, and execution options to materialize
+third-party add-on references into ordinary node payloads. The package root
+exports the library API from `src/lib.ts` rather than the CLI entrypoint so
+third-party add-on packages can type resolver exports from `divedra` without
+deep imports.
 
 Supporting design:
 `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.

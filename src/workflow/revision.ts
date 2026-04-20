@@ -37,6 +37,17 @@ export function collectPromptTemplateFiles(
   ];
 }
 
+export function collectWorkflowRevisionNodeFiles(workflow: {
+  readonly nodes: readonly {
+    readonly nodeFile: string;
+    readonly addon?: unknown;
+  }[];
+}): readonly string[] {
+  return workflow.nodes.flatMap((node) =>
+    node.addon === undefined ? [node.nodeFile] : [],
+  );
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }

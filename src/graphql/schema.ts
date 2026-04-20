@@ -15,6 +15,7 @@ import { loadWorkflowFromDisk } from "../workflow/load";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "../workflow/paths";
 import {
   collectPromptTemplateFiles,
+  collectWorkflowRevisionNodeFiles,
   computeWorkflowRevisionFromFiles,
 } from "../workflow/revision";
 import { saveWorkflowToDisk } from "../workflow/save";
@@ -48,7 +49,7 @@ import { listSessions } from "../workflow/session-store";
 import type { WorkflowSessionState } from "../workflow/session";
 import { createSessionId } from "../workflow/session";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
-import { validateWorkflowBundleDetailed } from "../workflow/validate";
+import { validateWorkflowBundleDetailedAsync } from "../workflow/validate";
 import { deriveWorkflowVisualization } from "../workflow/visualization";
 import { normalizeWorkflowWorkingDirectoryOverride } from "../workflow/working-directory";
 import type {
@@ -247,8 +248,8 @@ async function buildWorkflowDefinitionView(
   if (!loaded.ok) {
     return null;
   }
-  const nodeFiles = loaded.value.bundle.workflow.nodes.map(
-    (node) => node.nodeFile,
+  const nodeFiles = collectWorkflowRevisionNodeFiles(
+    loaded.value.bundle.workflow,
   );
   const revision = await computeWorkflowRevisionFromFiles(
     loaded.value.workflowDirectory,
@@ -352,14 +353,17 @@ async function validateWorkflowDefinitionMutation(
   context: GraphqlRequestContext,
 ): Promise<ValidateWorkflowDefinitionPayload> {
   if (input.bundle !== undefined) {
-    const validation = validateWorkflowBundleDetailed({
-      workflow: input.bundle.workflow as unknown as Readonly<
-        Record<string, unknown>
-      >,
-      nodePayloads: input.bundle.nodePayloads as unknown as Readonly<
-        Record<string, unknown>
-      >,
-    });
+    const validation = await validateWorkflowBundleDetailedAsync(
+      {
+        workflow: input.bundle.workflow as unknown as Readonly<
+          Record<string, unknown>
+        >,
+        nodePayloads: input.bundle.nodePayloads as unknown as Readonly<
+          Record<string, unknown>
+        >,
+      },
+      context,
+    );
     if (!validation.ok) {
       return {
         valid: false,
