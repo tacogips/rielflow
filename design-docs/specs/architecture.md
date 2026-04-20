@@ -88,10 +88,33 @@ Important validation facts:
 - authored `workflowCalls` are accepted, loaded, and executable when their target workflow bundles resolve under the configured workflow root
 - non-empty authored `subWorkflows[]` are treated as legacy structural compatibility input and are rejected when combined with authored `role` / `control` nodes
 - non-empty authored `subWorkflowConversations[]` are treated the same way and are rejected when combined with authored `role` / `control` nodes
+- structural boundary node kinds `subworkflow-manager`, `input`, and `output` are rejected when combined with authored `role` / `control` nodes
 - the validator still normalizes authored roles into legacy structural `kind` values and an effective runtime `managerNodeId` so the current engine can execute transitional bundles
 - `root-manager`, `subworkflow-manager`, `input`, and `output` remain the structural roles enforced by the current runtime compatibility layer
 - cross-scope edges must target manager boundaries
 - `branching.mode` is currently fixed to `fan-out`
+
+### Node Add-on Catalog
+
+Workflow node references may use built-in add-ons as an authoring shortcut for
+runtime-provided worker behavior. Add-ons are resolved by the loader into
+effective node payloads before execution, while save/edit surfaces preserve the
+authored add-on reference.
+
+Initial scope:
+
+- built-in-only `divedra/*` add-ons
+- no network resolution at workflow load time
+- `divedra/chat-reply-worker` as the first built-in add-on
+- add-on nodes remain ordinary worker nodes after resolution
+
+The chat reply worker creates provider-neutral reply requests from
+`runtimeVariables.event` and dispatches them through the event reply adapter
+registry. Provider SDKs and credentials remain in the event layer, not in the
+workflow engine.
+
+Supporting design:
+`design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.
 
 ### Prompt and Input Assembly
 
@@ -291,6 +314,9 @@ Current execution policies:
 - `user-action` is implemented as a `nodeType`, not as a new manager boundary, so human approval/input remains a runtime-owned execution flavor rather than a second structural control-flow system
 - optional node execution is implemented as scheduler policy on `workflow.json.nodes[]`
 - the current workflow manager may explicitly choose `execute-optional-node` or `skip-optional-node`, while legacy structural `subworkflow-manager` scope remains limited to its owned compatibility boundary
+- node add-ons are an authoring reuse layer, not a third role axis; after
+  resolution, an add-on node executes as a normal worker with descriptor
+  provenance recorded in runtime metadata
 - detailed design: `design-docs/specs/design-user-action-and-optional-node-execution.md`
 
 ## Current Execution Flow
@@ -438,4 +464,5 @@ Manager sessions are minted per manager-node execution and expire when that node
 - `design-docs/specs/design-workflow-json.md`
 - `design-docs/specs/design-data-model.md`
 - `design-docs/specs/design-node-execution-inbox-contract.md`
+- `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`
 - `design-docs/specs/design-graphql-manager-runtime-session-lifecycle.md`

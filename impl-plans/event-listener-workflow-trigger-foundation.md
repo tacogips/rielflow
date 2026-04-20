@@ -1,6 +1,6 @@
 # Event Listener Workflow Trigger Foundation Implementation Plan
 
-**Status**: Planning
+**Status**: Completed
 **Design Reference**: design-docs/specs/design-event-listener-workflow-trigger.md
 **Created**: 2026-04-20
 **Last Updated**: 2026-04-20
@@ -32,13 +32,17 @@ non-polling event receiver, while production receiver integration can remain a
 later provider slice after the open decisions in
 `design-docs/user-qa/qa-event-listener-workflow-trigger.md` are resolved.
 
-### Current Blockers
+### Resolved Decisions
 
-- Confirm default event root location.
-- Confirm canonical runtime variable names and `humanInput` mirroring behavior.
-- Confirm first provider slice and async-only webhook policy.
-- Confirm whether S3 metadata-only input is sufficient for the first provider
-  slice or whether object download-to-data-root is required.
+- Default event root resolves from `--event-root`, `DIVEDRA_EVENT_ROOT`, or
+  `.divedra-events` next to the workflow root.
+- Runtime variables expose canonical `workflowInput`, event metadata under
+  `event`, and optional compatibility `humanInput`.
+- First provider-neutral slice supports manual emit, cron, generic webhook, and
+  S3-compatible metadata-only repository file events.
+- Webhook-backed dispatch defaults to asynchronous execution and validation
+  rejects unsafe synchronous webhook bindings unless explicitly allowed.
+- S3 object content download remains deferred; metadata-only input is implemented.
 
 ---
 
@@ -48,7 +52,7 @@ later provider slice after the open decisions in
 
 #### src/events/types.ts
 
-**Status**: BLOCKED
+**Status**: COMPLETED
 
 ```typescript
 interface ExternalEventEnvelope {
@@ -78,18 +82,18 @@ interface EventBinding {
 
 **Checklist**:
 
-- [ ] Define provider-neutral event, source, binding, match, mapping, and
+- [x] Define provider-neutral event, source, binding, match, mapping, and
       execution policy types
-- [ ] Load `.divedra-events/sources/*.json` and
+- [x] Load `.divedra-events/sources/*.json` and
       `.divedra-events/bindings/*.json`
-- [ ] Resolve `--event-root` and `DIVEDRA_EVENT_ROOT`
-- [ ] Unit tests for missing, malformed, disabled, and duplicate config
+- [x] Resolve `--event-root` and `DIVEDRA_EVENT_ROOT`
+- [x] Unit tests for missing, malformed, disabled, and duplicate config
 
 ### 2. Event Validation
 
 #### src/events/validate.ts
 
-**Status**: BLOCKED
+**Status**: COMPLETED
 
 ```typescript
 interface EventConfigValidationIssue {
@@ -106,17 +110,17 @@ function validateEventConfig(input: EventConfigValidationInput): {
 
 **Checklist**:
 
-- [ ] Validate source ids, binding ids, and binding source references
-- [ ] Validate workflow name references against the workflow root
-- [ ] Validate template path references against supported event/source scopes
-- [ ] Reject unsafe sync webhook execution unless explicitly allowed
-- [ ] Reject polling mode for S3-compatible repository file sources
+- [x] Validate source ids, binding ids, and binding source references
+- [x] Validate workflow name references against the workflow root
+- [x] Validate template path references against supported event/source scopes
+- [x] Reject unsafe sync webhook execution unless explicitly allowed
+- [x] Reject polling mode for S3-compatible repository file sources
 
 ### 3. Event Ledger
 
 #### src/events/ledger.ts and src/workflow/runtime-db.ts
 
-**Status**: BLOCKED
+**Status**: COMPLETED
 
 ```typescript
 interface EventReceiptRecord {
@@ -142,16 +146,16 @@ interface EventReceiptRecord {
 
 **Checklist**:
 
-- [ ] Persist raw, normalized, workflow-input, dispatch, and error artifacts
-- [ ] Add SQLite receipt index with idempotency lookup
-- [ ] Deduplicate by source, binding, dedupe key, and dedupe window
-- [ ] Unit tests for duplicate and failed receipt paths
+- [x] Persist raw, normalized, workflow-input, dispatch, and error artifacts
+- [x] Add SQLite receipt index with idempotency lookup
+- [x] Deduplicate by source, binding, dedupe key, and dedupe window
+- [x] Unit tests for duplicate and failed receipt paths
 
 ### 4. Input Mapping And Dispatch
 
 #### src/events/trigger-runner.ts
 
-**Status**: BLOCKED
+**Status**: COMPLETED
 
 ```typescript
 interface WorkflowTriggerRunner {
@@ -167,18 +171,18 @@ interface WorkflowTriggerDispatchInput {
 
 **Checklist**:
 
-- [ ] Implement `mode: "event-input"` mapping
-- [ ] Implement static JSON template mapping without JavaScript evaluation
-- [ ] Build `workflowInput`, `event`, and optional `humanInput`
+- [x] Implement `mode: "event-input"` mapping
+- [x] Implement static JSON template mapping without JavaScript evaluation
+- [x] Build `workflowInput`, `event`, and optional `humanInput`
       runtime variables
-- [ ] Dispatch through `divedra workflow run`,
+- [x] Dispatch through `divedra workflow run`,
       `createWorkflowExecutionClient()`, or GraphQL endpoint
 
 ### 5. CLI Surface
 
 #### src/cli.ts
 
-**Status**: BLOCKED
+**Status**: COMPLETED
 
 ```typescript
 interface EventsValidateCommand {
@@ -197,16 +201,16 @@ interface EventsEmitCommand {
 
 **Checklist**:
 
-- [ ] Add `events validate`
-- [ ] Add `events emit <source-id> --event-file <path>`
-- [ ] Add CLI tests for parse errors and JSON output shape
-- [ ] Defer `events serve`, `events list`, and `events replay` to later slices
+- [x] Add `events validate`
+- [x] Add `events emit <source-id> --event-file <path>`
+- [x] Add CLI tests for parse errors and JSON output shape
+- [x] Defer `events list` and `events replay` to later slices
 
 ## Tasks
 
 ### TASK-001: Event Types And Config Loading
 
-**Status**: Blocked
+**Status**: Completed
 **Parallelizable**: Yes
 **Deliverables**: `src/events/types.ts`, `src/events/config.ts`
 **Dependencies**: None
@@ -217,15 +221,15 @@ execution policy types, plus event-root resolution and JSON config loading.
 
 **Completion Criteria**:
 
-- [ ] Canonical event and binding types are exported from `src/events/`
-- [ ] `.divedra-events/sources/*.json` and
+- [x] Canonical event and binding types are exported from `src/events/`
+- [x] `.divedra-events/sources/*.json` and
       `.divedra-events/bindings/*.json` load deterministically
-- [ ] `--event-root`, `DIVEDRA_EVENT_ROOT`, and default root resolution are covered
-- [ ] Missing, malformed, disabled, and duplicate config tests pass
+- [x] `--event-root`, `DIVEDRA_EVENT_ROOT`, and default root resolution are covered
+- [x] Missing, malformed, disabled, and duplicate config tests pass
 
 ### TASK-002: Event Validation
 
-**Status**: Blocked
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/events/validate.ts`
 **Dependencies**: TASK-001
@@ -236,14 +240,14 @@ references, adapter capabilities, template scopes, and unsafe execution policy.
 
 **Completion Criteria**:
 
-- [ ] Source ids, binding ids, and binding source references are validated
-- [ ] Workflow name references are validated against the workflow root
-- [ ] Template references are limited to supported event/source scopes
-- [ ] Unsafe synchronous webhook execution is rejected unless explicitly allowed
+- [x] Source ids, binding ids, and binding source references are validated
+- [x] Workflow name references are validated against the workflow root
+- [x] Template references are limited to supported event/source scopes
+- [x] Unsafe synchronous webhook execution is rejected unless explicitly allowed
 
 ### TASK-003: Event Ledger
 
-**Status**: Blocked
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/events/ledger.ts`, `src/workflow/runtime-db.ts`
 **Dependencies**: TASK-001
@@ -254,14 +258,14 @@ dedupe, audit, dispatch, and error records.
 
 **Completion Criteria**:
 
-- [ ] Raw, normalized, workflow-input, dispatch, and error artifacts are written
-- [ ] SQLite receipt index supports idempotency lookup
-- [ ] Dedupe uses source, binding, dedupe key, and dedupe window
-- [ ] Duplicate and failed receipt path tests pass
+- [x] Raw, normalized, workflow-input, dispatch, and error artifacts are written
+- [x] SQLite receipt index supports idempotency lookup
+- [x] Dedupe uses source, binding, dedupe key, and dedupe window
+- [x] Duplicate and failed receipt path tests pass
 
 ### TASK-004: Input Mapping And Dispatch
 
-**Status**: Blocked
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/events/trigger-runner.ts`
 **Dependencies**: TASK-001, TASK-003
@@ -272,15 +276,15 @@ existing library or GraphQL workflow execution boundary.
 
 **Completion Criteria**:
 
-- [ ] `mode: "event-input"` mapping is implemented
-- [ ] Static JSON template mapping works without JavaScript evaluation
-- [ ] Runtime variables include `workflowInput`, `event`, and optional `humanInput`
-- [ ] Dispatch works through `divedra workflow run`,
+- [x] `mode: "event-input"` mapping is implemented
+- [x] Static JSON template mapping works without JavaScript evaluation
+- [x] Runtime variables include `workflowInput`, `event`, and optional `humanInput`
+- [x] Dispatch works through `divedra workflow run`,
       `createWorkflowExecutionClient()`, or GraphQL
 
 ### TASK-005: CLI Surface
 
-**Status**: Blocked
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/cli.ts`, `src/cli.test.ts`
 **Dependencies**: TASK-002, TASK-004
@@ -291,40 +295,40 @@ fixture emission commands.
 
 **Completion Criteria**:
 
-- [ ] `events validate` returns stable JSON output
-- [ ] `events emit <source-id> --event-file <path>` dispatches fixtures
-- [ ] CLI parse errors and output shapes have tests
-- [ ] `events serve`, `events list`, and `events replay` remain deferred
+- [x] `events validate` returns stable JSON output
+- [x] `events emit <source-id> --event-file <path>` dispatches fixtures
+- [x] CLI parse errors and output shapes have tests
+- [x] `events list` and `events replay` remain deferred
 
 ## Module Status
 
-| Module                 | File Path                       | Status  | Tests |
-| ---------------------- | ------------------------------- | ------- | ----- |
-| Event types/config     | `src/events/types.ts`           | BLOCKED | -     |
-| Event validation       | `src/events/validate.ts`        | BLOCKED | -     |
-| Event ledger           | `src/events/ledger.ts`          | BLOCKED | -     |
-| Runtime DB receipt idx | `src/workflow/runtime-db.ts`    | BLOCKED | -     |
-| Trigger runner         | `src/events/trigger-runner.ts`  | BLOCKED | -     |
-| CLI commands           | `src/cli.ts`, `src/cli.test.ts` | BLOCKED | -     |
+| Module                 | File Path                       | Status | Tests |
+| ---------------------- | ------------------------------- | ------ | ----- |
+| Event types/config     | `src/events/types.ts`           | DONE   | Yes   |
+| Event validation       | `src/events/validate.ts`        | DONE   | Yes   |
+| Event ledger           | `src/events/ledger.ts`          | DONE   | Yes   |
+| Runtime DB receipt idx | `src/workflow/runtime-db.ts`    | DONE   | Yes   |
+| Trigger runner         | `src/events/trigger-runner.ts`  | DONE   | Yes   |
+| CLI commands           | `src/cli.ts`, `src/cli.test.ts` | DONE   | Yes   |
 
 ## Dependencies
 
-| Feature             | Depends On                                 | Status  |
-| ------------------- | ------------------------------------------ | ------- |
-| Foundation planning | Event trigger design and open QA decisions | BLOCKED |
-| Config validation   | Event root and runtime variable decisions  | BLOCKED |
-| Manual emit         | Config validation and ledger               | BLOCKED |
-| Dispatch            | Runtime variable decision                  | BLOCKED |
+| Feature             | Depends On                                 | Status |
+| ------------------- | ------------------------------------------ | ------ |
+| Foundation planning | Event trigger design and open QA decisions | DONE   |
+| Config validation   | Event root and runtime variable decisions  | DONE   |
+| Manual emit         | Config validation and ledger               | DONE   |
+| Dispatch            | Runtime variable decision                  | DONE   |
 
 ## Completion Criteria
 
-- [ ] Open decisions required for the foundation are resolved
-- [ ] `events validate` validates sources and bindings without dispatch
-- [ ] `events emit` can dispatch a fixture event exactly once per dedupe key
-- [ ] Event receipt artifacts and SQLite index are persisted
-- [ ] Provider SDKs are absent from `src/workflow/`
-- [ ] Type checking passes
-- [ ] Focused tests pass
+- [x] Open decisions required for the foundation are resolved
+- [x] `events validate` validates sources and bindings without dispatch
+- [x] `events emit` can dispatch a fixture event exactly once per dedupe key
+- [x] Event receipt artifacts and SQLite index are persisted
+- [x] Provider SDKs are absent from `src/workflow/`
+- [x] Type checking passes
+- [x] Focused tests pass
 
 ## Progress Log
 
@@ -345,6 +349,16 @@ slice, and webhook async policy are confirmed.
 **Notes**: Added explicit `TASK-XXX` sections and aligned task dependencies with
 `PROGRESS.json` so the blocked plan can move directly into implementation once
 the open decisions are resolved.
+
+### Session: 2026-04-20 15:10
+
+**Tasks Completed**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Implemented event types/config loading, validation, runtime receipt
+ledger with SQLite indexing, input mapping, workflow dispatch, `events validate`,
+and `events emit`. Verified with `bun run typecheck`, focused event/CLI tests,
+and the full `bun test` suite.
 
 ## Related Plans
 

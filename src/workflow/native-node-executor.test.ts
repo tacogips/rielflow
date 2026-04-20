@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { AdapterExecutionError } from "./adapter";
 import { executeNativeNode } from "./native-node-executor";
+import type { ChatReplyDispatchRequest } from "./types";
 
 const tempDirs: string[] = [];
 
@@ -109,6 +110,217 @@ function makeExecutionMailbox() {
 }
 
 describe("executeNativeNode", () => {
+  test("renders built-in chat reply add-on output from inbox and event target", async () => {
+    const workflowDirectory = await makeTempDir();
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: workflowDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "reply",
+        nodeExecId: "exec-1",
+        node: {
+          id: "reply",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/chat-reply-worker",
+            version: "1",
+            config: {
+              textTemplate: "Reply: {{inbox.latest.output.payload.text}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {
+          event: {
+            sourceId: "web-chat",
+            provider: "web-chat",
+            eventId: "evt-1",
+            conversation: { id: "conv-1", threadId: "thread-1" },
+          },
+        },
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "reply"),
+        executionMailbox: {
+          ...makeExecutionMailbox(),
+          input: {
+            arguments: {},
+            upstream: [
+              {
+                fromNodeId: "answer",
+                transitionWhen: "always",
+                communicationId: "comm-1",
+                output: {
+                  payload: {
+                    text: "done",
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.provider).toBe("native-addon");
+    expect(output.model).toBe("divedra/chat-reply-worker@1");
+    expect(output.when).toMatchObject({ replied: true });
+    expect(output.payload).toMatchObject({
+      reply: {
+        status: "intent-only",
+        target: {
+          sourceId: "web-chat",
+          provider: "web-chat",
+          eventId: "evt-1",
+          conversationId: "conv-1",
+          threadId: "thread-1",
+        },
+        message: {
+          text: "Reply: done",
+        },
+        idempotencyKey: "chat-reply:wf:sess-1:reply:exec-1",
+      },
+    });
+  });
+
+  test("fails chat reply add-on execution when target is missing by default", async () => {
+    const workflowDirectory = await makeTempDir();
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory: workflowDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "reply",
+          nodeExecId: "exec-1",
+          node: {
+            id: "reply",
+            nodeType: "addon",
+            variables: {},
+            addon: {
+              name: "divedra/chat-reply-worker",
+              version: "1",
+              config: {
+                textTemplate: "Reply text",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir: path.join(workflowDirectory, "artifacts", "reply"),
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toThrow(AdapterExecutionError);
+  });
+
+  test("dispatches built-in chat reply add-on when a dispatcher is available", async () => {
+    const workflowDirectory = await makeTempDir();
+    const dispatched: ChatReplyDispatchRequest[] = [];
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: workflowDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "reply",
+        nodeExecId: "exec-1",
+        node: {
+          id: "reply",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/chat-reply-worker",
+            version: "1",
+            config: {
+              textTemplate: "Reply text",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {
+          event: {
+            sourceId: "web-chat",
+            provider: "webhook",
+            eventId: "evt-1",
+            conversation: { id: "conv-1" },
+          },
+        },
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "reply"),
+        executionMailbox: makeExecutionMailbox(),
+        chatReplyDispatcher: {
+          async dispatchChatReply(request) {
+            dispatched.push(request);
+            return {
+              status: "sent",
+              provider: "webhook",
+              dispatchId: "dispatch-1",
+              providerMessageId: "message-1",
+            };
+          },
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      target: {
+        sourceId: "web-chat",
+        provider: "webhook",
+        eventId: "evt-1",
+        conversationId: "conv-1",
+      },
+      message: { text: "Reply text" },
+      idempotencyKey: "chat-reply:wf:sess-1:reply:exec-1",
+    });
+    expect(output.payload).toMatchObject({
+      reply: {
+        status: "sent",
+        dispatch: {
+          provider: "webhook",
+          status: "sent",
+          dispatchId: "dispatch-1",
+          providerMessageId: "message-1",
+        },
+      },
+    });
+  });
+
   test("defaults command cwd to the workflow execution working directory", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");

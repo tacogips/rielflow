@@ -1,0 +1,6 @@
+{
+  "id": "nightly-cron",
+  "kind": "cron",
+  "schedule": "0 2 * * *",
+  "timezone": "Asia/Tokyo"
+}

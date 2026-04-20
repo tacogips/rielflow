@@ -27,7 +27,9 @@ import type {
   ManagerSessionStore,
 } from "../workflow/manager-session-store";
 import type {
+  RuntimeEventReplyDispatchRecord,
   RuntimeNodeExecutionSummary,
+  RuntimeHookEventRecord,
   RuntimeNodeLogEntry,
 } from "../workflow/runtime-db";
 import type { SessionStoreOptions } from "../workflow/session-store";
@@ -35,7 +37,7 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../workflow/session";
-import type { LoadOptions } from "../workflow/types";
+import type { ChatReplyDispatcher, LoadOptions } from "../workflow/types";
 import type {
   NormalizedWorkflowBundle,
   ValidationIssue,
@@ -48,6 +50,7 @@ export interface GraphqlRequestContext extends SessionStoreOptions {
   readonly readOnly?: boolean;
   readonly fixedWorkflowName?: string;
   readonly noExec?: boolean;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
 }
 
 export interface WorkflowLookupInput {
@@ -109,6 +112,8 @@ export interface WorkflowExecutionView {
   readonly session: WorkflowSessionState;
   readonly nodeExecutions: readonly RuntimeNodeExecutionSummary[];
   readonly nodeLogs: readonly RuntimeNodeLogEntry[];
+  readonly hookEvents: readonly RuntimeHookEventRecord[];
+  readonly replyDispatches: readonly RuntimeEventReplyDispatchRecord[];
 }
 
 export interface WorkflowExecutionOverviewView {
@@ -120,6 +125,8 @@ export interface WorkflowExecutionOverviewView {
   readonly nodes: readonly NodeExecutionView[];
   readonly communications: CommunicationConnection;
   readonly nodeLogs: readonly RuntimeNodeLogEntry[];
+  readonly hookEvents: readonly RuntimeHookEventRecord[];
+  readonly replyDispatches: readonly RuntimeEventReplyDispatchRecord[];
 }
 
 export interface WorkflowExecutionConnection {

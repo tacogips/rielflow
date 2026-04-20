@@ -3,7 +3,7 @@
 **Status**: Completed
 **Design Reference**: design-docs/specs/design-workflow-json.md#sub-workflow-semantics
 **Created**: 2026-03-09
-**Last Updated**: 2026-03-09
+**Last Updated**: 2026-04-20
 
 ---
 
@@ -96,7 +96,11 @@ interface FutureEditorWork {
 - [x] Add Svelte authoring UX for branch-block and loop-body declaration
 - [x] Align Svelte local visualization with backend block-aware scope derivation
 - [x] Port the same block-aware authoring behavior to the legacy inline fallback, or remove that fallback
-- [ ] Decide whether existing sample workflows should be rewritten to the new canonical pattern
+- [x] Decide whether existing sample workflows should be rewritten to the new canonical pattern
+
+Decision: keep existing sample workflows in their current authored form. They
+remain valid compatibility and minimal-authoring fixtures; new or specifically
+updated branch/loop examples can opt into canonical block metadata directly.
 
 ## Module Status
 

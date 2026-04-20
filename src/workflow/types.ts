@@ -45,6 +45,12 @@ export interface WorkflowNodeExecutionPolicy {
   readonly decisionBy?: "owning-manager";
 }
 
+export interface WorkflowNodeAddonRef {
+  readonly name: string;
+  readonly version?: string;
+  readonly config?: Readonly<Record<string, unknown>>;
+}
+
 export interface WorkflowNodeRepeatPolicy {
   readonly while: string;
   readonly restartAt?: string;
@@ -54,6 +60,21 @@ export interface WorkflowNodeRepeatPolicy {
 export interface WorkflowNodeRef {
   readonly id: string;
   readonly nodeFile: string;
+  readonly addon?: WorkflowNodeAddonRef;
+  readonly kind?: NodeKind;
+  readonly role?: NodeRole;
+  readonly control?: NodeControlKind;
+  readonly completion?: CompletionRule;
+  readonly execution?: WorkflowNodeExecutionPolicy;
+  readonly group?: string;
+  readonly repeat?: WorkflowNodeRepeatPolicy;
+}
+
+export interface AuthoredWorkflowNodeRef {
+  readonly id: string;
+  readonly nodeFile?: string;
+  readonly addon?: WorkflowNodeAddonRef;
+  readonly node?: unknown;
   readonly kind?: NodeKind;
   readonly role?: NodeRole;
   readonly control?: NodeControlKind;
@@ -147,7 +168,7 @@ export interface AuthoredWorkflowJson extends Readonly<Record<string, unknown>> 
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly subWorkflows?: readonly SubWorkflowRef[];
   readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
-  readonly nodes: readonly WorkflowNodeRef[];
+  readonly nodes: readonly AuthoredWorkflowNodeRef[];
   readonly edges?: readonly WorkflowEdge[];
   readonly loops?: readonly LoopRule[];
   readonly branching?: {
@@ -206,7 +227,12 @@ export interface NodeOutputContract {
   readonly maxValidationAttempts?: number;
 }
 
-export type NodeType = "agent" | "command" | "container" | "user-action";
+export type NodeType =
+  | "agent"
+  | "command"
+  | "container"
+  | "user-action"
+  | "addon";
 
 export type NodeSessionMode = "new" | "reuse";
 
@@ -276,6 +302,57 @@ export interface UserActionNodeConfig {
   readonly allowFreeTextReply?: boolean;
 }
 
+export interface ChatReplyWorkerConfig {
+  readonly textTemplate: string;
+  readonly visibility?: "public" | "ephemeral";
+  readonly threadPolicy?: "same-thread" | "conversation-root";
+  readonly onMissingTarget?: "fail" | "intent-only" | "dry-run";
+}
+
+export interface ChatReplyDispatchTarget {
+  readonly sourceId: string;
+  readonly provider: string;
+  readonly eventId: string;
+  readonly conversationId: string;
+  readonly threadId?: string;
+  readonly actorId?: string;
+}
+
+export interface ChatReplyDispatchRequest {
+  readonly target: ChatReplyDispatchTarget;
+  readonly message: {
+    readonly text: string;
+  };
+  readonly visibility: "public" | "ephemeral";
+  readonly threadPolicy: "same-thread" | "conversation-root";
+  readonly idempotencyKey: string;
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+}
+
+export interface ChatReplyDispatchResult {
+  readonly status: "sent" | "queued";
+  readonly provider: string;
+  readonly dispatchId?: string;
+  readonly providerMessageId?: string;
+}
+
+export interface ChatReplyDispatcher {
+  dispatchChatReply(
+    request: ChatReplyDispatchRequest,
+  ): Promise<ChatReplyDispatchResult>;
+}
+
+export interface ResolvedChatReplyWorkerAddon {
+  readonly name: "divedra/chat-reply-worker";
+  readonly version: "1";
+  readonly config: ChatReplyWorkerConfig;
+}
+
+export type ResolvedNodeAddon = ResolvedChatReplyWorkerAddon;
+
 export interface NodePayload {
   readonly id: string;
   readonly description?: string;
@@ -295,6 +372,7 @@ export interface NodePayload {
   readonly container?: ContainerExecution;
   readonly durability?: NodeDurability;
   readonly userAction?: UserActionNodeConfig;
+  readonly addon?: ResolvedNodeAddon;
   readonly argumentsTemplate?: Readonly<Record<string, unknown>>;
   readonly argumentBindings?: readonly ArgumentBinding[];
   readonly templateEngine?: string;

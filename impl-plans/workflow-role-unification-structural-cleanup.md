@@ -1,9 +1,9 @@
 # Workflow Role Unification Structural Cleanup Implementation Plan
 
-**Status**: In Progress
+**Status**: Completed
 **Design Reference**: design-docs/specs/design-unified-workflow-role-model.md
 **Created**: 2026-04-05
-**Last Updated**: 2026-04-05
+**Last Updated**: 2026-04-20
 
 ## Design Document Reference
 
@@ -37,7 +37,7 @@ What remains is structural cleanup. Legacy `subWorkflows`, `subworkflow-manager`
 
 #### `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/prompt-composition.ts`
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 
 ```typescript
 export type ManagerControlActionType =
@@ -49,16 +49,16 @@ export type ManagerControlActionType =
 
 **Checklist**:
 
-- [ ] Remove subworkflow-manager child-input forwarding semantics from role-authored workflow execution
-- [ ] Ensure role-authored managers never need `start-sub-workflow` or `deliver-to-child-input`
-- [ ] Keep workflow-call result delivery as the only cross-workflow runtime handoff for role-authored bundles
-- [ ] Add targeted engine, mailbox, and prompt-composition coverage for the narrowed role-authored scope
+- [x] Remove subworkflow-manager child-input forwarding semantics from role-authored workflow execution
+- [x] Ensure role-authored managers never need `start-sub-workflow` or `deliver-to-child-input`
+- [x] Keep workflow-call result delivery as the only cross-workflow runtime handoff for role-authored bundles
+- [x] Add targeted engine, mailbox, and prompt-composition coverage for the narrowed role-authored scope
 
 ### 2. Compatibility Boundary Narrowing
 
 #### `src/workflow/types.ts`, `src/workflow/load.ts`, `src/workflow/inspect.ts`, `src/workflow/runtime-readiness.ts`
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 
 ```typescript
 export interface WorkflowInspectionSummary {
@@ -71,7 +71,7 @@ export interface WorkflowInspectionSummary {
 
 **Checklist**:
 
-- [ ] Keep structural `kind`/`subWorkflows` compatibility limited to explicitly legacy-authored bundles
+- [x] Keep structural `kind`/`subWorkflows` compatibility limited to explicitly legacy-authored bundles
 - [x] Stop role-authored inspection and rendering helpers from falling back to structural boundary vocabulary where it is no longer needed
 - [x] Document any remaining compatibility-only normalization rules in code comments and inspection output
 
@@ -79,7 +79,7 @@ export interface WorkflowInspectionSummary {
 
 #### `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts`
 
-**Status**: IN_PROGRESS
+**Status**: COMPLETED
 
 ```typescript
 interface RoleCleanupExampleSet {
@@ -91,16 +91,16 @@ interface RoleCleanupExampleSet {
 
 **Checklist**:
 
-- [ ] Replace structural sub-workflow examples as the primary reference path with workflow-call-oriented examples
-- [ ] Convert tests that still rely on structural sub-workflow fixtures when equivalent role-authored fixtures now exist
-- [ ] Keep only a minimal, explicitly-labeled compatibility regression slice for intentional legacy behavior
-- [ ] Update architecture/workflow docs so the remaining legacy boundary is described accurately and narrowly
+- [x] Replace structural sub-workflow examples as the primary reference path with workflow-call-oriented examples
+- [x] Convert tests that still rely on structural sub-workflow fixtures when equivalent role-authored fixtures now exist
+- [x] Keep only a minimal, explicitly-labeled compatibility regression slice for intentional legacy behavior
+- [x] Update architecture/workflow docs so the remaining legacy boundary is described accurately and narrowly
 
 ### 4. Verification and Closeout
 
 #### `src/workflow/*.test.ts`, `src/cli.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql.test.ts`, `src/tui/opentui-screen.test.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 interface VerificationCommandSet {
@@ -113,38 +113,66 @@ interface VerificationCommandSet {
 
 **Checklist**:
 
-- [ ] Re-run the targeted runtime/prompt/save/inspection regression slice after each cleanup increment
-- [ ] Re-run full `bun test`
-- [ ] Re-run `bun run build`
-- [ ] Reconcile `impl-plans/PROGRESS.json` and `impl-plans/README.md` when the cleanup completes
+- [x] Re-run the targeted runtime/prompt/save/inspection regression slice after each cleanup increment
+- [x] Re-run full `bun test`
+- [x] Re-run `bun run build`
+- [x] Reconcile `impl-plans/PROGRESS.json` and `impl-plans/README.md` when the cleanup completes
 
 ## Module Status
 
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
-| Runtime scope cleanup | `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/prompt-composition.ts` | IN_PROGRESS | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts --runInBand` |
-| Compatibility boundary narrowing | `src/workflow/types.ts`, `src/workflow/load.ts`, `src/workflow/inspect.ts`, `src/workflow/runtime-readiness.ts` | IN_PROGRESS | `bun test src/workflow/load.test.ts src/workflow/runtime-readiness.test.ts src/graphql/schema.test.ts src/cli.test.ts --runInBand` |
-| Examples, docs, and test migration | `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts` | NOT_STARTED | targeted example, CLI, GraphQL, and TUI regression slices |
-| Verification and closeout | repository-wide | NOT_STARTED | `bun run typecheck:server`, `bun test`, `bun run build` |
+| Runtime scope cleanup | `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/prompt-composition.ts` | COMPLETED | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts --runInBand` |
+| Compatibility boundary narrowing | `src/workflow/types.ts`, `src/workflow/load.ts`, `src/workflow/inspect.ts`, `src/workflow/runtime-readiness.ts` | COMPLETED | `bun test src/workflow/load.test.ts src/workflow/runtime-readiness.test.ts src/graphql/schema.test.ts src/cli.test.ts --runInBand` |
+| Examples, docs, and test migration | `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts` | COMPLETED | targeted example, CLI, GraphQL, and TUI regression slices |
+| Verification and closeout | repository-wide | COMPLETED | `bun run typecheck:server`, `bun test`, `bun run build` |
 
 ## Dependencies
 
 | Feature | Depends On | Status |
 | ------- | ---------- | ------ |
-| Runtime scope cleanup | Completed transitional role-unification slice | IN_PROGRESS |
-| Compatibility boundary narrowing | Runtime scope cleanup | IN_PROGRESS |
-| Examples, docs, and test migration | Runtime scope cleanup, compatibility boundary narrowing | IN_PROGRESS |
-| Verification and closeout | Runtime cleanup and migration updates | BLOCKED |
+| Runtime scope cleanup | Completed transitional role-unification slice | COMPLETED |
+| Compatibility boundary narrowing | Runtime scope cleanup | COMPLETED |
+| Examples, docs, and test migration | Runtime scope cleanup, compatibility boundary narrowing | COMPLETED |
+| Verification and closeout | Runtime cleanup and migration updates | COMPLETED |
 
 ## Completion Criteria
 
-- [ ] Role-authored workflows no longer depend on structural sub-workflow manager/input/output runtime behavior
-- [ ] Role-authored manager guidance is scoped to the current workflow execution plus explicit `workflowCalls`
-- [ ] Structural sub-workflow examples/tests are no longer the primary coverage path for the active architecture
-- [ ] Remaining legacy compatibility behavior is explicit, narrow, and documented
-- [ ] `bun run typecheck:server`, `bun test`, and `bun run build` pass after the cleanup
+- [x] Role-authored workflows no longer depend on structural sub-workflow manager/input/output runtime behavior
+- [x] Role-authored manager guidance is scoped to the current workflow execution plus explicit `workflowCalls`
+- [x] Structural sub-workflow examples/tests are no longer the primary coverage path for the active architecture
+- [x] Remaining legacy compatibility behavior is explicit, narrow, and documented
+- [x] `bun run typecheck:server`, `bun test`, and `bun run build` pass after the cleanup
 
 ## Progress Log
+
+### Session: 2026-04-20 17:42 JST
+
+**Tasks Completed**: TASK-001, TASK-003, TASK-004, final plan closeout
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Closed the remaining active-role cleanup by rejecting structural boundary node kinds `subworkflow-manager`, `input`, and `output` when they are combined with authored `role` / `control` nodes. Removed inactive `Sub-workflows: none declared` mailbox rendering from role/root manager prompts, kept structural control actions available only for explicit legacy compatibility bundles, and documented the narrowed boundary in README, architecture, and workflow JSON docs. Verification passed with the targeted role-cleanup suite (`bun test src/workflow/save.test.ts src/workflow/engine.test.ts src/workflow/load.test.ts src/workflow/validate.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/runtime-readiness.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/tui/opentui-screen.test.ts`), full `bun test`, and `bun run build`.
+
+### Session: 2026-04-20 17:35 JST
+
+**Tasks Completed**: Continued TASK-003, removed empty structural `subWorkflows` authoring from raw loader, CLI, and direct call-node fixtures that were not testing legacy behavior
+**Tasks In Progress**: TASK-001, TASK-003
+**Blockers**: Structural runtime execution semantics and their dedicated regression tests still remain for explicitly legacy `subWorkflows` / `subWorkflowConversations`
+**Notes**: Updated raw workflow fixtures in `src/workflow/load.test.ts`, `src/cli.test.ts`, and `src/workflow/call-node.test.ts` to rely on omitted `subWorkflows` normalization instead of authoring empty compatibility fields. This narrows active-path test authoring without changing normalized runtime fixtures that still require the structural field. Verified with `bun test src/workflow/load.test.ts src/workflow/call-node.test.ts`, `bun test src/cli.test.ts -t "call-node|events emit dispatches locally|inspect reports worker-only|local call-node"`, and `bun run typecheck`.
+
+### Session: 2026-04-20 17:23 JST
+
+**Tasks Completed**: Continued TASK-003, added an automated example-boundary regression for migrated role-authored examples
+**Tasks In Progress**: TASK-001, TASK-003
+**Blockers**: Structural runtime execution semantics and their dedicated regression tests still remain for explicitly legacy `subWorkflows` / `subWorkflowConversations`
+**Notes**: Added `loadWorkflowFromDisk` coverage that asserts every primary example bundle stays off authored `subWorkflows` / `subWorkflowConversations`, while `codex-codex-euthanasia-debate` remains the single explicit structural compatibility example. This turns the docs/example migration expectation into a regression guard without weakening the intentional legacy runtime tests. Verified with `bun test src/workflow/load.test.ts -t "workflow-call examples|structural sub-workflow authoring"` and `bun run typecheck`.
+
+### Session: 2026-04-20 17:16 JST
+
+**Tasks Completed**: TASK-002, node add-on validation hardening that was blocking the mixed role/add-on validation slice
+**Tasks In Progress**: TASK-001, TASK-003
+**Blockers**: Structural runtime execution semantics for explicitly legacy `subWorkflows` / `subWorkflowConversations` still remain, so the cleanup plan is not complete
+**Notes**: Verified that the current compatibility boundary rejects role-authored bundles that also author non-empty structural `subWorkflows` or `subWorkflowConversations`, and checked off the remaining boundary-narrowing criterion. Added regression coverage for chat reply add-on normalization, non-object config rejection, and unknown built-in add-on rejection, with a small resolver typing hardening so strict TypeScript keeps add-on config as `Readonly<Record<string, unknown>>`. Advanced TASK-003 by documenting that `subworkflow-chained-simple` is a historical-name grouped-lane example and not the structural compatibility reference; `workflow-call-simple` remains the primary cross-workflow example and `codex-codex-euthanasia-debate` remains the explicit legacy structural example. Re-ran `bun test src/workflow/validate.test.ts src/workflow/native-node-executor.test.ts src/workflow/save.test.ts`, `bun run typecheck`, `bun test src/cli.test.ts src/events/*.test.ts src/events/adapters/*.test.ts`, and `bun run src/main.ts events validate --workflow-root ./examples --event-root ./examples/event-sources/.divedra-events --output json`.
 
 ### Session: 2026-04-05 20:38 JST
 

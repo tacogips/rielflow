@@ -36,7 +36,6 @@ async function createWorkflowFixture(
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",

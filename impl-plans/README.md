@@ -24,15 +24,26 @@ impl-plans/
 
 ## Active Plans
 
-| Plan                                           | Status      | Design Reference                                  |
-| ---------------------------------------------- | ----------- | ------------------------------------------------- |
-| `event-listener-workflow-trigger-foundation`   | Planning    | `design-event-listener-workflow-trigger`          |
-| `workflow-role-unification-structural-cleanup` | In Progress | `design-unified-workflow-role-model`              |
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
 
 ## Completed Plans
 
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `workflow-role-unification-structural-cleanup`     | 2026-04-20 | `design-unified-workflow-role-model`                                                                |
+| `event-reply-dispatch-persistence`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-chat-reply-webhook-example`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-reply-dispatcher`                           | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-chat-reply-worker`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-replay-controls`                            | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `event-mock-scenario-dispatch`                     | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `gemini-hook-support`                              | 2026-04-20 | `design-hook-command`, `command`                                                                    |
+| `event-receipt-operator-commands`                  | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `hook-snippet-command`                             | 2026-04-20 | `design-hook-command`, `command`                                                                    |
+| `hook-event-recording`                             | 2026-04-20 | `design-hook-command`, `command`, `design-data-model`                                               |
+| `event-source-adapters`                            | 2026-04-20 | `design-event-listener-workflow-trigger`                                                            |
+| `event-listener-workflow-trigger-foundation`       | 2026-04-20 | `design-event-listener-workflow-trigger`                                                            |
 | `container-runtime-env-isolation`                  | 2026-04-20 | `design-container-runtime-contract`                                                                 |
 | `root-data-dir-project-root-scoping`               | 2026-03-26 | `command`, `architecture`                                                                           |
 | `workflow-execution-working-directory`             | 2026-04-12 | `design-workflow-working-directory`, `command`, `architecture`                                      |
@@ -197,6 +208,12 @@ impl-plans/
 | 85    | COMPLETED   | Phase 84   |
 | 86    | COMPLETED   | Phase 85   |
 | 89    | COMPLETED   | Phase 88   |
+| 94    | COMPLETED   | Phase 91   |
+| 96    | COMPLETED   | Phase 94   |
+| 97    | COMPLETED   | Phase 96   |
+| 99    | COMPLETED   | Phase 98   |
+| 100   | COMPLETED   | Phase 99   |
+| 101   | COMPLETED   | Phase 99   |
 
 ### Phase to Plans Mapping
 
@@ -280,6 +297,16 @@ PHASE_TO_PLANS = {
   72: ["impl-plans/completed/tui-opentui-solid-migration.md", "impl-plans/completed/tui-solid-runtime-fallback-hardening.md", "impl-plans/completed/remove-web-ui.md", "impl-plans/completed/root-data-dir-project-root-scoping.md"],
   82: ["impl-plans/workflow-role-unification-structural-cleanup.md"],
   89: ["impl-plans/container-runtime-env-isolation.md"],
-  90: ["impl-plans/event-listener-workflow-trigger-foundation.md"]
+  90: ["impl-plans/event-listener-workflow-trigger-foundation.md"],
+  91: ["impl-plans/event-source-adapters.md"],
+  93: ["impl-plans/hook-snippet-command.md"],
+  94: ["impl-plans/event-receipt-operator-commands.md"],
+  95: ["impl-plans/gemini-hook-support.md"],
+  96: ["impl-plans/event-mock-scenario-dispatch.md"],
+  97: ["impl-plans/event-replay-controls.md"],
+  98: ["impl-plans/node-addon-chat-reply-worker.md"],
+  99: ["impl-plans/event-reply-dispatcher.md"],
+  100: ["impl-plans/event-chat-reply-webhook-example.md"],
+  101: ["impl-plans/event-reply-dispatch-persistence.md"]
 }
 ```

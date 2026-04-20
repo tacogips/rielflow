@@ -389,6 +389,8 @@ describe("composeExecutionPrompt", () => {
     expect(prompt).not.toContain('"type":"start-sub-workflow"');
     expect(prompt).not.toContain('"type":"deliver-to-child-input"');
     expect(prompt).not.toContain("sub-workflow dispatch");
+    expect(prompt).not.toContain("Sub-workflows:");
+    expect(prompt).not.toContain("Sub-workflows: none declared");
   });
 
   test("keeps structural manager system guidance for explicit subworkflow compatibility bundles", () => {

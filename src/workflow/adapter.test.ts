@@ -3,10 +3,12 @@ import {
   AdapterExecutionError,
   type AdapterExecutionContext,
   type AdapterExecutionInput,
+  type NodeAdapter,
   normalizeAdapterOutput,
   parseJsonObjectCandidate,
   ScenarioNodeAdapter,
 } from "./adapter";
+import { executeAdapterWithTimeout } from "./adapter-execution";
 
 describe("normalizeAdapterOutput", () => {
   test("normalizes valid adapter output", () => {
@@ -212,5 +214,61 @@ describe("ScenarioNodeAdapter", () => {
     expect(first.payload).toEqual({ turn: 1 });
     expect(second.payload).toEqual({ turn: 2 });
     expect(third.payload).toEqual({ turn: 3 });
+  });
+});
+
+describe("executeAdapterWithTimeout", () => {
+  test("classifies non-DOM abort errors from timed-out adapters as timeout", async () => {
+    const abortingAdapter = {
+      async execute(_input, context) {
+        return await new Promise((_, reject) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("operation aborted");
+              error.name = "AbortError";
+              reject(error);
+            },
+            { once: true },
+          );
+        });
+      },
+    } satisfies NodeAdapter;
+
+    const result = await executeAdapterWithTimeout(
+      abortingAdapter,
+      makeExecutionInput(),
+      1,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("timeout");
+    expect(result.error.message).toBe("adapter execution timed out");
+  });
+
+  test("does not classify adapter-raised abort errors before timeout as timeout", async () => {
+    const abortingAdapter = {
+      async execute() {
+        const error = new Error("operation aborted by adapter");
+        error.name = "AbortError";
+        throw error;
+      },
+    } satisfies NodeAdapter;
+
+    const result = await executeAdapterWithTimeout(
+      abortingAdapter,
+      makeExecutionInput(),
+      1000,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("provider_error");
+    expect(result.error.message).toBe("operation aborted by adapter");
   });
 });

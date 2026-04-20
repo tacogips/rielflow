@@ -237,7 +237,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -285,7 +284,6 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -331,7 +329,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "inline",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -384,7 +381,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "nested nodes",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -439,7 +435,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "unsafe",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -749,7 +744,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "broken",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "missing",
-      subWorkflows: [],
       nodes: [],
       edges: [],
       branching: { mode: "fan-out" },
@@ -776,7 +770,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -950,7 +943,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -1005,7 +997,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -1075,7 +1066,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -1211,6 +1201,51 @@ describe("loadWorkflowFromDisk", () => {
     ]);
   });
 
+  test("keeps structural sub-workflow authoring limited to the legacy example", async () => {
+    const examplesRoot = path.resolve(process.cwd(), "examples");
+    const roleAuthoredExamples = [
+      "worker-only-single-step",
+      "workflow-call-simple",
+      "workflow-call-review-target",
+      "claude-divedra-codex-coding",
+      "claude-divedra-claude-worker",
+      "same-node-session-echo",
+      "subworkflow-chained-simple",
+      "node-combinations-showcase",
+      "first-four-arithmetic-pipeline",
+    ];
+
+    for (const workflowName of roleAuthoredExamples) {
+      const workflowText = await readFile(
+        path.join(examplesRoot, workflowName, "workflow.json"),
+        "utf8",
+      );
+      const workflowJson = JSON.parse(workflowText) as {
+        readonly subWorkflows?: unknown;
+        readonly subWorkflowConversations?: unknown;
+      };
+      expect(workflowJson.subWorkflows).toBeUndefined();
+      expect(workflowJson.subWorkflowConversations).toBeUndefined();
+    }
+
+    const legacyWorkflowText = await readFile(
+      path.join(
+        examplesRoot,
+        "codex-codex-euthanasia-debate",
+        "workflow.json",
+      ),
+      "utf8",
+    );
+    const legacyWorkflowJson = JSON.parse(legacyWorkflowText) as {
+      readonly subWorkflows?: readonly unknown[];
+      readonly subWorkflowConversations?: readonly unknown[];
+    };
+    expect(legacyWorkflowJson.subWorkflows?.length).toBeGreaterThan(0);
+    expect(
+      legacyWorkflowJson.subWorkflowConversations?.length,
+    ).toBeGreaterThan(0);
+  });
+
   test("resolves workflow ids from a directory whose name differs from workflowId", async () => {
     const root = await makeTempDir();
     const workflowDirectory = path.join(root, "review-flow-bundle");
@@ -1306,7 +1341,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -1355,7 +1389,6 @@ describe("loadWorkflowFromDisk", () => {
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",

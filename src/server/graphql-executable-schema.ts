@@ -124,11 +124,59 @@ const GRAPHQL_SCHEMA_TEXT = `
     at: String!
   }
 
+  type RuntimeHookEventRecord {
+    hookEventId: String!
+    workflowId: String!
+    workflowExecutionId: String!
+    nodeId: String!
+    nodeExecId: String!
+    managerSessionId: String
+    vendor: String!
+    agentSessionId: String!
+    rawEventName: String!
+    eventName: String!
+    cwd: String!
+    transcriptPath: String
+    model: String
+    turnId: String
+    payloadHash: String!
+    payloadRefJson: String
+    responseJson: String
+    status: String!
+    error: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type RuntimeEventReplyDispatchRecord {
+    idempotencyKey: String!
+    sourceId: String!
+    provider: String!
+    workflowId: String!
+    workflowExecutionId: String!
+    nodeId: String!
+    nodeExecId: String!
+    eventId: String!
+    conversationId: String!
+    threadId: String
+    actorId: String
+    status: String!
+    dispatchId: String
+    providerMessageId: String
+    requestJson: String!
+    responseJson: String
+    error: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type WorkflowExecutionView {
     workflowExecutionId: String!
     session: WorkflowSessionState!
     nodeExecutions: [RuntimeNodeExecutionSummary!]!
     nodeLogs: [RuntimeNodeLogEntry!]!
+    hookEvents: [RuntimeHookEventRecord!]!
+    replyDispatches: [RuntimeEventReplyDispatchRecord!]!
   }
 
   type NodeExecutionView {
@@ -223,6 +271,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodes: [NodeExecutionView!]!
     communications: CommunicationConnection!
     nodeLogs: [RuntimeNodeLogEntry!]!
+    hookEvents: [RuntimeHookEventRecord!]!
+    replyDispatches: [RuntimeEventReplyDispatchRecord!]!
   }
 
   type ManagerIntentSummary {

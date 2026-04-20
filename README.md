@@ -122,10 +122,26 @@ Primary commands implemented in `src/cli.ts`:
 - `tui [workflow-name]`
 - `call-node <workflow-id> <workflow-run-id> <node-id>`
 - `hook [--vendor claude-code|codex]`
+- `events validate`
+- `events emit <source-id> --event-file <path>`
+- `events serve`
+- `events list [--source <id>] [--status <status>] [--limit <n>]`
+- `events replay <receipt-id>`
 
 `workflow create <name>` scaffolds a role-based starter with a `claude-code-agent` manager node and a `codex-agent` worker node. The generated `workflow.json` prefers the authored-minimal surface and omits compatibility/default fields such as empty `subWorkflows`, synthesized `edges`, default `branching`, and node-level `completion: { "type": "none" }` unless they are needed. Pass `--worker-only` to scaffold a manager-less starter whose explicit `entryNodeId` points at `main-worker`.
 
 `serve` and `web serve` start the local Bun HTTP server. The root page serves a read-only Solid workflow viewer with the workflow node graph, execution run list, and selected run logs.
+
+`events` commands load external event source configuration from
+`.divedra-events` next to the workflow root, or from `--event-root`. `events
+emit` injects fixture payloads for local testing, `events serve` starts
+listener adapters, `events list` reads persisted receipt records from the
+runtime database, and `events replay` re-dispatches a stored normalized event
+with replay-specific event and dedupe identifiers. Event dispatch commands can
+use `--mock-scenario <path>` to execute local workflows deterministically
+without a GraphQL endpoint or real agent backend transports. `events replay`
+also accepts `--dry-run` and `--reason <text>` for operator verification and
+receipt audit metadata.
 
 Useful options:
 
@@ -261,6 +277,7 @@ Relevant current behavior:
 - non-empty authored `subWorkflows` are reserved for legacy structural compatibility and should not be combined with authored role/control nodes
 - non-empty authored `subWorkflowConversations` are also reserved for legacy structural compatibility and should not be combined with authored role/control nodes
 - authored `subWorkflowConversations` remain legacy structural compatibility metadata and are not part of the active role-authored `workflowCalls` path
+- structural boundary `kind` values `subworkflow-manager`, `input`, and `output` are reserved for legacy compatibility and should not be combined with authored role/control nodes
 - inline node payload authoring is supported through `workflow.nodes[].node` when `nodeFile` is omitted
 - `workflowId` is the runtime namespace key for artifacts and session storage, so it must be filesystem-safe
 
@@ -289,6 +306,7 @@ Current `kind` values:
 Role-based authoring note:
 
 - `role` is the authored direction of travel: `manager` or `worker`
+- role/control-authored workflows should omit structural boundary `kind` values
 - `kind` still appears in normalized runtime structures while the engine retains structural sub-workflow compatibility paths
 
 ## Node Payloads
@@ -392,7 +410,7 @@ Available examples:
 - `claude-divedra-codex-coding`
 - `claude-divedra-claude-worker`
 - `same-node-session-echo`
-- `subworkflow-chained-simple`
+- `subworkflow-chained-simple` (historical name; now an ordered grouped-lane example without structural `subWorkflows`)
 - `node-combinations-showcase`
 - `first-four-arithmetic-pipeline`
 - `codex-codex-euthanasia-debate` (legacy structural compatibility)
@@ -404,6 +422,7 @@ Recommended starting point:
 Workflow-call reference:
 
 - `workflow-call-simple` shows the current explicit `workflowCalls` path with a managed parent workflow calling a worker-only sibling workflow and resuming from the returned result
+- `subworkflow-chained-simple` is kept as a historical-name grouped-lane reference; it does not author structural `subWorkflows`
 
 Legacy compatibility reference:
 

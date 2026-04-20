@@ -181,6 +181,9 @@ function resolveLocalSessionConfig(
   const promptText = buildCombinedPromptText(input);
   const env = buildAmbientProcessEnv(
     config.env,
+    input.divedraHookContext === undefined
+      ? undefined
+      : { ...input.divedraHookContext.environment },
     input.ambientManagerContext === undefined
       ? undefined
       : { ...input.ambientManagerContext.environment },

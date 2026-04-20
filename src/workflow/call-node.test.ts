@@ -40,7 +40,6 @@ async function createCallNodeFixture(
     description: "call-node fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -146,7 +145,6 @@ async function createOptionalCallNodeFixture(
     description: "call-node fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",

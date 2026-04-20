@@ -210,6 +210,9 @@ async function executeLocalCodexAgent(
   const { promptText, sessionConfig } = resolveLocalSessionConfig(config, input);
   const ambientEnv = buildAmbientProcessEnv(
     config.env,
+    input.divedraHookContext === undefined
+      ? undefined
+      : { ...input.divedraHookContext.environment },
     input.ambientManagerContext === undefined
       ? undefined
       : { ...input.ambientManagerContext.environment },

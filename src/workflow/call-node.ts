@@ -7,6 +7,7 @@ import {
   atomicWriteTextFile as writeRawTextFile,
 } from "../shared/fs";
 import {
+  buildAdapterDivedraHookContext,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
   type AdapterExecutionInput,
@@ -65,6 +66,7 @@ import type {
 } from "./session";
 import type {
   AgentNodePayload,
+  ChatReplyDispatcher,
   JsonObject,
   LoadOptions,
   NodePayload,
@@ -80,6 +82,7 @@ export interface CallNodeInput extends LoadOptions, SessionStoreOptions {
   readonly message?: unknown;
   readonly mockScenario?: MockNodeScenario;
   readonly dryRun?: boolean;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly defaultTimeoutMs?: number;
 }
 
@@ -739,7 +742,8 @@ class ExecutionDispatcher {
     const nativeNodePayload =
       agentNodePayload === null &&
       (nodePayload.nodeType === "command" ||
-        nodePayload.nodeType === "container")
+        nodePayload.nodeType === "container" ||
+        nodePayload.nodeType === "addon")
         ? nodePayload
         : null;
     const executionNodePayload = agentNodePayload ?? nodePayload;
@@ -1057,6 +1061,15 @@ class ExecutionDispatcher {
                   artifactDir,
                   upstreamCommunicationIds: [],
                   executionMailbox,
+                  divedraHookContext: buildAdapterDivedraHookContext({
+                    workflowId: workflow.workflowId,
+                    workflowExecutionId: session.sessionId,
+                    nodeId: input.nodeId,
+                    nodeExecId,
+                    ...(agentNodePayload.executionBackend === undefined
+                      ? {}
+                      : { agentBackend: agentNodePayload.executionBackend }),
+                  }),
                   ...(backendSession === undefined ? {} : { backendSession }),
                   ...(ambientManagerContext === undefined
                     ? {}
@@ -1105,6 +1118,9 @@ class ExecutionDispatcher {
                 arguments: assembled.arguments,
                 artifactDir,
                 executionMailbox,
+                ...(input.eventReplyDispatcher === undefined
+                  ? {}
+                  : { chatReplyDispatcher: input.eventReplyDispatcher }),
                 ...(input.env === undefined ? {} : { env: input.env }),
                 timeoutMs,
               });

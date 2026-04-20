@@ -624,6 +624,43 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
+  test("rejects structural boundary node kinds for role-authored bundles", () => {
+    for (const kind of ["subworkflow-manager", "input", "output"] as const) {
+      const raw = makeUnifiedRoleRaw();
+      raw.workflow = {
+        ...(raw.workflow as Record<string, unknown>),
+        nodes: [
+          {
+            id: "divedra-manager",
+            role: "manager",
+            nodeFile: "node-divedra-manager.json",
+            completion: { type: "none" },
+          },
+          {
+            id: "worker-1",
+            role: "worker",
+            kind,
+            nodeFile: "node-worker-1.json",
+            completion: { type: "none" },
+          },
+        ],
+      };
+
+      const result = validateWorkflowBundleDetailed(raw);
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        continue;
+      }
+      expect(
+        result.error.some(
+          (issue) =>
+            issue.path === "workflow.nodes[1].kind" &&
+            issue.message.includes("legacy structural compatibility only"),
+        ),
+      ).toBe(true);
+    }
+  });
+
   test("accepts manager-less worker-only workflows with explicit entryNodeId", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
@@ -915,6 +952,258 @@ describe("validateWorkflowBundle", () => {
         description: "Validated user reply payload",
       },
     });
+  });
+
+  test("accepts built-in chat reply add-on node refs", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "divedra/chat-reply-worker",
+            version: "1",
+            config: {
+              textTemplate: "{{inbox.latest.output.payload.text}}",
+              onMissingTarget: "intent-only",
+            },
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-worker-1.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.workflow.nodes[1]?.addon).toEqual({
+      name: "divedra/chat-reply-worker",
+      version: "1",
+      config: {
+        textTemplate: "{{inbox.latest.output.payload.text}}",
+        onMissingTarget: "intent-only",
+      },
+    });
+    expect(result.value.nodePayloads["worker-1"]).toMatchObject({
+      id: "worker-1",
+      nodeType: "addon",
+      addon: {
+        name: "divedra/chat-reply-worker",
+        version: "1",
+        config: {
+          textTemplate: "{{inbox.latest.output.payload.text}}",
+          onMissingTarget: "intent-only",
+        },
+      },
+    });
+  });
+
+  test("normalizes optional built-in chat reply add-on config fields", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "divedra/chat-reply-worker",
+            config: {
+              textTemplate: "Reply: {{event.payload.text}}",
+              visibility: "ephemeral",
+              threadPolicy: "same-thread",
+              onMissingTarget: "dry-run",
+            },
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-worker-1.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.nodePayloads["worker-1"]?.addon?.config).toEqual({
+      textTemplate: "Reply: {{event.payload.text}}",
+      visibility: "ephemeral",
+      threadPolicy: "same-thread",
+      onMissingTarget: "dry-run",
+    });
+  });
+
+  test("rejects add-on node refs mixed with nodeFile", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+          addon: {
+            name: "divedra/chat-reply-worker",
+            config: { textTemplate: "done" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.nodes[1].addon" &&
+          issue.message.includes("must be omitted when nodeFile is provided"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects invalid built-in add-on config", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "divedra/chat-reply-worker",
+            version: "1",
+            config: {
+              textTemplate: "",
+            },
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-worker-1.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.nodes[1].addon.config.textTemplate" &&
+          issue.message.includes("non-empty string"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects non-object built-in add-on config", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "divedra/chat-reply-worker",
+            config: "not-an-object",
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-worker-1.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.nodes[1].addon.config" &&
+          issue.message.includes("must be an object"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects unknown built-in add-on refs", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          addon: {
+            name: "divedra/unknown-worker",
+            config: { textTemplate: "done" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+    };
+    delete raw.nodePayloads["node-worker-1.json"];
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.nodes[1].addon.name" &&
+          issue.message.includes("unknown built-in node add-on"),
+      ),
+    ).toBe(true);
   });
 
   test("rejects user-action nodes without message tool ids", () => {

@@ -18,6 +18,8 @@ import {
 } from "./workflow/inspect";
 import { loadWorkflowFromDisk } from "./workflow/load";
 import {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   listRuntimeSessions,
@@ -28,7 +30,7 @@ import {
 } from "./workflow/session-store";
 import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/adapter";
-import type { LoadOptions } from "./workflow/types";
+import type { ChatReplyDispatcher, LoadOptions } from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 
 export type DivedraOptions = LoadOptions & SessionStoreOptions;
@@ -39,6 +41,7 @@ export interface ExecuteWorkflowInput extends DivedraOptions {
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
   readonly dryRun?: boolean;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly maxSteps?: number;
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
@@ -74,6 +77,16 @@ export interface RuntimeSessionView {
   >
     ? T
     : never;
+  readonly hookEvents?: ReturnType<
+    typeof listRuntimeHookEvents
+  > extends Promise<infer T>
+    ? T
+    : never;
+  readonly replyDispatches?: ReturnType<
+    typeof listEventReplyDispatchesFromRuntimeDb
+  > extends Promise<infer T>
+    ? T
+    : never;
 }
 
 export interface CallWorkflowNodeInput extends CallNodeInput {}
@@ -84,6 +97,7 @@ export interface WorkflowExecutionClientOptions extends DivedraOptions {
   readonly authToken?: string;
   readonly managerSessionId?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
 }
 
 export interface WorkflowExecutionClientRequest {
@@ -388,6 +402,9 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       ? {}
       : { mockScenario: input.mockScenario }),
     ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
+    ...(input.eventReplyDispatcher === undefined
+      ? {}
+      : { eventReplyDispatcher: input.eventReplyDispatcher }),
     ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
     ...(input.maxLoopIterations === undefined
       ? {}
@@ -529,9 +546,17 @@ export async function getRuntimeSessionView(
   options: DivedraOptions = {},
 ): Promise<RuntimeSessionView> {
   const session = await getSession(sessionId, options);
-  const nodeExecutions = await listRuntimeNodeExecutions(sessionId, options);
-  const nodeLogs = await listRuntimeNodeLogs(sessionId, options);
-  return { session, nodeExecutions, nodeLogs };
+  const [nodeExecutions, nodeLogs, hookEvents, replyDispatches] =
+    await Promise.all([
+      listRuntimeNodeExecutions(sessionId, options),
+      listRuntimeNodeLogs(sessionId, options),
+      listRuntimeHookEvents(sessionId, options),
+      listEventReplyDispatchesFromRuntimeDb(
+        { workflowExecutionId: sessionId },
+        options,
+      ),
+    ]);
+  return { session, nodeExecutions, nodeLogs, hookEvents, replyDispatches };
 }
 
 export async function callWorkflowNode(input: CallWorkflowNodeInput): Promise<{

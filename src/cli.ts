@@ -7,10 +7,18 @@ import {
   executeGraphqlRequest,
   type GraphqlClientResponse,
 } from "./graphql/client";
+import { buildHookConfigurationSnippet } from "./hook/config";
 import { parseHookVendorOption } from "./hook/detect-vendor";
 import { createReadHookStdin, runHookCommand } from "./hook/index";
 import { SUPPORTED_HOOK_VENDORS } from "./hook/types";
 import { startServe, type StartedServe } from "./server/serve";
+import {
+  createEventListenerService,
+  loadAndValidateEventConfiguration,
+} from "./events";
+import { emitEventFile } from "./events/manual-emit";
+import { listEventReceipts, replayEventReceipt } from "./events/receipt-ops";
+import type { EventListenerHandle } from "./events/listener-service";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
 import { callNode, type CallNodeInput } from "./workflow/call-node";
@@ -32,9 +40,12 @@ import type {
 } from "./tui/opentui-screen";
 import { loadAgentSessionTranscript } from "./tui/agent-session-history";
 import {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   listRuntimeSessions,
+  type RuntimeEventReplyDispatchStatus,
 } from "./workflow/runtime-db";
 import { createManagerSessionStore } from "./workflow/manager-session-store";
 import { deleteWorkflowSessionHistory } from "./workflow/session-history";
@@ -59,6 +70,9 @@ export interface CliDependencies {
   }) => Promise<StartedServe>;
   readonly isInteractiveTerminal: () => boolean;
   readonly waitForServeShutdown?: (started: StartedServe) => Promise<void>;
+  readonly waitForEventListenerShutdown?: (
+    started: EventListenerHandle,
+  ) => Promise<void>;
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly readStdin?: () => Promise<string>;
@@ -101,6 +115,12 @@ interface ParsedOptions {
   readonly messageJson?: string;
   readonly messageFile?: string;
   readonly vendor?: string;
+  readonly eventRoot?: string;
+  readonly eventFile?: string;
+  readonly sourceId?: string;
+  readonly status?: string;
+  readonly limit?: number;
+  readonly reason?: string;
 }
 
 interface ParsedArgs {
@@ -140,6 +160,7 @@ interface WorkflowExecutionExport {
     ReturnType<typeof listRuntimeNodeExecutions>
   >;
   readonly nodeLogs: Awaited<ReturnType<typeof listRuntimeNodeLogs>>;
+  readonly hookEvents: Awaited<ReturnType<typeof listRuntimeHookEvents>>;
   readonly communications: readonly NonNullable<
     Awaited<
       ReturnType<
@@ -163,29 +184,34 @@ const DEFAULT_IO: CliIo = {
   stderr: (line: string) => console.error(line),
 };
 
+async function waitForProcessShutdownSignal(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+      resolve();
+    };
+    const onSigint = (): void => finish();
+    const onSigterm = (): void => finish();
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+  });
+}
+
 const DEFAULT_DEPS: CliDependencies = {
   startServe,
   isInteractiveTerminal: () =>
     process.stdin.isTTY === true && process.stdout.isTTY === true,
   readStdin: createReadHookStdin(process.stdin),
-  waitForServeShutdown: async (_started: StartedServe) => {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        process.off("SIGINT", onSigint);
-        process.off("SIGTERM", onSigterm);
-        resolve();
-      };
-      const onSigint = (): void => finish();
-      const onSigterm = (): void => finish();
-      process.once("SIGINT", onSigint);
-      process.once("SIGTERM", onSigterm);
-    });
-  },
+  waitForServeShutdown: async (_started: StartedServe) =>
+    waitForProcessShutdownSignal(),
+  waitForEventListenerShutdown: async (_started: EventListenerHandle) =>
+    waitForProcessShutdownSignal(),
 };
 
 function parseNumericOption(value: string | undefined): number | undefined {
@@ -197,6 +223,20 @@ function parseNumericOption(value: string | undefined): number | undefined {
     return undefined;
   }
   return parsed;
+}
+
+function parseReplyDispatchStatus(
+  value: string | undefined,
+): RuntimeEventReplyDispatchStatus | undefined {
+  if (
+    value === "dispatching" ||
+    value === "sent" ||
+    value === "queued" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -227,6 +267,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let messageJson: string | undefined;
   let messageFile: string | undefined;
   let vendor: string | undefined;
+  let eventRoot: string | undefined;
+  let eventFile: string | undefined;
+  let sourceId: string | undefined;
+  let status: string | undefined;
+  let limit: number | undefined;
+  let reason: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -340,6 +386,24 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--vendor":
         vendor = readNext();
         break;
+      case "--event-root":
+        eventRoot = readNext();
+        break;
+      case "--event-file":
+        eventFile = readNext();
+        break;
+      case "--source":
+        sourceId = readNext();
+        break;
+      case "--status":
+        status = readNext();
+        break;
+      case "--limit":
+        limit = parseNumericOption(readNext());
+        break;
+      case "--reason":
+        reason = readNext();
+        break;
       default:
         break;
     }
@@ -374,6 +438,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(messageJson === undefined ? {} : { messageJson }),
       ...(messageFile === undefined ? {} : { messageFile }),
       ...(vendor === undefined ? {} : { vendor }),
+      ...(eventRoot === undefined ? {} : { eventRoot }),
+      ...(eventFile === undefined ? {} : { eventFile }),
+      ...(sourceId === undefined ? {} : { sourceId }),
+      ...(status === undefined ? {} : { status }),
+      ...(limit === undefined ? {} : { limit }),
+      ...(reason === undefined ? {} : { reason }),
     },
   };
 }
@@ -400,16 +470,24 @@ function printHelp(io: CliIo): void {
     "  divedra gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
   );
   io.stdout(
+    "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
+  );
+  io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
   );
   io.stdout(`  divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
+  io.stdout(`  divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
   io.stdout("");
   io.stdout("Create options:");
   io.stdout("  --worker-only  Scaffold a manager-less starter workflow");
   io.stdout("");
   io.stdout("Session options:");
-  io.stdout("  export --file <path>     Write workflow run export JSON to a file");
-  io.stdout("  logs --format <format>   Print node logs as text, json, or jsonl");
+  io.stdout(
+    "  export --file <path>     Write workflow run export JSON to a file",
+  );
+  io.stdout(
+    "  logs --format <format>   Print node logs as text, json, or jsonl",
+  );
 }
 
 function formatValidationIssues(
@@ -563,9 +641,10 @@ async function buildWorkflowExecutionExport(
   }
   const workflowId = loaded.value.workflowId;
 
-  const [nodeExecutions, nodeLogs] = await Promise.all([
+  const [nodeExecutions, nodeLogs, hookEvents] = await Promise.all([
     listRuntimeNodeExecutions(workflowExecutionId, options),
     listRuntimeNodeLogs(workflowExecutionId, options),
+    listRuntimeHookEvents(workflowExecutionId, options),
   ]);
 
   const communicationService = createCommunicationService();
@@ -595,6 +674,7 @@ async function buildWorkflowExecutionExport(
     session: loaded.value,
     nodeExecutions,
     nodeLogs,
+    hookEvents,
     communications,
   };
 }
@@ -1650,13 +1730,40 @@ export async function runCli(
   }
 
   if (scope === "hook") {
+    const explicitVendor = parseHookVendorOption(parsed.options.vendor);
     if (command !== undefined) {
+      if (command !== "snippet") {
+        io.stderr("unknown hook subcommand");
+        io.stderr(`usage: divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
+        return 2;
+      }
+      if (target !== undefined) {
+        io.stderr("hook snippet does not accept extra positional arguments");
+        io.stderr(`usage: divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
+        return 2;
+      }
+      if (parsed.options.vendor === undefined) {
+        io.stderr(
+          `--vendor is required for hook snippet; expected ${HOOK_VENDOR_EXPECTED}`,
+        );
+        return 2;
+      }
+      if (explicitVendor === undefined) {
+        io.stderr(
+          `invalid --vendor value '${parsed.options.vendor}'; expected ${HOOK_VENDOR_EXPECTED}`,
+        );
+        return 2;
+      }
+      emitJson(io, buildHookConfigurationSnippet(explicitVendor));
+      return 0;
+    }
+
+    if (positionals.length > 1) {
       io.stderr("hook does not accept positional arguments");
       io.stderr(`usage: divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
       return 2;
     }
 
-    const explicitVendor = parseHookVendorOption(parsed.options.vendor);
     if (parsed.options.vendor !== undefined && explicitVendor === undefined) {
       io.stderr(
         `invalid --vendor value '${parsed.options.vendor}'; expected ${HOOK_VENDOR_EXPECTED}`,
@@ -1670,10 +1777,329 @@ export async function runCli(
           deps.readStdin ??
           DEFAULT_DEPS.readStdin ??
           createReadHookStdin(process.stdin),
+        env,
+        cwd: process.cwd(),
+        ...(sharedOptions.rootDataDir === undefined
+          ? {}
+          : { rootDataDir: sharedOptions.rootDataDir }),
+        ...(sharedOptions.artifactRoot === undefined
+          ? {}
+          : { artifactRoot: sharedOptions.artifactRoot }),
       },
       ...(explicitVendor === undefined ? {} : { explicitVendor }),
       io,
     });
+  }
+
+  if (scope === "events") {
+    let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
+    if (parsed.options.mockScenarioPath !== undefined) {
+      if (parsed.options.endpoint !== undefined) {
+        io.stderr("--mock-scenario cannot be combined with --endpoint");
+        return 2;
+      }
+      try {
+        mockScenarioOptions = await readMockScenarioOption(
+          parsed.options.mockScenarioPath,
+        );
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`failed to read mock scenario: ${message}`);
+        return 2;
+      }
+    }
+    const eventOptions = {
+      ...sharedOptions,
+      ...mockScenarioOptions,
+      ...(parsed.options.dryRun ? { dryRun: true } : {}),
+      ...(parsed.options.maxSteps === undefined
+        ? {}
+        : { maxSteps: parsed.options.maxSteps }),
+      ...(parsed.options.maxLoopIterations === undefined
+        ? {}
+        : { maxLoopIterations: parsed.options.maxLoopIterations }),
+      ...(parsed.options.defaultTimeoutMs === undefined
+        ? {}
+        : { defaultTimeoutMs: parsed.options.defaultTimeoutMs }),
+      ...(parsed.options.eventRoot === undefined
+        ? {}
+        : { eventRoot: parsed.options.eventRoot }),
+      ...(parsed.options.endpoint === undefined
+        ? {}
+        : { endpoint: parsed.options.endpoint }),
+      ...(graphqlCliTransport?.authToken === undefined
+        ? {}
+        : { authToken: graphqlCliTransport.authToken }),
+      ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+      ...(parsed.options.readOnly ? { readOnly: true } : {}),
+    };
+
+    if (command === "validate") {
+      try {
+        const result = await loadAndValidateEventConfiguration(eventOptions);
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            valid: result.valid,
+            eventRoot: result.configuration.eventRoot,
+            sources: result.configuration.sources.length,
+            bindings: result.configuration.bindings.length,
+            issues: result.issues,
+          });
+        } else if (result.valid) {
+          io.stdout(
+            `event configuration is valid: ${result.configuration.eventRoot}`,
+          );
+        } else {
+          io.stderr("event validation failed");
+          io.stderr(formatValidationIssues(result.issues));
+        }
+        return result.valid ? 0 : 2;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events validate failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "emit") {
+      const sourceId = target;
+      const eventFile = parsed.options.eventFile ?? parsed.options.filePath;
+      if (sourceId === undefined || eventFile === undefined) {
+        io.stderr("source id and --event-file are required");
+        io.stderr(
+          "usage: divedra events emit <source-id> --event-file <path> [options]",
+        );
+        return 2;
+      }
+      try {
+        const results = await emitEventFile({
+          ...eventOptions,
+          sourceId,
+          eventFile,
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            sourceId,
+            receipts: results.map((result) => ({
+              receiptId: result.receipt.receiptId,
+              status: result.receipt.status,
+              duplicate: result.duplicate,
+              workflowName: result.workflowName ?? null,
+              workflowExecutionId: result.workflowExecutionId ?? null,
+            })),
+          });
+        } else {
+          for (const result of results) {
+            io.stdout(
+              [
+                `receipt: ${result.receipt.receiptId}`,
+                `status: ${result.receipt.status}`,
+                `duplicate: ${String(result.duplicate)}`,
+                `workflowExecutionId: ${result.workflowExecutionId ?? "-"}`,
+              ].join(" "),
+            );
+          }
+        }
+        return results.some((result) => result.receipt.status === "failed")
+          ? 1
+          : 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events emit failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "list") {
+      try {
+        const receipts = await listEventReceipts({
+          ...eventOptions,
+          ...(parsed.options.sourceId === undefined
+            ? {}
+            : { sourceId: parsed.options.sourceId }),
+          ...(parsed.options.status === undefined
+            ? {}
+            : { status: parsed.options.status }),
+          ...(parsed.options.limit === undefined
+            ? {}
+            : { limit: parsed.options.limit }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, { receipts });
+        } else {
+          for (const receipt of receipts) {
+            io.stdout(
+              [
+                `receipt: ${receipt.receiptId}`,
+                `source: ${receipt.sourceId}`,
+                `binding: ${receipt.bindingId ?? "-"}`,
+                `status: ${receipt.status}`,
+                `workflowExecutionId: ${receipt.workflowExecutionId ?? "-"}`,
+                `updatedAt: ${receipt.updatedAt}`,
+              ].join(" "),
+            );
+          }
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events list failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "replies") {
+      const status = parseReplyDispatchStatus(parsed.options.status);
+      if (parsed.options.status !== undefined && status === undefined) {
+        io.stderr(
+          "--status must be one of dispatching, sent, queued, or failed",
+        );
+        return 2;
+      }
+      try {
+        const replies = await listEventReplyDispatchesFromRuntimeDb(
+          {
+            ...(target === undefined ? {} : { workflowExecutionId: target }),
+            ...(status === undefined ? {} : { status }),
+            ...(parsed.options.limit === undefined
+              ? {}
+              : { limit: parsed.options.limit }),
+          },
+          eventOptions,
+        );
+        if (parsed.options.output === "json") {
+          emitJson(io, { replies });
+        } else {
+          for (const reply of replies) {
+            io.stdout(
+              [
+                `reply: ${reply.idempotencyKey}`,
+                `source: ${reply.sourceId}`,
+                `status: ${reply.status}`,
+                `workflowExecutionId: ${reply.workflowExecutionId}`,
+                `node: ${reply.nodeId}/${reply.nodeExecId}`,
+                `providerMessageId: ${reply.providerMessageId ?? "-"}`,
+                `updatedAt: ${reply.updatedAt}`,
+              ].join(" "),
+            );
+          }
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events replies failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "replay") {
+      const receiptId = target;
+      if (receiptId === undefined) {
+        io.stderr("receipt id is required");
+        io.stderr(
+          "usage: divedra events replay <receipt-id> [--reason <text>] [--dry-run] [options]",
+        );
+        return 2;
+      }
+      try {
+        const result = await replayEventReceipt({
+          ...eventOptions,
+          receiptId,
+          ...(parsed.options.reason === undefined
+            ? {}
+            : { reason: parsed.options.reason }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            replayedFromReceiptId: result.original.receiptId,
+            replayEventId: result.replayEvent.eventId,
+            replayReason: result.reason ?? null,
+            receipts: result.receipts.map((entry) => ({
+              receiptId: entry.receipt.receiptId,
+              status: entry.receipt.status,
+              duplicate: entry.duplicate,
+              workflowName: entry.workflowName ?? null,
+              workflowExecutionId: entry.workflowExecutionId ?? null,
+            })),
+          });
+        } else {
+          for (const entry of result.receipts) {
+            io.stdout(
+              [
+                `replayedFrom: ${result.original.receiptId}`,
+                `receipt: ${entry.receipt.receiptId}`,
+                `status: ${entry.receipt.status}`,
+                `duplicate: ${String(entry.duplicate)}`,
+                `reason: ${result.reason ?? "-"}`,
+                `workflowExecutionId: ${entry.workflowExecutionId ?? "-"}`,
+              ].join(" "),
+            );
+          }
+        }
+        return result.receipts.some(
+          (entry) => entry.receipt.status === "failed",
+        )
+          ? 1
+          : 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events replay failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "serve") {
+      try {
+        const listener = await createEventListenerService().start({
+          ...eventOptions,
+          ...(parsed.options.host === undefined
+            ? {}
+            : { host: parsed.options.host }),
+          ...(parsed.options.port === undefined
+            ? {}
+            : { port: parsed.options.port }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            host: listener.host ?? null,
+            port: listener.port ?? null,
+            sources: listener.sources,
+          });
+        } else {
+          io.stdout(
+            listener.host === undefined || listener.port === undefined
+              ? `events listening for sources: ${listener.sources.join(",") || "-"}`
+              : `events listening on http://${listener.host}:${String(listener.port)}`,
+          );
+        }
+        const waitForEventListenerShutdown =
+          deps.waitForEventListenerShutdown ??
+          DEFAULT_DEPS.waitForEventListenerShutdown;
+        try {
+          if (waitForEventListenerShutdown !== undefined) {
+            await waitForEventListenerShutdown(listener);
+          }
+        } finally {
+          await listener.stop();
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events serve failed: ${message}`);
+        return 7;
+      }
+    }
+
+    io.stderr(`unknown events command: ${command ?? "(empty)"}`);
+    printHelp(io);
+    return 2;
   }
 
   if (scope === "serve" || (scope === "web" && command === "serve")) {

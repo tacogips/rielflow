@@ -17,6 +17,7 @@ import {
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
 } from "./backend";
+import { resolveBuiltinNodeAddonPayload } from "./node-addons";
 import {
   DEFAULT_CONTAINER_RUNNER_KIND,
   DEFAULT_MAX_LOOP_ITERATIONS,
@@ -50,6 +51,7 @@ import {
   type WorkflowEdge,
   type WorkflowJson,
   type WorkflowNodeExecutionPolicy,
+  type WorkflowNodeAddonRef,
   type WorkflowNodeRepeatPolicy,
   type WorkflowNodeRef,
   type WorkflowPrompts,
@@ -911,6 +913,64 @@ function normalizeCompletion(
   return { type: typeValue };
 }
 
+function normalizeWorkflowNodeAddonRef(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeAddonRef | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    if (value.length === 0) {
+      issues.push(makeIssue("error", path, "must be a non-empty string"));
+      return undefined;
+    }
+    return { name: value };
+  }
+
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be a string or object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["name", "version", "config"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue("error", `${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const name = readStringField(value, "name", path, issues);
+  const versionRaw = value["version"];
+  let version: string | undefined;
+  if (versionRaw !== undefined) {
+    if (typeof versionRaw === "string" && versionRaw.length > 0) {
+      version = versionRaw;
+    } else {
+      issues.push(
+        makeIssue("error", `${path}.version`, "must be a non-empty string"),
+      );
+    }
+  }
+
+  const configRaw = value["config"];
+  if (configRaw !== undefined && !isRecord(configRaw)) {
+    issues.push(makeIssue("error", `${path}.config`, "must be an object"));
+  }
+
+  if (name === null) {
+    return undefined;
+  }
+
+  return {
+    name,
+    ...(version === undefined ? {} : { version }),
+    ...(isRecord(configRaw) ? { config: configRaw } : {}),
+  };
+}
+
 function normalizeNodeRef(
   value: unknown,
   index: number,
@@ -925,14 +985,16 @@ function normalizeNodeRef(
   const id = readStringField(value, "id", path, issues);
   const nodeFileRaw = value["nodeFile"];
   const inlineNodeRaw = value[INLINE_NODE_FIELD];
+  const addonRaw = value["addon"];
+  const addon = normalizeWorkflowNodeAddonRef(addonRaw, `${path}.addon`, issues);
   let nodeFile: string | null = null;
   if (nodeFileRaw === undefined) {
-    if (inlineNodeRaw === undefined) {
+    if (inlineNodeRaw === undefined && addonRaw === undefined) {
       issues.push(
         makeIssue(
           "error",
           `${path}.nodeFile`,
-          "is required unless node is provided inline",
+          "is required unless node or addon is provided",
         ),
       );
     } else if (id !== null) {
@@ -951,6 +1013,24 @@ function normalizeNodeRef(
         "error",
         `${path}.${INLINE_NODE_FIELD}`,
         "must be omitted when nodeFile is provided",
+      ),
+    );
+  }
+  if (addonRaw !== undefined && nodeFileRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "must be omitted when nodeFile is provided",
+      ),
+    );
+  }
+  if (addonRaw !== undefined && inlineNodeRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        `must be omitted when ${INLINE_NODE_FIELD} is provided`,
       ),
     );
   }
@@ -1025,6 +1105,22 @@ function normalizeNodeRef(
       );
     } else {
       kind = normalizedKind;
+      const usesAuthoredRoleFields =
+        Object.hasOwn(value, "role") || Object.hasOwn(value, "control");
+      if (
+        usesAuthoredRoleFields &&
+        (normalizedKind === "subworkflow-manager" ||
+          normalizedKind === "input" ||
+          normalizedKind === "output")
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.kind`,
+            `kind '${normalizedKind}' is legacy structural compatibility only and cannot be combined with authored role/control nodes`,
+          ),
+        );
+      }
       const derived = deriveRoleAndControlFromKind(normalizedKind);
       if (role !== undefined && role !== derived.role) {
         issues.push(
@@ -1113,6 +1209,15 @@ function normalizeNodeRef(
       ),
     );
   }
+  if (role === "manager" && addon !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "manager-role nodes cannot reference add-ons",
+      ),
+    );
+  }
 
   if (id === null || nodeFile === null) {
     return null;
@@ -1136,6 +1241,7 @@ function normalizeNodeRef(
   return {
     id,
     nodeFile,
+    ...(addon === undefined ? {} : { addon }),
     ...(kind === undefined ? {} : { kind }),
     ...(role === undefined ? {} : { role }),
     ...(control === undefined ? {} : { control }),
@@ -3278,7 +3384,8 @@ function runSemanticValidation(
       node.role === "manager" &&
       (payload.nodeType === "command" ||
         payload.nodeType === "container" ||
-        payload.nodeType === "user-action")
+        payload.nodeType === "user-action" ||
+        payload.nodeType === "addon")
     ) {
       issues.push(
         makeIssue(
@@ -4098,7 +4205,20 @@ export function validateWorkflowBundleDetailed(
 
   const nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null) {
-    workflow.nodes.forEach((node) => {
+    workflow.nodes.forEach((node, index) => {
+      if (node.addon !== undefined) {
+        const resolved = resolveBuiltinNodeAddonPayload({
+          nodeId: node.id,
+          addon: node.addon,
+          path: `workflow.nodes[${index}].addon`,
+        });
+        issues.push(...resolved.issues);
+        if (resolved.payload !== undefined) {
+          nodePayloads[node.id] = resolved.payload;
+        }
+        return;
+      }
+
       const payloadRaw = nodePayloadsRaw[node.nodeFile];
       if (payloadRaw === undefined) {
         issues.push(

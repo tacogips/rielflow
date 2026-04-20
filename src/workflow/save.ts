@@ -17,6 +17,7 @@ import {
 } from "./revision";
 import type {
   AuthoredWorkflowJson,
+  AuthoredWorkflowNodeRef,
   LoadOptions,
   WorkflowDefaults,
   WorkflowJson,
@@ -103,11 +104,15 @@ function stripPersistedWorkflowCompatibilityFields(
 function createPersistedWorkflowNode(
   node: WorkflowNodeRef,
   authoredNode: Record<string, unknown> | undefined,
-): WorkflowNodeRef {
+): AuthoredWorkflowNodeRef {
+  const nodeSource =
+    node.addon === undefined
+      ? { nodeFile: node.nodeFile }
+      : { addon: node.addon };
   if (authoredNode === undefined) {
     return {
       id: node.id,
-      nodeFile: node.nodeFile,
+      ...nodeSource,
       ...(node.role === undefined && node.kind !== undefined
         ? { kind: node.kind }
         : {}),
@@ -122,7 +127,7 @@ function createPersistedWorkflowNode(
 
   return {
     id: node.id,
-    nodeFile: node.nodeFile,
+    ...nodeSource,
     ...(hasOwnKey(authoredNode, "kind") && node.kind !== undefined
       ? { kind: node.kind }
       : {}),
@@ -311,6 +316,9 @@ function prepareAuthoredWorkflowNodeForSave(input: {
   }
 
   const node = { ...input.node };
+  if (node["addon"] !== undefined) {
+    delete node["nodeFile"];
+  }
   const isExplicitKindMigration =
     hasOwnKey(input.existingNode, "kind") &&
     input.incomingNode !== undefined &&
@@ -551,12 +559,16 @@ function collectReferencedNodePayloads(input: {
     readonly nodes: readonly {
       readonly id: string;
       readonly nodeFile: string;
+      readonly addon?: unknown;
     }[];
   };
   readonly nodePayloads: Readonly<Record<string, unknown>>;
 }): Readonly<Record<string, unknown>> {
   const referencedPayloads: Record<string, unknown> = {};
   for (const node of input.workflow.nodes) {
+    if (node.addon !== undefined) {
+      continue;
+    }
     const payload =
       input.nodePayloads[node.nodeFile] ?? input.nodePayloads[node.id];
     if (payload !== undefined) {
@@ -939,8 +951,8 @@ export async function saveWorkflowToDisk(
     });
   }
 
-  const nodeFiles = validation.value.workflow.nodes.map(
-    (node) => node.nodeFile,
+  const nodeFiles = validation.value.workflow.nodes.flatMap((node) =>
+    node.addon === undefined ? [node.nodeFile] : [],
   );
   const referencedNodePayloads = collectReferencedNodePayloads({
     workflow: validation.value.workflow,
@@ -989,6 +1001,9 @@ export async function saveWorkflowToDisk(
       persistedWorkflow,
     );
     for (const node of validation.value.workflow.nodes) {
+      if (node.addon !== undefined) {
+        continue;
+      }
       const payload =
         normalizedNodePayloads[node.nodeFile] ??
         normalizedNodePayloads[node.id];

@@ -9,6 +9,10 @@ import {
   createManagerSessionStore,
   hashManagerAuthToken,
 } from "../workflow/manager-session-store";
+import {
+  saveEventReplyDispatchToRuntimeDb,
+  saveHookEventToRuntimeDb,
+} from "../workflow/runtime-db";
 import { createGraphqlSchema } from "./schema";
 
 function cloneJson<T>(value: T): T {
@@ -290,7 +294,9 @@ async function createCompletedGroupedWorkflowFixture(root: string) {
             nodeFile: "node-workflow-output.json",
           },
         ],
-        edges: [{ from: "workflow-input", to: "workflow-output", when: "always" }],
+        edges: [
+          { from: "workflow-input", to: "workflow-output", when: "always" },
+        ],
         loops: [],
         branching: { mode: "fan-out" },
       },
@@ -433,7 +439,9 @@ describe("createGraphqlSchema", () => {
       options,
     );
     expect(connection.totalCount).toBeGreaterThan(0);
-    expect(connection.items[0]?.record.workflowExecutionId).toBe(session.sessionId);
+    expect(connection.items[0]?.record.workflowExecutionId).toBe(
+      session.sessionId,
+    );
 
     const nodeExecutionRecord = session.nodeExecutions.at(-1);
     expect(nodeExecutionRecord).toBeDefined();
@@ -529,6 +537,44 @@ describe("createGraphqlSchema", () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
     const schema = createGraphqlSchema();
+    await saveHookEventToRuntimeDb(
+      {
+        hookEventId: "hook-schema-1",
+        workflowId: session.workflowId,
+        workflowExecutionId: session.sessionId,
+        nodeId: "manager",
+        nodeExecId: "manager-exec-1",
+        vendor: "codex",
+        agentSessionId: "agent-session-schema",
+        rawEventName: "PostToolUse",
+        eventName: "PostToolUse",
+        cwd: root,
+        payloadHash: "a".repeat(64),
+        status: "recorded",
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-20T00:00:00.000Z",
+      },
+      options,
+    );
+    await saveEventReplyDispatchToRuntimeDb(
+      {
+        idempotencyKey: "reply-schema-key",
+        sourceId: "webhook",
+        provider: "webhook",
+        workflowId: session.workflowId,
+        workflowExecutionId: session.sessionId,
+        nodeId: "reply-node",
+        nodeExecId: "reply-exec-1",
+        eventId: "event-schema-1",
+        conversationId: "conversation-schema",
+        status: "sent",
+        providerMessageId: "message-schema",
+        requestJson: JSON.stringify({ message: { text: "hello" } }),
+        responseJson: JSON.stringify({ providerMessageId: "message-schema" }),
+        updatedAt: "2026-04-20T00:00:00.000Z",
+      },
+      options,
+    );
 
     const overview = await schema.query.workflowExecutionOverview(
       {
@@ -546,6 +592,14 @@ describe("createGraphqlSchema", () => {
     expect(overview?.nodes.length).toBe(session.nodeExecutions.length);
     expect(overview?.communications.totalCount).toBeGreaterThan(0);
     expect(overview?.nodeLogs.length).toBeGreaterThan(0);
+    expect(overview?.hookEvents).toHaveLength(1);
+    expect(overview?.hookEvents[0]?.agentSessionId).toBe(
+      "agent-session-schema",
+    );
+    expect(overview?.replyDispatches).toHaveLength(1);
+    expect(overview?.replyDispatches[0]?.providerMessageId).toBe(
+      "message-schema",
+    );
 
     const nodeWithOutput = overview?.nodes.find((node) => node.output !== null);
     expect(nodeWithOutput?.output).toContain("stage");
@@ -556,12 +610,12 @@ describe("createGraphqlSchema", () => {
         item.artifactSnapshot.inboxMessageJson !== null,
     );
     expect(communicationWithSnapshot).toBeDefined();
-    expect(communicationWithSnapshot?.artifactSnapshot.outboxOutputRaw).toContain(
-      "\"payload\"",
-    );
-    expect(communicationWithSnapshot?.artifactSnapshot.inboxMessageJson).toContain(
-      "\"communicationId\"",
-    );
+    expect(
+      communicationWithSnapshot?.artifactSnapshot.outboxOutputRaw,
+    ).toContain('"payload"');
+    expect(
+      communicationWithSnapshot?.artifactSnapshot.inboxMessageJson,
+    ).toContain('"communicationId"');
   });
 
   test("supports async browser execution inputs over GraphQL", async () => {
@@ -920,9 +974,8 @@ describe("createGraphqlSchema", () => {
 
   test("rejects replay and retry mutations that violate root-manager communication scope", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedGroupedWorkflowFixture(
-      root,
-    );
+    const { options, session } =
+      await createCompletedGroupedWorkflowFixture(root);
     const managerStore = await createManagerSession(
       root,
       session.sessionId,

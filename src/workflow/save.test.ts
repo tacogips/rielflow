@@ -139,6 +139,93 @@ describe("saveWorkflowToDisk", () => {
     expect(reloaded.value.bundle.workflow.entryNodeId).toBe("main-worker");
   });
 
+  test("preserves authored add-on node refs without writing generated node payloads", async () => {
+    const root = await makeTempDir();
+    const workflowDir = path.join(root, "chat-reply");
+    await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
+    await writeFile(
+      path.join(workflowDir, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "chat-reply",
+          description: "Reply to chat",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          entryNodeId: "answer",
+          nodes: [
+            {
+              id: "answer",
+              role: "worker",
+              nodeFile: "nodes/node-answer.json",
+            },
+            {
+              id: "reply",
+              role: "worker",
+              addon: {
+                name: "divedra/chat-reply-worker",
+                version: "1",
+                config: {
+                  textTemplate: "{{inbox.latest.output.payload.text}}",
+                  onMissingTarget: "intent-only",
+                },
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDir, "nodes", "node-answer.json"),
+      `${JSON.stringify(
+        {
+          id: "answer",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "Answer the chat request",
+          variables: {},
+          output: { description: "Answer payload" },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowFromDisk("chat-reply", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const saveResult = await saveWorkflowToDisk(
+      "chat-reply",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      { workflowRoot: root },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(workflowDir, "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).toContain('"addon"');
+    expect(workflowJsonText).toContain('"divedra/chat-reply-worker"');
+    expect(workflowJsonText).not.toContain('"nodeFile": "nodes/node-reply.json"');
+    await expect(
+      readFile(path.join(workflowDir, "nodes", "node-reply.json"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   test("does not leak derived role fields when re-saving legacy kind-authored workflows", async () => {
     const root = await makeTempDir();
     const workflowDir = path.join(root, "legacy-demo");
@@ -151,7 +238,6 @@ describe("saveWorkflowToDisk", () => {
           description: "Legacy workflow",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -249,7 +335,6 @@ describe("saveWorkflowToDisk", () => {
           description: "Legacy workflow",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -1253,7 +1338,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -1319,7 +1403,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -1378,7 +1461,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",

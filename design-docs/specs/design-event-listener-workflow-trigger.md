@@ -655,14 +655,21 @@ First iteration:
 - let workflows produce final output as usual
 - do not require automatic provider replies
 
-Future reply bridge:
+Reply bridge:
 
-- a runtime-owned `EventReplyPublisher` can observe completed workflow runs and
-  post configured summaries back to chat threads
+- a runtime-owned reply dispatcher can post provider-neutral reply requests back
+  to chat threads
+- `divedra/chat-reply-worker` is the workflow-visible built-in node add-on for
+  creating such reply requests during a workflow run
+- an optional `EventReplyPublisher` can still observe completed workflow runs
+  and post configured summaries without requiring a reply node
 - provider replies should use the same adapter registry but remain outside the
   workflow engine
 - user-action nodes remain the correct mechanism for mid-run human decisions;
   event triggers are only the start-of-run ingestion path
+
+Supporting design:
+`design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.
 
 ## Security Model
 

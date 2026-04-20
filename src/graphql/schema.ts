@@ -36,6 +36,8 @@ import {
 import { assertCommunicationInManagerScope } from "../workflow/manager-control";
 import { type CommunicationRecord } from "../workflow/session";
 import {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   type RuntimeNodeExecutionSummary,
@@ -666,19 +668,23 @@ async function buildWorkflowExecutionView(
   if (!loaded.ok) {
     return null;
   }
-  const nodeExecutions = await listRuntimeNodeExecutions(
-    input.workflowExecutionId,
-    context,
-  );
-  const nodeLogs = await listRuntimeNodeLogs(
-    input.workflowExecutionId,
-    context,
-  );
+  const [nodeExecutions, nodeLogs, hookEvents, replyDispatches] =
+    await Promise.all([
+      listRuntimeNodeExecutions(input.workflowExecutionId, context),
+      listRuntimeNodeLogs(input.workflowExecutionId, context),
+      listRuntimeHookEvents(input.workflowExecutionId, context),
+      listEventReplyDispatchesFromRuntimeDb(
+        { workflowExecutionId: input.workflowExecutionId },
+        context,
+      ),
+    ]);
   return {
     workflowExecutionId: input.workflowExecutionId,
     session: loaded.value,
     nodeExecutions,
     nodeLogs,
+    hookEvents,
+    replyDispatches,
   };
 }
 
@@ -693,10 +699,16 @@ async function buildWorkflowExecutionOverviewView(
   }
 
   const session = loaded.value;
-  const [runtimeExecutions, runtimeLogs] = await Promise.all([
-    listRuntimeNodeExecutions(input.workflowExecutionId, context),
-    listRuntimeNodeLogs(input.workflowExecutionId, context),
-  ]);
+  const [runtimeExecutions, runtimeLogs, hookEvents, replyDispatches] =
+    await Promise.all([
+      listRuntimeNodeExecutions(input.workflowExecutionId, context),
+      listRuntimeNodeLogs(input.workflowExecutionId, context),
+      listRuntimeHookEvents(input.workflowExecutionId, context),
+      listEventReplyDispatchesFromRuntimeDb(
+        { workflowExecutionId: input.workflowExecutionId },
+        context,
+      ),
+    ]);
   const nodes = await Promise.all(
     session.nodeExecutions.map((execution) =>
       buildNodeExecutionViewFromState(
@@ -733,6 +745,8 @@ async function buildWorkflowExecutionOverviewView(
     nodes,
     communications,
     nodeLogs: runtimeLogs,
+    hookEvents,
+    replyDispatches,
   };
 }
 

@@ -58,29 +58,33 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Start interactive terminal UI for workflow selection and execution.
   - Interactive OpenTUI mode opens the unified workspace/history/run app directly; workflow selection happens inside that workspace screen.
   - Supports runtime user input for human-input nodes during execution.
-- `hook [--vendor claude-code|codex]`
-  - Receive agent backend hook payloads via stdin, detect vendor and event type, dispatch to registered handler.
-  - Both Claude Code and Codex pipe a JSON object to stdin; the command parses it, validates the shared transport fields (`session_id`, `cwd`, `hook_event_name`), resolves the vendor (from `--vendor` flag or best-effort detection), identifies the `hook_event_name`, and calls the matching handler.
-  - All handlers are initially noop (return empty JSON `{}`).
+- `hook [--vendor claude-code|codex|gemini]`
+  - Receive agent backend hook payloads via stdin, detect vendor and event type, associate hook `session_id` with the ambient divedra workflow execution when available, record the hook event, and dispatch to registered policy handlers.
+  - Claude Code, Codex, and Gemini pipe a JSON object to stdin; the command parses it, validates the shared transport fields (`session_id`, `cwd`, `hook_event_name`), resolves the vendor (from `--vendor` flag or best-effort detection), identifies the `hook_event_name`, and calls the matching handler.
+  - When `DIVEDRA_WORKFLOW_EXECUTION_ID`, `DIVEDRA_WORKFLOW_ID`, and node execution context variables are present, hook events are persisted as runtime hook-event records keyed by workflow execution id, backend agent session id, node execution id, and optional manager session id.
+  - Outside a divedra-launched agent process, the command remains pass-through by default and returns empty JSON `{}` unless a policy handler makes a decision.
   - Exit 0 with JSON on stdout for success; exit 2 with reason on stderr to block.
   - Supporting design: `design-docs/specs/design-hook-command.md`.
+- `hook snippet --vendor claude-code|codex|gemini`
+  - Print a paste-ready JSON hook configuration snippet for the selected backend.
+  - The generated snippet registers the vendor-detecting `divedra hook` command for the recommended lifecycle events.
+  - This command only prints JSON to stdout; it does not mutate Claude Code, Codex, Gemini, or project configuration files.
 - `events validate [--event-root <path>]`
   - Validate external event source and binding configuration without starting listeners.
 - `events emit <source-id> --event-file <path>`
   - Inject a normalized or raw fixture event for local testing of binding matching, input mapping, dedupe, and workflow dispatch.
-  - First foundation implementation scope: `events validate` and `events emit`.
-
-Planned later event commands:
-
 - `events serve [--event-root <path>] [--endpoint <graphql-url>]`
   - Start cron, webhook, chat, and web-chat event listeners.
   - In local command-dispatch mode, starts workflow execution through `divedra workflow run` with a generated mapped-input JSON file.
   - In local library mode, invokes the library workflow execution client in-process.
   - With `--endpoint`, dispatches workflow execution through GraphQL and can run as a lightweight listener process.
-- `events list [--source <id>] [--status <status>]`
+- `events list [--source <id>] [--status <status>] [--limit <n>]`
   - Inspect persisted event receipt records.
-- `events replay <receipt-id>`
-  - Re-run mapping and dispatch for a persisted event receipt, subject to explicit replay rules.
+- `events replay <receipt-id> [--dry-run] [--reason <text>]`
+  - Re-run mapping and dispatch for a persisted normalized event receipt using replay-specific event and dedupe identifiers.
+  - `--dry-run` forwards the replay through workflow execution dry-run behavior.
+  - `--reason` records operator intent in the replay receipt raw artifact.
+  - Local event dispatch commands accept `--mock-scenario <path>` and reject combining it with `--endpoint`.
   - Supporting design: `design-docs/specs/design-event-listener-workflow-trigger.md`.
 
 ### Flags and Options
@@ -127,10 +131,16 @@ Planned later event commands:
 | `DIVEDRA_GRAPHQL_ENDPOINT`        | No       | local serve endpoint                                         | Default GraphQL endpoint for CLI manager/control-plane commands                                                                                                                                                                            |
 | `DIVEDRA_MANAGER_AUTH_TOKEN`      | No       | none                                                         | Manager-session auth token for `divedra gql` and GraphQL control-plane mutations                                                                                                                                                           |
 | `DIVEDRA_MANAGER_SESSION_ID`      | No       | none                                                         | Ambient manager session id forwarded by `divedra gql` to `/graphql` for manager-scoped requests                                                                                                                                            |
-| `DIVEDRA_WORKFLOW_ID`             | No       | none                                                         | Ambient workflow id for manager tool environments                                                                                                                                                                                          |
-| `DIVEDRA_WORKFLOW_EXECUTION_ID`   | No       | none                                                         | Ambient workflow execution id for manager tool environments                                                                                                                                                                                |
+| `DIVEDRA_WORKFLOW_ID`             | No       | none                                                         | Ambient workflow id for divedra-launched backend processes, manager tool environments, and hook event recording                                                                                                                            |
+| `DIVEDRA_WORKFLOW_EXECUTION_ID`   | No       | none                                                         | Ambient workflow execution id for divedra-launched backend processes, manager tool environments, and hook event recording                                                                                                                  |
+| `DIVEDRA_NODE_ID`                 | No       | none                                                         | Ambient node id for divedra-launched backend processes and hook event recording                                                                                                                                                            |
+| `DIVEDRA_NODE_EXEC_ID`            | No       | none                                                         | Ambient node execution id for divedra-launched backend processes and hook event recording                                                                                                                                                  |
+| `DIVEDRA_AGENT_BACKEND`           | No       | none                                                         | Ambient backend name for divedra-launched agent processes, such as `codex-agent` or `claude-code-agent`                                                                                                                                    |
 | `DIVEDRA_MANAGER_NODE_ID`         | No       | none                                                         | Ambient manager node id for manager tool environments                                                                                                                                                                                      |
 | `DIVEDRA_MANAGER_NODE_EXEC_ID`    | No       | none                                                         | Ambient manager node execution id for manager tool environments                                                                                                                                                                            |
+| `DIVEDRA_HOOK_RECORDING`          | No       | `auto`                                                       | Hook event recording mode: `auto` records when divedra context is present, `off` disables persistence, and `required` errors when required context is missing                                                                              |
+| `DIVEDRA_HOOK_STRICT`             | No       | `false`                                                      | When `true`, hook persistence failures become hook errors; when `false`, recording failures do not block the backend                                                                                                                       |
+| `DIVEDRA_HOOK_CAPTURE_RAW`        | No       | `redacted`                                                   | Hook payload artifact mode: `redacted`, `metadata-only`, or `full`                                                                                                                                                                         |
 | `DIVEDRA_EVENT_ROOT`              | No       | nearest `.divedra-events` next to workflow root              | Default external event source and binding configuration root                                                                                                                                                                               |
 | `DIVEDRA_EVENT_ENDPOINT_BASE_URL` | No       | none                                                         | Public base URL used by webhook/chat providers when registering or displaying callback endpoints                                                                                                                                           |
 | `DIVEDRA_EVENTS_ENABLED`          | No       | `false` for `serve`, `true` for `events serve`               | Enables event listener routes and schedulers                                                                                                                                                                                               |

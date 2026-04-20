@@ -153,6 +153,7 @@ Validation rules:
 - omitted `edges` are synthesized sequentially from node order
 - omitted `subWorkflows`, `subWorkflowConversations`, `loops`, and `workflowCalls` normalize to empty arrays
 - non-empty authored `subWorkflows` and `subWorkflowConversations` are legacy structural compatibility fields and must not be combined with authored `role` / `control` nodes
+- structural boundary node kinds `subworkflow-manager`, `input`, and `output` are legacy compatibility fields and must not be combined with authored `role` / `control` nodes
 - omitted `branching` normalizes to `{ "mode": "fan-out" }`
 - authored `workflowCalls` are executable: the caller's `output.payload` is exposed to the callee as `runtimeVariables.workflowCall.input`, and `resultNodeId` receives the callee result through a runtime-owned `workflow-call:<id>` communication when configured
 
@@ -169,7 +170,8 @@ Older documents mentioned those concepts, but they are not current authored fiel
 `workflow.json.nodes[]` entries:
 
 - `id: string`
-- `nodeFile: string`
+- `nodeFile: string` when the node uses a workflow-local payload
+- optional `addon` when the node uses a runtime-provided add-on payload
 - optional `role: "manager" | "worker"`
 - optional `control: "none" | "branch-judge" | "loop-judge"`
 - optional `kind: NodeKind`
@@ -187,6 +189,7 @@ Current compatibility note:
 
 - the validator still accepts structural `kind` metadata where the current runtime needs it
 - the normalized runtime continues to derive structural `kind` values such as `root-manager`, `subworkflow-manager`, `input`, and `output`
+- role/control-authored nodes must not author structural boundary `kind` values directly
 - role-authored grouped examples should describe lanes/stages or explicit `workflowCalls`; only explicit legacy compatibility examples should foreground structural sub-workflow vocabulary
 
 Current `NodeKind` values:
@@ -201,9 +204,54 @@ Current `NodeKind` values:
 
 Validation rules:
 
+- a node reference must provide exactly one of `nodeFile` or `addon`
+- `addon` references are resolved from the built-in node add-on catalog into an
+  effective node payload during load/validation
+- first-iteration add-ons are worker-only and built-in-only; manager-role add-on
+  references are rejected
 - manager-role nodes must stay on the agent execution path
 - `workflow.managerNodeId`, when present, must resolve to the effective root manager in the normalized runtime bundle
 - structural sub-workflow validation still applies when `subWorkflows[]` are authored
+
+### `addon`
+
+`addon` lets an authored node reference a reusable runtime-provided node payload
+instead of a workflow-local `nodeFile`.
+
+Object form:
+
+```json
+{
+  "id": "reply",
+  "role": "worker",
+  "addon": {
+    "name": "divedra/chat-reply-worker",
+    "version": "1",
+    "config": {
+      "textTemplate": "{{inbox.latest.output.payload.text}}",
+      "visibility": "public"
+    }
+  }
+}
+```
+
+Rules:
+
+- saved workflows should prefer object form with explicit `version`
+- string shorthand may be accepted for built-in add-ons, but should normalize to
+  explicit object form in authoring tools
+- unknown add-on names or unsupported versions fail validation
+- `addon.config` is validated by the selected add-on descriptor
+- save/edit surfaces preserve the authored `addon` reference rather than writing
+  generated node payload JSON
+
+Initial built-in add-on:
+
+- `divedra/chat-reply-worker`: worker node that replies to the chat event target
+  in `runtimeVariables.event` through the event reply adapter registry
+
+Detailed design:
+`design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.
 
 ## `CompletionRule`
 
@@ -356,6 +404,11 @@ Current implementation behavior:
 - the runtime emits at most one new turn per evaluation pass
 
 ## `node-{id}.json`
+
+Nodes referenced with `addon` do not author a `node-{id}.json` file. The loader
+materializes their effective payload from the selected add-on descriptor during
+validation, and save/edit surfaces preserve the `addon` reference in
+`workflow.json`.
 
 Current authored shape:
 

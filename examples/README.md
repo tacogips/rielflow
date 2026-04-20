@@ -57,6 +57,31 @@ bun run src/main.ts workflow run worker-only-single-step \
   --output json
 ```
 
+### `chat-reply-webhook`
+
+Minimal worker-only workflow showing the built-in node add-on catalog:
+
+- no workflow-local worker implementation file is needed
+- `nodes[].addon.name` selects `divedra/chat-reply-worker`
+- the node renders a reply from `runtimeVariables.event`
+- when launched through `examples/event-sources`, the webhook source dispatches
+  the reply to `DIVEDRA_EXAMPLE_REPLY_ENDPOINT`
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate chat-reply-webhook --workflow-root ./examples
+```
+
+Inspect it:
+
+```bash
+bun run src/main.ts workflow inspect chat-reply-webhook --workflow-root ./examples --output json
+```
+
+See `examples/event-sources/README.md` for a local webhook event and reply
+endpoint demo.
+
 ### `workflow-call-simple`
 
 Managed parent workflow reference for explicit workflow invocation:
@@ -125,9 +150,10 @@ bun run src/main.ts workflow run workflow-call-review-target \
 ### `subworkflow-chained-simple`
 
 Minimal runnable reference for two sequential grouped lanes in one ordered node
-list. The beta lane follows the alpha lane without authored `edges` or
-`subWorkflows`, and the grouped lane payloads now live under
-`workflows/alpha/` and `workflows/beta/`.
+list. The directory name is historical; this is not the structural
+sub-workflow compatibility reference. The beta lane follows the alpha lane
+without authored `edges` or `subWorkflows`, and the grouped lane payloads now
+live under `workflows/alpha/` and `workflows/beta/`.
 
 Validate it:
 

@@ -1,0 +1,7 @@
+{
+  "id": "example-reply-webhook",
+  "kind": "webhook",
+  "path": "/events/example-reply-webhook",
+  "provider": "webhook",
+  "replyEndpointEnv": "DIVEDRA_EXAMPLE_REPLY_ENDPOINT"
+}
