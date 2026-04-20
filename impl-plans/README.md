@@ -24,9 +24,10 @@ impl-plans/
 
 ## Active Plans
 
-| Plan                                           | Status      | Design Reference                     |
-| ---------------------------------------------- | ----------- | ------------------------------------ |
-| `workflow-role-unification-structural-cleanup` | In Progress | `design-unified-workflow-role-model` |
+| Plan                                           | Status      | Design Reference                                  |
+| ---------------------------------------------- | ----------- | ------------------------------------------------- |
+| `event-listener-workflow-trigger-foundation`   | Planning    | `design-event-listener-workflow-trigger`          |
+| `workflow-role-unification-structural-cleanup` | In Progress | `design-unified-workflow-role-model`              |
 
 ## Completed Plans
 
@@ -278,6 +279,7 @@ PHASE_TO_PLANS = {
   71: ["impl-plans/workflow-role-unification.md", "impl-plans/tui-workflow-browser-and-json-input.md"],
   72: ["impl-plans/completed/tui-opentui-solid-migration.md", "impl-plans/completed/tui-solid-runtime-fallback-hardening.md", "impl-plans/completed/remove-web-ui.md", "impl-plans/completed/root-data-dir-project-root-scoping.md"],
   82: ["impl-plans/workflow-role-unification-structural-cleanup.md"],
-  89: ["impl-plans/container-runtime-env-isolation.md"]
+  89: ["impl-plans/container-runtime-env-isolation.md"],
+  90: ["impl-plans/event-listener-workflow-trigger-foundation.md"]
 }
 ```

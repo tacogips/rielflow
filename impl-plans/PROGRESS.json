@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-04-19T22:37:39Z",
+  "lastUpdated": "2026-04-20T04:05:26Z",
   "phases": {
     "1": { "status": "COMPLETED" },
     "2": { "status": "COMPLETED" },
@@ -89,7 +89,8 @@
     "86": { "status": "COMPLETED" },
     "87": { "status": "COMPLETED" },
     "88": { "status": "COMPLETED" },
-    "89": { "status": "COMPLETED" }
+    "89": { "status": "COMPLETED" },
+    "90": { "status": "BLOCKED" }
   },
   "plans": {
     "workflow-execution-working-directory": {
@@ -2144,6 +2145,37 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": []
+        }
+      }
+    },
+    "event-listener-workflow-trigger-foundation": {
+      "phase": 90,
+      "status": "Planning",
+      "tasks": {
+        "TASK-001": {
+          "status": "Blocked",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Blocked",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Blocked",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Blocked",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-003"]
+        },
+        "TASK-005": {
+          "status": "Blocked",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-004"]
         }
       }
     }

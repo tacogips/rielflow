@@ -242,6 +242,21 @@ Current implementation status:
 - interactive `divedra tui` now enters the unified Solid workspace/history/run app directly instead of passing through a separate selector-only OpenTUI surface
 - Bun and TypeScript are configured for the checked-in `.tsx` OpenTUI modules; JSX compilation uses the standard `solid-js` runtime while `@opentui/solid` provides the renderer and terminal component catalogue
 
+## Event Listener Workflow Triggers
+
+External events should be modeled as a separate trigger layer that invokes the
+existing workflow execution boundary. Provider-specific cron, webhook, chat, and
+UI adapters normalize incoming events into a canonical envelope, map that
+envelope into workflow runtime input, persist an event receipt for idempotency,
+and then call `createWorkflowExecutionClient()` or GraphQL `executeWorkflow`.
+
+The workflow engine should not import provider SDKs or provider-specific event
+types. Event bindings live outside workflow bundles so adding or changing an
+event source does not mutate `workflow.json`.
+
+Supporting design:
+`design-docs/specs/design-event-listener-workflow-trigger.md`.
+
 ## Runtime Node Roles
 
 Current authored direction:
