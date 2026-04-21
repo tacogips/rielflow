@@ -104,7 +104,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--scope`               | string        | `auto`                                                            | Workflow scope selector for read/write commands: `auto`, `project`, or `user`                                                                              |
 | `--user-root`           | string (path) | `~/.divedra`                                                      | User scope root; workflows are read from `<user-root>/workflows` unless `--workflow-root` is supplied                                                       |
 | `--project-root`        | string (path) | nearest project `.divedra`                                        | Project scope root; workflows are read from `<project-root>/workflows` unless `--workflow-root` is supplied                                                 |
-| `--addon-root`          | string (path) | scoped add-on catalog lookup                                      | Direct root directory containing local add-ons; when supplied, bypasses project/user add-on catalog lookup                                                  |
+| `--addon-root`          | string (path) | scoped add-on catalog lookup                                      | Direct root directory containing local add-ons; during scoped catalog loading, searched before project/user add-on roots                                     |
 | `--artifact-root`       | string (path) | `<scope-root>/artifacts/workflow`                                 | Root directory for execution artifacts                                                                                                                     |
 | `--session-store`       | string (path) | `<scope-root>/artifacts/sessions`                                 | Root directory for persisted workflow sessions                                                                                                             |
 | `--log-root`            | string (path) | `<scope-root>/logs`                                               | Root directory for operator-facing process logs and exported runtime logs                                                                                   |
@@ -140,7 +140,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `DIVEDRA_WORKFLOW_SCOPE`          | No       | `auto`                                                       | Default workflow scope selector: `auto`, `project`, or `user`                                                                                                                                                                               |
 | `DIVEDRA_USER_ROOT`               | No       | `~/.divedra`                                                 | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                                                                                                      |
 | `DIVEDRA_PROJECT_ROOT`            | No       | nearest project `.divedra`                                   | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`                                                                                 |
-| `DIVEDRA_ADDON_ROOT`              | No       | scoped add-on catalog lookup                                  | Direct default local add-on root; when set, bypasses project/user add-on catalog lookup                                                                                                                                                     |
+| `DIVEDRA_ADDON_ROOT`              | No       | scoped add-on catalog lookup                                  | Direct default local add-on root; during scoped catalog loading, searched before project/user add-on roots                                                                                                                                   |
 | `DIVEDRA_LOG_ROOT`                | No       | `<scope-root>/logs`                                          | Overrides operator-facing process/runtime log output root                                                                                                                                                                                   |
 | `DIVEDRA_CONFIG`                  | No       | `$XDG_CONFIG_HOME/divedra/config.json`                       | Bootstrap config path used before user scope root resolution                                                                                                                                                                                |
 | `DIVEDRA_SESSION_STORE`           | No       | local file store                                             | Session state backend selector                                                                                                                                                                                                             |
@@ -195,17 +195,19 @@ Scope root defaults:
 Add-on lookup resolution order:
 
 1. built-in runtime catalog for `divedra/*`
-2. `--addon-root`
-3. `DIVEDRA_ADDON_ROOT`
-4. caller workflow's owning scope `<scope-root>/addons`
-5. project scope `<project-root>/addons` when different from the caller scope
-   and present
-6. user scope `<user-root>/addons` when different from the caller scope
-7. host-provided resolver functions
+2. explicit direct add-on root override from `--addon-root` or
+   `DIVEDRA_ADDON_ROOT`, when supplied
+3. project scope `<project-root>/addons`, when present
+4. user scope `<user-root>/addons`
+5. host-provided resolver functions
 
 `--addon-root` and `DIVEDRA_ADDON_ROOT` are direct add-on-root overrides. They
 point at a directory containing `<namespace>/<addon-name>/<version>/addon.json`
-and do not point at a scope root.
+and do not point at a scope root. For scoped catalog loading they are prepended
+to the scoped candidates and do not suppress project/user fallback when the
+direct root does not contain the requested `(name, version)`. For direct
+workflow-root compatibility mode, scoped add-on roots are not inferred; only an
+explicit direct add-on root or host-provided resolver can satisfy local add-ons.
 
 Artifact root resolution order:
 

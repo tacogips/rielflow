@@ -524,17 +524,64 @@ function readRequiredStringConfig(
   return value;
 }
 
-function normalizeXGatewayReadConfig(
+type GatewayTemplateKey = "queryTemplate" | "documentTemplate";
+
+interface GatewayContainerConfigFields {
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+interface QueryGatewayConfig extends GatewayContainerConfigFields {
+  readonly queryTemplate: string;
+}
+
+interface DocumentGatewayConfig extends GatewayContainerConfigFields {
+  readonly documentTemplate: string;
+}
+
+function buildGatewayContainerConfig(
+  input: GatewayContainerConfigFields,
+): GatewayContainerConfigFields {
+  return {
+    ...(input.image === undefined ? {} : { image: input.image }),
+    ...(input.runnerKind === undefined ? {} : { runnerKind: input.runnerKind }),
+    ...(input.runnerPath === undefined ? {} : { runnerPath: input.runnerPath }),
+    ...(input.networkPolicy === undefined
+      ? {}
+      : { networkPolicy: input.networkPolicy }),
+  };
+}
+
+function normalizeGatewayTemplateConfig(
   value: Readonly<Record<string, unknown>> | undefined,
   path: string,
+  templateKey: "queryTemplate",
 ): {
-  readonly config?: XGatewayReadAddonConfig;
+  readonly config?: QueryGatewayConfig;
+  readonly issues: readonly ValidationIssue[];
+};
+function normalizeGatewayTemplateConfig(
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+  templateKey: "documentTemplate",
+): {
+  readonly config?: DocumentGatewayConfig;
+  readonly issues: readonly ValidationIssue[];
+};
+function normalizeGatewayTemplateConfig(
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+  templateKey: GatewayTemplateKey,
+): {
+  readonly config?: QueryGatewayConfig | DocumentGatewayConfig;
   readonly issues: readonly ValidationIssue[];
 } {
   const issues: ValidationIssue[] = [];
   const config: Readonly<Record<string, unknown>> = value ?? {};
   const allowedKeys = new Set([
-    "queryTemplate",
+    templateKey,
     "image",
     "runnerKind",
     "runnerPath",
@@ -547,12 +594,7 @@ function normalizeXGatewayReadConfig(
     }
   }
 
-  const queryTemplate = readRequiredStringConfig(
-    config,
-    "queryTemplate",
-    path,
-    issues,
-  );
+  const template = readRequiredStringConfig(config, templateKey, path, issues);
   const image = readOptionalStringConfig(config, "image", path, issues);
   const runnerPath = readOptionalStringConfig(
     config,
@@ -598,20 +640,44 @@ function normalizeXGatewayReadConfig(
     }
   }
 
-  if (issues.length > 0 || queryTemplate === undefined) {
+  if (issues.length > 0 || template === undefined) {
     return { issues };
+  }
+
+  const containerConfig = buildGatewayContainerConfig({
+    ...(image === undefined ? {} : { image }),
+    ...(runnerKind === undefined ? {} : { runnerKind }),
+    ...(runnerPath === undefined ? {} : { runnerPath }),
+    ...(networkPolicy === undefined ? {} : { networkPolicy }),
+  });
+
+  if (templateKey === "queryTemplate") {
+    return {
+      config: {
+        queryTemplate: template,
+        ...containerConfig,
+      },
+      issues,
+    };
   }
 
   return {
     config: {
-      queryTemplate,
-      ...(image === undefined ? {} : { image }),
-      ...(runnerKind === undefined ? {} : { runnerKind }),
-      ...(runnerPath === undefined ? {} : { runnerPath }),
-      ...(networkPolicy === undefined ? {} : { networkPolicy }),
+      documentTemplate: template,
+      ...containerConfig,
     },
     issues,
   };
+}
+
+function normalizeXGatewayReadConfig(
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+): {
+  readonly config?: XGatewayReadAddonConfig;
+  readonly issues: readonly ValidationIssue[];
+} {
+  return normalizeGatewayTemplateConfig(value, path, "queryTemplate");
 }
 
 function normalizeXGatewayConfig(
@@ -621,87 +687,7 @@ function normalizeXGatewayConfig(
   readonly config?: XGatewayAddonConfig;
   readonly issues: readonly ValidationIssue[];
 } {
-  const issues: ValidationIssue[] = [];
-  const config: Readonly<Record<string, unknown>> = value ?? {};
-  const allowedKeys = new Set([
-    "documentTemplate",
-    "image",
-    "runnerKind",
-    "runnerPath",
-    "networkPolicy",
-  ]);
-
-  for (const key of Object.keys(config)) {
-    if (!allowedKeys.has(key)) {
-      issues.push(makeIssue(`${path}.${key}`, "is not supported"));
-    }
-  }
-
-  const documentTemplate = readRequiredStringConfig(
-    config,
-    "documentTemplate",
-    path,
-    issues,
-  );
-  const image = readOptionalStringConfig(config, "image", path, issues);
-  const runnerPath = readOptionalStringConfig(
-    config,
-    "runnerPath",
-    path,
-    issues,
-  );
-
-  const runnerKindRaw = config["runnerKind"];
-  let runnerKind: XGatewayAddonConfig["runnerKind"];
-  if (runnerKindRaw !== undefined) {
-    if (
-      runnerKindRaw === "podman" ||
-      runnerKindRaw === "docker" ||
-      runnerKindRaw === "nerdctl"
-    ) {
-      runnerKind = runnerKindRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.runnerKind`,
-          "must be 'podman', 'docker', or 'nerdctl'",
-        ),
-      );
-    }
-  }
-
-  const networkPolicyRaw = config["networkPolicy"];
-  let networkPolicy: XGatewayAddonConfig["networkPolicy"];
-  if (networkPolicyRaw !== undefined) {
-    if (
-      networkPolicyRaw === "disabled" ||
-      networkPolicyRaw === "egress-allowed"
-    ) {
-      networkPolicy = networkPolicyRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.networkPolicy`,
-          "must be 'disabled' or 'egress-allowed'",
-        ),
-      );
-    }
-  }
-
-  if (issues.length > 0 || documentTemplate === undefined) {
-    return { issues };
-  }
-
-  return {
-    config: {
-      documentTemplate,
-      ...(image === undefined ? {} : { image }),
-      ...(runnerKind === undefined ? {} : { runnerKind }),
-      ...(runnerPath === undefined ? {} : { runnerPath }),
-      ...(networkPolicy === undefined ? {} : { networkPolicy }),
-    },
-    issues,
-  };
+  return normalizeGatewayTemplateConfig(value, path, "documentTemplate");
 }
 
 function normalizeMailGatewayReadConfig(
@@ -711,87 +697,7 @@ function normalizeMailGatewayReadConfig(
   readonly config?: MailGatewayReadAddonConfig;
   readonly issues: readonly ValidationIssue[];
 } {
-  const issues: ValidationIssue[] = [];
-  const config: Readonly<Record<string, unknown>> = value ?? {};
-  const allowedKeys = new Set([
-    "queryTemplate",
-    "image",
-    "runnerKind",
-    "runnerPath",
-    "networkPolicy",
-  ]);
-
-  for (const key of Object.keys(config)) {
-    if (!allowedKeys.has(key)) {
-      issues.push(makeIssue(`${path}.${key}`, "is not supported"));
-    }
-  }
-
-  const queryTemplate = readRequiredStringConfig(
-    config,
-    "queryTemplate",
-    path,
-    issues,
-  );
-  const image = readOptionalStringConfig(config, "image", path, issues);
-  const runnerPath = readOptionalStringConfig(
-    config,
-    "runnerPath",
-    path,
-    issues,
-  );
-
-  const runnerKindRaw = config["runnerKind"];
-  let runnerKind: MailGatewayReadAddonConfig["runnerKind"];
-  if (runnerKindRaw !== undefined) {
-    if (
-      runnerKindRaw === "podman" ||
-      runnerKindRaw === "docker" ||
-      runnerKindRaw === "nerdctl"
-    ) {
-      runnerKind = runnerKindRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.runnerKind`,
-          "must be 'podman', 'docker', or 'nerdctl'",
-        ),
-      );
-    }
-  }
-
-  const networkPolicyRaw = config["networkPolicy"];
-  let networkPolicy: MailGatewayReadAddonConfig["networkPolicy"];
-  if (networkPolicyRaw !== undefined) {
-    if (
-      networkPolicyRaw === "disabled" ||
-      networkPolicyRaw === "egress-allowed"
-    ) {
-      networkPolicy = networkPolicyRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.networkPolicy`,
-          "must be 'disabled' or 'egress-allowed'",
-        ),
-      );
-    }
-  }
-
-  if (issues.length > 0 || queryTemplate === undefined) {
-    return { issues };
-  }
-
-  return {
-    config: {
-      queryTemplate,
-      ...(image === undefined ? {} : { image }),
-      ...(runnerKind === undefined ? {} : { runnerKind }),
-      ...(runnerPath === undefined ? {} : { runnerPath }),
-      ...(networkPolicy === undefined ? {} : { networkPolicy }),
-    },
-    issues,
-  };
+  return normalizeGatewayTemplateConfig(value, path, "queryTemplate");
 }
 
 function normalizeMailGatewayConfig(
@@ -801,88 +707,118 @@ function normalizeMailGatewayConfig(
   readonly config?: MailGatewayAddonConfig;
   readonly issues: readonly ValidationIssue[];
 } {
-  const issues: ValidationIssue[] = [];
-  const config: Readonly<Record<string, unknown>> = value ?? {};
-  const allowedKeys = new Set([
-    "documentTemplate",
-    "image",
-    "runnerKind",
-    "runnerPath",
-    "networkPolicy",
-  ]);
-
-  for (const key of Object.keys(config)) {
-    if (!allowedKeys.has(key)) {
-      issues.push(makeIssue(`${path}.${key}`, "is not supported"));
-    }
-  }
-
-  const documentTemplate = readRequiredStringConfig(
-    config,
-    "documentTemplate",
-    path,
-    issues,
-  );
-  const image = readOptionalStringConfig(config, "image", path, issues);
-  const runnerPath = readOptionalStringConfig(
-    config,
-    "runnerPath",
-    path,
-    issues,
-  );
-
-  const runnerKindRaw = config["runnerKind"];
-  let runnerKind: MailGatewayAddonConfig["runnerKind"];
-  if (runnerKindRaw !== undefined) {
-    if (
-      runnerKindRaw === "podman" ||
-      runnerKindRaw === "docker" ||
-      runnerKindRaw === "nerdctl"
-    ) {
-      runnerKind = runnerKindRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.runnerKind`,
-          "must be 'podman', 'docker', or 'nerdctl'",
-        ),
-      );
-    }
-  }
-
-  const networkPolicyRaw = config["networkPolicy"];
-  let networkPolicy: MailGatewayAddonConfig["networkPolicy"];
-  if (networkPolicyRaw !== undefined) {
-    if (
-      networkPolicyRaw === "disabled" ||
-      networkPolicyRaw === "egress-allowed"
-    ) {
-      networkPolicy = networkPolicyRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          `${path}.networkPolicy`,
-          "must be 'disabled' or 'egress-allowed'",
-        ),
-      );
-    }
-  }
-
-  if (issues.length > 0 || documentTemplate === undefined) {
-    return { issues };
-  }
-
-  return {
-    config: {
-      documentTemplate,
-      ...(image === undefined ? {} : { image }),
-      ...(runnerKind === undefined ? {} : { runnerKind }),
-      ...(runnerPath === undefined ? {} : { runnerPath }),
-      ...(networkPolicy === undefined ? {} : { networkPolicy }),
-    },
-    issues,
-  };
+  return normalizeGatewayTemplateConfig(value, path, "documentTemplate");
 }
+
+type GatewayConfigNormalizer<Config> = (
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+) => {
+  readonly config?: Config;
+  readonly issues: readonly ValidationIssue[];
+};
+
+interface BuiltinGatewayAddonDescriptor<Config> {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly output: NodeOutputContract;
+  readonly normalizeConfig: GatewayConfigNormalizer<Config>;
+  readonly createResolvedAddon: (input: {
+    readonly config: Config;
+    readonly authoredAddon: WorkflowNodeAddonRef;
+  }) => ResolvedNodeAddon;
+}
+
+function validateGatewayAddonFields(
+  addon: WorkflowNodeAddonRef,
+  path: string,
+): readonly ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (addon.config !== undefined && !isRecord(addon.config)) {
+    issues.push(makeIssue(`${path}.config`, "must be an object"));
+  }
+  if (addon.inputs !== undefined && !isRecord(addon.inputs)) {
+    issues.push(makeIssue(`${path}.inputs`, "must be an object"));
+  }
+  return issues;
+}
+
+const X_GATEWAY_READ_DESCRIPTOR: BuiltinGatewayAddonDescriptor<XGatewayReadAddonConfig> =
+  {
+    name: X_GATEWAY_READ_ADDON_NAME,
+    version: X_GATEWAY_READ_ADDON_VERSION,
+    description:
+      "Built-in worker that runs a read-only x-gateway query in a container.",
+    output: X_GATEWAY_READ_OUTPUT,
+    normalizeConfig: normalizeXGatewayReadConfig,
+    createResolvedAddon: ({ config, authoredAddon }) => ({
+      name: X_GATEWAY_READ_ADDON_NAME,
+      version: X_GATEWAY_READ_ADDON_VERSION,
+      config,
+      ...(authoredAddon.env === undefined ? {} : { env: authoredAddon.env }),
+      ...(authoredAddon.inputs === undefined
+        ? {}
+        : { inputs: authoredAddon.inputs }),
+    }),
+  };
+
+const X_GATEWAY_DESCRIPTOR: BuiltinGatewayAddonDescriptor<XGatewayAddonConfig> =
+  {
+    name: X_GATEWAY_ADDON_NAME,
+    version: X_GATEWAY_ADDON_VERSION,
+    description:
+      "Built-in worker that runs an x-gateway query or mutation in a container.",
+    output: X_GATEWAY_OUTPUT,
+    normalizeConfig: normalizeXGatewayConfig,
+    createResolvedAddon: ({ config, authoredAddon }) => ({
+      name: X_GATEWAY_ADDON_NAME,
+      version: X_GATEWAY_ADDON_VERSION,
+      config,
+      ...(authoredAddon.env === undefined ? {} : { env: authoredAddon.env }),
+      ...(authoredAddon.inputs === undefined
+        ? {}
+        : { inputs: authoredAddon.inputs }),
+    }),
+  };
+
+const MAIL_GATEWAY_READ_DESCRIPTOR: BuiltinGatewayAddonDescriptor<MailGatewayReadAddonConfig> =
+  {
+    name: MAIL_GATEWAY_READ_ADDON_NAME,
+    version: MAIL_GATEWAY_READ_ADDON_VERSION,
+    description:
+      "Built-in worker that runs a read-only mail-gateway query in a container.",
+    output: MAIL_GATEWAY_READ_OUTPUT,
+    normalizeConfig: normalizeMailGatewayReadConfig,
+    createResolvedAddon: ({ config, authoredAddon }) => ({
+      name: MAIL_GATEWAY_READ_ADDON_NAME,
+      version: MAIL_GATEWAY_READ_ADDON_VERSION,
+      config,
+      ...(authoredAddon.env === undefined ? {} : { env: authoredAddon.env }),
+      ...(authoredAddon.inputs === undefined
+        ? {}
+        : { inputs: authoredAddon.inputs }),
+    }),
+  };
+
+const MAIL_GATEWAY_DESCRIPTOR: BuiltinGatewayAddonDescriptor<MailGatewayAddonConfig> =
+  {
+    name: MAIL_GATEWAY_ADDON_NAME,
+    version: MAIL_GATEWAY_ADDON_VERSION,
+    description:
+      "Built-in worker that runs a mail-gateway query or mutation in a container.",
+    output: MAIL_GATEWAY_OUTPUT,
+    normalizeConfig: normalizeMailGatewayConfig,
+    createResolvedAddon: ({ config, authoredAddon }) => ({
+      name: MAIL_GATEWAY_ADDON_NAME,
+      version: MAIL_GATEWAY_ADDON_VERSION,
+      config,
+      ...(authoredAddon.env === undefined ? {} : { env: authoredAddon.env }),
+      ...(authoredAddon.inputs === undefined
+        ? {}
+        : { inputs: authoredAddon.inputs }),
+    }),
+  };
 
 function normalizeAgentWorkerConfig(
   value: Readonly<Record<string, unknown>> | undefined,
@@ -1090,6 +1026,62 @@ function resolveAgentWorkerPayload(input: {
   };
 }
 
+function resolveGatewayPayload<Config>(
+  input: {
+    readonly nodeId: string;
+    readonly addon: WorkflowNodeAddonRef;
+    readonly path: string;
+  },
+  descriptor: BuiltinGatewayAddonDescriptor<Config>,
+): {
+  readonly payload?: NodePayload;
+  readonly issues: readonly ValidationIssue[];
+} {
+  if (input.addon.name !== descriptor.name) {
+    return { issues: [] };
+  }
+
+  const version = input.addon.version ?? descriptor.version;
+  if (version !== descriptor.version) {
+    return {
+      issues: [
+        makeIssue(
+          `${input.path}.version`,
+          `unsupported version '${version}' for ${descriptor.name}`,
+        ),
+      ],
+    };
+  }
+
+  const fieldIssues = validateGatewayAddonFields(input.addon, input.path);
+  if (fieldIssues.length > 0) {
+    return { issues: fieldIssues };
+  }
+
+  const normalized = descriptor.normalizeConfig(
+    input.addon.config,
+    `${input.path}.config`,
+  );
+  if (normalized.config === undefined) {
+    return { issues: normalized.issues };
+  }
+
+  return {
+    payload: {
+      id: input.nodeId,
+      description: descriptor.description,
+      nodeType: "addon",
+      variables: input.addon.inputs ?? {},
+      addon: descriptor.createResolvedAddon({
+        config: normalized.config,
+        authoredAddon: input.addon,
+      }),
+      output: descriptor.output,
+    },
+    issues: [],
+  };
+}
+
 function resolveXGatewayReadPayload(input: {
   readonly nodeId: string;
   readonly addon: WorkflowNodeAddonRef;
@@ -1098,60 +1090,7 @@ function resolveXGatewayReadPayload(input: {
   readonly payload?: NodePayload;
   readonly issues: readonly ValidationIssue[];
 } {
-  if (input.addon.name !== X_GATEWAY_READ_ADDON_NAME) {
-    return { issues: [] };
-  }
-
-  const version = input.addon.version ?? X_GATEWAY_READ_ADDON_VERSION;
-  if (version !== X_GATEWAY_READ_ADDON_VERSION) {
-    return {
-      issues: [
-        makeIssue(
-          `${input.path}.version`,
-          `unsupported version '${version}' for ${X_GATEWAY_READ_ADDON_NAME}`,
-        ),
-      ],
-    };
-  }
-  if (input.addon.config !== undefined && !isRecord(input.addon.config)) {
-    return {
-      issues: [makeIssue(`${input.path}.config`, "must be an object")],
-    };
-  }
-  if (input.addon.inputs !== undefined && !isRecord(input.addon.inputs)) {
-    return {
-      issues: [makeIssue(`${input.path}.inputs`, "must be an object")],
-    };
-  }
-
-  const normalized = normalizeXGatewayReadConfig(
-    input.addon.config,
-    `${input.path}.config`,
-  );
-  if (normalized.config === undefined) {
-    return { issues: normalized.issues };
-  }
-
-  const addon: ResolvedNodeAddon = {
-    name: X_GATEWAY_READ_ADDON_NAME,
-    version: X_GATEWAY_READ_ADDON_VERSION,
-    config: normalized.config,
-    ...(input.addon.env === undefined ? {} : { env: input.addon.env }),
-    ...(input.addon.inputs === undefined ? {} : { inputs: input.addon.inputs }),
-  };
-
-  return {
-    payload: {
-      id: input.nodeId,
-      description:
-        "Built-in worker that runs a read-only x-gateway query in a container.",
-      nodeType: "addon",
-      variables: input.addon.inputs ?? {},
-      addon,
-      output: X_GATEWAY_READ_OUTPUT,
-    },
-    issues: [],
-  };
+  return resolveGatewayPayload(input, X_GATEWAY_READ_DESCRIPTOR);
 }
 
 function resolveXGatewayPayload(input: {
@@ -1162,60 +1101,7 @@ function resolveXGatewayPayload(input: {
   readonly payload?: NodePayload;
   readonly issues: readonly ValidationIssue[];
 } {
-  if (input.addon.name !== X_GATEWAY_ADDON_NAME) {
-    return { issues: [] };
-  }
-
-  const version = input.addon.version ?? X_GATEWAY_ADDON_VERSION;
-  if (version !== X_GATEWAY_ADDON_VERSION) {
-    return {
-      issues: [
-        makeIssue(
-          `${input.path}.version`,
-          `unsupported version '${version}' for ${X_GATEWAY_ADDON_NAME}`,
-        ),
-      ],
-    };
-  }
-  if (input.addon.config !== undefined && !isRecord(input.addon.config)) {
-    return {
-      issues: [makeIssue(`${input.path}.config`, "must be an object")],
-    };
-  }
-  if (input.addon.inputs !== undefined && !isRecord(input.addon.inputs)) {
-    return {
-      issues: [makeIssue(`${input.path}.inputs`, "must be an object")],
-    };
-  }
-
-  const normalized = normalizeXGatewayConfig(
-    input.addon.config,
-    `${input.path}.config`,
-  );
-  if (normalized.config === undefined) {
-    return { issues: normalized.issues };
-  }
-
-  const addon: ResolvedNodeAddon = {
-    name: X_GATEWAY_ADDON_NAME,
-    version: X_GATEWAY_ADDON_VERSION,
-    config: normalized.config,
-    ...(input.addon.env === undefined ? {} : { env: input.addon.env }),
-    ...(input.addon.inputs === undefined ? {} : { inputs: input.addon.inputs }),
-  };
-
-  return {
-    payload: {
-      id: input.nodeId,
-      description:
-        "Built-in worker that runs an x-gateway query or mutation in a container.",
-      nodeType: "addon",
-      variables: input.addon.inputs ?? {},
-      addon,
-      output: X_GATEWAY_OUTPUT,
-    },
-    issues: [],
-  };
+  return resolveGatewayPayload(input, X_GATEWAY_DESCRIPTOR);
 }
 
 function resolveMailGatewayReadPayload(input: {
@@ -1226,60 +1112,7 @@ function resolveMailGatewayReadPayload(input: {
   readonly payload?: NodePayload;
   readonly issues: readonly ValidationIssue[];
 } {
-  if (input.addon.name !== MAIL_GATEWAY_READ_ADDON_NAME) {
-    return { issues: [] };
-  }
-
-  const version = input.addon.version ?? MAIL_GATEWAY_READ_ADDON_VERSION;
-  if (version !== MAIL_GATEWAY_READ_ADDON_VERSION) {
-    return {
-      issues: [
-        makeIssue(
-          `${input.path}.version`,
-          `unsupported version '${version}' for ${MAIL_GATEWAY_READ_ADDON_NAME}`,
-        ),
-      ],
-    };
-  }
-  if (input.addon.config !== undefined && !isRecord(input.addon.config)) {
-    return {
-      issues: [makeIssue(`${input.path}.config`, "must be an object")],
-    };
-  }
-  if (input.addon.inputs !== undefined && !isRecord(input.addon.inputs)) {
-    return {
-      issues: [makeIssue(`${input.path}.inputs`, "must be an object")],
-    };
-  }
-
-  const normalized = normalizeMailGatewayReadConfig(
-    input.addon.config,
-    `${input.path}.config`,
-  );
-  if (normalized.config === undefined) {
-    return { issues: normalized.issues };
-  }
-
-  const addon: ResolvedNodeAddon = {
-    name: MAIL_GATEWAY_READ_ADDON_NAME,
-    version: MAIL_GATEWAY_READ_ADDON_VERSION,
-    config: normalized.config,
-    ...(input.addon.env === undefined ? {} : { env: input.addon.env }),
-    ...(input.addon.inputs === undefined ? {} : { inputs: input.addon.inputs }),
-  };
-
-  return {
-    payload: {
-      id: input.nodeId,
-      description:
-        "Built-in worker that runs a read-only mail-gateway query in a container.",
-      nodeType: "addon",
-      variables: input.addon.inputs ?? {},
-      addon,
-      output: MAIL_GATEWAY_READ_OUTPUT,
-    },
-    issues: [],
-  };
+  return resolveGatewayPayload(input, MAIL_GATEWAY_READ_DESCRIPTOR);
 }
 
 function resolveMailGatewayPayload(input: {
@@ -1290,60 +1123,7 @@ function resolveMailGatewayPayload(input: {
   readonly payload?: NodePayload;
   readonly issues: readonly ValidationIssue[];
 } {
-  if (input.addon.name !== MAIL_GATEWAY_ADDON_NAME) {
-    return { issues: [] };
-  }
-
-  const version = input.addon.version ?? MAIL_GATEWAY_ADDON_VERSION;
-  if (version !== MAIL_GATEWAY_ADDON_VERSION) {
-    return {
-      issues: [
-        makeIssue(
-          `${input.path}.version`,
-          `unsupported version '${version}' for ${MAIL_GATEWAY_ADDON_NAME}`,
-        ),
-      ],
-    };
-  }
-  if (input.addon.config !== undefined && !isRecord(input.addon.config)) {
-    return {
-      issues: [makeIssue(`${input.path}.config`, "must be an object")],
-    };
-  }
-  if (input.addon.inputs !== undefined && !isRecord(input.addon.inputs)) {
-    return {
-      issues: [makeIssue(`${input.path}.inputs`, "must be an object")],
-    };
-  }
-
-  const normalized = normalizeMailGatewayConfig(
-    input.addon.config,
-    `${input.path}.config`,
-  );
-  if (normalized.config === undefined) {
-    return { issues: normalized.issues };
-  }
-
-  const addon: ResolvedNodeAddon = {
-    name: MAIL_GATEWAY_ADDON_NAME,
-    version: MAIL_GATEWAY_ADDON_VERSION,
-    config: normalized.config,
-    ...(input.addon.env === undefined ? {} : { env: input.addon.env }),
-    ...(input.addon.inputs === undefined ? {} : { inputs: input.addon.inputs }),
-  };
-
-  return {
-    payload: {
-      id: input.nodeId,
-      description:
-        "Built-in worker that runs a mail-gateway query or mutation in a container.",
-      nodeType: "addon",
-      variables: input.addon.inputs ?? {},
-      addon,
-      output: MAIL_GATEWAY_OUTPUT,
-    },
-    issues: [],
-  };
+  return resolveGatewayPayload(input, MAIL_GATEWAY_DESCRIPTOR);
 }
 
 export function resolveBuiltinNodeAddonPayload(

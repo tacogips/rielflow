@@ -207,15 +207,20 @@ descriptors until a separate trusted executor-registration design exists.
 For a workflow loaded from the scoped workflow catalog, add-on lookup order is:
 
 1. built-in runtime catalog for `divedra/*`
-2. caller workflow's owning scope add-on root
-3. project scope add-on root, when different from the caller scope and present
-4. user scope add-on root, when different from the caller scope
+2. explicit direct add-on root override, when supplied
+3. project scope add-on root, when present
+4. user scope add-on root
 5. host-provided resolver functions
 
 For direct workflow-root compatibility mode, scoped add-on roots are not
 inferred from the direct workflow root. The host may still pass explicit
 resolver functions, or the caller may supply `--addon-root` /
 `DIVEDRA_ADDON_ROOT`.
+
+When scoped catalog loading receives an explicit direct add-on root override,
+that root is prepended to the scoped candidates. It does not suppress project or
+user fallback when the direct root does not contain the requested
+`(name, version)`.
 
 Shadowing rules:
 

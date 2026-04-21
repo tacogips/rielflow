@@ -1661,6 +1661,124 @@ describe("loadWorkflowFromDisk", () => {
     });
   });
 
+  test("falls back to scoped local add-ons after a direct add-on root miss", async () => {
+    const root = await makeTempDir();
+    const projectScopeRoot = path.join(root, ".divedra");
+    const directAddonRoot = path.join(root, "direct-addons");
+    const workflowName = "direct-addon-root-fallback";
+    const addonName = "acme/project-only-worker";
+
+    await writeAddonWorkflow({
+      workflowRoot: path.join(projectScopeRoot, "workflows"),
+      workflowName,
+      addonName,
+      version: "1",
+    });
+    await writeLocalAddonManifest({
+      addonRoot: path.join(projectScopeRoot, "addons"),
+      name: addonName,
+      version: "1",
+      prompt: "Project fallback add-on",
+      model: "gpt-5-mini",
+    });
+
+    const result = await loadWorkflowFromCatalog(workflowName, {
+      cwd: root,
+      addonRoot: directAddonRoot,
+      env: {},
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.nodePayloads["worker-1"]).toMatchObject({
+      model: "gpt-5-mini",
+      promptTemplate: "Project fallback add-on\n",
+    });
+  });
+
+  test("does not infer scoped local add-ons for direct workflow-root loading", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "direct-workflows");
+    const projectScopeRoot = path.join(root, ".divedra");
+    const workflowName = "direct-root-addon-isolation";
+    const addonName = "acme/echo-worker";
+
+    await writeAddonWorkflow({
+      workflowRoot,
+      workflowName,
+      addonName,
+      version: "1",
+    });
+    await writeLocalAddonManifest({
+      addonRoot: path.join(projectScopeRoot, "addons"),
+      name: addonName,
+      version: "1",
+      prompt: "Project add-on",
+      model: "gpt-5-mini",
+    });
+
+    const isolated = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot,
+      cwd: root,
+      env: {},
+    });
+
+    expect(isolated.ok).toBe(false);
+    if (isolated.ok) {
+      return;
+    }
+    expect(isolated.error.code).toBe("VALIDATION");
+    expect(
+      isolated.error.issues?.some(
+        (issue) =>
+          issue.path === "workflow.nodes[0].addon.name" &&
+          issue.message.includes("unknown third-party node add-on"),
+      ),
+    ).toBe(true);
+
+    const withMissingDirectAddonRoot = await loadWorkflowFromDisk(
+      workflowName,
+      {
+        workflowRoot,
+        addonRoot: path.join(root, "missing-direct-addons"),
+        cwd: root,
+        env: {},
+      },
+    );
+
+    expect(withMissingDirectAddonRoot.ok).toBe(false);
+    if (withMissingDirectAddonRoot.ok) {
+      return;
+    }
+    expect(
+      withMissingDirectAddonRoot.error.issues?.some(
+        (issue) =>
+          issue.path === "workflow.nodes[0].addon.name" &&
+          issue.message.includes("unknown third-party node add-on"),
+      ),
+    ).toBe(true);
+
+    const withDirectAddonRoot = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot,
+      addonRoot: path.join(projectScopeRoot, "addons"),
+      cwd: root,
+      env: {},
+    });
+
+    expect(withDirectAddonRoot.ok).toBe(true);
+    if (!withDirectAddonRoot.ok) {
+      return;
+    }
+    expect(
+      withDirectAddonRoot.value.bundle.nodePayloads["worker-1"],
+    ).toMatchObject({
+      model: "gpt-5-mini",
+      promptTemplate: "Project add-on\n",
+    });
+  });
+
   test("rejects unsafe local add-on names before resolving paths", async () => {
     const root = await makeTempDir();
     const projectScopeRoot = path.join(root, ".divedra");

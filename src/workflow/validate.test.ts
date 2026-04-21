@@ -1200,6 +1200,10 @@ describe("validateWorkflowBundle", () => {
                 fromEnv: "ACCOUNT_A_X_GW_CONFIG_MODE",
                 required: false,
               },
+              X_GW_REQUIRED_OBJECT: {
+                fromEnv: "ACCOUNT_A_REQUIRED_X_GW_TOKEN",
+                required: true,
+              },
             },
             config: {
               queryTemplate: '{ post(id: "{{postId}}") { id text } }',
@@ -1229,6 +1233,10 @@ describe("validateWorkflowBundle", () => {
         X_GW_CONFIG_MODE: {
           fromEnv: "ACCOUNT_A_X_GW_CONFIG_MODE",
           required: false,
+        },
+        X_GW_REQUIRED_OBJECT: {
+          fromEnv: "ACCOUNT_A_REQUIRED_X_GW_TOKEN",
+          required: true,
         },
       },
       config: {

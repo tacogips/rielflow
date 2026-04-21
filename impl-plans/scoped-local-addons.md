@@ -299,6 +299,41 @@ direct add-on root override, unsafe names, and unsafe template paths.
 surfaces, including CLI JSON/text output, GraphQL validation/inspection, and
 library inspection. Added focused CLI, GraphQL, and library regression tests.
 
+### Session: 2026-04-21 15:33
+
+**Tasks Completed**: Review follow-up for TASK-001, TASK-003, and TASK-005.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Fixed direct workflow-root compatibility so scoped local add-on roots
+are not inferred unless a direct add-on root override is supplied. Preserved
+explicit `required: true` add-on env bindings, deduplicated built-in gateway
+add-on config normalization, and added regression coverage for the direct-root
+add-on isolation path.
+
+### Session: 2026-04-21 15:37
+
+**Tasks Completed**: Review follow-up for TASK-001 and TASK-005.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Aligned implementation with the documented add-on lookup order by
+making direct add-on root overrides prepend scoped candidates during catalog
+loads instead of replacing them. Kept direct workflow-root compatibility
+isolated to explicit add-on roots or host resolvers, removed a gateway
+normalization type assertion, and added regression coverage for direct-root
+fallback and direct-mode isolation.
+
+### Session: 2026-04-21 15:44
+
+**Tasks Completed**: Review follow-up for TASK-001, TASK-003, and design
+alignment.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Updated stale command and scoped-workflow design wording so direct
+add-on root overrides are documented as prepended scoped candidates rather than
+exclusive bypasses. Further deduplicated built-in x-gateway and mail-gateway
+payload resolution through a shared descriptor-driven resolver while preserving
+the existing validation and output contracts.
+
 ## Related Plans
 
 - **Previous**: `impl-plans/scoped-workflow-catalog-safety-follow-up.md`

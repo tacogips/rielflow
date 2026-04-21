@@ -293,24 +293,42 @@ function createAddonSource(
   };
 }
 
+function pushAddonCandidate(
+  candidates: AddonRootCandidate[],
+  candidate: AddonRootCandidate,
+): void {
+  if (
+    candidates.some((existing) => existing.addonRoot === candidate.addonRoot)
+  ) {
+    return;
+  }
+  candidates.push(candidate);
+}
+
 function createScopedAddonCandidates(input: {
   readonly workflowSource?: ResolvedWorkflowSource;
   readonly options: LoadOptions;
 }): readonly AddonRootCandidate[] {
+  const candidates: AddonRootCandidate[] = [];
   const directAddonRoot = resolveDirectAddonRootOverride(input.options);
   if (directAddonRoot !== undefined) {
-    return [{ scope: "direct", addonRoot: directAddonRoot }];
+    pushAddonCandidate(candidates, {
+      scope: "direct",
+      addonRoot: directAddonRoot,
+    });
   }
 
-  if (input.workflowSource?.scope === "direct") {
-    return [];
+  if (
+    input.workflowSource?.scope === "direct" ||
+    (input.workflowSource === undefined &&
+      resolveDirectWorkflowRootOverride(input.options) !== undefined)
+  ) {
+    return candidates;
   }
-
-  const candidates: AddonRootCandidate[] = [];
 
   const projectScopeRoot = discoverProjectScopeRoot(input.options);
   if (projectScopeRoot !== undefined) {
-    candidates.push({
+    pushAddonCandidate(candidates, {
       scope: "project",
       scopeRoot: projectScopeRoot,
       addonRoot: addonRootForScope(projectScopeRoot),
@@ -324,7 +342,7 @@ function createScopedAddonCandidates(input: {
   const userScopeRoot =
     explicitUserScopeRoot ?? resolveUserScopeRoot(input.options);
   if (userScopeRoot !== undefined && projectScopeRoot !== userScopeRoot) {
-    candidates.push({
+    pushAddonCandidate(candidates, {
       scope: "user",
       scopeRoot: userScopeRoot,
       addonRoot: addonRootForScope(userScopeRoot),

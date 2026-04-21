@@ -243,14 +243,18 @@ The path segments are derived from authored add-on names:
 Default local add-on lookup order:
 
 1. built-in runtime catalog for `divedra/*`
-2. caller workflow's owning scope add-on root
-3. project scope add-on root, when different from the caller scope and present
-4. user scope add-on root, when different from the caller scope
+2. explicit direct add-on root override, when supplied
+3. project scope add-on root, when present
+4. user scope add-on root
 5. host-provided resolver functions
 
-This order keeps a workflow's own scope stable, allows project-local add-ons to
-specialize shared user workflows when allowed by policy, and preserves existing
-host resolver integration as the final extension point.
+This order allows project-local add-ons to specialize shared user workflows by
+exact `(name, version)` while preserving existing host resolver integration as
+the final extension point. During scoped catalog loading, an explicit direct
+add-on root override is a prepended candidate, not an exclusive source. Direct
+workflow-root compatibility mode does not infer scoped add-on roots; callers
+must supply an explicit add-on root override or host resolver functions when
+direct workflow bundles reference local add-ons.
 
 For bare CLI workflow lookup, project workflow shadowing user workflow is
 intentional. For add-ons, shadowing should require both the same add-on name and
@@ -375,20 +379,20 @@ New CLI options:
 | `--scope <scope>`       | Selects workflow scope behavior for read/write commands: `auto`, `project`, or `user`. |
 | `--user-root <path>`    | Overrides the user scope root.                                                         |
 | `--project-root <path>` | Overrides the project scope root for the current command.                              |
-| `--addon-root <path>`   | Direct add-on root override; bypasses scoped add-on catalog lookup.                    |
+| `--addon-root <path>`   | Direct add-on root override; searched before scoped add-on roots during scoped loads.  |
 | `--log-root <path>`     | Overrides the log root.                                                                |
 | `--config <path>`       | Overrides the bootstrap config path.                                                   |
 
 New environment variables:
 
-| Variable                 | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
-| `DIVEDRA_WORKFLOW_SCOPE` | Default scope selector: `project`, `user`, or `auto`.               |
-| `DIVEDRA_USER_ROOT`      | Overrides the user scope root.                                      |
-| `DIVEDRA_PROJECT_ROOT`   | Overrides the project scope root.                                   |
-| `DIVEDRA_ADDON_ROOT`     | Direct add-on root override; bypasses scoped add-on catalog lookup. |
-| `DIVEDRA_LOG_ROOT`       | Overrides the log root.                                             |
-| `DIVEDRA_CONFIG`         | Overrides the bootstrap config path.                                |
+| Variable                 | Description                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `DIVEDRA_WORKFLOW_SCOPE` | Default scope selector: `project`, `user`, or `auto`.                                 |
+| `DIVEDRA_USER_ROOT`      | Overrides the user scope root.                                                        |
+| `DIVEDRA_PROJECT_ROOT`   | Overrides the project scope root.                                                     |
+| `DIVEDRA_ADDON_ROOT`     | Direct add-on root override; searched before scoped add-on roots during scoped loads. |
+| `DIVEDRA_LOG_ROOT`       | Overrides the log root.                                                               |
+| `DIVEDRA_CONFIG`         | Overrides the bootstrap config path.                                                  |
 
 Existing variables keep their current meaning. In particular,
 `DIVEDRA_WORKFLOW_ROOT` remains a direct workflow root override and should not
@@ -405,7 +409,11 @@ enumerating another scope.
 
 `DIVEDRA_ADDON_ROOT` is intentionally a direct root override, parallel to
 `DIVEDRA_WORKFLOW_ROOT`. It should point at a directory containing
-`<namespace>/<addon-name>/<version>/addon.json`, not at a scope root.
+`<namespace>/<addon-name>/<version>/addon.json`, not at a scope root. During
+scoped catalog loading it is prepended to add-on candidates and does not
+suppress project/user fallback on a miss. During direct workflow-root
+compatibility loading it is the only filesystem add-on root unless the host
+also supplies resolver functions.
 
 ## Workflow Calls Across Scopes
 

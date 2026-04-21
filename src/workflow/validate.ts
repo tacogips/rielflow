@@ -986,7 +986,7 @@ function normalizeWorkflowNodeAddonEnvBinding(
 
   return {
     fromEnv,
-    ...(typeof required === "boolean" && !required ? { required } : {}),
+    ...(typeof required === "boolean" ? { required } : {}),
   };
 }
 
