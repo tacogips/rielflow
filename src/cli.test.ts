@@ -21,6 +21,7 @@ import type { CliDependencies } from "./cli";
 import * as workflowCallNode from "./workflow/call-node";
 import * as workflowEngine from "./workflow/engine";
 import { ok } from "./workflow/result";
+import { saveEventReplyDispatchToRuntimeDb } from "./workflow/runtime-db";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
 
@@ -100,6 +101,53 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+async function writeLocalAddonManifest(input: {
+  readonly addonRoot: string;
+  readonly name: string;
+  readonly version: string;
+}): Promise<void> {
+  const [namespace, addonName] = input.name.split("/");
+  if (namespace === undefined || addonName === undefined) {
+    throw new Error(`invalid test add-on name '${input.name}'`);
+  }
+  const addonDirectory = path.join(
+    input.addonRoot,
+    namespace,
+    addonName,
+    input.version,
+  );
+  await mkdir(path.join(addonDirectory, "prompts"), { recursive: true });
+  await writeFile(
+    path.join(addonDirectory, "prompts", "worker.md"),
+    "CLI local {{renderedMessage}}\n",
+    "utf8",
+  );
+  await writeJson(path.join(addonDirectory, "addon.json"), {
+    name: input.name,
+    version: input.version,
+    description: "Local echo worker",
+    allowedRoles: ["worker"],
+    inputSchema: {
+      type: "object",
+      required: ["message"],
+      additionalProperties: false,
+      properties: {
+        message: { type: "string", minLength: 1 },
+      },
+    },
+    resolution: {
+      kind: "node-payload-template",
+      nodeType: "agent",
+      executionBackend: "official/openai-sdk",
+      model: "gpt-5-nano",
+      promptTemplateFile: "prompts/worker.md",
+      variables: {
+        renderedMessage: "{{addon.inputs.message}}",
+      },
+    },
+  });
+}
+
 async function createCallNodeFixture(
   workflowRoot: string,
   workflowName: string,
@@ -112,7 +160,6 @@ async function createCallNodeFixture(
     description: "call node cli fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -170,7 +217,6 @@ async function createManagerlessWorkflowFixture(
     description: "worker-only cli fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     entryNodeId: "worker-1",
-    subWorkflows: [],
     nodes: [
       {
         id: "worker-1",
@@ -708,6 +754,271 @@ describe("runCli", () => {
     expect(parsed.managerNodeId).toBe("divedra-manager");
     expect(parsed.counts.nodes).toBe(2);
     expect(parsed.runtime.ready).toBe(true);
+  });
+
+  test("workflow commands resolve explicit user scope", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user");
+    const workflowDirectory = path.join(userRoot, "workflows", "demo");
+
+    const createCapture = createIoCapture();
+    const createCode = await runCli(
+      [
+        "workflow",
+        "create",
+        "demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+      ],
+      createCapture.io,
+    );
+    expect(createCode).toBe(0);
+    expect(createCapture.stdout.join("\n")).toContain(workflowDirectory);
+
+    const validateCapture = createIoCapture();
+    const validateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        "demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+      ],
+      validateCapture.io,
+    );
+    expect(validateCode).toBe(0);
+    expect(validateCapture.stdout.join("\n")).toContain("is valid");
+    expect(validateCapture.stdout.join("\n")).toContain(
+      `source: user ${workflowDirectory}`,
+    );
+
+    const inspectCapture = createIoCapture();
+    const inspectCode = await runCli(
+      [
+        "workflow",
+        "inspect",
+        "demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      inspectCapture.io,
+    );
+    expect(inspectCode).toBe(0);
+    const inspectPayload = JSON.parse(inspectCapture.stdout.join("\n")) as {
+      source?: { scope?: string; workflowDirectory?: string };
+    };
+    expect(inspectPayload.source?.scope).toBe("user");
+    expect(inspectPayload.source?.workflowDirectory).toBe(workflowDirectory);
+
+    const scenarioPath = path.join(root, "scenario.json");
+    await writeFile(
+      scenarioPath,
+      JSON.stringify(makeDefaultTemplateScenario(), null, 2),
+      "utf8",
+    );
+    const runCapture = createIoCapture();
+    const runCode = await runCli(
+      [
+        "workflow",
+        "run",
+        "demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--mock-scenario",
+        scenarioPath,
+        "--output",
+        "json",
+      ],
+      runCapture.io,
+    );
+    expect(runCode).toBe(0);
+    const runPayload = JSON.parse(runCapture.stdout.join("\n")) as {
+      source?: { scope?: string; workflowDirectory?: string };
+    };
+    expect(runPayload.source?.scope).toBe("user");
+    expect(runPayload.source?.workflowDirectory).toBe(workflowDirectory);
+  });
+
+  test("workflow validate and inspect report scoped local add-on sources", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user");
+    const workflowName = "local-addon-cli";
+    const addonName = "acme/local-echo-worker";
+    const workflowDirectory = path.join(userRoot, "workflows", workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "local add-on cli fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "addon-worker",
+      nodes: [
+        {
+          id: "addon-worker",
+          role: "worker",
+          addon: {
+            name: addonName,
+            version: "1",
+            inputs: { message: "from cli" },
+          },
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+      loops: [],
+      branching: { mode: "fan-out" },
+    });
+    await writeLocalAddonManifest({
+      addonRoot: path.join(userRoot, "addons"),
+      name: addonName,
+      version: "1",
+    });
+
+    const validateCapture = createIoCapture();
+    const validateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        workflowName,
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      validateCapture.io,
+    );
+    expect(validateCode).toBe(0);
+    const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
+      addonSources?: ReadonlyArray<{
+        readonly nodeId: string;
+        readonly name: string;
+        readonly scope: string;
+        readonly manifestPath: string;
+      }>;
+    };
+    expect(validation.addonSources).toEqual([
+      expect.objectContaining({
+        nodeId: "addon-worker",
+        name: addonName,
+        scope: "user",
+        manifestPath: path.join(
+          userRoot,
+          "addons",
+          "acme",
+          "local-echo-worker",
+          "1",
+          "addon.json",
+        ),
+      }),
+    ]);
+
+    const inspectCapture = createIoCapture();
+    const inspectCode = await runCli(
+      [
+        "workflow",
+        "inspect",
+        workflowName,
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+      ],
+      inspectCapture.io,
+    );
+    expect(inspectCode).toBe(0);
+    expect(inspectCapture.stdout.join("\n")).toContain(
+      `addonSource: addon-worker: ${addonName}@1 user`,
+    );
+  });
+
+  test("workflow commands reject invalid scope selectors", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      ["workflow", "validate", "demo", "--scope", "global"],
+      capture.io,
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "invalid --scope value 'global'",
+    );
+  });
+
+  test("workflow commands reject invalid scope environment selectors", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(["workflow", "validate", "demo"], capture.io, {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 7777,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      env: {
+        DIVEDRA_WORKFLOW_SCOPE: "global",
+      },
+    });
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "invalid DIVEDRA_WORKFLOW_SCOPE value 'global'",
+    );
+  });
+
+  test("workflow commands resolve explicit project scope root", async () => {
+    const root = await makeTempDir();
+    const projectRoot = path.join(root, ".divedra");
+
+    const createCapture = createIoCapture();
+    const createCode = await runCli(
+      [
+        "workflow",
+        "create",
+        "demo",
+        "--scope",
+        "project",
+        "--project-root",
+        projectRoot,
+      ],
+      createCapture.io,
+    );
+    expect(createCode).toBe(0);
+    expect(createCapture.stdout.join("\n")).toContain(
+      path.join(projectRoot, "workflows", "demo"),
+    );
+
+    const inspectCapture = createIoCapture();
+    const inspectCode = await runCli(
+      [
+        "workflow",
+        "inspect",
+        "demo",
+        "--scope",
+        "project",
+        "--project-root",
+        projectRoot,
+        "--output",
+        "json",
+      ],
+      inspectCapture.io,
+    );
+    expect(inspectCode).toBe(0);
+    const parsed = JSON.parse(inspectCapture.stdout.join("\n")) as {
+      workflowName: string;
+    };
+    expect(parsed.workflowName).toBe("demo");
   });
 
   test("create --worker-only scaffolds a manager-less starter", async () => {
@@ -1946,6 +2257,7 @@ describe("runCli", () => {
     const started: Array<{
       host?: string;
       port?: number;
+      addonRoot?: string;
       fixedWorkflowName?: string;
       readOnly?: boolean;
       noExec?: boolean;
@@ -1961,6 +2273,8 @@ describe("runCli", () => {
         "7777",
         "--read-only",
         "--no-exec",
+        "--addon-root",
+        "/tmp/direct-addons",
         "--output",
         "json",
       ],
@@ -1981,6 +2295,7 @@ describe("runCli", () => {
 
     expect(code).toBe(0);
     expect(started).toHaveLength(1);
+    expect(started[0]?.addonRoot).toBe("/tmp/direct-addons");
     expect(started[0]?.fixedWorkflowName).toBe("demo");
     expect(started[0]?.readOnly).toBe(true);
     expect(started[0]?.noExec).toBe(true);
@@ -2839,6 +3154,509 @@ describe("runCli", () => {
     expect(statusPayload.runtimeVariables.resumedFromSessionId).toBe(sessionId);
   });
 
+  test("events validate reports valid event configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await mkdir(path.join(workflowRoot, "demo"), { recursive: true });
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await mkdir(path.join(eventRoot, "sources"), { recursive: true });
+    await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
+      id: "webhook",
+      kind: "webhook",
+      path: "/events/webhook",
+    });
+    await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
+    await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
+      id: "demo",
+      sourceId: "webhook",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "events",
+        "validate",
+        "--workflow-root",
+        workflowRoot,
+        "--event-root",
+        eventRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(JSON.parse(capture.stdout.join("\n"))).toMatchObject({
+      valid: true,
+      eventRoot,
+      sources: 1,
+      bindings: 1,
+    });
+  });
+
+  test("events emit dispatches locally with mock scenario without endpoint", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    const artifactRoot = path.join(root, "data", "workflow");
+    const eventFile = path.join(root, "event.json");
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await createManagerlessWorkflowFixture(workflowRoot, "demo");
+    await mkdir(path.join(eventRoot, "sources"), { recursive: true });
+    await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
+      id: "webhook",
+      kind: "webhook",
+      path: "/events/webhook",
+    });
+    await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
+    await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
+      id: "demo",
+      sourceId: "webhook",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: { request: "{{event.input.text}}" },
+        mirrorToHumanInput: true,
+      },
+      execution: {
+        async: false,
+        allowUnsafeSyncWebhook: true,
+      },
+    });
+    await writeJson(eventFile, {
+      eventId: "evt-local-mock",
+      eventType: "chat.message",
+      input: { text: "hello local mock" },
+    });
+    await writeJson(mockScenarioPath, {
+      "worker-1": {
+        provider: "scenario-mock",
+        payload: { step: "first" },
+      },
+      "worker-2": {
+        provider: "scenario-mock",
+        payload: { step: "second" },
+      },
+    });
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse({ errors: [{ message: "unexpected fetch" }] }),
+    ) as typeof fetch;
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "events",
+        "emit",
+        "webhook",
+        "--workflow-root",
+        workflowRoot,
+        "--artifact-root",
+        artifactRoot,
+        "--event-root",
+        eventRoot,
+        "--event-file",
+        eventFile,
+        "--mock-scenario",
+        mockScenarioPath,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        fetchImpl,
+      },
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      receipts: readonly {
+        status: string;
+        workflowExecutionId: string | null;
+      }[];
+    };
+
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(payload.receipts[0]?.status).toBe("dispatched");
+    expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^div-demo-/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test("events emit honors DIVEDRA_EVENTS_READ_ONLY", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    const artifactRoot = path.join(root, "data", "workflow");
+    const eventFile = path.join(root, "event.json");
+    await mkdir(path.join(workflowRoot, "demo"), { recursive: true });
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await mkdir(path.join(eventRoot, "sources"), { recursive: true });
+    await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
+      id: "webhook",
+      kind: "webhook",
+      path: "/events/webhook",
+    });
+    await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
+    await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
+      id: "demo",
+      sourceId: "webhook",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: { request: "{{event.input.text}}" },
+      },
+    });
+    await writeJson(eventFile, {
+      eventId: "evt-cli-read-only",
+      eventType: "chat.message",
+      input: { text: "hello read-only cli" },
+    });
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse({ errors: [{ message: "unexpected dispatch" }] }),
+    ) as typeof fetch;
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "events",
+        "emit",
+        "webhook",
+        "--workflow-root",
+        workflowRoot,
+        "--artifact-root",
+        artifactRoot,
+        "--event-root",
+        eventRoot,
+        "--event-file",
+        eventFile,
+        "--endpoint",
+        "http://example.test/graphql",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        env: { DIVEDRA_EVENTS_READ_ONLY: "true" },
+        fetchImpl,
+      },
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      receipts: readonly {
+        status: string;
+        workflowExecutionId: string | null;
+      }[];
+    };
+
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(payload.receipts[0]?.status).toBe("skipped");
+    expect(payload.receipts[0]?.workflowExecutionId).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test("events reject mock scenario with remote endpoint", async () => {
+    const root = await makeTempDir();
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeJson(mockScenarioPath, {});
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "events",
+        "emit",
+        "webhook",
+        "--event-file",
+        path.join(root, "event.json"),
+        "--mock-scenario",
+        mockScenarioPath,
+        "--endpoint",
+        "http://example.test/graphql",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr).toEqual([
+      "--mock-scenario cannot be combined with --endpoint",
+    ]);
+    expect(capture.stdout).toEqual([]);
+  });
+
+  test("events list and replay operate on persisted receipts with mocked dispatch", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    const artifactRoot = path.join(root, "data", "workflow");
+    const eventFile = path.join(root, "event.json");
+    await mkdir(path.join(workflowRoot, "demo"), { recursive: true });
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await mkdir(path.join(eventRoot, "sources"), { recursive: true });
+    await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
+      id: "webhook",
+      kind: "webhook",
+      path: "/events/webhook",
+    });
+    await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
+    await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
+      id: "demo",
+      sourceId: "webhook",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: { request: "{{event.input.text}}" },
+        mirrorToHumanInput: true,
+      },
+    });
+    await writeJson(eventFile, {
+      eventId: "evt-cli",
+      eventType: "chat.message",
+      input: { text: "hello cli replay" },
+    });
+    const executionIds = ["sess-cli-first", "sess-cli-replay"];
+    const requestedDryRuns: unknown[] = [];
+    const fetchImpl = vi.fn(async (_request, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        variables: {
+          input: {
+            workflowName: string;
+            runtimeVariables: Readonly<Record<string, unknown>>;
+            dryRun?: boolean;
+          };
+        };
+      };
+      expect(body.variables.input.workflowName).toBe("demo");
+      expect(body.variables.input.runtimeVariables["workflowInput"]).toEqual({
+        request: "hello cli replay",
+      });
+      requestedDryRuns.push(body.variables.input.dryRun);
+      return createJsonResponse({
+        data: {
+          executeWorkflow: {
+            workflowExecutionId: executionIds.shift() ?? "sess-cli-extra",
+            sessionId: "sess-cli",
+            status: "running",
+            accepted: true,
+            exitCode: null,
+          },
+        },
+      });
+    }) as typeof fetch;
+    const deps: CliDependencies = {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 43173,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      fetchImpl,
+    };
+    const emitCapture = createIoCapture();
+
+    const emitCode = await runCli(
+      [
+        "events",
+        "emit",
+        "webhook",
+        "--workflow-root",
+        workflowRoot,
+        "--artifact-root",
+        artifactRoot,
+        "--event-root",
+        eventRoot,
+        "--event-file",
+        eventFile,
+        "--endpoint",
+        "http://example.test/graphql",
+        "--output",
+        "json",
+      ],
+      emitCapture.io,
+      deps,
+    );
+    const emitPayload = JSON.parse(emitCapture.stdout.join("\n")) as {
+      receipts: readonly { receiptId: string; status: string }[];
+    };
+    const listCapture = createIoCapture();
+
+    const listCode = await runCli(
+      [
+        "events",
+        "list",
+        "--artifact-root",
+        artifactRoot,
+        "--source",
+        "webhook",
+        "--output",
+        "json",
+      ],
+      listCapture.io,
+      deps,
+    );
+    const listPayload = JSON.parse(listCapture.stdout.join("\n")) as {
+      receipts: readonly { receiptId: string; status: string }[];
+    };
+    const replayCapture = createIoCapture();
+
+    const replayCode = await runCli(
+      [
+        "events",
+        "replay",
+        emitPayload.receipts[0]?.receiptId ?? "",
+        "--workflow-root",
+        workflowRoot,
+        "--artifact-root",
+        artifactRoot,
+        "--event-root",
+        eventRoot,
+        "--endpoint",
+        "http://example.test/graphql",
+        "--dry-run",
+        "--reason",
+        "operator verification",
+        "--output",
+        "json",
+      ],
+      replayCapture.io,
+      deps,
+    );
+    const replayPayload = JSON.parse(replayCapture.stdout.join("\n")) as {
+      replayedFromReceiptId: string;
+      replayEventId: string;
+      replayReason: string | null;
+      receipts: readonly { status: string; workflowExecutionId: string }[];
+    };
+
+    expect(emitCode).toBe(0);
+    expect(listCode).toBe(0);
+    expect(replayCode).toBe(0);
+    expect(emitCapture.stderr).toEqual([]);
+    expect(listCapture.stderr).toEqual([]);
+    expect(replayCapture.stderr).toEqual([]);
+    expect(emitPayload.receipts[0]?.status).toBe("dispatched");
+    expect(listPayload.receipts[0]?.receiptId).toBe(
+      emitPayload.receipts[0]?.receiptId,
+    );
+    expect(replayPayload.replayedFromReceiptId).toBe(
+      emitPayload.receipts[0]?.receiptId,
+    );
+    expect(replayPayload.replayEventId).toContain(":replay-");
+    expect(replayPayload.replayReason).toBe("operator verification");
+    expect(replayPayload.receipts[0]?.status).toBe("dispatched");
+    expect(replayPayload.receipts[0]?.workflowExecutionId).toBe(
+      "sess-cli-replay",
+    );
+    expect(requestedDryRuns).toEqual([undefined, true]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  test("events replies lists persisted chat reply dispatches", async () => {
+    const root = await makeTempDir();
+    const artifactRoot = path.join(root, "data", "workflow");
+    const rootDataDir = path.dirname(artifactRoot);
+    await saveEventReplyDispatchToRuntimeDb(
+      {
+        idempotencyKey: "reply-cli-key",
+        sourceId: "webhook",
+        provider: "webhook",
+        workflowId: "demo",
+        workflowExecutionId: "sess-reply-cli",
+        nodeId: "reply-node",
+        nodeExecId: "exec-000001",
+        eventId: "evt-reply-cli",
+        conversationId: "conv-cli",
+        status: "sent",
+        providerMessageId: "message-cli",
+        requestJson: JSON.stringify({ message: { text: "hello" } }),
+        responseJson: JSON.stringify({
+          status: "sent",
+          providerMessageId: "message-cli",
+        }),
+        updatedAt: "2026-04-20T00:00:00.000Z",
+      },
+      { rootDataDir },
+    );
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "events",
+        "replies",
+        "sess-reply-cli",
+        "--artifact-root",
+        artifactRoot,
+        "--status",
+        "sent",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      replies: readonly {
+        readonly idempotencyKey: string;
+        readonly workflowExecutionId: string;
+        readonly providerMessageId: string | null;
+      }[];
+    };
+
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(payload.replies).toHaveLength(1);
+    expect(payload.replies[0]).toMatchObject({
+      idempotencyKey: "reply-cli-key",
+      workflowExecutionId: "sess-reply-cli",
+      providerMessageId: "message-cli",
+    });
+  });
+
   test("hook command reads stdin and returns noop JSON", async () => {
     const capture = createIoCapture();
 
@@ -2866,6 +3684,136 @@ describe("runCli", () => {
     expect(JSON.parse(capture.stdout.join("\n"))).toEqual({});
   });
 
+  test("hook snippet command prints Claude Code hook configuration", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      ["hook", "snippet", "--vendor", "claude-code"],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        readStdin: async () => "",
+      },
+    );
+
+    const output = JSON.parse(capture.stdout.join("\n"));
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(output.hooks.PreToolUse).toEqual([
+      {
+        matcher: "",
+        hooks: [
+          {
+            type: "command",
+            command: "divedra hook",
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("hook snippet command prints Codex hook configuration", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      ["hook", "snippet", "--vendor", "codex"],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        readStdin: async () => "",
+      },
+    );
+
+    const output = JSON.parse(capture.stdout.join("\n"));
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(output.hooks.PostToolUse).toEqual([
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: "divedra hook",
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("hook snippet command prints Gemini hook configuration", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      ["hook", "snippet", "--vendor", "gemini"],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        readStdin: async () => "",
+      },
+    );
+
+    const output = JSON.parse(capture.stdout.join("\n"));
+    expect(code).toBe(0);
+    expect(capture.stderr).toEqual([]);
+    expect(output.hooks.SessionStart).toEqual([
+      {
+        matcher: "startup",
+        hooks: [
+          {
+            type: "command",
+            command: "divedra hook",
+          },
+        ],
+      },
+    ]);
+    expect(output.hooks.BeforeTool).toEqual([
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: "divedra hook",
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("hook snippet command requires an explicit vendor", async () => {
+    const capture = createIoCapture();
+
+    const code = await runCli(["hook", "snippet"], capture.io, {
+      startServe: async () => ({
+        host: "127.0.0.1",
+        port: 43173,
+        stop: () => {},
+      }),
+      isInteractiveTerminal: () => true,
+      readStdin: async () => "",
+    });
+
+    expect(code).toBe(2);
+    expect(capture.stdout).toEqual([]);
+    expect(capture.stderr).toEqual([
+      "--vendor is required for hook snippet; expected 'claude-code' or 'codex' or 'gemini'",
+    ]);
+  });
+
   test("hook command rejects invalid vendor values", async () => {
     const capture = createIoCapture();
 
@@ -2882,7 +3830,7 @@ describe("runCli", () => {
     expect(code).toBe(2);
     expect(capture.stdout).toEqual([]);
     expect(capture.stderr).toEqual([
-      "invalid --vendor value 'bad-vendor'; expected 'claude-code' or 'codex'",
+      "invalid --vendor value 'bad-vendor'; expected 'claude-code' or 'codex' or 'gemini'",
     ]);
   });
 
@@ -2902,8 +3850,8 @@ describe("runCli", () => {
     expect(code).toBe(2);
     expect(capture.stdout).toEqual([]);
     expect(capture.stderr).toEqual([
-      "hook does not accept positional arguments",
-      "usage: divedra hook [--vendor claude-code|codex]",
+      "unknown hook subcommand",
+      "usage: divedra hook snippet --vendor claude-code|codex|gemini",
     ]);
   });
 });

@@ -1,0 +1,17 @@
+{
+  "id": "incoming-docs",
+  "kind": "s3-repository",
+  "provider": "s3-compatible",
+  "bucket": "team-docs",
+  "rootPrefix": "incoming/",
+  "eventReceiver": {
+    "mode": "webhook-bridge",
+    "path": "/events/incoming-docs"
+  },
+  "objectAccess": {
+    "mode": "metadata-only"
+  },
+  "filters": {
+    "suffixes": [".md", ".json"]
+  }
+}

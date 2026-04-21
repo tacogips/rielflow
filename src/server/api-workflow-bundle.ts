@@ -1,7 +1,5 @@
 import { isJsonObject, type JsonObject } from "../shared/json";
-import {
-  remapAuthoredNodePayloadsByNodeFile,
-} from "../workflow/authored-node";
+import { remapAuthoredNodePayloadsByNodeFile } from "../workflow/authored-node";
 import { jsonBodyObject, optionalStringField } from "./api-request";
 
 export interface ParsedWorkflowBundleRequest {

@@ -97,10 +97,7 @@ export function bindAbortSignal(
   };
 }
 
-export function throwIfAborted(
-  signal: AbortSignal,
-  message: string,
-): void {
+export function throwIfAborted(signal: AbortSignal, message: string): void {
   if (signal.aborted) {
     throw new AdapterExecutionError("timeout", message);
   }

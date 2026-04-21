@@ -168,7 +168,8 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     selectedWorkflowName: "demo",
     workflowInputDetection: {
       mode: "json",
-      reason: "detected structured human-input bindings or JSON-oriented input prompts",
+      reason:
+        "detected structured human-input bindings or JSON-oriented input prompts",
     },
     ...overrides.state,
   };

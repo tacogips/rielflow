@@ -404,9 +404,9 @@ export function createManagerSessionStore(
       db.prepare(
         "DELETE FROM idempotent_mutations WHERE manager_session_id = ?",
       ).run(managerSessionId);
-      db.prepare("DELETE FROM manager_messages WHERE manager_session_id = ?").run(
-        managerSessionId,
-      );
+      db.prepare(
+        "DELETE FROM manager_messages WHERE manager_session_id = ?",
+      ).run(managerSessionId);
     }
 
     db.prepare(deleteManagerSessionsSql).run(parameter);
@@ -460,18 +460,20 @@ export function createManagerSessionStore(
     },
     async deleteByWorkflowId(workflowId) {
       await withManagerDatabase(options, (db) => {
-        const runDeleteByWorkflowId = db.transaction((targetWorkflowId: string) => {
-          deleteManagerSessions(
-            db,
-            `
+        const runDeleteByWorkflowId = db.transaction(
+          (targetWorkflowId: string) => {
+            deleteManagerSessions(
+              db,
+              `
               SELECT manager_session_id
               FROM manager_sessions
               WHERE workflow_id = ?
             `,
-            targetWorkflowId,
-            "DELETE FROM manager_sessions WHERE workflow_id = ?",
-          );
-        });
+              targetWorkflowId,
+              "DELETE FROM manager_sessions WHERE workflow_id = ?",
+            );
+          },
+        );
         runDeleteByWorkflowId(workflowId);
       });
     },

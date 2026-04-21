@@ -137,7 +137,9 @@ async function createCompletedSubworkflowFixture(root: string) {
             nodeFile: "node-workflow-output.json",
           },
         ],
-        edges: [{ from: "workflow-input", to: "workflow-output", when: "always" }],
+        edges: [
+          { from: "workflow-input", to: "workflow-output", when: "always" },
+        ],
       },
       null,
       2,
@@ -256,7 +258,9 @@ describe("communication-service", () => {
     expect(view?.sourceNodeExecution?.nodeExecId).toBe(
       communication.sourceNodeExecId,
     );
-    expect(view?.artifactSnapshot.metaJson).toContain(communication.communicationId);
+    expect(view?.artifactSnapshot.metaJson).toContain(
+      communication.communicationId,
+    );
     expect(view?.artifactSnapshot.attemptFiles).toHaveLength(1);
     expect(view?.artifactSnapshot.attemptFiles[0]?.attemptJson).toContain(
       communication.communicationId,

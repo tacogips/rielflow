@@ -7,6 +7,7 @@ import {
   atomicWriteTextFile as writeRawTextFile,
 } from "../shared/fs";
 import {
+  buildAdapterDivedraHookContext,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
   type AdapterExecutionInput,
@@ -86,6 +87,7 @@ import {
 } from "./working-directory";
 import type {
   AgentNodePayload,
+  ChatReplyDispatcher,
   JsonObject,
   LoadOptions,
   LoopRule,
@@ -104,6 +106,7 @@ export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly mockScenario?: MockNodeScenario;
   readonly resumeSessionId?: string;
   readonly rerunFromSessionId?: string;
@@ -1720,7 +1723,11 @@ function buildScenarioExecutableNodePayload(
   if (!hasScenarioEntry) {
     return null;
   }
-  if (node.nodeType !== "command" && node.nodeType !== "container") {
+  if (
+    node.nodeType !== "command" &&
+    node.nodeType !== "container" &&
+    node.nodeType !== "addon"
+  ) {
     return null;
   }
   const { nodeType: _nodeType, ...rest } = node;
@@ -2042,7 +2049,8 @@ async function runWorkflowInternal(
     const nativeNodePayload =
       executableNodePayload === null &&
       (nodePayload.nodeType === "command" ||
-        nodePayload.nodeType === "container")
+        nodePayload.nodeType === "container" ||
+        nodePayload.nodeType === "addon")
         ? nodePayload
         : null;
     if (
@@ -2057,7 +2065,7 @@ async function runWorkflowInternal(
         status: "failed",
         currentNodeId: nodeId,
         endedAt: nowIso(),
-        lastError: `node '${nodeId}' is missing agent execution fields`,
+        lastError: `node '${nodeId}' is missing executable node fields`,
       };
       await saveSession(failed, options);
       return err({
@@ -2815,6 +2823,17 @@ async function runWorkflowInternal(
                       artifactDir,
                       upstreamCommunicationIds,
                       executionMailbox,
+                      divedraHookContext: buildAdapterDivedraHookContext({
+                        workflowId: workflow.workflowId,
+                        workflowExecutionId: session.sessionId,
+                        nodeId,
+                        nodeExecId,
+                        ...(agentNodePayload.executionBackend === undefined
+                          ? {}
+                          : {
+                              agentBackend: agentNodePayload.executionBackend,
+                            }),
+                      }),
                       ...(backendSession === undefined
                         ? {}
                         : { backendSession }),
@@ -2843,6 +2862,9 @@ async function runWorkflowInternal(
                     arguments: assembledArguments,
                     artifactDir,
                     executionMailbox,
+                    ...(options.eventReplyDispatcher === undefined
+                      ? {}
+                      : { chatReplyDispatcher: options.eventReplyDispatcher }),
                     ...(options.env === undefined ? {} : { env: options.env }),
                     timeoutMs,
                   });

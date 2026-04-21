@@ -162,7 +162,9 @@ function buildResumeSessionOptions(
 ): Omit<CodexSessionConfig, "prompt"> {
   return {
     ...(sessionConfig.cwd === undefined ? {} : { cwd: sessionConfig.cwd }),
-    ...(sessionConfig.model === undefined ? {} : { model: sessionConfig.model }),
+    ...(sessionConfig.model === undefined
+      ? {}
+      : { model: sessionConfig.model }),
     ...(sessionConfig.sandbox === undefined
       ? {}
       : { sandbox: sessionConfig.sandbox }),
@@ -184,9 +186,7 @@ function buildResumeSessionOptions(
   };
 }
 
-function isCodexEvent(
-  value: unknown,
-): value is CodexNormalizedEvent {
+function isCodexEvent(value: unknown): value is CodexNormalizedEvent {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -207,9 +207,15 @@ async function executeLocalCodexAgent(
       : { codexBinary: config.codexBinary }),
     ...(config.codexHome === undefined ? {} : { codexHome: config.codexHome }),
   });
-  const { promptText, sessionConfig } = resolveLocalSessionConfig(config, input);
+  const { promptText, sessionConfig } = resolveLocalSessionConfig(
+    config,
+    input,
+  );
   const ambientEnv = buildAmbientProcessEnv(
     config.env,
+    input.divedraHookContext === undefined
+      ? undefined
+      : { ...input.divedraHookContext.environment },
     input.ambientManagerContext === undefined
       ? undefined
       : { ...input.ambientManagerContext.environment },
@@ -307,7 +313,8 @@ export class CodexAgentAdapter implements NodeAdapter {
       maxAttempts,
       retryDelayMs,
       signal: context.signal,
-      run: async () => await executeLocalCodexAgent(this.#config, input, context),
+      run: async () =>
+        await executeLocalCodexAgent(this.#config, input, context),
       normalizeError: (error) =>
         error instanceof DOMException && error.name === "AbortError"
           ? new AdapterExecutionError(

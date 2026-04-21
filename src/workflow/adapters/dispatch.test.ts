@@ -34,7 +34,7 @@ function makeCodexRunner() {
             payload: {
               type: "message",
               role: "assistant",
-              content: [{ type: "output_text", text: "{\"ok\":true}" }],
+              content: [{ type: "output_text", text: '{"ok":true}' }],
             },
           };
         },
@@ -68,7 +68,7 @@ function makeClaudeRunner() {
             type: "assistant",
             message: {
               role: "assistant",
-              content: [{ type: "text", text: "{\"ok\":true}" }],
+              content: [{ type: "text", text: '{"ok":true}' }],
             },
           };
         },
@@ -176,7 +176,7 @@ describe("DispatchingNodeAdapter", () => {
 
     const output = await adapter.execute(input, baseContext);
     expect(output.provider).toBe("codex-agent");
-    expect(output.payload).toEqual({ text: "{\"ok\":true}" });
+    expect(output.payload).toEqual({ text: '{"ok":true}' });
     expect(fixture.createRunner).toHaveBeenCalledTimes(1);
   });
 
@@ -209,7 +209,7 @@ describe("DispatchingNodeAdapter", () => {
     const output = await adapter.execute(input, baseContext);
     expect(output.provider).toBe("claude-code-agent");
     expect(output.model).toBe("claude-opus-4-1");
-    expect(output.payload).toEqual({ text: "{\"ok\":true}" });
+    expect(output.payload).toEqual({ text: '{"ok":true}' });
     expect(fixture.createRunner).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,5 @@
 import type { WorkflowSessionState } from "../workflow/session";
+import type { WorkflowAddonSourceSummary } from "../workflow/addon-source-summary";
 import type {
   NormalizedWorkflowBundle,
   ValidationIssue,
@@ -42,6 +43,7 @@ export type WorkflowExecutionStateResponse = WorkflowSessionState & {
 export interface ValidationResponse {
   readonly valid: boolean;
   readonly workflowId?: string;
+  readonly addonSources?: readonly WorkflowAddonSourceSummary[];
   readonly warnings?: readonly ValidationIssue[];
   readonly issues?: readonly ValidationIssue[];
   readonly error?: string;

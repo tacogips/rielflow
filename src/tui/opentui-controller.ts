@@ -1,5 +1,8 @@
 import type { LoadedWorkflow } from "../workflow/load";
-import type { NodeExecutionRecord, WorkflowSessionState } from "../workflow/session";
+import type {
+  NodeExecutionRecord,
+  WorkflowSessionState,
+} from "../workflow/session";
 import type { RuntimeSessionSummary } from "../workflow/runtime-db";
 import type {
   FocusPane,
@@ -101,13 +104,15 @@ export interface OpenTuiControllerContext {
   ) => void;
   readonly setRunConfirmationContent: (content: string) => void;
   readonly setRunConfirmationOpen: (open: boolean) => void;
-  readonly setRunExecutionResult: (result:
-    | {
-        readonly exitCode: number;
-        readonly sessionId: string;
-        readonly status: WorkflowSessionState["status"];
-      }
-    | undefined) => void;
+  readonly setRunExecutionResult: (
+    result:
+      | {
+          readonly exitCode: number;
+          readonly sessionId: string;
+          readonly status: WorkflowSessionState["status"];
+        }
+      | undefined,
+  ) => void;
   readonly setRunPendingSessionId: (sessionId: string | undefined) => void;
   readonly setRunStatusError: (message: string | undefined) => void;
   readonly setStatus: (message: string) => void;
@@ -116,7 +121,10 @@ export interface OpenTuiControllerContext {
   ) => void;
   readonly startRunPolling: () => void;
   readonly stopRunPolling: () => void;
-  readonly withBusy: (label: string, action: () => Promise<void>) => Promise<void>;
+  readonly withBusy: (
+    label: string,
+    action: () => Promise<void>,
+  ) => Promise<void>;
 }
 
 export interface OpenTuiController {
@@ -157,7 +165,9 @@ function buildCopyTargetInput(
     focusPane: context.getFocusPane(),
     screenMode,
     ...(loadedWorkflowId === undefined ? {} : { loadedWorkflowId }),
-    ...(selectedNodeExecutionId === undefined ? {} : { selectedNodeExecutionId }),
+    ...(selectedNodeExecutionId === undefined
+      ? {}
+      : { selectedNodeExecutionId }),
     ...(selectedSessionId === undefined ? {} : { selectedSessionId }),
     ...(selectedSubworkflowId === undefined ? {} : { selectedSubworkflowId }),
     ...(selectedWorkflowName === undefined ? {} : { selectedWorkflowName }),
@@ -182,7 +192,7 @@ export function createOpenTuiController(
         const nextValue =
           previousMode === "text"
             ? parsedValue["humanInput"]
-            : parsedValue["promptJson"] ?? parsedValue["humanInput"];
+            : (parsedValue["promptJson"] ?? parsedValue["humanInput"]);
         context.setWorkflowInputDetection({
           mode: nextMode,
           reason: "manually toggled inside the TUI",
@@ -190,7 +200,8 @@ export function createOpenTuiController(
         context.setInputText(formatEditorValue(nextValue, nextMode));
         context.setStatus(`Input mode switched to ${nextMode}`);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message =
+          error instanceof Error ? error.message : "unknown error";
         context.setStatus(`Input mode toggle failed: ${message}`);
       }
       await context.render();
@@ -208,7 +219,8 @@ export function createOpenTuiController(
         context.setInputText(formatJsonEditorText(context.getInputText()));
         context.setStatus("Formatted JSON input");
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message =
+          error instanceof Error ? error.message : "unknown error";
         context.setStatus(`JSON formatting failed: ${message}`);
       }
       await context.render();
@@ -231,7 +243,8 @@ export function createOpenTuiController(
         });
         context.setPendingRunRuntimeVariables(runtimeVariables);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message =
+          error instanceof Error ? error.message : "unknown error";
         context.setStatus(`Cannot run workflow: ${message}`);
         await context.render();
         return;
@@ -251,7 +264,8 @@ export function createOpenTuiController(
 
     confirmRun: async (): Promise<void> => {
       const workflowName = context.getLoadedWorkflow()?.workflowName;
-      const pendingRunRuntimeVariables = context.getPendingRunRuntimeVariables();
+      const pendingRunRuntimeVariables =
+        context.getPendingRunRuntimeVariables();
       if (
         workflowName === undefined ||
         pendingRunRuntimeVariables === undefined
@@ -261,37 +275,42 @@ export function createOpenTuiController(
         return;
       }
       let started = false;
-      await context.withBusy(`Starting workflow '${workflowName}'`, async () => {
-        context.resetRunState();
-        const handle = await context.executeWorkflow({
-          workflowName,
-          runtimeVariables: pendingRunRuntimeVariables,
-        });
-        started = true;
-        context.setRunPendingSessionId(handle.sessionId);
-        context.setRunConfirmationOpen(false);
-        context.setStatus(`Run started: ${handle.sessionId}`);
-        context.startRunPolling();
-        void handle.completion
-          .then(async (result) => {
-            context.setRunExecutionResult(result);
-            await context.refreshWorkflow(workflowName, result.sessionId);
-            await context.render();
-            context.setStatus(
-              `Run finished: ${result.sessionId} status=${result.status} exitCode=${String(
-                result.exitCode,
-              )}`,
-            );
-          })
-          .catch(async (error: unknown) => {
-            const message =
-              error instanceof Error ? error.message : "unknown workflow error";
-            context.setRunStatusError(message);
-            context.setStatus(`Run failed: ${message}`);
-            context.stopRunPolling();
-            await context.render();
+      await context.withBusy(
+        `Starting workflow '${workflowName}'`,
+        async () => {
+          context.resetRunState();
+          const handle = await context.executeWorkflow({
+            workflowName,
+            runtimeVariables: pendingRunRuntimeVariables,
           });
-      });
+          started = true;
+          context.setRunPendingSessionId(handle.sessionId);
+          context.setRunConfirmationOpen(false);
+          context.setStatus(`Run started: ${handle.sessionId}`);
+          context.startRunPolling();
+          void handle.completion
+            .then(async (result) => {
+              context.setRunExecutionResult(result);
+              await context.refreshWorkflow(workflowName, result.sessionId);
+              await context.render();
+              context.setStatus(
+                `Run finished: ${result.sessionId} status=${result.status} exitCode=${String(
+                  result.exitCode,
+                )}`,
+              );
+            })
+            .catch(async (error: unknown) => {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : "unknown workflow error";
+              context.setRunStatusError(message);
+              context.setStatus(`Run failed: ${message}`);
+              context.stopRunPolling();
+              await context.render();
+            });
+        },
+      );
       if (!started) {
         return;
       }
@@ -328,7 +347,8 @@ export function createOpenTuiController(
               },
         );
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown error";
+        const message =
+          error instanceof Error ? error.message : "unknown error";
         context.setStatus(`Cannot rerun workflow: ${message}`);
         await context.render();
         return;
@@ -399,10 +419,9 @@ export function describeRunConfirmation(input: {
   return [
     `Start workflow '${input.workflowName}'?`,
     `Input mode: ${input.inputMode}`,
-    `Input syntax: ${describeTuiWorkflowInputSyntax(
-      input.editorText,
-      input.inputMode,
-    ).summary}`,
+    `Input syntax: ${
+      describeTuiWorkflowInputSyntax(input.editorText, input.inputMode).summary
+    }`,
     "",
     "Preview:",
     input.editorText.trim().length === 0 ? "{}" : input.editorText.trim(),

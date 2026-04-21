@@ -106,10 +106,9 @@ describe("workflow revision prompt file tracking", () => {
       "utf8",
     );
 
-    const revision = await computeWorkflowRevisionFromFiles(
-      workflowDirectory,
-      ["nodes/node-manager.json"],
-    );
+    const revision = await computeWorkflowRevisionFromFiles(workflowDirectory, [
+      "nodes/node-manager.json",
+    ]);
     expect(revision.ok).toBe(true);
   });
 
@@ -120,10 +119,9 @@ describe("workflow revision prompt file tracking", () => {
       '{"workflowId":"wf"}\n',
       "utf8",
     );
-    const revision = await computeWorkflowRevisionFromFiles(
-      workflowDirectory,
-      ["../nodes/node-manager.json"],
-    );
+    const revision = await computeWorkflowRevisionFromFiles(workflowDirectory, [
+      "../nodes/node-manager.json",
+    ]);
     expect(revision.ok).toBe(false);
     if (revision.ok) {
       return;

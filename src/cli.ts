@@ -1,4 +1,4 @@
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import readline from "node:readline/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,21 +7,31 @@ import {
   executeGraphqlRequest,
   type GraphqlClientResponse,
 } from "./graphql/client";
+import { buildHookConfigurationSnippet } from "./hook/config";
 import { parseHookVendorOption } from "./hook/detect-vendor";
 import { createReadHookStdin, runHookCommand } from "./hook/index";
 import { SUPPORTED_HOOK_VENDORS } from "./hook/types";
 import { startServe, type StartedServe } from "./server/serve";
+import {
+  createEventListenerService,
+  loadAndValidateEventConfiguration,
+} from "./events";
+import { emitEventFile } from "./events/manual-emit";
+import { listEventReceipts, replayEventReceipt } from "./events/receipt-ops";
+import type { EventListenerHandle } from "./events/listener-service";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
 import { callNode, type CallNodeInput } from "./workflow/call-node";
 import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
-import { loadWorkflowFromDisk, type LoadedWorkflow } from "./workflow/load";
+import { loadWorkflowFromCatalog, type LoadedWorkflow } from "./workflow/load";
 import {
-  inferRootDataDirFromExplicitStorageRoots,
-  resolveEffectiveRoots,
-} from "./workflow/paths";
+  listWorkflowCatalogSources,
+  withResolvedWorkflowSourceOptions,
+} from "./workflow/catalog";
+import { inferRootDataDirFromExplicitStorageRoots } from "./workflow/paths";
 import { createSessionId, type WorkflowSessionState } from "./workflow/session";
 import { buildInspectionSummary } from "./workflow/inspect";
+import { collectWorkflowAddonSourceSummaries } from "./workflow/addon-source-summary";
 import { loadSession } from "./workflow/session-store";
 import { createCommunicationService } from "./workflow/communication-service";
 import { selectTuiRuntimeMode } from "./tui/runtime";
@@ -32,14 +42,21 @@ import type {
 } from "./tui/opentui-screen";
 import { loadAgentSessionTranscript } from "./tui/agent-session-history";
 import {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   listRuntimeSessions,
+  type RuntimeEventReplyDispatchStatus,
 } from "./workflow/runtime-db";
 import { createManagerSessionStore } from "./workflow/manager-session-store";
 import { deleteWorkflowSessionHistory } from "./workflow/session-history";
 import { deleteWorkflowHistory as deleteWorkflowHistoryForWorkflow } from "./workflow/history";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
+import type {
+  ResolvedWorkflowSource,
+  WorkflowScopeSelector,
+} from "./workflow/types";
 
 export interface CliIo {
   readonly stdout: (line: string) => void;
@@ -51,6 +68,7 @@ export interface CliDependencies {
     host?: string;
     port?: number;
     workflowRoot?: string;
+    addonRoot?: string;
     artifactRoot?: string;
     sessionStoreRoot?: string;
     readOnly?: boolean;
@@ -59,6 +77,9 @@ export interface CliDependencies {
   }) => Promise<StartedServe>;
   readonly isInteractiveTerminal: () => boolean;
   readonly waitForServeShutdown?: (started: StartedServe) => Promise<void>;
+  readonly waitForEventListenerShutdown?: (
+    started: EventListenerHandle,
+  ) => Promise<void>;
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly readStdin?: () => Promise<string>;
@@ -69,13 +90,30 @@ export interface CliDependencies {
 
 interface CliStorageOptions {
   readonly workflowRoot?: string;
+  readonly workflowScope?: WorkflowScopeSelector;
+  readonly userRoot?: string;
+  readonly projectRoot?: string;
+  readonly addonRoot?: string;
   readonly artifactRoot?: string;
+  readonly rootDataDir?: string;
   readonly sessionStoreRoot?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
+interface WorkflowSourceOutput {
+  readonly scope: ResolvedWorkflowSource["scope"];
+  readonly workflowRoot: string;
+  readonly workflowDirectory: string;
+  readonly scopeRoot?: string;
+  readonly legacyProjectRoot?: boolean;
+}
+
 interface ParsedOptions {
   readonly workflowRoot?: string;
+  readonly workflowScope?: WorkflowScopeSelector;
+  readonly userRoot?: string;
+  readonly projectRoot?: string;
+  readonly addonRoot?: string;
   readonly artifactRoot?: string;
   readonly sessionStoreRoot?: string;
   readonly workingDirectory?: string;
@@ -101,11 +139,18 @@ interface ParsedOptions {
   readonly messageJson?: string;
   readonly messageFile?: string;
   readonly vendor?: string;
+  readonly eventRoot?: string;
+  readonly eventFile?: string;
+  readonly sourceId?: string;
+  readonly status?: string;
+  readonly limit?: number;
+  readonly reason?: string;
 }
 
 interface ParsedArgs {
   readonly positionals: string[];
   readonly options: ParsedOptions;
+  readonly error?: string;
 }
 
 function normalizeCliPositionals(positionals: readonly string[]): string[] {
@@ -140,6 +185,7 @@ interface WorkflowExecutionExport {
     ReturnType<typeof listRuntimeNodeExecutions>
   >;
   readonly nodeLogs: Awaited<ReturnType<typeof listRuntimeNodeLogs>>;
+  readonly hookEvents: Awaited<ReturnType<typeof listRuntimeHookEvents>>;
   readonly communications: readonly NonNullable<
     Awaited<
       ReturnType<
@@ -163,29 +209,34 @@ const DEFAULT_IO: CliIo = {
   stderr: (line: string) => console.error(line),
 };
 
+async function waitForProcessShutdownSignal(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+      resolve();
+    };
+    const onSigint = (): void => finish();
+    const onSigterm = (): void => finish();
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+  });
+}
+
 const DEFAULT_DEPS: CliDependencies = {
   startServe,
   isInteractiveTerminal: () =>
     process.stdin.isTTY === true && process.stdout.isTTY === true,
   readStdin: createReadHookStdin(process.stdin),
-  waitForServeShutdown: async (_started: StartedServe) => {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = (): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        process.off("SIGINT", onSigint);
-        process.off("SIGTERM", onSigterm);
-        resolve();
-      };
-      const onSigint = (): void => finish();
-      const onSigterm = (): void => finish();
-      process.once("SIGINT", onSigint);
-      process.once("SIGTERM", onSigterm);
-    });
-  },
+  waitForServeShutdown: async (_started: StartedServe) =>
+    waitForProcessShutdownSignal(),
+  waitForEventListenerShutdown: async (_started: EventListenerHandle) =>
+    waitForProcessShutdownSignal(),
 };
 
 function parseNumericOption(value: string | undefined): number | undefined {
@@ -199,9 +250,43 @@ function parseNumericOption(value: string | undefined): number | undefined {
   return parsed;
 }
 
+function parseEnvBooleanFlag(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function parseWorkflowScopeOption(
+  value: string | undefined,
+): WorkflowScopeSelector | undefined {
+  return value === "auto" || value === "project" || value === "user"
+    ? value
+    : undefined;
+}
+
+function parseReplyDispatchStatus(
+  value: string | undefined,
+): RuntimeEventReplyDispatchStatus | undefined {
+  if (
+    value === "dispatching" ||
+    value === "sent" ||
+    value === "queued" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
   let workflowRoot: string | undefined;
+  let workflowScope: WorkflowScopeSelector | undefined;
+  let userRoot: string | undefined;
+  let projectRoot: string | undefined;
+  let addonRoot: string | undefined;
   let artifactRoot: string | undefined;
   let sessionStoreRoot: string | undefined;
   let workingDirectory: string | undefined;
@@ -227,6 +312,13 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let messageJson: string | undefined;
   let messageFile: string | undefined;
   let vendor: string | undefined;
+  let eventRoot: string | undefined;
+  let eventFile: string | undefined;
+  let sourceId: string | undefined;
+  let status: string | undefined;
+  let limit: number | undefined;
+  let reason: string | undefined;
+  let parseError: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -251,6 +343,29 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     switch (token) {
       case "--workflow-root":
         workflowRoot = readNext();
+        break;
+      case "--scope":
+        {
+          const rawScope = readNext();
+          const parsedScope = parseWorkflowScopeOption(rawScope);
+          if (parsedScope === undefined) {
+            parseError =
+              rawScope === undefined
+                ? "--scope requires a value: auto, project, or user"
+                : `invalid --scope value '${rawScope}'; expected auto, project, or user`;
+          } else {
+            workflowScope = parsedScope;
+          }
+        }
+        break;
+      case "--user-root":
+        userRoot = readNext();
+        break;
+      case "--project-root":
+        projectRoot = readNext();
+        break;
+      case "--addon-root":
+        addonRoot = readNext();
         break;
       case "--artifact-root":
         artifactRoot = readNext();
@@ -340,6 +455,24 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--vendor":
         vendor = readNext();
         break;
+      case "--event-root":
+        eventRoot = readNext();
+        break;
+      case "--event-file":
+        eventFile = readNext();
+        break;
+      case "--source":
+        sourceId = readNext();
+        break;
+      case "--status":
+        status = readNext();
+        break;
+      case "--limit":
+        limit = parseNumericOption(readNext());
+        break;
+      case "--reason":
+        reason = readNext();
+        break;
       default:
         break;
     }
@@ -349,6 +482,10 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     positionals,
     options: {
       ...(workflowRoot === undefined ? {} : { workflowRoot }),
+      ...(workflowScope === undefined ? {} : { workflowScope }),
+      ...(userRoot === undefined ? {} : { userRoot }),
+      ...(projectRoot === undefined ? {} : { projectRoot }),
+      ...(addonRoot === undefined ? {} : { addonRoot }),
       ...(artifactRoot === undefined ? {} : { artifactRoot }),
       ...(sessionStoreRoot === undefined ? {} : { sessionStoreRoot }),
       ...(workingDirectory === undefined ? {} : { workingDirectory }),
@@ -374,7 +511,14 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(messageJson === undefined ? {} : { messageJson }),
       ...(messageFile === undefined ? {} : { messageFile }),
       ...(vendor === undefined ? {} : { vendor }),
+      ...(eventRoot === undefined ? {} : { eventRoot }),
+      ...(eventFile === undefined ? {} : { eventFile }),
+      ...(sourceId === undefined ? {} : { sourceId }),
+      ...(status === undefined ? {} : { status }),
+      ...(limit === undefined ? {} : { limit }),
+      ...(reason === undefined ? {} : { reason }),
     },
+    ...(parseError === undefined ? {} : { error: parseError }),
   };
 }
 
@@ -400,16 +544,33 @@ function printHelp(io: CliIo): void {
     "  divedra gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
   );
   io.stdout(
+    "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
+  );
+  io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
   );
   io.stdout(`  divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
+  io.stdout(`  divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
   io.stdout("");
   io.stdout("Create options:");
   io.stdout("  --worker-only  Scaffold a manager-less starter workflow");
   io.stdout("");
+  io.stdout("Workflow scope options:");
+  io.stdout(
+    "  --workflow-root <path>  Use a direct workflow root and bypass scoped lookup",
+  );
+  io.stdout("  --scope <scope>         Select auto, project, or user scope");
+  io.stdout("  --user-root <path>      Override the user scope root");
+  io.stdout("  --project-root <path>   Override the project scope root");
+  io.stdout("  --addon-root <path>     Use a direct add-on root override");
+  io.stdout("");
   io.stdout("Session options:");
-  io.stdout("  export --file <path>     Write workflow run export JSON to a file");
-  io.stdout("  logs --format <format>   Print node logs as text, json, or jsonl");
+  io.stdout(
+    "  export --file <path>     Write workflow run export JSON to a file",
+  );
+  io.stdout(
+    "  logs --format <format>   Print node logs as text, json, or jsonl",
+  );
 }
 
 function formatValidationIssues(
@@ -563,9 +724,10 @@ async function buildWorkflowExecutionExport(
   }
   const workflowId = loaded.value.workflowId;
 
-  const [nodeExecutions, nodeLogs] = await Promise.all([
+  const [nodeExecutions, nodeLogs, hookEvents] = await Promise.all([
     listRuntimeNodeExecutions(workflowExecutionId, options),
     listRuntimeNodeLogs(workflowExecutionId, options),
+    listRuntimeHookEvents(workflowExecutionId, options),
   ]);
 
   const communicationService = createCommunicationService();
@@ -595,6 +757,7 @@ async function buildWorkflowExecutionExport(
     session: loaded.value,
     nodeExecutions,
     nodeLogs,
+    hookEvents,
     communications,
   };
 }
@@ -899,32 +1062,67 @@ function buildLocalCallNodeOverrides(
 
 async function listWorkflowNames(options: {
   workflowRoot?: string;
+  workflowScope?: WorkflowScopeSelector;
+  userRoot?: string;
+  projectRoot?: string;
+  addonRoot?: string;
   artifactRoot?: string;
   sessionStoreRoot?: string;
   env?: Readonly<Record<string, string | undefined>>;
 }): Promise<readonly string[]> {
-  const roots = resolveEffectiveRoots(options);
-  const entries = await readdir(roots.workflowRoot, { withFileTypes: true });
-  const names: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const workflowPath = path.join(
-      roots.workflowRoot,
-      entry.name,
-      "workflow.json",
-    );
-    try {
-      const details = await stat(workflowPath);
-      if (details.isFile()) {
-        names.push(entry.name);
-      }
-    } catch {
-      // skip incomplete directories
-    }
+  const catalogSources = await listWorkflowCatalogSources(options);
+  if (!catalogSources.ok) {
+    return [];
   }
-  return names.sort((a, b) => a.localeCompare(b));
+  return [
+    ...new Set(catalogSources.value.map((source) => source.workflowName)),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+function optionsForLoadedWorkflow<T extends CliStorageOptions>(
+  loadedWorkflow: LoadedWorkflow,
+  options: T,
+): T {
+  return loadedWorkflow.source === undefined
+    ? options
+    : withResolvedWorkflowSourceOptions(loadedWorkflow.source, options);
+}
+
+function formatWorkflowSource(
+  source: ResolvedWorkflowSource | undefined,
+): string | undefined {
+  if (source === undefined) {
+    return undefined;
+  }
+  const legacySuffix = source.legacyProjectRoot === true ? " legacy-root" : "";
+  return `${source.scope}${legacySuffix} ${source.workflowDirectory}`;
+}
+
+function workflowSourceJson(
+  source: ResolvedWorkflowSource | undefined,
+): WorkflowSourceOutput | undefined {
+  if (source === undefined) {
+    return undefined;
+  }
+  return {
+    scope: source.scope,
+    workflowRoot: source.workflowRoot,
+    workflowDirectory: source.workflowDirectory,
+    ...(source.scopeRoot === undefined ? {} : { scopeRoot: source.scopeRoot }),
+    ...(source.legacyProjectRoot === undefined
+      ? {}
+      : { legacyProjectRoot: source.legacyProjectRoot }),
+  };
+}
+
+function formatAddonSource(source: {
+  readonly nodeId: string;
+  readonly name: string;
+  readonly version: string;
+  readonly scope: string;
+  readonly manifestPath: string;
+}): string {
+  return `${source.nodeId}: ${source.name}@${source.version} ${source.scope} ${source.manifestPath}`;
 }
 
 export async function loadOpenTuiScreenImplementations(
@@ -1002,7 +1200,7 @@ export function createOpenTuiWorkflowAppOptions(
   const loadWorkflowDefinitionOrThrow = async (
     workflowName: string,
   ): Promise<LoadedWorkflow> => {
-    const loaded = await loadWorkflowFromDisk(
+    const loaded = await loadWorkflowFromCatalog(
       workflowName,
       input.sharedOptions,
     );
@@ -1148,24 +1346,36 @@ async function runTui(
     resumeSessionId: string | undefined,
   ): Promise<number> => {
     let sessionId = resumeSessionId;
-    if (sessionId === undefined) {
-      const loadedWorkflow = await loadWorkflowFromDisk(
-        workflowName,
-        sharedOptions,
-      );
-      if (!loadedWorkflow.ok) {
+    let workflowOptions = sharedOptions;
+    const loadedWorkflow = await loadWorkflowFromCatalog(
+      workflowName,
+      sharedOptions,
+    );
+    if (!loadedWorkflow.ok) {
+      if (resumeSessionId === undefined) {
         io.stderr(loadedWorkflow.error.message);
         return 1;
       }
+    } else {
+      workflowOptions = optionsForLoadedWorkflow(
+        loadedWorkflow.value,
+        sharedOptions,
+      );
+    }
+    if (sessionId === undefined && loadedWorkflow.ok) {
       sessionId = createSessionId({
         workflowId: loadedWorkflow.value.bundle.workflow.workflowId,
       });
+    }
+    if (sessionId === undefined) {
+      io.stderr("cannot start workflow without a session id");
+      return 1;
     }
     io.stdout(
       `${resumeSessionId === undefined ? "Starting" : "Resuming"} session ${sessionId}`,
     );
     const runPromise = runWorkflow(workflowName, {
-      ...sharedOptions,
+      ...workflowOptions,
       sessionId,
       runtimeVariables,
       ...(mockScenario === undefined ? {} : { mockScenario }),
@@ -1216,7 +1426,7 @@ async function runTui(
     if (parsedOptions.mockScenarioPath !== undefined) {
       return readMockScenario(parsedOptions.mockScenarioPath);
     }
-    const loaded = await loadWorkflowFromDisk(workflowName, sharedOptions);
+    const loaded = await loadWorkflowFromCatalog(workflowName, sharedOptions);
     if (!loaded.ok) {
       throw new Error(loaded.error.message);
     }
@@ -1505,11 +1715,15 @@ async function runTui(
       if (parsedOptions.mockScenarioPath !== undefined) {
         mockScenario = await readMockScenario(parsedOptions.mockScenarioPath);
       } else {
-        const loaded = await loadWorkflowFromDisk(workflowName, sharedOptions);
+        const loaded = await loadWorkflowFromCatalog(
+          workflowName,
+          sharedOptions,
+        );
         if (!loaded.ok) {
           io.stderr(loaded.error.message);
           return loaded.error.code === "VALIDATION" ||
-            loaded.error.code === "INVALID_WORKFLOW_NAME"
+            loaded.error.code === "INVALID_WORKFLOW_NAME" ||
+            loaded.error.code === "INVALID_SCOPE"
             ? 2
             : 1;
         }
@@ -1552,9 +1766,25 @@ export async function runCli(
   deps: CliDependencies = DEFAULT_DEPS,
 ): Promise<number> {
   const parsed = parseArgs(argv);
+  if (parsed.error !== undefined) {
+    io.stderr(parsed.error);
+    return 2;
+  }
   const positionals = normalizeCliPositionals(parsed.positionals);
   const [scope, command, target] = positionals;
   const env = resolveCliEnv(deps);
+  const envWorkflowScope = env["DIVEDRA_WORKFLOW_SCOPE"];
+  if (
+    parsed.options.workflowScope === undefined &&
+    envWorkflowScope !== undefined &&
+    envWorkflowScope.length > 0 &&
+    parseWorkflowScopeOption(envWorkflowScope) === undefined
+  ) {
+    io.stderr(
+      `invalid DIVEDRA_WORKFLOW_SCOPE value '${envWorkflowScope}'; expected auto, project, or user`,
+    );
+    return 2;
+  }
   const inferredRootDataDir = inferRootDataDirFromExplicitStorageRoots({
     ...(parsed.options.artifactRoot === undefined
       ? {}
@@ -1568,6 +1798,18 @@ export async function runCli(
     ...(parsed.options.workflowRoot === undefined
       ? {}
       : { workflowRoot: parsed.options.workflowRoot }),
+    ...(parsed.options.workflowScope === undefined
+      ? {}
+      : { workflowScope: parsed.options.workflowScope }),
+    ...(parsed.options.userRoot === undefined
+      ? {}
+      : { userRoot: parsed.options.userRoot }),
+    ...(parsed.options.projectRoot === undefined
+      ? {}
+      : { projectRoot: parsed.options.projectRoot }),
+    ...(parsed.options.addonRoot === undefined
+      ? {}
+      : { addonRoot: parsed.options.addonRoot }),
     ...(parsed.options.artifactRoot === undefined
       ? {}
       : { artifactRoot: parsed.options.artifactRoot }),
@@ -1650,13 +1892,40 @@ export async function runCli(
   }
 
   if (scope === "hook") {
+    const explicitVendor = parseHookVendorOption(parsed.options.vendor);
     if (command !== undefined) {
+      if (command !== "snippet") {
+        io.stderr("unknown hook subcommand");
+        io.stderr(`usage: divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
+        return 2;
+      }
+      if (target !== undefined) {
+        io.stderr("hook snippet does not accept extra positional arguments");
+        io.stderr(`usage: divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
+        return 2;
+      }
+      if (parsed.options.vendor === undefined) {
+        io.stderr(
+          `--vendor is required for hook snippet; expected ${HOOK_VENDOR_EXPECTED}`,
+        );
+        return 2;
+      }
+      if (explicitVendor === undefined) {
+        io.stderr(
+          `invalid --vendor value '${parsed.options.vendor}'; expected ${HOOK_VENDOR_EXPECTED}`,
+        );
+        return 2;
+      }
+      emitJson(io, buildHookConfigurationSnippet(explicitVendor));
+      return 0;
+    }
+
+    if (positionals.length > 1) {
       io.stderr("hook does not accept positional arguments");
       io.stderr(`usage: divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
       return 2;
     }
 
-    const explicitVendor = parseHookVendorOption(parsed.options.vendor);
     if (parsed.options.vendor !== undefined && explicitVendor === undefined) {
       io.stderr(
         `invalid --vendor value '${parsed.options.vendor}'; expected ${HOOK_VENDOR_EXPECTED}`,
@@ -1670,10 +1939,332 @@ export async function runCli(
           deps.readStdin ??
           DEFAULT_DEPS.readStdin ??
           createReadHookStdin(process.stdin),
+        env,
+        cwd: process.cwd(),
+        ...(sharedOptions.rootDataDir === undefined
+          ? {}
+          : { rootDataDir: sharedOptions.rootDataDir }),
+        ...(sharedOptions.artifactRoot === undefined
+          ? {}
+          : { artifactRoot: sharedOptions.artifactRoot }),
       },
       ...(explicitVendor === undefined ? {} : { explicitVendor }),
       io,
     });
+  }
+
+  if (scope === "events") {
+    const eventsReadOnly =
+      parsed.options.readOnly ||
+      parseEnvBooleanFlag(env["DIVEDRA_EVENTS_READ_ONLY"]);
+    let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
+    if (parsed.options.mockScenarioPath !== undefined) {
+      if (parsed.options.endpoint !== undefined) {
+        io.stderr("--mock-scenario cannot be combined with --endpoint");
+        return 2;
+      }
+      try {
+        mockScenarioOptions = await readMockScenarioOption(
+          parsed.options.mockScenarioPath,
+        );
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`failed to read mock scenario: ${message}`);
+        return 2;
+      }
+    }
+    const eventOptions = {
+      ...sharedOptions,
+      ...mockScenarioOptions,
+      ...(parsed.options.dryRun ? { dryRun: true } : {}),
+      ...(parsed.options.maxSteps === undefined
+        ? {}
+        : { maxSteps: parsed.options.maxSteps }),
+      ...(parsed.options.maxLoopIterations === undefined
+        ? {}
+        : { maxLoopIterations: parsed.options.maxLoopIterations }),
+      ...(parsed.options.defaultTimeoutMs === undefined
+        ? {}
+        : { defaultTimeoutMs: parsed.options.defaultTimeoutMs }),
+      ...(parsed.options.eventRoot === undefined
+        ? {}
+        : { eventRoot: parsed.options.eventRoot }),
+      ...(parsed.options.endpoint === undefined
+        ? {}
+        : { endpoint: parsed.options.endpoint }),
+      ...(graphqlCliTransport?.authToken === undefined
+        ? {}
+        : { authToken: graphqlCliTransport.authToken }),
+      ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+      ...(eventsReadOnly ? { readOnly: true } : {}),
+    };
+
+    if (command === "validate") {
+      try {
+        const result = await loadAndValidateEventConfiguration(eventOptions);
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            valid: result.valid,
+            eventRoot: result.configuration.eventRoot,
+            sources: result.configuration.sources.length,
+            bindings: result.configuration.bindings.length,
+            issues: result.issues,
+          });
+        } else if (result.valid) {
+          io.stdout(
+            `event configuration is valid: ${result.configuration.eventRoot}`,
+          );
+        } else {
+          io.stderr("event validation failed");
+          io.stderr(formatValidationIssues(result.issues));
+        }
+        return result.valid ? 0 : 2;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events validate failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "emit") {
+      const sourceId = target;
+      const eventFile = parsed.options.eventFile ?? parsed.options.filePath;
+      if (sourceId === undefined || eventFile === undefined) {
+        io.stderr("source id and --event-file are required");
+        io.stderr(
+          "usage: divedra events emit <source-id> --event-file <path> [options]",
+        );
+        return 2;
+      }
+      try {
+        const results = await emitEventFile({
+          ...eventOptions,
+          sourceId,
+          eventFile,
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            sourceId,
+            receipts: results.map((result) => ({
+              receiptId: result.receipt.receiptId,
+              status: result.receipt.status,
+              duplicate: result.duplicate,
+              workflowName: result.workflowName ?? null,
+              workflowExecutionId: result.workflowExecutionId ?? null,
+            })),
+          });
+        } else {
+          for (const result of results) {
+            io.stdout(
+              [
+                `receipt: ${result.receipt.receiptId}`,
+                `status: ${result.receipt.status}`,
+                `duplicate: ${String(result.duplicate)}`,
+                `workflowExecutionId: ${result.workflowExecutionId ?? "-"}`,
+              ].join(" "),
+            );
+          }
+        }
+        return results.some((result) => result.receipt.status === "failed")
+          ? 1
+          : 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events emit failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "list") {
+      try {
+        const receipts = await listEventReceipts({
+          ...eventOptions,
+          ...(parsed.options.sourceId === undefined
+            ? {}
+            : { sourceId: parsed.options.sourceId }),
+          ...(parsed.options.status === undefined
+            ? {}
+            : { status: parsed.options.status }),
+          ...(parsed.options.limit === undefined
+            ? {}
+            : { limit: parsed.options.limit }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, { receipts });
+        } else {
+          for (const receipt of receipts) {
+            io.stdout(
+              [
+                `receipt: ${receipt.receiptId}`,
+                `source: ${receipt.sourceId}`,
+                `binding: ${receipt.bindingId ?? "-"}`,
+                `status: ${receipt.status}`,
+                `workflowExecutionId: ${receipt.workflowExecutionId ?? "-"}`,
+                `updatedAt: ${receipt.updatedAt}`,
+              ].join(" "),
+            );
+          }
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events list failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "replies") {
+      const status = parseReplyDispatchStatus(parsed.options.status);
+      if (parsed.options.status !== undefined && status === undefined) {
+        io.stderr(
+          "--status must be one of dispatching, sent, queued, or failed",
+        );
+        return 2;
+      }
+      try {
+        const replies = await listEventReplyDispatchesFromRuntimeDb(
+          {
+            ...(target === undefined ? {} : { workflowExecutionId: target }),
+            ...(status === undefined ? {} : { status }),
+            ...(parsed.options.limit === undefined
+              ? {}
+              : { limit: parsed.options.limit }),
+          },
+          eventOptions,
+        );
+        if (parsed.options.output === "json") {
+          emitJson(io, { replies });
+        } else {
+          for (const reply of replies) {
+            io.stdout(
+              [
+                `reply: ${reply.idempotencyKey}`,
+                `source: ${reply.sourceId}`,
+                `status: ${reply.status}`,
+                `workflowExecutionId: ${reply.workflowExecutionId}`,
+                `node: ${reply.nodeId}/${reply.nodeExecId}`,
+                `providerMessageId: ${reply.providerMessageId ?? "-"}`,
+                `updatedAt: ${reply.updatedAt}`,
+              ].join(" "),
+            );
+          }
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events replies failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "replay") {
+      const receiptId = target;
+      if (receiptId === undefined) {
+        io.stderr("receipt id is required");
+        io.stderr(
+          "usage: divedra events replay <receipt-id> [--reason <text>] [--dry-run] [options]",
+        );
+        return 2;
+      }
+      try {
+        const result = await replayEventReceipt({
+          ...eventOptions,
+          receiptId,
+          ...(parsed.options.reason === undefined
+            ? {}
+            : { reason: parsed.options.reason }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            replayedFromReceiptId: result.original.receiptId,
+            replayEventId: result.replayEvent.eventId,
+            replayReason: result.reason ?? null,
+            receipts: result.receipts.map((entry) => ({
+              receiptId: entry.receipt.receiptId,
+              status: entry.receipt.status,
+              duplicate: entry.duplicate,
+              workflowName: entry.workflowName ?? null,
+              workflowExecutionId: entry.workflowExecutionId ?? null,
+            })),
+          });
+        } else {
+          for (const entry of result.receipts) {
+            io.stdout(
+              [
+                `replayedFrom: ${result.original.receiptId}`,
+                `receipt: ${entry.receipt.receiptId}`,
+                `status: ${entry.receipt.status}`,
+                `duplicate: ${String(entry.duplicate)}`,
+                `reason: ${result.reason ?? "-"}`,
+                `workflowExecutionId: ${entry.workflowExecutionId ?? "-"}`,
+              ].join(" "),
+            );
+          }
+        }
+        return result.receipts.some(
+          (entry) => entry.receipt.status === "failed",
+        )
+          ? 1
+          : 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events replay failed: ${message}`);
+        return 1;
+      }
+    }
+
+    if (command === "serve") {
+      try {
+        const listener = await createEventListenerService().start({
+          ...eventOptions,
+          ...(parsed.options.host === undefined
+            ? {}
+            : { host: parsed.options.host }),
+          ...(parsed.options.port === undefined
+            ? {}
+            : { port: parsed.options.port }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, {
+            host: listener.host ?? null,
+            port: listener.port ?? null,
+            sources: listener.sources,
+          });
+        } else {
+          io.stdout(
+            listener.host === undefined || listener.port === undefined
+              ? `events listening for sources: ${listener.sources.join(",") || "-"}`
+              : `events listening on http://${listener.host}:${String(listener.port)}`,
+          );
+        }
+        const waitForEventListenerShutdown =
+          deps.waitForEventListenerShutdown ??
+          DEFAULT_DEPS.waitForEventListenerShutdown;
+        try {
+          if (waitForEventListenerShutdown !== undefined) {
+            await waitForEventListenerShutdown(listener);
+          }
+        } finally {
+          await listener.stop();
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events serve failed: ${message}`);
+        return 7;
+      }
+    }
+
+    io.stderr(`unknown events command: ${command ?? "(empty)"}`);
+    printHelp(io);
+    return 2;
   }
 
   if (scope === "serve" || (scope === "web" && command === "serve")) {
@@ -1848,7 +2439,10 @@ export async function runCli(
       });
       if (!created.ok) {
         io.stderr(created.error.message);
-        return created.error.code === "INVALID_WORKFLOW_NAME" ? 2 : 1;
+        return created.error.code === "INVALID_WORKFLOW_NAME" ||
+          created.error.code === "INVALID_SCOPE"
+          ? 2
+          : 1;
       }
       if (parsed.options.output === "json") {
         emitJson(io, {
@@ -1862,7 +2456,7 @@ export async function runCli(
     }
 
     if (command === "validate") {
-      const loaded = await loadWorkflowFromDisk(target, sharedOptions);
+      const loaded = await loadWorkflowFromCatalog(target, sharedOptions);
       if (!loaded.ok) {
         if (parsed.options.output === "json") {
           emitJson(io, loaded.error);
@@ -1873,44 +2467,83 @@ export async function runCli(
           }
         }
         return loaded.error.code === "VALIDATION" ||
-          loaded.error.code === "INVALID_WORKFLOW_NAME"
+          loaded.error.code === "INVALID_WORKFLOW_NAME" ||
+          loaded.error.code === "INVALID_SCOPE"
           ? 2
           : 1;
       }
+      const loadedWorkflowOptions = optionsForLoadedWorkflow(
+        loaded.value,
+        sharedOptions,
+      );
+      const addonSources = await collectWorkflowAddonSourceSummaries({
+        workflow: loaded.value.bundle.workflow,
+        options: loadedWorkflowOptions,
+        ...(loaded.value.source === undefined
+          ? {}
+          : { workflowSource: loaded.value.source }),
+      });
       if (parsed.options.output === "json") {
         emitJson(io, {
           workflowName: loaded.value.workflowName,
           workflowId: loaded.value.bundle.workflow.workflowId,
+          source: workflowSourceJson(loaded.value.source),
+          addonSources,
           valid: true,
         });
       } else {
         io.stdout(`workflow '${loaded.value.workflowName}' is valid`);
+        const sourceLine = formatWorkflowSource(loaded.value.source);
+        if (sourceLine !== undefined) {
+          io.stdout(`source: ${sourceLine}`);
+        }
+        for (const addonSource of addonSources) {
+          io.stdout(`addonSource: ${formatAddonSource(addonSource)}`);
+        }
       }
       return 0;
     }
 
     if (command === "inspect") {
-      const loaded = await loadWorkflowFromDisk(target, sharedOptions);
+      const loaded = await loadWorkflowFromCatalog(target, sharedOptions);
       if (!loaded.ok) {
         io.stderr(`inspect failed: ${loaded.error.message}`);
         if (loaded.error.issues) {
           io.stderr(formatValidationIssues(loaded.error.issues));
         }
         return loaded.error.code === "VALIDATION" ||
-          loaded.error.code === "INVALID_WORKFLOW_NAME"
+          loaded.error.code === "INVALID_WORKFLOW_NAME" ||
+          loaded.error.code === "INVALID_SCOPE"
           ? 2
           : 1;
       }
 
-      const summary = await buildInspectionSummary(loaded.value, sharedOptions);
+      const loadedWorkflowOptions = optionsForLoadedWorkflow(
+        loaded.value,
+        sharedOptions,
+      );
+      const summary = await buildInspectionSummary(
+        loaded.value,
+        loadedWorkflowOptions,
+      );
       if (parsed.options.output === "json") {
-        emitJson(io, summary);
+        emitJson(io, {
+          ...summary,
+          source: workflowSourceJson(loaded.value.source),
+        });
       } else {
         const legacySubWorkflowCountSegment =
           summary.counts.legacySubWorkflows === 0
             ? ""
             : `, legacySubWorkflows: ${summary.counts.legacySubWorkflows}`;
         io.stdout(`workflow: ${summary.workflowName}`);
+        const sourceLine = formatWorkflowSource(loaded.value.source);
+        if (sourceLine !== undefined) {
+          io.stdout(`source: ${sourceLine}`);
+        }
+        for (const addonSource of summary.addonSources) {
+          io.stdout(`addonSource: ${formatAddonSource(addonSource)}`);
+        }
         io.stdout(`workflowId: ${summary.workflowId}`);
         io.stdout(
           `managerNodeId: ${summary.managerNodeId ?? "(none; worker-only workflow)"}`,
@@ -2037,8 +2670,32 @@ export async function runCli(
         return 1;
       }
 
+      const loadedWorkflow = await loadWorkflowFromCatalog(
+        target,
+        sharedOptions,
+      );
+      if (!loadedWorkflow.ok) {
+        if (parsed.options.output === "json") {
+          emitJson(io, loadedWorkflow.error);
+        } else {
+          io.stderr(`run failed: ${loadedWorkflow.error.message}`);
+          if (loadedWorkflow.error.issues) {
+            io.stderr(formatValidationIssues(loadedWorkflow.error.issues));
+          }
+        }
+        return loadedWorkflow.error.code === "VALIDATION" ||
+          loadedWorkflow.error.code === "INVALID_WORKFLOW_NAME" ||
+          loadedWorkflow.error.code === "INVALID_SCOPE"
+          ? 2
+          : 1;
+      }
+      const workflowRunOptions = optionsForLoadedWorkflow(
+        loadedWorkflow.value,
+        sharedOptions,
+      );
+
       const result = await runWorkflow(target, {
-        ...sharedOptions,
+        ...workflowRunOptions,
         runtimeVariables,
         ...mockScenarioOptions,
         dryRun: parsed.options.dryRun,
@@ -2068,11 +2725,16 @@ export async function runCli(
           status: result.value.session.status,
           workflowName: result.value.session.workflowName,
           workflowId: result.value.session.workflowId,
+          source: workflowSourceJson(loadedWorkflow.value.source),
           nodeExecutions: result.value.session.nodeExecutions.length,
           transitions: result.value.session.transitions.length,
           exitCode: result.value.exitCode,
         });
       } else {
+        const sourceLine = formatWorkflowSource(loadedWorkflow.value.source);
+        if (sourceLine !== undefined) {
+          io.stdout(`source: ${sourceLine}`);
+        }
         io.stdout(`run session: ${result.value.session.sessionId}`);
         io.stdout(`status: ${result.value.session.status}`);
         io.stdout(

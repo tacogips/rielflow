@@ -170,8 +170,8 @@ function makeWorkspaceLatestRunView(): RuntimeSessionView {
         restartedFromNodeExecId: null,
         inputHash: "in",
         outputHash: "out",
-        inputJson: "{\"request\":\"ship\"}",
-        outputJson: "{\"summary\":\"done\",\"score\":0.9}",
+        inputJson: '{"request":"ship"}',
+        outputJson: '{"summary":"done","score":0.9}',
         createdAt: "2026-03-26T00:02:02.000Z",
       },
     ],
@@ -465,7 +465,9 @@ describe("buildWorkflowRunPreview", () => {
               completion: { type: "none" },
             },
           ],
-          edges: [{ from: "divedra-manager", to: "main-worker", when: "always" }],
+          edges: [
+            { from: "divedra-manager", to: "main-worker", when: "always" },
+          ],
           loops: [],
           branching: { mode: "fan-out" },
         },
@@ -707,7 +709,7 @@ describe("workflow preview text helpers", () => {
     expect(text).toContain("sessionId: sess-3");
     expect(text).toContain("status:");
     expect(text).toContain("Output");
-    expect(text).toContain("\"summary\": \"done\"");
+    expect(text).toContain('"summary": "done"');
   });
 
   test("buildWorkflowSelectorHistorySummary surfaces latest-run load failures clearly", () => {
@@ -782,9 +784,7 @@ describe("workflow preview text helpers", () => {
 
     expect(text).toContain("demo");
     expect(text).not.toContain("demo workflow");
-    expect(text).toContain(
-      "nodes=3  workflowCalls=0  legacySubWorkflows=1",
-    );
+    expect(text).toContain("nodes=3  workflowCalls=0  legacySubWorkflows=1");
     expect(text).not.toContain("demo\n\nnodes=");
   });
 });
@@ -1007,7 +1007,9 @@ describe("buildWorkflowHistoryStatusMessage", () => {
         },
         workflowName: "demo-flow",
       }),
-    ).toContain("workflow runs: D runs workflow history delete-all for the current workflow");
+    ).toContain(
+      "workflow runs: D runs workflow history delete-all for the current workflow",
+    );
   });
 
   test("documents that escape closes in-pane viewers before returning", () => {

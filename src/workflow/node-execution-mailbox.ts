@@ -183,6 +183,9 @@ function summarizeNodeExecutionSeed(node: NodePayload): string {
   if (node.nodeType === "command") {
     return "direct command execution";
   }
+  if (node.nodeType === "addon") {
+    return "built-in add-on execution";
+  }
   return summarizePromptTemplate(node.promptTemplate);
 }
 
@@ -604,9 +607,7 @@ function renderStructureSection(
   if (structure.type === "root-workflow") {
     const lines = ["Workflow structure:"];
     lines.push(`- Root manager: ${structure.rootManagerNodeId ?? ""}`);
-    if ((structure.subWorkflows ?? []).length === 0) {
-      lines.push("- Sub-workflows: none declared");
-    } else {
+    if ((structure.subWorkflows ?? []).length > 0) {
       lines.push("- Sub-workflows:");
       for (const subWorkflow of structure.subWorkflows ?? []) {
         lines.push(

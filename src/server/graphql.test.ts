@@ -9,6 +9,10 @@ import {
   createManagerSessionStore,
   hashManagerAuthToken,
 } from "../workflow/manager-session-store";
+import {
+  saveEventReplyDispatchToRuntimeDb,
+  saveHookEventToRuntimeDb,
+} from "../workflow/runtime-db";
 import { handleApiRequest } from "./api";
 import { executeGraphqlDocument, handleGraphqlRequest } from "./graphql";
 
@@ -517,6 +521,44 @@ describe("GraphQL HTTP transport", () => {
   test("exposes workflow execution overview over /graphql", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
+    await saveHookEventToRuntimeDb(
+      {
+        hookEventId: "hook-http-1",
+        workflowId: session.workflowId,
+        workflowExecutionId: session.sessionId,
+        nodeId: "manager",
+        nodeExecId: "manager-exec-1",
+        vendor: "claude-code",
+        agentSessionId: "agent-session-http",
+        rawEventName: "SessionStart",
+        eventName: "SessionStart",
+        cwd: root,
+        payloadHash: "b".repeat(64),
+        status: "recorded",
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-20T00:00:00.000Z",
+      },
+      options,
+    );
+    await saveEventReplyDispatchToRuntimeDb(
+      {
+        idempotencyKey: "reply-http-key",
+        sourceId: "webhook",
+        provider: "webhook",
+        workflowId: session.workflowId,
+        workflowExecutionId: session.sessionId,
+        nodeId: "reply-node",
+        nodeExecId: "reply-exec-1",
+        eventId: "event-http-1",
+        conversationId: "conversation-http",
+        status: "sent",
+        providerMessageId: "message-http",
+        requestJson: JSON.stringify({ message: { text: "hello" } }),
+        responseJson: JSON.stringify({ providerMessageId: "message-http" }),
+        updatedAt: "2026-04-20T00:00:00.000Z",
+      },
+      options,
+    );
 
     const response = await handleGraphqlRequest(
       new Request("http://localhost/graphql", {
@@ -558,6 +600,16 @@ describe("GraphQL HTTP transport", () => {
                     }
                   }
                 }
+                hookEvents {
+                  agentSessionId
+                  rawEventName
+                  status
+                }
+                replyDispatches {
+                  idempotencyKey
+                  providerMessageId
+                  status
+                }
               }
             }
           `,
@@ -591,6 +643,16 @@ describe("GraphQL HTTP transport", () => {
               };
             }[];
           };
+          readonly hookEvents: readonly {
+            readonly agentSessionId: string;
+            readonly rawEventName: string;
+            readonly status: string;
+          }[];
+          readonly replyDispatches: readonly {
+            readonly idempotencyKey: string;
+            readonly providerMessageId: string | null;
+            readonly status: string;
+          }[];
         };
       };
     };
@@ -606,6 +668,20 @@ describe("GraphQL HTTP transport", () => {
     expect(
       payload.data?.workflowExecutionOverview?.communications.totalCount,
     ).toBeGreaterThan(0);
+    expect(payload.data?.workflowExecutionOverview?.hookEvents).toEqual([
+      {
+        agentSessionId: "agent-session-http",
+        rawEventName: "SessionStart",
+        status: "recorded",
+      },
+    ]);
+    expect(payload.data?.workflowExecutionOverview?.replyDispatches).toEqual([
+      {
+        idempotencyKey: "reply-http-key",
+        providerMessageId: "message-http",
+        status: "sent",
+      },
+    ]);
     expect(
       payload.data?.workflowExecutionOverview?.nodes.some(
         (node) =>

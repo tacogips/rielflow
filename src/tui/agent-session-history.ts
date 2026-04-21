@@ -193,12 +193,16 @@ function extractClaudeContentText(content: unknown): string {
       const toolName =
         typeof entry["name"] === "string" ? entry["name"] : "unknown-tool";
       const toolInput =
-        entry["input"] === undefined ? "" : `\n${stringifyUnknown(entry["input"])}`;
+        entry["input"] === undefined
+          ? ""
+          : `\n${stringifyUnknown(entry["input"])}`;
       return [`[tool_use:${toolName}]${toolInput}`];
     }
     if (entry["type"] === "tool_result") {
       const toolResult =
-        entry["content"] === undefined ? "" : `\n${stringifyUnknown(entry["content"])}`;
+        entry["content"] === undefined
+          ? ""
+          : `\n${stringifyUnknown(entry["content"])}`;
       return [`[tool_result]${toolResult}`];
     }
     return [];
@@ -276,9 +280,7 @@ async function findFirstMatchingFile(
   root: string,
   matcher: (filePath: string) => boolean,
 ): Promise<string | undefined> {
-  let entries:
-    | Awaited<ReturnType<typeof readdir>>
-    | undefined;
+  let entries: Awaited<ReturnType<typeof readdir>> | undefined;
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch {

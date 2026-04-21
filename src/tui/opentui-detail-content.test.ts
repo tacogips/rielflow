@@ -64,9 +64,9 @@ const temporaryArtifactDirs: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryArtifactDirs.splice(0).map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    temporaryArtifactDirs
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
   );
 });
 
@@ -93,11 +93,7 @@ async function createNodeExecutionArtifactDir(): Promise<string> {
     '{\n  "transport": "mailbox"\n}\n',
     "utf8",
   );
-  await writeFile(
-    mailboxPaths.inputPath,
-    '{\n  "kind": "inbox"\n}\n',
-    "utf8",
-  );
+  await writeFile(mailboxPaths.inputPath, '{\n  "kind": "inbox"\n}\n', "utf8");
   await writeFile(
     path.join(mailboxPaths.outboxDir, "output.json"),
     '{\n  "kind": "outbox"\n}\n',
@@ -244,7 +240,9 @@ describe("buildHistoryDetailPaneState", () => {
     );
     expect(state.summaryVisible).toBe(true);
     expect(state.textVisible).toBe(false);
-    expect(state.summaryOptions[0]?.name).toBe("AI agent session (codex-agent)");
+    expect(state.summaryOptions[0]?.name).toBe(
+      "AI agent session (codex-agent)",
+    );
     expect(state.summaryOptions[1]?.name).toBe("Execution input (input.json)");
   });
 
@@ -373,7 +371,7 @@ describe("buildHistoryDetailPaneState", () => {
   test("renders viewer content through the shared detail-pane state", async () => {
     const state = await buildHistoryDetailPaneState({
       detailMode: "viewer",
-      detailViewerBody: "{\n  \"ok\": true\n}",
+      detailViewerBody: '{\n  "ok": true\n}',
       detailViewerTitle: "demo / worker / Execution output",
       historyViewMode: "workflow",
       inputDetection: {

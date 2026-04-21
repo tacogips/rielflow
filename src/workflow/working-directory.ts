@@ -44,9 +44,8 @@ export function resolveNodeExecutionWorkingDirectory(
   workflowWorkingDirectory: string,
   nodeWorkingDirectory: string | undefined,
 ): string {
-  const normalizedNodeWorkingDirectory = normalizeWorkingDirectoryPath(
-    nodeWorkingDirectory,
-  );
+  const normalizedNodeWorkingDirectory =
+    normalizeWorkingDirectoryPath(nodeWorkingDirectory);
   if (normalizedNodeWorkingDirectory === undefined) {
     return workflowWorkingDirectory;
   }

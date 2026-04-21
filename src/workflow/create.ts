@@ -1,7 +1,11 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { err, ok, type Result } from "./result";
-import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
+import { isSafeWorkflowName } from "./paths";
+import {
+  resolveWorkflowCreateSource,
+  withResolvedWorkflowSourceOptions,
+} from "./catalog";
 import type { AuthoredWorkflowJson, LoadOptions } from "./types";
 
 export interface CreateWorkflowSuccess {
@@ -10,7 +14,11 @@ export interface CreateWorkflowSuccess {
 }
 
 export interface CreateWorkflowFailure {
-  readonly code: "INVALID_WORKFLOW_NAME" | "ALREADY_EXISTS" | "IO";
+  readonly code:
+    | "INVALID_WORKFLOW_NAME"
+    | "INVALID_SCOPE"
+    | "ALREADY_EXISTS"
+    | "IO";
   readonly message: string;
 }
 
@@ -56,10 +64,7 @@ const MANAGED_TEMPLATE_NODE_DEFINITIONS = [
     prompt: "Complete the assigned workflow step for {{workflowId}}",
     includeWorkflowId: true,
   },
-] as const satisfies readonly [
-  TemplateNodeDefinition,
-  TemplateNodeDefinition,
-];
+] as const satisfies readonly [TemplateNodeDefinition, TemplateNodeDefinition];
 
 const WORKER_ONLY_TEMPLATE_NODE_DEFINITIONS = [
   {
@@ -173,7 +178,18 @@ export async function createWorkflowTemplate(
     });
   }
 
-  const roots = resolveEffectiveRoots(options);
+  const source = resolveWorkflowCreateSource(workflowName, options);
+  if (!source.ok) {
+    return err({
+      code:
+        source.error.code === "INVALID_SCOPE"
+          ? "INVALID_SCOPE"
+          : "INVALID_WORKFLOW_NAME",
+      message: source.error.message,
+    });
+  }
+
+  const roots = withResolvedWorkflowSourceOptions(source.value, options);
   const workflowDirectory = path.join(roots.workflowRoot, workflowName);
   const promptDirectory = path.join(workflowDirectory, "prompts");
 

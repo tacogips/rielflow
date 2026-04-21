@@ -7,12 +7,12 @@ export const INLINE_NODE_FIELD = "node";
 const DEFAULT_NODE_DIRECTORY = "nodes";
 
 function splitWorkflowRelativePath(relativePath: string): readonly string[] {
-  return relativePath
-    .split(/[\\/]+/)
-    .filter((segment) => segment.length > 0);
+  return relativePath.split(/[\\/]+/).filter((segment) => segment.length > 0);
 }
 
-export function normalizeWorkflowRelativeJsonPath(relativePath: string): string {
+export function normalizeWorkflowRelativeJsonPath(
+  relativePath: string,
+): string {
   return splitWorkflowRelativePath(relativePath).join("/");
 }
 
@@ -49,8 +49,7 @@ export function resolveWorkflowRelativeNodeFilePath(
 ): Result<string, WorkflowRelativeNodeFileFailure> {
   if (!isSafeWorkflowRelativePath(relativePath)) {
     return err({
-      message:
-        `nodeFile '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
+      message: `nodeFile '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
     });
   }
 
@@ -58,8 +57,7 @@ export function resolveWorkflowRelativeNodeFilePath(
   const relative = path.relative(workflowDirectory, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     return err({
-      message:
-        `nodeFile '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
+      message: `nodeFile '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
     });
   }
 
@@ -75,7 +73,11 @@ export function resolveAuthoredNodeFileReference(
   }
 
   const nodeId = typeof node["id"] === "string" ? node["id"] : undefined;
-  if (node[INLINE_NODE_FIELD] === undefined || nodeId === undefined || nodeId.length === 0) {
+  if (
+    node[INLINE_NODE_FIELD] === undefined ||
+    nodeId === undefined ||
+    nodeId.length === 0
+  ) {
     return undefined;
   }
 

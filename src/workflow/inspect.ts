@@ -1,8 +1,13 @@
 import type { LoadedWorkflow } from "./load";
 import {
+  collectWorkflowAddonSourceSummaries,
+  type WorkflowAddonSourceSummary,
+} from "./addon-source-summary";
+import {
   inspectWorkflowRuntimeReadiness,
   type WorkflowRuntimeReadiness,
 } from "./runtime-readiness";
+import { collectWorkflowRevisionNodeFiles } from "./revision";
 import type { LoadOptions } from "./types";
 
 export interface WorkflowInspectionSummary {
@@ -33,6 +38,7 @@ export interface WorkflowInspectionSummary {
   readonly nodeFiles: readonly string[];
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
+  readonly addonSources: readonly WorkflowAddonSourceSummary[];
   readonly runtime: WorkflowRuntimeReadiness;
 }
 
@@ -89,9 +95,14 @@ export async function buildInspectionSummary(
       workflowCalls: workflow.workflowCalls?.length ?? 0,
       legacySubWorkflows: workflow.subWorkflows.length,
     },
-    nodeFiles: workflow.nodes.map((node) => node.nodeFile),
+    nodeFiles: collectWorkflowRevisionNodeFiles(workflow),
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,
+    addonSources: await collectWorkflowAddonSourceSummaries({
+      workflow,
+      options,
+      ...(loaded.source === undefined ? {} : { workflowSource: loaded.source }),
+    }),
     runtime: await inspectWorkflowRuntimeReadiness(loaded.bundle, options),
   };
 }

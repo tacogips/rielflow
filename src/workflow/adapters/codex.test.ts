@@ -72,36 +72,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function makeCodexRunnerFixture(input: {
-  readonly sessionId?: string;
-  readonly messages?: readonly unknown[];
-  readonly success?: boolean;
-  readonly exitCode?: number;
-} = {}): {
+function makeCodexRunnerFixture(
+  input: {
+    readonly sessionId?: string;
+    readonly messages?: readonly unknown[];
+    readonly success?: boolean;
+    readonly exitCode?: number;
+  } = {},
+): {
   readonly createRunner: ReturnType<typeof vi.fn>;
   readonly startSession: ReturnType<typeof vi.fn>;
   readonly resumeSession: ReturnType<typeof vi.fn>;
   readonly cancel: ReturnType<typeof vi.fn>;
 } {
   const sessionId = input.sessionId ?? "codex-session-1";
-  const chunks =
-    input.messages ??
-    [
-      {
-        type: "session_meta",
-        payload: {
-          meta: { id: sessionId },
-        },
+  const chunks = input.messages ?? [
+    {
+      type: "session_meta",
+      payload: {
+        meta: { id: sessionId },
       },
-      {
-        type: "response_item",
-        payload: {
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: "local codex reply" }],
-        },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "local codex reply" }],
       },
-    ];
+    },
+  ];
   const cancel = vi.fn(async () => {
     return;
   });
@@ -184,7 +184,7 @@ describe("CodexAgentAdapter", () => {
           payload: {
             type: "message",
             role: "assistant",
-            content: [{ type: "output_text", text: "{\"summary\":\"ok\"}" }],
+            content: [{ type: "output_text", text: '{"summary":"ok"}' }],
           },
         },
       ],
@@ -231,10 +231,15 @@ describe("CodexAgentAdapter", () => {
 
   test("injects ambient manager env during local session startup", async () => {
     let observedGraphqlEndpoint: string | undefined;
+    let observedWorkflowExecutionId: string | undefined;
+    let observedNodeExecId: string | undefined;
     const fixture = makeCodexRunnerFixture();
     fixture.createRunner.mockImplementation(() => ({
       startSession: vi.fn(async () => {
         observedGraphqlEndpoint = process.env["DIVEDRA_GRAPHQL_ENDPOINT"];
+        observedWorkflowExecutionId =
+          process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"];
+        observedNodeExecId = process.env["DIVEDRA_NODE_EXEC_ID"];
         return {
           sessionId: "codex-session-ambient",
           messages: async function* () {
@@ -274,6 +279,15 @@ describe("CodexAgentAdapter", () => {
     await adapter.execute(
       {
         ...baseInput,
+        divedraHookContext: {
+          environment: {
+            DIVEDRA_WORKFLOW_ID: "wf",
+            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+            DIVEDRA_NODE_ID: "node-1",
+            DIVEDRA_NODE_EXEC_ID: "exec-1",
+            DIVEDRA_AGENT_BACKEND: "codex-agent",
+          },
+        },
         ambientManagerContext: {
           environment: {
             DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
@@ -290,7 +304,10 @@ describe("CodexAgentAdapter", () => {
     );
 
     expect(observedGraphqlEndpoint).toBe("http://127.0.0.1:43173/graphql");
+    expect(observedWorkflowExecutionId).toBe("sess-1");
+    expect(observedNodeExecId).toBe("exec-1");
     expect(process.env["DIVEDRA_GRAPHQL_ENDPOINT"]).toBeUndefined();
+    expect(process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"]).toBeUndefined();
   });
 
   test("maps invalid structured output to invalid_output", async () => {

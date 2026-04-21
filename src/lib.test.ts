@@ -1,17 +1,20 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   callWorkflowNode,
+  createNodeAddonPayloadResolver,
   createWorkflowExecutionClient,
   executeWorkflow,
   getRuntimeSessionView,
   getSession,
   inspectWorkflow,
   listSessions,
+  rerunWorkflow,
   resumeWorkflow,
 } from "./lib";
+import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./lib";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
 import { createSessionState } from "./workflow/session";
@@ -73,6 +76,157 @@ async function createCallNodeFixture(
     promptTemplate: "writer",
     variables: {},
   });
+}
+
+async function createThirdPartyAddonWorkflowFixture(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+  readonly includeSetupNode?: boolean;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  await mkdir(workflowDirectory, { recursive: true });
+
+  const nodes =
+    input.includeSetupNode === true
+      ? [
+          {
+            id: "setup",
+            role: "worker",
+            nodeFile: "nodes/node-setup.json",
+            completion: { type: "none" },
+          },
+          {
+            id: "addon-worker",
+            role: "worker",
+            addon: {
+              name: "acme/echo-worker",
+              version: "1",
+              inputs: { message: "from addon" },
+            },
+            completion: { type: "none" },
+          },
+        ]
+      : [
+          {
+            id: "addon-worker",
+            role: "worker",
+            addon: {
+              name: "acme/echo-worker",
+              version: "1",
+              inputs: { message: "from addon" },
+            },
+            completion: { type: "none" },
+          },
+        ];
+
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: input.workflowName,
+    description: "third-party add-on library fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryNodeId: input.includeSetupNode === true ? "setup" : "addon-worker",
+    nodes,
+    edges:
+      input.includeSetupNode === true
+        ? [{ from: "setup", to: "addon-worker", when: "always" }]
+        : [],
+    loops: [],
+    branching: { mode: "fan-out" },
+  });
+
+  if (input.includeSetupNode === true) {
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await writeJson(path.join(workflowDirectory, "nodes/node-setup.json"), {
+      id: "setup",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "setup",
+      variables: {},
+    });
+  }
+}
+
+async function writeLocalAddonManifest(input: {
+  readonly addonRoot: string;
+  readonly name: string;
+  readonly version: string;
+  readonly prompt: string;
+}): Promise<void> {
+  const [namespace, addonName] = input.name.split("/");
+  if (namespace === undefined || addonName === undefined) {
+    throw new Error(`invalid test add-on name '${input.name}'`);
+  }
+  const addonDirectory = path.join(
+    input.addonRoot,
+    namespace,
+    addonName,
+    input.version,
+  );
+  await mkdir(path.join(addonDirectory, "prompts"), { recursive: true });
+  await writeFile(
+    path.join(addonDirectory, "prompts", "worker.md"),
+    `${input.prompt}\n`,
+    "utf8",
+  );
+  await writeJson(path.join(addonDirectory, "addon.json"), {
+    name: input.name,
+    version: input.version,
+    description: "Local echo worker",
+    allowedRoles: ["worker"],
+    inputSchema: {
+      type: "object",
+      required: ["message"],
+      additionalProperties: false,
+      properties: {
+        message: { type: "string", minLength: 1 },
+      },
+    },
+    resolution: {
+      kind: "node-payload-template",
+      nodeType: "agent",
+      executionBackend: "official/openai-sdk",
+      model: "gpt-5-nano",
+      promptTemplateFile: "prompts/worker.md",
+      variables: {
+        renderedMessage: "{{addon.inputs.message}}",
+      },
+    },
+  });
+}
+
+function createThirdPartyAddonDefinition(): NodeAddonDefinition {
+  return {
+    name: "acme/echo-worker",
+    version: "1",
+    resolve: (input) => ({
+      payload: {
+        id: input.nodeId,
+        executionBackend: "official/openai-sdk",
+        model: "gpt-5-nano",
+        promptTemplate: "Echo {{message}}",
+        variables: input.addon.inputs ?? {},
+      },
+    }),
+  };
+}
+
+function createThirdPartyAddonResolver(): NodeAddonPayloadResolver {
+  return createNodeAddonPayloadResolver(createThirdPartyAddonDefinition());
+}
+
+function createAsyncThirdPartyAddonDefinition(): NodeAddonDefinition {
+  return {
+    name: "acme/echo-worker",
+    version: "1",
+    resolve: async (input) => ({
+      payload: {
+        id: input.nodeId,
+        executionBackend: "official/openai-sdk",
+        model: "gpt-5-nano",
+        promptTemplate: "Echo {{message}}",
+        variables: input.addon.inputs ?? {},
+      },
+    }),
+  };
 }
 
 afterEach(async () => {
@@ -232,6 +386,249 @@ describe("library api", () => {
     expect(result.workflowExecutionId).toBe(result.sessionId);
     expect(result.status).toBe("completed");
     expect(result.exitCode).toBe(0);
+  });
+
+  test("passes third-party add-on resolvers through execution wrappers", async () => {
+    const root = await makeTempDir();
+    await createThirdPartyAddonWorkflowFixture({
+      workflowRoot: root,
+      workflowName: "third-party-execute",
+    });
+
+    const result = await executeWorkflow({
+      workflowName: "third-party-execute",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      nodeAddonResolvers: [createThirdPartyAddonResolver()],
+      mockScenario: {
+        "addon-worker": {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "resolved" },
+        },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("executes user-scope workflows through library wrappers", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user-scope");
+    const created = await createWorkflowTemplate("scoped-demo", {
+      cwd: root,
+      workflowScope: "user",
+      userRoot,
+      env: {},
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const summary = await inspectWorkflow("scoped-demo", {
+      cwd: root,
+      workflowScope: "user",
+      userRoot,
+      env: {},
+    });
+    expect(summary.workflowName).toBe("scoped-demo");
+
+    const result = await executeWorkflow({
+      workflowName: "scoped-demo",
+      cwd: root,
+      workflowScope: "user",
+      userRoot,
+      env: {},
+      mockScenario: makeDefaultTemplateScenario(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.exitCode).toBe(0);
+    const session = await getSession(result.sessionId, {
+      rootDataDir: path.join(userRoot, "artifacts"),
+      env: {},
+    });
+    expect(session.status).toBe("completed");
+  });
+
+  test("reports scoped local add-on sources through library inspection", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user-scope");
+    const workflowName = "local-addon-library";
+    const addonName = "acme/local-echo-worker";
+    await createThirdPartyAddonWorkflowFixture({
+      workflowRoot: path.join(userRoot, "workflows"),
+      workflowName,
+    });
+    await writeLocalAddonManifest({
+      addonRoot: path.join(userRoot, "addons"),
+      name: addonName,
+      version: "1",
+      prompt: "Local library {{renderedMessage}}",
+    });
+    const workflowPath = path.join(
+      userRoot,
+      "workflows",
+      workflowName,
+      "workflow.json",
+    );
+    const workflowJson = JSON.parse(
+      await readFile(workflowPath, "utf8"),
+    ) as Record<string, unknown>;
+    workflowJson["nodes"] = [
+      {
+        id: "addon-worker",
+        role: "worker",
+        addon: {
+          name: addonName,
+          version: "1",
+          inputs: { message: "from local library" },
+        },
+        completion: { type: "none" },
+      },
+    ];
+    await writeJson(workflowPath, workflowJson);
+
+    const summary = await inspectWorkflow(workflowName, {
+      cwd: root,
+      workflowScope: "user",
+      userRoot,
+      env: {},
+    });
+
+    expect(summary.addonSources).toEqual([
+      expect.objectContaining({
+        nodeId: "addon-worker",
+        name: addonName,
+        version: "1",
+        scope: "user",
+        manifestPath: path.join(
+          userRoot,
+          "addons",
+          "acme",
+          "local-echo-worker",
+          "1",
+          "addon.json",
+        ),
+      }),
+    ]);
+  });
+
+  test("rejects invalid workflow scope environment values through library wrappers", async () => {
+    const root = await makeTempDir();
+
+    await expect(
+      inspectWorkflow("scoped-demo", {
+        cwd: root,
+        env: {
+          DIVEDRA_WORKFLOW_SCOPE: "global",
+        },
+      }),
+    ).rejects.toThrow("DIVEDRA_WORKFLOW_SCOPE");
+  });
+
+  test("passes third-party add-on definitions through execution wrappers", async () => {
+    const root = await makeTempDir();
+    await createThirdPartyAddonWorkflowFixture({
+      workflowRoot: root,
+      workflowName: "third-party-addon-definition",
+    });
+
+    const result = await executeWorkflow({
+      workflowName: "third-party-addon-definition",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      nodeAddons: [createThirdPartyAddonDefinition()],
+      mockScenario: {
+        "addon-worker": {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "resolved" },
+        },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("passes async third-party add-on definitions through execution wrappers", async () => {
+    const root = await makeTempDir();
+    await createThirdPartyAddonWorkflowFixture({
+      workflowRoot: root,
+      workflowName: "async-third-party-addon-definition",
+    });
+
+    const result = await executeWorkflow({
+      workflowName: "async-third-party-addon-definition",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      nodeAddons: [createAsyncThirdPartyAddonDefinition()],
+      mockScenario: {
+        "addon-worker": {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "resolved" },
+        },
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("passes third-party add-on resolvers through resume and rerun wrappers", async () => {
+    const root = await makeTempDir();
+    const workflowName = "third-party-resume";
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      nodeAddonResolvers: [createThirdPartyAddonResolver()],
+      mockScenario: {
+        setup: {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "setup" },
+        },
+        "addon-worker": {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "resolved" },
+        },
+      },
+    };
+    await createThirdPartyAddonWorkflowFixture({
+      workflowRoot: root,
+      workflowName,
+      includeSetupNode: true,
+    });
+
+    const paused = await executeWorkflow({
+      workflowName,
+      ...options,
+      maxSteps: 1,
+    });
+    expect(paused.status).toBe("paused");
+
+    const resumed = await resumeWorkflow({
+      ...options,
+      sessionId: paused.sessionId,
+    });
+    expect(resumed.status).toBe("completed");
+
+    const rerun = await rerunWorkflow({
+      ...options,
+      sourceSessionId: resumed.sessionId,
+      fromNodeId: "addon-worker",
+    });
+    expect(rerun.status).toBe("completed");
+    expect(rerun.exitCode).toBe(0);
   });
 
   test("executes a fixed workflow through the endpoint-backed library client", async () => {

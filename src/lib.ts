@@ -16,8 +16,11 @@ import {
   buildInspectionSummary,
   type WorkflowInspectionSummary,
 } from "./workflow/inspect";
-import { loadWorkflowFromDisk } from "./workflow/load";
+import { loadWorkflowFromCatalog } from "./workflow/load";
+import { withResolvedWorkflowSourceOptions } from "./workflow/catalog";
 import {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   listRuntimeSessions,
@@ -28,7 +31,7 @@ import {
 } from "./workflow/session-store";
 import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/adapter";
-import type { LoadOptions } from "./workflow/types";
+import type { ChatReplyDispatcher, LoadOptions } from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 
 export type DivedraOptions = LoadOptions & SessionStoreOptions;
@@ -39,6 +42,7 @@ export interface ExecuteWorkflowInput extends DivedraOptions {
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
   readonly dryRun?: boolean;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly maxSteps?: number;
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
@@ -74,6 +78,16 @@ export interface RuntimeSessionView {
   >
     ? T
     : never;
+  readonly hookEvents?: ReturnType<
+    typeof listRuntimeHookEvents
+  > extends Promise<infer T>
+    ? T
+    : never;
+  readonly replyDispatches?: ReturnType<
+    typeof listEventReplyDispatchesFromRuntimeDb
+  > extends Promise<infer T>
+    ? T
+    : never;
 }
 
 export interface CallWorkflowNodeInput extends CallNodeInput {}
@@ -84,6 +98,7 @@ export interface WorkflowExecutionClientOptions extends DivedraOptions {
   readonly authToken?: string;
   readonly managerSessionId?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly eventReplyDispatcher?: ChatReplyDispatcher;
 }
 
 export interface WorkflowExecutionClientRequest {
@@ -168,6 +183,19 @@ function resolveRuntimeVariables(
     throw new Error("use only one of input or runtimeVariables");
   }
   return request?.runtimeVariables ?? request?.input;
+}
+
+async function resolveWorkflowCatalogOptions<T extends DivedraOptions>(
+  workflowName: string,
+  options: T,
+): Promise<T> {
+  const loaded = await loadWorkflowFromCatalog(workflowName, options);
+  if (!loaded.ok) {
+    throw new Error(loaded.error.message);
+  }
+  return loaded.value.source === undefined
+    ? options
+    : withResolvedWorkflowSourceOptions(loaded.value.source, options);
 }
 
 async function executeWorkflowThroughGraphqlClient(
@@ -268,6 +296,10 @@ async function executeWorkflowThroughLibraryClient(
   );
   if (request?.async === true) {
     const schema = createGraphqlSchema();
+    const executionOptions = await resolveWorkflowCatalogOptions(
+      options.workflowName,
+      options,
+    );
     const payload = await schema.mutation.executeWorkflow(
       {
         workflowName: options.workflowName,
@@ -288,7 +320,7 @@ async function executeWorkflowThroughLibraryClient(
           ? {}
           : { defaultTimeoutMs: request.defaultTimeoutMs }),
       },
-      options,
+      executionOptions,
     );
     return {
       workflowName: options.workflowName,
@@ -348,11 +380,15 @@ export async function inspectWorkflow(
   workflowName: string,
   options: DivedraOptions = {},
 ): Promise<WorkflowInspectionSummary> {
-  const loaded = await loadWorkflowFromDisk(workflowName, options);
+  const loaded = await loadWorkflowFromCatalog(workflowName, options);
   if (!loaded.ok) {
     throw new Error(loaded.error.message);
   }
-  return await buildInspectionSummary(loaded.value, options);
+  const inspectionOptions =
+    loaded.value.source === undefined
+      ? options
+      : withResolvedWorkflowSourceOptions(loaded.value.source, options);
+  return await buildInspectionSummary(loaded.value, inspectionOptions);
 }
 
 export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
@@ -367,6 +403,13 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
     ...(input.workflowRoot === undefined
       ? {}
       : { workflowRoot: input.workflowRoot }),
+    ...(input.workflowScope === undefined
+      ? {}
+      : { workflowScope: input.workflowScope }),
+    ...(input.userRoot === undefined ? {} : { userRoot: input.userRoot }),
+    ...(input.projectRoot === undefined
+      ? {}
+      : { projectRoot: input.projectRoot }),
     ...(input.artifactRoot === undefined
       ? {}
       : { artifactRoot: input.artifactRoot }),
@@ -378,6 +421,13 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -388,6 +438,9 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       ? {}
       : { mockScenario: input.mockScenario }),
     ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
+    ...(input.eventReplyDispatcher === undefined
+      ? {}
+      : { eventReplyDispatcher: input.eventReplyDispatcher }),
     ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
     ...(input.maxLoopIterations === undefined
       ? {}
@@ -396,7 +449,11 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
   };
-  const result = await runWorkflow(input.workflowName, options);
+  const executionOptions = await resolveWorkflowCatalogOptions(
+    input.workflowName,
+    options,
+  );
+  const result = await runWorkflow(input.workflowName, executionOptions);
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -434,6 +491,13 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -479,6 +543,13 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       : { sessionStoreRoot: input.sessionStoreRoot }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
+    ...(input.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
+    ...(input.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
@@ -529,9 +600,17 @@ export async function getRuntimeSessionView(
   options: DivedraOptions = {},
 ): Promise<RuntimeSessionView> {
   const session = await getSession(sessionId, options);
-  const nodeExecutions = await listRuntimeNodeExecutions(sessionId, options);
-  const nodeLogs = await listRuntimeNodeLogs(sessionId, options);
-  return { session, nodeExecutions, nodeLogs };
+  const [nodeExecutions, nodeLogs, hookEvents, replyDispatches] =
+    await Promise.all([
+      listRuntimeNodeExecutions(sessionId, options),
+      listRuntimeNodeLogs(sessionId, options),
+      listRuntimeHookEvents(sessionId, options),
+      listEventReplyDispatchesFromRuntimeDb(
+        { workflowExecutionId: sessionId },
+        options,
+      ),
+    ]);
+  return { session, nodeExecutions, nodeLogs, hookEvents, replyDispatches };
 }
 
 export async function callWorkflowNode(input: CallWorkflowNodeInput): Promise<{
@@ -612,7 +691,34 @@ export type {
   GraphqlSchema,
   GraphqlSchemaDependencies,
 };
-export { loadWorkflowFromDisk } from "./workflow/load";
+export type {
+  AsyncNodeAddonPayloadResolver,
+  LoadOptions,
+  NodeAddonDefinition,
+  NodeAddonDefinitionResolver,
+  NodeAddonPayloadResolver,
+  NodeAddonResolveInput,
+  NodeAddonResolveResult,
+  NodePayload,
+  ResolvedWorkflowSource,
+  ValidationIssue,
+  WorkflowNodeAddonRef,
+  WorkflowScopeSelector,
+  WorkflowSourceScope,
+} from "./workflow/types";
+export {
+  createAsyncNodeAddonPayloadResolver,
+  createAsyncNodeAddonRegistry,
+  createNodeAddonPayloadResolver,
+  createNodeAddonRegistry,
+} from "./workflow/node-addons";
+export { loadWorkflowFromCatalog, loadWorkflowFromDisk } from "./workflow/load";
+export {
+  listWorkflowCatalogSources,
+  resolveWorkflowCreateSource,
+  resolveWorkflowScopeSelector,
+  resolveWorkflowSource,
+} from "./workflow/catalog";
 export { runWorkflow } from "./workflow/engine";
 export { callNode } from "./workflow/call-node";
 export { deriveWorkflowVisualization } from "./workflow/visualization";

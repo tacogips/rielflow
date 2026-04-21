@@ -64,7 +64,14 @@ Workflow root resolution:
 
 1. `--workflow-root`
 2. `DIVEDRA_WORKFLOW_ROOT`
-3. `./.divedra`
+3. scoped workflow catalog lookup
+
+In scoped catalog lookup, the workspace lists project-scope workflows from
+`<project>/.divedra/workflows` before user-scope workflows from
+`~/.divedra/workflows`. Duplicate workflow names must remain distinguishable in
+the list, while bare workflow-name startup follows the command-layer rule that
+project scope shadows user scope. Supporting design:
+`design-docs/specs/design-user-scope-workflows.md`.
 
 ### Screen Model
 

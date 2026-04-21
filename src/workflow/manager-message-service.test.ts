@@ -153,7 +153,9 @@ async function createCompletedGroupedWorkflowFixture(root: string) {
             nodeFile: "node-workflow-output.json",
           },
         ],
-        edges: [{ from: "workflow-input", to: "workflow-output", when: "always" }],
+        edges: [
+          { from: "workflow-input", to: "workflow-output", when: "always" },
+        ],
       },
       null,
       2,
@@ -508,9 +510,9 @@ describe("manager-message-service", () => {
 
     const messages = await managerStore.listMessages("mgrsess-000001");
     expect(messages).toHaveLength(2);
-    expect(
-      new Set(messages.map((entry) => entry.managerMessageId)).size,
-    ).toBe(2);
+    expect(new Set(messages.map((entry) => entry.managerMessageId)).size).toBe(
+      2,
+    );
   });
 
   test("rejects attachments outside the current workflow execution namespace", async () => {
@@ -563,9 +565,8 @@ describe("manager-message-service", () => {
 
   test("replays a communication from a manager message with canonicalized action idempotency", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedGroupedWorkflowFixture(
-      root,
-    );
+    const { options, session } =
+      await createCompletedGroupedWorkflowFixture(root);
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
@@ -644,9 +645,8 @@ describe("manager-message-service", () => {
 
   test("rejects replay actions outside the subworkflow-manager owned communication scope", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedGroupedWorkflowFixture(
-      root,
-    );
+    const { options, session } =
+      await createCompletedGroupedWorkflowFixture(root);
     const managerStore = await createManagerSession(
       root,
       session.sessionId,
@@ -694,9 +694,8 @@ describe("manager-message-service", () => {
 
   test("accepts queue-only start-sub-workflow actions without mailbox materialization", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedGroupedWorkflowFixture(
-      root,
-    );
+    const { options, session } =
+      await createCompletedGroupedWorkflowFixture(root);
     const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T02:30:00.000Z",
@@ -820,9 +819,8 @@ describe("manager-message-service", () => {
 
   test("delivers manager-authored child-input messages with durable provenance", async () => {
     const root = await makeTempDir();
-    const { options, session } = await createCompletedGroupedWorkflowFixture(
-      root,
-    );
+    const { options, session } =
+      await createCompletedGroupedWorkflowFixture(root);
     const managerStore = await createManagerSession(
       root,
       session.sessionId,

@@ -39,12 +39,7 @@ export function WorkspaceScreen(props: WorkspaceScreenProps) {
           height="100%"
         />
       </Box>
-      <Box
-        width="60%"
-        minWidth={20}
-        height="100%"
-        flexDirection="column"
-      >
+      <Box width="60%" minWidth={20} height="100%" flexDirection="column">
         <ScrollBox
           ref={(node) => {
             props.refs.selectorPreviewScroll = node;

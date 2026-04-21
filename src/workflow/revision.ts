@@ -17,22 +17,35 @@ export interface RevisionFailure {
 export function collectPromptTemplateFiles(
   nodePayloads: Readonly<Record<string, unknown>>,
 ): readonly string[] {
-  return [...new Set(
-    Object.values(nodePayloads)
-      .flatMap((payload) => {
-        if (typeof payload !== "object" || payload === null) {
-          return [];
-        }
-        const payloadRecord = payload as Record<string, unknown>;
-        return NODE_TEMPLATE_FIELD_SPECS.flatMap((spec) => {
-          const templateFile = payloadRecord[spec.fileField];
-          return typeof templateFile === "string" && templateFile.length > 0
-            ? [templateFile]
-            : [];
-        });
-      })
-      .sort((a, b) => a.localeCompare(b)),
-  )];
+  return [
+    ...new Set(
+      Object.values(nodePayloads)
+        .flatMap((payload) => {
+          if (typeof payload !== "object" || payload === null) {
+            return [];
+          }
+          const payloadRecord = payload as Record<string, unknown>;
+          return NODE_TEMPLATE_FIELD_SPECS.flatMap((spec) => {
+            const templateFile = payloadRecord[spec.fileField];
+            return typeof templateFile === "string" && templateFile.length > 0
+              ? [templateFile]
+              : [];
+          });
+        })
+        .sort((a, b) => a.localeCompare(b)),
+    ),
+  ];
+}
+
+export function collectWorkflowRevisionNodeFiles(workflow: {
+  readonly nodes: readonly {
+    readonly nodeFile: string;
+    readonly addon?: unknown;
+  }[];
+}): readonly string[] {
+  return workflow.nodes.flatMap((node) =>
+    node.addon === undefined ? [node.nodeFile] : [],
+  );
 }
 
 function sha256(value: string): string {
@@ -50,18 +63,13 @@ export async function computeWorkflowRevisionFromFiles(
     if (!isSafeWorkflowRelativePath(fileName)) {
       return err({
         code: "IO",
-        message:
-          `invalid workflow-relative file '${fileName}' used in revision computation`,
+        message: `invalid workflow-relative file '${fileName}' used in revision computation`,
       });
     }
   }
   const nodeFileSet = new Set(sortedNodeFiles);
   const extraFileSet = new Set(sortedExtraFiles);
-  const files = [
-    "workflow.json",
-    ...sortedNodeFiles,
-    ...sortedExtraFiles,
-  ];
+  const files = ["workflow.json", ...sortedNodeFiles, ...sortedExtraFiles];
 
   try {
     const chunks: string[] = [];

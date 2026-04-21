@@ -101,7 +101,9 @@ export interface OpenTuiRichSelectOption extends SelectOption {
   readonly textColor?: ColorInput;
 }
 
-export function resolveOpenTuiNodeTypeColor(nodeType: string | undefined): string {
+export function resolveOpenTuiNodeTypeColor(
+  nodeType: string | undefined,
+): string {
   return (
     OPEN_TUI_NODE_TYPE_COLORS[
       (nodeType ?? "agent") as keyof typeof OPEN_TUI_NODE_TYPE_COLORS
@@ -369,7 +371,9 @@ export class FocusAwareSelectRenderable extends SelectRenderable {
           line,
           3,
           y,
-          parseColor(input.option.detailLineColors?.[index] ?? defaultDetailColor),
+          parseColor(
+            input.option.detailLineColors?.[index] ?? defaultDetailColor,
+          ),
         );
       });
   }

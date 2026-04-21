@@ -120,7 +120,14 @@ describe("formatClaudeSessionTranscript", () => {
 describe("loadAgentSessionTranscript", () => {
   test("finds codex transcripts by backend session id suffix", async () => {
     const homeDir = await createTempHome();
-    const codexDir = path.join(homeDir, ".codex", "sessions", "2026", "03", "25");
+    const codexDir = path.join(
+      homeDir,
+      ".codex",
+      "sessions",
+      "2026",
+      "03",
+      "25",
+    );
     await mkdir(codexDir, { recursive: true });
     const sessionId = "019d-session-codex";
     const sourcePath = path.join(

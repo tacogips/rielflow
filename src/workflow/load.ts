@@ -13,10 +13,15 @@ import {
   resolveEffectiveRoots,
   resolveWorkflowScopedPath,
 } from "./paths";
-import { validateWorkflowBundle } from "./validate";
+import { validateWorkflowBundleAsync } from "./validate";
+import {
+  resolveWorkflowSource,
+  withResolvedWorkflowSourceOptions,
+} from "./catalog";
 import type {
   LoadOptions,
   NormalizedWorkflowBundle,
+  ResolvedWorkflowSource,
   ValidationIssue,
 } from "./types";
 
@@ -25,10 +30,16 @@ export interface LoadedWorkflow {
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
   readonly bundle: NormalizedWorkflowBundle;
+  readonly source?: ResolvedWorkflowSource;
 }
 
 export interface LoadFailure {
-  readonly code: "INVALID_WORKFLOW_NAME" | "NOT_FOUND" | "IO" | "VALIDATION";
+  readonly code:
+    | "INVALID_WORKFLOW_NAME"
+    | "INVALID_SCOPE"
+    | "NOT_FOUND"
+    | "IO"
+    | "VALIDATION";
   readonly message: string;
   readonly issues?: readonly ValidationIssue[];
 }
@@ -131,8 +142,7 @@ async function resolvePromptTemplateFileForNode(input: {
     if (!promptText.ok) {
       return err({
         code: promptText.error.code,
-        message:
-          `failed resolving ${spec.fileField} for '${input.nodeFile}': ${promptText.error.message}`,
+        message: `failed resolving ${spec.fileField} for '${input.nodeFile}': ${promptText.error.message}`,
       });
     }
 
@@ -232,10 +242,13 @@ export async function loadWorkflowFromDisk(
     nodePayloads[nodeFile] = resolvedNodeRaw.value;
   }
 
-  const validation = validateWorkflowBundle({
-    workflow: workflowRaw.value,
-    nodePayloads,
-  });
+  const validation = await validateWorkflowBundleAsync(
+    {
+      workflow: workflowRaw.value,
+      nodePayloads,
+    },
+    options,
+  );
 
   if (!validation.ok) {
     return err({
@@ -272,6 +285,39 @@ export async function loadWorkflowFromDisk(
   });
 }
 
+export async function loadWorkflowFromCatalog(
+  workflowName: string,
+  options: LoadOptions = {},
+): Promise<Result<LoadedWorkflow, LoadFailure>> {
+  const source = await resolveWorkflowSource(workflowName, options);
+  if (!source.ok) {
+    return err({
+      code:
+        source.error.code === "INVALID_WORKFLOW_NAME"
+          ? "INVALID_WORKFLOW_NAME"
+          : source.error.code === "INVALID_SCOPE"
+            ? "INVALID_SCOPE"
+            : source.error.code === "IO"
+              ? "IO"
+              : "NOT_FOUND",
+      message: source.error.message,
+    });
+  }
+
+  const loaded = await loadWorkflowFromDisk(
+    workflowName,
+    withResolvedWorkflowSourceOptions(source.value, options),
+  );
+  if (!loaded.ok) {
+    return loaded;
+  }
+
+  return ok({
+    ...loaded.value,
+    source: source.value,
+  });
+}
+
 export async function loadWorkflowByIdFromDisk(
   workflowId: string,
   options: LoadOptions = {},
@@ -284,7 +330,9 @@ export async function loadWorkflowByIdFromDisk(
   const roots = resolveEffectiveRoots(options);
   let directoryEntries: Awaited<ReturnType<typeof readdir>>;
   try {
-    directoryEntries = await readdir(roots.workflowRoot, { withFileTypes: true });
+    directoryEntries = await readdir(roots.workflowRoot, {
+      withFileTypes: true,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     return err({
@@ -298,7 +346,10 @@ export async function loadWorkflowByIdFromDisk(
     .sort((left, right) => left.name.localeCompare(right.name));
 
   for (const entry of candidateDirectories) {
-    const candidateWorkflowDirectory = path.join(roots.workflowRoot, entry.name);
+    const candidateWorkflowDirectory = path.join(
+      roots.workflowRoot,
+      entry.name,
+    );
     const candidateWorkflowId = await readWorkflowIdFromDirectory(
       candidateWorkflowDirectory,
     );
@@ -315,16 +366,14 @@ export async function loadWorkflowByIdFromDisk(
   if (direct.ok) {
     return err({
       code: "NOT_FOUND",
-      message:
-        `workflow id '${workflowId}' was not found under workflow root '${roots.workflowRoot}'`,
+      message: `workflow id '${workflowId}' was not found under workflow root '${roots.workflowRoot}'`,
     });
   }
 
   return direct.error.code === "NOT_FOUND"
     ? err({
         code: "NOT_FOUND",
-        message:
-          `workflow id '${workflowId}' was not found under workflow root '${roots.workflowRoot}'`,
+        message: `workflow id '${workflowId}' was not found under workflow root '${roots.workflowRoot}'`,
       })
     : direct;
 }

@@ -655,7 +655,8 @@ export async function runOpenTuiWorkflowApp(
       loadedWorkflow,
       activeSubworkflow,
     );
-    workflowDefinitionText.content = buildWorkflowDefinitionContent(loadedWorkflow);
+    workflowDefinitionText.content =
+      buildWorkflowDefinitionContent(loadedWorkflow);
     runWorkflowText.content = buildWorkflowRunPreview(loadedWorkflow);
     runStatusText.content = buildWorkflowRunStatusContent({
       loadedWorkflow,
@@ -863,27 +864,27 @@ export async function runOpenTuiWorkflowApp(
           ? confirmPopup
           : nodeDefinitionPopupOpen
             ? nodeDefinitionPopup
-          : agentSessionPopupOpen
-            ? agentSessionPopup
-            : screenMode === "workspace"
-              ? workflowSelect
-              : screenMode === "definition"
-                ? focusPane === "definition"
-                  ? mountedRefs.workflowDefinitionPane
-                  : workflowDefinitionNodeSelect
-              : screenMode === "run"
-                ? inputTextarea
-                : focusPane === "sessions"
-                  ? sessionSelect
-                  : focusPane === "nodes"
-                    ? nodeSelect
-                    : focusPane === "detail"
-                      ? detailMode === "summary"
-                        ? detailSummarySelect
-                        : detailScroll
-                      : editingInput
-                        ? inputTextarea
-                        : inputShell;
+            : agentSessionPopupOpen
+              ? agentSessionPopup
+              : screenMode === "workspace"
+                ? workflowSelect
+                : screenMode === "definition"
+                  ? focusPane === "definition"
+                    ? mountedRefs.workflowDefinitionPane
+                    : workflowDefinitionNodeSelect
+                  : screenMode === "run"
+                    ? inputTextarea
+                    : focusPane === "sessions"
+                      ? sessionSelect
+                      : focusPane === "nodes"
+                        ? nodeSelect
+                        : focusPane === "detail"
+                          ? detailMode === "summary"
+                            ? detailSummarySelect
+                            : detailScroll
+                          : editingInput
+                            ? inputTextarea
+                            : inputShell;
     focusOpenTuiTarget(focusTarget);
     renderer.requestRender();
   };
@@ -975,9 +976,8 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     try {
-      workspaceLatestRunView = await options.loadRuntimeSessionView(
-        latestSessionId,
-      );
+      workspaceLatestRunView =
+        await options.loadRuntimeSessionView(latestSessionId);
       workspaceLatestRunError = undefined;
     } catch (error: unknown) {
       workspaceLatestRunView = undefined;
@@ -1240,7 +1240,8 @@ export async function runOpenTuiWorkflowApp(
   };
 
   const closeConfirmPopup = async (): Promise<void> => {
-    const returnFocusPane = confirmPopupKind === "run-confirm" ? "input" : "sessions";
+    const returnFocusPane =
+      confirmPopupKind === "run-confirm" ? "input" : "sessions";
     if (confirmPopupKind === "run-confirm") {
       pendingRunRuntimeVariables = undefined;
     }
@@ -1267,9 +1268,7 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     if (session.status === "paused" || session.status === "running") {
-      setStatus(
-        `Cannot delete a workflow run while it is ${session.status}`,
-      );
+      setStatus(`Cannot delete a workflow run while it is ${session.status}`);
       await render();
       return;
     }

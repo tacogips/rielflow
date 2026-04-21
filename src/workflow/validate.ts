@@ -18,19 +18,28 @@ import {
   normalizeNodeExecutionBackend,
 } from "./backend";
 import {
+  createAsyncNodeAddonRegistry,
+  createNodeAddonRegistry,
+  resolveNodeAddonPayload,
+  resolveNodeAddonPayloadAsync,
+} from "./node-addons";
+import {
   DEFAULT_CONTAINER_RUNNER_KIND,
   DEFAULT_MAX_LOOP_ITERATIONS,
   DEFAULT_NODE_TIMEOUT_MS,
   NODE_ID_PATTERN,
   type ArgumentBinding,
+  type AsyncNodeAddonPayloadResolver,
   type CommandExecution,
   type ContainerBuild,
   type ContainerExecution,
   type ContainerRuntimeDefaults,
   type ContainerRunnerKind,
   type JsonObject,
+  type LoadOptions,
   type CompletionRule,
   type NodeControlKind,
+  type NodeAddonPayloadResolver,
   type NodeOutputContract,
   type NodeDurability,
   type LoopRule,
@@ -50,6 +59,8 @@ import {
   type WorkflowEdge,
   type WorkflowJson,
   type WorkflowNodeExecutionPolicy,
+  type WorkflowNodeAddonEnvBinding,
+  type WorkflowNodeAddonRef,
   type WorkflowNodeRepeatPolicy,
   type WorkflowNodeRef,
   type WorkflowPrompts,
@@ -60,6 +71,22 @@ interface RawBundle {
   readonly workflow: unknown;
   readonly nodePayloads: Readonly<Record<string, unknown>>;
 }
+
+export interface WorkflowValidationOptions
+  extends Pick<
+    LoadOptions,
+    | "workflowRoot"
+    | "workflowScope"
+    | "userRoot"
+    | "projectRoot"
+    | "addonRoot"
+    | "resolvedWorkflowSource"
+    | "env"
+    | "cwd"
+    | "nodeAddons"
+    | "asyncNodeAddonResolvers"
+    | "nodeAddonResolvers"
+  > {}
 
 type UnknownRecord = Record<string, unknown>;
 type ValidationResult = Result<
@@ -323,11 +350,7 @@ function normalizeContainerBuild(
     return undefined;
   }
 
-  const allowedKeys = new Set([
-    "contextPath",
-    "containerfilePath",
-    "target",
-  ]);
+  const allowedKeys = new Set(["contextPath", "containerfilePath", "target"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(
@@ -911,6 +934,168 @@ function normalizeCompletion(
   return { type: typeValue };
 }
 
+const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function isValidEnvVarName(value: string): boolean {
+  return ENV_VAR_NAME_PATTERN.test(value);
+}
+
+function normalizeWorkflowNodeAddonEnvBinding(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeAddonEnvBinding | undefined {
+  if (typeof value === "string") {
+    if (value.length === 0 || !isValidEnvVarName(value)) {
+      issues.push(
+        makeIssue("error", path, "must be a valid environment variable name"),
+      );
+      return undefined;
+    }
+    return { fromEnv: value };
+  }
+
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be a string or object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["fromEnv", "required"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue("error", `${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const fromEnv = value["fromEnv"];
+  if (typeof fromEnv !== "string" || !isValidEnvVarName(fromEnv)) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.fromEnv`,
+        "must be a valid environment variable name",
+      ),
+    );
+    return undefined;
+  }
+
+  const required = value["required"];
+  if (required !== undefined && typeof required !== "boolean") {
+    issues.push(makeIssue("error", `${path}.required`, "must be a boolean"));
+  }
+
+  return {
+    fromEnv,
+    ...(typeof required === "boolean" ? { required } : {}),
+  };
+}
+
+function normalizeWorkflowNodeAddonEnv(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): Readonly<Record<string, WorkflowNodeAddonEnvBinding>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const bindings: Record<string, WorkflowNodeAddonEnvBinding> = {};
+  for (const [targetEnv, bindingValue] of Object.entries(value)) {
+    if (!isValidEnvVarName(targetEnv)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${targetEnv}`,
+          "target must be a valid environment variable name",
+        ),
+      );
+      continue;
+    }
+    const binding = normalizeWorkflowNodeAddonEnvBinding(
+      bindingValue,
+      `${path}.${targetEnv}`,
+      issues,
+    );
+    if (binding !== undefined) {
+      bindings[targetEnv] = binding;
+    }
+  }
+  return bindings;
+}
+
+function normalizeWorkflowNodeAddonRef(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeAddonRef | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    if (value.length === 0) {
+      issues.push(makeIssue("error", path, "must be a non-empty string"));
+      return undefined;
+    }
+    return { name: value };
+  }
+
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be a string or object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["name", "version", "config", "env", "inputs"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue("error", `${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const name = readStringField(value, "name", path, issues);
+  const versionRaw = value["version"];
+  let version: string | undefined;
+  if (versionRaw !== undefined) {
+    if (typeof versionRaw === "string" && versionRaw.length > 0) {
+      version = versionRaw;
+    } else {
+      issues.push(
+        makeIssue("error", `${path}.version`, "must be a non-empty string"),
+      );
+    }
+  }
+
+  const configRaw = value["config"];
+  if (configRaw !== undefined && !isRecord(configRaw)) {
+    issues.push(makeIssue("error", `${path}.config`, "must be an object"));
+  }
+  const env = normalizeWorkflowNodeAddonEnv(
+    value["env"],
+    `${path}.env`,
+    issues,
+  );
+  const inputsRaw = value["inputs"];
+  if (inputsRaw !== undefined && !isRecord(inputsRaw)) {
+    issues.push(makeIssue("error", `${path}.inputs`, "must be an object"));
+  }
+
+  if (name === null) {
+    return undefined;
+  }
+
+  return {
+    name,
+    ...(version === undefined ? {} : { version }),
+    ...(isRecord(configRaw) ? { config: configRaw } : {}),
+    ...(env === undefined ? {} : { env }),
+    ...(isRecord(inputsRaw) ? { inputs: inputsRaw } : {}),
+  };
+}
+
 function normalizeNodeRef(
   value: unknown,
   index: number,
@@ -925,14 +1110,20 @@ function normalizeNodeRef(
   const id = readStringField(value, "id", path, issues);
   const nodeFileRaw = value["nodeFile"];
   const inlineNodeRaw = value[INLINE_NODE_FIELD];
+  const addonRaw = value["addon"];
+  const addon = normalizeWorkflowNodeAddonRef(
+    addonRaw,
+    `${path}.addon`,
+    issues,
+  );
   let nodeFile: string | null = null;
   if (nodeFileRaw === undefined) {
-    if (inlineNodeRaw === undefined) {
+    if (inlineNodeRaw === undefined && addonRaw === undefined) {
       issues.push(
         makeIssue(
           "error",
           `${path}.nodeFile`,
-          "is required unless node is provided inline",
+          "is required unless node or addon is provided",
         ),
       );
     } else if (id !== null) {
@@ -951,6 +1142,24 @@ function normalizeNodeRef(
         "error",
         `${path}.${INLINE_NODE_FIELD}`,
         "must be omitted when nodeFile is provided",
+      ),
+    );
+  }
+  if (addonRaw !== undefined && nodeFileRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "must be omitted when nodeFile is provided",
+      ),
+    );
+  }
+  if (addonRaw !== undefined && inlineNodeRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        `must be omitted when ${INLINE_NODE_FIELD} is provided`,
       ),
     );
   }
@@ -1025,6 +1234,22 @@ function normalizeNodeRef(
       );
     } else {
       kind = normalizedKind;
+      const usesAuthoredRoleFields =
+        Object.hasOwn(value, "role") || Object.hasOwn(value, "control");
+      if (
+        usesAuthoredRoleFields &&
+        (normalizedKind === "subworkflow-manager" ||
+          normalizedKind === "input" ||
+          normalizedKind === "output")
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.kind`,
+            `kind '${normalizedKind}' is legacy structural compatibility only and cannot be combined with authored role/control nodes`,
+          ),
+        );
+      }
       const derived = deriveRoleAndControlFromKind(normalizedKind);
       if (role !== undefined && role !== derived.role) {
         issues.push(
@@ -1113,6 +1338,24 @@ function normalizeNodeRef(
       ),
     );
   }
+  if (addon !== undefined && roleRaw === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "add-on nodes must declare role 'worker'",
+      ),
+    );
+  }
+  if (role === "manager" && addon !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.addon`,
+        "manager-role nodes cannot reference add-ons",
+      ),
+    );
+  }
 
   if (id === null || nodeFile === null) {
     return null;
@@ -1136,6 +1379,7 @@ function normalizeNodeRef(
   return {
     id,
     nodeFile,
+    ...(addon === undefined ? {} : { addon }),
     ...(kind === undefined ? {} : { kind }),
     ...(role === undefined ? {} : { role }),
     ...(control === undefined ? {} : { control }),
@@ -2143,10 +2387,7 @@ function normalizeWorkflow(
         .filter((entry): entry is SubWorkflowConversation => entry !== null)
     : undefined;
 
-  if (
-    usesAuthoredRoleModel &&
-    (subWorkflowConversations?.length ?? 0) > 0
-  ) {
+  if (usesAuthoredRoleModel && (subWorkflowConversations?.length ?? 0) > 0) {
     issues.push(
       makeIssue(
         "error",
@@ -2316,27 +2557,39 @@ function normalizeNodeTemplateFields(args: {
   };
 }
 
-function normalizeNodePayload(
-  nodeId: string,
-  nodeFile: string,
-  payload: unknown,
-  issues: ValidationIssue[],
-): NodePayload | null {
-  const path = `nodePayloads.${nodeFile}`;
+function normalizeNodePayload(input: {
+  readonly nodeId: string;
+  readonly nodeFile: string;
+  readonly payload: unknown;
+  readonly issues: ValidationIssue[];
+  readonly path?: string;
+}): NodePayload | null {
+  const path = input.path ?? `nodePayloads.${input.nodeFile}`;
+  const payload = input.payload;
+  const issues = input.issues;
   if (!isRecord(payload)) {
     issues.push(makeIssue("error", path, "must be an object"));
     return null;
   }
 
   const id = readStringField(payload, "id", path, issues);
-  if (id !== null && id !== nodeId) {
-    issues.push(makeIssue("error", `${path}.id`, `must equal ${nodeId}`));
+  if (id !== null && id !== input.nodeId) {
+    issues.push(makeIssue("error", `${path}.id`, `must equal ${input.nodeId}`));
   }
 
   let nodeType: NodeType = "agent";
   const nodeTypeRaw = payload["nodeType"];
   if (nodeTypeRaw !== undefined) {
-    if (isNodeType(nodeTypeRaw)) {
+    if (nodeTypeRaw === "addon") {
+      nodeType = "addon";
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.nodeType`,
+          "nodeType 'addon' is runtime-owned; author add-ons with workflow.nodes[].addon",
+        ),
+      );
+    } else if (isNodeType(nodeTypeRaw)) {
       nodeType = nodeTypeRaw;
     } else {
       issues.push(
@@ -2415,7 +2668,8 @@ function normalizeNodePayload(
     nodeType === "agent" &&
     model !== undefined &&
     requiresSeparatedModel(executionBackend) &&
-    (normalizeCliAgentBackend(model) !== null || isLegacyCliModelIdentifier(model))
+    (normalizeCliAgentBackend(model) !== null ||
+      isLegacyCliModelIdentifier(model))
   ) {
     issues.push(
       makeIssue(
@@ -2776,6 +3030,7 @@ function normalizeNodePayload(
   if (
     id === null ||
     variables === null ||
+    nodeType === "addon" ||
     (nodeType === "agent" &&
       (model === undefined || promptTemplate === undefined))
   ) {
@@ -3278,7 +3533,8 @@ function runSemanticValidation(
       node.role === "manager" &&
       (payload.nodeType === "command" ||
         payload.nodeType === "container" ||
-        payload.nodeType === "user-action")
+        payload.nodeType === "user-action" ||
+        payload.nodeType === "addon")
     ) {
       issues.push(
         makeIssue(
@@ -4085,8 +4341,101 @@ function runSemanticValidation(
   }
 }
 
+function validateResolvedAddonPayload(input: {
+  readonly authoredAddonName: string;
+  readonly expectedNodeId: string;
+  readonly payload: unknown;
+  readonly path: string;
+  readonly issues: ValidationIssue[];
+}): boolean {
+  const payload = input.payload;
+  let valid = true;
+  if (!isRecord(payload)) {
+    input.issues.push(
+      makeIssue("error", `${input.path}.payload`, "must be an object"),
+    );
+    return false;
+  }
+  if (payload["id"] !== input.expectedNodeId) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.id`,
+        `resolved add-on payload id must be '${input.expectedNodeId}'`,
+      ),
+    );
+    valid = false;
+  }
+  if (
+    !input.authoredAddonName.startsWith("divedra/") &&
+    payload["nodeType"] === "addon"
+  ) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.nodeType`,
+        "third-party add-on resolvers must return an ordinary agent, command, container, or user-action payload",
+      ),
+    );
+    valid = false;
+  }
+  if (
+    !input.authoredAddonName.startsWith("divedra/") &&
+    payload["addon"] !== undefined
+  ) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.path}.payload.addon`,
+        "third-party add-on resolvers must not return runtime add-on metadata",
+      ),
+    );
+    valid = false;
+  }
+  return valid;
+}
+
+function resolveSyncNodeAddonResolvers(
+  options: WorkflowValidationOptions,
+  issues: ValidationIssue[],
+): readonly NodeAddonPayloadResolver[] | undefined {
+  if (
+    options.asyncNodeAddonResolvers !== undefined &&
+    options.asyncNodeAddonResolvers.length > 0
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.nodes",
+        "async node add-on resolvers require validateWorkflowBundleAsync or loadWorkflowFromDisk",
+      ),
+    );
+  }
+
+  return options.nodeAddons === undefined || options.nodeAddons.length === 0
+    ? options.nodeAddonResolvers
+    : [
+        ...(options.nodeAddonResolvers ?? []),
+        createNodeAddonRegistry(options.nodeAddons),
+      ];
+}
+
+function resolveAsyncNodeAddonResolvers(
+  options: WorkflowValidationOptions,
+): readonly AsyncNodeAddonPayloadResolver[] | undefined {
+  const resolvers: AsyncNodeAddonPayloadResolver[] = [
+    ...(options.nodeAddonResolvers ?? []),
+    ...(options.asyncNodeAddonResolvers ?? []),
+  ];
+  if (options.nodeAddons !== undefined && options.nodeAddons.length > 0) {
+    resolvers.push(createAsyncNodeAddonRegistry(options.nodeAddons));
+  }
+  return resolvers.length === 0 ? undefined : resolvers;
+}
+
 export function validateWorkflowBundleDetailed(
   raw: RawBundle,
+  options: WorkflowValidationOptions = {},
 ): Result<ValidationSuccessDetails, readonly ValidationIssue[]> {
   const issues: ValidationIssue[] = [];
   const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
@@ -4096,9 +4445,54 @@ export function validateWorkflowBundleDetailed(
 
   const workflow = normalizeWorkflow(raw.workflow, issues);
 
+  const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
+
   const nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null) {
-    workflow.nodes.forEach((node) => {
+    workflow.nodes.forEach((node, index) => {
+      if (node.addon !== undefined) {
+        const resolved = resolveNodeAddonPayload({
+          nodeId: node.id,
+          addon: node.addon,
+          path: `workflow.nodes[${index}].addon`,
+          ...(options.resolvedWorkflowSource === undefined
+            ? {}
+            : { workflowSource: options.resolvedWorkflowSource }),
+          options,
+          ...(nodeAddonResolvers === undefined
+            ? {}
+            : { thirdPartyResolvers: nodeAddonResolvers }),
+        });
+        issues.push(...(resolved.issues ?? []));
+        if (
+          resolved.payload !== undefined &&
+          validateResolvedAddonPayload({
+            authoredAddonName: node.addon.name,
+            expectedNodeId: node.id,
+            payload: resolved.payload,
+            path: `workflow.nodes[${index}].addon`,
+            issues,
+          })
+        ) {
+          if (node.addon.name.startsWith("divedra/")) {
+            nodePayloads[node.id] = resolved.payload;
+            return;
+          }
+
+          const normalizedPayload = normalizeNodePayload({
+            nodeId: node.id,
+            nodeFile: node.nodeFile,
+            payload: resolved.payload,
+            issues,
+            path: `workflow.nodes[${index}].addon.payload`,
+          });
+          if (normalizedPayload !== null) {
+            nodePayloads[node.id] = normalizedPayload;
+          }
+        }
+        return;
+      }
+
       const payloadRaw = nodePayloadsRaw[node.nodeFile];
       if (payloadRaw === undefined) {
         issues.push(
@@ -4110,12 +4504,12 @@ export function validateWorkflowBundleDetailed(
         );
         return;
       }
-      const payload = normalizeNodePayload(
-        node.id,
-        node.nodeFile,
-        payloadRaw,
+      const payload = normalizeNodePayload({
+        nodeId: node.id,
+        nodeFile: node.nodeFile,
+        payload: payloadRaw,
         issues,
-      );
+      });
       if (payload !== null) {
         nodePayloads[node.id] = payload;
       }
@@ -4140,8 +4534,122 @@ export function validateWorkflowBundleDetailed(
   return ok({ bundle, issues });
 }
 
-export function validateWorkflowBundle(raw: RawBundle): ValidationResult {
-  const validation = validateWorkflowBundleDetailed(raw);
+export async function validateWorkflowBundleDetailedAsync(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): Promise<Result<ValidationSuccessDetails, readonly ValidationIssue[]>> {
+  const issues: ValidationIssue[] = [];
+  const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
+    raw.workflow,
+    raw.nodePayloads,
+  );
+
+  const workflow = normalizeWorkflow(raw.workflow, issues);
+  const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
+
+  const nodePayloads: Record<string, NodePayload> = {};
+  if (workflow !== null) {
+    for (const [index, node] of workflow.nodes.entries()) {
+      if (node.addon !== undefined) {
+        const resolved = await resolveNodeAddonPayloadAsync({
+          nodeId: node.id,
+          addon: node.addon,
+          path: `workflow.nodes[${index}].addon`,
+          ...(options.resolvedWorkflowSource === undefined
+            ? {}
+            : { workflowSource: options.resolvedWorkflowSource }),
+          options,
+          ...(nodeAddonResolvers === undefined
+            ? {}
+            : { thirdPartyResolvers: nodeAddonResolvers }),
+        });
+        issues.push(...(resolved.issues ?? []));
+        if (
+          resolved.payload !== undefined &&
+          validateResolvedAddonPayload({
+            authoredAddonName: node.addon.name,
+            expectedNodeId: node.id,
+            payload: resolved.payload,
+            path: `workflow.nodes[${index}].addon`,
+            issues,
+          })
+        ) {
+          if (node.addon.name.startsWith("divedra/")) {
+            nodePayloads[node.id] = resolved.payload;
+            continue;
+          }
+
+          const normalizedPayload = normalizeNodePayload({
+            nodeId: node.id,
+            nodeFile: node.nodeFile,
+            payload: resolved.payload,
+            issues,
+            path: `workflow.nodes[${index}].addon.payload`,
+          });
+          if (normalizedPayload !== null) {
+            nodePayloads[node.id] = normalizedPayload;
+          }
+        }
+        continue;
+      }
+
+      const payloadRaw = nodePayloadsRaw[node.nodeFile];
+      if (payloadRaw === undefined) {
+        issues.push(
+          makeIssue(
+            "error",
+            `nodePayloads.${node.nodeFile}`,
+            "node payload file is missing",
+          ),
+        );
+        continue;
+      }
+      const payload = normalizeNodePayload({
+        nodeId: node.id,
+        nodeFile: node.nodeFile,
+        payload: payloadRaw,
+        issues,
+      });
+      if (payload !== null) {
+        nodePayloads[node.id] = payload;
+      }
+    }
+  }
+
+  if (workflow === null) {
+    return err(issues);
+  }
+
+  const bundle: NormalizedWorkflowBundle = {
+    workflow,
+    nodePayloads,
+  };
+
+  runSemanticValidation(bundle, issues);
+  const allErrors = issues.filter((entry) => entry.severity === "error");
+  if (allErrors.length > 0) {
+    return err(issues);
+  }
+
+  return ok({ bundle, issues });
+}
+
+export function validateWorkflowBundle(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): ValidationResult {
+  const validation = validateWorkflowBundleDetailed(raw, options);
+  if (!validation.ok) {
+    return err(validation.error);
+  }
+  return ok(validation.value.bundle);
+}
+
+export async function validateWorkflowBundleAsync(
+  raw: RawBundle,
+  options: WorkflowValidationOptions = {},
+): Promise<ValidationResult> {
+  const validation = await validateWorkflowBundleDetailedAsync(raw, options);
   if (!validation.ok) {
     return err(validation.error);
   }

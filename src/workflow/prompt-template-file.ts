@@ -6,9 +6,7 @@ export interface WorkflowRelativePathFailure {
 }
 
 function splitWorkflowRelativePath(relativePath: string): readonly string[] {
-  return relativePath
-    .split(/[\\/]+/)
-    .filter((segment) => segment.length > 0);
+  return relativePath.split(/[\\/]+/).filter((segment) => segment.length > 0);
 }
 
 export function isSafeWorkflowRelativePath(relativePath: string): boolean {
@@ -28,7 +26,9 @@ export function isSafeWorkflowRelativePath(relativePath: string): boolean {
   return !segments.some((segment) => segment === "." || segment === "..");
 }
 
-export function isReservedWorkflowDefinitionPath(relativePath: string): boolean {
+export function isReservedWorkflowDefinitionPath(
+  relativePath: string,
+): boolean {
   const segments = splitWorkflowRelativePath(relativePath);
   if (segments.length === 0) {
     return false;
@@ -38,10 +38,7 @@ export function isReservedWorkflowDefinitionPath(relativePath: string): boolean 
   if (fileName === undefined) {
     return false;
   }
-  return (
-    fileName === "workflow.json" ||
-    /^node-.+\.json$/u.test(fileName)
-  );
+  return fileName === "workflow.json" || /^node-.+\.json$/u.test(fileName);
 }
 
 export function resolveWorkflowRelativePath(
@@ -50,14 +47,12 @@ export function resolveWorkflowRelativePath(
 ): Result<string, WorkflowRelativePathFailure> {
   if (!isSafeWorkflowRelativePath(relativePath)) {
     return err({
-      message:
-        `promptTemplateFile '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
+      message: `promptTemplateFile '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
     });
   }
   if (isReservedWorkflowDefinitionPath(relativePath)) {
     return err({
-      message:
-        `promptTemplateFile '${relativePath}' must not overwrite canonical workflow definition files`,
+      message: `promptTemplateFile '${relativePath}' must not overwrite canonical workflow definition files`,
     });
   }
 
@@ -65,8 +60,7 @@ export function resolveWorkflowRelativePath(
   const relative = path.relative(workflowDirectory, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     return err({
-      message:
-        `promptTemplateFile '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
+      message: `promptTemplateFile '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
     });
   }
 

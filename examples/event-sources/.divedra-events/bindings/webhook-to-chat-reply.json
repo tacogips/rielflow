@@ -1,0 +1,17 @@
+{
+  "id": "webhook-to-chat-reply",
+  "sourceId": "example-reply-webhook",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "workflowName": "chat-reply-webhook",
+  "inputMapping": {
+    "mode": "event-input",
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": false,
+    "allowUnsafeSyncWebhook": true,
+    "dedupeWindowMs": 86400000
+  }
+}

@@ -3342,6 +3342,7 @@ describe("runWorkflow", () => {
     expect(managerInput.promptText).not.toContain(
       '"type":"deliver-to-child-input"',
     );
+    expect(managerInput.promptText).not.toContain("Sub-workflows:");
     expect(managerInput.promptText).toContain("Node-specific instruction:");
     expect(managerInput.promptText).toContain("manager B");
 

@@ -38,12 +38,43 @@ export interface AdapterExecutionInput {
   readonly upstreamCommunicationIds: readonly string[];
   readonly executionMailbox?: NodeExecutionMailbox;
   readonly backendSession?: AdapterBackendSessionInput;
+  readonly divedraHookContext?: AdapterDivedraHookContext;
   readonly ambientManagerContext?: AdapterAmbientManagerContext;
   readonly output?: AdapterOutputContractInput;
 }
 
 export interface AdapterAmbientManagerContext {
   readonly environment: AmbientManagerControlPlaneEnvironment;
+}
+
+export interface AdapterDivedraHookContext {
+  readonly environment: {
+    readonly DIVEDRA_WORKFLOW_ID: string;
+    readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
+    readonly DIVEDRA_NODE_ID: string;
+    readonly DIVEDRA_NODE_EXEC_ID: string;
+    readonly DIVEDRA_AGENT_BACKEND?: string;
+  };
+}
+
+export function buildAdapterDivedraHookContext(input: {
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly agentBackend?: string;
+}): AdapterDivedraHookContext {
+  return {
+    environment: {
+      DIVEDRA_WORKFLOW_ID: input.workflowId,
+      DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
+      DIVEDRA_NODE_ID: input.nodeId,
+      DIVEDRA_NODE_EXEC_ID: input.nodeExecId,
+      ...(input.agentBackend === undefined
+        ? {}
+        : { DIVEDRA_AGENT_BACKEND: input.agentBackend }),
+    },
+  };
 }
 
 export interface AdapterOutputContractInput {

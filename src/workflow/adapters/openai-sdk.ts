@@ -81,11 +81,7 @@ function extractOpenAiText(response: unknown): string {
       continue;
     }
     for (const entry of content) {
-      if (
-        typeof entry !== "object" ||
-        entry === null ||
-        Array.isArray(entry)
-      ) {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
         continue;
       }
       if ((entry as Record<string, unknown>)["type"] !== "output_text") {

@@ -47,7 +47,9 @@ export function resolveTabFocusTarget(input: {
 }): FocusPane | undefined {
   if (input.navigation.screenMode === "definition") {
     if (input.direction === "next") {
-      return input.navigation.focusPane === "definition" ? "nodes" : "definition";
+      return input.navigation.focusPane === "definition"
+        ? "nodes"
+        : "definition";
     }
     return input.navigation.focusPane === "nodes" ? "definition" : "nodes";
   }
@@ -291,7 +293,10 @@ export function resolveOpenTuiCopyTarget(
   }
 
   if (input.screenMode === "definition") {
-    if (input.focusPane === "nodes" && input.selectedWorkflowNodeId !== undefined) {
+    if (
+      input.focusPane === "nodes" &&
+      input.selectedWorkflowNodeId !== undefined
+    ) {
       return {
         label: "workflow node id",
         value: input.selectedWorkflowNodeId,

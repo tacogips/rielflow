@@ -21,7 +21,10 @@ import type {
 import { describeWorkflowNodeKind } from "../../workflow/node-role";
 import { getNormalizedNodePayload } from "../../workflow/types";
 import type { OpenTuiRichSelectOption } from "../opentui-view-shared";
-import { resolveOpenTuiNodeTypeColor, resolveOpenTuiStatusColor } from "../opentui-view-shared";
+import {
+  resolveOpenTuiNodeTypeColor,
+  resolveOpenTuiStatusColor,
+} from "../opentui-view-shared";
 import { detectWorkflowInputMode } from "./input";
 import { resolveDirectChildSubworkflows } from "./navigation";
 import {
@@ -65,7 +68,9 @@ import {
 const WORKSPACE_LATEST_RESULT_PREVIEW_LINES = 18;
 
 function buildLegacySubWorkflowCountSegment(count: number): string {
-  return count === 0 ? "" : `  Legacy structural sub-workflows: ${String(count)}`;
+  return count === 0
+    ? ""
+    : `  Legacy structural sub-workflows: ${String(count)}`;
 }
 
 function appendWorkflowBoundarySections(input: {
@@ -135,7 +140,8 @@ function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
       nodeRef === undefined
         ? undefined
         : getNormalizedNodePayload(loaded.bundle, nodeRef.id);
-    const kind = nodeRef === undefined ? "task" : describeWorkflowNodeKind(nodeRef);
+    const kind =
+      nodeRef === undefined ? "task" : describeWorkflowNodeKind(nodeRef);
     const visualMetadata = resolveWorkflowNodeVisualMetadata({
       nodeId,
       visualMetadataByNodeId: derivedNodes,
@@ -202,10 +208,10 @@ export function buildWorkflowSummaryPreview(
   const workflow = loadedWorkflow.bundle.workflow;
   const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
   const managerLabel =
-    workflow.hasManagerNode === false
-      ? "none"
-      : workflow.managerNodeId;
-  const workflowCallIds = (workflow.workflowCalls ?? []).map((entry) => entry.id);
+    workflow.hasManagerNode === false ? "none" : workflow.managerNodeId;
+  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+    (entry) => entry.id,
+  );
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -213,9 +219,7 @@ export function buildWorkflowSummaryPreview(
 
   append(
     t`${dim(
-      `Nodes: ${String(
-        workflow.nodes.length,
-      )}  Workflow calls: ${String(
+      `Nodes: ${String(workflow.nodes.length)}  Workflow calls: ${String(
         workflowCallIds.length,
       )}${buildLegacySubWorkflowCountSegment(
         workflow.subWorkflows.length,
@@ -246,10 +250,10 @@ export function buildWorkflowRunPreview(
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
   const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
   const managerLabel =
-    workflow.hasManagerNode === false
-      ? "none"
-      : workflow.managerNodeId;
-  const workflowCallIds = (workflow.workflowCalls ?? []).map((entry) => entry.id);
+    workflow.hasManagerNode === false ? "none" : workflow.managerNodeId;
+  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+    (entry) => entry.id,
+  );
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -275,10 +279,7 @@ export function buildWorkflowRunPreview(
 
   append(t`\n\n${brightWhite("Nodes")}`);
   workflow.nodes.forEach((nodeRef) => {
-    const payload = getNormalizedNodePayload(
-      loadedWorkflow.bundle,
-      nodeRef.id,
-    );
+    const payload = getNormalizedNodePayload(loadedWorkflow.bundle, nodeRef.id);
     const purpose =
       payload?.description ??
       payload?.output?.description ??
@@ -311,7 +312,9 @@ export function buildWorkflowDefinitionContent(
   const workflow = loadedWorkflow.bundle.workflow;
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
   const subworkflowIds = workflow.subWorkflows.map((entry) => entry.id);
-  const workflowCallIds = (workflow.workflowCalls ?? []).map((entry) => entry.id);
+  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+    (entry) => entry.id,
+  );
   return [
     `Workflow: ${workflow.workflowId}`,
     `Workflow name: ${loadedWorkflow.workflowName}`,
@@ -450,7 +453,9 @@ export function buildWorkflowSelectorHistorySummary(input: {
   if (latestSession === undefined) {
     return new StyledText(chunks);
   }
-  const latestRunResult = resolveWorkflowFinalResult(input.latestRunSessionView);
+  const latestRunResult = resolveWorkflowFinalResult(
+    input.latestRunSessionView,
+  );
   append(
     t`\n\n${brightWhite("Latest Run")}\n${dim(
       `sessionId: ${latestSession.sessionId}`,
@@ -464,9 +469,7 @@ export function buildWorkflowSelectorHistorySummary(input: {
   );
 
   if (hasVisibleText(latestSession.lastError ?? undefined)) {
-    append(
-      t`\nlast error: ${truncate(latestSession.lastError ?? "", 120)}`,
-    );
+    append(t`\nlast error: ${truncate(latestSession.lastError ?? "", 120)}`);
   }
   if (input.latestRunStatusError !== undefined) {
     append(t`\nstatus refresh note: ${input.latestRunStatusError}`);
@@ -631,10 +634,7 @@ export function buildNodeSelectOptions(
   const visualMetadataByNodeId = buildWorkflowNodeVisualMetadata(workflow);
   return session.nodeExecutions.map((execution) => {
     const kind = resolveNodeKind(workflow.bundle.workflow, execution.nodeId);
-    const payload = getNormalizedNodePayload(
-      workflow.bundle,
-      execution.nodeId,
-    );
+    const payload = getNormalizedNodePayload(workflow.bundle, execution.nodeId);
     const owningSubworkflow = resolveOwningSubWorkflow(
       workflow.bundle.workflow,
       execution.nodeId,

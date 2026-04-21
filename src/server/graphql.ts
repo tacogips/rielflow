@@ -85,7 +85,9 @@ function parseGraphqlRequestEnvelope(value: unknown): GraphqlRequestEnvelope {
   const body = value as Readonly<Record<string, unknown>>;
   const query = typeof body["query"] === "string" ? body["query"].trim() : "";
   if (query.length === 0) {
-    throw new Error("GraphQL request body must include a non-empty query string");
+    throw new Error(
+      "GraphQL request body must include a non-empty query string",
+    );
   }
 
   const operationName =
@@ -101,7 +103,9 @@ function parseGraphqlRequestEnvelope(value: unknown): GraphqlRequestEnvelope {
   };
 }
 
-function toGraphqlErrorEntries(value: unknown): readonly GraphqlErrorEntry[] | undefined {
+function toGraphqlErrorEntries(
+  value: unknown,
+): readonly GraphqlErrorEntry[] | undefined {
   if (!Array.isArray(value) || value.length === 0) {
     return undefined;
   }
@@ -199,7 +203,9 @@ export async function executeGraphqlDocument(
     request,
     context,
   );
-  const payload = parseGraphqlExecutionResult((await response.json()) as unknown);
+  const payload = parseGraphqlExecutionResult(
+    (await response.json()) as unknown,
+  );
 
   if (payload.errors !== undefined && payload.errors.length > 0) {
     const [firstError] = payload.errors;
@@ -238,7 +244,9 @@ export async function handleGraphqlRequest(
       forwardedRequest,
       buildHttpExecutionContext(request, context),
     );
-    const execution = parseGraphqlExecutionResult((await response.json()) as unknown);
+    const execution = parseGraphqlExecutionResult(
+      (await response.json()) as unknown,
+    );
     return jsonResponse({
       data: execution.data ?? null,
       ...(execution.errors === undefined ? {} : { errors: execution.errors }),

@@ -1,6 +1,4 @@
-import {
-  createCommunicationService,
-} from "./communication-service";
+import { createCommunicationService } from "./communication-service";
 import { loadWorkflowFromDisk } from "./load";
 import {
   createManagerSessionStore,
@@ -10,10 +8,7 @@ import {
   assertCommunicationInManagerScope,
   parseManagerControlActions,
 } from "./manager-control";
-import {
-  loadSession,
-  saveSession,
-} from "./session-store";
+import { loadSession, saveSession } from "./session-store";
 import type { WorkflowSessionState } from "./session";
 import {
   normalizeAttachmentsForIdempotency,
@@ -207,8 +202,7 @@ export function createManagerMessageService(
                   break;
                 case "replay-communication": {
                   const sourceCommunication = nextSession.communications.find(
-                    (entry) =>
-                      entry.communicationId === action.communicationId,
+                    (entry) => entry.communicationId === action.communicationId,
                   );
                   if (sourceCommunication === undefined) {
                     throw new Error(

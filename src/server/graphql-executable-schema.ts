@@ -23,6 +23,17 @@ const GRAPHQL_SCHEMA_TEXT = `
     legacySubWorkflows: Int!
   }
 
+  type WorkflowAddonSource {
+    nodeId: String!
+    name: String!
+    version: String!
+    scope: String!
+    addonRoot: String!
+    addonDirectory: String!
+    manifestPath: String!
+    scopeRoot: String
+  }
+
   type WorkflowView {
     workflowName: String!
     workflowId: String!
@@ -36,6 +47,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodeFiles: [String!]!
     workflowDirectory: String!
     artifactWorkflowRoot: String!
+    addonSources: [WorkflowAddonSource!]!
   }
 
   type WorkflowDefinitionView {
@@ -124,11 +136,59 @@ const GRAPHQL_SCHEMA_TEXT = `
     at: String!
   }
 
+  type RuntimeHookEventRecord {
+    hookEventId: String!
+    workflowId: String!
+    workflowExecutionId: String!
+    nodeId: String!
+    nodeExecId: String!
+    managerSessionId: String
+    vendor: String!
+    agentSessionId: String!
+    rawEventName: String!
+    eventName: String!
+    cwd: String!
+    transcriptPath: String
+    model: String
+    turnId: String
+    payloadHash: String!
+    payloadRefJson: String
+    responseJson: String
+    status: String!
+    error: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type RuntimeEventReplyDispatchRecord {
+    idempotencyKey: String!
+    sourceId: String!
+    provider: String!
+    workflowId: String!
+    workflowExecutionId: String!
+    nodeId: String!
+    nodeExecId: String!
+    eventId: String!
+    conversationId: String!
+    threadId: String
+    actorId: String
+    status: String!
+    dispatchId: String
+    providerMessageId: String
+    requestJson: String!
+    responseJson: String
+    error: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type WorkflowExecutionView {
     workflowExecutionId: String!
     session: WorkflowSessionState!
     nodeExecutions: [RuntimeNodeExecutionSummary!]!
     nodeLogs: [RuntimeNodeLogEntry!]!
+    hookEvents: [RuntimeHookEventRecord!]!
+    replyDispatches: [RuntimeEventReplyDispatchRecord!]!
   }
 
   type NodeExecutionView {
@@ -223,6 +283,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodes: [NodeExecutionView!]!
     communications: CommunicationConnection!
     nodeLogs: [RuntimeNodeLogEntry!]!
+    hookEvents: [RuntimeHookEventRecord!]!
+    replyDispatches: [RuntimeEventReplyDispatchRecord!]!
   }
 
   type ManagerIntentSummary {
@@ -248,6 +310,7 @@ const GRAPHQL_SCHEMA_TEXT = `
   type ValidateWorkflowDefinitionPayload {
     valid: Boolean!
     workflowId: String
+    addonSources: [WorkflowAddonSource!]
     warnings: JSON
     issues: JSON
     error: String

@@ -107,21 +107,27 @@ describe("manager-session-store", () => {
       idempotencyKey: "idem-1",
     });
     expect(idempotent?.normalizedRequestHash).toBe("sha256:hash");
-    expect(await store.validateAuthToken({
-      managerSessionId: "mgrsess-000001",
-      authToken,
-      now: "2026-03-15T12:00:00.000Z",
-    })).not.toBeNull();
-    expect(await store.validateAuthToken({
-      managerSessionId: "mgrsess-000001",
-      authToken: "wrong-token",
-      now: "2026-03-15T12:00:00.000Z",
-    })).toBeNull();
-    expect(await store.validateAuthToken({
-      managerSessionId: "mgrsess-000001",
-      authToken,
-      now: "2026-03-16T00:00:00.000Z",
-    })).toBeNull();
+    expect(
+      await store.validateAuthToken({
+        managerSessionId: "mgrsess-000001",
+        authToken,
+        now: "2026-03-15T12:00:00.000Z",
+      }),
+    ).not.toBeNull();
+    expect(
+      await store.validateAuthToken({
+        managerSessionId: "mgrsess-000001",
+        authToken: "wrong-token",
+        now: "2026-03-15T12:00:00.000Z",
+      }),
+    ).toBeNull();
+    expect(
+      await store.validateAuthToken({
+        managerSessionId: "mgrsess-000001",
+        authToken,
+        now: "2026-03-16T00:00:00.000Z",
+      }),
+    ).toBeNull();
 
     await store.createOrResumeSession({
       managerSessionId: "mgrsess-000001",
@@ -285,7 +291,7 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-delete-000001",
       idempotencyKey: "idem-delete-1",
       normalizedRequestHash: "sha256:delete",
-      responseJson: "{\"ok\":true}",
+      responseJson: '{"ok":true}',
       completedAt: "2026-03-15T00:02:00.000Z",
     });
 
@@ -338,13 +344,15 @@ describe("manager-session-store", () => {
       managerSessionId: "mgrsess-delete-workflow-000001",
       idempotencyKey: "idem-delete-workflow-1",
       normalizedRequestHash: "sha256:delete",
-      responseJson: "{\"ok\":true}",
+      responseJson: '{"ok":true}',
       completedAt: "2026-03-15T00:02:00.000Z",
     });
 
     await store.deleteByWorkflowId("demo");
 
-    expect(await store.loadSession("mgrsess-delete-workflow-000001")).toBeNull();
+    expect(
+      await store.loadSession("mgrsess-delete-workflow-000001"),
+    ).toBeNull();
     expect(await store.listMessages("mgrsess-delete-workflow-000001")).toEqual(
       [],
     );

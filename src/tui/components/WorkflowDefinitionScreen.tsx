@@ -65,8 +65,12 @@ export function WorkflowDefinitionScreen(props: WorkflowDefinitionScreenProps) {
           selectedBackgroundColor={
             OPEN_TUI_SELECT_THEMES.historyNodes.selectedBackgroundColor
           }
-          selectedTextColor={OPEN_TUI_SELECT_THEMES.historyNodes.selectedTextColor}
-          descriptionColor={OPEN_TUI_SELECT_THEMES.historyNodes.descriptionColor}
+          selectedTextColor={
+            OPEN_TUI_SELECT_THEMES.historyNodes.selectedTextColor
+          }
+          descriptionColor={
+            OPEN_TUI_SELECT_THEMES.historyNodes.descriptionColor
+          }
           selectedDescriptionColor={
             OPEN_TUI_SELECT_THEMES.historyNodes.selectedDescriptionColor
           }

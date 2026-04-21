@@ -1,18 +1,27 @@
 export enum HookVendor {
   ClaudeCode = "claude-code",
   Codex = "codex",
+  Gemini = "gemini",
 }
 
 export const SUPPORTED_HOOK_VENDORS = [
   HookVendor.ClaudeCode,
   HookVendor.Codex,
+  HookVendor.Gemini,
 ] as const;
 
 export enum HookEventName {
   SessionStart = "SessionStart",
   PreToolUse = "PreToolUse",
   PostToolUse = "PostToolUse",
+  BeforeTool = "BeforeTool",
+  AfterTool = "AfterTool",
   UserPromptSubmit = "UserPromptSubmit",
+  BeforeAgent = "BeforeAgent",
+  AfterAgent = "AfterAgent",
+  BeforeModel = "BeforeModel",
+  BeforeToolSelection = "BeforeToolSelection",
+  AfterModel = "AfterModel",
   Stop = "Stop",
   PostToolUseFailure = "PostToolUseFailure",
   PermissionRequest = "PermissionRequest",
@@ -31,6 +40,7 @@ export enum HookEventName {
   ElicitationResult = "ElicitationResult",
   WorktreeCreate = "WorktreeCreate",
   WorktreeRemove = "WorktreeRemove",
+  PreCompress = "PreCompress",
   PreCompact = "PreCompact",
   PostCompact = "PostCompact",
   SessionEnd = "SessionEnd",
@@ -72,4 +82,18 @@ export interface ParsedHookContext {
   readonly eventName: HookEventName;
   readonly rawEventName: string;
   readonly payload: HookInputPayload;
+  readonly divedra?: DivedraHookContext;
 }
+
+export interface DivedraHookContext {
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly agentSessionId: string;
+  readonly managerSessionId?: string;
+  readonly agentBackend?: string;
+}
+
+export type HookRecordingMode = "auto" | "off" | "required";
+export type HookPayloadCaptureMode = "redacted" | "metadata-only" | "full";

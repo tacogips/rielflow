@@ -1,10 +1,7 @@
 import { rm } from "node:fs/promises";
 import { loadWorkflowFromDisk } from "./load";
 import { createManagerSessionStore } from "./manager-session-store";
-import {
-  resolveAttachmentRoot,
-  resolveWorkflowScopedPath,
-} from "./paths";
+import { resolveAttachmentRoot, resolveWorkflowScopedPath } from "./paths";
 import { listRuntimeSessions } from "./runtime-db";
 import {
   listSessions,
@@ -51,7 +48,10 @@ async function collectSessionStates(input: {
 
   for (const sessionId of listedSessions.value) {
     const loadedSession = await loadSession(sessionId, input.options);
-    if (!loadedSession.ok || loadedSession.value.workflowId !== input.workflowId) {
+    if (
+      !loadedSession.ok ||
+      loadedSession.value.workflowId !== input.workflowId
+    ) {
       continue;
     }
     states.set(loadedSession.value.sessionId, loadedSession.value.status);

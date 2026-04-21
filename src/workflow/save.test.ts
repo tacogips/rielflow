@@ -139,6 +139,100 @@ describe("saveWorkflowToDisk", () => {
     expect(reloaded.value.bundle.workflow.entryNodeId).toBe("main-worker");
   });
 
+  test("preserves authored add-on node refs without writing generated node payloads", async () => {
+    const root = await makeTempDir();
+    const workflowDir = path.join(root, "chat-reply");
+    await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
+    await writeFile(
+      path.join(workflowDir, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "chat-reply",
+          description: "Reply to chat",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          entryNodeId: "answer",
+          nodes: [
+            {
+              id: "answer",
+              role: "worker",
+              nodeFile: "nodes/node-answer.json",
+            },
+            {
+              id: "reply",
+              role: "worker",
+              addon: {
+                name: "divedra/chat-reply-worker",
+                version: "1",
+                config: {
+                  textTemplate: "{{inbox.latest.output.payload.text}}",
+                  onMissingTarget: "intent-only",
+                },
+                inputs: {
+                  prefix: "Result",
+                },
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDir, "nodes", "node-answer.json"),
+      `${JSON.stringify(
+        {
+          id: "answer",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "Answer the chat request",
+          variables: {},
+          output: { description: "Answer payload" },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowFromDisk("chat-reply", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const saveResult = await saveWorkflowToDisk(
+      "chat-reply",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      { workflowRoot: root },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(workflowDir, "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).toContain('"addon"');
+    expect(workflowJsonText).toContain('"divedra/chat-reply-worker"');
+    expect(workflowJsonText).toContain('"inputs"');
+    expect(workflowJsonText).toContain('"prefix": "Result"');
+    expect(workflowJsonText).not.toContain(
+      '"nodeFile": "nodes/node-reply.json"',
+    );
+    await expect(
+      readFile(path.join(workflowDir, "nodes", "node-reply.json"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   test("does not leak derived role fields when re-saving legacy kind-authored workflows", async () => {
     const root = await makeTempDir();
     const workflowDir = path.join(root, "legacy-demo");
@@ -151,7 +245,6 @@ describe("saveWorkflowToDisk", () => {
           description: "Legacy workflow",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -164,7 +257,9 @@ describe("saveWorkflowToDisk", () => {
               nodeFile: "nodes/node-main-worker.json",
             },
           ],
-          edges: [{ from: "divedra-manager", to: "main-worker", when: "always" }],
+          edges: [
+            { from: "divedra-manager", to: "main-worker", when: "always" },
+          ],
           loops: [],
           branching: { mode: "fan-out" },
         },
@@ -249,7 +344,6 @@ describe("saveWorkflowToDisk", () => {
           description: "Legacy workflow",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -262,7 +356,9 @@ describe("saveWorkflowToDisk", () => {
               nodeFile: "nodes/node-main-worker.json",
             },
           ],
-          edges: [{ from: "divedra-manager", to: "main-worker", when: "always" }],
+          edges: [
+            { from: "divedra-manager", to: "main-worker", when: "always" },
+          ],
           loops: [],
           branching: { mode: "fan-out" },
         },
@@ -698,10 +794,16 @@ describe("saveWorkflowToDisk", () => {
     }
 
     await expect(
-      readFile(path.join(root, "demo", "nodes", "node-divedra-manager.json"), "utf8"),
+      readFile(
+        path.join(root, "demo", "nodes", "node-divedra-manager.json"),
+        "utf8",
+      ),
     ).rejects.toThrow(/ENOENT/u);
     await expect(
-      readFile(path.join(root, "demo", "prompts", "divedra-manager.md"), "utf8"),
+      readFile(
+        path.join(root, "demo", "prompts", "divedra-manager.md"),
+        "utf8",
+      ),
     ).rejects.toThrow(/ENOENT/u);
 
     const workerPromptText = await readFile(
@@ -754,7 +856,10 @@ describe("saveWorkflowToDisk", () => {
     }
 
     await expect(
-      readFile(path.join(root, "demo", "prompts", "divedra-manager.md"), "utf8"),
+      readFile(
+        path.join(root, "demo", "prompts", "divedra-manager.md"),
+        "utf8",
+      ),
     ).rejects.toThrow(/ENOENT/u);
 
     const renamedPromptText = await readFile(
@@ -838,7 +943,10 @@ describe("saveWorkflowToDisk", () => {
     }
 
     const workflowJson = JSON.parse(
-      await readFile(path.join(root, "minimal-managed", "workflow.json"), "utf8"),
+      await readFile(
+        path.join(root, "minimal-managed", "workflow.json"),
+        "utf8",
+      ),
     ) as {
       readonly defaults: Readonly<Record<string, unknown>>;
       readonly nodes: readonly Readonly<Record<string, unknown>>[];
@@ -884,7 +992,9 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.workflow.managerNodeId).toBe("divedra-manager");
+    expect(reloaded.value.bundle.workflow.managerNodeId).toBe(
+      "divedra-manager",
+    );
     expect(reloaded.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
     expect(reloaded.value.bundle.workflow.edges).toEqual([
       { from: "divedra-manager", to: "decision", when: "always" },
@@ -915,9 +1025,10 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    const originalPayload =
-      loaded.value.bundle.nodePayloads["divedra-manager"];
-    expect(originalPayload?.promptTemplateFile).toBe("prompts/divedra-manager.md");
+    const originalPayload = loaded.value.bundle.nodePayloads["divedra-manager"];
+    expect(originalPayload?.promptTemplateFile).toBe(
+      "prompts/divedra-manager.md",
+    );
 
     const updatedNodePayloads = {
       ...loaded.value.bundle.nodePayloads,
@@ -952,7 +1063,9 @@ describe("saveWorkflowToDisk", () => {
       path.join(root, "demo", "nodes", "node-divedra-manager.json"),
       "utf8",
     );
-    expect(nodeJsonRaw).toContain('"promptTemplateFile": "prompts/divedra-manager.md"');
+    expect(nodeJsonRaw).toContain(
+      '"promptTemplateFile": "prompts/divedra-manager.md"',
+    );
     expect(nodeJsonRaw).not.toContain('"promptTemplate":');
 
     const reloaded = await loadWorkflowFromDisk("demo", {
@@ -963,9 +1076,9 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
-      "Updated manager prompt from save path\n",
-    );
+    expect(
+      reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate,
+    ).toBe("Updated manager prompt from save path\n");
   });
 
   test("reuses existing promptTemplateFile content when inline promptTemplate is omitted on save", async () => {
@@ -986,9 +1099,10 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    const originalPayload =
-      loaded.value.bundle.nodePayloads["divedra-manager"];
-    expect(originalPayload?.promptTemplateFile).toBe("prompts/divedra-manager.md");
+    const originalPayload = loaded.value.bundle.nodePayloads["divedra-manager"];
+    expect(originalPayload?.promptTemplateFile).toBe(
+      "prompts/divedra-manager.md",
+    );
 
     const strippedPromptPayload = {
       ...originalPayload,
@@ -1050,8 +1164,7 @@ describe("saveWorkflowToDisk", () => {
         systemPromptTemplate: "Keep the manager role stable.",
         sessionStartPromptTemplateFile:
           "prompts/divedra-manager-session-start.md",
-        sessionStartPromptTemplate:
-          "## prompt\n{{prompt}}\n## args\n{{args}}",
+        sessionStartPromptTemplate: "## prompt\n{{prompt}}\n## args\n{{args}}",
       },
     };
 
@@ -1077,15 +1190,12 @@ describe("saveWorkflowToDisk", () => {
     expect(systemPromptText).toBe("Keep the manager role stable.\n");
 
     const sessionStartPromptText = await readFile(
-      path.join(
-        root,
-        "demo",
-        "prompts",
-        "divedra-manager-session-start.md",
-      ),
+      path.join(root, "demo", "prompts", "divedra-manager-session-start.md"),
       "utf8",
     );
-    expect(sessionStartPromptText).toBe("## prompt\n{{prompt}}\n## args\n{{args}}\n");
+    expect(sessionStartPromptText).toBe(
+      "## prompt\n{{prompt}}\n## args\n{{args}}\n",
+    );
 
     const nodeJsonRaw = await readFile(
       path.join(root, "demo", "nodes", "node-divedra-manager.json"),
@@ -1166,12 +1276,16 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
     expect(saveResult.error.code).toBe("VALIDATION");
-    expect(saveResult.error.issues?.some(
-      (issue) =>
-        issue.path ===
-          "nodePayloads.nodes/node-divedra-manager.json.promptTemplateFile" &&
-        issue.message.includes("must not target canonical workflow definition files"),
-    )).toBe(true);
+    expect(
+      saveResult.error.issues?.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.nodes/node-divedra-manager.json.promptTemplateFile" &&
+          issue.message.includes(
+            "must not target canonical workflow definition files",
+          ),
+      ),
+    ).toBe(true);
 
     const workflowJsonAfter = await readFile(
       path.join(root, "demo", "workflow.json"),
@@ -1228,12 +1342,16 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
     expect(saveResult.error.code).toBe("VALIDATION");
-    expect(saveResult.error.issues?.some(
-      (issue) =>
-        issue.path ===
-          "nodePayloads.nodes/node-divedra-manager.json.promptTemplateFile" &&
-        issue.message.includes("must not target canonical workflow definition files"),
-    )).toBe(true);
+    expect(
+      saveResult.error.issues?.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.nodes/node-divedra-manager.json.promptTemplateFile" &&
+          issue.message.includes(
+            "must not target canonical workflow definition files",
+          ),
+      ),
+    ).toBe(true);
 
     const nodeJsonAfter = await readFile(
       path.join(root, "demo", "nodes", "node-divedra-manager.json"),
@@ -1253,7 +1371,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -1287,7 +1404,9 @@ describe("saveWorkflowToDisk", () => {
       path.join(root, "inline-demo", "workflow.json"),
       "utf8",
     );
-    expect(workflowJsonRaw).toContain('"nodeFile": "nodes/node-divedra-manager.json"');
+    expect(workflowJsonRaw).toContain(
+      '"nodeFile": "nodes/node-divedra-manager.json"',
+    );
 
     const nodeJsonRaw = await readFile(
       path.join(root, "inline-demo", "nodes", "node-divedra-manager.json"),
@@ -1303,9 +1422,9 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate).toBe(
-      "inline manager",
-    );
+    expect(
+      reloaded.value.bundle.nodePayloads["divedra-manager"]?.promptTemplate,
+    ).toBe("inline manager");
   });
 
   test("prefers inline-authored node payloads over stale id-keyed nodePayloads on save", async () => {
@@ -1319,7 +1438,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -1378,7 +1496,6 @@ describe("saveWorkflowToDisk", () => {
           description: "inline demo",
           defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
           managerNodeId: "divedra-manager",
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",

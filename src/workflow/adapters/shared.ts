@@ -60,7 +60,9 @@ function waitForRetryDelay(
     const onAbort = () => {
       clearTimeout(timeoutId);
       signal.removeEventListener("abort", onAbort);
-      reject(new AdapterExecutionError("timeout", "adapter retry delay aborted"));
+      reject(
+        new AdapterExecutionError("timeout", "adapter retry delay aborted"),
+      );
     };
 
     signal.addEventListener("abort", onAbort, { once: true });

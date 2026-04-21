@@ -72,27 +72,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function makeClaudeRunnerFixture(input: {
-  readonly sessionId?: string;
-  readonly messages?: readonly object[];
-  readonly success?: boolean;
-} = {}): {
+function makeClaudeRunnerFixture(
+  input: {
+    readonly sessionId?: string;
+    readonly messages?: readonly object[];
+    readonly success?: boolean;
+  } = {},
+): {
   readonly createRunner: ReturnType<typeof vi.fn>;
   readonly startSession: ReturnType<typeof vi.fn>;
   readonly resumeSession: ReturnType<typeof vi.fn>;
 } {
   const sessionId = input.sessionId ?? "claude-session-1";
-  const messages =
-    input.messages ??
-    [
-      {
-        type: "assistant",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "local claude reply" }],
-        },
+  const messages = input.messages ?? [
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "local claude reply" }],
       },
-    ];
+    },
+  ];
 
   const session = {
     sessionId,
@@ -171,7 +171,7 @@ describe("ClaudeCodeAgentAdapter", () => {
           type: "assistant",
           message: {
             role: "assistant",
-            content: [{ type: "text", text: "{\"summary\":\"ok\"}" }],
+            content: [{ type: "text", text: '{"summary":"ok"}' }],
           },
         },
       ],
@@ -222,6 +222,15 @@ describe("ClaudeCodeAgentAdapter", () => {
     await adapter.execute(
       {
         ...baseInput,
+        divedraHookContext: {
+          environment: {
+            DIVEDRA_WORKFLOW_ID: "wf",
+            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+            DIVEDRA_NODE_ID: "node-1",
+            DIVEDRA_NODE_EXEC_ID: "exec-1",
+            DIVEDRA_AGENT_BACKEND: "claude-code-agent",
+          },
+        },
         ambientManagerContext: {
           environment: {
             DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
@@ -241,6 +250,8 @@ describe("ClaudeCodeAgentAdapter", () => {
       expect.objectContaining({
         env: expect.objectContaining({
           DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+          DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
+          DIVEDRA_NODE_EXEC_ID: "exec-1",
         }),
       }),
     );

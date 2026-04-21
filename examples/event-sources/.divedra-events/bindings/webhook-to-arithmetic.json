@@ -1,0 +1,20 @@
+{
+  "id": "webhook-to-arithmetic",
+  "sourceId": "example-webhook",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "workflowName": "first-four-arithmetic-pipeline",
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "source": "webhook"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000
+  }
+}

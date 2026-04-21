@@ -63,8 +63,8 @@ describe("remapNodePayloadsForValidation", () => {
     expect(remapped["nodes/node-manager.json"]).toMatchObject({
       promptTemplate: "inline manager",
     });
-    expect(
-      remapped["nodes/node-manager.json"],
-    ).not.toHaveProperty("sessionStartPromptTemplate");
+    expect(remapped["nodes/node-manager.json"]).not.toHaveProperty(
+      "sessionStartPromptTemplate",
+    );
   });
 });

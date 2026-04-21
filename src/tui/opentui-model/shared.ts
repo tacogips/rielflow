@@ -1,10 +1,4 @@
-import {
-  StyledText,
-  bold,
-  dim,
-  fg,
-  t,
-} from "@opentui/core";
+import { StyledText, bold, dim, fg, t } from "@opentui/core";
 import { normalizeCliAgentBackend } from "../../workflow/backend";
 import type { LoadedWorkflow } from "../../workflow/load";
 import type {
@@ -232,7 +226,9 @@ function formatNodeTypeLabel(nodeType: string): string {
   return nodeType.toUpperCase();
 }
 
-function buildNodeTypeDetail(payload: NodePayload | undefined): string | undefined {
+function buildNodeTypeDetail(
+  payload: NodePayload | undefined,
+): string | undefined {
   const nodeType = payload?.nodeType ?? "agent";
   if (nodeType === "agent") {
     return (
@@ -296,10 +292,9 @@ export function buildWorkflowNodeVisualMetadata(
     workflow: loaded.bundle.workflow,
   });
   const nodeKindById = new Map(
-    loaded.bundle.workflow.nodes.map((node) => [
-      node.id,
-      describeWorkflowNodeKind(node),
-    ] as const),
+    loaded.bundle.workflow.nodes.map(
+      (node) => [node.id, describeWorkflowNodeKind(node)] as const,
+    ),
   );
   const subworkflowScopeNodeIds = new Set<string>();
   loaded.bundle.workflow.subWorkflows.forEach((subworkflow) => {
@@ -331,7 +326,10 @@ export function buildWorkflowNodeVisualMetadata(
 
 export function resolveWorkflowNodeVisualMetadata(input: {
   readonly nodeId: string;
-  readonly visualMetadataByNodeId?: ReadonlyMap<string, WorkflowNodeVisualMetadata>;
+  readonly visualMetadataByNodeId?: ReadonlyMap<
+    string,
+    WorkflowNodeVisualMetadata
+  >;
 }): WorkflowNodeVisualMetadata {
   return (
     input.visualMetadataByNodeId?.get(input.nodeId) ?? {
@@ -372,9 +370,9 @@ export function buildPreviewTitleLine(input: {
   readonly kind: string;
   readonly nodeId: string;
 }): StyledText {
-  return t`${input.indentPrefix}${fg(resolveOpenTuiNodeKindColor(input.kind))(bold(
-    input.nodeId,
-  ))}\n`;
+  return t`${input.indentPrefix}${fg(resolveOpenTuiNodeKindColor(input.kind))(
+    bold(input.nodeId),
+  )}\n`;
 }
 
 export function buildNodeSelectOption(input: {
@@ -385,7 +383,10 @@ export function buildNodeSelectOption(input: {
   readonly purpose?: string;
   readonly scopeLabel?: string;
   readonly value: string;
-  readonly visualMetadataByNodeId?: ReadonlyMap<string, WorkflowNodeVisualMetadata>;
+  readonly visualMetadataByNodeId?: ReadonlyMap<
+    string,
+    WorkflowNodeVisualMetadata
+  >;
 }): OpenTuiRichSelectOption {
   const nodeType = input.payload?.nodeType ?? "agent";
   const visualMetadata = resolveWorkflowNodeVisualMetadata({
@@ -418,7 +419,9 @@ export function buildNodeSelectOption(input: {
       nodeId: input.nodeId,
     }),
     name: input.nodeId,
-    statusColor: resolveOpenTuiStatusColor(input.execution?.status ?? "pending"),
+    statusColor: resolveOpenTuiStatusColor(
+      input.execution?.status ?? "pending",
+    ),
     statusLabel: formatStatusLabel(input.execution?.status ?? "pending"),
     textColor: kindColor,
     value: input.value,

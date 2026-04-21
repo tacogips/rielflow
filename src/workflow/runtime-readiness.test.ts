@@ -19,10 +19,7 @@ async function makeTempDir(): Promise<string> {
   return directory;
 }
 
-async function writeExecutable(
-  filePath: string,
-  body: string,
-): Promise<void> {
+async function writeExecutable(filePath: string, body: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${body}\n`, { mode: 0o755 });
 }
@@ -99,7 +96,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     );
     await writeExecutable(
       path.join(root, "node_modules", ".bin", "claude-code-agent"),
-      "#!/usr/bin/env bash\ncat <<'EOF'\n{\"agent\":\"0.1.0\",\"tools\":{\"claude\":{\"version\":\"2.1.86\",\"error\":null},\"codex\":{\"version\":\"0.116.0\",\"error\":null},\"git\":{\"version\":\"2.53.0\",\"error\":null}}}\nEOF",
+      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"0.1.0","tools":{"claude":{"version":"2.1.86","error":null},"codex":{"version":"0.116.0","error":null},"git":{"version":"2.53.0","error":null}}}\nEOF',
     );
 
     const readiness = await inspectWorkflowRuntimeReadiness(
@@ -184,6 +181,317 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
   });
 
+  test("reports x-gateway read add-on container runner requirements", async () => {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        "x-read": {
+          id: "x-read",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/x-gateway-read",
+            version: "1",
+            config: {
+              queryTemplate: "{ accountMe { id } }",
+              runnerKind: "docker",
+              runnerPath: "/definitely/missing/docker",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "container-runner:docker:/definitely/missing/docker:docker-cli",
+      ),
+    ).toMatchObject({
+      kind: "container-runner",
+      status: "unavailable",
+      sourceNodeIds: ["x-read"],
+    });
+  });
+
+  test("reports required x-gateway read add-on env sources", async () => {
+    const root = await makeTempDir();
+    const runnerPath = path.join(root, "fake-docker");
+    await writeExecutable(
+      runnerPath,
+      "#!/usr/bin/env bash\necho 'Docker version 27.0.0'",
+    );
+
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        "x-read": {
+          id: "x-read",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/x-gateway-read",
+            version: "1",
+            env: {
+              X_GW_TOKEN: {
+                fromEnv: "ACCOUNT_A_X_GW_TOKEN",
+              },
+              X_GW_CONFIG_MODE: {
+                fromEnv: "OPTIONAL_X_GW_CONFIG_MODE",
+                required: false,
+              },
+            },
+            config: {
+              queryTemplate: "{ accountMe { id } }",
+              runnerKind: "docker",
+              runnerPath,
+            },
+          },
+        },
+      }),
+      {
+        env: {},
+      },
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "container-runner:docker:" + runnerPath + ":docker-cli",
+      ),
+    ).toMatchObject({
+      kind: "container-runner",
+      status: "available",
+      sourceNodeIds: ["x-read"],
+    });
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "environment-variable:addon:ACCOUNT_A_X_GW_TOKEN",
+      ),
+    ).toMatchObject({
+      kind: "environment-variable",
+      status: "unavailable",
+      sourceNodeIds: ["x-read"],
+    });
+    expect(
+      readiness.requirements.find(
+        (requirement) =>
+          requirement.id ===
+          "environment-variable:addon:OPTIONAL_X_GW_CONFIG_MODE",
+      ),
+    ).toBeUndefined();
+  });
+
+  test("reports x-gateway add-on container runner and env requirements", async () => {
+    const root = await makeTempDir();
+    const runnerPath = path.join(root, "fake-docker");
+    await writeExecutable(
+      runnerPath,
+      "#!/usr/bin/env bash\necho 'Docker version 27.0.0'",
+    );
+
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        "x-post": {
+          id: "x-post",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/x-gateway",
+            version: "1",
+            env: {
+              X_GW_ACCESS_TOKEN: {
+                fromEnv: "ACCOUNT_A_X_GW_ACCESS_TOKEN",
+              },
+            },
+            config: {
+              documentTemplate:
+                'mutation { createPost(text: "hello") { id text } }',
+              runnerKind: "docker",
+              runnerPath,
+            },
+          },
+        },
+      }),
+      {
+        env: {},
+      },
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "container-runner:docker:" + runnerPath + ":docker-cli",
+      ),
+    ).toMatchObject({
+      kind: "container-runner",
+      status: "available",
+      sourceNodeIds: ["x-post"],
+    });
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "environment-variable:addon:ACCOUNT_A_X_GW_ACCESS_TOKEN",
+      ),
+    ).toMatchObject({
+      kind: "environment-variable",
+      status: "unavailable",
+      sourceNodeIds: ["x-post"],
+    });
+  });
+
+  test("reports mail-gateway add-on container runner and env requirements", async () => {
+    const root = await makeTempDir();
+    const runnerPath = path.join(root, "fake-docker");
+    await writeExecutable(
+      runnerPath,
+      "#!/usr/bin/env bash\necho 'Docker version 27.0.0'",
+    );
+
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        "mail-send": {
+          id: "mail-send",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/mail-gateway",
+            version: "1",
+            env: {
+              MAIL_GATEWAY_CONFIG: {
+                fromEnv: "ACCOUNT_A_MAIL_GATEWAY_CONFIG",
+              },
+            },
+            config: {
+              documentTemplate:
+                'mutation { sendMessage(input: { accountId: "work", to: ["person@example.test"], subject: "hello", textBody: "body" }) { message { id } } }',
+              runnerKind: "docker",
+              runnerPath,
+            },
+          },
+        },
+      }),
+      {
+        env: {},
+      },
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "container-runner:docker:" + runnerPath + ":docker-cli",
+      ),
+    ).toMatchObject({
+      kind: "container-runner",
+      status: "available",
+      sourceNodeIds: ["mail-send"],
+    });
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "environment-variable:addon:ACCOUNT_A_MAIL_GATEWAY_CONFIG",
+      ),
+    ).toMatchObject({
+      kind: "environment-variable",
+      status: "unavailable",
+      sourceNodeIds: ["mail-send"],
+    });
+  });
+
+  test("reports empty required x-gateway read add-on env sources as unavailable", async () => {
+    const root = await makeTempDir();
+    const runnerPath = path.join(root, "fake-docker");
+    await writeExecutable(
+      runnerPath,
+      "#!/usr/bin/env bash\necho 'Docker version 27.0.0'",
+    );
+
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        "x-read": {
+          id: "x-read",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/x-gateway-read",
+            version: "1",
+            env: {
+              X_GW_TOKEN: {
+                fromEnv: "EMPTY_X_GW_TOKEN",
+              },
+            },
+            config: {
+              queryTemplate: "{ accountMe { id } }",
+              runnerKind: "docker",
+              runnerPath,
+            },
+          },
+        },
+      }),
+      {
+        env: {
+          EMPTY_X_GW_TOKEN: "",
+        },
+      },
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "environment-variable:addon:EMPTY_X_GW_TOKEN",
+      ),
+    ).toMatchObject({
+      kind: "environment-variable",
+      status: "unavailable",
+      sourceNodeIds: ["x-read"],
+    });
+  });
+
+  test("reports unsupported x-gateway read add-on inherited runner defaults", async () => {
+    const bundle = makeBundle({
+      "x-read": {
+        id: "x-read",
+        nodeType: "addon",
+        variables: {},
+        addon: {
+          name: "divedra/x-gateway-read",
+          version: "1",
+          config: {
+            queryTemplate: "{ accountMe { id } }",
+          },
+        },
+      },
+    });
+    const readiness = await inspectWorkflowRuntimeReadiness({
+      ...bundle,
+      workflow: {
+        ...bundle.workflow,
+        defaults: {
+          ...bundle.workflow.defaults,
+          containerRuntime: {
+            runnerKind: "apple-container",
+          },
+        },
+      },
+    });
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "container-runner:apple-container:default:docker-cli",
+      ),
+    ).toMatchObject({
+      kind: "container-runner",
+      status: "unsupported",
+      sourceNodeIds: ["x-read"],
+    });
+  });
+
   test("reports workflow-call execution as available when target workflows resolve", async () => {
     const root = await makeTempDir();
     const workflowDir = path.join(root, "review-flow-bundle");
@@ -259,10 +567,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     expect(readiness.ready).toBe(true);
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ),
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "available",
@@ -342,20 +647,15 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ),
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
       sourceNodeIds: ["writer"],
     });
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ).detail,
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls")
+        .detail,
     ).toContain("workflow validation failed");
   });
 
@@ -386,10 +686,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ),
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
@@ -516,20 +813,15 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ),
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
       sourceNodeIds: ["manager"],
     });
     expect(
-      findRequirement(
-        readiness.requirements,
-        "workflow-feature:workflowCalls",
-      ).detail,
+      findRequirement(readiness.requirements, "workflow-feature:workflowCalls")
+        .detail,
     ).toContain(
       "recursive workflow-call chains are unsupported: runtime-ready -> review-flow -> runtime-ready",
     );

@@ -30,17 +30,44 @@ Workflow definitions live under `<workflow-root>/<workflow-name>/` and are compo
 
 The loader resolves those workflow-local prompt files into effective inline template text before validation and execution, and normalizes inline-authored node payloads to stable workflow-relative paths.
 
+Workflow roots can be resolved directly or through the scoped workflow catalog.
+The scoped model defines:
+
+- project scope root: nearest project `.divedra`
+- user scope root: `~/.divedra` by default
+- workflow root: `<scope-root>/workflows`
+- add-on root: `<scope-root>/addons`
+- runtime data root: `<scope-root>/artifacts`
+- log root: `<scope-root>/logs`
+
+Project scope is searched before user scope for bare workflow names, while
+`--workflow-root` and `DIVEDRA_WORKFLOW_ROOT` remain direct workflow-root
+overrides for examples and automation. Supporting design:
+`design-docs/specs/design-user-scope-workflows.md`.
+
 ### Runtime State Boundary
 
 The runtime persists three distinct forms of state:
 
-- workflow session state in `{DIVEDRA_ARTIFACT_DIR}/sessions/` (default: `~/.divedra/project/<encoded-project-root>/divedra-artifact/sessions/`, where `<encoded-project-root>` is the nearest ancestor containing `.divedra` when present, otherwise the current working directory, with path segments joined by `__` and path-hostile characters normalized to `_`)
-- node and communication artifacts in `{DIVEDRA_ARTIFACT_DIR}/workflow/`
-- query-oriented runtime index data in `{DIVEDRA_ARTIFACT_DIR}/divedra.db`
+- workflow session state in `{rootDataDir}/sessions/`
+- node and communication artifacts in `{rootDataDir}/workflow/`
+- query-oriented runtime index data in `{rootDataDir}/divedra.db`
+
+In scoped catalog mode, `{rootDataDir}` defaults to the owning workflow scope's
+`<scope-root>/artifacts`. In direct workflow-root compatibility mode, the
+current computed default remains `~/.divedra/project/<encoded-project-root>/divedra-artifact`,
+where `<encoded-project-root>` is the nearest ancestor containing `.divedra`
+when present, otherwise the current working directory, with path segments joined
+by `__` and path-hostile characters normalized to `_`.
 
 File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI, TUI, and GraphQL inspection queries.
 
-When CLI or API entrypoints receive explicit artifact and/or session-store roots, they infer `rootDataDir` from those explicit storage roots when possible so `divedra.db` stays co-located with the selected runtime tree instead of drifting to an ambient `DIVEDRA_ARTIFACT_DIR`.
+When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
+artifact and/or session-store roots, they infer `rootDataDir` from those
+explicit storage roots when possible so `divedra.db` stays co-located with the
+selected runtime tree instead of drifting to an ambient default. An explicit
+`DIVEDRA_ARTIFACT_DIR` remains the canonical root data directory override and is
+not replaced by scoped defaults.
 
 ### Execution Boundary
 
@@ -88,10 +115,57 @@ Important validation facts:
 - authored `workflowCalls` are accepted, loaded, and executable when their target workflow bundles resolve under the configured workflow root
 - non-empty authored `subWorkflows[]` are treated as legacy structural compatibility input and are rejected when combined with authored `role` / `control` nodes
 - non-empty authored `subWorkflowConversations[]` are treated the same way and are rejected when combined with authored `role` / `control` nodes
+- structural boundary node kinds `subworkflow-manager`, `input`, and `output` are rejected when combined with authored `role` / `control` nodes
 - the validator still normalizes authored roles into legacy structural `kind` values and an effective runtime `managerNodeId` so the current engine can execute transitional bundles
 - `root-manager`, `subworkflow-manager`, `input`, and `output` remain the structural roles enforced by the current runtime compatibility layer
 - cross-scope edges must target manager boundaries
 - `branching.mode` is currently fixed to `fan-out`
+
+### Node Add-on Catalog
+
+Workflow node references may use built-in add-ons as an authoring shortcut for
+runtime-provided worker behavior. Add-ons are resolved by the loader into
+effective node payloads before execution, while save/edit surfaces preserve the
+authored add-on reference.
+
+Initial scope:
+
+- runtime-provided `divedra/*` add-ons
+- scoped local add-on manifests under `<scope-root>/addons`, where project and
+  user scopes use the same add-on directory layout as workflow scopes
+- third-party add-on references through host-provided resolver functions; these
+  are local process integrations and do not perform package or network
+  resolution during workflow load
+- no network resolution at workflow load time
+- `divedra/chat-reply-worker` for provider-neutral event replies
+- `divedra/codex-worker` and `divedra/claude-code-worker` for reusable
+  agent-backed worker nodes
+- `divedra/x-gateway-read` for read-only x-gateway GraphQL inspection through
+  an explicit container runner binding
+- `divedra/x-gateway` for intentional x-gateway GraphQL query or mutation
+  execution, including X post mutations, through the same explicit container
+  runner and environment binding model
+- `divedra/mail-gateway-read` and `divedra/mail-gateway` for read-only mail
+  inspection and intentional mail send mutations through the same explicit
+  container runner and environment binding model
+- add-on nodes remain ordinary worker nodes after resolution
+- `divedra/` is reserved for runtime-provided add-ons; third-party add-ons use
+  non-`divedra/` names such as `vendor/name`
+
+The chat reply worker creates provider-neutral reply requests from
+`runtimeVariables.event` and dispatches them through the event reply adapter
+registry. Provider SDKs and credentials remain in the event layer, not in the
+workflow engine. Add-ons that need invocation-specific values use
+`addon.inputs`, and only descriptors that explicitly consume environment
+bindings accept `addon.env`. Host applications can pass add-on resolvers through
+workflow load, validation, save, and execution options to materialize
+third-party add-on references into ordinary node payloads. The package root
+exports the library API from `src/lib.ts` rather than the CLI entrypoint so
+third-party add-on packages can type resolver exports from `divedra` without
+deep imports.
+
+Supporting design:
+`design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.
 
 ### Prompt and Input Assembly
 
@@ -242,6 +316,21 @@ Current implementation status:
 - interactive `divedra tui` now enters the unified Solid workspace/history/run app directly instead of passing through a separate selector-only OpenTUI surface
 - Bun and TypeScript are configured for the checked-in `.tsx` OpenTUI modules; JSX compilation uses the standard `solid-js` runtime while `@opentui/solid` provides the renderer and terminal component catalogue
 
+## Event Listener Workflow Triggers
+
+External events should be modeled as a separate trigger layer that invokes the
+existing workflow execution boundary. Provider-specific cron, webhook, chat, and
+UI adapters normalize incoming events into a canonical envelope, map that
+envelope into workflow runtime input, persist an event receipt for idempotency,
+and then call `createWorkflowExecutionClient()` or GraphQL `executeWorkflow`.
+
+The workflow engine should not import provider SDKs or provider-specific event
+types. Event bindings live outside workflow bundles so adding or changing an
+event source does not mutate `workflow.json`.
+
+Supporting design:
+`design-docs/specs/design-event-listener-workflow-trigger.md`.
+
 ## Runtime Node Roles
 
 Current authored direction:
@@ -276,6 +365,9 @@ Current execution policies:
 - `user-action` is implemented as a `nodeType`, not as a new manager boundary, so human approval/input remains a runtime-owned execution flavor rather than a second structural control-flow system
 - optional node execution is implemented as scheduler policy on `workflow.json.nodes[]`
 - the current workflow manager may explicitly choose `execute-optional-node` or `skip-optional-node`, while legacy structural `subworkflow-manager` scope remains limited to its owned compatibility boundary
+- node add-ons are an authoring reuse layer, not a third role axis; after
+  resolution, an add-on node executes as a normal worker with descriptor
+  provenance recorded in runtime metadata
 - detailed design: `design-docs/specs/design-user-action-and-optional-node-execution.md`
 
 ## Current Execution Flow
@@ -423,4 +515,5 @@ Manager sessions are minted per manager-node execution and expire when that node
 - `design-docs/specs/design-workflow-json.md`
 - `design-docs/specs/design-data-model.md`
 - `design-docs/specs/design-node-execution-inbox-contract.md`
+- `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`
 - `design-docs/specs/design-graphql-manager-runtime-session-lifecycle.md`

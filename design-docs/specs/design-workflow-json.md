@@ -39,6 +39,9 @@ Typical managed layout:
 
 Notes:
 
+- in scoped workflow lookup, `<workflow-root>` is `<scope-root>/workflows`;
+  user scope defaults to `~/.divedra/workflows` and project scope defaults to
+  `<project>/.divedra/workflows`
 - `workflow.json.nodes[]` order is canonical for editor and runtime vertical ordering.
 - runtime execution artifacts are written outside the workflow-definition directory under the configured artifact root.
 - worker-only workflows are also valid and may omit `managerNodeId` when `entryNodeId` names the first worker node.
@@ -153,6 +156,7 @@ Validation rules:
 - omitted `edges` are synthesized sequentially from node order
 - omitted `subWorkflows`, `subWorkflowConversations`, `loops`, and `workflowCalls` normalize to empty arrays
 - non-empty authored `subWorkflows` and `subWorkflowConversations` are legacy structural compatibility fields and must not be combined with authored `role` / `control` nodes
+- structural boundary node kinds `subworkflow-manager`, `input`, and `output` are legacy compatibility fields and must not be combined with authored `role` / `control` nodes
 - omitted `branching` normalizes to `{ "mode": "fan-out" }`
 - authored `workflowCalls` are executable: the caller's `output.payload` is exposed to the callee as `runtimeVariables.workflowCall.input`, and `resultNodeId` receives the callee result through a runtime-owned `workflow-call:<id>` communication when configured
 
@@ -169,7 +173,9 @@ Older documents mentioned those concepts, but they are not current authored fiel
 `workflow.json.nodes[]` entries:
 
 - `id: string`
-- `nodeFile: string`
+- `nodeFile: string` when the node uses a workflow-local payload
+- optional `addon` when the node uses a built-in, scoped local, or
+  host-provided add-on payload
 - optional `role: "manager" | "worker"`
 - optional `control: "none" | "branch-judge" | "loop-judge"`
 - optional `kind: NodeKind`
@@ -187,6 +193,7 @@ Current compatibility note:
 
 - the validator still accepts structural `kind` metadata where the current runtime needs it
 - the normalized runtime continues to derive structural `kind` values such as `root-manager`, `subworkflow-manager`, `input`, and `output`
+- role/control-authored nodes must not author structural boundary `kind` values directly
 - role-authored grouped examples should describe lanes/stages or explicit `workflowCalls`; only explicit legacy compatibility examples should foreground structural sub-workflow vocabulary
 
 Current `NodeKind` values:
@@ -201,9 +208,94 @@ Current `NodeKind` values:
 
 Validation rules:
 
+- a node reference must provide exactly one of `nodeFile` or `addon`
+- `divedra/*` `addon` references are resolved from the built-in node add-on
+  catalog into an effective node payload during load/validation
+- non-`divedra/` add-on references may resolve from scoped local add-on roots
+  under `<scope-root>/addons`, or through explicit host-provided resolver
+  functions passed through the library/server load, validation, save, and
+  execution options
+- workflow loading does not fetch third-party packages or registry metadata
+- current add-ons are worker-only; manager-role add-on references are rejected
 - manager-role nodes must stay on the agent execution path
 - `workflow.managerNodeId`, when present, must resolve to the effective root manager in the normalized runtime bundle
 - structural sub-workflow validation still applies when `subWorkflows[]` are authored
+
+### `addon`
+
+`addon` lets an authored node reference a reusable payload instead of a
+workflow-local `nodeFile`. The source may be the built-in runtime catalog, a
+scoped local add-on under `<scope-root>/addons`, or an explicitly registered
+host resolver.
+
+Object form:
+
+```json
+{
+  "id": "reply",
+  "role": "worker",
+  "addon": {
+    "name": "divedra/chat-reply-worker",
+    "version": "1",
+    "config": {
+      "textTemplate": "{{inbox.latest.output.payload.text}}",
+      "visibility": "public"
+    },
+    "inputs": {
+      "replyPrefix": "Answer"
+    }
+  }
+}
+```
+
+Rules:
+
+- saved workflows should prefer object form with explicit `version`
+- string shorthand may be accepted for built-in add-ons, but should normalize to
+  explicit object form in authoring tools
+- unknown add-on names or unsupported versions fail validation
+- `divedra/` names are reserved for built-in add-ons and are not loaded from
+  scoped local add-on roots
+- local add-on lookup uses `(name, version)` and searches the caller workflow's
+  owning scope, then project scope, then user scope, before falling back to
+  host-provided resolvers
+- `addon.config` is validated by the selected add-on descriptor
+- `addon.env`, when present, maps add-on environment variable names to divedra
+  runtime environment variable names for add-ons whose descriptors support
+  explicit environment bindings; no ambient environment variables are forwarded
+  implicitly. Required source variables are reported by runtime readiness before
+  execution, and empty required values are treated as unavailable; optional
+  bindings set `required: false`
+- `addon.inputs`, when present, is copied into the resolved node payload
+  `variables`
+- add-on node references must author `role: "worker"` explicitly; compatibility
+  inference from `kind`, `control`, or `repeat` does not satisfy the add-on
+  worker-only contract
+- save/edit surfaces preserve the authored `addon` reference rather than writing
+  generated node payload JSON
+
+Initial built-in add-ons:
+
+- `divedra/chat-reply-worker`: worker node that replies to the chat event target
+  in `runtimeVariables.event` through the event reply adapter registry
+- `divedra/codex-worker`: worker node that resolves to an `agent` payload using
+  `executionBackend: "codex-agent"`
+- `divedra/claude-code-worker`: worker node that resolves to an `agent` payload
+  using `executionBackend: "claude-code-agent"`
+- `divedra/x-gateway-read`: worker node that runs the read-only
+  `x-gateway-reader graphql query` surface in a Docker-compatible container
+- `divedra/x-gateway`: worker node that runs the full `x-gateway graphql query`
+  surface for intentional query or mutation documents in a Docker-compatible
+  container
+- `divedra/mail-gateway-read`: worker node that runs the read-only
+  `mail-gateway-reader graphql --query` surface in a Docker-compatible
+  container
+- `divedra/mail-gateway`: worker node that runs the full
+  `mail-gateway graphql --query` surface for intentional query or send-mutation
+  documents in a Docker-compatible container
+
+Detailed design:
+`design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.
 
 ## `CompletionRule`
 
@@ -356,6 +448,11 @@ Current implementation behavior:
 - the runtime emits at most one new turn per evaluation pass
 
 ## `node-{id}.json`
+
+Nodes referenced with `addon` do not author a `node-{id}.json` file. The loader
+materializes their effective payload from the selected add-on descriptor,
+scoped local add-on manifest, or host resolver during validation. Save/edit
+surfaces preserve the `addon` reference in `workflow.json`.
 
 Current authored shape:
 

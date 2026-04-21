@@ -8,14 +8,15 @@ Store questions, pending decisions, and items awaiting user approval.
 
 ## File Naming Convention
 
-| Prefix | Use Case |
-|--------|----------|
-| `qa-` | Questions/confirmation items |
-| `pending-` | Pending decisions |
+| Prefix     | Use Case                     |
+| ---------- | ---------------------------- |
+| `qa-`      | Questions/confirmation items |
+| `pending-` | Pending decisions            |
 
 ## Current Items
 
 - [qa-example.md](./qa-example.md) - Example: Database Selection (template example)
+- [qa-event-listener-workflow-trigger.md](./qa-event-listener-workflow-trigger.md) - Pending product and architecture decisions for external event listener workflow triggers
 - [qa-user-action-open-decisions.md](./qa-user-action-open-decisions.md) - Pending first-iteration product decisions for `user-action` nodes and optional-node skip behavior
 - [pending-example.md](./pending-example.md) - Example: CLI Output Format (template example)
 

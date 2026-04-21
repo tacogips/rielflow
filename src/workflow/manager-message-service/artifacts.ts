@@ -3,15 +3,9 @@ import path from "node:path";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../../shared/fs";
 import { resolveRootDataDir } from "../paths";
 import type { SessionStoreOptions } from "../session-store";
-import type {
-  CommunicationRecord,
-  ManagerMessagePayloadRef,
-} from "../session";
+import type { CommunicationRecord, ManagerMessagePayloadRef } from "../session";
 import type { ManagerControlAction } from "../manager-control";
-import type {
-  DataDirFileRef,
-  PersistedManagerMessageArtifacts,
-} from "./types";
+import type { DataDirFileRef, PersistedManagerMessageArtifacts } from "./types";
 
 export function normalizeFileRef(fileRef: DataDirFileRef): string {
   const candidate = fileRef.path.trim();
@@ -19,9 +13,7 @@ export function normalizeFileRef(fileRef: DataDirFileRef): string {
     throw new Error("attachment path must be non-empty");
   }
   if (path.isAbsolute(candidate)) {
-    throw new Error(
-      "attachment path must be relative to DIVEDRA_ARTIFACT_DIR",
-    );
+    throw new Error("attachment path must be relative to DIVEDRA_ARTIFACT_DIR");
   }
   if (candidate.includes("\\")) {
     throw new Error("attachment path must use forward slashes");
@@ -60,9 +52,7 @@ export async function validateAttachments(
   for (const attachment of attachments) {
     const normalized = normalizeFileRef(attachment);
     if (!normalized.startsWith(expectedPrefix)) {
-      throw new Error(
-        `attachment path must stay within ${expectedPrefix}`,
-      );
+      throw new Error(`attachment path must stay within ${expectedPrefix}`);
     }
     const resolved = path.resolve(rootDataDir, ...normalized.split("/"));
     const rootPrefix = `${rootDataDir}${path.sep}`;

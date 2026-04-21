@@ -18,7 +18,9 @@ describe("createSessionId", () => {
       now: new Date("2026-03-25T12:34:56.000Z"),
     });
 
-    expect(sessionId).toMatch(/^div-Demo-workflow-with-spaces-1774442096-[a-f0-9]{8}$/);
+    expect(sessionId).toMatch(
+      /^div-Demo-workflow-with-spaces-1774442096-[a-f0-9]{8}$/,
+    );
     expect(isSafeSessionId(sessionId)).toBe(true);
   });
 });

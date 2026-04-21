@@ -24,14 +24,49 @@ impl-plans/
 
 ## Active Plans
 
-| Plan                                           | Status      | Design Reference                     |
-| ---------------------------------------------- | ----------- | ------------------------------------ |
-| `workflow-role-unification-structural-cleanup` | In Progress | `design-unified-workflow-role-model` |
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
 
 ## Completed Plans
 
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `scoped-local-addons`                              | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`, `design-user-scope-workflows`                    |
+| `scoped-workflow-catalog-safety-follow-up`         | 2026-04-21 | `design-user-scope-workflows`, `architecture`                                                       |
+| `scoped-workflow-source-visibility`                | 2026-04-21 | `design-user-scope-workflows`, `command`                                                            |
+| `scoped-workflow-graphql-server`                   | 2026-04-21 | `design-user-scope-workflows`                                                                       |
+| `scoped-workflow-runtime-follow-up`                | 2026-04-21 | `design-user-scope-workflows`, `command`                                                            |
+| `scoped-workflow-catalog`                          | 2026-04-21 | `design-user-scope-workflows`                                                                       |
+| `third-party-addon-async-resolution`               | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-definition-registry`            | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-ergonomics`            | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-unhandled-return`      | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-editor-revision`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-graphql-validation`             | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-package-root-entrypoint`        | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`, `architecture`                                   |
+| `third-party-addon-public-api`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolver-validation`            | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `third-party-addon-resolution`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `mail-gateway-addons`                              | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-authored-payload-guard`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-worker-role-validation`                | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-addon`                                  | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-read-env-readiness`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `x-gateway-read-addon`                             | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `agent-worker-addons`                              | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `workflow-role-unification-structural-cleanup`     | 2026-04-20 | `design-unified-workflow-role-model`                                                                |
+| `event-reply-dispatch-persistence`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-chat-reply-webhook-example`                 | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-reply-dispatcher`                           | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `node-addon-chat-reply-worker`                     | 2026-04-20 | `design-node-addon-catalog-and-chat-reply-worker`                                                   |
+| `event-replay-controls`                            | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `event-mock-scenario-dispatch`                     | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `gemini-hook-support`                              | 2026-04-20 | `design-hook-command`, `command`                                                                    |
+| `event-receipt-operator-commands`                  | 2026-04-20 | `design-event-listener-workflow-trigger`, `command`                                                 |
+| `hook-snippet-command`                             | 2026-04-20 | `design-hook-command`, `command`                                                                    |
+| `hook-event-recording`                             | 2026-04-20 | `design-hook-command`, `command`, `design-data-model`                                               |
+| `event-source-adapters`                            | 2026-04-20 | `design-event-listener-workflow-trigger`                                                            |
+| `event-listener-workflow-trigger-foundation`       | 2026-04-20 | `design-event-listener-workflow-trigger`                                                            |
 | `container-runtime-env-isolation`                  | 2026-04-20 | `design-container-runtime-contract`                                                                 |
 | `root-data-dir-project-root-scoping`               | 2026-03-26 | `command`, `architecture`                                                                           |
 | `workflow-execution-working-directory`             | 2026-04-12 | `design-workflow-working-directory`, `command`, `architecture`                                      |
@@ -196,6 +231,26 @@ impl-plans/
 | 85    | COMPLETED   | Phase 84   |
 | 86    | COMPLETED   | Phase 85   |
 | 89    | COMPLETED   | Phase 88   |
+| 94    | COMPLETED   | Phase 91   |
+| 96    | COMPLETED   | Phase 94   |
+| 97    | COMPLETED   | Phase 96   |
+| 99    | COMPLETED   | Phase 98   |
+| 100   | COMPLETED   | Phase 99   |
+| 101   | COMPLETED   | Phase 99   |
+| 102   | COMPLETED   | Phase 101  |
+| 103   | COMPLETED   | Phase 98   |
+| 104   | COMPLETED   | Phase 103  |
+| 105   | COMPLETED   | Phase 103  |
+| 106   | COMPLETED   | Phase 98   |
+| 107   | COMPLETED   | Phase 106  |
+| 108   | COMPLETED   | Phase 105  |
+| 109   | COMPLETED   | Phase 98   |
+| 110   | COMPLETED   | Phase 109  |
+| 111   | COMPLETED   | Phase 110  |
+| 112   | COMPLETED   | Phase 111  |
+| 113   | COMPLETED   | Phase 111  |
+| 114   | COMPLETED   | Phase 111  |
+| 115   | COMPLETED   | Phase 114  |
 
 ### Phase to Plans Mapping
 
@@ -278,6 +333,31 @@ PHASE_TO_PLANS = {
   71: ["impl-plans/workflow-role-unification.md", "impl-plans/tui-workflow-browser-and-json-input.md"],
   72: ["impl-plans/completed/tui-opentui-solid-migration.md", "impl-plans/completed/tui-solid-runtime-fallback-hardening.md", "impl-plans/completed/remove-web-ui.md", "impl-plans/completed/root-data-dir-project-root-scoping.md"],
   82: ["impl-plans/workflow-role-unification-structural-cleanup.md"],
-  89: ["impl-plans/container-runtime-env-isolation.md"]
+  89: ["impl-plans/container-runtime-env-isolation.md"],
+  90: ["impl-plans/event-listener-workflow-trigger-foundation.md"],
+  91: ["impl-plans/event-source-adapters.md"],
+  93: ["impl-plans/hook-snippet-command.md"],
+  94: ["impl-plans/event-receipt-operator-commands.md"],
+  95: ["impl-plans/gemini-hook-support.md"],
+  96: ["impl-plans/event-mock-scenario-dispatch.md"],
+  97: ["impl-plans/event-replay-controls.md"],
+  98: ["impl-plans/node-addon-chat-reply-worker.md"],
+  99: ["impl-plans/event-reply-dispatcher.md"],
+  100: ["impl-plans/event-chat-reply-webhook-example.md"],
+  101: ["impl-plans/event-reply-dispatch-persistence.md"],
+  102: ["impl-plans/agent-worker-addons.md"],
+  103: ["impl-plans/x-gateway-read-addon.md"],
+  104: ["impl-plans/x-gateway-read-env-readiness.md"],
+  105: ["impl-plans/x-gateway-addon.md"],
+  106: ["impl-plans/node-addon-worker-role-validation.md"],
+  107: ["impl-plans/node-addon-authored-payload-guard.md"],
+  108: ["impl-plans/mail-gateway-addons.md"],
+  109: ["impl-plans/third-party-addon-resolution.md"],
+  110: ["impl-plans/third-party-addon-resolver-validation.md"],
+  111: ["impl-plans/third-party-addon-public-api.md"],
+  112: ["impl-plans/third-party-addon-payload-shape-guard.md"],
+  113: ["impl-plans/third-party-addon-package-root-entrypoint.md"],
+  114: ["impl-plans/third-party-addon-graphql-validation.md"],
+  115: ["impl-plans/third-party-addon-editor-revision.md"]
 }
 ```

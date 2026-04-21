@@ -27,7 +27,9 @@ function shortcut(
   compactLabel: string | undefined,
   helpLabel: string,
 ): OpenTuiShortcutEntry {
-  return compactLabel === undefined ? { helpLabel } : { compactLabel, helpLabel };
+  return compactLabel === undefined
+    ? { helpLabel }
+    : { compactLabel, helpLabel };
 }
 
 function formatCompactShortcutSection(section: OpenTuiShortcutSection): string {
@@ -43,7 +45,10 @@ function formatHelpShortcutSection(section: OpenTuiShortcutSection): string {
 }
 
 export function resolveOpenTuiShortcutSections(input: {
-  readonly navigation: Pick<OpenTuiNavigationState, "historyViewMode" | "screenMode">;
+  readonly navigation: Pick<
+    OpenTuiNavigationState,
+    "historyViewMode" | "screenMode"
+  >;
 }): readonly OpenTuiShortcutSection[] {
   if (input.navigation.screenMode === "workspace") {
     return [
@@ -51,10 +56,7 @@ export function resolveOpenTuiShortcutSections(input: {
         entries: [
           shortcut("j/k move", "j/k: move"),
           shortcut("/ filter", "/: filter"),
-          shortcut(
-            "enter/ctrl-m/l definition",
-            "enter/ctrl-m/l: definition",
-          ),
+          shortcut("enter/ctrl-m/l definition", "enter/ctrl-m/l: definition"),
           shortcut("n new-run", "n: new run"),
           shortcut("y copy workflow id", "y: copy workflow id"),
           shortcut("r refresh", "r: refresh"),
@@ -73,7 +75,10 @@ export function resolveOpenTuiShortcutSections(input: {
             "tab/shift-tab cycle panes",
             "tab/shift-tab: cycle definition <-> nodes",
           ),
-          shortcut("j/k or arrows move/scroll", "j/k or arrows: scroll/move in the focused pane"),
+          shortcut(
+            "j/k or arrows move/scroll",
+            "j/k or arrows: scroll/move in the focused pane",
+          ),
         ],
       },
       {
@@ -139,7 +144,10 @@ export function resolveOpenTuiShortcutSections(input: {
   return [
     {
       entries: [
-        shortcut("tab/shift-tab cycle panes", "tab/shift-tab: cycle sessions -> nodes -> detail -> input"),
+        shortcut(
+          "tab/shift-tab cycle panes",
+          "tab/shift-tab: cycle sessions -> nodes -> detail -> input",
+        ),
         shortcut("j/k or arrows move/scroll", "j/k or arrows: move/scroll"),
         shortcut("enter/ctrl-m select/open", "enter/ctrl-m: load selection"),
         shortcut("e edit", "e: edit input"),
@@ -149,10 +157,7 @@ export function resolveOpenTuiShortcutSections(input: {
     },
     {
       entries: [
-        shortcut(
-          undefined,
-          "nodes: enter/ctrl-m to node detail",
-        ),
+        shortcut(undefined, "nodes: enter/ctrl-m to node detail"),
         shortcut(
           undefined,
           "node detail: j/k or arrows stay in-pane, enter/ctrl-m opens the selected JSON viewer or AI session popup, esc closes in-pane viewers before returning to the opener",
@@ -394,7 +399,10 @@ export function buildWorkflowHistoryStatusMessage(input: {
 }
 
 export function buildOpenTuiFooterShortcutRow(input: {
-  readonly navigation: Pick<OpenTuiNavigationState, "historyViewMode" | "screenMode">;
+  readonly navigation: Pick<
+    OpenTuiNavigationState,
+    "historyViewMode" | "screenMode"
+  >;
 }): string {
   return resolveOpenTuiShortcutSections({
     navigation: input.navigation,

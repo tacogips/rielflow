@@ -1,0 +1,14 @@
+{
+  "eventId": "chat-fixture-1",
+  "eventType": "chat.message",
+  "actor": {
+    "id": "user-1",
+    "displayName": "Example User"
+  },
+  "conversation": {
+    "id": "example-channel"
+  },
+  "input": {
+    "text": "Run the arithmetic pipeline from a webhook fixture."
+  }
+}

@@ -45,6 +45,50 @@ export interface WorkflowNodeExecutionPolicy {
   readonly decisionBy?: "owning-manager";
 }
 
+export interface WorkflowNodeAddonEnvBinding {
+  readonly fromEnv: string;
+  readonly required?: boolean;
+}
+
+export interface WorkflowNodeAddonRef {
+  readonly name: string;
+  readonly version?: string;
+  readonly config?: Readonly<Record<string, unknown>>;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface NodeAddonResolveInput {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+}
+
+export interface NodeAddonResolveResult {
+  readonly payload?: NodePayload;
+  readonly issues?: readonly ValidationIssue[];
+}
+
+export type NodeAddonPayloadResolver = (
+  input: NodeAddonResolveInput,
+) => NodeAddonResolveResult | undefined;
+
+export type Awaitable<T> = T | Promise<T>;
+
+export type AsyncNodeAddonPayloadResolver = (
+  input: NodeAddonResolveInput,
+) => Awaitable<NodeAddonResolveResult | undefined>;
+
+export type NodeAddonDefinitionResolver = (
+  input: NodeAddonResolveInput,
+) => Awaitable<NodeAddonResolveResult>;
+
+export interface NodeAddonDefinition {
+  readonly name: string;
+  readonly version?: string;
+  readonly resolve: NodeAddonDefinitionResolver;
+}
+
 export interface WorkflowNodeRepeatPolicy {
   readonly while: string;
   readonly restartAt?: string;
@@ -54,6 +98,21 @@ export interface WorkflowNodeRepeatPolicy {
 export interface WorkflowNodeRef {
   readonly id: string;
   readonly nodeFile: string;
+  readonly addon?: WorkflowNodeAddonRef;
+  readonly kind?: NodeKind;
+  readonly role?: NodeRole;
+  readonly control?: NodeControlKind;
+  readonly completion?: CompletionRule;
+  readonly execution?: WorkflowNodeExecutionPolicy;
+  readonly group?: string;
+  readonly repeat?: WorkflowNodeRepeatPolicy;
+}
+
+export interface AuthoredWorkflowNodeRef {
+  readonly id: string;
+  readonly nodeFile?: string;
+  readonly addon?: WorkflowNodeAddonRef;
+  readonly node?: unknown;
   readonly kind?: NodeKind;
   readonly role?: NodeRole;
   readonly control?: NodeControlKind;
@@ -137,7 +196,8 @@ export interface SubWorkflowConversation {
   readonly stopWhen: string;
 }
 
-export interface AuthoredWorkflowJson extends Readonly<Record<string, unknown>> {
+export interface AuthoredWorkflowJson
+  extends Readonly<Record<string, unknown>> {
   readonly workflowId: string;
   readonly description?: string;
   readonly defaults: WorkflowDefaults;
@@ -147,7 +207,7 @@ export interface AuthoredWorkflowJson extends Readonly<Record<string, unknown>> 
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly subWorkflows?: readonly SubWorkflowRef[];
   readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
-  readonly nodes: readonly WorkflowNodeRef[];
+  readonly nodes: readonly AuthoredWorkflowNodeRef[];
   readonly edges?: readonly WorkflowEdge[];
   readonly loops?: readonly LoopRule[];
   readonly branching?: {
@@ -206,7 +266,12 @@ export interface NodeOutputContract {
   readonly maxValidationAttempts?: number;
 }
 
-export type NodeType = "agent" | "command" | "container" | "user-action";
+export type NodeType =
+  | "agent"
+  | "command"
+  | "container"
+  | "user-action"
+  | "addon";
 
 export type NodeSessionMode = "new" | "reuse";
 
@@ -276,6 +341,155 @@ export interface UserActionNodeConfig {
   readonly allowFreeTextReply?: boolean;
 }
 
+export interface ChatReplyWorkerConfig {
+  readonly textTemplate: string;
+  readonly visibility?: "public" | "ephemeral";
+  readonly threadPolicy?: "same-thread" | "conversation-root";
+  readonly onMissingTarget?: "fail" | "intent-only" | "dry-run";
+}
+
+export interface XGatewayReadAddonConfig {
+  readonly queryTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface XGatewayAddonConfig {
+  readonly documentTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface MailGatewayReadAddonConfig {
+  readonly queryTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface MailGatewayAddonConfig {
+  readonly documentTemplate: string;
+  readonly image?: string;
+  readonly runnerKind?: "podman" | "docker" | "nerdctl";
+  readonly runnerPath?: string;
+  readonly networkPolicy?: "disabled" | "egress-allowed";
+}
+
+export interface AgentWorkerAddonConfig {
+  readonly model: string;
+  readonly promptTemplate: string;
+  readonly systemPromptTemplate?: string;
+  readonly sessionStartPromptTemplate?: string;
+  readonly sessionPolicy?: NodeSessionPolicy;
+  readonly timeoutMs?: number;
+}
+
+export interface ChatReplyDispatchTarget {
+  readonly sourceId: string;
+  readonly provider: string;
+  readonly eventId: string;
+  readonly conversationId: string;
+  readonly threadId?: string;
+  readonly actorId?: string;
+}
+
+export interface ChatReplyDispatchRequest {
+  readonly target: ChatReplyDispatchTarget;
+  readonly message: {
+    readonly text: string;
+  };
+  readonly visibility: "public" | "ephemeral";
+  readonly threadPolicy: "same-thread" | "conversation-root";
+  readonly idempotencyKey: string;
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+}
+
+export interface ChatReplyDispatchResult {
+  readonly status: "sent" | "queued";
+  readonly provider: string;
+  readonly dispatchId?: string;
+  readonly providerMessageId?: string;
+}
+
+export interface ChatReplyDispatcher {
+  dispatchChatReply(
+    request: ChatReplyDispatchRequest,
+  ): Promise<ChatReplyDispatchResult>;
+}
+
+export interface ResolvedChatReplyWorkerAddon {
+  readonly name: "divedra/chat-reply-worker";
+  readonly version: "1";
+  readonly config: ChatReplyWorkerConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedXGatewayReadAddon {
+  readonly name: "divedra/x-gateway-read";
+  readonly version: "1";
+  readonly config: XGatewayReadAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedXGatewayAddon {
+  readonly name: "divedra/x-gateway";
+  readonly version: "1";
+  readonly config: XGatewayAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedMailGatewayReadAddon {
+  readonly name: "divedra/mail-gateway-read";
+  readonly version: "1";
+  readonly config: MailGatewayReadAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedMailGatewayAddon {
+  readonly name: "divedra/mail-gateway";
+  readonly version: "1";
+  readonly config: MailGatewayAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedCodexWorkerAddon {
+  readonly name: "divedra/codex-worker";
+  readonly version: "1";
+  readonly config: AgentWorkerAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedClaudeCodeWorkerAddon {
+  readonly name: "divedra/claude-code-worker";
+  readonly version: "1";
+  readonly config: AgentWorkerAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export type ResolvedAgentWorkerAddon =
+  | ResolvedCodexWorkerAddon
+  | ResolvedClaudeCodeWorkerAddon;
+
+export type ResolvedNodeAddon =
+  | ResolvedChatReplyWorkerAddon
+  | ResolvedXGatewayReadAddon
+  | ResolvedXGatewayAddon
+  | ResolvedMailGatewayReadAddon
+  | ResolvedMailGatewayAddon
+  | ResolvedAgentWorkerAddon;
+
 export interface NodePayload {
   readonly id: string;
   readonly description?: string;
@@ -295,6 +509,7 @@ export interface NodePayload {
   readonly container?: ContainerExecution;
   readonly durability?: NodeDurability;
   readonly userAction?: UserActionNodeConfig;
+  readonly addon?: ResolvedNodeAddon;
   readonly argumentsTemplate?: Readonly<Record<string, unknown>>;
   readonly argumentBindings?: readonly ArgumentBinding[];
   readonly templateEngine?: string;
@@ -350,10 +565,42 @@ export function getNormalizedNodePayload(
 
 export interface LoadOptions {
   readonly workflowRoot?: string;
+  readonly workflowScope?: WorkflowScopeSelector;
+  readonly userRoot?: string;
+  readonly projectRoot?: string;
+  readonly addonRoot?: string;
+  readonly resolvedWorkflowSource?: ResolvedWorkflowSource;
   readonly artifactRoot?: string;
   readonly rootDataDir?: string;
+  readonly sessionStoreRoot?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
+  readonly nodeAddons?: readonly NodeAddonDefinition[];
+  readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
+  readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
+}
+
+export type WorkflowScopeSelector = "auto" | "project" | "user";
+export type WorkflowSourceScope = "direct" | "project" | "user";
+export type AddonSourceScope = "direct" | "project" | "user";
+
+export interface ResolvedWorkflowSource {
+  readonly scope: WorkflowSourceScope;
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+  readonly workflowDirectory: string;
+  readonly scopeRoot?: string;
+  readonly legacyProjectRoot?: boolean;
+}
+
+export interface ResolvedAddonSource {
+  readonly scope: AddonSourceScope;
+  readonly addonRoot: string;
+  readonly addonName: string;
+  readonly version: string;
+  readonly addonDirectory: string;
+  readonly manifestPath: string;
+  readonly scopeRoot?: string;
 }
 
 export interface EffectiveRoots {

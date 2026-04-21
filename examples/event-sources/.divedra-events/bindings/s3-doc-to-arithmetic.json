@@ -1,0 +1,23 @@
+{
+  "id": "s3-doc-to-arithmetic",
+  "sourceId": "incoming-docs",
+  "match": {
+    "eventType": "repository.file.created",
+    "pathPrefix": "plans/"
+  },
+  "workflowName": "first-four-arithmetic-pipeline",
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "Review the new repository file metadata.",
+      "repository": "{{event.input.repository}}",
+      "file": "{{event.input.file}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "concurrencyKey": "{{event.input.file.s3Key}}"
+  }
+}

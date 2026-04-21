@@ -3,9 +3,7 @@ import type {
   PendingOptionalNodeDecision,
   WorkflowSessionState,
 } from "../session";
-import type {
-  ManagerIntentSummary,
-} from "../manager-session-store";
+import type { ManagerIntentSummary } from "../manager-session-store";
 import {
   parseManagerControlActionInput,
   type ManagerControlAction,
