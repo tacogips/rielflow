@@ -12,16 +12,22 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 - `cli workflow create <name>`
   - Create `<workflow-root>/<name>/` with `workflow.json`, prompt templates, and default `nodes/node-{id}.json` payload files.
+  - In scoped mode, create under `<scope-root>/workflows/<name>/`.
+  - Default write scope is project scope when a project `.divedra` exists, otherwise user scope; `--scope project|user` makes the destination explicit.
   - The current starter template uses a `claude-code-agent` manager node and a `codex-agent` worker node.
   - The generated `workflow.json` should prefer the authored-minimal role-based shape and omit compatibility/default fields such as empty `subWorkflows`, synthesized sequential `edges`, default `branching`, unrelated `containerRuntime` defaults, and node-level `completion: { "type": "none" }` unless the authored bundle needs them.
   - `--worker-only` switches the starter to a manager-less template whose explicit `entryNodeId` points at `main-worker`.
 - `cli workflow validate <name>`
   - Validate `<workflow-root>/<name>/` structure and semantic constraints.
+  - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.
 - `cli workflow inspect <name>`
   - Print normalized node graph, fan-out branch rules, loop defaults, timeout defaults, and node file references.
+  - Scoped catalog output includes the resolved workflow `source` scope and workflow directory.
   - Active inspection output should label structural compatibility counts as `legacySubWorkflows` rather than presenting raw `subWorkflows` as a peer concept to authored `workflowCalls`.
 - `cli workflow run <name>`
   - Execute `<workflow-root>/<name>/workflow.json` and all referenced workflow-local node payload files.
+  - Without a direct `--workflow-root`, resolve `<name>` from the scoped workflow catalog: project scope first, then user scope.
+  - Local run output includes the resolved workflow `source` scope and workflow directory before execution/session details.
   - Accepts `--working-dir` / `--working-directory` to override the workflow execution working directory for that run.
 - `session progress <session-id>`
   - Show queue, execution counts, and per-node restart/execution summary.
@@ -58,6 +64,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Start interactive terminal UI for workflow selection and execution.
   - Interactive OpenTUI mode opens the unified workspace/history/run app directly; workflow selection happens inside that workspace screen.
   - Supports runtime user input for human-input nodes during execution.
+  - Lists project-scope and user-scope workflows as separate groups when both scopes are available.
 - `hook [--vendor claude-code|codex|gemini]`
   - Receive agent backend hook payloads via stdin, detect vendor and event type, associate hook `session_id` with the ambient divedra workflow execution when available, record the hook event, and dispatch to registered policy handlers.
   - Claude Code, Codex, and Gemini pipe a JSON object to stdin; the command parses it, validates the shared transport fields (`session_id`, `cwd`, `hook_event_name`), resolves the vendor (from `--vendor` flag or best-effort detection), identifies the `hook_event_name`, and calls the matching handler.
@@ -93,9 +100,15 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | ----------------------- | ------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--worker-only`         | boolean       | `false`                                                           | For `workflow create`: scaffold a manager-less starter whose explicit entry node is `main-worker`                                                          |
 | `--variables`           | string        | none                                                              | For legacy execution commands: JSON file supplying runtime prompt variables. For `divedra gql`: inline GraphQL variables JSON or `@path/to/variables.json` |
-| `--workflow-root`       | string (path) | nearest ancestor `./.divedra`                                     | Root directory containing workflow definitions                                                                                                             |
-| `--artifact-root`       | string (path) | derived from `DIVEDRA_ARTIFACT_DIR` (see env) / `{root}/workflow` | Root directory for execution artifacts                                                                                                                     |
-| `--session-store`       | string (path) | derived from `DIVEDRA_SESSION_STORE` / `{root}/sessions`          | Root directory for persisted workflow sessions                                                                                                             |
+| `--workflow-root`       | string (path) | scoped catalog lookup                                             | Direct root directory containing workflow definitions; when supplied, bypasses project/user scope catalog lookup                                            |
+| `--scope`               | string        | `auto`                                                            | Workflow scope selector for read/write commands: `auto`, `project`, or `user`                                                                              |
+| `--user-root`           | string (path) | `~/.divedra`                                                      | User scope root; workflows are read from `<user-root>/workflows` unless `--workflow-root` is supplied                                                       |
+| `--project-root`        | string (path) | nearest project `.divedra`                                        | Project scope root; workflows are read from `<project-root>/workflows` unless `--workflow-root` is supplied                                                 |
+| `--addon-root`          | string (path) | scoped add-on catalog lookup                                      | Direct root directory containing local add-ons; when supplied, bypasses project/user add-on catalog lookup                                                  |
+| `--artifact-root`       | string (path) | `<scope-root>/artifacts/workflow`                                 | Root directory for execution artifacts                                                                                                                     |
+| `--session-store`       | string (path) | `<scope-root>/artifacts/sessions`                                 | Root directory for persisted workflow sessions                                                                                                             |
+| `--log-root`            | string (path) | `<scope-root>/logs`                                               | Root directory for operator-facing process logs and exported runtime logs                                                                                   |
+| `--config`              | string (path) | `$XDG_CONFIG_HOME/divedra/config.json`                            | Bootstrap config path used to resolve user/project scope roots                                                                                             |
 | `--working-dir`         | string (path) | command invocation `cwd`                                          | Workflow execution working directory override; relative values resolve from the command invocation directory                                               |
 | `--workflow`            | string        | none                                                              | Workflow name for direct TUI launch (skip workflow chooser)                                                                                                |
 | `--resume-session`      | string        | none                                                              | Session id to preselect for interactive TUI resume/inspection, or to resume immediately in non-interactive fallback mode                                   |
@@ -122,12 +135,18 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 | Variable                          | Required | Default                                                      | Description                                                                                                                                                                                                                                |
 | --------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DIVEDRA_ARTIFACT_ROOT`           | No       | derived from `DIVEDRA_ARTIFACT_DIR` / `{root}/workflow`      | Overrides only the workflow artifact tree root (`.../workflow`)                                                                                                                                                                            |
-| `DIVEDRA_WORKFLOW_ROOT`           | No       | nearest ancestor `./.divedra`                                | Default workflow definition root directory                                                                                                                                                                                                 |
+| `DIVEDRA_ARTIFACT_ROOT`           | No       | `<scope-root>/artifacts/workflow`                            | Overrides only the workflow artifact tree root (`.../workflow`)                                                                                                                                                                            |
+| `DIVEDRA_WORKFLOW_ROOT`           | No       | scoped catalog lookup                                        | Direct default workflow definition root directory; when set, bypasses project/user scope catalog lookup                                                                                                                                     |
+| `DIVEDRA_WORKFLOW_SCOPE`          | No       | `auto`                                                       | Default workflow scope selector: `auto`, `project`, or `user`                                                                                                                                                                               |
+| `DIVEDRA_USER_ROOT`               | No       | `~/.divedra`                                                 | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                                                                                                      |
+| `DIVEDRA_PROJECT_ROOT`            | No       | nearest project `.divedra`                                   | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`                                                                                 |
+| `DIVEDRA_ADDON_ROOT`              | No       | scoped add-on catalog lookup                                  | Direct default local add-on root; when set, bypasses project/user add-on catalog lookup                                                                                                                                                     |
+| `DIVEDRA_LOG_ROOT`                | No       | `<scope-root>/logs`                                          | Overrides operator-facing process/runtime log output root                                                                                                                                                                                   |
+| `DIVEDRA_CONFIG`                  | No       | `$XDG_CONFIG_HOME/divedra/config.json`                       | Bootstrap config path used before user scope root resolution                                                                                                                                                                                |
 | `DIVEDRA_SESSION_STORE`           | No       | local file store                                             | Session state backend selector                                                                                                                                                                                                             |
 | `DIVEDRA_SERVE_HOST`              | No       | `127.0.0.1`                                                  | Default bind address for `serve`                                                                                                                                                                                                           |
 | `DIVEDRA_SERVE_PORT`              | No       | `43173`                                                      | Default listen port for `serve`                                                                                                                                                                                                            |
-| `DIVEDRA_ARTIFACT_DIR`            | No       | `~/.divedra/project/<encoded-project-root>/divedra-artifact` | Canonical root data directory: sessions, `workflow/`, `files/`, `divedra.db`; when no explicit root is set, `divedra` first walks upward to find the nearest ancestor containing `.divedra` and uses that project root for default scoping |
+| `DIVEDRA_ARTIFACT_DIR`            | No       | scoped `<scope-root>/artifacts`; compatibility direct-mode default `~/.divedra/project/<encoded-project-root>/divedra-artifact` | Canonical root data directory override: sessions, `workflow/`, `files/`, `divedra.db`. In scoped lookup, the owning scope root provides the default. In direct workflow-root compatibility mode, the encoded project-root default remains available |
 | `DIVEDRA_GRAPHQL_ENDPOINT`        | No       | local serve endpoint                                         | Default GraphQL endpoint for CLI manager/control-plane commands                                                                                                                                                                            |
 | `DIVEDRA_MANAGER_AUTH_TOKEN`      | No       | none                                                         | Manager-session auth token for `divedra gql` and GraphQL control-plane mutations                                                                                                                                                           |
 | `DIVEDRA_MANAGER_SESSION_ID`      | No       | none                                                         | Ambient manager session id forwarded by `divedra gql` to `/graphql` for manager-scoped requests                                                                                                                                            |
@@ -148,19 +167,53 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `DIVEDRA_EVENTS_ENABLED`          | No       | `false` for `serve`, `true` for `events serve`               | Enables event listener routes and schedulers                                                                                                                                                                                               |
 | `DIVEDRA_EVENTS_READ_ONLY`        | No       | `false`                                                      | Validates and records incoming events without dispatching workflow execution                                                                                                                                                               |
 
-Workflow root resolution order:
+Workflow lookup resolution order:
 
 1. `--workflow-root`
 2. `DIVEDRA_WORKFLOW_ROOT`
-3. nearest ancestor `./.divedra` discovered by walking upward from `cwd`
-4. fallback to `cwd/.divedra` when no ancestor contains `.divedra`
+3. `--scope project|user` / `DIVEDRA_WORKFLOW_SCOPE`
+4. project scope `<project-root>/workflows` when scope is `auto` or `project`
+5. user scope `<user-root>/workflows` when scope is `auto` or `user`
+
+In `auto` mode, project scope is searched before user scope. If the same name
+exists in both scopes, project scope wins for bare workflow names. `--workflow-root`
+and `DIVEDRA_WORKFLOW_ROOT` are direct workflow-root overrides and do not use
+scope catalog lookup.
+
+Invalid values for `--scope` or `DIVEDRA_WORKFLOW_SCOPE` are usage errors. The
+CLI must fail rather than silently treating the value as `auto`.
+
+Scope root defaults:
+
+1. user scope root: `--user-root`, `DIVEDRA_USER_ROOT`, bootstrap config
+   `userRoot`, then `~/.divedra`
+2. project scope root: `--project-root`, `DIVEDRA_PROJECT_ROOT`, nearest
+   project `.divedra`
+3. scope subdirectories: `workflows`, `addons`, `artifacts`, and `logs` unless
+   overridden by scope config
+
+Add-on lookup resolution order:
+
+1. built-in runtime catalog for `divedra/*`
+2. `--addon-root`
+3. `DIVEDRA_ADDON_ROOT`
+4. caller workflow's owning scope `<scope-root>/addons`
+5. project scope `<project-root>/addons` when different from the caller scope
+   and present
+6. user scope `<user-root>/addons` when different from the caller scope
+7. host-provided resolver functions
+
+`--addon-root` and `DIVEDRA_ADDON_ROOT` are direct add-on-root overrides. They
+point at a directory containing `<namespace>/<addon-name>/<version>/addon.json`
+and do not point at a scope root.
 
 Artifact root resolution order:
 
 1. `--artifact-root`
 2. `DIVEDRA_ARTIFACT_ROOT`
-3. `DIVEDRA_ARTIFACT_DIR/workflow`
-4. computed default: `{resolved DIVEDRA_ARTIFACT_DIR}/workflow` where `DIVEDRA_ARTIFACT_DIR` defaults to `~/.divedra/project/<encoded-project-root>/divedra-artifact`
+3. `DIVEDRA_ARTIFACT_DIR/workflow` when `DIVEDRA_ARTIFACT_DIR` is set
+4. owning scope default: `<scope-root>/artifacts/workflow`
+5. compatibility computed default: `{resolved DIVEDRA_ARTIFACT_DIR}/workflow` where `DIVEDRA_ARTIFACT_DIR` defaults to `~/.divedra/project/<encoded-project-root>/divedra-artifact`
    - the encoded project root is the nearest ancestor containing `.divedra`, otherwise the current working directory
 
 Runtime-root co-location rule:
@@ -172,8 +225,16 @@ Session store root resolution order:
 
 1. `--session-store`
 2. `DIVEDRA_SESSION_STORE`
-3. `{resolved DIVEDRA_ARTIFACT_DIR}/sessions`
-4. existing runtime default
+3. owning scope default: `<scope-root>/artifacts/sessions`
+4. `{resolved DIVEDRA_ARTIFACT_DIR}/sessions` when `DIVEDRA_ARTIFACT_DIR` is set
+5. existing runtime default
+
+Log root resolution order:
+
+1. `--log-root`
+2. `DIVEDRA_LOG_ROOT`
+3. scope config `logSubdir`
+4. owning scope default: `<scope-root>/logs`
 
 GraphQL control-plane resolution order:
 

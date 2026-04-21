@@ -27,6 +27,8 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
 - ship a small deterministic built-in catalog under the `divedra/` namespace
 - keep `divedra/` reserved for runtime-provided add-ons while allowing
   non-`divedra/` add-ons to be resolved by host-provided extension code
+- allow non-`divedra/` add-ons to be installed in project and user scope
+  add-on roots under `<scope-root>/addons`
 - keep provider SDKs and credentials outside workflow bundles
 - make chat replies runtime-owned and idempotent
 - preserve authored workflow round-trips; save/edit surfaces should keep the
@@ -39,7 +41,7 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
 - turning workflow bundles into package manifests
 - downloading third-party add-ons at workflow load time
 - allowing arbitrary add-on code execution from a workflow definition
-- loading add-on packages directly from a workflow bundle
+- loading arbitrary executable add-on packages directly from a workflow bundle
 - adding Slack, Discord, Telegram, or web-chat fields to `workflow.json`
 - replacing `user-action` nodes, which remain the mechanism for mid-run human
   replies and approvals
@@ -107,6 +109,141 @@ Rules:
 - `divedra/` is a reserved namespace for built-ins; third-party references
   should use a distinct namespace such as `vendor/addon-name`
 
+## Scoped Local Add-on Roots
+
+Local add-ons can be installed under the same project/user scope model used for
+workflows:
+
+```text
+<scope-root>/
+  addons/
+    <namespace>/
+      <addon-name>/
+        <version>/
+          addon.json
+          templates/
+```
+
+Examples:
+
+```text
+~/.divedra/addons/acme/reviewer/1/addon.json
+<project>/.divedra/addons/team/release-note/1/addon.json
+```
+
+Rules:
+
+- user-scope add-ons live under `~/.divedra/addons` by default
+- project-scope add-ons live under `<project>/.divedra/addons` by default
+- scope roots, including `addons`, are configurable through the scoped root
+  resolver described in `design-docs/specs/design-user-scope-workflows.md`
+- `DIVEDRA_ADDON_ROOT` and `--addon-root` are direct add-on-root overrides,
+  parallel to `DIVEDRA_WORKFLOW_ROOT`; they point at the directory containing
+  `<namespace>/<addon-name>/<version>/addon.json`
+- `divedra/` remains reserved for built-in runtime add-ons and must not be
+  loaded from the filesystem add-on roots
+- local filesystem add-ons are manifest/template add-ons in the first
+  iteration; they must not execute arbitrary JavaScript, TypeScript, shell, or
+  package lifecycle code during workflow load or validation
+
+### Local Add-on Manifest
+
+Each local add-on version has an `addon.json` manifest:
+
+```json
+{
+  "name": "team/release-note",
+  "version": "1",
+  "description": "Generate a release note from upstream workflow output.",
+  "allowedRoles": ["worker"],
+  "resolution": {
+    "kind": "node-payload-template",
+    "nodeType": "agent",
+    "executionBackend": "codex-agent",
+    "model": "gpt-5-nano",
+    "promptTemplateFile": "templates/prompt.md"
+  },
+  "inputSchema": {
+    "type": "object"
+  },
+  "configSchema": {
+    "type": "object"
+  }
+}
+```
+
+First-iteration local manifest fields:
+
+- `name`: must match the path-derived add-on name
+- `version`: must match the path-derived version
+- `description`: non-empty human-readable summary
+- `allowedRoles`: only `["worker"]` initially
+- `resolution.kind`: `node-payload-template`
+- `resolution.nodeType`: one ordinary node execution type such as `agent`,
+  `command`, `container`, or `user-action`
+- template fields such as `promptTemplateFile` are resolved relative to the
+  add-on version directory, not the workflow directory
+- `configSchema`, `envSchema`, and `inputSchema` validate authored
+  `addon.config`, `addon.env`, and `addon.inputs`
+
+`resolution` is a node payload template, not executable code. Resolution rules:
+
+- overlay the authored workflow node id onto the resolved payload id
+- render string template fields with a small context containing `addon.config`,
+  `addon.inputs`, and the authored `nodeId`
+- resolve `*TemplateFile` paths from the add-on version directory
+- merge `addon.inputs` into the resolved payload `variables` after manifest
+  defaults, so workflow-authored inputs can override add-on defaults
+- never copy `addon.env` into the payload except through descriptor-approved
+  explicit environment binding fields
+
+The resolved payload must be an ordinary node payload after template expansion.
+Local manifests cannot produce runtime-owned native `nodeType: "addon"` payloads
+or internal executor bindings. Those remain reserved for built-in runtime
+descriptors until a separate trusted executor-registration design exists.
+
+### Local Add-on Resolution
+
+For a workflow loaded from the scoped workflow catalog, add-on lookup order is:
+
+1. built-in runtime catalog for `divedra/*`
+2. caller workflow's owning scope add-on root
+3. project scope add-on root, when different from the caller scope and present
+4. user scope add-on root, when different from the caller scope
+5. host-provided resolver functions
+
+For direct workflow-root compatibility mode, scoped add-on roots are not
+inferred from the direct workflow root. The host may still pass explicit
+resolver functions, or the caller may supply `--addon-root` /
+`DIVEDRA_ADDON_ROOT`.
+
+Shadowing rules:
+
+- add-on lookup is by `(name, version)`, not only by name
+- if a higher-priority scope has the requested name but not the requested
+  version, lookup continues to lower-priority scopes
+- if more than one candidate exists for the exact `(name, version)`, the
+  highest-priority scope wins and inspection output must show the resolved
+  source path
+- omitted versions may resolve only when exactly one compatible version exists
+  in the selected source; otherwise validation fails and asks for an explicit
+  version
+
+The normalized runtime bundle should expose local add-on provenance:
+
+```json
+{
+  "nodeId": "release-note",
+  "source": {
+    "kind": "local-addon",
+    "scope": "project",
+    "name": "team/release-note",
+    "version": "1",
+    "manifestPath": "<project>/.divedra/addons/team/release-note/1/addon.json"
+  }
+}
+```
+
 ## Add-on Descriptor
 
 Each built-in add-on is defined by a descriptor owned by the runtime build.
@@ -153,10 +290,11 @@ Descriptor rules:
 
 ## Third-party Resolver Boundary
 
-Third-party add-ons are intentionally integrated by host code, not by workflow
-JSON. A host application may provide resolver functions to validation, load,
-save, and execution entry points. Each resolver receives the authored add-on
-reference and either:
+Third-party add-ons can be integrated through scoped local manifests or through
+host code. Host-code integration is for add-ons that cannot be expressed as a
+manifest/template add-on. A host application may provide resolver functions to
+validation, load, save, and execution entry points. Each resolver receives the
+authored add-on reference and either:
 
 - returns `undefined`, or no payload and no issues, to indicate "not handled"
 - returns validation issues for a handled but invalid add-on reference
@@ -187,8 +325,8 @@ Resolver rules:
   (`src/lib.ts` / built `dist/lib.js`), while the CLI entry remains separate, so
   importing resolver types or helpers does not execute the command-line program
 - third-party resolvers should be registered explicitly by the host process
-  through API options; CLI package discovery and lockfile-backed loading are
-  future work
+  through API options; CLI package discovery, executable local add-ons, and
+  lockfile-backed loading are future work
 - resolver composition should be forgiving for package authors: `undefined`
   means the resolver did not handle the reference and validation should continue
   to the next registered resolver
@@ -227,12 +365,13 @@ normalization:
 2. Validate each `WorkflowNodeRef` has exactly one source: `nodeFile` or
    `addon`.
 3. Resolve `addon.name` and `addon.version` from the built-in catalog for
-   `divedra/*`, or from host-provided third-party resolvers for other
-   namespaces.
+   `divedra/*`, from scoped local add-on roots for manifest/template add-ons, or
+   from host-provided third-party resolvers for other namespaces.
 4. Validate `addon.config`, `addon.env`, and `addon.inputs` through the
    descriptor or resolver.
-5. For third-party resolvers, normalize the returned payload through ordinary
-   node payload validation and reject runtime-owned add-on execution metadata.
+5. For local manifests and third-party resolvers, normalize the returned payload
+   through ordinary node payload validation and reject runtime-owned add-on
+   execution metadata.
 6. Materialize an effective node payload in memory for execution,
    inspection, and validation.
 7. Mark the payload provenance as add-on resolved metadata.
@@ -249,6 +388,9 @@ The normalized runtime bundle should expose enough metadata for inspection:
   }
 }
 ```
+
+For local filesystem add-ons, `source.kind` is `local-addon` and includes the
+resolved scope plus manifest path.
 
 Persistence rules:
 

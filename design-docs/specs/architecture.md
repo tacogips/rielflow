@@ -30,17 +30,44 @@ Workflow definitions live under `<workflow-root>/<workflow-name>/` and are compo
 
 The loader resolves those workflow-local prompt files into effective inline template text before validation and execution, and normalizes inline-authored node payloads to stable workflow-relative paths.
 
+Workflow roots can be resolved directly or through the scoped workflow catalog.
+The scoped model defines:
+
+- project scope root: nearest project `.divedra`
+- user scope root: `~/.divedra` by default
+- workflow root: `<scope-root>/workflows`
+- add-on root: `<scope-root>/addons`
+- runtime data root: `<scope-root>/artifacts`
+- log root: `<scope-root>/logs`
+
+Project scope is searched before user scope for bare workflow names, while
+`--workflow-root` and `DIVEDRA_WORKFLOW_ROOT` remain direct workflow-root
+overrides for examples and automation. Supporting design:
+`design-docs/specs/design-user-scope-workflows.md`.
+
 ### Runtime State Boundary
 
 The runtime persists three distinct forms of state:
 
-- workflow session state in `{DIVEDRA_ARTIFACT_DIR}/sessions/` (default: `~/.divedra/project/<encoded-project-root>/divedra-artifact/sessions/`, where `<encoded-project-root>` is the nearest ancestor containing `.divedra` when present, otherwise the current working directory, with path segments joined by `__` and path-hostile characters normalized to `_`)
-- node and communication artifacts in `{DIVEDRA_ARTIFACT_DIR}/workflow/`
-- query-oriented runtime index data in `{DIVEDRA_ARTIFACT_DIR}/divedra.db`
+- workflow session state in `{rootDataDir}/sessions/`
+- node and communication artifacts in `{rootDataDir}/workflow/`
+- query-oriented runtime index data in `{rootDataDir}/divedra.db`
+
+In scoped catalog mode, `{rootDataDir}` defaults to the owning workflow scope's
+`<scope-root>/artifacts`. In direct workflow-root compatibility mode, the
+current computed default remains `~/.divedra/project/<encoded-project-root>/divedra-artifact`,
+where `<encoded-project-root>` is the nearest ancestor containing `.divedra`
+when present, otherwise the current working directory, with path segments joined
+by `__` and path-hostile characters normalized to `_`.
 
 File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI, TUI, and GraphQL inspection queries.
 
-When CLI or API entrypoints receive explicit artifact and/or session-store roots, they infer `rootDataDir` from those explicit storage roots when possible so `divedra.db` stays co-located with the selected runtime tree instead of drifting to an ambient `DIVEDRA_ARTIFACT_DIR`.
+When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
+artifact and/or session-store roots, they infer `rootDataDir` from those
+explicit storage roots when possible so `divedra.db` stays co-located with the
+selected runtime tree instead of drifting to an ambient default. An explicit
+`DIVEDRA_ARTIFACT_DIR` remains the canonical root data directory override and is
+not replaced by scoped defaults.
 
 ### Execution Boundary
 
@@ -104,6 +131,8 @@ authored add-on reference.
 Initial scope:
 
 - runtime-provided `divedra/*` add-ons
+- scoped local add-on manifests under `<scope-root>/addons`, where project and
+  user scopes use the same add-on directory layout as workflow scopes
 - third-party add-on references through host-provided resolver functions; these
   are local process integrations and do not perform package or network
   resolution during workflow load

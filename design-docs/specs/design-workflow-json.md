@@ -39,6 +39,9 @@ Typical managed layout:
 
 Notes:
 
+- in scoped workflow lookup, `<workflow-root>` is `<scope-root>/workflows`;
+  user scope defaults to `~/.divedra/workflows` and project scope defaults to
+  `<project>/.divedra/workflows`
 - `workflow.json.nodes[]` order is canonical for editor and runtime vertical ordering.
 - runtime execution artifacts are written outside the workflow-definition directory under the configured artifact root.
 - worker-only workflows are also valid and may omit `managerNodeId` when `entryNodeId` names the first worker node.
@@ -171,7 +174,8 @@ Older documents mentioned those concepts, but they are not current authored fiel
 
 - `id: string`
 - `nodeFile: string` when the node uses a workflow-local payload
-- optional `addon` when the node uses a runtime-provided add-on payload
+- optional `addon` when the node uses a built-in, scoped local, or
+  host-provided add-on payload
 - optional `role: "manager" | "worker"`
 - optional `control: "none" | "branch-judge" | "loop-judge"`
 - optional `kind: NodeKind`
@@ -207,10 +211,11 @@ Validation rules:
 - a node reference must provide exactly one of `nodeFile` or `addon`
 - `divedra/*` `addon` references are resolved from the built-in node add-on
   catalog into an effective node payload during load/validation
-- non-`divedra/` add-on references are resolved only through explicit
-  host-provided resolver functions passed through the library/server load,
-  validation, save, and execution options; workflow loading does not fetch
-  third-party packages or registry metadata
+- non-`divedra/` add-on references may resolve from scoped local add-on roots
+  under `<scope-root>/addons`, or through explicit host-provided resolver
+  functions passed through the library/server load, validation, save, and
+  execution options
+- workflow loading does not fetch third-party packages or registry metadata
 - current add-ons are worker-only; manager-role add-on references are rejected
 - manager-role nodes must stay on the agent execution path
 - `workflow.managerNodeId`, when present, must resolve to the effective root manager in the normalized runtime bundle
@@ -218,8 +223,10 @@ Validation rules:
 
 ### `addon`
 
-`addon` lets an authored node reference a reusable runtime-provided node payload
-instead of a workflow-local `nodeFile`.
+`addon` lets an authored node reference a reusable payload instead of a
+workflow-local `nodeFile`. The source may be the built-in runtime catalog, a
+scoped local add-on under `<scope-root>/addons`, or an explicitly registered
+host resolver.
 
 Object form:
 
@@ -247,6 +254,11 @@ Rules:
 - string shorthand may be accepted for built-in add-ons, but should normalize to
   explicit object form in authoring tools
 - unknown add-on names or unsupported versions fail validation
+- `divedra/` names are reserved for built-in add-ons and are not loaded from
+  scoped local add-on roots
+- local add-on lookup uses `(name, version)` and searches the caller workflow's
+  owning scope, then project scope, then user scope, before falling back to
+  host-provided resolvers
 - `addon.config` is validated by the selected add-on descriptor
 - `addon.env`, when present, maps add-on environment variable names to divedra
   runtime environment variable names for add-ons whose descriptors support
@@ -438,9 +450,9 @@ Current implementation behavior:
 ## `node-{id}.json`
 
 Nodes referenced with `addon` do not author a `node-{id}.json` file. The loader
-materializes their effective payload from the selected add-on descriptor during
-validation, and save/edit surfaces preserve the `addon` reference in
-`workflow.json`.
+materializes their effective payload from the selected add-on descriptor,
+scoped local add-on manifest, or host resolver during validation. Save/edit
+surfaces preserve the `addon` reference in `workflow.json`.
 
 Current authored shape:
 
