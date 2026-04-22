@@ -32,6 +32,7 @@ impl-plans/
 | Plan                                               | Completed  | Design Reference                                                                                    |
 | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
 | `scoped-local-addons`                              | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`, `design-user-scope-workflows`                    |
+| `event-root-manager-session-stickiness`            | 2026-04-22 | `design-node-session-reuse`, `design-event-listener-workflow-trigger`, `design-manager-driven-call-node-runtime` |
 | `scoped-workflow-catalog-safety-follow-up`         | 2026-04-21 | `design-user-scope-workflows`, `architecture`                                                       |
 | `scoped-workflow-source-visibility`                | 2026-04-21 | `design-user-scope-workflows`, `command`                                                            |
 | `scoped-workflow-graphql-server`                   | 2026-04-21 | `design-user-scope-workflows`                                                                       |

@@ -353,7 +353,7 @@ Output:
 
 ## Context Awareness
 
-- Understand project structure from CLAUDE.md
+- Understand project structure from AGENTS.md
 - Follow TypeScript testing conventions
 - Use appropriate testing strategies per module
 - Check for Taskfile targets for project-specific commands

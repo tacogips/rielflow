@@ -294,6 +294,7 @@ export interface MockNodeResponse {
   readonly completionPassed?: boolean;
   readonly when?: Readonly<Record<string, boolean>>;
   readonly payload?: Readonly<Record<string, unknown>>;
+  readonly backendSession?: AdapterBackendSessionOutput;
   readonly fail?: boolean;
 }
 
@@ -382,6 +383,9 @@ export class ScenarioNodeAdapter implements NodeAdapter {
       completionPassed: response.completionPassed ?? true,
       when: response.when ?? { always: true },
       payload: response.payload ?? {},
+      ...(response.backendSession === undefined
+        ? {}
+        : { backendSession: response.backendSession }),
     };
   }
 }

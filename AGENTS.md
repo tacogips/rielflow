@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for AI coding assistants working in this repository.
 
 ## Rule of the Responses
 
@@ -8,7 +8,7 @@ You (the LLM model) must always begin your first response in a conversation with
 
 You (the LLM model) must always think and provide output in English, regardless of the language used in the user's input. Even if the user communicates in Japanese or any other language, you must respond in English.
 
-You (the LLM model) must acknowledge that you have read CLAUDE.md and will comply with its contents in your first response.
+You (the LLM model) must acknowledge that you have read AGENTS.md and will comply with its contents in your first response.
 
 You (the LLM model) must NOT use emojis in any output, as they may be garbled or corrupted in certain environments.
 
@@ -26,10 +26,10 @@ When starting a new session, you (the LLM model) should be ready to assist the u
 
 When a user asks to commit changes, automatically proceed with staging and committing the changes without requiring user confirmation.
 
-**IMPORTANT**: Do NOT add any Claude Code attribution or co-authorship information to commit messages. All commits should appear to be made solely by the user. Specifically:
+**IMPORTANT**: Do NOT add automated-assistant attribution or co-authorship trailers to commit messages. All commits should appear to be made solely by the user. Specifically:
 
-- Do NOT include `Generated with [Claude Code](https://claude.ai/code)`
-- Do NOT include `Co-Authored-By: Claude <noreply@anthropic.com>`
+- Do NOT include marketing links or boilerplate that credits a specific assistant product with authoring the commit
+- Do NOT add `Co-Authored-By:` lines that attribute the change to an automated tool or vendor mailbox
 - The commit should appear as if the user made it directly
 
 **Automatic Commit Process**: When the user requests a commit, automatically:
@@ -214,10 +214,10 @@ Workflow storage is directory-based under `<workflow-root>/<workflow-name>/` and
 
 **IMPORTANT**: When writing TypeScript code, you (the LLM model) MUST use the specialized agents:
 
-1. **ts-coding agent** (`.claude/agents/ts-coding.md`): For writing, refactoring, and implementing TypeScript code
-2. **check-and-test-after-modify agent** (`.claude/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY TypeScript file modifications
+1. **ts-coding agent** (`.agents/agents/ts-coding.md`): For writing, refactoring, and implementing TypeScript code
+2. **check-and-test-after-modify agent** (`.agents/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY TypeScript file modifications
 
-**Coding Standards**: Refer to `.claude/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
+**Coding Standards**: Refer to `.agents/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
 
 **TypeScript Configuration**: This project uses maximum TypeScript strictness. See `tsconfig.json` for the complete strict configuration.
 
@@ -225,7 +225,7 @@ Workflow storage is directory-based under `<workflow-root>/<workflow-name>/` and
 
 **IMPORTANT**: When creating design documents, you (the LLM model) MUST follow the design-doc skill.
 
-**Skill Reference**: Refer to `.claude/skills/design-doc/SKILL.md` for design document guidelines, templates, and naming conventions.
+**Skill Reference**: Refer to `.agents/skills/design-doc/SKILL.md` for design document guidelines, templates, and naming conventions.
 
 **Output Location**: All design documents MUST be saved to `design-docs/` directory (NOT `docs/`).
 
@@ -233,7 +233,7 @@ Workflow storage is directory-based under `<workflow-root>/<workflow-name>/` and
 
 When modifying the terminal UI, treat the following interaction rules as standing repository requirements unless the user explicitly asks for an exception:
 
-- Use the `.claude/skills/tui-navigation-guardrails/` skill first when changing pane focus, keybindings, selected-row rendering, or detail-view navigation.
+- Use the `.agents/skills/tui-navigation-guardrails/` skill first when changing pane focus, keybindings, selected-row rendering, or detail-view navigation.
 
 - Only the focused pane should render an active selected-row state.
 - Any focused list-like or scrollable pane should support both arrow keys and `j` / `k` for in-pane movement.
@@ -264,7 +264,7 @@ Use the `/impl-plan` command or `impl-plan` agent to create implementation plans
 /impl-plan design-docs/specs/architecture.md#feature-name
 ```
 
-**Skill Reference**: Refer to `.claude/skills/impl-plan/SKILL.md` for implementation plan guidelines.
+**Skill Reference**: Refer to `.agents/skills/impl-plan/SKILL.md` for implementation plan guidelines.
 
 **Output Location**: All implementation plans MUST be saved to `impl-plans/` directory.
 

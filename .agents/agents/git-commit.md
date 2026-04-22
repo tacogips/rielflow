@@ -305,7 +305,7 @@ git checkout <branch-name>
 
 ## Context Awareness
 
-- Project structure from CLAUDE.md
+- Project structure from AGENTS.md
 - Coding standards and conventions
 - Conventional commit types
 - Typical architecture patterns
