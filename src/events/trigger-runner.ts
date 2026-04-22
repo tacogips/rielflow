@@ -1,4 +1,8 @@
-import { createWorkflowExecutionClient, type DivedraOptions } from "../lib";
+import {
+  createWorkflowExecutionClient,
+  type DivedraOptions,
+  type WorkflowExecutionClientOptions,
+} from "../lib";
 import { runWorkflow } from "../workflow/engine";
 import { withResolvedWorkflowSourceOptions } from "../workflow/catalog";
 import { loadWorkflowFromCatalog } from "../workflow/load";
@@ -9,6 +13,7 @@ import type { ChatReplyDispatcher } from "../workflow/types";
 import { getNormalizedNodePayload } from "../workflow/types";
 import { isEventBindingEnabled, isEventSourceEnabled } from "./config";
 import {
+  deleteEventWorkflowSessionStickiness,
   loadEventWorkflowSessionStickiness,
   saveEventWorkflowSessionStickiness,
 } from "./session-stickiness";
@@ -56,15 +61,41 @@ export interface WorkflowTriggerRunner {
   dispatch(input: WorkflowTriggerDispatchInput): Promise<WorkflowTriggerResult>;
 }
 
+interface StickyRootManagerContext {
+  readonly workflowId: string;
+  readonly workflowName: string;
+  readonly managerNodeId: string;
+  readonly sourceId: string;
+  readonly bindingId: string;
+  readonly conversationId: string;
+  readonly threadId?: string;
+  readonly options: DivedraOptions;
+}
+
 interface StickyDispatchPlan {
   readonly sessionId: string;
   readonly options: DivedraOptions;
 }
 
-function isTerminalSessionForStickyReuse(
-  session: WorkflowSessionState,
-): boolean {
-  return session.status === "failed" || session.status === "cancelled";
+type StickyDispatchResolution =
+  | { readonly outcome: "resume"; readonly plan: StickyDispatchPlan }
+  | { readonly outcome: "proceed-without-resume" }
+  | { readonly outcome: "blocked-active-user-actions" };
+
+function stickinessLookupKeyFromContext(ctx: StickyRootManagerContext): {
+  readonly workflowId: string;
+  readonly sourceId: string;
+  readonly bindingId: string;
+  readonly conversationId: string;
+  readonly threadId?: string;
+} {
+  return {
+    workflowId: ctx.workflowId,
+    sourceId: ctx.sourceId,
+    bindingId: ctx.bindingId,
+    conversationId: ctx.conversationId,
+    ...(ctx.threadId === undefined ? {} : { threadId: ctx.threadId }),
+  };
 }
 
 function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
@@ -80,12 +111,19 @@ function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
   return deduped;
 }
 
-async function resolveStickyDispatchPlan(input: {
+function isStickyReuseBlockedSession(session: WorkflowSessionState): boolean {
+  return session.status === "failed" || session.status === "cancelled";
+}
+
+function isStickyPersistableStatus(status: string): boolean {
+  return status === "running" || status === "paused" || status === "completed";
+}
+
+async function resolveStickyRootManagerContext(input: {
   readonly binding: EventBinding;
   readonly event: ExternalEventEnvelope;
-  readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly options: WorkflowTriggerRunnerOptions;
-}): Promise<StickyDispatchPlan | null> {
+}): Promise<StickyRootManagerContext | null> {
   if (input.options.endpoint !== undefined) {
     return null;
   }
@@ -114,100 +152,159 @@ async function resolveStickyDispatchPlan(input: {
     loaded.value.source === undefined
       ? input.options
       : withResolvedWorkflowSourceOptions(loaded.value.source, input.options);
+  return {
+    workflowId: loaded.value.bundle.workflow.workflowId,
+    workflowName: input.binding.workflowName,
+    managerNodeId: loaded.value.bundle.workflow.managerNodeId,
+    sourceId: input.event.sourceId,
+    bindingId: input.binding.id,
+    conversationId,
+    ...(input.event.conversation?.threadId === undefined
+      ? {}
+      : { threadId: input.event.conversation.threadId }),
+    options: stickyOptions,
+  };
+}
+
+async function clearStickySessionBinding(
+  stickyContext: StickyRootManagerContext,
+): Promise<void> {
+  await deleteEventWorkflowSessionStickiness(
+    stickinessLookupKeyFromContext(stickyContext),
+    stickyContext.options,
+  );
+}
+
+async function resolveStickyDispatchResolution(input: {
+  readonly stickyContext: StickyRootManagerContext | null;
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+}): Promise<StickyDispatchResolution> {
+  const { stickyContext } = input;
+  if (stickyContext === null) {
+    return { outcome: "proceed-without-resume" };
+  }
   const stickyRecord = await loadEventWorkflowSessionStickiness(
-    {
-      workflowId: loaded.value.bundle.workflow.workflowId,
-      sourceId: input.event.sourceId,
-      conversationId,
-      ...(input.event.conversation?.threadId === undefined
-        ? {}
-        : { threadId: input.event.conversation.threadId }),
-    },
-    stickyOptions,
+    stickinessLookupKeyFromContext(stickyContext),
+    stickyContext.options,
   );
   if (stickyRecord === null) {
-    return null;
+    return { outcome: "proceed-without-resume" };
   }
 
-  const existing = await loadSession(stickyRecord.sessionId, stickyOptions);
+  const existing = await loadSession(
+    stickyRecord.sessionId,
+    stickyContext.options,
+  );
   if (!existing.ok) {
-    return null;
+    await clearStickySessionBinding(stickyContext);
+    return { outcome: "proceed-without-resume" };
   }
   if (
-    existing.value.workflowName !== input.binding.workflowName ||
-    isTerminalSessionForStickyReuse(existing.value) ||
-    (existing.value.activeUserActions?.length ?? 0) > 0
+    existing.value.workflowName !== stickyContext.workflowName ||
+    isStickyReuseBlockedSession(existing.value)
   ) {
-    return null;
+    await clearStickySessionBinding(stickyContext);
+    return { outcome: "proceed-without-resume" };
+  }
+  if ((existing.value.activeUserActions?.length ?? 0) > 0) {
+    return { outcome: "blocked-active-user-actions" };
   }
 
-  const { endedAt: _endedAt, lastError: _lastError, ...resumable } =
-    existing.value;
+  const {
+    endedAt: _endedAt,
+    lastError: _lastError,
+    ...resumable
+  } = existing.value;
   const updatedSession: WorkflowSessionState = {
     ...resumable,
     status: "running",
     queue: dedupeNodeIds([
-      loaded.value.bundle.workflow.managerNodeId,
+      stickyContext.managerNodeId,
       ...existing.value.queue,
     ]),
-    currentNodeId: loaded.value.bundle.workflow.managerNodeId,
+    currentNodeId: stickyContext.managerNodeId,
     runtimeVariables: {
       ...existing.value.runtimeVariables,
       ...input.runtimeVariables,
     },
   };
-  const saved = await saveSession(updatedSession, stickyOptions);
+  const saved = await saveSession(updatedSession, stickyContext.options);
   if (!saved.ok) {
     throw new Error(saved.error.message);
   }
   return {
-    sessionId: updatedSession.sessionId,
-    options: stickyOptions,
+    outcome: "resume",
+    plan: {
+      sessionId: updatedSession.sessionId,
+      options: stickyContext.options,
+    },
   };
 }
 
 async function persistStickySessionBinding(input: {
-  readonly binding: EventBinding;
-  readonly event: ExternalEventEnvelope;
+  readonly stickyContext: StickyRootManagerContext | null;
   readonly workflowExecutionId: string;
-  readonly options: WorkflowTriggerRunnerOptions;
+  readonly workflowStatus: string;
 }): Promise<void> {
-  const conversationId = input.event.conversation?.id;
-  if (input.options.endpoint !== undefined || conversationId === undefined) {
+  const { stickyContext } = input;
+  if (stickyContext === null) {
     return;
   }
-  const loaded = await loadWorkflowFromCatalog(
-    input.binding.workflowName,
-    input.options,
-  );
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
-  }
-  const managerNode = getNormalizedNodePayload(
-    loaded.value.bundle,
-    loaded.value.bundle.workflow.managerNodeId,
-  );
-  if (managerNode?.sessionPolicy?.mode !== "reuse") {
+  if (!isStickyPersistableStatus(input.workflowStatus)) {
+    await clearStickySessionBinding(stickyContext);
     return;
   }
-  const stickyOptions =
-    loaded.value.source === undefined
-      ? input.options
-      : withResolvedWorkflowSourceOptions(loaded.value.source, input.options);
   await saveEventWorkflowSessionStickiness(
     {
-      workflowId: loaded.value.bundle.workflow.workflowId,
-      workflowName: input.binding.workflowName,
-      sourceId: input.event.sourceId,
-      conversationId,
-      ...(input.event.conversation?.threadId === undefined
-        ? {}
-        : { threadId: input.event.conversation.threadId }),
+      ...stickinessLookupKeyFromContext(stickyContext),
+      workflowName: stickyContext.workflowName,
       sessionId: input.workflowExecutionId,
       updatedAt: new Date().toISOString(),
     },
-    stickyOptions,
+    stickyContext.options,
   );
+}
+
+function buildWorkflowExecutionClientOptions(
+  workflowName: string,
+  options: WorkflowTriggerRunnerOptions,
+): WorkflowExecutionClientOptions {
+  const {
+    readOnly: _readOnly,
+    dryRun: _dryRun,
+    maxSteps: _maxSteps,
+    maxLoopIterations: _maxLoopIterations,
+    defaultTimeoutMs: _defaultTimeoutMs,
+    mockScenario: _mockScenario,
+    ...divedraAndTransportOptions
+  } = options;
+  return { workflowName, ...divedraAndTransportOptions };
+}
+
+/** Options forwarded to both library `execute` and local `runWorkflow` resume paths. */
+function workflowTriggerLocalEngineOverrides(
+  options: WorkflowTriggerRunnerOptions,
+): Pick<
+  WorkflowTriggerRunnerOptions,
+  | "mockScenario"
+  | "dryRun"
+  | "maxSteps"
+  | "maxLoopIterations"
+  | "defaultTimeoutMs"
+> {
+  return {
+    ...(options.mockScenario === undefined
+      ? {}
+      : { mockScenario: options.mockScenario }),
+    ...(options.dryRun === undefined ? {} : { dryRun: options.dryRun }),
+    ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
+    ...(options.maxLoopIterations === undefined
+      ? {}
+      : { maxLoopIterations: options.maxLoopIterations }),
+    ...(options.defaultTimeoutMs === undefined
+      ? {}
+      : { defaultTimeoutMs: options.defaultTimeoutMs }),
+  };
 }
 
 export function createWorkflowTriggerRunner(
@@ -294,102 +391,54 @@ export function createWorkflowTriggerRunner(
           },
           options,
         );
-        const stickyPlan = await resolveStickyDispatchPlan({
+        const stickyContext = await resolveStickyRootManagerContext({
           binding: input.binding,
           event: input.event,
-          runtimeVariables: mapping.runtimeVariables,
           options,
         });
+        const stickyResolution = await resolveStickyDispatchResolution({
+          stickyContext,
+          runtimeVariables: mapping.runtimeVariables,
+        });
+        if (stickyResolution.outcome === "blocked-active-user-actions") {
+          const skipped = await updateEventReceipt(
+            {
+              record: receipt,
+              artifactDir: begin.artifactDir,
+              status: "skipped",
+              error:
+                "event dispatch skipped: sticky workflow session has pending user actions",
+            },
+            options,
+          );
+          return {
+            receipt: skipped,
+            duplicate: false,
+            workflowName: input.binding.workflowName,
+          };
+        }
+        const stickyPlan =
+          stickyResolution.outcome === "resume"
+            ? stickyResolution.plan
+            : null;
         const result =
           stickyPlan === null
-            ? await createWorkflowExecutionClient({
-                workflowName: input.binding.workflowName,
-                ...(options.workflowRoot === undefined
-                  ? {}
-                  : { workflowRoot: options.workflowRoot }),
-                ...(options.workflowScope === undefined
-                  ? {}
-                  : { workflowScope: options.workflowScope }),
-                ...(options.userRoot === undefined
-                  ? {}
-                  : { userRoot: options.userRoot }),
-                ...(options.projectRoot === undefined
-                  ? {}
-                  : { projectRoot: options.projectRoot }),
-                ...(options.artifactRoot === undefined
-                  ? {}
-                  : { artifactRoot: options.artifactRoot }),
-                ...(options.rootDataDir === undefined
-                  ? {}
-                  : { rootDataDir: options.rootDataDir }),
-                ...(options.sessionStoreRoot === undefined
-                  ? {}
-                  : { sessionStoreRoot: options.sessionStoreRoot }),
-                ...(options.env === undefined ? {} : { env: options.env }),
-                ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-                ...(options.nodeAddons === undefined
-                  ? {}
-                  : { nodeAddons: options.nodeAddons }),
-                ...(options.asyncNodeAddonResolvers === undefined
-                  ? {}
-                  : { asyncNodeAddonResolvers: options.asyncNodeAddonResolvers }),
-                ...(options.nodeAddonResolvers === undefined
-                  ? {}
-                  : { nodeAddonResolvers: options.nodeAddonResolvers }),
-                ...(options.endpoint === undefined
-                  ? {}
-                  : { endpoint: options.endpoint }),
-                ...(options.authToken === undefined
-                  ? {}
-                  : { authToken: options.authToken }),
-                ...(options.fetchImpl === undefined
-                  ? {}
-                  : { fetchImpl: options.fetchImpl }),
-                ...(options.eventReplyDispatcher === undefined
-                  ? {}
-                  : { eventReplyDispatcher: options.eventReplyDispatcher }),
-              }).execute({
+            ? await createWorkflowExecutionClient(
+                buildWorkflowExecutionClientOptions(
+                  input.binding.workflowName,
+                  options,
+                ),
+              ).execute({
                 input: mapping.runtimeVariables,
-                ...(options.mockScenario === undefined
-                  ? {}
-                  : { mockScenario: options.mockScenario }),
-                ...(options.dryRun === undefined
-                  ? {}
-                  : { dryRun: options.dryRun }),
-                ...(options.maxSteps === undefined
-                  ? {}
-                  : { maxSteps: options.maxSteps }),
-                ...(options.maxLoopIterations === undefined
-                  ? {}
-                  : { maxLoopIterations: options.maxLoopIterations }),
-                ...(options.defaultTimeoutMs === undefined
-                  ? {}
-                  : { defaultTimeoutMs: options.defaultTimeoutMs }),
+                ...workflowTriggerLocalEngineOverrides(options),
                 async: input.binding.execution?.async ?? true,
               })
             : await (async () => {
-                const resumed = await runWorkflow(
-                  input.binding.workflowName,
-                  {
-                    ...stickyPlan.options,
-                    resumeSessionId: stickyPlan.sessionId,
-                    ...(options.mockScenario === undefined
-                      ? {}
-                      : { mockScenario: options.mockScenario }),
-                    ...(options.dryRun === undefined
-                      ? {}
-                      : { dryRun: options.dryRun }),
-                    ...(options.maxSteps === undefined
-                      ? {}
-                      : { maxSteps: options.maxSteps }),
-                    ...(options.maxLoopIterations === undefined
-                      ? {}
-                      : { maxLoopIterations: options.maxLoopIterations }),
-                    ...(options.defaultTimeoutMs === undefined
-                      ? {}
-                      : { defaultTimeoutMs: options.defaultTimeoutMs }),
-                  },
-                );
+                const resumed = await runWorkflow(input.binding.workflowName, {
+                  ...stickyPlan.options,
+                  resumeSessionId: stickyPlan.sessionId,
+                  ...workflowTriggerLocalEngineOverrides(options),
+                });
                 if (!resumed.ok) {
                   throw new Error(resumed.error.message);
                 }
@@ -402,10 +451,9 @@ export function createWorkflowTriggerRunner(
                 };
               })();
         await persistStickySessionBinding({
-          binding: input.binding,
-          event: input.event,
+          stickyContext,
           workflowExecutionId: result.workflowExecutionId,
-          options,
+          workflowStatus: result.status,
         });
         receipt = await updateEventReceipt(
           {

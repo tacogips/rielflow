@@ -7,6 +7,14 @@ export type SessionStatus =
   | "failed"
   | "cancelled";
 
+export function isTerminalWorkflowSessionStatus(
+  status: SessionStatus,
+): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "cancelled"
+  );
+}
+
 export interface SessionTransition {
   readonly from: string;
   readonly to: string;

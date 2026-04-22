@@ -632,6 +632,28 @@ Recommended policies:
 - `queue`: persist pending event and dispatch later
 - `allow`: no per-key concurrency limit
 
+Sticky root-manager session reuse rules:
+
+- sticky-session lookup must stay binding-local, even when multiple bindings
+  target the same workflow and chat conversation
+- the minimum sticky-session scope is
+  `workflowId + sourceId + binding.id + conversation.id + conversation.threadId`
+- sticky reuse may reopen a previously completed workflow session for the same
+  binding conversation, because chat-shaped event bursts are modeled as one
+  long-lived manager conversation across multiple dispatches
+- failed or cancelled workflow sessions must not be reused by sticky dispatch
+- while a sticky workflow session has pending user-action replies, new events for
+  the same binding conversation must not start a parallel workflow; dispatch
+  should be skipped (or queued by a later milestone) and the sticky pointer
+  must remain unchanged
+- a stored sticky record that does not match the current binding scope must be
+  treated as absent rather than reused opportunistically
+- sticky lookup should self-heal stale records that reference a missing
+  workflow session or a session that is no longer reusable for the same
+  binding conversation
+- this preserves the event-layer contract that bindings remain distinct
+  execution entrypoints with their own mapping and policy decisions
+
 ## Acknowledgement Semantics
 
 Webhook providers expect fast acknowledgement. The listener should:

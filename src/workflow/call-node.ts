@@ -57,12 +57,12 @@ import {
   resolveNodeExecutionWorkingDirectory,
   resolveWorkflowExecutionWorkingDirectory,
 } from "./working-directory";
-import type {
-  NodeBackendSessionRecord,
-  NodeExecutionRecord,
-  OutputRef,
-  SessionStatus,
-  WorkflowSessionState,
+import {
+  isTerminalWorkflowSessionStatus,
+  type NodeBackendSessionRecord,
+  type NodeExecutionRecord,
+  type OutputRef,
+  type WorkflowSessionState,
 } from "./session";
 import type {
   AgentNodePayload,
@@ -661,7 +661,7 @@ class ExecutionDispatcher {
     }
 
     let session = sessionResult.value;
-    if (isTerminalSessionStatus(session.status)) {
+    if (isTerminalWorkflowSessionStatus(session.status)) {
       return err({
         session,
         exitCode: 1,
@@ -1471,10 +1471,4 @@ export async function callNode(
       ? new DispatchingNodeAdapter()
       : new ScenarioNodeAdapter(input.mockScenario));
   return new ExecutionDispatcher(effectiveAdapter, input).dispatch(input);
-}
-
-function isTerminalSessionStatus(status: SessionStatus): boolean {
-  return (
-    status === "completed" || status === "failed" || status === "cancelled"
-  );
 }
