@@ -15,6 +15,7 @@ import { createManagerSessionStore } from "./manager-session-store";
 import { listRuntimeNodeExecutions, listRuntimeNodeLogs } from "./runtime-db";
 import { resolveCurrentStepId } from "./session";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
+import type { WorkflowJson, WorkflowTimeoutPolicy } from "./types";
 
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
@@ -515,6 +516,28 @@ class OutputContractRetryPromptCaptureAdapter implements NodeAdapter {
   }
 }
 
+class TimeoutCaptureAdapter implements NodeAdapter {
+  readonly timeouts: Array<{ readonly nodeId: string; readonly timeoutMs: number }> =
+    [];
+
+  async execute(
+    input: Parameters<NodeAdapter["execute"]>[0],
+    context: Parameters<NodeAdapter["execute"]>[1],
+  ): Promise<
+    ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
+  > {
+    this.timeouts.push({ nodeId: input.nodeId, timeoutMs: context.timeoutMs });
+    return {
+      provider: "timeout-capture-adapter",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      when: { always: true },
+      payload: { nodeId: input.nodeId },
+    };
+  }
+}
+
 class DescriptionOnlyRetryPromptCaptureAdapter implements NodeAdapter {
   prompts: string[] = [];
 
@@ -858,6 +881,40 @@ async function makeTempDir(): Promise<string> {
 
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+async function loadWorkflowFixture(
+  root: string,
+  workflowName: string,
+): Promise<WorkflowJson> {
+  const workflowRaw = await readFile(
+    path.join(root, workflowName, "workflow.json"),
+    "utf8",
+  );
+  return JSON.parse(workflowRaw) as WorkflowJson;
+}
+
+async function saveWorkflowFixture(
+  root: string,
+  workflowName: string,
+  workflow: WorkflowJson,
+): Promise<void> {
+  await writeJson(path.join(root, workflowName, "workflow.json"), workflow);
+}
+
+async function setWorkflowTimeoutPolicy(
+  root: string,
+  workflowName: string,
+  timeoutPolicy: WorkflowTimeoutPolicy,
+): Promise<void> {
+  const workflow = await loadWorkflowFixture(root, workflowName);
+  await saveWorkflowFixture(root, workflowName, {
+    ...workflow,
+    defaults: {
+      ...workflow.defaults,
+      timeoutPolicy,
+    },
+  });
 }
 
 afterEach(async () => {
@@ -5935,6 +5992,342 @@ describe("runWorkflow", () => {
     expect(stepExecutions).toHaveLength(2);
     expect(stepExecutions[0]?.status).toBe("timed_out");
     expect(stepExecutions[1]?.status).toBe("succeeded");
+  });
+
+  test("applies authored retry timeout policy when runtime restartOnStuck is unset", async () => {
+    const root = await makeTempDir();
+    const workflowName = "authored-timeout-retry-success";
+    await createWorkflowFixture(root, workflowName, false);
+    await setWorkflowTimeoutPolicy(root, workflowName, {
+      onTimeout: "retry-same-step",
+      maxRetries: 1,
+    });
+
+    let firstStepAttempt = true;
+    const flakyAdapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "step-1" && firstStepAttempt) {
+          firstStepAttempt = false;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: "ok",
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const result = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        defaultTimeoutMs: 10,
+        stuckRestartBackoffMs: 0,
+      },
+      flakyAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.session.status).toBe("completed");
+    expect((result.value.session.restartEvents ?? []).length).toBe(1);
+    expect((result.value.session.restartCounts ?? {})["step-1"]).toBe(1);
+    const stepExecutions = result.value.session.nodeExecutions.filter(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExecutions).toHaveLength(2);
+    expect(stepExecutions[0]?.status).toBe("timed_out");
+    expect(stepExecutions[1]?.status).toBe("succeeded");
+  });
+
+  test("defaultTimeoutMs does not override authored step-local or node timeouts", async () => {
+    const root = await makeTempDir();
+    const workflowName = "step-addressed-step-timeout-precedence";
+    await createStepAddressedInheritedSessionReuseFixture(root, workflowName);
+
+    const workflow = await loadWorkflowFixture(root, workflowName);
+    await saveWorkflowFixture(root, workflowName, {
+      ...workflow,
+      defaults: {
+        ...workflow.defaults,
+        nodeTimeoutMs: 120,
+      },
+      steps: (workflow.steps ?? []).map((step) =>
+        step.id === "step-a"
+          ? {
+              ...step,
+              timeoutMs: 15,
+            }
+          : step,
+      ),
+    });
+
+    const nodePath = path.join(root, workflowName, "nodes", "node-writer.json");
+    const node = JSON.parse(await readFile(nodePath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    await writeJson(nodePath, {
+      ...node,
+      timeoutMs: 40,
+    });
+
+    const adapter = new TimeoutCaptureAdapter();
+    const result = await runWorkflow(
+      workflowName,
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        defaultTimeoutMs: 5,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(adapter.timeouts).toEqual([
+      { nodeId: "step-a", timeoutMs: 15 },
+      { nodeId: "step-b", timeoutMs: 40 },
+    ]);
+  });
+
+  test("retry timeout increments still apply when base timeout comes from defaultTimeoutMs", async () => {
+    const root = await makeTempDir();
+    const workflowName = "step-addressed-default-timeout-retry-increment";
+    const sessionId = "sess-step-addressed-default-timeout-retry-increment";
+    await createStepAddressedInheritedSessionReuseFixture(root, workflowName);
+
+    const workflow = await loadWorkflowFixture(root, workflowName);
+    await saveWorkflowFixture(root, workflowName, {
+      ...workflow,
+      defaults: {
+        ...workflow.defaults,
+        nodeTimeoutMs: 120,
+        timeoutPolicy: {
+          onTimeout: "retry-same-step",
+          maxRetries: 1,
+          retryTimeoutIncrementMs: 50,
+        },
+      },
+    });
+
+    const stuckAdapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "step-a") {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: input.promptText,
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const result = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        sessionId,
+        defaultTimeoutMs: 10,
+        stuckRestartBackoffMs: 0,
+      },
+      stuckAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const completedSession = await loadSession(sessionId, options);
+    expect(completedSession.ok).toBe(true);
+    if (!completedSession.ok) {
+      return;
+    }
+
+    expect(completedSession.value.status).toBe("completed");
+    const stepExecutions = completedSession.value.nodeExecutions.filter(
+      (entry) => entry.stepId === "step-a",
+    );
+    expect(stepExecutions).toHaveLength(2);
+    expect(stepExecutions[0]?.timeoutMs).toBe(10);
+    expect(stepExecutions[0]?.status).toBe("timed_out");
+    expect(stepExecutions[1]?.timeoutMs).toBe(60);
+    expect(stepExecutions[1]?.status).toBe("succeeded");
+  });
+
+  test("explicit restartOnStuck false disables authored retry timeout policy", async () => {
+    const root = await makeTempDir();
+    const workflowName = "authored-timeout-retry-disabled";
+    const sessionId = "sess-authored-timeout-retry-disabled";
+    await createWorkflowFixture(root, workflowName, false);
+    await setWorkflowTimeoutPolicy(root, workflowName, {
+      onTimeout: "retry-same-step",
+      maxRetries: 3,
+    });
+
+    const stuckAdapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "step-1") {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: "late",
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const result = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        sessionId,
+        defaultTimeoutMs: 10,
+        restartOnStuck: false,
+        stuckRestartBackoffMs: 0,
+      },
+      stuckAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.exitCode).toBe(6);
+
+    const failedSession = await loadSession(sessionId, options);
+    expect(failedSession.ok).toBe(true);
+    if (!failedSession.ok) {
+      return;
+    }
+
+    expect(failedSession.value.status).toBe("failed");
+    expect(failedSession.value.restartEvents ?? []).toEqual([]);
+    const stepExecutions = failedSession.value.nodeExecutions.filter(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(stepExecutions).toHaveLength(1);
+    expect(stepExecutions[0]?.status).toBe("timed_out");
+  });
+
+  test("explicit restartOnStuck false disables authored jump timeout policy", async () => {
+    const root = await makeTempDir();
+    const workflowName = "authored-timeout-jump-disabled";
+    const sessionId = "sess-authored-timeout-jump-disabled";
+    await createWorkflowFixture(root, workflowName, false);
+    const workflow = await loadWorkflowFixture(root, workflowName);
+    await saveWorkflowFixture(root, workflowName, {
+      ...workflow,
+      defaults: {
+        ...workflow.defaults,
+        timeoutPolicy: {
+          onTimeout: "jump-to-step",
+          jumpStepId: "step-2",
+        },
+      },
+      nodes: [
+        ...workflow.nodes,
+        {
+          id: "step-2",
+          kind: "task",
+          nodeFile: "node-step-2.json",
+          completion: { type: "none" },
+        },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "step 2",
+      variables: {},
+    });
+
+    const stuckAdapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "step-1") {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: "ok",
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const result = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        sessionId,
+        defaultTimeoutMs: 10,
+        restartOnStuck: false,
+        stuckRestartBackoffMs: 0,
+      },
+      stuckAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.exitCode).toBe(6);
+
+    const failedSession = await loadSession(sessionId, options);
+    expect(failedSession.ok).toBe(true);
+    if (!failedSession.ok) {
+      return;
+    }
+
+    expect(failedSession.value.status).toBe("failed");
+    expect(
+      failedSession.value.nodeExecutions.some(
+        (entry) => entry.nodeId === "step-2",
+      ),
+    ).toBe(false);
   });
 
   test("fails with timeout when stuck restart budget is exhausted", async () => {

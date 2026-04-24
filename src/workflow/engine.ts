@@ -94,6 +94,7 @@ import type {
   SubWorkflowRef,
   WorkflowEdge,
   WorkflowJson,
+  WorkflowTimeoutPolicy,
 } from "./types";
 import { asAgentNodePayload } from "./types";
 
@@ -196,18 +197,63 @@ function initialDeliveryAttemptId(): string {
   return "attempt-000001";
 }
 
-function resolveTimeoutMs(
-  node: NodePayload,
-  workflowTimeoutMs: number,
-  overrideTimeoutMs: number | undefined,
-): number {
-  if (node.timeoutMs !== undefined) {
-    return node.timeoutMs;
+function resolveTimeoutMs(input: {
+  readonly node: NodePayload;
+  readonly stepTimeoutMs?: number;
+  readonly workflowTimeoutMs: number;
+}): {
+  readonly timeoutMs: number;
+  readonly source: "step" | "node" | "workflow-default";
+} {
+  if (input.stepTimeoutMs !== undefined) {
+    return {
+      timeoutMs: input.stepTimeoutMs,
+      source: "step",
+    };
   }
-  if (overrideTimeoutMs !== undefined && overrideTimeoutMs > 0) {
-    return overrideTimeoutMs;
+  if (input.node.timeoutMs !== undefined) {
+    return {
+      timeoutMs: input.node.timeoutMs,
+      source: "node",
+    };
   }
-  return workflowTimeoutMs;
+  return {
+    timeoutMs: input.workflowTimeoutMs,
+    source: "workflow-default",
+  };
+}
+
+function resolveTimeoutRestartBudget(
+  timeoutPolicy: WorkflowTimeoutPolicy | undefined,
+  options: WorkflowRunOptions,
+  restartAttempt: number,
+): { readonly allowRestart: boolean; readonly maxRestarts: number } {
+  if (options.restartOnStuck === false) {
+    return { allowRestart: false, maxRestarts: 0 };
+  }
+  const optRestart = options.restartOnStuck ?? true;
+  const optMax = options.maxStuckRestarts ?? 2;
+  if (timeoutPolicy === undefined) {
+    return { allowRestart: optRestart, maxRestarts: optMax };
+  }
+  switch (timeoutPolicy.onTimeout) {
+    case "fail":
+      return { allowRestart: false, maxRestarts: 0 };
+    case "retry-same-step":
+      return {
+        allowRestart: true,
+        maxRestarts: timeoutPolicy.maxRetries ?? optMax,
+      };
+    case "jump-to-step": {
+      const retriesBeforeJump = timeoutPolicy.maxRetries ?? 0;
+      return {
+        allowRestart: restartAttempt < retriesBeforeJump,
+        maxRestarts: retriesBeforeJump,
+      };
+    }
+    default:
+      return { allowRestart: optRestart, maxRestarts: optMax };
+  }
 }
 
 function evaluateEdge(
@@ -1684,6 +1730,7 @@ function resolveStepExecutionAddress(
   readonly stepId?: string;
   readonly nodeRegistryId?: string;
   readonly promptVariant?: string;
+  readonly timeoutMs?: number;
   readonly inheritFromStepId?: string;
 } {
   const step = workflow.steps?.find((entry) => entry.id === nodeId);
@@ -1693,6 +1740,7 @@ function resolveStepExecutionAddress(
     ...(step?.promptVariant === undefined
       ? {}
       : { promptVariant: step.promptVariant }),
+    ...(step?.timeoutMs === undefined ? {} : { timeoutMs: step.timeoutMs }),
     ...(step?.sessionPolicy?.inheritFromStepId === undefined
       ? {}
       : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
@@ -1960,8 +2008,6 @@ async function runWorkflowInternal(
   const maxLoopIterations =
     options.maxLoopIterations ?? workflow.defaults.maxLoopIterations;
   const maxSteps = options.maxSteps;
-  const restartOnStuck = options.restartOnStuck ?? true;
-  const maxStuckRestarts = options.maxStuckRestarts ?? 2;
   const stuckRestartBackoffMs = options.stuckRestartBackoffMs ?? 250;
 
   if (
@@ -2738,11 +2784,26 @@ async function runWorkflowInternal(
       );
 
       const startedAt = nowIso();
-      const timeoutMs = resolveTimeoutMs(
-        executionNodePayload,
-        workflow.defaults.nodeTimeoutMs,
-        options.defaultTimeoutMs,
-      );
+      const resolvedTimeout = resolveTimeoutMs({
+        node: executionNodePayload,
+        workflowTimeoutMs:
+          options.defaultTimeoutMs ?? workflow.defaults.nodeTimeoutMs,
+        ...(stepExecutionAddress.timeoutMs === undefined
+          ? {}
+          : { stepTimeoutMs: stepExecutionAddress.timeoutMs }),
+      });
+      const baseTimeoutMs = resolvedTimeout.timeoutMs;
+      const timeoutPolicy = workflow.defaults.timeoutPolicy;
+      const timeoutIncrementMs = timeoutPolicy?.retryTimeoutIncrementMs ?? 0;
+      const applyTimeoutIncrement =
+        timeoutIncrementMs > 0 &&
+        restartAttempt > 0 &&
+        timeoutPolicy !== undefined &&
+        (timeoutPolicy.onTimeout === "retry-same-step" ||
+          timeoutPolicy.onTimeout === "jump-to-step");
+      const timeoutMs =
+        baseTimeoutMs +
+        (applyTimeoutIncrement ? timeoutIncrementMs * restartAttempt : 0);
       let ambientManagerContext: AdapterAmbientManagerContext | undefined;
       let managerSessionId: string | undefined;
 
@@ -3899,7 +3960,60 @@ async function runWorkflowInternal(
       }
 
       if (nodeStatus === "timed_out") {
-        if (restartOnStuck && restartAttempt < maxStuckRestarts) {
+        const authoredTimeoutPolicy = workflow.defaults.timeoutPolicy;
+        if (
+          options.restartOnStuck !== false &&
+          authoredTimeoutPolicy?.onTimeout === "jump-to-step" &&
+          authoredTimeoutPolicy.jumpStepId !== undefined
+        ) {
+          const retriesBeforeJump = authoredTimeoutPolicy.maxRetries ?? 0;
+          if (restartAttempt >= retriesBeforeJump) {
+            const jumpId = authoredTimeoutPolicy.jumpStepId;
+            if (!workflowNodes.has(jumpId)) {
+              const failed: WorkflowSessionState = {
+                ...session,
+                queue,
+                status: "failed",
+                currentNodeId: nodeId,
+                endedAt,
+                nodeExecutionCounter: nextExecutionCounter,
+                nodeExecutionCounts: updatedCounts,
+                nodeExecutions,
+                communicationCounter: currentCommunicationCounter,
+                communications: currentCommunications,
+                nodeBackendSessions: nextNodeBackendSessions,
+                lastError: `node timeout at '${nodeId}': timeout policy jump target '${jumpId}' is not a known workflow node`,
+              };
+              await saveSession(failed, options);
+              return err({
+                exitCode: 6,
+                message: failed.lastError ?? "node timeout",
+              });
+            }
+            session = {
+              ...session,
+              status: "running",
+              queue: [...dedupeNodeIds([jumpId, ...queue])],
+              currentNodeId: nodeId,
+              nodeExecutionCounter: nextExecutionCounter,
+              nodeExecutionCounts: updatedCounts,
+              nodeExecutions,
+              communicationCounter: currentCommunicationCounter,
+              communications: currentCommunications,
+              nodeBackendSessions: nextNodeBackendSessions,
+              lastError: `node timeout at '${nodeId}', jumping to '${jumpId}'`,
+            };
+            await saveSession(session, options);
+            break;
+          }
+        }
+
+        const { allowRestart, maxRestarts } = resolveTimeoutRestartBudget(
+          authoredTimeoutPolicy,
+          options,
+          restartAttempt,
+        );
+        if (allowRestart && restartAttempt < maxRestarts) {
           const restartCountForNode =
             (session.restartCounts?.[nodeId] ?? 0) + 1;
           const restartEvents = [
