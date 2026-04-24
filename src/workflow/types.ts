@@ -30,8 +30,9 @@ export interface CompletionRule {
 }
 
 export interface WorkflowDefaults {
-  readonly maxLoopIterations: number;
   readonly nodeTimeoutMs: number;
+  readonly maxLoopIterations: number;
+  readonly timeoutPolicy?: WorkflowTimeoutPolicy;
   readonly containerRuntime?: ContainerRuntimeDefaults;
 }
 
@@ -56,6 +57,14 @@ export interface WorkflowNodeAddonRef {
   readonly config?: Readonly<Record<string, unknown>>;
   readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
   readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface WorkflowTimeoutPolicy {
+  readonly onTimeout: "fail" | "retry-same-step" | "jump-to-step";
+  readonly maxRetries?: number;
+  readonly retryTimeoutIncrementMs?: number;
+  readonly jumpStepId?: string;
+  readonly reuseBackendSession?: boolean;
 }
 
 export interface NodeAddonResolveInput {
@@ -93,6 +102,47 @@ export interface WorkflowNodeRepeatPolicy {
   readonly while: string;
   readonly restartAt?: string;
   readonly maxIterations?: number;
+}
+
+export interface WorkflowNodeRegistryRef {
+  readonly id: string;
+  readonly nodeFile?: string;
+  readonly addon?: WorkflowNodeAddonRef;
+}
+
+export interface WorkflowStepTransition {
+  readonly toStepId: string;
+  readonly toWorkflowId?: string;
+  readonly label?: string;
+}
+
+export interface WorkflowStepSessionPolicy {
+  readonly mode?: NodeSessionMode;
+  readonly inheritFromStepId?: string;
+}
+
+export interface WorkflowStepRef {
+  readonly id: string;
+  readonly stepFile?: string;
+  readonly nodeId: string;
+  readonly description?: string;
+  readonly role?: NodeRole;
+  readonly promptVariant?: string;
+  readonly timeoutMs?: number;
+  readonly sessionPolicy?: WorkflowStepSessionPolicy;
+  readonly transitions?: readonly WorkflowStepTransition[];
+}
+
+export interface AuthoredWorkflowStepRef {
+  readonly id: string;
+  readonly stepFile?: string;
+  readonly nodeId?: string;
+  readonly description?: string;
+  readonly role?: NodeRole;
+  readonly promptVariant?: string;
+  readonly timeoutMs?: number;
+  readonly sessionPolicy?: WorkflowStepSessionPolicy;
+  readonly transitions?: readonly WorkflowStepTransition[];
 }
 
 export interface WorkflowNodeRef {
@@ -204,10 +254,16 @@ export interface AuthoredWorkflowJson
   readonly prompts?: WorkflowPrompts;
   readonly managerNodeId?: string;
   readonly entryNodeId?: string;
+  readonly managerStepId?: string;
+  readonly entryStepId?: string;
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly subWorkflows?: readonly SubWorkflowRef[];
   readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
-  readonly nodes: readonly AuthoredWorkflowNodeRef[];
+  readonly nodes: readonly (
+    | AuthoredWorkflowNodeRef
+    | WorkflowNodeRegistryRef
+  )[];
+  readonly steps?: readonly AuthoredWorkflowStepRef[];
   readonly edges?: readonly WorkflowEdge[];
   readonly loops?: readonly LoopRule[];
   readonly branching?: {
@@ -223,6 +279,10 @@ export interface WorkflowJson {
   readonly managerNodeId: string;
   readonly hasManagerNode?: boolean;
   readonly entryNodeId?: string;
+  readonly managerStepId?: string;
+  readonly entryStepId?: string;
+  readonly nodeRegistry?: readonly WorkflowNodeRegistryRef[];
+  readonly steps?: readonly WorkflowStepRef[];
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly subWorkflows: readonly SubWorkflowRef[];
   readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
@@ -494,6 +554,7 @@ export interface NodePayload {
   readonly id: string;
   readonly description?: string;
   readonly nodeType?: NodeType;
+  readonly managerType?: "code" | "llm";
   readonly workingDirectory?: string;
   readonly model?: string;
   readonly executionBackend?: NodeExecutionBackend;
@@ -504,6 +565,7 @@ export interface NodePayload {
   readonly promptTemplateFile?: string;
   readonly sessionStartPromptTemplate?: string;
   readonly sessionStartPromptTemplateFile?: string;
+  readonly promptVariants?: Readonly<Record<string, NodePromptVariant>>;
   readonly variables: Readonly<Record<string, unknown>>;
   readonly command?: CommandExecution;
   readonly container?: ContainerExecution;
@@ -521,6 +583,15 @@ export interface AgentNodePayload extends NodePayload {
   readonly nodeType?: "agent";
   readonly model: string;
   readonly promptTemplate: string;
+}
+
+export interface NodePromptVariant {
+  readonly systemPromptTemplate?: string;
+  readonly systemPromptTemplateFile?: string;
+  readonly promptTemplate?: string;
+  readonly promptTemplateFile?: string;
+  readonly sessionStartPromptTemplate?: string;
+  readonly sessionStartPromptTemplateFile?: string;
 }
 
 export function asAgentNodePayload(node: NodePayload): AgentNodePayload | null {

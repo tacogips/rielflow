@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
+import {
+  listNodeTemplateFieldContainers,
+  NODE_TEMPLATE_FIELD_SPECS,
+} from "./node-template-fields";
 import { renderPromptTemplate } from "./render";
 import { err, ok, type Result } from "./result";
 import {
@@ -322,43 +325,40 @@ async function resolveTemplateFiles(input: {
   readonly payload: Record<string, unknown>;
   readonly issues: ValidationIssue[];
 }): Promise<void> {
-  for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
-    const templateFile = input.payload[spec.fileField];
-    if (templateFile === undefined) {
-      continue;
-    }
-    if (typeof templateFile !== "string" || templateFile.length === 0) {
-      input.issues.push(
-        makeIssue(
-          `addon.resolution.${spec.fileField}`,
-          "must be a non-empty string",
-        ),
-      );
-      continue;
-    }
-    const resolvedPath = resolveAddonRelativePath(input.source, templateFile);
-    if (!resolvedPath.ok) {
-      input.issues.push(
-        makeIssue(
-          `addon.resolution.${spec.fileField}`,
-          resolvedPath.error.message,
-        ),
-      );
-      continue;
-    }
-    try {
-      input.payload[spec.textField] = await readFile(
-        resolvedPath.value,
-        "utf8",
-      );
-      delete input.payload[spec.fileField];
-    } catch (error: unknown) {
-      input.issues.push(
-        makeIssue(
-          `addon.resolution.${spec.fileField}`,
-          `failed reading template file '${templateFile}': ${errorMessageFromUnknown(error)}`,
-        ),
-      );
+  for (const { path: containerPath, record } of listNodeTemplateFieldContainers(
+    input.payload,
+  )) {
+    for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
+      const templateFile = record[spec.fileField];
+      const issuePath =
+        containerPath.length === 0
+          ? `addon.resolution.${spec.fileField}`
+          : `addon.resolution.${containerPath}.${spec.fileField}`;
+      if (templateFile === undefined) {
+        continue;
+      }
+      if (typeof templateFile !== "string" || templateFile.length === 0) {
+        input.issues.push(
+          makeIssue(issuePath, "must be a non-empty string"),
+        );
+        continue;
+      }
+      const resolvedPath = resolveAddonRelativePath(input.source, templateFile);
+      if (!resolvedPath.ok) {
+        input.issues.push(makeIssue(issuePath, resolvedPath.error.message));
+        continue;
+      }
+      try {
+        record[spec.textField] = await readFile(resolvedPath.value, "utf8");
+        delete record[spec.fileField];
+      } catch (error: unknown) {
+        input.issues.push(
+          makeIssue(
+            issuePath,
+            `failed reading template file '${templateFile}': ${errorMessageFromUnknown(error)}`,
+          ),
+        );
+      }
     }
   }
 }

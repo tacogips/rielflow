@@ -363,6 +363,587 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.workflow.nodes[2]?.kind).toBe("loop-judge");
   });
 
+  test("accepts step-addressed workflows with reusable node registry entries", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-demo",
+        description: "step addressed workflow",
+        defaults: {
+          nodeTimeoutMs: 120000,
+          timeoutPolicy: {
+            onTimeout: "retry-same-step",
+            maxRetries: 1,
+          },
+        },
+        managerStepId: "manager",
+        entryStepId: "manager",
+        nodes: [
+          {
+            id: "manager-node",
+            nodeFile: "nodes/node-manager.json",
+          },
+          {
+            id: "coder-node",
+            nodeFile: "nodes/node-coder.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager",
+            nodeId: "manager-node",
+            role: "manager",
+            transitions: [{ toStepId: "implement" }],
+          },
+          {
+            id: "implement",
+            nodeId: "coder-node",
+            role: "worker",
+            transitions: [{ toStepId: "review" }],
+          },
+          {
+            id: "review",
+            nodeId: "coder-node",
+            role: "worker",
+            promptVariant: "self-review",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-manager.json": {
+          id: "manager-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "manager",
+          variables: {},
+          managerType: "code",
+        },
+        "nodes/node-coder.json": {
+          id: "coder-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "implement",
+          variables: {},
+          promptVariants: {
+            "self-review": {
+              promptTemplate: "review",
+            },
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.nodeRegistry?.map((node) => node.id)).toEqual([
+      "manager-node",
+      "coder-node",
+    ]);
+    expect(result.value.workflow.steps?.map((step) => step.id)).toEqual([
+      "manager",
+      "implement",
+      "review",
+    ]);
+    expect(result.value.workflow.edges).toEqual([
+      { from: "manager", to: "implement", when: "always" },
+      { from: "implement", to: "review", when: "always" },
+    ]);
+    expect(result.value.nodePayloads["manager"]?.managerType).toBe("code");
+    expect(result.value.nodePayloads["implement"]?.promptTemplate).toBe(
+      "implement",
+    );
+    expect(result.value.nodePayloads["review"]?.promptTemplate).toBe("review");
+  });
+
+  test("defaults manager steps to code-manager payloads without LLM fields", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-code-manager-default",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        managerStepId: "manager-step",
+        entryStepId: "manager-step",
+        nodes: [
+          {
+            id: "manager-node",
+            nodeFile: "nodes/node-manager.json",
+          },
+          {
+            id: "worker-node",
+            nodeFile: "nodes/node-worker.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager-step",
+            nodeId: "manager-node",
+            transitions: [{ toStepId: "worker-step" }],
+          },
+          {
+            id: "worker-step",
+            nodeId: "worker-node",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-manager.json": {
+          id: "manager-node",
+          variables: {},
+        },
+        "nodes/node-worker.json": {
+          id: "worker-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "implement",
+          variables: {},
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.nodePayloads["manager-step"]).toMatchObject({
+      id: "manager-step",
+      managerType: "code",
+      variables: {},
+    });
+    expect(result.value.nodePayloads["manager-step"]?.executionBackend).toBe(
+      undefined,
+    );
+    expect(result.value.nodePayloads["manager-step"]?.promptTemplate).toBe(
+      undefined,
+    );
+  });
+
+  test("rejects managerType on worker-role steps in step-addressed workflows", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-worker-manager-type",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        managerStepId: "manager-step",
+        entryStepId: "manager-step",
+        nodes: [
+          {
+            id: "shared-node",
+            nodeFile: "nodes/node-shared.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager-step",
+            nodeId: "shared-node",
+            role: "manager",
+          },
+          {
+            id: "worker-step",
+            nodeId: "shared-node",
+            role: "worker",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-shared.json": {
+          id: "shared-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "shared prompt",
+          variables: {},
+          managerType: "code",
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps[1].nodeId",
+          message:
+            "references node 'shared-node' whose payload declares managerType; managerType is valid only for manager-role steps",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects add-on-backed node registry entries for manager steps in step-addressed workflows", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-manager-addon",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        managerStepId: "manager-step",
+        entryStepId: "manager-step",
+        nodes: [
+          {
+            id: "shared-node",
+            addon: {
+              name: "divedra/codex-worker",
+              version: "1",
+              config: {
+                model: "gpt-5-nano",
+                promptTemplate: "shared prompt",
+              },
+            },
+          },
+        ],
+        steps: [
+          {
+            id: "manager-step",
+            nodeId: "shared-node",
+            role: "manager",
+          },
+        ],
+      },
+      nodePayloads: {},
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps[0].nodeId",
+          message:
+            "manager step 'manager-step' must reference a file-backed node; add-on-backed node registry entry 'shared-node' is worker-only",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects duplicate step ids and node registry ids in step-addressed workflows", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-duplicate-demo",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        entryStepId: "manager",
+        managerStepId: "manager",
+        nodes: [
+          {
+            id: "shared-node",
+            nodeFile: "nodes/node-manager.json",
+          },
+          {
+            id: "shared-node",
+            nodeFile: "nodes/node-coder.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager",
+            nodeId: "shared-node",
+            role: "manager",
+          },
+          {
+            id: "manager",
+            nodeId: "shared-node",
+            role: "worker",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-manager.json": {
+          id: "shared-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "manager",
+          variables: {},
+        },
+        "nodes/node-coder.json": {
+          id: "shared-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "worker",
+          variables: {},
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.nodes[1].id",
+          message: "duplicate node registry id 'shared-node'",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps[1].id",
+          message: "duplicate step id 'manager'",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects mixing stepFile with inline step fields in authored step-addressed workflows", () => {
+    const result = validateWorkflowBundleDetailed({
+      workflow: {
+        workflowId: "step-file-inline-mix",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        entryStepId: "manager",
+        nodes: [
+          {
+            id: "manager-node",
+            nodeFile: "nodes/node-manager.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager",
+            stepFile: "steps/step-manager.json",
+            nodeId: "manager-node",
+            role: "manager",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-manager.json": {
+          id: "manager-node",
+          variables: {},
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps[0].nodeId",
+          message:
+            "must not be authored inline when workflow.steps[].stepFile is used",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps[0].role",
+          message:
+            "must not be authored inline when workflow.steps[].stepFile is used",
+        }),
+      ]),
+    );
+  });
+
+  test("treats malformed steps authoring as step-addressed schema input", () => {
+    const result = validateWorkflowBundleDetailed({
+      workflow: {
+        workflowId: "broken-step-schema",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        nodes: [],
+        steps: {},
+      },
+      nodePayloads: {},
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps",
+          message: "must be an array",
+        }),
+        expect.objectContaining({
+          path: "workflow.entryStepId",
+          message: "must be a non-empty string",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some((issue) => issue.path === "workflow.managerNodeId"),
+    ).toBe(false);
+    expect(
+      result.error.some((issue) => issue.path === "workflow.entryNodeId"),
+    ).toBe(false);
+  });
+
+  test("rejects empty step-addressed arrays without leaking legacy compatibility diagnostics", () => {
+    const emptyStepsResult = validateWorkflowBundleDetailed({
+      workflow: {
+        workflowId: "empty-step-addressed-steps",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        entryStepId: "missing-step",
+        nodes: [
+          {
+            id: "shared-node",
+            nodeFile: "nodes/node-shared.json",
+          },
+        ],
+        steps: [],
+      },
+      nodePayloads: {
+        "nodes/node-shared.json": {
+          id: "shared-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "worker",
+          variables: {},
+        },
+      },
+    });
+    expect(emptyStepsResult.ok).toBe(false);
+    if (!emptyStepsResult.ok) {
+      expect(emptyStepsResult.error).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "workflow.steps",
+            message: "must contain at least one step",
+          }),
+          expect.objectContaining({
+            path: "workflow.entryStepId",
+            message: "must reference an existing step id (missing-step)",
+          }),
+        ]),
+      );
+      expect(
+        emptyStepsResult.error.some(
+          (issue) =>
+            issue.path === "workflow.managerNodeId" ||
+            issue.path === "workflow.entryNodeId" ||
+            issue.path.startsWith("workflow.edges["),
+        ),
+      ).toBe(false);
+    }
+
+    const emptyNodesResult = validateWorkflowBundleDetailed({
+      workflow: {
+        workflowId: "empty-step-addressed-nodes",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        entryStepId: "worker-step",
+        nodes: [],
+        steps: [
+          {
+            id: "worker-step",
+            nodeId: "shared-node",
+          },
+        ],
+      },
+      nodePayloads: {},
+    });
+    expect(emptyNodesResult.ok).toBe(false);
+    if (!emptyNodesResult.ok) {
+      expect(emptyNodesResult.error).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "workflow.nodes",
+            message: "must contain at least one workflow node registry entry",
+          }),
+          expect.objectContaining({
+            path: "workflow.steps[0].nodeId",
+            message:
+              "must reference an existing workflow node registry entry (shared-node)",
+          }),
+        ]),
+      );
+      expect(
+        emptyNodesResult.error.some(
+          (issue) =>
+            issue.path === "workflow.managerNodeId" ||
+            issue.path === "workflow.entryNodeId" ||
+            issue.path.startsWith("workflow.edges["),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("replaces base prompt fields when a step prompt variant overrides them", () => {
+    const result = validateWorkflowBundle({
+      workflow: {
+        workflowId: "step-prompt-variant-overrides",
+        defaults: {
+          nodeTimeoutMs: 120000,
+        },
+        entryStepId: "review",
+        nodes: [
+          {
+            id: "coder-node",
+            nodeFile: "nodes/node-coder.json",
+          },
+        ],
+        steps: [
+          {
+            id: "review",
+            nodeId: "coder-node",
+            promptVariant: "self-review",
+          },
+        ],
+      },
+      nodePayloads: {
+        "nodes/node-coder.json": {
+          id: "coder-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "implement",
+          systemPromptTemplateFile: "prompts/system-default.md",
+          sessionStartPromptTemplate: "first turn",
+          variables: {},
+          promptVariants: {
+            "self-review": {
+              promptTemplateFile: "prompts/review.md",
+              systemPromptTemplate: "review system",
+              sessionStartPromptTemplateFile: "prompts/review-start.md",
+            },
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.nodePayloads["review"]?.promptTemplate).toBeUndefined();
+    expect(result.value.nodePayloads["review"]?.promptTemplateFile).toBe(
+      "prompts/review.md",
+    );
+    expect(result.value.nodePayloads["review"]?.systemPromptTemplate).toBe(
+      "review system",
+    );
+    expect(
+      result.value.nodePayloads["review"]?.systemPromptTemplateFile,
+    ).toBeUndefined();
+    expect(
+      result.value.nodePayloads["review"]?.sessionStartPromptTemplate,
+    ).toBeUndefined();
+    expect(
+      result.value.nodePayloads["review"]?.sessionStartPromptTemplateFile,
+    ).toBe("prompts/review-start.md");
+    expect(result.value.nodePayloads["coder-node"]?.promptTemplate).toBe(
+      "implement",
+    );
+    expect(
+      result.value.nodePayloads["coder-node"]?.systemPromptTemplateFile,
+    ).toBe("prompts/system-default.md");
+    expect(
+      result.value.nodePayloads["coder-node"]?.sessionStartPromptTemplate,
+    ).toBe("first turn");
+  });
+
   test("accepts simplified sequential schema and synthesizes edges plus repeat loops", () => {
     const raw = {
       workflow: {

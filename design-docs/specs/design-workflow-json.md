@@ -180,6 +180,9 @@ Validation rules:
   functions passed through the library/server load, validation, save, and
   execution options
 - workflow loading does not fetch third-party packages or registry metadata
+- manager steps must currently reference file-backed node definitions; the
+  current add-on contract is worker-only until manager-capable add-ons are
+  designed explicitly
 - manager/worker semantics are authored at the step or node payload level rather than through structural `kind` metadata
 
 ### `addon`

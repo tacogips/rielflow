@@ -1117,7 +1117,7 @@ describe("createGraphqlSchema", () => {
       "utf8",
     );
     expect(workflowJsonText).not.toContain('"managerNodeId"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
   });
 
   test("keeps worker-only workflow definitions manager-less across save mutations", async () => {
@@ -1157,7 +1157,7 @@ describe("createGraphqlSchema", () => {
     expect(workflowJsonText).not.toContain('"hasManagerNode"');
     expect(workflowJsonText).not.toContain('"managerNodeId"');
     expect(workflowJsonText).not.toContain('"kind"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
     expect(workflowJsonText).toContain('"role": "worker"');
   });
 
@@ -1180,15 +1180,48 @@ describe("createGraphqlSchema", () => {
     if (workerPayload === undefined) {
       return;
     }
+    const workerNode = created.bundle.workflow.nodes.find(
+      (node) => node.id === "main-worker",
+    );
+    expect(workerNode).toBeDefined();
+    if (workerNode === undefined) {
+      return;
+    }
+    const workerRegistryNode =
+      created.bundle.workflow.nodeRegistry?.find(
+        (node) => node.id === "main-worker",
+      ) ?? workerNode;
+    const { managerStepId: _managerStepId, ...managedWorkflow } = cloneJson(
+      created.bundle.workflow,
+    );
     const convertedBundle = {
       workflow: {
-        ...cloneJson(created.bundle.workflow),
+        ...managedWorkflow,
         hasManagerNode: false,
+        entryStepId: "main-worker",
         entryNodeId: "main-worker",
         edges: [],
-        nodes: cloneJson(created.bundle.workflow.nodes).filter(
-          (node) => node.id === "main-worker",
-        ),
+        nodeRegistry: [
+          {
+            id: workerRegistryNode.id,
+            ...(workerRegistryNode.nodeFile === undefined
+              ? {}
+              : { nodeFile: workerRegistryNode.nodeFile }),
+          },
+        ],
+        steps: [
+          {
+            id: "main-worker",
+            nodeId: "main-worker",
+            role: "worker" as const,
+          },
+        ],
+        nodes: [
+          {
+            ...cloneJson(workerNode),
+            role: "worker" as const,
+          },
+        ],
       },
       nodePayloads: {
         "main-worker": workerPayload,
@@ -1218,7 +1251,7 @@ describe("createGraphqlSchema", () => {
       "utf8",
     );
     expect(workflowJsonText).not.toContain('"managerNodeId"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
     expect(workflowJsonText).not.toContain('"role": "manager"');
   });
 
@@ -1245,16 +1278,49 @@ describe("createGraphqlSchema", () => {
     if (created.revision === null) {
       return;
     }
+    const workerNode = created.bundle.workflow.nodes.find(
+      (node) => node.id === "main-worker",
+    );
+    expect(workerNode).toBeDefined();
+    if (workerNode === undefined) {
+      return;
+    }
+    const workerRegistryNode =
+      created.bundle.workflow.nodeRegistry?.find(
+        (node) => node.id === "main-worker",
+      ) ?? workerNode;
+    const { managerStepId: _managerStepId, ...managedWorkflow } = cloneJson(
+      created.bundle.workflow,
+    );
 
     const convertedBundle = {
       workflow: {
-        ...cloneJson(created.bundle.workflow),
+        ...managedWorkflow,
         hasManagerNode: false,
+        entryStepId: "main-worker",
         entryNodeId: "main-worker",
         edges: [],
-        nodes: cloneJson(created.bundle.workflow.nodes).filter(
-          (node) => node.id === "main-worker",
-        ),
+        nodeRegistry: [
+          {
+            id: workerRegistryNode.id,
+            ...(workerRegistryNode.nodeFile === undefined
+              ? {}
+              : { nodeFile: workerRegistryNode.nodeFile }),
+          },
+        ],
+        steps: [
+          {
+            id: "main-worker",
+            nodeId: "main-worker",
+            role: "worker" as const,
+          },
+        ],
+        nodes: [
+          {
+            ...cloneJson(workerNode),
+            role: "worker" as const,
+          },
+        ],
       },
       nodePayloads: {
         "main-worker": workerPayload,

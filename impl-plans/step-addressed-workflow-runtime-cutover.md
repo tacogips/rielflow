@@ -1,6 +1,6 @@
 # Step-addressed Workflow Runtime Cutover Implementation Plan
 
-**Status**: Ready
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-workflow-steps-and-node-reuse.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/user-qa/qa-step-schema-workflow-calls.md`
 **Created**: 2026-04-24
 **Last Updated**: 2026-04-24
@@ -66,7 +66,7 @@ This plan is intentionally a breaking cutover. Backward compatibility with
 
 #### `src/workflow/types.ts`, `src/workflow/json-schema.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/inspect.ts`, `src/workflow/create.ts`
 
-**Status**: NOT_STARTED
+**Status**: IN_PROGRESS
 
 ```typescript
 export interface WorkflowTimeoutPolicy {
@@ -263,7 +263,7 @@ interface StepAddressedExampleSet {
 
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
-| Authored schema and bundle I/O | `src/workflow/types.ts`, `src/workflow/json-schema.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/inspect.ts`, `src/workflow/create.ts` | NOT_STARTED | `src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, `src/workflow/save.test.ts`, `src/workflow/json-schema.test.ts` |
+| Authored schema and bundle I/O | `src/workflow/types.ts`, `src/workflow/json-schema.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/inspect.ts`, `src/workflow/create.ts` | IN_PROGRESS | `src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, `src/workflow/save.test.ts`, `src/workflow/json-schema.test.ts` |
 | Step execution state and unified `call-step` | `src/workflow/call-step.ts`, `src/workflow/session.ts`, `src/workflow/runtime-db.ts`, `src/workflow/node-execution-mailbox.ts` | NOT_STARTED | `src/workflow/call-step.test.ts`, `src/workflow/runtime-db.test.ts`, `src/workflow/session-store.test.ts` |
 | Engine and deterministic manager runtime | `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/prompt-composition.ts`, `src/workflow/input-assembly.ts` | NOT_STARTED | `src/workflow/engine.test.ts`, `src/workflow/manager-control.test.ts`, `src/workflow/prompt-composition.test.ts`, `src/workflow/input-assembly.test.ts` |
 | Public surfaces and inspection | `src/lib.ts`, `src/cli.ts`, `src/graphql/schema.ts`, `src/tui/**/*` | NOT_STARTED | `src/lib.test.ts`, `src/cli.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql.test.ts`, `src/tui/opentui-screen.test.ts` |
@@ -297,6 +297,84 @@ interface StepAddressedExampleSet {
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Created from the 2026-04-24 design-document diff that converges architecture, workflow JSON, command docs, and QA notes on the step-addressed runtime. Per user instruction, backward compatibility is not part of this cutover plan; the intent is replacement, not migration-layer expansion.
+
+### Session: 2026-04-24 16:00 JST
+**Tasks Completed**: Partial TASK-001 implementation
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Added a step-addressed authoring path across workflow types, validation, load, save, create, inspect, and focused regression coverage. The loader now resolves file-backed `steps/step-*.json`, the validator accepts `workflow.json.steps[]` plus reusable `workflow.json.nodes[]`, and save/create now emit the new shape. Internal runtime compatibility projections remain in place so later runtime tasks can cut over engine/session/call semantics without breaking the repository mid-plan. Legacy node-ordered authoring has not been fully removed yet, so TASK-001 remains in progress rather than complete.
+
+### Session: 2026-04-24 17:26 JST
+**Tasks Completed**: Partial TASK-001 hardening and review follow-up
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Tightened the authored step-addressed path after reviewing the in-progress diff. Save now preserves file-backed `steps/step-*.json` bundles instead of collapsing them inline, step files participate in revision and stale-file cleanup, the loader rejects `stepFile` id mismatches instead of silently overriding them, and validation now flags duplicate step ids plus duplicate node-registry ids. TypeScript authored-step types were split from resolved runtime step types so the schema model matches the design, and `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts` plus `bun run typecheck` both pass. TASK-001 still remains in progress because the internal compatibility projections and legacy runtime-facing fields are not fully removed yet.
+
+### Session: 2026-04-24 17:33 JST
+**Tasks Completed**: Partial TASK-001 review-driven schema alignment
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Closed a design mismatch in the step-addressed authoring path: manager-role steps now default to `managerType: "code"` even when the reusable node payload omits LLM execution fields, matching the current design docs instead of forcing manager nodes through the worker-style agent schema. Validation now rejects `managerType` when a reusable node is referenced by worker-role steps, and load/save regressions cover minimal file-backed manager node payloads so the authored bundle round-trips without injecting unnecessary `executionBackend` or `promptTemplate` fields. Focused workflow tests and `bun run typecheck` pass after the change. TASK-001 remains in progress because the broader runtime/session/public-surface cutover is still pending.
+
+### Session: 2026-04-24 17:37 JST
+**Tasks Completed**: Partial TASK-001 save-path hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Reviewed the in-progress step-addressed schema/save diff and fixed an authored-minimal persistence bug: re-saving a workflow that omits top-level `managerStepId` and identifies the manager through a single `role: "manager"` step no longer leaks `managerStepId` back into `workflow.json`. Added a regression covering load/save round-tripping of that shape and re-ran `bun test src/workflow/save.test.ts src/workflow/load.test.ts src/workflow/validate.test.ts` plus `bun run typecheck`, both passing. TASK-001 remains in progress because the repository still keeps internal runtime compatibility projections and later runtime/public-surface cutover modules are pending.
+
+### Session: 2026-04-24 17:45 JST
+**Tasks Completed**: Partial TASK-001 validator hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Per the requested review pass, hardened two overlooked step-addressed schema gaps before continuing broader cutover work. Validation now classifies any authored `steps` field as step-addressed input even when malformed, so users receive direct `workflow.steps` / `entryStepId` errors instead of falling back into legacy node-schema diagnostics. Step prompt-variant resolution now replaces the base prompt/template-file pair for each template channel instead of leaking mixed base and variant fields into the resolved step payload. Added focused regressions for both cases and re-ran `bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts` plus `bun run typecheck`, all passing. TASK-001 remains in progress because the authored schema still feeds internal compatibility projections and the later runtime/public-surface modules are not yet cut over.
+
+### Session: 2026-04-24 17:47 JST
+**Tasks Completed**: Partial TASK-001 prompt-variant file lifecycle hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Review of the in-progress step-addressed diff found that `promptVariants` support had only been wired through validation, leaving file-backed variant prompts outside the workflow bundle I/O lifecycle. Shared node-template traversal now covers top-level prompt fields and `promptVariants.*` fields during workflow load, save, revision hashing, stale-file cleanup, inline-node payload merges, and local add-on template resolution. Added focused regressions for loading step-addressed variant prompt files, saving and cleaning up renamed variant prompt files, and revision changes driven solely by variant prompt files. Re-ran `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/revision.test.ts` plus `bun run typecheck`, all passing. TASK-001 remains in progress because the broader authored-schema cutover still retains internal runtime compatibility projections for later tasks.
+
+### Session: 2026-04-24 20:35 JST
+**Tasks Completed**: Review-driven regression cleanup and runtime DB lock hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: A repository-wide verification pass surfaced follow-up issues outside the narrow workflow schema tests. Updated GraphQL and HTTP GraphQL regression coverage so worker-only authored bundles assert the new `entryStepId` shape and managed-to-worker-only save mutations mutate the step-addressed fields (`entryStepId`, `steps`, `nodeRegistry`) instead of stale compatibility-only node projections. Full-suite execution also exposed deterministic SQLite lock failures when manager sessions were created against the shared runtime database; `manager-session-store` now initializes the shared DB with WAL and a busy timeout so manager-session writes no longer fail under normal workflow/test concurrency. Re-ran `bun run typecheck` and the full `bun test` suite, both passing. TASK-001 remains in progress because the later runtime/public-surface cutover modules are still pending.
+
+### Session: 2026-04-24 21:04 JST
+**Tasks Completed**: Partial TASK-001 save-path review fix
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Review of the in-progress step-addressed save path found an authored-bundle corruption risk when a reusable node registry id collided with a step id that carried step-local payload overrides such as `promptVariant`. Save previously preferred the id-keyed payload for persistence, which could write a derived step payload back into the shared node file. The save path now keeps ordinary node-id edits authoritative, but detects collision cases that carry step-local overrides and preserves the node-file-backed payload for registry persistence instead. Added a regression covering that collision scenario and re-ran `bun run typecheck`, `bun test src/workflow/save.test.ts`, and the full `bun test` suite, all passing. TASK-001 remains in progress because authored-schema compatibility projections and the later runtime/public-surface cutover modules are still pending.
+
+### Session: 2026-04-24 21:08 JST
+**Tasks Completed**: Partial TASK-001 validation diagnostic cleanup
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Continued the requested git-diff review pass and fixed a remaining authored-schema mismatch in the step-addressed validator. Empty `workflow.steps[]` / `workflow.nodes[]` arrays now fail with direct step-addressed schema errors, and semantic validation no longer leaks compatibility-only `workflow.managerNodeId`, `workflow.entryNodeId`, or synthesized `workflow.edges[*]` diagnostics when the authored step graph is invalid. Added focused regressions covering those empty-array and diagnostic-leak scenarios, then re-ran `bun test src/workflow/validate.test.ts` and `bun run typecheck`, both passing. TASK-001 remains in progress because the broader runtime/session/public-surface cutover modules are still pending.
+
+### Session: 2026-04-24 21:12 JST
+**Tasks Completed**: Partial TASK-001 add-on contract hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Continued review of the in-progress step-addressed schema cutover found a contract gap: manager-role steps could still reference built-in worker add-ons such as `divedra/codex-worker`, which normalized into an invalid code-manager shape despite the add-on catalog being worker-only. Validation now rejects add-on-backed node registry entries for manager steps, regression coverage locks the behavior, and the workflow JSON design now states that manager steps must stay file-backed until manager-capable add-ons are designed explicitly. Focused workflow tests and `bun run typecheck` pass after the change. TASK-001 remains in progress because broader runtime/session/public-surface cutover work is still pending.
+
+### Session: 2026-04-24 21:18 JST
+**Tasks Completed**: Partial TASK-001 save-path review hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Another review-driven follow-up found that re-saving a loaded step-addressed managed workflow could persist the derived manager-step payload back into the shared node file when the manager step id matched the node registry id. That leaked synthesized `managerType: "code"` into authored node JSON and risked treating runtime-derived step state as authored node state on later saves. Save now compares the id-keyed payload against the node-file-backed payload plus the colliding step projection, and keeps the node-file payload authoritative when the id-keyed payload is only a derived step view. Added a regression covering managed-template load/save/load round-tripping and re-ran `bun run typecheck` plus `bun test src/workflow/save.test.ts src/workflow/load.test.ts`, all passing. TASK-001 remains in progress because the broader runtime/session/public-surface cutover modules are still pending.
+
+### Session: 2026-04-24 21:22 JST
+**Tasks Completed**: Partial TASK-001 validator contract hardening
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Continued the requested git-diff review pass and found that direct step-addressed validation still accepted authored `workflow.steps[]` entries that mixed `stepFile` with inline fields such as `nodeId` and `role`, even though the loader and design reject that shape. Validation now enforces the authored contract for raw step-file entries, while load/save continue to validate resolved step definitions through an explicit internal option. Added regression coverage for the mixed-authoring case and re-ran `bun run typecheck` plus the full `bun test` suite, both passing. TASK-001 remains in progress because the broader runtime/session/public-surface cutover modules are still pending.
+
+### Session: 2026-04-24 21:27 JST
+**Tasks Completed**: TASK-001 review and verification pass
+**Tasks In Progress**: TASK-001
+**Blockers**: None
+**Notes**: Reviewed the current step-addressed authored-schema diff against the active design and implementation plan instead of forcing speculative follow-up edits. The current architecture remains aligned with the intended TASK-001 scope: authored bundles use `entryStepId` / optional `managerStepId`, reusable node registry entries remain separate from executable steps, file-backed steps round-trip correctly, and step-addressed validation rejects removed legacy authored fields. Re-ran `bun run typecheck` and the full `bun test` suite; both passed. No additional concrete TASK-001 defects were identified in this review pass, so the task stays in progress pending the later runtime/public-surface cutover modules rather than another authored-schema patch.
 
 ## Related Plans
 

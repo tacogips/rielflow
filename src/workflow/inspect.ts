@@ -17,6 +17,10 @@ export interface WorkflowInspectionSummary {
   readonly hasManagerNode: boolean;
   readonly managerNodeId?: string;
   readonly entryNodeId: string;
+  readonly managerStepId?: string;
+  readonly entryStepId?: string;
+  readonly stepIds: readonly string[];
+  readonly nodeRegistryIds: readonly string[];
   readonly workflowCallIds: readonly string[];
   readonly compatibility: {
     readonly normalizesRoleAuthoredNodesToStructuralKinds: boolean;
@@ -30,6 +34,8 @@ export interface WorkflowInspectionSummary {
   };
   readonly counts: {
     readonly nodes: number;
+    readonly nodeRegistry: number;
+    readonly steps: number;
     readonly edges: number;
     readonly loops: number;
     readonly workflowCalls: number;
@@ -47,13 +53,22 @@ export async function buildInspectionSummary(
   options: LoadOptions = {},
 ): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
+  const stepIds = workflow.steps?.map((step) => step.id) ?? [];
+  const nodeRegistryIds = workflow.nodeRegistry?.map((node) => node.id) ?? [];
   const hasManagerNode = workflow.hasManagerNode !== false;
-  const usesRoleAuthoredNodes = workflow.nodes.some(
-    (node) => node.role !== undefined || node.control !== undefined,
-  );
+  const usesRoleAuthoredNodes =
+    workflow.steps?.some((step) => step.role !== undefined) ??
+    workflow.nodes.some(
+      (node) => node.role !== undefined || node.control !== undefined,
+    );
   const usesEffectiveEntryManagerNodeId = !hasManagerNode;
   const usesLegacyStructuralSubWorkflows = workflow.subWorkflows.length > 0;
   const compatibilityNotes = [
+    ...(workflow.steps !== undefined
+      ? [
+          "Step-addressed authoring is loaded, but some internal runtime paths still consume compatibility node/edge projections while the runtime cutover is in progress.",
+        ]
+      : []),
     ...(usesRoleAuthoredNodes
       ? [
           "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
@@ -77,6 +92,14 @@ export async function buildInspectionSummary(
     hasManagerNode,
     ...(hasManagerNode ? { managerNodeId: workflow.managerNodeId } : {}),
     entryNodeId: workflow.entryNodeId ?? workflow.managerNodeId,
+    ...(workflow.managerStepId === undefined
+      ? {}
+      : { managerStepId: workflow.managerStepId }),
+    ...(workflow.entryStepId === undefined
+      ? {}
+      : { entryStepId: workflow.entryStepId }),
+    stepIds,
+    nodeRegistryIds,
     workflowCallIds: (workflow.workflowCalls ?? []).map((call) => call.id),
     compatibility: {
       normalizesRoleAuthoredNodesToStructuralKinds: usesRoleAuthoredNodes,
@@ -90,6 +113,11 @@ export async function buildInspectionSummary(
     },
     counts: {
       nodes: workflow.nodes.length,
+      nodeRegistry:
+        workflow.nodeRegistry === undefined
+          ? workflow.nodes.length
+          : workflow.nodeRegistry.length,
+      steps: workflow.steps?.length ?? workflow.nodes.length,
       edges: workflow.edges.length,
       loops: workflow.loops?.length ?? 0,
       workflowCalls: workflow.workflowCalls?.length ?? 0,

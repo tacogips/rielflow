@@ -1,5 +1,9 @@
 import path from "node:path";
-import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
+import {
+  cloneNodeTemplateAwarePayload,
+  listNodeTemplateFieldContainers,
+  NODE_TEMPLATE_FIELD_SPECS,
+} from "./node-template-fields";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowRelativePath } from "./prompt-template-file";
 
@@ -99,25 +103,39 @@ function mergeResolvedInlineTemplateFields(
 
   const inlinePayloadRecord = inlinePayload as Record<string, unknown>;
   const existingPayloadRecord = existingPayload as Record<string, unknown>;
-  const mergedPayload: Record<string, unknown> = { ...inlinePayloadRecord };
+  const mergedPayload = cloneNodeTemplateAwarePayload(inlinePayloadRecord);
+  const existingContainersByPath = new Map(
+    listNodeTemplateFieldContainers(existingPayloadRecord).map((container) => [
+      container.path,
+      container.record,
+    ]),
+  );
 
-  for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
-    const inlineTemplateFile = inlinePayloadRecord[spec.fileField];
-    const existingTemplateFile = existingPayloadRecord[spec.fileField];
-    const existingTemplateText = existingPayloadRecord[spec.textField];
-    if (
-      typeof inlineTemplateFile !== "string" ||
-      inlineTemplateFile.length === 0 ||
-      typeof existingTemplateFile !== "string" ||
-      existingTemplateFile !== inlineTemplateFile ||
-      typeof existingTemplateText !== "string" ||
-      existingTemplateText.length === 0 ||
-      mergedPayload[spec.textField] !== undefined
-    ) {
+  for (const { path, record } of listNodeTemplateFieldContainers(
+    mergedPayload,
+  )) {
+    const existingContainer = existingContainersByPath.get(path);
+    if (existingContainer === undefined) {
       continue;
     }
+    for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
+      const inlineTemplateFile = record[spec.fileField];
+      const existingTemplateFile = existingContainer[spec.fileField];
+      const existingTemplateText = existingContainer[spec.textField];
+      if (
+        typeof inlineTemplateFile !== "string" ||
+        inlineTemplateFile.length === 0 ||
+        typeof existingTemplateFile !== "string" ||
+        existingTemplateFile !== inlineTemplateFile ||
+        typeof existingTemplateText !== "string" ||
+        existingTemplateText.length === 0 ||
+        record[spec.textField] !== undefined
+      ) {
+        continue;
+      }
 
-    mergedPayload[spec.textField] = existingTemplateText;
+      record[spec.textField] = existingTemplateText;
+    }
   }
 
   return mergedPayload;

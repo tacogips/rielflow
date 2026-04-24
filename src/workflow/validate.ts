@@ -46,6 +46,7 @@ import {
   type NodeExecutionBackend,
   type NodeKind,
   type NodePayload,
+  type NodePromptVariant,
   type NodeRole,
   type NodeType,
   type NodeSessionPolicy,
@@ -61,15 +62,25 @@ import {
   type WorkflowNodeExecutionPolicy,
   type WorkflowNodeAddonEnvBinding,
   type WorkflowNodeAddonRef,
+  type WorkflowNodeRegistryRef,
   type WorkflowNodeRepeatPolicy,
   type WorkflowNodeRef,
   type WorkflowPrompts,
+  type WorkflowStepRef,
+  type WorkflowStepSessionPolicy,
+  type WorkflowStepTransition,
+  type WorkflowTimeoutPolicy,
   type UserActionNodeConfig,
 } from "./types";
 
 interface RawBundle {
   readonly workflow: unknown;
   readonly nodePayloads: Readonly<Record<string, unknown>>;
+}
+
+interface NodeStepRoleUsage {
+  readonly manager: boolean;
+  readonly worker: boolean;
 }
 
 export interface WorkflowValidationOptions
@@ -86,7 +97,9 @@ export interface WorkflowValidationOptions
     | "nodeAddons"
     | "asyncNodeAddonResolvers"
     | "nodeAddonResolvers"
-  > {}
+  > {
+  readonly allowResolvedStepFileFields?: boolean;
+}
 
 type UnknownRecord = Record<string, unknown>;
 type ValidationResult = Result<
@@ -1553,6 +1566,906 @@ function normalizeWorkflowNodeRepeatPolicy(
   };
 }
 
+function normalizeWorkflowTimeoutPolicy(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowTimeoutPolicy | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const onTimeout = value["onTimeout"];
+  if (
+    onTimeout !== "fail" &&
+    onTimeout !== "retry-same-step" &&
+    onTimeout !== "jump-to-step"
+  ) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.onTimeout`,
+        "must be 'fail', 'retry-same-step', or 'jump-to-step'",
+      ),
+    );
+    return undefined;
+  }
+
+  const maxRetriesRaw = value["maxRetries"];
+  let maxRetries: number | undefined;
+  if (maxRetriesRaw !== undefined) {
+    if (
+      typeof maxRetriesRaw === "number" &&
+      Number.isInteger(maxRetriesRaw) &&
+      maxRetriesRaw >= 0
+    ) {
+      maxRetries = maxRetriesRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.maxRetries`,
+          "must be an integer >= 0 when provided",
+        ),
+      );
+    }
+  }
+
+  const retryTimeoutIncrementMsRaw = value["retryTimeoutIncrementMs"];
+  let retryTimeoutIncrementMs: number | undefined;
+  if (retryTimeoutIncrementMsRaw !== undefined) {
+    if (
+      typeof retryTimeoutIncrementMsRaw === "number" &&
+      Number.isFinite(retryTimeoutIncrementMsRaw) &&
+      retryTimeoutIncrementMsRaw >= 0
+    ) {
+      retryTimeoutIncrementMs = retryTimeoutIncrementMsRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.retryTimeoutIncrementMs`,
+          "must be >= 0 when provided",
+        ),
+      );
+    }
+  }
+
+  const jumpStepIdRaw = value["jumpStepId"];
+  let jumpStepId: string | undefined;
+  if (jumpStepIdRaw !== undefined) {
+    if (typeof jumpStepIdRaw === "string" && jumpStepIdRaw.length > 0) {
+      jumpStepId = jumpStepIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.jumpStepId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const reuseBackendSessionRaw = value["reuseBackendSession"];
+  let reuseBackendSession: boolean | undefined;
+  if (reuseBackendSessionRaw !== undefined) {
+    if (typeof reuseBackendSessionRaw === "boolean") {
+      reuseBackendSession = reuseBackendSessionRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.reuseBackendSession`,
+          "must be a boolean when provided",
+        ),
+      );
+    }
+  }
+
+  if (onTimeout === "jump-to-step" && jumpStepId === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.jumpStepId`,
+        "is required when onTimeout is 'jump-to-step'",
+      ),
+    );
+  }
+
+  return {
+    onTimeout,
+    ...(maxRetries === undefined ? {} : { maxRetries }),
+    ...(retryTimeoutIncrementMs === undefined
+      ? {}
+      : { retryTimeoutIncrementMs }),
+    ...(jumpStepId === undefined ? {} : { jumpStepId }),
+    ...(reuseBackendSession === undefined ? {} : { reuseBackendSession }),
+  };
+}
+
+function normalizeWorkflowNodeRegistryRef(
+  value: unknown,
+  index: number,
+  issues: ValidationIssue[],
+): WorkflowNodeRegistryRef | null {
+  const path = `workflow.nodes[${index}]`;
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return null;
+  }
+
+  const allowedKeys = new Set(["id", "nodeFile", "addon"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported step-addressed node registry field",
+        ),
+      );
+    }
+  }
+
+  const id = readStringField(value, "id", path, issues);
+  if (id !== null && !NODE_ID_PATTERN.test(id)) {
+    issues.push(
+      makeIssue("error", `${path}.id`, "must match ^[a-z0-9][a-z0-9-]{1,63}$"),
+    );
+  }
+
+  const nodeFileRaw = value["nodeFile"];
+  let nodeFile: string | undefined;
+  if (nodeFileRaw !== undefined) {
+    if (typeof nodeFileRaw !== "string" || nodeFileRaw.length === 0) {
+      issues.push(
+        makeIssue("error", `${path}.nodeFile`, "must be a non-empty string"),
+      );
+    } else {
+      nodeFile = normalizeWorkflowRelativeJsonPath(nodeFileRaw);
+    }
+  }
+
+  const addon = normalizeWorkflowNodeAddonRef(
+    value["addon"],
+    `${path}.addon`,
+    issues,
+  );
+
+  if ((nodeFile === undefined) === (addon === undefined)) {
+    issues.push(
+      makeIssue("error", path, "must declare exactly one of nodeFile or addon"),
+    );
+  }
+
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    ...(nodeFile === undefined ? {} : { nodeFile }),
+    ...(addon === undefined ? {} : { addon }),
+  };
+}
+
+function normalizeWorkflowStepTransition(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowStepTransition | null {
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return null;
+  }
+
+  const allowedKeys = new Set(["toStepId", "toWorkflowId", "label"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported step transition field",
+        ),
+      );
+    }
+  }
+
+  const toStepId = readStringField(value, "toStepId", path, issues);
+  const toWorkflowIdRaw = value["toWorkflowId"];
+  let toWorkflowId: string | undefined;
+  if (toWorkflowIdRaw !== undefined) {
+    if (typeof toWorkflowIdRaw === "string" && toWorkflowIdRaw.length > 0) {
+      toWorkflowId = toWorkflowIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.toWorkflowId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const labelRaw = value["label"];
+  let label: string | undefined;
+  if (labelRaw !== undefined) {
+    if (typeof labelRaw === "string" && labelRaw.length > 0) {
+      label = labelRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.label`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  if (toStepId === null) {
+    return null;
+  }
+
+  return {
+    toStepId,
+    ...(toWorkflowId === undefined ? {} : { toWorkflowId }),
+    ...(label === undefined ? {} : { label }),
+  };
+}
+
+function normalizeWorkflowStepSessionPolicy(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowStepSessionPolicy | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["mode", "inheritFromStepId"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported step session policy field",
+        ),
+      );
+    }
+  }
+
+  const modeRaw = value["mode"];
+  let mode: WorkflowStepSessionPolicy["mode"];
+  if (modeRaw !== undefined) {
+    if (isNodeSessionMode(modeRaw)) {
+      mode = modeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.mode`,
+          "must be 'new' or 'reuse' when provided",
+        ),
+      );
+    }
+  }
+
+  const inheritFromStepIdRaw = value["inheritFromStepId"];
+  let inheritFromStepId: string | undefined;
+  if (inheritFromStepIdRaw !== undefined) {
+    if (
+      typeof inheritFromStepIdRaw === "string" &&
+      inheritFromStepIdRaw.length > 0
+    ) {
+      inheritFromStepId = inheritFromStepIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.inheritFromStepId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(inheritFromStepId === undefined ? {} : { inheritFromStepId }),
+  };
+}
+
+function normalizeWorkflowStepRef(
+  value: unknown,
+  index: number,
+  issues: ValidationIssue[],
+  options: Pick<WorkflowValidationOptions, "allowResolvedStepFileFields">,
+): WorkflowStepRef | null {
+  const path = `workflow.steps[${index}]`;
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return null;
+  }
+
+  const allowedKeys = new Set([
+    "id",
+    "stepFile",
+    "nodeId",
+    "description",
+    "role",
+    "promptVariant",
+    "timeoutMs",
+    "sessionPolicy",
+    "transitions",
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue("error", `${path}.${key}`, "uses an unsupported step field"),
+      );
+    }
+  }
+
+  const id = readStringField(value, "id", path, issues);
+  const stepFileRaw = value["stepFile"];
+  let stepFile: string | undefined;
+  if (stepFileRaw !== undefined) {
+    if (typeof stepFileRaw === "string" && stepFileRaw.length > 0) {
+      stepFile = normalizeWorkflowRelativeJsonPath(stepFileRaw);
+    } else {
+      issues.push(
+        makeIssue("error", `${path}.stepFile`, "must be a non-empty string"),
+      );
+    }
+  }
+  if (stepFile !== undefined && options.allowResolvedStepFileFields !== true) {
+    for (const inlineField of [
+      "nodeId",
+      "description",
+      "role",
+      "promptVariant",
+      "timeoutMs",
+      "sessionPolicy",
+      "transitions",
+    ] as const) {
+      if (value[inlineField] !== undefined) {
+        issues.push(
+          makeIssue(
+            "error",
+            `${path}.${inlineField}`,
+            "must not be authored inline when workflow.steps[].stepFile is used",
+          ),
+        );
+      }
+    }
+  }
+
+  const nodeIdRaw = value["nodeId"];
+  let nodeId: string | undefined;
+  if (typeof nodeIdRaw === "string" && nodeIdRaw.length > 0) {
+    nodeId = nodeIdRaw;
+  } else {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.nodeId`,
+        "must be a non-empty string after step files are resolved",
+      ),
+    );
+  }
+
+  const descriptionRaw = value["description"];
+  let description: string | undefined;
+  if (descriptionRaw !== undefined) {
+    if (typeof descriptionRaw === "string" && descriptionRaw.length > 0) {
+      description = descriptionRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.description`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const role = normalizeNodeRole(value["role"]);
+  if (value["role"] !== undefined && role === undefined) {
+    issues.push(
+      makeIssue("error", `${path}.role`, "must be 'manager' or 'worker'"),
+    );
+  }
+
+  const promptVariantRaw = value["promptVariant"];
+  let promptVariant: string | undefined;
+  if (promptVariantRaw !== undefined) {
+    if (typeof promptVariantRaw === "string" && promptVariantRaw.length > 0) {
+      promptVariant = promptVariantRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.promptVariant`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const timeoutMsRaw = value["timeoutMs"];
+  let timeoutMs: number | undefined;
+  if (timeoutMsRaw !== undefined) {
+    if (
+      typeof timeoutMsRaw === "number" &&
+      Number.isFinite(timeoutMsRaw) &&
+      timeoutMsRaw > 0
+    ) {
+      timeoutMs = timeoutMsRaw;
+    } else {
+      issues.push(
+        makeIssue("error", `${path}.timeoutMs`, "must be > 0 when provided"),
+      );
+    }
+  }
+
+  const sessionPolicy = normalizeWorkflowStepSessionPolicy(
+    value["sessionPolicy"],
+    `${path}.sessionPolicy`,
+    issues,
+  );
+
+  const transitionsRaw = value["transitions"];
+  let transitions: readonly WorkflowStepTransition[] | undefined;
+  if (transitionsRaw !== undefined) {
+    if (!Array.isArray(transitionsRaw)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.transitions`,
+          "must be an array when provided",
+        ),
+      );
+    } else {
+      transitions = transitionsRaw
+        .map((transition, transitionIndex) =>
+          normalizeWorkflowStepTransition(
+            transition,
+            `${path}.transitions[${transitionIndex}]`,
+            issues,
+          ),
+        )
+        .filter(
+          (transition): transition is WorkflowStepTransition =>
+            transition !== null,
+        );
+    }
+  }
+
+  if (id === null || nodeId === undefined) {
+    return null;
+  }
+
+  return {
+    id,
+    ...(stepFile === undefined ? {} : { stepFile }),
+    nodeId,
+    ...(description === undefined ? {} : { description }),
+    ...(role === undefined ? {} : { role }),
+    ...(promptVariant === undefined ? {} : { promptVariant }),
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
+    ...(transitions === undefined ? {} : { transitions }),
+  };
+}
+
+function normalizeStepAddressedWorkflow(
+  workflow: UnknownRecord,
+  issues: ValidationIssue[],
+  options: WorkflowValidationOptions,
+): WorkflowJson | null {
+  const workflowId = readStringField(
+    workflow,
+    "workflowId",
+    "workflow",
+    issues,
+  );
+  if (workflowId !== null && !isSafeWorkflowId(workflowId)) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.workflowId",
+        "must start with an alphanumeric character and contain only letters, digits, hyphens, or underscores",
+      ),
+    );
+  }
+
+  const descriptionRaw = workflow["description"];
+  let description = "";
+  if (descriptionRaw !== undefined) {
+    if (typeof descriptionRaw === "string" && descriptionRaw.length > 0) {
+      description = descriptionRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.description",
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const defaultsValue = workflow["defaults"];
+  if (!isRecord(defaultsValue)) {
+    issues.push(makeIssue("error", "workflow.defaults", "must be an object"));
+  }
+  const nodeTimeoutMs =
+    isRecord(defaultsValue) &&
+    readNumberField(
+      defaultsValue,
+      "nodeTimeoutMs",
+      "workflow.defaults",
+      issues,
+    );
+  const maxLoopIterationsRaw =
+    isRecord(defaultsValue) && defaultsValue["maxLoopIterations"] !== undefined
+      ? readNumberField(
+          defaultsValue,
+          "maxLoopIterations",
+          "workflow.defaults",
+          issues,
+        )
+      : DEFAULT_MAX_LOOP_ITERATIONS;
+  const containerRuntime = normalizeContainerRuntimeDefaults(
+    isRecord(defaultsValue) ? defaultsValue["containerRuntime"] : undefined,
+    "workflow.defaults.containerRuntime",
+    issues,
+  );
+  const timeoutPolicy = normalizeWorkflowTimeoutPolicy(
+    isRecord(defaultsValue) ? defaultsValue["timeoutPolicy"] : undefined,
+    "workflow.defaults.timeoutPolicy",
+    issues,
+  );
+
+  let prompts: WorkflowPrompts | undefined;
+  const promptsRaw = workflow["prompts"];
+  if (promptsRaw !== undefined) {
+    if (!isRecord(promptsRaw)) {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.prompts",
+          "must be an object when provided",
+        ),
+      );
+    } else {
+      const divedraPromptTemplateRaw = promptsRaw["divedraPromptTemplate"];
+      const workerSystemPromptTemplateRaw =
+        promptsRaw["workerSystemPromptTemplate"];
+
+      if (
+        divedraPromptTemplateRaw !== undefined &&
+        typeof divedraPromptTemplateRaw !== "string"
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            "workflow.prompts.divedraPromptTemplate",
+            "must be a string when provided",
+          ),
+        );
+      }
+      if (
+        workerSystemPromptTemplateRaw !== undefined &&
+        typeof workerSystemPromptTemplateRaw !== "string"
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            "workflow.prompts.workerSystemPromptTemplate",
+            "must be a string when provided",
+          ),
+        );
+      }
+
+      prompts = {
+        ...(typeof divedraPromptTemplateRaw === "string"
+          ? { divedraPromptTemplate: divedraPromptTemplateRaw }
+          : {}),
+        ...(typeof workerSystemPromptTemplateRaw === "string"
+          ? { workerSystemPromptTemplate: workerSystemPromptTemplateRaw }
+          : {}),
+      };
+    }
+  }
+
+  const entryStepId = readStringField(
+    workflow,
+    "entryStepId",
+    "workflow",
+    issues,
+  );
+  const managerStepIdRaw = workflow["managerStepId"];
+  let managerStepId: string | undefined | null;
+  if (managerStepIdRaw !== undefined) {
+    if (typeof managerStepIdRaw === "string" && managerStepIdRaw.length > 0) {
+      managerStepId = managerStepIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.managerStepId",
+          "must be a non-empty string when provided",
+        ),
+      );
+      managerStepId = null;
+    }
+  }
+
+  for (const legacyField of [
+    "managerNodeId",
+    "entryNodeId",
+    "workflowCalls",
+    "subWorkflows",
+    "subWorkflowConversations",
+    "edges",
+    "loops",
+    "branching",
+  ] as const) {
+    if (workflow[legacyField] !== undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.${legacyField}`,
+          "is not part of the step-addressed workflow schema",
+        ),
+      );
+    }
+  }
+
+  const nodeRegistryRaw = workflow["nodes"];
+  if (!Array.isArray(nodeRegistryRaw)) {
+    issues.push(makeIssue("error", "workflow.nodes", "must be an array"));
+  }
+  const nodeRegistry = Array.isArray(nodeRegistryRaw)
+    ? nodeRegistryRaw
+        .map((entry, index) =>
+          normalizeWorkflowNodeRegistryRef(entry, index, issues),
+        )
+        .filter((entry): entry is WorkflowNodeRegistryRef => entry !== null)
+    : [];
+  if (Array.isArray(nodeRegistryRaw) && nodeRegistry.length === 0) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.nodes",
+        "must contain at least one workflow node registry entry",
+      ),
+    );
+  }
+
+  const stepsRaw = workflow["steps"];
+  if (!Array.isArray(stepsRaw)) {
+    issues.push(makeIssue("error", "workflow.steps", "must be an array"));
+  }
+  const steps = Array.isArray(stepsRaw)
+    ? stepsRaw
+        .map((entry, index) =>
+          normalizeWorkflowStepRef(entry, index, issues, options),
+        )
+        .filter((entry): entry is WorkflowStepRef => entry !== null)
+    : [];
+  if (Array.isArray(stepsRaw) && steps.length === 0) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.steps",
+        "must contain at least one step",
+      ),
+    );
+  }
+
+  const seenNodeRegistryIds = new Set<string>();
+  nodeRegistry.forEach((node, index) => {
+    if (seenNodeRegistryIds.has(node.id)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.nodes[${index}].id`,
+          `duplicate node registry id '${node.id}'`,
+        ),
+      );
+      return;
+    }
+    seenNodeRegistryIds.add(node.id);
+  });
+
+  const seenStepIds = new Set<string>();
+  steps.forEach((step, index) => {
+    if (seenStepIds.has(step.id)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}].id`,
+          `duplicate step id '${step.id}'`,
+        ),
+      );
+      return;
+    }
+    seenStepIds.add(step.id);
+  });
+
+  const stepIdSet = new Set(steps.map((step) => step.id));
+  const explicitManagerSteps = steps.filter((step) => step.role === "manager");
+  if (explicitManagerSteps.length > 1) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.steps",
+        "must not declare more than one manager-role step",
+      ),
+    );
+  }
+  if (managerStepId === undefined && explicitManagerSteps.length === 1) {
+    managerStepId = explicitManagerSteps[0]?.id;
+  }
+  if (managerStepId !== undefined && managerStepId !== null) {
+    if (!stepIdSet.has(managerStepId)) {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.managerStepId",
+          `must reference an existing step id (${managerStepId})`,
+        ),
+      );
+    }
+    const explicitManagerStep = explicitManagerSteps[0];
+    if (
+      explicitManagerStep !== undefined &&
+      explicitManagerStep.id !== managerStepId
+    ) {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.managerStepId",
+          `must match the authored manager-role step '${explicitManagerStep.id}'`,
+        ),
+      );
+    }
+  }
+  if (entryStepId !== null && !stepIdSet.has(entryStepId)) {
+    issues.push(
+      makeIssue(
+        "error",
+        "workflow.entryStepId",
+        `must reference an existing step id (${entryStepId})`,
+      ),
+    );
+  }
+
+  steps.forEach((step, index) => {
+    const registryNode = nodeRegistry.find((node) => node.id === step.nodeId);
+    if (registryNode === undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}].nodeId`,
+          `must reference an existing workflow node registry entry (${step.nodeId})`,
+        ),
+      );
+    } else {
+      const stepRole =
+        step.role ?? (step.id === managerStepId ? "manager" : "worker");
+      if (stepRole === "manager" && registryNode.addon !== undefined) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${index}].nodeId`,
+            `manager step '${step.id}' must reference a file-backed node; add-on-backed node registry entry '${step.nodeId}' is worker-only`,
+          ),
+        );
+      }
+    }
+    step.transitions?.forEach((transition, transitionIndex) => {
+      if (
+        transition.toWorkflowId === undefined &&
+        !stepIdSet.has(transition.toStepId)
+      ) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${index}].transitions[${transitionIndex}].toStepId`,
+            `must reference an existing step id (${transition.toStepId})`,
+          ),
+        );
+      }
+    });
+    if (
+      step.sessionPolicy?.inheritFromStepId !== undefined &&
+      !stepIdSet.has(step.sessionPolicy.inheritFromStepId)
+    ) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}].sessionPolicy.inheritFromStepId`,
+          `must reference an existing step id (${step.sessionPolicy.inheritFromStepId})`,
+        ),
+      );
+    }
+  });
+
+  if (
+    workflowId === null ||
+    entryStepId === null ||
+    managerStepId === null ||
+    typeof nodeTimeoutMs !== "number" ||
+    typeof maxLoopIterationsRaw !== "number"
+  ) {
+    return null;
+  }
+
+  const compatNodes: WorkflowNodeRef[] = steps.map((step) => {
+    const registryNode = nodeRegistry.find((node) => node.id === step.nodeId);
+    const role =
+      step.role ?? (step.id === managerStepId ? "manager" : "worker");
+    return {
+      id: step.id,
+      nodeFile: registryNode?.nodeFile ?? synthesizeInlineNodeFile(step.id),
+      ...(registryNode?.addon === undefined
+        ? {}
+        : { addon: registryNode.addon }),
+      role,
+      kind: role === "manager" ? "root-manager" : "task",
+    };
+  });
+  const edges: WorkflowEdge[] = steps.flatMap((step) =>
+    (step.transitions ?? [])
+      .filter((transition) => transition.toWorkflowId === undefined)
+      .map((transition) => ({
+        from: step.id,
+        to: transition.toStepId,
+        when: transition.label ?? "always",
+      })),
+  );
+
+  return {
+    workflowId,
+    description,
+    defaults: {
+      nodeTimeoutMs,
+      maxLoopIterations: maxLoopIterationsRaw,
+      ...(timeoutPolicy === undefined ? {} : { timeoutPolicy }),
+      ...(containerRuntime === undefined ? {} : { containerRuntime }),
+    },
+    ...(prompts === undefined ? {} : { prompts }),
+    managerNodeId: managerStepId ?? entryStepId,
+    hasManagerNode: managerStepId !== undefined,
+    entryNodeId: entryStepId,
+    ...(managerStepId === undefined ? {} : { managerStepId }),
+    entryStepId,
+    nodeRegistry,
+    steps,
+    subWorkflows: [],
+    nodes: compatNodes,
+    edges,
+    branching: { mode: "fan-out" },
+  };
+}
+
 function normalizeEdge(
   value: unknown,
   index: number,
@@ -2098,10 +3011,19 @@ function synthesizeRepeatLoops(
 function normalizeWorkflow(
   workflow: unknown,
   issues: ValidationIssue[],
+  options: WorkflowValidationOptions,
 ): WorkflowJson | null {
   if (!isRecord(workflow)) {
     issues.push(makeIssue("error", "workflow", "must be an object"));
     return null;
+  }
+
+  if (
+    Object.hasOwn(workflow, "steps") ||
+    workflow["entryStepId"] !== undefined ||
+    workflow["managerStepId"] !== undefined
+  ) {
+    return normalizeStepAddressedWorkflow(workflow, issues, options);
   }
 
   const workflowId = readStringField(
@@ -2557,12 +3479,106 @@ function normalizeNodeTemplateFields(args: {
   };
 }
 
+function normalizeNodePromptVariants(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): Readonly<Record<string, NodePromptVariant>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const variants: Record<string, NodePromptVariant> = {};
+  for (const [variantName, variantValue] of Object.entries(value)) {
+    if (variantName.length === 0) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${variantName}`,
+          "variant names must be non-empty strings",
+        ),
+      );
+      continue;
+    }
+    if (!isRecord(variantValue)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${variantName}`,
+          "must be an object when provided",
+        ),
+      );
+      continue;
+    }
+    const normalizedSystemPromptTemplate = normalizeNodeTemplateFields({
+      path: `${path}.${variantName}`,
+      payload: variantValue,
+      issues,
+      templateField: "systemPromptTemplate",
+      templateFileField: "systemPromptTemplateFile",
+    });
+    const normalizedPromptTemplate = normalizeNodeTemplateFields({
+      path: `${path}.${variantName}`,
+      payload: variantValue,
+      issues,
+      templateField: "promptTemplate",
+      templateFileField: "promptTemplateFile",
+    });
+    const normalizedSessionStartPromptTemplate = normalizeNodeTemplateFields({
+      path: `${path}.${variantName}`,
+      payload: variantValue,
+      issues,
+      templateField: "sessionStartPromptTemplate",
+      templateFileField: "sessionStartPromptTemplateFile",
+    });
+
+    variants[variantName] = {
+      ...(normalizedSystemPromptTemplate.template === undefined
+        ? {}
+        : {
+            systemPromptTemplate: normalizedSystemPromptTemplate.template,
+          }),
+      ...(normalizedSystemPromptTemplate.templateFile === undefined
+        ? {}
+        : {
+            systemPromptTemplateFile:
+              normalizedSystemPromptTemplate.templateFile,
+          }),
+      ...(normalizedPromptTemplate.template === undefined
+        ? {}
+        : { promptTemplate: normalizedPromptTemplate.template }),
+      ...(normalizedPromptTemplate.templateFile === undefined
+        ? {}
+        : { promptTemplateFile: normalizedPromptTemplate.templateFile }),
+      ...(normalizedSessionStartPromptTemplate.template === undefined
+        ? {}
+        : {
+            sessionStartPromptTemplate:
+              normalizedSessionStartPromptTemplate.template,
+          }),
+      ...(normalizedSessionStartPromptTemplate.templateFile === undefined
+        ? {}
+        : {
+            sessionStartPromptTemplateFile:
+              normalizedSessionStartPromptTemplate.templateFile,
+          }),
+    };
+  }
+
+  return variants;
+}
+
 function normalizeNodePayload(input: {
   readonly nodeId: string;
   readonly nodeFile: string;
   readonly payload: unknown;
   readonly issues: ValidationIssue[];
   readonly path?: string;
+  readonly allowManagerCodePathDefaults?: boolean;
 }): NodePayload | null {
   const path = input.path ?? `nodePayloads.${input.nodeFile}`;
   const payload = input.payload;
@@ -2625,11 +3641,34 @@ function normalizeNodePayload(input: {
     nodeType = "container";
   }
 
+  const managerTypeRaw = payload["managerType"];
+  let managerType: NodePayload["managerType"];
+  if (managerTypeRaw !== undefined) {
+    if (managerTypeRaw === "code" || managerTypeRaw === "llm") {
+      managerType = managerTypeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.managerType`,
+          "must be 'code' or 'llm' when provided",
+        ),
+      );
+    }
+  }
+  const allowsManagerCodePathDefaults =
+    input.allowManagerCodePathDefaults === true &&
+    (managerType === undefined || managerType === "code");
+
   const modelRaw = payload["model"];
   let model: string | undefined;
   if (typeof modelRaw === "string" && modelRaw.length > 0) {
     model = modelRaw;
-  } else if (modelRaw !== undefined && nodeType === "agent") {
+  } else if (
+    modelRaw !== undefined &&
+    nodeType === "agent" &&
+    !allowsManagerCodePathDefaults
+  ) {
     issues.push(
       makeIssue("error", `${path}.model`, "must be a non-empty string"),
     );
@@ -2655,7 +3694,7 @@ function normalizeNodePayload(input: {
         ),
       );
     }
-  } else if (nodeType === "agent") {
+  } else if (nodeType === "agent" && !allowsManagerCodePathDefaults) {
     issues.push(
       makeIssue(
         "error",
@@ -2710,7 +3749,16 @@ function normalizeNodePayload(input: {
     normalizedSessionStartPromptTemplate.template;
   const sessionStartPromptTemplateFile =
     normalizedSessionStartPromptTemplate.templateFile;
-  if (promptTemplate === undefined && nodeType === "agent") {
+  const promptVariants = normalizeNodePromptVariants(
+    payload["promptVariants"],
+    `${path}.promptVariants`,
+    issues,
+  );
+  if (
+    promptTemplate === undefined &&
+    nodeType === "agent" &&
+    !allowsManagerCodePathDefaults
+  ) {
     issues.push(
       makeIssue(
         "error",
@@ -3032,7 +4080,8 @@ function normalizeNodePayload(input: {
     variables === null ||
     nodeType === "addon" ||
     (nodeType === "agent" &&
-      (model === undefined || promptTemplate === undefined))
+      (model === undefined || promptTemplate === undefined) &&
+      !allowsManagerCodePathDefaults)
   ) {
     return null;
   }
@@ -3041,6 +4090,7 @@ function normalizeNodePayload(input: {
     id,
     ...(description === undefined ? {} : { description }),
     ...(nodeType === "agent" ? {} : { nodeType }),
+    ...(managerType === undefined ? {} : { managerType }),
     ...(workingDirectory === undefined ? {} : { workingDirectory }),
     ...(model === undefined ? {} : { model }),
     ...(executionBackend === undefined ? {} : { executionBackend }),
@@ -3057,6 +4107,7 @@ function normalizeNodePayload(input: {
     ...(sessionStartPromptTemplateFile === undefined
       ? {}
       : { sessionStartPromptTemplateFile }),
+    ...(promptVariants === undefined ? {} : { promptVariants }),
     variables,
     ...(command === undefined ? {} : { command }),
     ...(container === undefined ? {} : { container }),
@@ -3068,6 +4119,70 @@ function normalizeNodePayload(input: {
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     ...(outputContract === undefined ? {} : { output: outputContract }),
   };
+}
+
+function resolveWorkflowStepExecutionRole(
+  workflow: Pick<WorkflowJson, "managerStepId">,
+  step: Pick<WorkflowStepRef, "id" | "role">,
+): NodeRole {
+  return (
+    step.role ?? (workflow.managerStepId === step.id ? "manager" : "worker")
+  );
+}
+
+function applyPromptVariantTemplateOverride(input: {
+  readonly payload: NodePayload;
+  readonly variant: NodePromptVariant;
+  readonly templateField:
+    | "systemPromptTemplate"
+    | "promptTemplate"
+    | "sessionStartPromptTemplate";
+  readonly templateFileField:
+    | "systemPromptTemplateFile"
+    | "promptTemplateFile"
+    | "sessionStartPromptTemplateFile";
+}): NodePayload {
+  const variantTemplate = input.variant[input.templateField];
+  const variantTemplateFile = input.variant[input.templateFileField];
+  if (variantTemplate === undefined && variantTemplateFile === undefined) {
+    return input.payload;
+  }
+
+  const {
+    [input.templateField]: _removedTemplate,
+    [input.templateFileField]: _removedTemplateFile,
+    ...payloadWithoutTemplatePair
+  } = input.payload;
+
+  return {
+    ...payloadWithoutTemplatePair,
+    ...(variantTemplate === undefined
+      ? {}
+      : { [input.templateField]: variantTemplate }),
+    ...(variantTemplateFile === undefined
+      ? {}
+      : { [input.templateFileField]: variantTemplateFile }),
+  };
+}
+
+function collectStepNodeRoleUsage(
+  workflow: Pick<WorkflowJson, "managerStepId" | "steps">,
+): ReadonlyMap<string, NodeStepRoleUsage> {
+  const usage = new Map<string, NodeStepRoleUsage>();
+
+  for (const step of workflow.steps ?? []) {
+    const role = resolveWorkflowStepExecutionRole(workflow, step);
+    const current = usage.get(step.nodeId) ?? {
+      manager: false,
+      worker: false,
+    };
+    usage.set(step.nodeId, {
+      manager: current.manager || role === "manager",
+      worker: current.worker || role === "worker",
+    });
+  }
+
+  return usage;
 }
 
 function normalizeUserActionNodeConfig(
@@ -3404,6 +4519,9 @@ function runSemanticValidation(
   bundle: NormalizedWorkflowBundle,
   issues: ValidationIssue[],
 ): void {
+  const isStepAddressedWorkflow =
+    bundle.workflow.nodeRegistry !== undefined &&
+    bundle.workflow.steps !== undefined;
   const nodeIdSet = new Set(bundle.workflow.nodes.map((node) => node.id));
   const nodeOrderByNodeId = new Map(
     bundle.workflow.nodes.map((node, order) => [node.id, order]),
@@ -3415,7 +4533,10 @@ function runSemanticValidation(
     .filter((node) => node.role === "manager")
     .map((node) => node.id);
 
-  if (!nodeIdSet.has(bundle.workflow.managerNodeId)) {
+  if (
+    !isStepAddressedWorkflow &&
+    !nodeIdSet.has(bundle.workflow.managerNodeId)
+  ) {
     issues.push(
       makeIssue(
         "error",
@@ -3426,6 +4547,7 @@ function runSemanticValidation(
   }
 
   if (
+    !isStepAddressedWorkflow &&
     bundle.workflow.entryNodeId !== undefined &&
     !nodeIdSet.has(bundle.workflow.entryNodeId)
   ) {
@@ -3438,7 +4560,7 @@ function runSemanticValidation(
     );
   }
 
-  if (managerRoleNodeIds.length > 1) {
+  if (!isStepAddressedWorkflow && managerRoleNodeIds.length > 1) {
     managerRoleNodeIds.forEach((nodeId) => {
       issues.push(
         makeIssue(
@@ -3454,6 +4576,7 @@ function runSemanticValidation(
     (node) => node.id === bundle.workflow.managerNodeId,
   );
   if (
+    !isStepAddressedWorkflow &&
     managerRoleNodeIds.length === 1 &&
     managerRoleNodeIds[0] !== bundle.workflow.managerNodeId
   ) {
@@ -3466,6 +4589,7 @@ function runSemanticValidation(
     );
   }
   if (
+    !isStepAddressedWorkflow &&
     bundle.workflow.hasManagerNode !== false &&
     managerNode?.kind !== "root-manager"
   ) {
@@ -3478,6 +4602,7 @@ function runSemanticValidation(
     );
   }
   if (
+    !isStepAddressedWorkflow &&
     bundle.workflow.hasManagerNode === false &&
     bundle.workflow.entryNodeId !== undefined &&
     bundle.workflow.managerNodeId !== bundle.workflow.entryNodeId
@@ -3490,35 +4615,42 @@ function runSemanticValidation(
       ),
     );
   }
-  rootManagerNodeIds.forEach((nodeId) => {
-    if (nodeId === bundle.workflow.managerNodeId) {
-      return;
-    }
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.nodes",
-        `node '${nodeId}' cannot use kind 'root-manager' unless it is workflow.managerNodeId`,
-      ),
-    );
-  });
+  if (!isStepAddressedWorkflow) {
+    rootManagerNodeIds.forEach((nodeId) => {
+      if (nodeId === bundle.workflow.managerNodeId) {
+        return;
+      }
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.nodes",
+          `node '${nodeId}' cannot use kind 'root-manager' unless it is workflow.managerNodeId`,
+        ),
+      );
+    });
+  }
 
   const seenNodeIds = new Set<string>();
   bundle.workflow.nodes.forEach((node, index) => {
     if (seenNodeIds.has(node.id)) {
-      issues.push(
-        makeIssue(
-          "error",
-          `workflow.nodes[${index}].id`,
-          `duplicate node id '${node.id}'`,
-        ),
-      );
+      if (!isStepAddressedWorkflow) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.nodes[${index}].id`,
+            `duplicate node id '${node.id}'`,
+          ),
+        );
+      }
       return;
     }
     seenNodeIds.add(node.id);
 
     const payload = bundle.nodePayloads[node.id];
     if (!payload) {
+      if (isStepAddressedWorkflow) {
+        return;
+      }
       issues.push(
         makeIssue(
           "error",
@@ -3544,6 +4676,15 @@ function runSemanticValidation(
         ),
       );
     }
+    if (node.role !== "manager" && payload.managerType !== undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `nodePayloads.${node.nodeFile}.managerType`,
+          "managerType is valid only for manager-role nodes",
+        ),
+      );
+    }
 
     if (
       payload.timeoutMs === undefined &&
@@ -3559,26 +4700,28 @@ function runSemanticValidation(
     }
   });
 
-  bundle.workflow.edges.forEach((edge, index) => {
-    if (!nodeIdSet.has(edge.from)) {
-      issues.push(
-        makeIssue(
-          "error",
-          `workflow.edges[${index}].from`,
-          "must reference an existing node id",
-        ),
-      );
-    }
-    if (!nodeIdSet.has(edge.to)) {
-      issues.push(
-        makeIssue(
-          "error",
-          `workflow.edges[${index}].to`,
-          "must reference an existing node id",
-        ),
-      );
-    }
-  });
+  if (!isStepAddressedWorkflow) {
+    bundle.workflow.edges.forEach((edge, index) => {
+      if (!nodeIdSet.has(edge.from)) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.edges[${index}].from`,
+            "must reference an existing node id",
+          ),
+        );
+      }
+      if (!nodeIdSet.has(edge.to)) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.edges[${index}].to`,
+            "must reference an existing node id",
+          ),
+        );
+      }
+    });
+  }
 
   const workflowCallIdSet = new Set<string>();
   bundle.workflow.workflowCalls?.forEach((call, index) => {
@@ -4433,6 +5576,296 @@ function resolveAsyncNodeAddonResolvers(
   return resolvers.length === 0 ? undefined : resolvers;
 }
 
+function applyStepPromptVariant(input: {
+  readonly basePayload: NodePayload;
+  readonly workflow: Pick<WorkflowJson, "managerStepId">;
+  readonly step: WorkflowStepRef;
+  readonly issues: ValidationIssue[];
+  readonly stepPath: string;
+}): NodePayload {
+  const { basePayload, step } = input;
+  const stepRole = resolveWorkflowStepExecutionRole(input.workflow, step);
+  if (stepRole !== "manager" && basePayload.managerType !== undefined) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.stepPath}.nodeId`,
+        `references node '${step.nodeId}' whose payload declares managerType; managerType is valid only for manager-role steps`,
+      ),
+    );
+  }
+
+  const resolvedPayload: NodePayload = {
+    ...basePayload,
+    id: step.id,
+    ...(step.timeoutMs === undefined ? {} : { timeoutMs: step.timeoutMs }),
+    ...(step.sessionPolicy?.mode === undefined
+      ? {}
+      : { sessionPolicy: { mode: step.sessionPolicy.mode } }),
+  };
+  const payloadWithResolvedManagerType =
+    stepRole === "manager"
+      ? {
+          ...resolvedPayload,
+          managerType: basePayload.managerType ?? "code",
+        }
+      : (() => {
+          const { managerType: _managerType, ...payloadWithoutManagerType } =
+            resolvedPayload;
+          return payloadWithoutManagerType;
+        })();
+
+  if (step.promptVariant === undefined) {
+    return payloadWithResolvedManagerType;
+  }
+
+  const variant = basePayload.promptVariants?.[step.promptVariant];
+  if (variant === undefined) {
+    input.issues.push(
+      makeIssue(
+        "error",
+        `${input.stepPath}.promptVariant`,
+        `must reference a promptVariants entry on node '${step.nodeId}'`,
+      ),
+    );
+    return payloadWithResolvedManagerType;
+  }
+
+  return [
+    {
+      templateField: "systemPromptTemplate" as const,
+      templateFileField: "systemPromptTemplateFile" as const,
+    },
+    {
+      templateField: "promptTemplate" as const,
+      templateFileField: "promptTemplateFile" as const,
+    },
+    {
+      templateField: "sessionStartPromptTemplate" as const,
+      templateFileField: "sessionStartPromptTemplateFile" as const,
+    },
+  ].reduce(
+    (payload, templatePair) =>
+      applyPromptVariantTemplateOverride({
+        payload,
+        variant,
+        templateField: templatePair.templateField,
+        templateFileField: templatePair.templateFileField,
+      }),
+    payloadWithResolvedManagerType,
+  );
+}
+
+function buildStepAddressedNodePayloadsSync(input: {
+  readonly workflow: WorkflowJson;
+  readonly nodePayloadsRaw: Readonly<Record<string, unknown>>;
+  readonly issues: ValidationIssue[];
+  readonly options: WorkflowValidationOptions;
+  readonly nodeAddonResolvers: readonly NodeAddonPayloadResolver[] | undefined;
+}): Record<string, NodePayload> {
+  const nodePayloads: Record<string, NodePayload> = {};
+  const nodeRegistry = input.workflow.nodeRegistry ?? [];
+  const steps = input.workflow.steps ?? [];
+  const basePayloadsByRegistryId = new Map<string, NodePayload>();
+  const nodeRoleUsage = collectStepNodeRoleUsage(input.workflow);
+
+  nodeRegistry.forEach((node, index) => {
+    const usage = nodeRoleUsage.get(node.id);
+    if (node.addon !== undefined) {
+      const resolved = resolveNodeAddonPayload({
+        nodeId: node.id,
+        addon: node.addon,
+        path: `workflow.nodes[${index}].addon`,
+        ...(input.options.resolvedWorkflowSource === undefined
+          ? {}
+          : { workflowSource: input.options.resolvedWorkflowSource }),
+        options: input.options,
+        ...(input.nodeAddonResolvers === undefined
+          ? {}
+          : { thirdPartyResolvers: input.nodeAddonResolvers }),
+      });
+      input.issues.push(...(resolved.issues ?? []));
+      if (
+        resolved.payload !== undefined &&
+        validateResolvedAddonPayload({
+          authoredAddonName: node.addon.name,
+          expectedNodeId: node.id,
+          payload: resolved.payload,
+          path: `workflow.nodes[${index}].addon`,
+          issues: input.issues,
+        })
+      ) {
+        const normalizedPayload = node.addon.name.startsWith("divedra/")
+          ? (resolved.payload as NodePayload)
+          : normalizeNodePayload({
+              nodeId: node.id,
+              nodeFile: node.nodeFile ?? synthesizeInlineNodeFile(node.id),
+              payload: resolved.payload,
+              issues: input.issues,
+              path: `workflow.nodes[${index}].addon.payload`,
+              allowManagerCodePathDefaults:
+                usage?.manager === true && usage.worker !== true,
+            });
+        if (normalizedPayload !== null) {
+          basePayloadsByRegistryId.set(node.id, normalizedPayload);
+          nodePayloads[node.id] = normalizedPayload;
+        }
+      }
+      return;
+    }
+
+    if (node.nodeFile === undefined) {
+      return;
+    }
+    const payloadRaw = input.nodePayloadsRaw[node.nodeFile];
+    if (payloadRaw === undefined) {
+      input.issues.push(
+        makeIssue(
+          "error",
+          `nodePayloads.${node.nodeFile}`,
+          "node payload file is missing",
+        ),
+      );
+      return;
+    }
+    const payload = normalizeNodePayload({
+      nodeId: node.id,
+      nodeFile: node.nodeFile,
+      payload: payloadRaw,
+      issues: input.issues,
+      allowManagerCodePathDefaults:
+        usage?.manager === true && usage.worker !== true,
+    });
+    if (payload !== null) {
+      basePayloadsByRegistryId.set(node.id, payload);
+      nodePayloads[node.id] = payload;
+      nodePayloads[node.nodeFile] = payload;
+    }
+  });
+
+  steps.forEach((step, index) => {
+    const basePayload = basePayloadsByRegistryId.get(step.nodeId);
+    if (basePayload === undefined) {
+      return;
+    }
+    nodePayloads[step.id] = applyStepPromptVariant({
+      basePayload,
+      workflow: input.workflow,
+      step,
+      issues: input.issues,
+      stepPath: `workflow.steps[${index}]`,
+    });
+  });
+
+  return nodePayloads;
+}
+
+async function buildStepAddressedNodePayloadsAsync(input: {
+  readonly workflow: WorkflowJson;
+  readonly nodePayloadsRaw: Readonly<Record<string, unknown>>;
+  readonly issues: ValidationIssue[];
+  readonly options: WorkflowValidationOptions;
+  readonly nodeAddonResolvers:
+    | readonly AsyncNodeAddonPayloadResolver[]
+    | undefined;
+}): Promise<Record<string, NodePayload>> {
+  const nodePayloads: Record<string, NodePayload> = {};
+  const nodeRegistry = input.workflow.nodeRegistry ?? [];
+  const steps = input.workflow.steps ?? [];
+  const basePayloadsByRegistryId = new Map<string, NodePayload>();
+  const nodeRoleUsage = collectStepNodeRoleUsage(input.workflow);
+
+  for (const [index, node] of nodeRegistry.entries()) {
+    const usage = nodeRoleUsage.get(node.id);
+    if (node.addon !== undefined) {
+      const resolved = await resolveNodeAddonPayloadAsync({
+        nodeId: node.id,
+        addon: node.addon,
+        path: `workflow.nodes[${index}].addon`,
+        ...(input.options.resolvedWorkflowSource === undefined
+          ? {}
+          : { workflowSource: input.options.resolvedWorkflowSource }),
+        options: input.options,
+        ...(input.nodeAddonResolvers === undefined
+          ? {}
+          : { thirdPartyResolvers: input.nodeAddonResolvers }),
+      });
+      input.issues.push(...(resolved.issues ?? []));
+      if (
+        resolved.payload !== undefined &&
+        validateResolvedAddonPayload({
+          authoredAddonName: node.addon.name,
+          expectedNodeId: node.id,
+          payload: resolved.payload,
+          path: `workflow.nodes[${index}].addon`,
+          issues: input.issues,
+        })
+      ) {
+        const normalizedPayload = node.addon.name.startsWith("divedra/")
+          ? (resolved.payload as NodePayload)
+          : normalizeNodePayload({
+              nodeId: node.id,
+              nodeFile: node.nodeFile ?? synthesizeInlineNodeFile(node.id),
+              payload: resolved.payload,
+              issues: input.issues,
+              path: `workflow.nodes[${index}].addon.payload`,
+              allowManagerCodePathDefaults:
+                usage?.manager === true && usage.worker !== true,
+            });
+        if (normalizedPayload !== null) {
+          basePayloadsByRegistryId.set(node.id, normalizedPayload);
+          nodePayloads[node.id] = normalizedPayload;
+        }
+      }
+      continue;
+    }
+
+    if (node.nodeFile === undefined) {
+      continue;
+    }
+    const payloadRaw = input.nodePayloadsRaw[node.nodeFile];
+    if (payloadRaw === undefined) {
+      input.issues.push(
+        makeIssue(
+          "error",
+          `nodePayloads.${node.nodeFile}`,
+          "node payload file is missing",
+        ),
+      );
+      continue;
+    }
+    const payload = normalizeNodePayload({
+      nodeId: node.id,
+      nodeFile: node.nodeFile,
+      payload: payloadRaw,
+      issues: input.issues,
+      allowManagerCodePathDefaults:
+        usage?.manager === true && usage.worker !== true,
+    });
+    if (payload !== null) {
+      basePayloadsByRegistryId.set(node.id, payload);
+      nodePayloads[node.id] = payload;
+      nodePayloads[node.nodeFile] = payload;
+    }
+  }
+
+  steps.forEach((step, index) => {
+    const basePayload = basePayloadsByRegistryId.get(step.nodeId);
+    if (basePayload === undefined) {
+      return;
+    }
+    nodePayloads[step.id] = applyStepPromptVariant({
+      basePayload,
+      workflow: input.workflow,
+      step,
+      issues: input.issues,
+      stepPath: `workflow.steps[${index}]`,
+    });
+  });
+
+  return nodePayloads;
+}
+
 export function validateWorkflowBundleDetailed(
   raw: RawBundle,
   options: WorkflowValidationOptions = {},
@@ -4443,12 +5876,20 @@ export function validateWorkflowBundleDetailed(
     raw.nodePayloads,
   );
 
-  const workflow = normalizeWorkflow(raw.workflow, issues);
+  const workflow = normalizeWorkflow(raw.workflow, issues, options);
 
   const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
 
-  const nodePayloads: Record<string, NodePayload> = {};
-  if (workflow !== null) {
+  let nodePayloads: Record<string, NodePayload> = {};
+  if (workflow !== null && workflow.nodeRegistry !== undefined) {
+    nodePayloads = buildStepAddressedNodePayloadsSync({
+      workflow,
+      nodePayloadsRaw,
+      issues,
+      options,
+      nodeAddonResolvers,
+    });
+  } else if (workflow !== null) {
     workflow.nodes.forEach((node, index) => {
       if (node.addon !== undefined) {
         const resolved = resolveNodeAddonPayload({
@@ -4544,11 +5985,19 @@ export async function validateWorkflowBundleDetailedAsync(
     raw.nodePayloads,
   );
 
-  const workflow = normalizeWorkflow(raw.workflow, issues);
+  const workflow = normalizeWorkflow(raw.workflow, issues, options);
   const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
 
-  const nodePayloads: Record<string, NodePayload> = {};
-  if (workflow !== null) {
+  let nodePayloads: Record<string, NodePayload> = {};
+  if (workflow !== null && workflow.nodeRegistry !== undefined) {
+    nodePayloads = await buildStepAddressedNodePayloadsAsync({
+      workflow,
+      nodePayloadsRaw,
+      issues,
+      options,
+      nodeAddonResolvers,
+    });
+  } else if (workflow !== null) {
     for (const [index, node] of workflow.nodes.entries()) {
       if (node.addon !== undefined) {
         const resolved = await resolveNodeAddonPayloadAsync({

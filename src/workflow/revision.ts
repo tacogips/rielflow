@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveWorkflowRelativeNodeFilePath } from "./authored-node";
-import { NODE_TEMPLATE_FIELD_SPECS } from "./node-template-fields";
+import { collectNodeTemplateFiles } from "./node-template-fields";
 import {
   isSafeWorkflowRelativePath,
   resolveWorkflowRelativePath,
@@ -20,32 +20,45 @@ export function collectPromptTemplateFiles(
   return [
     ...new Set(
       Object.values(nodePayloads)
-        .flatMap((payload) => {
-          if (typeof payload !== "object" || payload === null) {
-            return [];
-          }
-          const payloadRecord = payload as Record<string, unknown>;
-          return NODE_TEMPLATE_FIELD_SPECS.flatMap((spec) => {
-            const templateFile = payloadRecord[spec.fileField];
-            return typeof templateFile === "string" && templateFile.length > 0
-              ? [templateFile]
-              : [];
-          });
-        })
+        .flatMap((payload) => collectNodeTemplateFiles(payload))
         .sort((a, b) => a.localeCompare(b)),
     ),
   ];
 }
 
 export function collectWorkflowRevisionNodeFiles(workflow: {
+  readonly nodeRegistry?: readonly {
+    readonly nodeFile?: string;
+    readonly addon?: unknown;
+  }[];
   readonly nodes: readonly {
     readonly nodeFile: string;
     readonly addon?: unknown;
   }[];
 }): readonly string[] {
-  return workflow.nodes.flatMap((node) =>
-    node.addon === undefined ? [node.nodeFile] : [],
-  );
+  return workflow.nodeRegistry === undefined
+    ? workflow.nodes.flatMap((node) =>
+        node.addon === undefined ? [node.nodeFile] : [],
+      )
+    : workflow.nodeRegistry.flatMap((node) =>
+        node.addon === undefined && typeof node.nodeFile === "string"
+          ? [node.nodeFile]
+          : [],
+      );
+}
+
+export function collectWorkflowRevisionStepFiles(workflow: {
+  readonly steps?: readonly {
+    readonly stepFile?: string;
+  }[];
+}): readonly string[] {
+  return [
+    ...new Set(
+      (workflow.steps ?? []).flatMap((step) =>
+        typeof step.stepFile === "string" ? [step.stepFile] : [],
+      ),
+    ),
+  ];
 }
 
 function sha256(value: string): string {

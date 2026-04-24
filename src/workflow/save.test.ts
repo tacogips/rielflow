@@ -18,6 +18,10 @@ async function makeTempDir(): Promise<string> {
   return directory;
 }
 
+async function writeJson(filePath: string, payload: unknown): Promise<void> {
+  await writeFile(`${filePath}`, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs
@@ -76,6 +80,65 @@ describe("saveWorkflowToDisk", () => {
     expect(workflowJsonText).not.toContain('"completion"');
   });
 
+  test("does not persist derived managerType defaults when re-saving loaded managed templates", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const loaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    expect(loaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
+      managerType: "code",
+    });
+
+    const saveResult = await saveWorkflowToDisk(
+      "demo",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const managerNodeText = await readFile(
+      path.join(root, "demo", "nodes", "node-divedra-manager.json"),
+      "utf8",
+    );
+    expect(managerNodeText).not.toContain('"managerType"');
+
+    const reloaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
+      managerType: "code",
+    });
+    expect(
+      reloaded.value.bundle.nodePayloads["nodes/node-divedra-manager.json"],
+    ).not.toHaveProperty("managerType");
+  });
+
   test("keeps worker-only workflows authored without compatibility manager fields on save", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("solo", {
@@ -117,7 +180,8 @@ describe("saveWorkflowToDisk", () => {
     expect(workflowJsonText).not.toContain('"hasManagerNode"');
     expect(workflowJsonText).not.toContain('"managerNodeId"');
     expect(workflowJsonText).not.toContain('"kind"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
+    expect(workflowJsonText).toContain('"steps"');
     expect(workflowJsonText).toContain('"role": "worker"');
     expect(workflowJsonText).not.toContain('"subWorkflows"');
     expect(workflowJsonText).not.toContain('"edges"');
@@ -489,7 +553,7 @@ describe("saveWorkflowToDisk", () => {
       await readFile(path.join(root, "demo", "workflow.json"), "utf8"),
     ) as {
       readonly description?: string;
-      readonly managerNodeId?: string;
+      readonly managerStepId?: string;
       readonly edges?: unknown;
       readonly branching?: unknown;
       readonly defaults: {
@@ -503,7 +567,7 @@ describe("saveWorkflowToDisk", () => {
     expect(workflowJson.defaults.containerRuntime).toEqual({
       runnerKind: "docker",
     });
-    expect(workflowJson.managerNodeId).toBe("divedra-manager");
+    expect(workflowJson.managerStepId).toBe("divedra-manager");
     expect(workflowJson.edges).toBeUndefined();
     expect(workflowJson.branching).toBeUndefined();
   });
@@ -608,6 +672,10 @@ describe("saveWorkflowToDisk", () => {
     if (workerNode === undefined) {
       return;
     }
+    const workerRegistryNode =
+      loaded.value.bundle.workflow.nodeRegistry?.find(
+        (node) => node.id === "main-worker",
+      ) ?? workerNode;
 
     const saveResult = await saveWorkflowToDisk(
       "demo",
@@ -615,7 +683,22 @@ describe("saveWorkflowToDisk", () => {
         workflow: {
           ...loaded.value.bundle.workflow,
           hasManagerNode: false,
+          managerStepId: undefined,
+          entryStepId: "main-worker",
           entryNodeId: "main-worker",
+          nodeRegistry: [
+            {
+              id: workerRegistryNode.id,
+              nodeFile: workerRegistryNode.nodeFile,
+            },
+          ],
+          steps: [
+            {
+              id: "main-worker",
+              nodeId: "main-worker",
+              role: "worker",
+            },
+          ],
           edges: [],
           nodes: [
             {
@@ -642,7 +725,8 @@ describe("saveWorkflowToDisk", () => {
       "utf8",
     );
     expect(workflowJsonText).not.toContain('"managerNodeId"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).not.toContain('"managerStepId"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
     expect(workflowJsonText).toContain('"role": "worker"');
     expect(workflowJsonText).not.toContain('"role": "manager"');
 
@@ -681,7 +765,14 @@ describe("saveWorkflowToDisk", () => {
 
     const expectedRevision = await computeWorkflowRevisionFromFiles(
       loaded.value.workflowDirectory,
-      loaded.value.bundle.workflow.nodes.map((node) => node.nodeFile),
+      (
+        loaded.value.bundle.workflow.nodeRegistry ??
+        loaded.value.bundle.workflow.nodes
+      ).flatMap((node) =>
+        "nodeFile" in node && typeof node.nodeFile === "string"
+          ? [node.nodeFile]
+          : [],
+      ),
       collectPromptTemplateFiles(loaded.value.bundle.nodePayloads),
     );
     expect(expectedRevision.ok).toBe(true);
@@ -696,6 +787,10 @@ describe("saveWorkflowToDisk", () => {
     if (workerNode === undefined) {
       return;
     }
+    const workerRegistryNode =
+      loaded.value.bundle.workflow.nodeRegistry?.find(
+        (node) => node.id === "main-worker",
+      ) ?? workerNode;
 
     const saveResult = await saveWorkflowToDisk(
       "demo",
@@ -703,7 +798,22 @@ describe("saveWorkflowToDisk", () => {
         workflow: {
           ...loaded.value.bundle.workflow,
           hasManagerNode: false,
+          managerStepId: undefined,
+          entryStepId: "main-worker",
           entryNodeId: "main-worker",
+          nodeRegistry: [
+            {
+              id: workerRegistryNode.id,
+              nodeFile: workerRegistryNode.nodeFile,
+            },
+          ],
+          steps: [
+            {
+              id: "main-worker",
+              nodeId: "main-worker",
+              role: "worker",
+            },
+          ],
           edges: [],
           nodes: [
             {
@@ -764,6 +874,10 @@ describe("saveWorkflowToDisk", () => {
     if (workerNode === undefined) {
       return;
     }
+    const workerRegistryNode =
+      loaded.value.bundle.workflow.nodeRegistry?.find(
+        (node) => node.id === "main-worker",
+      ) ?? workerNode;
 
     const saveResult = await saveWorkflowToDisk(
       "demo",
@@ -771,7 +885,22 @@ describe("saveWorkflowToDisk", () => {
         workflow: {
           ...loaded.value.bundle.workflow,
           hasManagerNode: false,
+          managerStepId: undefined,
+          entryStepId: "main-worker",
           entryNodeId: "main-worker",
+          nodeRegistry: [
+            {
+              id: workerRegistryNode.id,
+              nodeFile: workerRegistryNode.nodeFile,
+            },
+          ],
+          steps: [
+            {
+              id: "main-worker",
+              nodeId: "main-worker",
+              role: "worker",
+            },
+          ],
           edges: [],
           nodes: [
             {
@@ -877,6 +1006,415 @@ describe("saveWorkflowToDisk", () => {
     expect(nodeJsonRaw).toContain(
       '"promptTemplateFile": "prompts/renamed-manager.md"',
     );
+  });
+
+  test("preserves file-backed step definitions when saving step-addressed workflows", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "step-save-demo");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await mkdir(path.join(workflowDirectory, "steps"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "step-save-demo",
+      description: "step save demo",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "manager",
+      managerStepId: "manager",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+        {
+          id: "coder-node",
+          nodeFile: "nodes/node-coder.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager",
+          stepFile: "steps/step-manager.json",
+        },
+        {
+          id: "review",
+          stepFile: "steps/step-review.json",
+        },
+      ],
+    });
+    await writeJson(
+      path.join(workflowDirectory, "steps", "step-manager.json"),
+      {
+        id: "manager",
+        nodeId: "manager-node",
+        role: "manager",
+        transitions: [{ toStepId: "review" }],
+      },
+    );
+    await writeJson(path.join(workflowDirectory, "steps", "step-review.json"), {
+      id: "review",
+      nodeId: "coder-node",
+      role: "worker",
+      promptVariant: "self-review",
+    });
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      {
+        id: "manager-node",
+        variables: {},
+      },
+    );
+    await writeJson(path.join(workflowDirectory, "nodes", "node-coder.json"), {
+      id: "coder-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "implement",
+      variables: {},
+      promptVariants: {
+        "self-review": {
+          promptTemplate: "review",
+        },
+      },
+    });
+
+    const loaded = await loadWorkflowFromDisk("step-save-demo", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const saveResult = await saveWorkflowToDisk(
+      "step-save-demo",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(workflowDirectory, "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).toContain('"stepFile": "steps/step-manager.json"');
+    expect(workflowJsonText).toContain('"stepFile": "steps/step-review.json"');
+    expect(workflowJsonText).not.toContain('"nodeId": "manager-node"');
+    expect(workflowJsonText).not.toContain('"nodeId": "coder-node"');
+
+    const reviewStepText = await readFile(
+      path.join(workflowDirectory, "steps", "step-review.json"),
+      "utf8",
+    );
+    expect(reviewStepText).toContain('"nodeId": "coder-node"');
+    expect(reviewStepText).toContain('"promptVariant": "self-review"');
+
+    const managerNodeText = await readFile(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      "utf8",
+    );
+    expect(managerNodeText).not.toContain('"executionBackend"');
+    expect(managerNodeText).not.toContain('"promptTemplate"');
+  });
+
+  test("persists and cleans up prompt variant template files on save", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "variant-prompt-save");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await mkdir(path.join(workflowDirectory, "prompts"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "variant-prompt-save",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "review",
+      nodes: [
+        {
+          id: "coder-node",
+          nodeFile: "nodes/node-coder.json",
+        },
+      ],
+      steps: [
+        {
+          id: "review",
+          nodeId: "coder-node",
+          promptVariant: "self-review",
+        },
+      ],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-coder.json"), {
+      id: "coder-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "implement",
+      variables: {},
+      promptVariants: {
+        "self-review": {
+          promptTemplateFile: "prompts/review.md",
+        },
+      },
+    });
+    await writeFile(
+      path.join(workflowDirectory, "prompts", "review.md"),
+      "review v1\n",
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowFromDisk("variant-prompt-save", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const updatedNodePayloads = {
+      ...loaded.value.bundle.nodePayloads,
+      "coder-node": {
+        ...loaded.value.bundle.nodePayloads["coder-node"],
+        promptVariants: {
+          "self-review": {
+            promptTemplateFile: "prompts/review-renamed.md",
+            promptTemplate: "review v2",
+          },
+        },
+      },
+    };
+
+    const saveResult = await saveWorkflowToDisk(
+      "variant-prompt-save",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: updatedNodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    await expect(
+      readFile(path.join(workflowDirectory, "prompts", "review.md"), "utf8"),
+    ).rejects.toThrow(/ENOENT/u);
+
+    await expect(
+      readFile(
+        path.join(workflowDirectory, "prompts", "review-renamed.md"),
+        "utf8",
+      ),
+    ).resolves.toBe("review v2\n");
+
+    const nodeJsonRaw = await readFile(
+      path.join(workflowDirectory, "nodes", "node-coder.json"),
+      "utf8",
+    );
+    expect(nodeJsonRaw).toContain('"promptVariants"');
+    expect(nodeJsonRaw).toContain(
+      '"promptTemplateFile": "prompts/review-renamed.md"',
+    );
+    expect(nodeJsonRaw).not.toContain('"promptTemplate": "review v2"');
+  });
+
+  test("does not let a colliding step id overwrite the shared node payload on save", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "step-node-id-collision");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "step-node-id-collision",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "implement",
+      nodes: [
+        {
+          id: "review",
+          nodeFile: "nodes/node-review.json",
+        },
+      ],
+      steps: [
+        {
+          id: "implement",
+          nodeId: "review",
+        },
+        {
+          id: "review",
+          nodeId: "review",
+          promptVariant: "self-review",
+        },
+      ],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-review.json"), {
+      id: "review",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "implement",
+      variables: {},
+      promptVariants: {
+        "self-review": {
+          promptTemplate: "review",
+        },
+      },
+    });
+
+    const loaded = await loadWorkflowFromDisk("step-node-id-collision", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    expect(loaded.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
+      "review",
+    );
+    expect(
+      loaded.value.bundle.nodePayloads["nodes/node-review.json"]?.promptTemplate,
+    ).toBe("implement");
+
+    const saveResult = await saveWorkflowToDisk(
+      "step-node-id-collision",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const nodeJsonRaw = await readFile(
+      path.join(workflowDirectory, "nodes", "node-review.json"),
+      "utf8",
+    );
+    expect(nodeJsonRaw).toContain('"promptTemplate": "implement"');
+    expect(nodeJsonRaw).toContain('"promptVariants"');
+    expect(nodeJsonRaw).toContain('"promptTemplate": "review"');
+
+    const reloaded = await loadWorkflowFromDisk("step-node-id-collision", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(
+      reloaded.value.bundle.nodePayloads["nodes/node-review.json"]?.promptTemplate,
+    ).toBe("implement");
+    expect(reloaded.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
+      "review",
+    );
+  });
+
+  test("keeps managerStepId omitted when a single manager-role step already identifies the manager", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "implicit-manager-step");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "implicit-manager-step",
+      description: "manager inferred from step role",
+      defaults: {
+        maxLoopIterations: 3,
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "manager",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+        {
+          id: "worker-node",
+          nodeFile: "nodes/node-worker.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager",
+          nodeId: "manager-node",
+          role: "manager",
+          transitions: [{ toStepId: "worker" }],
+        },
+        {
+          id: "worker",
+          nodeId: "worker-node",
+        },
+      ],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
+      id: "manager-node",
+      variables: {},
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-worker.json"), {
+      id: "worker-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "Do the work",
+      variables: {},
+      output: { description: "Worker payload" },
+    });
+
+    const loaded = await loadWorkflowFromDisk("implicit-manager-step", {
+      workflowRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    expect(loaded.value.bundle.workflow.managerStepId).toBe("manager");
+
+    const saveResult = await saveWorkflowToDisk(
+      "implicit-manager-step",
+      {
+        workflow: loaded.value.bundle.workflow,
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(saveResult.ok).toBe(true);
+    if (!saveResult.ok) {
+      return;
+    }
+
+    const workflowJsonText = await readFile(
+      path.join(workflowDirectory, "workflow.json"),
+      "utf8",
+    );
+    expect(workflowJsonText).not.toContain('"managerStepId"');
+    expect(workflowJsonText).toContain('"entryStepId": "manager"');
+    expect(workflowJsonText).toContain('"role": "manager"');
+
+    const reloaded = await loadWorkflowFromDisk("implicit-manager-step", {
+      workflowRoot: root,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    expect(reloaded.value.bundle.workflow.managerStepId).toBe("manager");
+    expect(reloaded.value.bundle.workflow.entryStepId).toBe("manager");
   });
 
   test("preserves omitted normalized workflow fields instead of leaking compatibility defaults on save", async () => {

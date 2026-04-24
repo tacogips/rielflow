@@ -1125,7 +1125,9 @@ describe("loadWorkflowFromDisk", () => {
     expect(workflowJsonText).not.toContain('"branching"');
     expect(workflowJsonText).not.toContain('"containerRuntime"');
     expect(workflowJsonText).not.toContain('"completion"');
-    expect(workflowJsonText).toContain('"entryNodeId": "divedra-manager"');
+    expect(workflowJsonText).toContain('"managerStepId": "divedra-manager"');
+    expect(workflowJsonText).toContain('"entryStepId": "divedra-manager"');
+    expect(workflowJsonText).toContain('"steps"');
 
     const result = await loadWorkflowFromDisk("template-role-workflow", {
       workflowRoot: root,
@@ -1139,6 +1141,8 @@ describe("loadWorkflowFromDisk", () => {
 
     expect(result.value.bundle.workflow.nodes[0]?.id).toBe("divedra-manager");
     expect(result.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.managerStepId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.entryStepId).toBe("divedra-manager");
     expect(result.value.bundle.workflow.nodes[0]?.role).toBe("manager");
     expect(result.value.bundle.workflow.nodes[1]?.role).toBe("worker");
     expect(
@@ -1190,7 +1194,8 @@ describe("loadWorkflowFromDisk", () => {
     expect(workflowJsonText).not.toContain('"branching"');
     expect(workflowJsonText).not.toContain('"containerRuntime"');
     expect(workflowJsonText).not.toContain('"completion"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
+    expect(workflowJsonText).toContain('"steps"');
 
     const result = await loadWorkflowFromDisk("template-worker-only", {
       workflowRoot: root,
@@ -1203,6 +1208,7 @@ describe("loadWorkflowFromDisk", () => {
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
     expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
     expect(result.value.bundle.workflow.managerNodeId).toBe("main-worker");
     expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
       "main-worker",
@@ -1216,6 +1222,244 @@ describe("loadWorkflowFromDisk", () => {
     expect(
       result.value.bundle.nodePayloads["main-worker"]?.executionBackend,
     ).toBe("codex-agent");
+  });
+
+  test("loads step-addressed workflows with file-backed step definitions", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "step-file-demo");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await mkdir(path.join(workflowDirectory, "steps"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "step-file-demo",
+      description: "step file workflow",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      managerStepId: "manager",
+      entryStepId: "manager",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+        {
+          id: "coder-node",
+          nodeFile: "nodes/node-coder.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager",
+          stepFile: "steps/step-manager.json",
+        },
+        {
+          id: "review",
+          stepFile: "steps/step-review.json",
+        },
+      ],
+    });
+    await writeJson(
+      path.join(workflowDirectory, "steps", "step-manager.json"),
+      {
+        id: "manager",
+        nodeId: "manager-node",
+        role: "manager",
+        transitions: [{ toStepId: "review" }],
+      },
+    );
+    await writeJson(path.join(workflowDirectory, "steps", "step-review.json"), {
+      id: "review",
+      nodeId: "coder-node",
+      role: "worker",
+      promptVariant: "self-review",
+    });
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      {
+        id: "manager-node",
+        variables: {},
+      },
+    );
+    await writeJson(path.join(workflowDirectory, "nodes", "node-coder.json"), {
+      id: "coder-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "implement",
+      variables: {},
+      promptVariants: {
+        "self-review": {
+          promptTemplate: "review",
+        },
+      },
+    });
+
+    const result = await loadWorkflowFromDisk("step-file-demo", {
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(
+      result.value.bundle.workflow.nodeRegistry?.map((node) => node.id),
+    ).toEqual(["manager-node", "coder-node"]);
+    expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
+      "manager",
+      "review",
+    ]);
+    expect(result.value.bundle.workflow.steps?.[0]?.stepFile).toBe(
+      "steps/step-manager.json",
+    );
+    expect(result.value.bundle.nodePayloads["manager"]?.managerType).toBe(
+      "code",
+    );
+    expect(result.value.bundle.nodePayloads["manager"]?.executionBackend).toBe(
+      undefined,
+    );
+    expect(result.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
+      "review",
+    );
+  });
+
+  test("loads prompt variant template files for step-addressed node reuse", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "step-variant-file-demo");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await mkdir(path.join(workflowDirectory, "prompts"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "step-variant-file-demo",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "review",
+      nodes: [
+        {
+          id: "coder-node",
+          nodeFile: "nodes/node-coder.json",
+        },
+      ],
+      steps: [
+        {
+          id: "review",
+          nodeId: "coder-node",
+          promptVariant: "self-review",
+        },
+      ],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-coder.json"), {
+      id: "coder-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "implement",
+      variables: {},
+      promptVariants: {
+        "self-review": {
+          promptTemplateFile: "prompts/review.md",
+          systemPromptTemplateFile: "prompts/review-system.md",
+        },
+      },
+    });
+    await writeFile(
+      path.join(workflowDirectory, "prompts", "review.md"),
+      "review via file\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "prompts", "review-system.md"),
+      "review system via file\n",
+      "utf8",
+    );
+
+    const result = await loadWorkflowFromDisk("step-variant-file-demo", {
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.nodePayloads["coder-node"]?.promptVariants).toMatchObject({
+      "self-review": {
+        promptTemplate: "review via file\n",
+        promptTemplateFile: "prompts/review.md",
+        systemPromptTemplate: "review system via file\n",
+        systemPromptTemplateFile: "prompts/review-system.md",
+      },
+    });
+    expect(result.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
+      "review via file\n",
+    );
+    expect(
+      result.value.bundle.nodePayloads["review"]?.systemPromptTemplate,
+    ).toBe("review system via file\n");
+  });
+
+  test("rejects step files whose authored id disagrees with workflow.json", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "step-file-id-mismatch");
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await mkdir(path.join(workflowDirectory, "steps"), { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "step-file-id-mismatch",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      entryStepId: "manager",
+      managerStepId: "manager",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager",
+          stepFile: "steps/step-manager.json",
+        },
+      ],
+    });
+    await writeJson(
+      path.join(workflowDirectory, "steps", "step-manager.json"),
+      {
+        id: "not-manager",
+        nodeId: "manager-node",
+        role: "manager",
+      },
+    );
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      {
+        id: "manager-node",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "manager",
+        variables: {},
+      },
+    );
+
+    const result = await loadWorkflowFromDisk("step-file-id-mismatch", {
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps[0].stepFile",
+          message:
+            "step file id 'not-manager' must match workflow step id 'manager'",
+        }),
+      ]),
+    );
   });
 
   test("loads promptTemplate from a workflow-local promptTemplateFile", async () => {

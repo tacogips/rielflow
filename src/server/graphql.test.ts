@@ -978,7 +978,7 @@ describe("GraphQL HTTP transport", () => {
       "utf8",
     );
     expect(workflowJsonText).not.toContain('"managerNodeId"');
-    expect(workflowJsonText).toContain('"entryNodeId": "main-worker"');
+    expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
   });
 
   test("authenticates manager mutations over /graphql with bearer auth", async () => {

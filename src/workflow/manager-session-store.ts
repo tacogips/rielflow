@@ -318,6 +318,8 @@ export function stripAmbientManagerExecutionContext(
 
 function ensureSchema(db: Database): void {
   db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS manager_sessions (
       manager_session_id TEXT PRIMARY KEY,
       workflow_id TEXT NOT NULL,
