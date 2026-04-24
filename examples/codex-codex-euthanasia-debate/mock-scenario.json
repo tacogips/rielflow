@@ -4,22 +4,11 @@
       "provider": "scenario-mock",
       "model": "gpt-5-nano",
       "when": {
-        "start_affirmative": true
+        "always": true
       },
       "payload": {
         "stage": "root-dispatch",
         "policy": "affirmative-starts"
-      }
-    },
-    {
-      "provider": "scenario-mock",
-      "model": "gpt-5-nano",
-      "when": {
-        "start_affirmative": false
-      },
-      "payload": {
-        "stage": "conversation-dispatch",
-        "policy": "runtime-managed-turns"
       }
     }
   ],
@@ -339,8 +328,7 @@
         "turnNumber": 6,
         "argument": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent.",
         "responseToOpponent": "No safeguard is perfect, but regulated choice can still be ethically preferable to denying relief in every case.",
-        "done": true,
-        "summary": "Debate reached the configured 10-turn cap with the affirmative side delivering the final published turn."
+        "done": true
       }
     }
   ],
@@ -398,6 +386,17 @@
       "payload": {
         "stance": "negative",
         "turnNumber": 5
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 6
       }
     }
   ],
@@ -465,6 +464,19 @@
         "turnNumber": 5,
         "topic": "euthanasia",
         "opponentClaim": "Respectful legal frameworks can affirm that no one is obligated to choose euthanasia while still allowing it for those who persistently request it."
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 6,
+        "topic": "euthanasia",
+        "opponentClaim": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent."
       }
     }
   ],
@@ -538,6 +550,20 @@
         "responseToOpponent": "When the failure mode is an irreversible death, residual risk carries unusual ethical weight.",
         "done": false
       }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 6,
+        "argument": "Residual error and coercion risk mean some societies may still prefer a ban even when autonomy claims sound compelling in the abstract.",
+        "responseToOpponent": "Autonomy framed with evidence still cannot reduce wrongful-death risk to zero, so prohibition can remain a coherent stance.",
+        "done": false
+      }
     }
   ],
   "negative-output": [
@@ -609,6 +635,105 @@
         "argument": "Review boards and consent checks cannot eliminate every wrongful death, so the moral cost of legalization remains too high.",
         "responseToOpponent": "When the failure mode is an irreversible death, residual risk carries unusual ethical weight.",
         "done": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "negative",
+        "turnNumber": 6,
+        "argument": "Residual error and coercion risk mean some societies may still prefer a ban even when autonomy claims sound compelling in the abstract.",
+        "responseToOpponent": "Autonomy framed with evidence still cannot reduce wrongful-death risk to zero, so prohibition can remain a coherent stance.",
+        "done": false
+      }
+    }
+  ],
+  "debate-judge": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": true
+      },
+      "payload": {
+        "completedRounds": 1,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": true
+      },
+      "payload": {
+        "completedRounds": 2,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": true
+      },
+      "payload": {
+        "completedRounds": 3,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": true
+      },
+      "payload": {
+        "completedRounds": 4,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": true
+      },
+      "payload": {
+        "completedRounds": 5,
+        "decision": "continue"
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "continue_debate": false
+      },
+      "payload": {
+        "completedRounds": 6,
+        "decision": "stop"
+      }
+    }
+  ],
+  "debate-summary": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5-nano",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "stance": "neutral",
+        "roundsCompleted": 6,
+        "summary": "Debate completed six full affirmative-then-negative rounds; the affirmative side delivered the final published turn.",
+        "argument": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent.",
+        "responseToOpponent": "No safeguard is perfect, but regulated choice can still be ethically preferable to denying relief in every case.",
+        "done": true
       }
     }
   ]

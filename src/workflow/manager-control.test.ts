@@ -176,7 +176,7 @@ describe("parseManagerControlPayload", () => {
     expect(parsed?.startSubWorkflowIds).toEqual(["sw-a"]);
   });
 
-  test("rejects start-sub-workflow for role-authored workflows that use explicit workflowCalls instead", () => {
+  test("rejects start-sub-workflow for role-authored workflows without structural sub-workflows", () => {
     expect(() =>
       parseManagerControlPayload(
         {
@@ -194,7 +194,7 @@ describe("parseManagerControlPayload", () => {
         },
       ),
     ).toThrow(
-      "workflow has no structural sub-workflows; explicit workflowCalls run automatically",
+      "cross-workflow step transitions and explicit workflowCalls run automatically from their caller steps",
     );
   });
 

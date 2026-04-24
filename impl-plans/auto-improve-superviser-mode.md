@@ -1,9 +1,9 @@
 # Auto Improve Superviser Mode Implementation Plan
 
-**Status**: Planning
+**Status**: In Progress
 **Design Reference**: `design-docs/specs/design-auto-improve-superviser-mode.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`
 **Created**: 2026-04-24
-**Last Updated**: 2026-04-24
+**Last Updated**: 2026-04-25 (unblocked from cutover TASK-005; dependency table)
 
 ## Design Document Reference
 
@@ -214,11 +214,11 @@ interface SuperviserExampleBundle {
 
 | Feature | Depends On | Status |
 | ------- | ---------- | ------ |
-| Supervision policy and persistent records | Step-addressed runtime cutover | BLOCKED |
-| Mutable workflow workspace and revision plumbing | Supervision policy and persistent records | BLOCKED |
-| Superviser orchestration and control operations | Step-addressed runtime cutover, mutable workspace plumbing | BLOCKED |
-| Public surfaces | Supervision policy and orchestration | BLOCKED |
-| Examples, documentation, and verification | All supervision modules | BLOCKED |
+| Supervision policy and persistent records | `step-addressed-workflow-runtime-cutover` (TASK-005 examples/docs complete; `call-step` / step graph in production use) | Ready |
+| Mutable workflow workspace and revision plumbing | Supervision policy and persistent records | NOT_STARTED |
+| Superviser orchestration and control operations | Cutover core runtime, mutable workspace plumbing | NOT_STARTED |
+| Public surfaces | Supervision policy and orchestration | NOT_STARTED |
+| Examples, documentation, and verification | All supervision modules | NOT_STARTED |
 
 ## Completion Criteria
 
@@ -231,6 +231,14 @@ interface SuperviserExampleBundle {
 - [ ] `bun run typecheck:server`, targeted supervision tests, and the full regression suite pass
 
 ## Progress Log
+
+### Session: 2026-04-25
+
+**Tasks Completed**: Aligned the plan with `impl-plans/PROGRESS.json`: `step-addressed-workflow-runtime-cutover` **TASK-005** (shipped examples/docs slice for the step-addressed model) is **Completed**, so this plan’s **TASK-001** no longer depends on it. The dependency table above reflects that implementation can start while the parent cutover finishes TASK-001 through TASK-004 (strict-default depth, `call-step` follow-ups, engine, surfaces).
+
+**Tasks In Progress**: TASK-001 (supervision policy and records) per `PROGRESS.json`
+
+**Blockers**: None for the cutover gate; remaining work is implementation of supervision modules (all `NOT_STARTED` in the module table).
 
 ### Session: 2026-04-24 00:00 JST
 **Tasks Completed**: Plan creation

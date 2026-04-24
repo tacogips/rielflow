@@ -59,6 +59,7 @@ afterEach(async () => {
 async function createCompletedWorkflowFixture(root: string) {
   const created = await createWorkflowTemplate("demo", {
     workflowRoot: root,
+    rejectLegacyWorkflowAuthoring: false,
   });
   expect(created.ok).toBe(true);
   if (!created.ok) {
@@ -70,6 +71,7 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -193,6 +195,7 @@ async function createCompletedSubworkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,

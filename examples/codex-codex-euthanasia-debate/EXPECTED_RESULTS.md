@@ -32,7 +32,7 @@ Expected stable run summary:
   "workflowName": "codex-codex-euthanasia-debate",
   "workflowId": "codex-codex-euthanasia-debate",
   "nodeExecutions": 56,
-  "transitions": 45,
+  "transitions": 55,
   "exitCode": 0
 }
 ```
@@ -41,32 +41,34 @@ Expected post-run session assertions:
 
 ```json
 {
-  "conversationTurns": 10,
+  "conversationTurns": 0,
   "nodeExecutionCounts": {
-    "divedra-manager": 12,
+    "divedra-manager": 1,
     "affirmative-manager": 6,
     "affirmative-input": 6,
     "affirmative-speaker": 6,
     "affirmative-output": 6,
-    "negative-manager": 5,
-    "negative-input": 5,
-    "negative-speaker": 5,
-    "negative-output": 5
+    "negative-manager": 6,
+    "negative-input": 6,
+    "negative-speaker": 6,
+    "negative-output": 6,
+    "debate-judge": 6,
+    "debate-summary": 1
   }
 }
 ```
 
-Expected final output node: `affirmative-output`
+Expected final output node: `debate-summary`
 
 Expected final output payload:
 
 ```json
 {
-  "stance": "affirmative",
-  "turnNumber": 6,
+  "stance": "neutral",
+  "roundsCompleted": 6,
+  "summary": "Debate completed six full affirmative-then-negative rounds; the affirmative side delivered the final published turn.",
   "argument": "The strongest ethical case remains autonomy constrained by evidence, review, and explicit voluntary consent.",
   "responseToOpponent": "No safeguard is perfect, but regulated choice can still be ethically preferable to denying relief in every case.",
-  "done": true,
-  "summary": "Debate reached the configured 10-turn cap with the affirmative side delivering the final published turn."
+  "done": true
 }
 ```

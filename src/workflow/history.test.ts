@@ -78,6 +78,7 @@ function makeWorkflowOptions(root: string) {
     rootDataDir: path.join(root, "runtime-data"),
     sessionStoreRoot: path.join(root, "sessions"),
     workflowRoot: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
 }
 

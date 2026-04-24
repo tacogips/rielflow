@@ -113,6 +113,8 @@ export interface WorkflowNodeRegistryRef {
 export interface WorkflowStepTransition {
   readonly toStepId: string;
   readonly toWorkflowId?: string;
+  /** Parent workflow step to queue after the callee workflow completes (required when `toWorkflowId` is set). */
+  readonly resumeStepId?: string;
   readonly label?: string;
 }
 
@@ -179,6 +181,11 @@ export interface WorkflowCallRef {
   /** Step-addressed: optional; when set must equal `callerNodeId` and limits the call to that step id (disambiguates shared registry nodes). */
   readonly callerStepId?: string;
   readonly resultNodeId?: string;
+  /**
+   * When set, the call runs only if this branch predicate matches the caller output
+   * (same expression grammar as workflow edge `when`). Omitted means unconditional.
+   */
+  readonly when?: string;
 }
 
 export interface WorkflowEdge {
@@ -651,6 +658,12 @@ export interface LoadOptions {
   readonly nodeAddons?: readonly NodeAddonDefinition[];
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
+  /**
+   * Legacy authoring gate: `true` always rejects legacy fields; `false` always allows them.
+   * When omitted, `validate.ts` uses `isStrictWorkflowAuthorshipValidation`: strict by default,
+   * unless `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` is set in the environment (used only
+   * where options cannot be threaded, such as selected `runCli` integration tests).
+   */
   readonly rejectLegacyWorkflowAuthoring?: boolean;
 }
 

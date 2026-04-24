@@ -34,6 +34,23 @@ async function makeTempDir(): Promise<string> {
   return directory;
 }
 
+/** `runCli` loads workflows like the production CLI; legacy disk fixtures opt in via the same env knob as `isStrictWorkflowAuthorshipValidation`. */
+async function withLegacyWorkflowAuthorshipForCli<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+  process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] = "true";
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) {
+      delete process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+    } else {
+      process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] = prev;
+    }
+  }
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
@@ -762,10 +779,22 @@ describe("runCli", () => {
     const capture = createIoCapture();
     const code = await runCli(["unknown", "cmd", "target"], capture.io);
     expect(code).toBe(1);
-    expect(capture.stdout.join("\n")).toContain("Usage:");
+    const help = capture.stdout.join("\n");
+    expect(help).toContain("Usage:");
+    expect(help).toContain("prefer call-step");
+  });
+
+  test("call-node usage on missing args mentions call-step preference", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(["call-node", "wf", "run"], capture.io);
+    expect(code).toBe(2);
+    const err = capture.stderr.join("\n");
+    expect(err).toContain("node id are required");
+    expect(err).toContain("prefer call-step");
   });
 
   test("call-node executes locally with structured manager message input", async () => {
+    await withLegacyWorkflowAuthorshipForCli(async () => {
     const root = await makeTempDir();
     const workflowName = "call-node-cli";
     const sessionId = "sess-call-node-cli";
@@ -852,6 +881,7 @@ describe("runCli", () => {
       ),
     ) as { managerMessage?: { instruction?: string } };
     expect(inputJson.managerMessage?.instruction).toBe("review this change");
+    });
   });
 
   test("call-step executes locally with structured manager message input", async () => {
@@ -981,23 +1011,33 @@ describe("runCli", () => {
     const outputJson = inspectCapture.stdout.join("\n");
     const parsed = JSON.parse(outputJson) as {
       workflowName: string;
-      entryNodeId: string;
+      entryNodeId?: string;
       managerNodeId?: string;
       entryStepId?: string;
       managerStepId?: string;
       stepIds: readonly string[];
       nodeRegistryIds: readonly string[];
-      counts: { nodes: number; nodeRegistry: number; steps: number };
+      counts: {
+        nodeRegistry: number;
+        steps: number;
+        structuralProjection?: { nodes: number; edges: number; loops: number };
+        nodes?: number;
+      };
       runtime: { ready: boolean; blockers: readonly string[] };
     };
     expect(parsed.workflowName).toBe("demo");
-    expect(parsed.entryNodeId).toBe("divedra-manager");
-    expect(parsed.managerNodeId).toBe("divedra-manager");
+    expect(parsed.entryNodeId).toBeUndefined();
+    expect(parsed.managerNodeId).toBeUndefined();
     expect(parsed.entryStepId).toBe("divedra-manager");
     expect(parsed.managerStepId).toBe("divedra-manager");
     expect(parsed.stepIds).toEqual(["divedra-manager", "main-worker"]);
     expect(parsed.nodeRegistryIds).toEqual(["divedra-manager", "main-worker"]);
-    expect(parsed.counts.nodes).toBe(2);
+    expect(parsed.counts.nodes).toBeUndefined();
+    expect(parsed.counts.structuralProjection).toEqual({
+      nodes: 2,
+      edges: 1,
+      loops: 0,
+    });
     expect(parsed.counts.nodeRegistry).toBe(2);
     expect(parsed.counts.steps).toBe(2);
     expect(parsed.runtime.ready).toBe(false);
@@ -1023,8 +1063,8 @@ describe("runCli", () => {
     expect(inspectTextCapture.stdout.join("\n")).toContain(
       "nodeRegistryIds: divedra-manager, main-worker",
     );
-    expect(inspectTextCapture.stdout.join("\n")).toContain(
-      "nodeRegistry: 2, steps: 2",
+    expect(inspectTextCapture.stdout.join("\n")).toMatch(
+      /nodeRegistry: 2, workflowCalls: 0, structuralProjection: nodes=2 edges=1 loops=0/,
     );
   });
 
@@ -1122,6 +1162,7 @@ describe("runCli", () => {
   });
 
   test("workflow validate and inspect report scoped local add-on sources", async () => {
+    await withLegacyWorkflowAuthorshipForCli(async () => {
     const root = await makeTempDir();
     const userRoot = path.join(root, "user");
     const workflowName = "local-addon-cli";
@@ -1212,6 +1253,7 @@ describe("runCli", () => {
     expect(inspectCapture.stdout.join("\n")).toContain(
       `addonSource: addon-worker: ${addonName}@1 user`,
     );
+    });
   });
 
   test("workflow commands reject invalid scope selectors", async () => {
@@ -1319,18 +1361,43 @@ describe("runCli", () => {
     expect(inspectCode).toBe(0);
 
     const parsed = JSON.parse(inspectCapture.stdout.join("\n")) as {
-      entryNodeId: string;
+      entryNodeId?: string;
+      entryStepId?: string;
       hasManagerNode: boolean;
       managerNodeId?: string;
-      counts: { nodes: number };
+      counts: { structuralProjection?: { nodes: number }; nodes?: number };
     };
     expect(parsed.hasManagerNode).toBe(false);
     expect(parsed.managerNodeId).toBeUndefined();
-    expect(parsed.entryNodeId).toBe("main-worker");
-    expect(parsed.counts.nodes).toBe(1);
+    expect(parsed.entryNodeId).toBeUndefined();
+    expect(parsed.entryStepId).toBe("main-worker");
+    expect(parsed.counts.nodes).toBeUndefined();
+    expect(parsed.counts.structuralProjection?.nodes).toBe(1);
+
+    const inspectTextCapture = createIoCapture();
+    const inspectTextCode = await runCli(
+      [
+        "workflow",
+        "inspect",
+        "solo",
+        "--workflow-root",
+        root,
+      ],
+      inspectTextCapture.io,
+    );
+    expect(inspectTextCode).toBe(0);
+    const textOut = inspectTextCapture.stdout.join("\n");
+    expect(textOut).toMatch(
+      /compatibility: normalizesRoleAuthoredNodesToStructuralKinds=yes, usesEffectiveEntryManagerNodeId=yes, usesLegacyStructuralSubWorkflows=no/,
+    );
+    expect(textOut).toContain("compatibility notes:");
+    expect(textOut).toContain(
+      "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
+    );
   });
 
   test("inspect reports worker-only workflows without an authored manager node", async () => {
+    await withLegacyWorkflowAuthorshipForCli(async () => {
     const root = await makeTempDir();
     await createManagerlessWorkflowFixture(root, "worker-only");
 
@@ -1367,9 +1434,11 @@ describe("runCli", () => {
     expect(parsed.compatibility.notes).toContain(
       "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
     );
+    });
   });
 
   test("inspect reports authored workflowCalls in json and text output", async () => {
+    await withLegacyWorkflowAuthorshipForCli(async () => {
     const root = await makeTempDir();
     await createWorkflowCallInspectFixture(root, "workflow-calls");
 
@@ -1420,13 +1489,17 @@ describe("runCli", () => {
     expect(textCapture.stdout.join("\n")).toContain(
       "workflowCallIds: review-call",
     );
-    expect(textCapture.stdout.join("\n")).toContain("compatibility:");
+    expect(textCapture.stdout.join("\n")).toMatch(
+      /compatibility: normalizesRoleAuthoredNodesToStructuralKinds=yes, usesEffectiveEntryManagerNodeId=no, usesLegacyStructuralSubWorkflows=no/,
+    );
+    expect(textCapture.stdout.join("\n")).toContain("compatibility notes:");
     expect(textCapture.stdout.join("\n")).toContain(
       "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
     );
     expect(textCapture.stdout.join("\n")).not.toContain("subWorkflows:");
     expect(textCapture.stdout.join("\n")).not.toContain("legacySubWorkflows:");
     expect(textCapture.stdout.join("\n")).toContain("runtimeReady: yes");
+    });
   });
 
   test("workflow run fails early when required agent backend transport is unavailable", async () => {
@@ -3825,6 +3898,7 @@ describe("runCli", () => {
   });
 
   test("events emit dispatches locally with mock scenario without endpoint", async () => {
+    await withLegacyWorkflowAuthorshipForCli(async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");
     const eventRoot = path.join(root, ".divedra-events");
@@ -3915,6 +3989,7 @@ describe("runCli", () => {
     expect(payload.receipts[0]?.status).toBe("dispatched");
     expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^div-demo-/);
     expect(fetchImpl).not.toHaveBeenCalled();
+    });
   });
 
   test("events emit honors DIVEDRA_EVENTS_READ_ONLY", async () => {

@@ -346,7 +346,7 @@ export function parseManagerControlActions(
     if (action.type === "start-sub-workflow") {
       if (!hasStructuralSubWorkflows(workflow)) {
         throw new Error(
-          "managerControl start-sub-workflow is unavailable when the workflow has no structural sub-workflows; explicit workflowCalls run automatically from their caller nodes",
+          "managerControl start-sub-workflow is unavailable when the workflow has no structural sub-workflows; cross-workflow step transitions and explicit workflowCalls run automatically from their caller steps",
         );
       }
       if (!isRootManagerControlContext(workflow, context)) {

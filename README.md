@@ -38,7 +38,7 @@ Current runtime behavior:
 - authored workflows may use role-based nodes (`manager` / `worker`) and may omit a manager when the authored entry is explicit (`entryStepId` for step-addressed bundles, `entryNodeId` for legacy compatibility bundles)
 - manager-less workflows execute today, but the normalized runtime still derives an internal effective manager/entry identity for compatibility
 - `call-step` is the primary direct-call surface; `call-node` remains a compatibility wrapper for the older node-addressed runtime contract
-- explicit `workflowCalls` still exist as a compatibility-only cross-workflow invocation path in the queue engine while step-addressed cross-workflow dispatch is being unified
+- cross-workflow step transitions execute through the same queue-engine workflow-call primitive as explicit `workflowCalls`; authored `workflowCalls` remain a compatibility path for non-step bundles and transitional fixtures
 - node-local `repeat` remains supported only in the simplified compatibility format and still synthesizes loop semantics
 - `user-action` nodes are supported and pause execution until an external reply resolves the action
 
@@ -464,7 +464,7 @@ Available examples:
 - `subworkflow-chained-simple` (historical name; now a step-addressed grouped-lane example without structural `subWorkflows`)
 - `node-combinations-showcase`
 - `first-four-arithmetic-pipeline`
-- `codex-codex-euthanasia-debate` (legacy structural compatibility)
+- `codex-codex-euthanasia-debate` (step-addressed multi-round debate demo)
 
 Recommended starting point:
 
@@ -472,16 +472,8 @@ Recommended starting point:
 
 Workflow-call reference:
 
-- `workflow-call-simple` shows a step-addressed managed parent that still uses the compatibility `workflowCalls` path to call a worker-only sibling workflow and resume from the returned result
+- `workflow-call-simple` shows a step-addressed managed parent that invokes a worker-only sibling workflow through a cross-workflow step transition (`toWorkflowId` + `resumeStepId`), executed with the same workflow-call primitive as explicit `workflowCalls` (deterministic id `__cw:<callerStepId>`) without merging calls into the normalized bundle
 - `subworkflow-chained-simple` is kept as a historical-name grouped-lane reference; it now uses explicit step-addressed transitions and does not author structural `subWorkflows`
-
-Legacy compatibility reference:
-
-- `codex-codex-euthanasia-debate` remains as an explicitly legacy structural example until `subWorkflowConversations` is migrated away from structural sub-workflow boundaries
-
-Repeat-based compatibility reference:
-
-- `node-combinations-showcase` still uses compatibility-only ordered-node authoring metadata for node-local `repeat`
 
 Examples that exercise the full node surface:
 

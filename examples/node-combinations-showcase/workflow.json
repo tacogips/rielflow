@@ -1,6 +1,6 @@
 {
   "workflowId": "node-combinations-showcase",
-  "description": "Compact reference bundle authored as a linear ordered node list showing command-node, container-node, and repeat-based foreach authoring in one place.",
+  "description": "Compact reference bundle in the step-addressed shape: command-node, container-node, and a foreach lane with a judge step that branches back on continue_items (same behavior as the former node-local repeat authoring).",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000,
@@ -9,84 +9,148 @@
     }
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Run the command lane, then the container lane, then the repeat-based foreach lane.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Run the command lane, then the container lane, then the foreach lane (judge step transitions loop until continue_items is false).",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise workflow JSON-oriented output."
   },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
       "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "command-manager",
-      "group": "command-lane",
       "nodeFile": "nodes/node-command-manager.json"
     },
     {
       "id": "command-input",
-      "group": "command-lane",
       "nodeFile": "nodes/node-command-input.json"
     },
     {
       "id": "command-worker",
-      "group": "command-lane",
       "nodeFile": "nodes/node-command-worker.json"
     },
     {
       "id": "command-output",
-      "group": "command-lane",
       "nodeFile": "nodes/node-command-output.json"
     },
     {
       "id": "container-manager",
-      "group": "container-lane",
       "nodeFile": "nodes/node-container-manager.json"
     },
     {
       "id": "container-input",
-      "group": "container-lane",
       "nodeFile": "nodes/node-container-input.json"
     },
     {
       "id": "container-worker",
-      "group": "container-lane",
       "nodeFile": "nodes/node-container-worker.json"
     },
     {
       "id": "container-output",
-      "group": "container-lane",
       "nodeFile": "nodes/node-container-output.json"
     },
     {
       "id": "foreach-manager",
-      "group": "foreach-loop",
       "nodeFile": "nodes/node-foreach-manager.json"
     },
     {
       "id": "foreach-input",
-      "group": "foreach-loop",
       "nodeFile": "nodes/node-foreach-input.json"
     },
     {
       "id": "foreach-worker",
-      "group": "foreach-loop",
       "nodeFile": "nodes/node-foreach-worker.json"
     },
     {
       "id": "foreach-judge",
-      "group": "foreach-loop",
-      "nodeFile": "nodes/node-foreach-judge.json",
-      "repeat": {
-        "while": "continue_items",
-        "restartAt": "foreach-manager",
-        "maxIterations": 3
-      }
+      "nodeFile": "nodes/node-foreach-judge.json"
     },
     {
       "id": "foreach-output",
-      "group": "foreach-loop",
       "nodeFile": "nodes/node-foreach-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [{ "toStepId": "command-manager" }]
+    },
+    {
+      "id": "command-manager",
+      "nodeId": "command-manager",
+      "transitions": [{ "toStepId": "command-input" }]
+    },
+    {
+      "id": "command-input",
+      "nodeId": "command-input",
+      "transitions": [{ "toStepId": "command-worker" }]
+    },
+    {
+      "id": "command-worker",
+      "nodeId": "command-worker",
+      "transitions": [{ "toStepId": "command-output" }]
+    },
+    {
+      "id": "command-output",
+      "nodeId": "command-output",
+      "transitions": [{ "toStepId": "container-manager" }]
+    },
+    {
+      "id": "container-manager",
+      "nodeId": "container-manager",
+      "transitions": [{ "toStepId": "container-input" }]
+    },
+    {
+      "id": "container-input",
+      "nodeId": "container-input",
+      "transitions": [{ "toStepId": "container-worker" }]
+    },
+    {
+      "id": "container-worker",
+      "nodeId": "container-worker",
+      "transitions": [{ "toStepId": "container-output" }]
+    },
+    {
+      "id": "container-output",
+      "nodeId": "container-output",
+      "transitions": [{ "toStepId": "foreach-manager" }]
+    },
+    {
+      "id": "foreach-manager",
+      "nodeId": "foreach-manager",
+      "transitions": [{ "toStepId": "foreach-input" }]
+    },
+    {
+      "id": "foreach-input",
+      "nodeId": "foreach-input",
+      "transitions": [{ "toStepId": "foreach-worker" }]
+    },
+    {
+      "id": "foreach-worker",
+      "nodeId": "foreach-worker",
+      "transitions": [{ "toStepId": "foreach-judge" }]
+    },
+    {
+      "id": "foreach-judge",
+      "nodeId": "foreach-judge",
+      "transitions": [
+        {
+          "toStepId": "foreach-manager",
+          "label": "continue_items"
+        },
+        {
+          "toStepId": "foreach-output",
+          "label": "!(continue_items)"
+        }
+      ]
+    },
+    {
+      "id": "foreach-output",
+      "nodeId": "foreach-output"
     }
   ]
 }

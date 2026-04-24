@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type { NodePayload } from "../workflow/types";
+import type { NodePayload, WorkflowJson } from "../workflow/types";
 import type { RuntimeSessionView } from "./opentui-model";
 import {
   buildOpenTuiFooterShortcutRow,
@@ -346,6 +346,49 @@ describe("buildWorkflowDefinitionContent", () => {
     expect(content).not.toContain("workflow.json");
   });
 
+  test("uses authorship fallbacks for legacy manager/entry when ids are absent", () => {
+    const content = buildWorkflowDefinitionContent({
+      workflowName: "legacy-missing-ids",
+      workflowDirectory: "/tmp/x",
+      artifactWorkflowRoot: "/tmp/artifacts/legacy-missing-ids",
+      bundle: {
+        workflow: {
+          workflowId: "legacy-missing-ids",
+          description: "",
+          defaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120_000,
+          },
+          hasManagerNode: true,
+          subWorkflows: [],
+          nodes: [
+            {
+              id: "n1",
+              kind: "task",
+              nodeFile: "n1.json",
+              completion: { type: "none" },
+            },
+          ],
+          edges: [],
+          loops: [],
+          branching: { mode: "fan-out" },
+        } as unknown as WorkflowJson,
+        nodePayloads: {
+          n1: {
+            id: "n1",
+            model: "m",
+            promptTemplate: "p",
+            variables: {},
+          },
+        },
+      },
+    } as LoadedWorkflow);
+    expect(content).toContain(
+      "Manager node: (not set; check workflow authorship)",
+    );
+    expect(content).toContain("Entry node: (not set; check workflow authorship)");
+  });
+
   test("shows entry-node details for worker-only workflows", () => {
     const loaded: LoadedWorkflow = {
       workflowName: "worker-only",
@@ -400,6 +443,8 @@ describe("buildWorkflowDefinitionContent", () => {
       makeStepAddressedLoadedWorkflow(),
     );
 
+    expect(content).not.toContain("Entry node:");
+    expect(content).not.toContain("Manager node:");
     expect(content).toContain("Entry step: manager-step");
     expect(content).toContain("Manager step: manager-step");
     expect(content).toContain("Steps: 2");

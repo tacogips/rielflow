@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { callStep } from "./call-step";
+import { callStep, rewriteCallStepFailureMessage } from "./call-step";
 import { listRuntimeNodeExecutions } from "./runtime-db";
 import { createSessionState } from "./session";
 import { saveSession } from "./session-store";
@@ -723,5 +723,77 @@ describe("callStep", () => {
       mode: "reuse",
       sessionId: "persisted-review-session",
     });
+  });
+
+  test("rewriteCallStepFailureMessage maps generic call-node execution errors to step wording", () => {
+    const stepId = "writer-step";
+    expect(rewriteCallStepFailureMessage("node execution failed", stepId)).toBe(
+      "step execution failed",
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        "node execution produced no output",
+        stepId,
+      ),
+    ).toBe("step execution produced no output");
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepId}' is missing executable node fields`,
+        stepId,
+      ),
+    ).toBe(`step '${stepId}' is missing executable fields`);
+    expect(
+      rewriteCallStepFailureMessage(
+        `cannot call node '${stepId}' on terminal session 'sess-1' with status 'completed'`,
+        stepId,
+      ),
+    ).toBe(
+      `cannot call step '${stepId}' on terminal session 'sess-1' with status 'completed'`,
+    );
+  });
+
+  test("reports terminal-session direct-call failures with step-oriented wording", async () => {
+    const root = await makeTempDir();
+    const workflowName = "call-step-terminal-session";
+    const sessionId = "sess-call-step-terminal";
+    const sessionStoreRoot = path.join(root, "sessions");
+
+    await createCallStepFixture(root, workflowName);
+
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName,
+          workflowId: workflowName,
+          initialNodeId: "manager-step",
+          runtimeVariables: {},
+        }),
+        status: "completed",
+      },
+      {
+        sessionStoreRoot,
+      },
+    );
+    expect(saved.ok).toBe(true);
+
+    const result = await callStep({
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      stepId: "writer-step",
+      mockScenario: {},
+      dryRun: true,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("cannot call step");
+    expect(result.error.message).toContain("'writer-step'");
+    expect(result.error.message).not.toContain("cannot call node");
   });
 });

@@ -1,194 +1,126 @@
 {
   "workflowId": "codex-codex-euthanasia-debate",
-  "description": "Two codex debate nodes argue the ethics of euthanasia from opposing positions. The runtime alternates conversation turns between the two sub-workflows and stops after 10 turns.",
+  "description": "Two codex-agent lanes argue euthanasia from opposing positions. After each full affirmative-then-negative round, a judge step decides whether to continue; the mock scenario ends after six rounds (same deterministic depth as the former structural conversation demo).",
   "defaults": {
-    "maxLoopIterations": 3,
+    "maxLoopIterations": 10,
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Run {{workflowId}} as a two-sided debate. Start the affirmative lane first, let the negative lane answer, and rely on runtime-managed conversation turns until the 10-turn cap stops the debate.",
+    "divedraPromptTemplate": "Run {{workflowId}} as a two-sided debate. Start the affirmative lane, run the negative lane, and let the judge step decide whether another round is needed until the scenario ends the loop.",
     "workerSystemPromptTemplate": "Return concise business JSON that is useful to the next workflow node."
   },
-  "managerNodeId": "divedra-manager",
-  "subWorkflows": [
-    {
-      "id": "affirmative-lane",
-      "description": "Affirmative speaker argues in favor of permitting euthanasia under strict safeguards.",
-      "managerNodeId": "affirmative-manager",
-      "inputNodeId": "affirmative-input",
-      "outputNodeId": "affirmative-output",
-      "nodeIds": [
-        "affirmative-manager",
-        "affirmative-input",
-        "affirmative-speaker",
-        "affirmative-output"
-      ],
-      "inputSources": [
-        {
-          "type": "human-input"
-        }
-      ],
-      "block": {
-        "type": "plain"
-      }
-    },
-    {
-      "id": "negative-lane",
-      "description": "Negative speaker argues against euthanasia and answers the affirmative case.",
-      "managerNodeId": "negative-manager",
-      "inputNodeId": "negative-input",
-      "outputNodeId": "negative-output",
-      "nodeIds": [
-        "negative-manager",
-        "negative-input",
-        "negative-speaker",
-        "negative-output"
-      ],
-      "inputSources": [
-        {
-          "type": "sub-workflow-output",
-          "subWorkflowId": "affirmative-lane"
-        }
-      ],
-      "block": {
-        "type": "plain"
-      }
-    }
-  ],
-  "subWorkflowConversations": [
-    {
-      "id": "debate-rounds",
-      "participants": [
-        "affirmative-lane",
-        "negative-lane"
-      ],
-      "maxTurns": 10,
-      "stopWhen": "never"
-    }
-  ],
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "kind": "root-manager",
-      "nodeFile": "nodes/node-divedra-manager.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "affirmative-manager",
-      "kind": "subworkflow-manager",
-      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-manager.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-manager.json"
     },
     {
       "id": "affirmative-input",
-      "kind": "input",
-      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-input.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-input.json"
     },
     {
       "id": "affirmative-speaker",
-      "kind": "task",
-      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-speaker.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-speaker.json"
     },
     {
       "id": "affirmative-output",
-      "kind": "output",
-      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-output.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/affirmative-lane/nodes/node-affirmative-output.json"
     },
     {
       "id": "negative-manager",
-      "kind": "subworkflow-manager",
-      "nodeFile": "workflows/negative-lane/nodes/node-negative-manager.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-manager.json"
     },
     {
       "id": "negative-input",
-      "kind": "input",
-      "nodeFile": "workflows/negative-lane/nodes/node-negative-input.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-input.json"
     },
     {
       "id": "negative-speaker",
-      "kind": "task",
-      "nodeFile": "workflows/negative-lane/nodes/node-negative-speaker.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-speaker.json"
     },
     {
       "id": "negative-output",
-      "kind": "output",
-      "nodeFile": "workflows/negative-lane/nodes/node-negative-output.json",
-      "completion": {
-        "type": "none"
-      }
+      "nodeFile": "workflows/negative-lane/nodes/node-negative-output.json"
+    },
+    {
+      "id": "debate-judge",
+      "nodeFile": "nodes/node-debate-judge.json"
+    },
+    {
+      "id": "debate-summary",
+      "nodeFile": "nodes/node-debate-summary.json"
     }
   ],
-  "edges": [
+  "steps": [
     {
-      "from": "divedra-manager",
-      "to": "affirmative-manager",
-      "when": "start_affirmative"
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [{ "toStepId": "affirmative-manager" }]
     },
     {
-      "from": "affirmative-manager",
-      "to": "affirmative-input",
-      "when": "always"
+      "id": "affirmative-manager",
+      "nodeId": "affirmative-manager",
+      "transitions": [{ "toStepId": "affirmative-input" }]
     },
     {
-      "from": "affirmative-input",
-      "to": "affirmative-speaker",
-      "when": "always"
+      "id": "affirmative-input",
+      "nodeId": "affirmative-input",
+      "transitions": [{ "toStepId": "affirmative-speaker" }]
     },
     {
-      "from": "affirmative-speaker",
-      "to": "affirmative-output",
-      "when": "always"
+      "id": "affirmative-speaker",
+      "nodeId": "affirmative-speaker",
+      "transitions": [{ "toStepId": "affirmative-output" }]
     },
     {
-      "from": "affirmative-output",
-      "to": "divedra-manager",
-      "when": "always"
+      "id": "affirmative-output",
+      "nodeId": "affirmative-output",
+      "transitions": [{ "toStepId": "negative-manager" }]
     },
     {
-      "from": "negative-manager",
-      "to": "negative-input",
-      "when": "always"
+      "id": "negative-manager",
+      "nodeId": "negative-manager",
+      "transitions": [{ "toStepId": "negative-input" }]
     },
     {
-      "from": "negative-input",
-      "to": "negative-speaker",
-      "when": "always"
+      "id": "negative-input",
+      "nodeId": "negative-input",
+      "transitions": [{ "toStepId": "negative-speaker" }]
     },
     {
-      "from": "negative-speaker",
-      "to": "negative-output",
-      "when": "always"
+      "id": "negative-speaker",
+      "nodeId": "negative-speaker",
+      "transitions": [{ "toStepId": "negative-output" }]
     },
     {
-      "from": "negative-output",
-      "to": "divedra-manager",
-      "when": "always"
+      "id": "negative-output",
+      "nodeId": "negative-output",
+      "transitions": [{ "toStepId": "debate-judge" }]
+    },
+    {
+      "id": "debate-judge",
+      "nodeId": "debate-judge",
+      "transitions": [
+        {
+          "toStepId": "affirmative-manager",
+          "label": "continue_debate"
+        },
+        {
+          "toStepId": "debate-summary",
+          "label": "!(continue_debate)"
+        }
+      ]
+    },
+    {
+      "id": "debate-summary",
+      "nodeId": "debate-summary"
     }
-  ],
-  "loops": [],
-  "branching": {
-    "mode": "fan-out"
-  }
+  ]
 }

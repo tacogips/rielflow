@@ -27,7 +27,7 @@ Expected stable inspection facts:
 - `entryStepId` is `divedra-manager`
 - `stepIds` are `["divedra-manager", "draft-write", "apply-review"]`
 - `counts.workflowCalls` is `1`
-- `workflowCallIds` contains `call-review`
+- `workflowCallIds` contains `__cw:draft-write` (derived from the cross-workflow step transition)
 - `subWorkflows` remains omitted from the authored bundle
 
 ## Run
@@ -56,7 +56,7 @@ Expected stable run summary:
 
 Expected stable workflow-call facts:
 
-- the parent session records one communication with `transitionWhen = "workflow-call:call-review"`
+- the parent session records one communication with `transitionWhen = "workflow-call:__cw:draft-write"`
 - that communication targets `apply-review`
 - that communication payload references workflow id `workflow-call-review-target`
 

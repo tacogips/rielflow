@@ -1,10 +1,21 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { crossWorkflowCallsFromSteps } from "./cross-workflow-from-steps";
 import {
+  isStrictWorkflowAuthorshipValidation,
   validateWorkflowBundleAsync,
   validateWorkflowBundle,
   validateWorkflowBundleDetailed,
 } from "./validate";
 import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./types";
+
+/** Opt in to legacy node-ordered / structural authoring for tests of the compatibility validator path. */
+const legacyWorkflowAuthorshipOk = {
+  rejectLegacyWorkflowAuthoring: false,
+} as const;
 
 function makeValidRaw(): {
   workflow: unknown;
@@ -172,6 +183,25 @@ function makeValidStepAddressedRaw(): {
 }
 
 describe("validateWorkflowBundle", () => {
+  test("defaults to strict authorship validation when legacy default env is unset", () => {
+    const prev = process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+    delete process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+    try {
+      expect(isStrictWorkflowAuthorshipValidation({})).toBe(true);
+      expect(
+        isStrictWorkflowAuthorshipValidation({
+          rejectLegacyWorkflowAuthoring: false,
+        }),
+      ).toBe(false);
+    } finally {
+      if (prev === undefined) {
+        delete process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+      } else {
+        process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] = prev;
+      }
+    }
+  });
+
   function expectInvalidNodeKind(kind: string): void {
     const raw = makeValidRaw();
     raw.workflow = {
@@ -192,7 +222,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -207,7 +237,7 @@ describe("validateWorkflowBundle", () => {
   }
 
   test("accepts canonical valid payload", () => {
-    const result = validateWorkflowBundle(makeValidRaw());
+    const result = validateWorkflowBundle(makeValidRaw(), legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -233,6 +263,764 @@ describe("validateWorkflowBundle", () => {
       "manager",
       "worker",
     ]);
+  });
+
+  test("rejects cross-workflow step transitions without resumeStepId", () => {
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      { toStepId: "ext-step", toWorkflowId: "other-workflow" },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "workflow.steps[0].transitions[0].resumeStepId" &&
+          issue.message.includes("required when toWorkflowId is set"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects resumeStepId on local step transitions", () => {
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "worker",
+        resumeStepId: "worker",
+      },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "workflow.steps[0].transitions[0].resumeStepId" &&
+          issue.message.includes("only when toWorkflowId is set"),
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps cross-workflow step transitions on the step graph (no merged workflowCalls)", () => {
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "callee-entry",
+        toWorkflowId: "other-workflow",
+        resumeStepId: "worker",
+      },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect(crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps)).toEqual([
+      {
+        id: "__cw:manager",
+        workflowId: "other-workflow",
+        callerNodeId: "manager",
+        callerStepId: "manager",
+        resultNodeId: "worker",
+      },
+    ]);
+  });
+
+  test("maps cross-workflow step transition label to derived workflowCall when for execution", () => {
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "callee-entry",
+        toWorkflowId: "other-workflow",
+        resumeStepId: "worker",
+        label: "need_review",
+      },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect(crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps)).toEqual([
+      {
+        id: "__cw:manager",
+        workflowId: "other-workflow",
+        callerNodeId: "manager",
+        callerStepId: "manager",
+        resultNodeId: "worker",
+        when: "need_review",
+      },
+    ]);
+  });
+
+  test("rejects explicit workflowCalls for the same caller step as a cross-workflow step transition (non-strict)", () => {
+    const raw = makeValidStepAddressedRaw();
+    const workflow = raw.workflow as Record<string, unknown>;
+    (workflow as { workflowCalls: readonly unknown[] }).workflowCalls = [
+      {
+        id: "extra-call",
+        workflowId: "callee",
+        callerNodeId: "manager",
+        callerStepId: "manager",
+        resultNodeId: "worker",
+      },
+    ];
+    const steps = workflow["steps"] as Array<Record<string, unknown>>;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "callee-entry",
+        toWorkflowId: "callee",
+        resumeStepId: "worker",
+      },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0]" &&
+          issue.message.includes(
+            "cannot combine cross-workflow transitions with workflowCalls",
+          ),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects explicit workflowCall ids that collide with cross-workflow __cw: ids (non-strict)", () => {
+    const raw = makeValidStepAddressedRaw();
+    const workflow = raw.workflow as Record<string, unknown>;
+    (workflow as { workflowCalls: readonly unknown[] }).workflowCalls = [
+      {
+        id: "__cw:manager",
+        workflowId: "callee",
+        callerNodeId: "worker",
+        callerStepId: "worker",
+        resultNodeId: "manager",
+      },
+    ];
+    const steps = workflow["steps"] as Array<Record<string, unknown>>;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "callee-entry",
+        toWorkflowId: "callee",
+        resumeStepId: "worker",
+      },
+    ];
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: false,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.workflowCalls" &&
+          issue.message.includes(
+            "reserved for cross-workflow step transitions",
+          ),
+      ),
+    ).toBe(true);
+  });
+
+  test("async validation requires cross-workflow toStepId to match callee entry when workflowRoot is set", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-"));
+    const calleeName = "callee-wf";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: "callee-wf",
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "real-entry",
+        nodes: [],
+        steps: [],
+      }),
+      "utf8",
+    );
+
+    const rawMismatch = makeValidStepAddressedRaw();
+    const stepsMismatch = (
+      rawMismatch.workflow as { steps: Array<Record<string, unknown>> }
+    ).steps;
+    (stepsMismatch[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "wrong-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const bad = await validateWorkflowBundleAsync(rawMismatch, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) {
+      return;
+    }
+    expect(
+      bad.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toStepId" &&
+          issue.message.includes("real-entry"),
+      ),
+    ).toBe(true);
+
+    const rawOk = makeValidStepAddressedRaw();
+    const stepsOk = (rawOk.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (stepsOk[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "real-entry",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const good = await validateWorkflowBundleAsync(rawOk, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(good.ok).toBe(true);
+  });
+
+  test("sync validateWorkflowBundleDetailed applies callee entry alignment when workflowRoot is set", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-sync-"));
+    const calleeName = "callee-wf";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: "callee-wf",
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "real-entry",
+        nodes: [],
+        steps: [],
+      }),
+      "utf8",
+    );
+
+    const rawMismatch = makeValidStepAddressedRaw();
+    const stepsMismatch = (
+      rawMismatch.workflow as { steps: Array<Record<string, unknown>> }
+    ).steps;
+    (stepsMismatch[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "wrong-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const bad = validateWorkflowBundleDetailed(rawMismatch, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) {
+      return;
+    }
+    expect(
+      bad.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toStepId" &&
+          issue.message.includes("real-entry"),
+      ),
+    ).toBe(true);
+  });
+
+  test("async validation resolves cross-workflow callees by workflowId even when the directory name differs", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-id-async-"));
+    const calleeDirectoryName = "callee-directory";
+    const calleeWorkflowId = "callee-by-id";
+    await mkdir(path.join(root, calleeDirectoryName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeDirectoryName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeWorkflowId,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "real-entry",
+        nodes: [],
+        steps: [],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "real-entry",
+        toWorkflowId: calleeWorkflowId,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("sync validation resolves cross-workflow callees by workflowId even when the directory name differs", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "wf-cross-id-sync-"));
+    const calleeDirectoryName = "callee-directory";
+    const calleeWorkflowId = "callee-by-id";
+    mkdirSync(path.join(root, calleeDirectoryName), { recursive: true });
+    writeFileSync(
+      path.join(root, calleeDirectoryName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeWorkflowId,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "real-entry",
+        nodes: [],
+        steps: [],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "real-entry",
+        toWorkflowId: calleeWorkflowId,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("async validation uses callee managerStepId as the start step when both managerStepId and entryStepId are set", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-"));
+    const calleeName = "managed-callee";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: "managed-callee",
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        managerStepId: "mgr-step",
+        entryStepId: "other-step",
+        nodes: [],
+        steps: [],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "other-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const bad = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) {
+      return;
+    }
+    expect(
+      bad.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toStepId" &&
+          issue.message.includes("mgr-step"),
+      ),
+    ).toBe(true);
+  });
+
+  test("async validation accepts a callee with an implicit manager-role step when managerStepId is omitted", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-"));
+    const calleeName = "implicit-managed-callee";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [{ id: "mgr-node", nodeFile: "node-mgr.json" }],
+        steps: [
+          {
+            id: "mgr-step",
+            nodeId: "mgr-node",
+            role: "manager",
+          },
+          {
+            id: "worker-step",
+            nodeId: "mgr-node",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("sync validation accepts a callee with an implicit manager-role step when managerStepId is omitted", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "wf-cross-sync-"));
+    const calleeName = "implicit-managed-callee-sync";
+    mkdirSync(path.join(root, calleeName), { recursive: true });
+    writeFileSync(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [{ id: "mgr-node", nodeFile: "node-mgr.json" }],
+        steps: [
+          {
+            id: "mgr-step",
+            nodeId: "mgr-node",
+            role: "manager",
+          },
+          {
+            id: "worker-step",
+            nodeId: "mgr-node",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("async validation rejects an ambiguous implicit callee manager when managerStepId is omitted", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-ambiguous-"));
+    const calleeName = "ambiguous-managed-callee";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [
+          { id: "mgr-node-a", nodeFile: "node-mgr-a.json" },
+          { id: "mgr-node-b", nodeFile: "node-mgr-b.json" },
+          { id: "worker-node", nodeFile: "node-worker.json" },
+        ],
+        steps: [
+          {
+            id: "mgr-step-a",
+            nodeId: "mgr-node-a",
+            role: "manager",
+          },
+          {
+            id: "mgr-step-b",
+            nodeId: "mgr-node-b",
+            role: "manager",
+          },
+          {
+            id: "worker-step",
+            nodeId: "worker-node",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step-a",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toWorkflowId" &&
+          issue.message.includes("more than one manager-role step"),
+      ),
+    ).toBe(true);
+  });
+
+  test("sync validation rejects an ambiguous implicit callee manager when managerStepId is omitted", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "wf-cross-ambiguous-sync-"));
+    const calleeName = "ambiguous-managed-callee-sync";
+    mkdirSync(path.join(root, calleeName), { recursive: true });
+    writeFileSync(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [
+          { id: "mgr-node-a", nodeFile: "node-mgr-a.json" },
+          { id: "mgr-node-b", nodeFile: "node-mgr-b.json" },
+          { id: "worker-node", nodeFile: "node-worker.json" },
+        ],
+        steps: [
+          {
+            id: "mgr-step-a",
+            nodeId: "mgr-node-a",
+            role: "manager",
+          },
+          {
+            id: "mgr-step-b",
+            nodeId: "mgr-node-b",
+            role: "manager",
+          },
+          {
+            id: "worker-step",
+            nodeId: "worker-node",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step-a",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toWorkflowId" &&
+          issue.message.includes("more than one manager-role step"),
+      ),
+    ).toBe(true);
+  });
+
+  test("async validation accepts a file-backed callee with an implicit manager-role step when managerStepId is omitted", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-file-step-"));
+    const calleeName = "file-step-managed-callee";
+    const calleeRoot = path.join(root, calleeName);
+    await mkdir(path.join(calleeRoot, "steps"), { recursive: true });
+    await writeFile(
+      path.join(calleeRoot, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [{ id: "mgr-node", nodeFile: "node-mgr.json" }],
+        steps: [
+          {
+            id: "mgr-step",
+            stepFile: "steps/step-mgr.json",
+          },
+          {
+            id: "worker-step",
+            stepFile: "steps/step-worker.json",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(calleeRoot, "steps/step-mgr.json"),
+      JSON.stringify({
+        id: "mgr-step",
+        nodeId: "mgr-node",
+        role: "manager",
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(calleeRoot, "steps/step-worker.json"),
+      JSON.stringify({
+        id: "worker-step",
+        nodeId: "mgr-node",
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("sync validation accepts a file-backed callee with an implicit manager-role step when managerStepId is omitted", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "wf-cross-file-step-sync-"));
+    const calleeName = "file-step-managed-callee-sync";
+    const calleeRoot = path.join(root, calleeName);
+    mkdirSync(path.join(calleeRoot, "steps"), { recursive: true });
+    writeFileSync(
+      path.join(calleeRoot, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "c",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "worker-step",
+        nodes: [{ id: "mgr-node", nodeFile: "node-mgr.json" }],
+        steps: [
+          {
+            id: "mgr-step",
+            stepFile: "steps/step-mgr.json",
+          },
+          {
+            id: "worker-step",
+            stepFile: "steps/step-worker.json",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      path.join(calleeRoot, "steps/step-mgr.json"),
+      JSON.stringify({
+        id: "mgr-step",
+        nodeId: "mgr-node",
+        role: "manager",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      path.join(calleeRoot, "steps/step-worker.json"),
+      JSON.stringify({
+        id: "worker-step",
+        nodeId: "mgr-node",
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "mgr-step",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(true);
   });
 
   test("rejects legacy node-addressed authoring in strict step-addressed validation mode", () => {
@@ -266,7 +1054,7 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     delete (raw.workflow as { description?: unknown }).description;
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -282,7 +1070,7 @@ describe("validateWorkflowBundle", () => {
       workflowId: "../demo",
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -323,7 +1111,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-divedra-manager.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -372,7 +1160,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-divedra-manager.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -411,7 +1199,7 @@ describe("validateWorkflowBundle", () => {
       "nodes/node-worker-1.json": raw.nodePayloads["node-worker-1.json"],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -432,7 +1220,7 @@ describe("validateWorkflowBundle", () => {
       description: "",
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -448,7 +1236,7 @@ describe("validateWorkflowBundle", () => {
   });
 
   test("accepts unified role schema", () => {
-    const result = validateWorkflowBundle(makeUnifiedRoleRaw());
+    const result = validateWorkflowBundle(makeUnifiedRoleRaw(), legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1111,7 +1899,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1195,7 +1983,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1226,7 +2014,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1256,7 +2044,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1287,7 +2075,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1318,7 +2106,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1348,7 +2136,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1414,7 +2202,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1443,7 +2231,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1480,7 +2268,7 @@ describe("validateWorkflowBundle", () => {
         ],
       };
 
-      const result = validateWorkflowBundleDetailed(raw);
+      const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
       expect(result.ok).toBe(false);
       if (result.ok) {
         continue;
@@ -1522,7 +2310,7 @@ describe("validateWorkflowBundle", () => {
     delete (raw.workflow as Record<string, unknown>)["managerNodeId"];
     delete raw.nodePayloads["node-divedra-manager.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1554,7 +2342,7 @@ describe("validateWorkflowBundle", () => {
       edges: [],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1579,7 +2367,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1604,7 +2392,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1625,7 +2413,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1648,7 +2436,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1698,7 +2486,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1732,7 +2520,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1765,7 +2553,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1816,7 +2604,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1872,7 +2660,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1920,7 +2708,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -1989,7 +2777,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2052,7 +2840,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2123,7 +2911,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2176,7 +2964,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2243,7 +3031,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2298,7 +3086,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2365,7 +3153,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2418,7 +3206,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2486,7 +3274,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2534,7 +3322,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2583,7 +3371,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2625,7 +3413,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2669,7 +3457,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2710,7 +3498,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2751,7 +3539,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2773,7 +3561,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2811,7 +3599,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2852,7 +3640,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2890,7 +3678,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2928,7 +3716,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2984,6 +3772,7 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3041,6 +3830,7 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddons: [addon],
     });
 
@@ -3095,6 +3885,7 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = await validateWorkflowBundleAsync(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddons: [addon],
     });
 
@@ -3148,6 +3939,7 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddons: [addon],
     });
 
@@ -3203,6 +3995,7 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddons: [addon],
     });
 
@@ -3243,7 +4036,7 @@ describe("validateWorkflowBundle", () => {
     };
     delete raw.nodePayloads["node-worker-1.json"];
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -3294,6 +4087,7 @@ describe("validateWorkflowBundle", () => {
     });
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3344,6 +4138,7 @@ describe("validateWorkflowBundle", () => {
     });
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3394,6 +4189,7 @@ describe("validateWorkflowBundle", () => {
     });
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3447,6 +4243,7 @@ describe("validateWorkflowBundle", () => {
     });
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [unhandledResolver, handledResolver],
     });
 
@@ -3488,6 +4285,7 @@ describe("validateWorkflowBundle", () => {
     const resolver = (() => 42) as unknown as NodeAddonPayloadResolver;
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3534,6 +4332,7 @@ describe("validateWorkflowBundle", () => {
     })) as unknown as NodeAddonPayloadResolver;
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3591,6 +4390,7 @@ describe("validateWorkflowBundle", () => {
     });
 
     const result = validateWorkflowBundle(raw, {
+      ...legacyWorkflowAuthorshipOk,
       nodeAddonResolvers: [resolver],
     });
 
@@ -3619,7 +4419,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3649,7 +4449,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3690,7 +4490,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -3712,7 +4512,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -3742,7 +4542,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -3774,7 +4574,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -3809,7 +4609,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3838,7 +4638,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3867,7 +4667,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -3898,7 +4698,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3926,7 +4726,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -3951,7 +4751,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -3974,7 +4774,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -3996,7 +4796,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -4022,7 +4822,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4049,7 +4849,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4077,7 +4877,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4115,7 +4915,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4138,7 +4938,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4162,7 +4962,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundleDetailed(raw);
+    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4185,7 +4985,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4199,7 +4999,7 @@ describe("validateWorkflowBundle", () => {
   });
 
   test("does not emit compatibility warnings for canonical payloads", () => {
-    const result = validateWorkflowBundleDetailed(makeValidRaw());
+    const result = validateWorkflowBundleDetailed(makeValidRaw(), legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -4223,7 +5023,7 @@ describe("validateWorkflowBundle", () => {
       variable: { name: "legacy" },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4255,7 +5055,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -4276,7 +5076,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4312,7 +5112,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -4337,7 +5137,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -4360,7 +5160,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4385,7 +5185,7 @@ describe("validateWorkflowBundle", () => {
       output: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4417,7 +5217,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4447,7 +5247,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4477,7 +5277,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4506,7 +5306,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4537,7 +5337,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4578,7 +5378,7 @@ describe("validateWorkflowBundle", () => {
       edges: [],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4614,7 +5414,7 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4650,7 +5450,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4767,7 +5567,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4862,7 +5662,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4940,7 +5740,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5034,7 +5834,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5127,7 +5927,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5294,7 +6094,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -5390,7 +6190,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5552,7 +6352,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5658,7 +6458,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5784,7 +6584,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -5921,7 +6721,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
   });
 
@@ -6047,7 +6847,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6148,7 +6948,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6249,7 +7049,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6385,7 +7185,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6452,7 +7252,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6552,7 +7352,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6673,7 +7473,7 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6774,7 +7574,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -6920,7 +7720,7 @@ describe("validateWorkflowBundle", () => {
       },
     };
 
-    const result = validateWorkflowBundle(raw);
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;

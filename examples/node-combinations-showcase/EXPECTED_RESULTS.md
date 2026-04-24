@@ -66,7 +66,7 @@ Expected lane terminal payloads:
     "result": "container showcase lane"
   },
   "foreach-output": {
-    "summary": "Node combination showcase exercised command, container, and repeat-based foreach authoring with deterministic outputs.",
+    "summary": "Node combination showcase exercised command, container, and step-addressed foreach (judge transitions) with deterministic outputs.",
     "status": "ready",
     "commandLane": {
       "result": "command showcase lane"

@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { err, ok, type Result } from "./result";
 import { validateJsonSchemaDefinition } from "./json-schema";
 import {
@@ -11,7 +14,8 @@ import {
   remapAuthoredNodePayloadsByNodeFile,
   synthesizeInlineNodeFile,
 } from "./authored-node";
-import { isSafeWorkflowId } from "./paths";
+import { crossWorkflowCallsFromSteps } from "./cross-workflow-from-steps";
+import { isSafeWorkflowId, isSafeWorkflowName } from "./paths";
 import { normalizeWorkingDirectoryPath } from "./working-directory";
 import {
   normalizeCliAgentBackend,
@@ -100,6 +104,25 @@ export interface WorkflowValidationOptions
   > {
   readonly allowResolvedStepFileFields?: boolean;
   readonly rejectLegacyWorkflowAuthoring?: boolean;
+}
+
+/**
+ * When true, authored bundles must use step-addressed-only fields (legacy authoring rejected).
+ * Explicit `false`/`true` always wins; when omitted, production defaults to strict. Callers that
+ * load legacy-shaped fixtures (including unit tests) should pass `rejectLegacyWorkflowAuthoring:
+ * false` on `LoadOptions`. Setting `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` still makes
+ * omission non-strict for processes that cannot thread options (for example some `runCli` tests).
+ */
+export function isStrictWorkflowAuthorshipValidation(
+  options: Pick<WorkflowValidationOptions, "rejectLegacyWorkflowAuthoring">,
+): boolean {
+  if (options.rejectLegacyWorkflowAuthoring === false) {
+    return false;
+  }
+  if (options.rejectLegacyWorkflowAuthoring === true) {
+    return true;
+  }
+  return process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] !== "true";
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -1765,7 +1788,12 @@ function normalizeWorkflowStepTransition(
     return null;
   }
 
-  const allowedKeys = new Set(["toStepId", "toWorkflowId", "label"]);
+  const allowedKeys = new Set([
+    "toStepId",
+    "toWorkflowId",
+    "resumeStepId",
+    "label",
+  ]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(
@@ -1795,6 +1823,25 @@ function normalizeWorkflowStepTransition(
     }
   }
 
+  const resumeStepIdRaw = value["resumeStepId"];
+  let resumeStepId: string | undefined;
+  if (resumeStepIdRaw !== undefined) {
+    if (
+      typeof resumeStepIdRaw === "string" &&
+      resumeStepIdRaw.length > 0
+    ) {
+      resumeStepId = resumeStepIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.resumeStepId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
   const labelRaw = value["label"];
   let label: string | undefined;
   if (labelRaw !== undefined) {
@@ -1811,6 +1858,16 @@ function normalizeWorkflowStepTransition(
     }
   }
 
+  if (toWorkflowId === undefined && resumeStepId !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.resumeStepId`,
+        "is supported only when toWorkflowId is set",
+      ),
+    );
+  }
+
   if (toStepId === null) {
     return null;
   }
@@ -1818,6 +1875,7 @@ function normalizeWorkflowStepTransition(
   return {
     toStepId,
     ...(toWorkflowId === undefined ? {} : { toWorkflowId }),
+    ...(resumeStepId === undefined ? {} : { resumeStepId }),
     ...(label === undefined ? {} : { label }),
   };
 }
@@ -2239,7 +2297,7 @@ function normalizeStepAddressedWorkflow(
 
   const workflowCallsRaw = workflow["workflowCalls"];
   if (workflowCallsRaw !== undefined) {
-    if (options.rejectLegacyWorkflowAuthoring === true) {
+    if (isStrictWorkflowAuthorshipValidation(options)) {
       issues.push(
         makeIssue(
           "error",
@@ -2259,7 +2317,7 @@ function normalizeStepAddressedWorkflow(
   }
   const workflowCalls =
     Array.isArray(workflowCallsRaw) &&
-    options.rejectLegacyWorkflowAuthoring !== true
+    !isStrictWorkflowAuthorshipValidation(options)
       ? workflowCallsRaw
           .map((entry, index) => normalizeWorkflowCall(entry, index, issues))
           .filter((entry): entry is WorkflowCallRef => entry !== null)
@@ -2404,7 +2462,50 @@ function normalizeStepAddressedWorkflow(
         );
       }
     }
+    const crossWorkflowTransitions = (step.transitions ?? []).filter(
+      (t) => t.toWorkflowId !== undefined,
+    );
+    if (crossWorkflowTransitions.length > 1) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}]`,
+          "must have at most one cross-workflow transition (toWorkflowId)",
+        ),
+      );
+    }
+    const callsFromSameStep = (workflowCalls ?? []).filter(
+      (call) => (call.callerStepId ?? call.callerNodeId) === step.id,
+    );
+    if (crossWorkflowTransitions.length > 0 && callsFromSameStep.length > 0) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}]`,
+          "cannot combine cross-workflow transitions with workflowCalls for the same caller step",
+        ),
+      );
+    }
     step.transitions?.forEach((transition, transitionIndex) => {
+      if (transition.toWorkflowId !== undefined) {
+        if (transition.resumeStepId === undefined) {
+          issues.push(
+            makeIssue(
+              "error",
+              `workflow.steps[${index}].transitions[${transitionIndex}].resumeStepId`,
+              "is required when toWorkflowId is set (parent step to resume after the callee workflow completes)",
+            ),
+          );
+        } else if (!stepIdSet.has(transition.resumeStepId)) {
+          issues.push(
+            makeIssue(
+              "error",
+              `workflow.steps[${index}].transitions[${transitionIndex}].resumeStepId`,
+              `must reference an existing step id (${transition.resumeStepId})`,
+            ),
+          );
+        }
+      }
       if (
         transition.toWorkflowId === undefined &&
         !stepIdSet.has(transition.toStepId)
@@ -2466,6 +2567,24 @@ function normalizeStepAddressedWorkflow(
       })),
   );
 
+  const derivedCrossWorkflowCalls = crossWorkflowCallsFromSteps(steps);
+  if (workflowCalls !== undefined) {
+    const authoredIds = new Set(workflowCalls.map((call) => call.id));
+    for (const derived of derivedCrossWorkflowCalls) {
+      if (authoredIds.has(derived.id)) {
+        issues.push(
+          makeIssue(
+            "error",
+            "workflow.workflowCalls",
+            `id '${derived.id}' is reserved for cross-workflow step transitions; rename the workflow call or adjust step transitions`,
+          ),
+        );
+      }
+    }
+  }
+  const mergedWorkflowCalls =
+    workflowCalls === undefined ? undefined : [...workflowCalls];
+
   return {
     workflowId,
     description,
@@ -2479,7 +2598,7 @@ function normalizeStepAddressedWorkflow(
     managerNodeId: managerStepId ?? entryStepId,
     hasManagerNode: managerStepId !== undefined,
     entryNodeId: entryStepId,
-    ...(workflowCalls === undefined ? {} : { workflowCalls }),
+    ...(mergedWorkflowCalls === undefined ? {} : { workflowCalls: mergedWorkflowCalls }),
     ...(managerStepId === undefined ? {} : { managerStepId }),
     entryStepId,
     nodeRegistry,
@@ -2631,6 +2750,22 @@ function normalizeWorkflowCall(
     }
   }
 
+  const whenRaw = value["when"];
+  let when: string | undefined;
+  if (whenRaw !== undefined) {
+    if (typeof whenRaw === "string" && whenRaw.length > 0) {
+      when = whenRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.when`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
   if (id === null || workflowId === null || callerNodeId === null) {
     return null;
   }
@@ -2641,6 +2776,7 @@ function normalizeWorkflowCall(
     callerNodeId,
     ...(callerStepId === undefined ? {} : { callerStepId }),
     ...(resultNodeId === undefined ? {} : { resultNodeId }),
+    ...(when === undefined ? {} : { when }),
   };
 }
 
@@ -3060,7 +3196,7 @@ function normalizeWorkflow(
     return null;
   }
 
-  if (options.rejectLegacyWorkflowAuthoring === true) {
+  if (isStrictWorkflowAuthorshipValidation(options)) {
     return normalizeStepAddressedWorkflow(workflow, issues, options);
   }
 
@@ -4561,6 +4697,669 @@ function pushCrossingIntervalIssue(
   );
 }
 
+function resolveCalleeStepFilePath(
+  workflowDirectory: string,
+  relativeStepFile: string,
+): string | undefined {
+  if (
+    relativeStepFile.length === 0 ||
+    path.posix.isAbsolute(relativeStepFile) ||
+    path.win32.isAbsolute(relativeStepFile)
+  ) {
+    return undefined;
+  }
+  const segments = relativeStepFile
+    .split(/[\\/]+/)
+    .filter((segment) => segment.length > 0);
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => segment === "." || segment === "..")
+  ) {
+    return undefined;
+  }
+  const resolved = path.resolve(workflowDirectory, relativeStepFile);
+  const relative = path.relative(workflowDirectory, resolved);
+  return relative.startsWith("..") || path.isAbsolute(relative)
+    ? undefined
+    : resolved;
+}
+
+function inferSingleManagerStepIdFromRawSync(input: {
+  readonly raw: Readonly<Record<string, unknown>>;
+  readonly workflowDirectory: string;
+}):
+  | { ok: true; managerStepId?: string }
+  | { ok: false; message: string } {
+  const stepsRaw = input.raw["steps"];
+  if (!Array.isArray(stepsRaw)) {
+    return { ok: true };
+  }
+
+  const managerIds = new Set<string>();
+  for (const step of stepsRaw) {
+    if (!isRecord(step)) {
+      continue;
+    }
+    const authoredId =
+      typeof step["id"] === "string" && step["id"].length > 0
+        ? step["id"]
+        : undefined;
+    if (step["role"] === "manager" && authoredId !== undefined) {
+      managerIds.add(authoredId);
+      continue;
+    }
+
+    const stepFile = step["stepFile"];
+    if (typeof stepFile !== "string" || stepFile.length === 0) {
+      continue;
+    }
+    const resolvedStepFile = resolveCalleeStepFilePath(
+      input.workflowDirectory,
+      stepFile,
+    );
+    if (resolvedStepFile === undefined) {
+      return {
+        ok: false,
+        message: `callee stepFile '${stepFile}' must stay within workflow directory '${input.workflowDirectory}'`,
+      };
+    }
+    let rawStep: unknown;
+    try {
+      rawStep = JSON.parse(readFileSync(resolvedStepFile, "utf8")) as unknown;
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? `failed to read callee stepFile '${stepFile}': ${error.message}`
+            : `failed to read callee stepFile '${stepFile}'`,
+      };
+    }
+    if (!isRecord(rawStep)) {
+      return {
+        ok: false,
+        message: `callee stepFile '${stepFile}' must contain a JSON object`,
+      };
+    }
+    if (rawStep["role"] !== "manager") {
+      continue;
+    }
+    const resolvedId =
+      authoredId ??
+      (typeof rawStep["id"] === "string" && rawStep["id"].length > 0
+        ? rawStep["id"]
+        : undefined);
+    if (resolvedId !== undefined) {
+      managerIds.add(resolvedId);
+    }
+  }
+
+  const explicitManagerStepId = input.raw["managerStepId"];
+  if (
+    managerIds.size > 1 &&
+    !(
+      typeof explicitManagerStepId === "string" &&
+      explicitManagerStepId.length > 0
+    )
+  ) {
+    return {
+      ok: false,
+      message:
+        "callee workflow declares more than one manager-role step; set managerStepId explicitly or fix the callee workflow authorship",
+    };
+  }
+  const managerStepId = [...managerIds][0];
+  return managerStepId === undefined
+    ? { ok: true }
+    : { ok: true, managerStepId };
+}
+
+async function inferSingleManagerStepIdFromRawAsync(input: {
+  readonly raw: Readonly<Record<string, unknown>>;
+  readonly workflowDirectory: string;
+}): Promise<
+  | { ok: true; managerStepId?: string }
+  | { ok: false; message: string }
+> {
+  const stepsRaw = input.raw["steps"];
+  if (!Array.isArray(stepsRaw)) {
+    return { ok: true };
+  }
+
+  const managerIds = new Set<string>();
+  for (const step of stepsRaw) {
+    if (!isRecord(step)) {
+      continue;
+    }
+    const authoredId =
+      typeof step["id"] === "string" && step["id"].length > 0
+        ? step["id"]
+        : undefined;
+    if (step["role"] === "manager" && authoredId !== undefined) {
+      managerIds.add(authoredId);
+      continue;
+    }
+
+    const stepFile = step["stepFile"];
+    if (typeof stepFile !== "string" || stepFile.length === 0) {
+      continue;
+    }
+    const resolvedStepFile = resolveCalleeStepFilePath(
+      input.workflowDirectory,
+      stepFile,
+    );
+    if (resolvedStepFile === undefined) {
+      return {
+        ok: false,
+        message: `callee stepFile '${stepFile}' must stay within workflow directory '${input.workflowDirectory}'`,
+      };
+    }
+    let rawStep: unknown;
+    try {
+      rawStep = JSON.parse(await readFile(resolvedStepFile, "utf8")) as unknown;
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? `failed to read callee stepFile '${stepFile}': ${error.message}`
+            : `failed to read callee stepFile '${stepFile}'`,
+      };
+    }
+    if (!isRecord(rawStep)) {
+      return {
+        ok: false,
+        message: `callee stepFile '${stepFile}' must contain a JSON object`,
+      };
+    }
+    if (rawStep["role"] !== "manager") {
+      continue;
+    }
+    const resolvedId =
+      authoredId ??
+      (typeof rawStep["id"] === "string" && rawStep["id"].length > 0
+        ? rawStep["id"]
+        : undefined);
+    if (resolvedId !== undefined) {
+      managerIds.add(resolvedId);
+    }
+  }
+
+  const explicitManagerStepId = input.raw["managerStepId"];
+  if (
+    managerIds.size > 1 &&
+    !(
+      typeof explicitManagerStepId === "string" &&
+      explicitManagerStepId.length > 0
+    )
+  ) {
+    return {
+      ok: false,
+      message:
+        "callee workflow declares more than one manager-role step; set managerStepId explicitly or fix the callee workflow authorship",
+    };
+  }
+  const managerStepId = [...managerIds][0];
+  return managerStepId === undefined
+    ? { ok: true }
+    : { ok: true, managerStepId };
+}
+
+function parseCalleeWorkflowJsonText(text: string):
+  | { ok: true; raw: Readonly<Record<string, unknown>> }
+  | { ok: false; message: string } {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { ok: false, message: "callee workflow.json is not valid JSON" };
+  }
+  if (!isRecord(raw)) {
+    return { ok: false, message: "callee workflow.json must be a JSON object" };
+  }
+  return { ok: true, raw };
+}
+
+function resolveCalleeWorkflowJsonByIdSync(input: {
+  readonly workflowRoot: string;
+  readonly workflowId: string;
+}):
+  | {
+      ok: true;
+      raw: Readonly<Record<string, unknown>>;
+      workflowDirectory: string;
+    }
+  | { ok: false; message: string } {
+  let directoryEntries: ReturnType<typeof readdirSync>;
+  try {
+    directoryEntries = readdirSync(input.workflowRoot, {
+      withFileTypes: true,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `failed listing workflow root '${input.workflowRoot}': ${error.message}`
+          : `failed listing workflow root '${input.workflowRoot}'`,
+    };
+  }
+
+  const candidateDirectories = directoryEntries
+    .filter((entry) => entry.isDirectory())
+    .sort((left, right) => {
+      if (left.name === input.workflowId) {
+        return -1;
+      }
+      if (right.name === input.workflowId) {
+        return 1;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
+  let preferredDirectoryError: string | undefined;
+  for (const entry of candidateDirectories) {
+    const workflowDirectory = path.join(input.workflowRoot, entry.name);
+    const workflowJsonPath = path.join(workflowDirectory, "workflow.json");
+    let text: string;
+    try {
+      text = readFileSync(workflowJsonPath, "utf8");
+    } catch (error) {
+      if (entry.name === input.workflowId) {
+        preferredDirectoryError =
+          error instanceof Error
+            ? error.message
+            : "failed to read callee workflow.json";
+      }
+      continue;
+    }
+    const parsed = parseCalleeWorkflowJsonText(text);
+    if (!parsed.ok) {
+      if (entry.name === input.workflowId) {
+        preferredDirectoryError = parsed.message;
+      }
+      continue;
+    }
+    if (parsed.raw["workflowId"] !== input.workflowId) {
+      continue;
+    }
+    return {
+      ok: true,
+      raw: parsed.raw,
+      workflowDirectory,
+    };
+  }
+
+  if (preferredDirectoryError !== undefined) {
+    return { ok: false, message: preferredDirectoryError };
+  }
+  return {
+    ok: false,
+    message: `workflow id '${input.workflowId}' was not found under workflow root '${input.workflowRoot}'`,
+  };
+}
+
+async function resolveCalleeWorkflowJsonByIdAsync(input: {
+  readonly workflowRoot: string;
+  readonly workflowId: string;
+}): Promise<
+  | {
+      ok: true;
+      raw: Readonly<Record<string, unknown>>;
+      workflowDirectory: string;
+    }
+  | { ok: false; message: string }
+> {
+  let directoryEntries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    directoryEntries = await readdir(input.workflowRoot, {
+      withFileTypes: true,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? `failed listing workflow root '${input.workflowRoot}': ${error.message}`
+          : `failed listing workflow root '${input.workflowRoot}'`,
+    };
+  }
+
+  const candidateDirectories = directoryEntries
+    .filter((entry) => entry.isDirectory())
+    .sort((left, right) => {
+      if (left.name === input.workflowId) {
+        return -1;
+      }
+      if (right.name === input.workflowId) {
+        return 1;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
+  let preferredDirectoryError: string | undefined;
+  for (const entry of candidateDirectories) {
+    const workflowDirectory = path.join(input.workflowRoot, entry.name);
+    const workflowJsonPath = path.join(workflowDirectory, "workflow.json");
+    let text: string;
+    try {
+      text = await readFile(workflowJsonPath, "utf8");
+    } catch (error) {
+      if (entry.name === input.workflowId) {
+        preferredDirectoryError =
+          error instanceof Error
+            ? error.message
+            : "failed to read callee workflow.json";
+      }
+      continue;
+    }
+    const parsed = parseCalleeWorkflowJsonText(text);
+    if (!parsed.ok) {
+      if (entry.name === input.workflowId) {
+        preferredDirectoryError = parsed.message;
+      }
+      continue;
+    }
+    if (parsed.raw["workflowId"] !== input.workflowId) {
+      continue;
+    }
+    return {
+      ok: true,
+      raw: parsed.raw,
+      workflowDirectory,
+    };
+  }
+
+  if (preferredDirectoryError !== undefined) {
+    return { ok: false, message: preferredDirectoryError };
+  }
+  return {
+    ok: false,
+    message: `workflow id '${input.workflowId}' was not found under workflow root '${input.workflowRoot}'`,
+  };
+}
+
+function resolveCalleeWorkflowEntry(input: {
+  readonly raw: Readonly<Record<string, unknown>>;
+  readonly inferredManagerStepId?: string;
+}):
+  | { ok: true; entry: string }
+  | { ok: false; message: string } {
+  const managerStepId = input.raw["managerStepId"];
+  const entryStepId = input.raw["entryStepId"];
+  const entryNodeId = input.raw["entryNodeId"];
+  let entry: string | undefined;
+  if (typeof managerStepId === "string" && managerStepId.length > 0) {
+    entry = managerStepId;
+  } else if (input.inferredManagerStepId !== undefined) {
+    entry = input.inferredManagerStepId;
+  } else if (typeof entryStepId === "string" && entryStepId.length > 0) {
+    entry = entryStepId;
+  } else if (typeof entryNodeId === "string" && entryNodeId.length > 0) {
+    entry = entryNodeId;
+  }
+  if (entry === undefined) {
+    return {
+      ok: false,
+      message:
+        "callee workflow must declare managerStepId, entryStepId, or entryNodeId (or exactly one manager-role step)",
+    };
+  }
+  return { ok: true, entry };
+}
+
+/**
+ * When `workflowRoot` is available, ensures each cross-workflow step transition's
+ * `toStepId` matches the step id where the callee run starts: `managerStepId` when
+ * present, otherwise `entryStepId` or legacy `entryNodeId`. That matches
+ * `runWorkflowInternal`, which seeds the session at `workflow.managerNodeId`
+ * (the normalized manager step for managed bundles, or entry for worker-only).
+ */
+function validateCrossWorkflowCalleeEntryAlignmentSync(
+  bundle: NormalizedWorkflowBundle,
+  options: WorkflowValidationOptions,
+  issues: ValidationIssue[],
+): void {
+  const workflowRoot = options.workflowRoot;
+  if (workflowRoot === undefined || workflowRoot === "") {
+    return;
+  }
+  const steps = bundle.workflow.steps;
+  if (steps === undefined) {
+    return;
+  }
+
+  const cwd = options.cwd ?? process.cwd();
+  const resolvedRoot = path.isAbsolute(workflowRoot)
+    ? workflowRoot
+    : path.resolve(cwd, workflowRoot);
+
+  const calleeEntryById = new Map<
+    string,
+    | { status: "ok"; entry: string }
+    | { status: "error"; message: string }
+  >();
+
+  function resolveCalleeEntry(calleeId: string):
+    | { ok: true; entry: string }
+    | { ok: false; message: string } {
+    const cached = calleeEntryById.get(calleeId);
+    if (cached !== undefined) {
+      return cached.status === "ok"
+        ? { ok: true, entry: cached.entry }
+        : { ok: false, message: cached.message };
+    }
+
+    try {
+      const resolvedWorkflow = resolveCalleeWorkflowJsonByIdSync({
+        workflowRoot: resolvedRoot,
+        workflowId: calleeId,
+      });
+      if (!resolvedWorkflow.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: resolvedWorkflow.message,
+        });
+        return { ok: false, message: resolvedWorkflow.message };
+      }
+      const inferred = inferSingleManagerStepIdFromRawSync({
+        raw: resolvedWorkflow.raw,
+        workflowDirectory: resolvedWorkflow.workflowDirectory,
+      });
+      if (!inferred.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: inferred.message,
+        });
+        return { ok: false, message: inferred.message };
+      }
+      const resolved = resolveCalleeWorkflowEntry({
+        raw: resolvedWorkflow.raw,
+        ...(inferred.managerStepId === undefined
+          ? {}
+          : { inferredManagerStepId: inferred.managerStepId }),
+      });
+      if (!resolved.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: resolved.message,
+        });
+        return { ok: false, message: resolved.message };
+      }
+      calleeEntryById.set(calleeId, { status: "ok", entry: resolved.entry });
+      return { ok: true, entry: resolved.entry };
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "failed to read callee workflow.json";
+      calleeEntryById.set(calleeId, { status: "error", message });
+      return { ok: false, message };
+    }
+  }
+
+  for (const [stepIndex, step] of steps.entries()) {
+    const transitions = step.transitions ?? [];
+    for (const [ti, transition] of transitions.entries()) {
+      if (transition.toWorkflowId === undefined) {
+        continue;
+      }
+      const calleeId = transition.toWorkflowId;
+      if (!isSafeWorkflowName(calleeId)) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toWorkflowId`,
+            `must be a safe workflow directory name (got '${calleeId}')`,
+          ),
+        );
+        continue;
+      }
+      const resolved = resolveCalleeEntry(calleeId);
+      if (!resolved.ok) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toWorkflowId`,
+            `cannot load callee workflow '${calleeId}': ${resolved.message}`,
+          ),
+        );
+        continue;
+      }
+      if (transition.toStepId !== resolved.entry) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toStepId`,
+            `must match callee start step '${resolved.entry}' (callee '${calleeId}': managerStepId, else entryStepId / entryNodeId); cross-workflow calls use the same initial step as a normal run`,
+          ),
+        );
+      }
+    }
+  }
+}
+
+async function validateCrossWorkflowCalleeEntryAlignment(
+  bundle: NormalizedWorkflowBundle,
+  options: WorkflowValidationOptions,
+  issues: ValidationIssue[],
+): Promise<void> {
+  const workflowRoot = options.workflowRoot;
+  if (workflowRoot === undefined || workflowRoot === "") {
+    return;
+  }
+  const steps = bundle.workflow.steps;
+  if (steps === undefined) {
+    return;
+  }
+
+  const cwd = options.cwd ?? process.cwd();
+  const resolvedRoot = path.isAbsolute(workflowRoot)
+    ? workflowRoot
+    : path.resolve(cwd, workflowRoot);
+
+  const calleeEntryById = new Map<
+    string,
+    | { status: "ok"; entry: string }
+    | { status: "error"; message: string }
+  >();
+
+  async function resolveCalleeEntry(calleeId: string): Promise<
+    | { ok: true; entry: string }
+    | { ok: false; message: string }
+  > {
+    const cached = calleeEntryById.get(calleeId);
+    if (cached !== undefined) {
+      return cached.status === "ok"
+        ? { ok: true, entry: cached.entry }
+        : { ok: false, message: cached.message };
+    }
+
+    try {
+      const resolvedWorkflow = await resolveCalleeWorkflowJsonByIdAsync({
+        workflowRoot: resolvedRoot,
+        workflowId: calleeId,
+      });
+      if (!resolvedWorkflow.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: resolvedWorkflow.message,
+        });
+        return { ok: false, message: resolvedWorkflow.message };
+      }
+      const inferred = await inferSingleManagerStepIdFromRawAsync({
+        raw: resolvedWorkflow.raw,
+        workflowDirectory: resolvedWorkflow.workflowDirectory,
+      });
+      if (!inferred.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: inferred.message,
+        });
+        return { ok: false, message: inferred.message };
+      }
+      const resolved = resolveCalleeWorkflowEntry({
+        raw: resolvedWorkflow.raw,
+        ...(inferred.managerStepId === undefined
+          ? {}
+          : { inferredManagerStepId: inferred.managerStepId }),
+      });
+      if (!resolved.ok) {
+        calleeEntryById.set(calleeId, {
+          status: "error",
+          message: resolved.message,
+        });
+        return { ok: false, message: resolved.message };
+      }
+      calleeEntryById.set(calleeId, { status: "ok", entry: resolved.entry });
+      return { ok: true, entry: resolved.entry };
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "failed to read callee workflow.json";
+      calleeEntryById.set(calleeId, { status: "error", message });
+      return { ok: false, message };
+    }
+  }
+
+  for (const [stepIndex, step] of steps.entries()) {
+    const transitions = step.transitions ?? [];
+    for (const [ti, transition] of transitions.entries()) {
+      if (transition.toWorkflowId === undefined) {
+        continue;
+      }
+      const calleeId = transition.toWorkflowId;
+      if (!isSafeWorkflowName(calleeId)) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toWorkflowId`,
+            `must be a safe workflow directory name (got '${calleeId}')`,
+          ),
+        );
+        continue;
+      }
+      const resolved = await resolveCalleeEntry(calleeId);
+      if (!resolved.ok) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toWorkflowId`,
+            `cannot load callee workflow '${calleeId}': ${resolved.message}`,
+          ),
+        );
+        continue;
+      }
+      if (transition.toStepId !== resolved.entry) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.steps[${stepIndex}].transitions[${ti}].toStepId`,
+            `must match callee start step '${resolved.entry}' (callee '${calleeId}': managerStepId, else entryStepId / entryNodeId); cross-workflow calls use the same initial step as a normal run`,
+          ),
+        );
+      }
+    }
+  }
+}
+
 function runSemanticValidation(
   bundle: NormalizedWorkflowBundle,
   issues: ValidationIssue[],
@@ -6046,6 +6845,7 @@ export function validateWorkflowBundleDetailed(
   };
 
   runSemanticValidation(bundle, issues);
+  validateCrossWorkflowCalleeEntryAlignmentSync(bundle, options, issues);
   const allErrors = issues.filter((entry) => entry.severity === "error");
   if (allErrors.length > 0) {
     return err(issues);
@@ -6154,6 +6954,7 @@ export async function validateWorkflowBundleDetailedAsync(
   };
 
   runSemanticValidation(bundle, issues);
+  await validateCrossWorkflowCalleeEntryAlignment(bundle, options, issues);
   const allErrors = issues.filter((entry) => entry.severity === "error");
   if (allErrors.length > 0) {
     return err(issues);

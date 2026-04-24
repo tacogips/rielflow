@@ -129,6 +129,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: path.join(root, "sessions"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": [
           {
@@ -225,6 +226,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: path.join(root, "sessions"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "fresh" },
@@ -273,6 +275,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: path.join(root, "sessions"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "sticky" },
@@ -336,6 +339,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "only-once" },
@@ -401,6 +405,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "only-once" },
@@ -466,6 +471,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "only-once" },
@@ -556,6 +562,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "only-once" },
@@ -622,6 +629,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: dataRoot,
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           payload: { reply: "first" },
@@ -669,6 +677,7 @@ describe("workflow trigger runner manager session stickiness", () => {
       sessionStoreRoot: sessionRoot,
       rootDataDir: dataRoot,
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
       mockScenario: {
         "divedra-manager": {
           fail: true,

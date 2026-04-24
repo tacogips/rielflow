@@ -389,9 +389,6 @@ export async function loadWorkflowFromDisk(
     {
       ...options,
       allowResolvedStepFileFields: true,
-      ...(options.rejectLegacyWorkflowAuthoring === true
-        ? { rejectLegacyWorkflowAuthoring: true }
-        : {}),
     },
   );
 

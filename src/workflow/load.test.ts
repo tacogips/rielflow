@@ -18,7 +18,17 @@ import {
   resolveSafeScopedPath,
   resolveWorkflowScopedPath,
 } from "./paths";
-import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./types";
+import type {
+  LoadOptions,
+  NodeAddonDefinition,
+  NodeAddonPayloadResolver,
+} from "./types";
+
+/** Opt in to loading legacy-shaped inline fixtures (suite defaults to strict authorship when omitted). */
+const testLegacyAuthorshipOk: Pick<
+  LoadOptions,
+  "rejectLegacyWorkflowAuthoring"
+> = { rejectLegacyWorkflowAuthoring: false };
 
 const tempDirs: string[] = [];
 
@@ -545,6 +555,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -592,6 +603,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -639,6 +651,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -691,6 +704,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -740,6 +754,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -823,6 +838,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -872,6 +888,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -927,6 +944,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -999,6 +1017,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
 
@@ -1036,6 +1055,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(result.ok).toBe(false);
@@ -1091,6 +1111,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1130,6 +1151,7 @@ describe("loadWorkflowFromDisk", () => {
     expect(workflowJsonText).toContain('"steps"');
 
     const result = await loadWorkflowFromDisk("template-role-workflow", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1198,6 +1220,7 @@ describe("loadWorkflowFromDisk", () => {
     expect(workflowJsonText).toContain('"steps"');
 
     const result = await loadWorkflowFromDisk("template-worker-only", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1573,6 +1596,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1637,6 +1661,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1694,6 +1719,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -1711,6 +1737,7 @@ describe("loadWorkflowFromDisk", () => {
   test("loads the claude worker example with an explicit claude-code-agent worker node", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const result = await loadWorkflowFromDisk("claude-divedra-claude-worker", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: path.resolve(process.cwd(), "examples"),
       artifactRoot,
     });
@@ -1776,6 +1803,7 @@ describe("loadWorkflowFromDisk", () => {
         : { issues: [] };
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       nodeAddonResolvers: [resolver],
@@ -1832,6 +1860,7 @@ describe("loadWorkflowFromDisk", () => {
     };
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       nodeAddons: [addon],
@@ -1868,6 +1897,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowScope: "user",
       userRoot: userScopeRoot,
       cwd: root,
@@ -1919,6 +1949,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowScope: "user",
       userRoot: userScopeRoot,
       cwd: root,
@@ -1964,6 +1995,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       cwd: root,
       addonRoot: directAddonRoot,
       env: {},
@@ -2001,6 +2033,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       cwd: root,
       addonRoot: directAddonRoot,
       env: {},
@@ -2038,6 +2071,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const isolated = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot,
       cwd: root,
       env: {},
@@ -2059,6 +2093,7 @@ describe("loadWorkflowFromDisk", () => {
     const withMissingDirectAddonRoot = await loadWorkflowFromDisk(
       workflowName,
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot,
         addonRoot: path.join(root, "missing-direct-addons"),
         cwd: root,
@@ -2079,6 +2114,7 @@ describe("loadWorkflowFromDisk", () => {
     ).toBe(true);
 
     const withDirectAddonRoot = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot,
       addonRoot: path.join(projectScopeRoot, "addons"),
       cwd: root,
@@ -2110,6 +2146,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       cwd: root,
       env: {},
     });
@@ -2160,6 +2197,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromCatalog(workflowName, {
+      ...testLegacyAuthorshipOk,
       cwd: root,
       env: {},
     });
@@ -2321,6 +2359,41 @@ describe("loadWorkflowFromDisk", () => {
           "divide-output",
         ],
       ],
+      [
+        "node-combinations-showcase",
+        [
+          "divedra-manager",
+          "command-manager",
+          "command-input",
+          "command-worker",
+          "command-output",
+          "container-manager",
+          "container-input",
+          "container-worker",
+          "container-output",
+          "foreach-manager",
+          "foreach-input",
+          "foreach-worker",
+          "foreach-judge",
+          "foreach-output",
+        ],
+      ],
+      [
+        "codex-codex-euthanasia-debate",
+        [
+          "divedra-manager",
+          "affirmative-manager",
+          "affirmative-input",
+          "affirmative-speaker",
+          "affirmative-output",
+          "negative-manager",
+          "negative-input",
+          "negative-speaker",
+          "negative-output",
+          "debate-judge",
+          "debate-summary",
+        ],
+      ],
     ] as const) {
       const artifactRoot = path.join(await makeTempDir(), "artifacts");
       const result = await loadWorkflowFromDisk(workflowName, {
@@ -2402,10 +2475,11 @@ describe("loadWorkflowFromDisk", () => {
     ).toContain("revisiting the reusable worker node for its answer step");
   });
 
-  test("loads the workflow-call examples with a step-addressed parent plus compatibility workflow-call metadata and a strict step-addressed worker-only callee", async () => {
+  test("loads the workflow-call examples with a step-addressed parent (cross-workflow step transition, no authored workflowCalls) and strict step-addressed callee", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const examplesRoot = path.resolve(process.cwd(), "examples");
     const parentResult = await loadWorkflowFromDisk("workflow-call-simple", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: examplesRoot,
       artifactRoot,
     });
@@ -2415,15 +2489,7 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(parentResult.value.bundle.workflow.workflowCalls).toEqual([
-      {
-        id: "call-review",
-        workflowId: "workflow-call-review-target",
-        callerNodeId: "draft-write",
-        callerStepId: "draft-write",
-        resultNodeId: "apply-review",
-      },
-    ]);
+    expect(parentResult.value.bundle.workflow.workflowCalls).toBeUndefined();
     expect(parentResult.value.bundle.workflow.managerStepId).toBe(
       "divedra-manager",
     );
@@ -2442,18 +2508,11 @@ describe("loadWorkflowFromDisk", () => {
         rejectLegacyWorkflowAuthoring: true,
       },
     );
-    expect(strictParentResult.ok).toBe(false);
+    expect(strictParentResult.ok).toBe(true);
     if (!strictParentResult.ok) {
-      expect(strictParentResult.error.code).toBe("VALIDATION");
-      expect(strictParentResult.error.issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            path: "workflow.workflowCalls",
-            message: "is not part of the step-addressed workflow schema",
-          }),
-        ]),
-      );
+      return;
     }
+    expect(strictParentResult.value.bundle.workflow.workflowCalls).toBeUndefined();
 
     const calleeResult = await loadWorkflowFromDisk(
       "workflow-call-review-target",
@@ -2480,7 +2539,7 @@ describe("loadWorkflowFromDisk", () => {
     ).toEqual(["reviewer"]);
   });
 
-  test("keeps structural sub-workflow authoring limited to the legacy example", async () => {
+  test("keeps shipped examples off structural sub-workflow authoring", async () => {
     const examplesRoot = path.resolve(process.cwd(), "examples");
     const roleAuthoredExamples = [
       "chat-reply-webhook",
@@ -2493,6 +2552,7 @@ describe("loadWorkflowFromDisk", () => {
       "subworkflow-chained-simple",
       "node-combinations-showcase",
       "first-four-arithmetic-pipeline",
+      "codex-codex-euthanasia-debate",
     ];
 
     for (const workflowName of roleAuthoredExamples) {
@@ -2507,19 +2567,6 @@ describe("loadWorkflowFromDisk", () => {
       expect(workflowJson.subWorkflows).toBeUndefined();
       expect(workflowJson.subWorkflowConversations).toBeUndefined();
     }
-
-    const legacyWorkflowText = await readFile(
-      path.join(examplesRoot, "codex-codex-euthanasia-debate", "workflow.json"),
-      "utf8",
-    );
-    const legacyWorkflowJson = JSON.parse(legacyWorkflowText) as {
-      readonly subWorkflows?: readonly unknown[];
-      readonly subWorkflowConversations?: readonly unknown[];
-    };
-    expect(legacyWorkflowJson.subWorkflows?.length).toBeGreaterThan(0);
-    expect(legacyWorkflowJson.subWorkflowConversations?.length).toBeGreaterThan(
-      0,
-    );
   });
 
   test("resolves workflow ids from a directory whose name differs from workflowId", async () => {
@@ -2552,6 +2599,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowByIdFromDisk("review-flow", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
 
@@ -2593,6 +2641,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowByIdFromDisk("review-flow", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
 
@@ -2645,6 +2694,7 @@ describe("loadWorkflowFromDisk", () => {
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });
@@ -2696,6 +2746,7 @@ describe("loadWorkflowFromDisk", () => {
     );
 
     const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
     });

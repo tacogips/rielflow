@@ -20,6 +20,11 @@ import type { WorkflowJson, WorkflowTimeoutPolicy } from "./types";
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
 
+/** Fixture workflows in this file are legacy-authored unless noted; explicit for strict-default harness runs. */
+const legacyAuthoredWorkflowLoadOpts = {
+  rejectLegacyWorkflowAuthoring: false,
+} as const;
+
 class OptionalDecisionAdapter implements NodeAdapter {
   managerCalls = 0;
 
@@ -1174,6 +1179,67 @@ async function createWorkflowCallFixture(
   });
 }
 
+/**
+ * Like {@link createWorkflowCallFixture} but the workflow call is conditioned with
+ * `when: "need_review"`. Deterministic adapter output does not satisfy it, so the
+ * callee is never run (see `executeWorkflowCallsForNode` gating by `entry.when`).
+ */
+async function createWhenGatedWorkflowCallFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "workflow call fixture (when-gated)",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryNodeId: "writer",
+    workflowCalls: [
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "writer",
+        resultNodeId: "review-result",
+        when: "need_review",
+      },
+    ],
+    nodes: [
+      {
+        id: "writer",
+        role: "worker",
+        nodeFile: "node-writer.json",
+        completion: { type: "none" },
+      },
+      {
+        id: "review-result",
+        role: "worker",
+        nodeFile: "node-review-result.json",
+        completion: { type: "none" },
+      },
+    ],
+    edges: [],
+    branching: { mode: "fan-out" },
+  });
+
+  await writeJson(path.join(workflowDir, "node-writer.json"), {
+    id: "writer",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "writer",
+    variables: {},
+  });
+
+  await writeJson(path.join(workflowDir, "node-review-result.json"), {
+    id: "review-result",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "review result",
+    variables: {},
+  });
+}
+
 async function createWorkflowCallCalleeFixture(
   root: string,
   workflowName: string,
@@ -2021,6 +2087,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "managerless",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2049,6 +2116,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "workflow-call-fixture",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2075,11 +2143,44 @@ describe("runWorkflow", () => {
     );
   });
 
+  test("skips a workflow call when `when` does not match caller output (gated by evaluateBranch)", async () => {
+    const root = await makeTempDir();
+    await createWhenGatedWorkflowCallFixture(root, "workflow-call-when-skip");
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+
+    const result = await runWorkflow(
+      "workflow-call-when-skip",
+      {
+        ...legacyAuthoredWorkflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      deterministicAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.exitCode).toBe(0);
+    expect(
+      result.value.session.nodeExecutions.map((entry) => entry.nodeId),
+    ).toEqual(["writer"]);
+    expect(
+      result.value.session.communications.some((entry) =>
+        entry.transitionWhen.startsWith("workflow-call:"),
+      ),
+    ).toBe(false);
+  });
+
   test("fails early when workflow-call targets are missing", async () => {
     const root = await makeTempDir();
     await createWorkflowCallFixture(root, "workflow-call-fixture");
 
     const result = await runWorkflow("workflow-call-fixture", {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -2106,6 +2207,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "workflow-call-fixture",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2154,7 +2256,7 @@ describe("runWorkflow", () => {
       result.value.session.nodeExecutions.map((entry) => entry.nodeId),
     ).toEqual(["divedra-manager", "draft-write", "apply-review"]);
     const workflowCallCommunication = result.value.session.communications.find(
-      (entry) => entry.transitionWhen === "workflow-call:call-review",
+      (entry) => entry.transitionWhen === "workflow-call:__cw:draft-write",
     );
     expect(workflowCallCommunication?.toNodeId).toBe("apply-review");
     expect(workflowCallCommunication?.payloadRef.workflowId).toBe(
@@ -2169,6 +2271,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "linear",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2368,6 +2471,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2429,6 +2533,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2483,6 +2588,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2541,6 +2647,7 @@ describe("runWorkflow", () => {
     const first = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2594,6 +2701,7 @@ describe("runWorkflow", () => {
     const resumed = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2632,6 +2740,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
       },
@@ -2653,6 +2762,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "node-session-reuse",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2694,6 +2804,7 @@ describe("runWorkflow", () => {
     const first = await runWorkflow(
       "node-session-resume",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2715,6 +2826,7 @@ describe("runWorkflow", () => {
     const resumed = await runWorkflow(
       "node-session-resume",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2937,6 +3049,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "explicit-new-session-policy",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -2989,6 +3102,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "manager-session-failure",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3034,6 +3148,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         rootDataDir: path.join(root, "data"),
@@ -3096,6 +3211,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         rootDataDir: path.join(root, "data"),
@@ -3129,6 +3245,7 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, workflowName, false);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -3190,6 +3307,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "root-mailbox-input",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3291,6 +3409,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "root-human-input-text",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3350,6 +3469,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "root-mailbox-output",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3419,6 +3539,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "root-output-publication",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3476,6 +3597,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "multiple-root-outputs",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3538,6 +3660,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "root-output-then-task",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3603,6 +3726,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "no-root-output-publication",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3638,6 +3762,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "workflow-output-source",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3717,6 +3842,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "prompt-composition",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3772,7 +3898,7 @@ describe("runWorkflow", () => {
       '"type":"retry-node","nodeId":"<node-id>"',
     );
     expect(managerInput.promptText).toContain(
-      "Explicit `workflowCalls` run automatically from authored caller nodes",
+      "run automatically from the caller step; do not emit",
     );
     expect(managerInput.promptText).not.toContain(
       '"type":"start-sub-workflow"',
@@ -3824,6 +3950,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "assembled-input",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3889,6 +4016,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -3986,6 +4114,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-session-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4050,6 +4179,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-scenario-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4120,6 +4250,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-file-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4200,6 +4331,7 @@ describe("runWorkflow", () => {
     const firstRun = await runWorkflow(
       "output-contract-stale-candidate",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         cwd: root,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
@@ -4212,6 +4344,7 @@ describe("runWorkflow", () => {
     const secondRun = await runWorkflow(
       "output-contract-stale-candidate",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         cwd: root,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
@@ -4279,6 +4412,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-description-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4359,6 +4493,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-description-retry-text",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4407,6 +4542,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-fail",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4497,6 +4633,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-invalid-output-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4581,6 +4718,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-invalid-output-fail",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4656,6 +4794,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-provider-fail-after-retry",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4746,6 +4885,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-prompt",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4839,6 +4979,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-request-artifacts",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -4958,6 +5099,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-boundary",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5022,6 +5164,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-compact-feedback",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5077,6 +5220,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-file-path",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5126,6 +5270,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "non-contract-candidate-file-failure",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5175,6 +5320,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "non-contract-no-output-attempt-artifacts",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5240,6 +5386,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "file-output-ready",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot,
         artifactRoot,
       },
@@ -5297,6 +5444,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "output-contract-staging-path",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5360,6 +5508,7 @@ describe("runWorkflow", () => {
     const successResult = await runWorkflow(
       "output-contract-cleanup-success",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: successRoot,
         artifactRoot: path.join(successRoot, "artifacts"),
         sessionStoreRoot: path.join(successRoot, "sessions"),
@@ -5410,6 +5559,7 @@ describe("runWorkflow", () => {
     const failureResult = await runWorkflow(
       "output-contract-cleanup-failure",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: failureRoot,
         artifactRoot: path.join(failureRoot, "artifacts"),
         sessionStoreRoot: path.join(failureRoot, "sessions"),
@@ -5450,6 +5600,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "missing-required-binding",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5471,6 +5622,7 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, workflowName, false);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5529,6 +5681,7 @@ describe("runWorkflow", () => {
     await createSingleRootOutputFixture(root, workflowName);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5631,6 +5784,7 @@ describe("runWorkflow", () => {
     await createSingleRootOutputFixture(root, workflowName);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5725,6 +5879,7 @@ describe("runWorkflow", () => {
     await createSingleRootOutputFixture(root, workflowName);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5799,6 +5954,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -5841,6 +5997,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot,
         sessionStoreRoot,
@@ -5875,6 +6032,7 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, "looped", true);
 
     const result = await runWorkflow("looped", {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5921,6 +6079,7 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, "dry-run", false);
 
     const result = await runWorkflow("dry-run", {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -5969,6 +6128,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "restart-success",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -6024,6 +6184,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -6205,6 +6366,7 @@ describe("runWorkflow", () => {
     };
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6293,6 +6455,7 @@ describe("runWorkflow", () => {
     };
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6352,6 +6515,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "restart-fail",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -6399,6 +6563,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "policy-blocked",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -6417,6 +6582,7 @@ describe("runWorkflow", () => {
     await createWorkflowFixture(root, "scenario", false);
 
     const result = await runWorkflow("scenario", {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6582,6 +6748,7 @@ describe("runWorkflow", () => {
       { encoding: "utf8", mode: 0o755 },
     );
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6666,6 +6833,7 @@ describe("runWorkflow", () => {
     );
     const sessionId = "sess-command-timeout-log";
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6693,6 +6861,7 @@ describe("runWorkflow", () => {
     const root = await makeTempDir();
     await createWorkflowFixture(root, "rerun", false);
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6769,6 +6938,7 @@ describe("runWorkflow", () => {
     const root = await makeTempDir();
     await createNodeSessionReuseFixture(root, "rerun-node-session-reuse");
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -6825,6 +6995,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       "subworkflow-runtime",
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7016,6 +7187,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7053,6 +7225,7 @@ describe("runWorkflow", () => {
     await createSubWorkflowRuntimeFixture(root, workflowName);
 
     const options = {
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
@@ -7118,6 +7291,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7175,6 +7349,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7229,6 +7404,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7265,6 +7441,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7313,6 +7490,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7377,6 +7555,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7426,6 +7605,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
@@ -7499,6 +7679,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(
       workflowName,
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),

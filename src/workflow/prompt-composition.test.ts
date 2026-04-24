@@ -386,7 +386,7 @@ describe("composeExecutionPrompt", () => {
       '"type":"skip-optional-node","nodeId":"<node-id>"',
     );
     expect(prompt).toContain(
-      "Explicit `workflowCalls` run automatically from authored caller nodes",
+      "run automatically from the caller step; do not emit",
     );
     expect(prompt).not.toContain('"type":"start-sub-workflow"');
     expect(prompt).not.toContain('"type":"deliver-to-child-input"');

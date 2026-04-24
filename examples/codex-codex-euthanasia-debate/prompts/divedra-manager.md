@@ -1,1 +1,1 @@
-Start the affirmative lane first. After that, let the two sub-workflows continue their debate via runtime-managed conversation turns until the conversation reaches the configured 10-turn cap.
+Kick off the debate: queue the affirmative lane first. Further rounds are scheduled by the judge step after each negative lane completes.

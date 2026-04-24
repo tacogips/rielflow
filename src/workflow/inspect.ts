@@ -3,6 +3,7 @@ import {
   collectWorkflowAddonSourceSummaries,
   type WorkflowAddonSourceSummary,
 } from "./addon-source-summary";
+import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
 import {
   inspectWorkflowRuntimeReadiness,
   type WorkflowRuntimeReadiness,
@@ -10,13 +11,40 @@ import {
 import { collectWorkflowRevisionNodeFiles } from "./revision";
 import type { LoadOptions } from "./types";
 
+export interface WorkflowStructuralProjectionCounts {
+  readonly nodes: number;
+  readonly edges: number;
+  readonly loops: number;
+}
+
+/**
+ * For legacy node-ordered bundles, `nodes`, `edges`, and `loops` are the
+ * primary structural counts. For step-addressed bundles (authored `steps[]`),
+ * the primary contract uses `steps` and `nodeRegistry` instead; the runtime
+ * graph sizes are reported only under `structuralProjection`.
+ */
+export interface WorkflowInspectionCounts {
+  readonly steps: number;
+  readonly nodeRegistry: number;
+  readonly workflowCalls: number;
+  readonly legacySubWorkflows: number;
+  /** Legacy (non-step-addressed) bundles only. Omitted for step-addressed. */
+  readonly nodes?: number;
+  readonly edges?: number;
+  readonly loops?: number;
+  /** Step-addressed bundles only: internal runtime graph projection sizes. */
+  readonly structuralProjection?: WorkflowStructuralProjectionCounts;
+}
+
 export interface WorkflowInspectionSummary {
   readonly workflowName: string;
   readonly workflowId: string;
   readonly description: string;
   readonly hasManagerNode: boolean;
+  /** Legacy (non-step-addressed) bundles: workflow manager node id. Omitted for step-addressed. */
   readonly managerNodeId?: string;
-  readonly entryNodeId: string;
+  /** Legacy (non-step-addressed) bundles: entry node id. Omitted for step-addressed. */
+  readonly entryNodeId?: string;
   readonly managerStepId?: string;
   readonly entryStepId?: string;
   readonly stepIds: readonly string[];
@@ -32,15 +60,7 @@ export interface WorkflowInspectionSummary {
     readonly maxLoopIterations: number;
     readonly nodeTimeoutMs: number;
   };
-  readonly counts: {
-    readonly nodes: number;
-    readonly nodeRegistry: number;
-    readonly steps: number;
-    readonly edges: number;
-    readonly loops: number;
-    readonly workflowCalls: number;
-    readonly legacySubWorkflows: number;
-  };
+  readonly counts: WorkflowInspectionCounts;
   readonly nodeFiles: readonly string[];
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
@@ -53,6 +73,7 @@ export async function buildInspectionSummary(
   options: LoadOptions = {},
 ): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
+  const isStepAddressed = workflow.steps !== undefined;
   const stepIds = workflow.steps?.map((step) => step.id) ?? [];
   const nodeRegistryIds = workflow.nodeRegistry?.map((node) => node.id) ?? [];
   const hasManagerNode = workflow.hasManagerNode !== false;
@@ -64,34 +85,46 @@ export async function buildInspectionSummary(
   const usesEffectiveEntryManagerNodeId = !hasManagerNode;
   const usesLegacyStructuralSubWorkflows = workflow.subWorkflows.length > 0;
   const compatibilityNotes = [
-    ...(workflow.steps !== undefined
-      ? [
-          "Step-addressed authoring is loaded, but some internal runtime paths still consume compatibility node/edge projections while the runtime cutover is in progress.",
-        ]
-      : []),
     ...(usesRoleAuthoredNodes
       ? [
           "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
         ]
       : []),
-    ...(usesEffectiveEntryManagerNodeId
+    ...(!isStepAddressed && usesEffectiveEntryManagerNodeId
       ? [
           "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
         ]
       : []),
     ...(usesLegacyStructuralSubWorkflows
       ? [
-          "Legacy structural subWorkflows remain active for this bundle; explicit workflowCalls are the preferred cross-workflow invocation path for role-authored workflows.",
+          "Legacy structural subWorkflows remain active for this bundle; prefer step-addressed cross-workflow transitions (steps[].transitions with toWorkflowId and resumeStepId) or explicit workflowCalls when migrating away from structural sub-workflows.",
         ]
       : []),
   ];
+  const nodeRegistryCount =
+    workflow.nodeRegistry === undefined
+      ? workflow.nodes.length
+      : workflow.nodeRegistry.length;
+  const stepCount = workflow.steps?.length ?? workflow.nodes.length;
+  const edgeCount = workflow.edges.length;
+  const loopCount = workflow.loops?.length ?? 0;
+  const structuralGraphCounts: WorkflowStructuralProjectionCounts = {
+    nodes: workflow.nodes.length,
+    edges: edgeCount,
+    loops: loopCount,
+  };
+  const effectiveCalls = effectiveWorkflowCalls(workflow);
   return {
     workflowName: loaded.workflowName,
     workflowId: workflow.workflowId,
     description: workflow.description,
     hasManagerNode,
-    ...(hasManagerNode ? { managerNodeId: workflow.managerNodeId } : {}),
-    entryNodeId: workflow.entryNodeId ?? workflow.managerNodeId,
+    ...(!isStepAddressed && hasManagerNode
+      ? { managerNodeId: workflow.managerNodeId }
+      : {}),
+    ...(!isStepAddressed
+      ? { entryNodeId: workflow.entryNodeId ?? workflow.managerNodeId }
+      : {}),
     ...(workflow.managerStepId === undefined
       ? {}
       : { managerStepId: workflow.managerStepId }),
@@ -100,7 +133,7 @@ export async function buildInspectionSummary(
       : { entryStepId: workflow.entryStepId }),
     stepIds,
     nodeRegistryIds,
-    workflowCallIds: (workflow.workflowCalls ?? []).map((call) => call.id),
+    workflowCallIds: effectiveCalls.map((call) => call.id),
     compatibility: {
       normalizesRoleAuthoredNodesToStructuralKinds: usesRoleAuthoredNodes,
       usesEffectiveEntryManagerNodeId,
@@ -111,18 +144,23 @@ export async function buildInspectionSummary(
       maxLoopIterations: workflow.defaults.maxLoopIterations,
       nodeTimeoutMs: workflow.defaults.nodeTimeoutMs,
     },
-    counts: {
-      nodes: workflow.nodes.length,
-      nodeRegistry:
-        workflow.nodeRegistry === undefined
-          ? workflow.nodes.length
-          : workflow.nodeRegistry.length,
-      steps: workflow.steps?.length ?? workflow.nodes.length,
-      edges: workflow.edges.length,
-      loops: workflow.loops?.length ?? 0,
-      workflowCalls: workflow.workflowCalls?.length ?? 0,
-      legacySubWorkflows: workflow.subWorkflows.length,
-    },
+    counts: isStepAddressed
+      ? {
+          steps: stepCount,
+          nodeRegistry: nodeRegistryCount,
+          workflowCalls: effectiveCalls.length,
+          legacySubWorkflows: workflow.subWorkflows.length,
+          structuralProjection: structuralGraphCounts,
+        }
+      : {
+          steps: stepCount,
+          nodeRegistry: nodeRegistryCount,
+          nodes: workflow.nodes.length,
+          edges: edgeCount,
+          loops: loopCount,
+          workflowCalls: effectiveCalls.length,
+          legacySubWorkflows: workflow.subWorkflows.length,
+        },
     nodeFiles: collectWorkflowRevisionNodeFiles(workflow),
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,

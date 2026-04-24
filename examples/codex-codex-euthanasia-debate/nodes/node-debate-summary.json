@@ -1,0 +1,7 @@
+{
+  "id": "debate-summary",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/debate-summary.md",
+  "variables": {}
+}

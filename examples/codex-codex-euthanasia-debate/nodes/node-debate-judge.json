@@ -1,0 +1,7 @@
+{
+  "id": "debate-judge",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/debate-judge.md",
+  "variables": {}
+}

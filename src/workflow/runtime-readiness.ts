@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
+import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
 import { loadWorkflowByIdFromDisk } from "./load";
 import {
   MAIL_GATEWAY_ADDON_NAME,
@@ -324,7 +325,7 @@ async function probeWorkflowCallRuntime(
         return;
       }
       nextWorkflowIds = toSortedArray(
-        (loaded.value.bundle.workflow.workflowCalls ?? []).map(
+        effectiveWorkflowCalls(loaded.value.bundle.workflow).map(
           (call) => call.workflowId,
         ),
       );
@@ -529,7 +530,7 @@ function collectRequirements(
   const commandNodeIds = new Set<string>();
   const containerNodeIds = new Set<string>();
   const defaults = bundle.workflow.defaults.containerRuntime;
-  const relevantWorkflowCalls = (bundle.workflow.workflowCalls ?? []).filter(
+  const relevantWorkflowCalls = effectiveWorkflowCalls(bundle.workflow).filter(
     (call) => onlyNodeIds === undefined || onlyNodeIds.has(call.callerNodeId),
   );
 

@@ -6,26 +6,20 @@ without copying them into `./.divedra`.
 Each example directory also includes `EXPECTED_RESULTS.md`, which records the
 stable assertions used for deterministic verification.
 
-Example bundles are currently mixed while the repository completes the
-step-addressed cutover:
+Shipped reference bundles use the step-addressed authored shape; repository
+tests may still construct legacy fixtures under explicit non-strict validation.
 
-- most bundles now use `workflow -> steps[] + nodes[]`, where `entryStepId`
+- most bundles use `workflow -> steps[] + nodes[]`, where `entryStepId`
   names the authored entry step and `nodes[]` is a reusable registry
-- compatibility-only authored bundles are now limited to the
-  node-combinations showcase that still relies on ordered-node repeat metadata
-  and the explicit legacy structural debate reference
-- `workflow-call-simple` is step-addressed except for its intentional
-  compatibility `workflowCalls` cross-workflow invocation metadata
-- authored `subWorkflows` are omitted except for the explicit legacy
-  compatibility reference
+- `workflow-call-simple` is fully step-addressed; cross-workflow invocation is
+  authored as a `steps[].transitions[]` entry with `toWorkflowId` and
+  `resumeStepId` (executed as a derived workflow call at runtime; not stored on `workflow.workflowCalls`)
+- shipped workflow bundles omit structural `subWorkflows` and
+  `subWorkflowConversations`; multi-round demos use explicit steps (for example a
+  judge step with labeled `transitions`, as in `codex-codex-euthanasia-debate`
+  and the foreach lane in `node-combinations-showcase`)
 - node payload files live under `nodes/` by default
 - grouped lane payloads may live under `workflows/*/nodes/`
-
-Explicit legacy-compatibility exception:
-
-- `codex-codex-euthanasia-debate` still uses the structural sub-workflow form
-  because `subWorkflowConversations` has not yet been migrated to the
-  simplified format
 
 ## Available Examples
 
@@ -89,21 +83,20 @@ endpoint demo.
 
 ### `workflow-call-simple`
 
-Managed parent workflow reference for explicit workflow invocation. This bundle
-has already moved to step-addressed authoring, but it still uses the
-compatibility `workflowCalls` runtime path until cross-workflow dispatch is
-fully unified under `call-step` semantics:
+Managed parent workflow reference for cross-workflow invocation in the
+step-addressed authored shape:
 
 - `divedra-manager` stays on `claude-code-agent`
 - `draft-write` and `apply-review` stay on `codex-agent`
 - explicit `managerStepId: "divedra-manager"` and `entryStepId:
 "divedra-manager"` define the parent entry
 - `steps[]` carries the authored manager-to-draft progression directly
-- authored `workflowCalls` remain the only compatibility field in this example
-- authored `workflowCalls` invoke the sibling workflow
-  `workflow-call-review-target`
-- `apply-review` runs when the workflow-call result is delivered back through
-  `workflow-call:call-review`
+- `draft-write` declares a cross-workflow transition targeting
+  `workflow-call-review-target` (`toStepId: "reviewer"`) with
+  `resumeStepId: "apply-review"`
+- the engine executes that transition using the deterministic runtime workflow-call id
+  `__cw:draft-write`; session communications use
+  `transitionWhen = "workflow-call:__cw:draft-write"`
 - the bundled deterministic mock scenario covers both the parent and callee
   node ids so the full call chain can be run from one command
 
@@ -227,11 +220,12 @@ bun run src/main.ts workflow run claude-divedra-codex-coding \
 
 ### `node-combinations-showcase`
 
-Validation-oriented reference bundle for the newer node authoring surface:
+Validation-oriented reference bundle in the step-addressed authored shape:
 
-- compatibility-authored ordered nodes still carry this example because
-  node-local `repeat` is not yet part of the strict step-addressed schema
-- a node-local `repeat` shows the repeated-iteration pattern for `foreach`
+- `managerStepId` / `entryStepId` plus explicit `steps[]` transitions (the
+  foreach lane uses two labeled transitions from the judge step:
+  `continue_items` back to `foreach-manager` and `!(continue_items)` forward to
+  `foreach-output`, matching the former repeat-edge semantics)
 - one task uses `nodeType: "command"`
 - one task uses `nodeType: "container"`
 - workflow-relative support assets are included for the command script and
@@ -400,14 +394,17 @@ Live execution note:
 
 ### `codex-codex-euthanasia-debate`
 
-Legacy compatibility debate bundle for the new node-local prompt split:
+Step-addressed debate bundle for the node-local prompt split:
 
-- two `codex-agent` speaker nodes debate euthanasia from opposing positions
+- two `codex-agent` speaker lanes (grouped under `workflows/*/nodes/`) debate euthanasia from opposing positions
 - the affirmative speaker uses a node-local `systemPromptTemplateFile`
 - the negative speaker uses a different node-local `systemPromptTemplateFile`
 - both speakers use `sessionStartPromptTemplateFile` with the first-turn wrapper format:
   `##prompt ... ## args ...`
-- `subWorkflowConversations.maxTurns = 10` stops the debate after 10 turns
+- after each full affirmative-then-negative round, `debate-judge` chooses labeled
+  transitions (`continue_debate` / `!(continue_debate)`) to loop or finish at
+  `debate-summary`; the bundled mock runs six rounds (same node-execution depth as
+  the former structural conversation fixture)
 
 Validate it:
 

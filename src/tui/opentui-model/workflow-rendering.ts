@@ -9,6 +9,7 @@ import {
   fg,
   t,
 } from "@opentui/core";
+import { effectiveWorkflowCalls } from "../../workflow/cross-workflow-from-steps";
 import type { LoadedWorkflow } from "../../workflow/load";
 import type {
   NodeExecutionRecord,
@@ -78,7 +79,7 @@ function appendWorkflowBoundarySections(input: {
   readonly append: (value: StyledText) => void;
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
 }): void {
-  const workflowCallIds = (input.workflow.workflowCalls ?? []).map(
+  const workflowCallIds = effectiveWorkflowCalls(input.workflow).map(
     (entry) => entry.id,
   );
   const legacySubWorkflowIds = input.workflow.subWorkflows.map(
@@ -231,7 +232,7 @@ export function buildWorkflowSummaryPreview(
   const managerExecutionLabel =
     workflow.managerStepId ??
     (workflow.hasManagerNode === false ? "none" : workflow.managerNodeId);
-  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
@@ -300,7 +301,7 @@ export function buildWorkflowRunPreview(
   const managerExecutionLabel =
     workflow.managerStepId ??
     (workflow.hasManagerNode === false ? "none" : workflow.managerNodeId);
-  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
@@ -380,11 +381,36 @@ export function buildWorkflowDefinitionContent(
   const workflow = loadedWorkflow.bundle.workflow;
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
   const subworkflowIds = workflow.subWorkflows.map((entry) => entry.id);
-  const workflowCallIds = (workflow.workflowCalls ?? []).map(
+  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
   const nodeRegistryIds = workflow.nodeRegistry?.map((entry) => entry.id) ?? [];
+  const isStepAddressed = workflow.steps !== undefined;
+  const identityLines = isStepAddressed
+    ? [
+        `Manager step: ${workflow.managerStepId ?? "(implicit or worker-only)"}`,
+        `Entry step: ${workflow.entryStepId ?? "(not set; check workflow authorship)"}`,
+      ]
+    : [
+        `Manager node: ${
+          workflow.hasManagerNode === false
+            ? "(none; worker-only workflow)"
+            : (workflow.managerNodeId ??
+              "(not set; check workflow authorship)")
+        }`,
+        `Entry node: ${
+          workflow.entryNodeId ??
+          workflow.managerNodeId ??
+          "(not set; check workflow authorship)"
+        }`,
+        ...(workflow.entryStepId === undefined
+          ? []
+          : [`Entry step: ${workflow.entryStepId}`]),
+        ...(workflow.managerStepId === undefined
+          ? []
+          : [`Manager step: ${workflow.managerStepId}`]),
+      ];
   return [
     `Workflow: ${workflow.workflowId}`,
     `Workflow name: ${loadedWorkflow.workflowName}`,
@@ -393,18 +419,7 @@ export function buildWorkflowDefinitionContent(
       : []),
     `Workflow directory: ${loadedWorkflow.workflowDirectory}`,
     `Artifact root: ${loadedWorkflow.artifactWorkflowRoot}`,
-    `Manager node: ${
-      workflow.hasManagerNode === false
-        ? "(none; worker-only workflow)"
-        : workflow.managerNodeId
-    }`,
-    `Entry node: ${workflow.entryNodeId ?? workflow.managerNodeId}`,
-    ...(workflow.entryStepId === undefined
-      ? []
-      : [`Entry step: ${workflow.entryStepId}`]),
-    ...(workflow.managerStepId === undefined
-      ? []
-      : [`Manager step: ${workflow.managerStepId}`]),
+    ...identityLines,
     ...(workflow.steps === undefined
       ? []
       : [

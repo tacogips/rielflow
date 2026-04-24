@@ -75,6 +75,7 @@ afterEach(async () => {
 async function createCompletedWorkflowFixture(root: string) {
   const created = await createWorkflowTemplate("demo", {
     workflowRoot: root,
+    rejectLegacyWorkflowAuthoring: false,
   });
   expect(created.ok).toBe(true);
   if (!created.ok) {
@@ -86,6 +87,7 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -209,6 +211,7 @@ async function createCompletedGroupedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -381,6 +384,7 @@ async function createPendingOptionalDecisionSession(input: {
     artifactRoot: path.join(input.root, "artifacts"),
     rootDataDir: path.join(input.root, "data"),
     cwd: input.root,
+    rejectLegacyWorkflowAuthoring: false as const,
   });
   expect(saved.ok).toBe(true);
   if (!saved.ok) {
@@ -748,6 +752,7 @@ describe("manager-message-service", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
     };
     const managerStore = await createManagerSession(
       root,

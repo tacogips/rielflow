@@ -21,6 +21,12 @@ import { createWorkflowTemplate } from "./workflow/create";
 import * as workflowEngine from "./workflow/engine";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
+import type { LoadOptions } from "./workflow/types";
+
+const testLegacyAuthorshipOk: Pick<
+  LoadOptions,
+  "rejectLegacyWorkflowAuthoring"
+> = { rejectLegacyWorkflowAuthoring: false };
 
 const tempDirs: string[] = [];
 
@@ -317,6 +323,8 @@ describe("library api", () => {
     const options = {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
       cwd: root,
     };
     const mockScenario = makeDefaultTemplateScenario();
@@ -331,6 +339,14 @@ describe("library api", () => {
       fetchSpy.mockRestore();
     }
     expect(summary.workflowName).toBe("demo");
+    expect(summary.entryNodeId).toBeUndefined();
+    expect(summary.entryStepId).toBe("divedra-manager");
+    expect(summary.counts.nodes).toBeUndefined();
+    expect(summary.counts.structuralProjection).toEqual({
+      nodes: 2,
+      edges: 1,
+      loops: 0,
+    });
     expect(summary.runtime.ready).toBe(false);
     expect(summary.runtime.blockers).toEqual(
       expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
@@ -446,6 +462,7 @@ describe("library api", () => {
     expect(saved.ok).toBe(true);
 
     const result = await callWorkflowNode({
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot,
@@ -602,6 +619,7 @@ describe("library api", () => {
     });
 
     const result = await executeWorkflow({
+      ...testLegacyAuthorshipOk,
       workflowName: "third-party-execute",
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
@@ -699,6 +717,7 @@ describe("library api", () => {
     await writeJson(workflowPath, workflowJson);
 
     const summary = await inspectWorkflow(workflowName, {
+      ...testLegacyAuthorshipOk,
       cwd: root,
       workflowScope: "user",
       userRoot,
@@ -744,6 +763,7 @@ describe("library api", () => {
     });
 
     const result = await executeWorkflow({
+      ...testLegacyAuthorshipOk,
       workflowName: "third-party-addon-definition",
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
@@ -770,6 +790,7 @@ describe("library api", () => {
     });
 
     const result = await executeWorkflow({
+      ...testLegacyAuthorshipOk,
       workflowName: "async-third-party-addon-definition",
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
@@ -792,6 +813,7 @@ describe("library api", () => {
     const root = await makeTempDir();
     const workflowName = "third-party-resume";
     const options = {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),

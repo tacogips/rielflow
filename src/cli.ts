@@ -649,7 +649,7 @@ function printHelp(io: CliIo): void {
     "  divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-node-exec <id>] [options]",
   );
   io.stdout(
-    "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
+    "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]  (compatibility; prefer call-step for step-addressed workflows)",
   );
   io.stdout(`  divedra hook [--vendor ${HOOK_VENDOR_USAGE}]`);
   io.stdout(`  divedra hook snippet --vendor ${HOOK_VENDOR_USAGE}`);
@@ -2524,7 +2524,7 @@ export async function runCli(
     ) {
       io.stderr("workflow id, workflow run id, and node id are required");
       io.stderr(
-        "usage: divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
+        "usage: divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]  (compatibility; prefer call-step for step-addressed workflows)",
       );
       return 2;
     }
@@ -2788,6 +2788,8 @@ export async function runCli(
         loaded.value,
         loadedWorkflowOptions,
       );
+      const isStepAddressedInspect =
+        loaded.value.bundle.workflow.steps !== undefined;
       if (parsed.options.output === "json") {
         emitJson(io, {
           ...summary,
@@ -2807,27 +2809,48 @@ export async function runCli(
           io.stdout(`addonSource: ${formatAddonSource(addonSource)}`);
         }
         io.stdout(`workflowId: ${summary.workflowId}`);
-        io.stdout(
-          `managerNodeId: ${summary.managerNodeId ?? "(none; worker-only workflow)"}`,
-        );
-        io.stdout(`entryNodeId: ${summary.entryNodeId}`);
-        if (summary.entryStepId !== undefined) {
+        if (isStepAddressedInspect) {
           io.stdout(
             `managerStepId: ${summary.managerStepId ?? "(implicit or worker-only)"}`,
           );
-          io.stdout(`entryStepId: ${summary.entryStepId}`);
+          io.stdout(
+            `entryStepId: ${summary.entryStepId ?? "(not set; check workflow authorship)"}`,
+          );
           io.stdout(`stepIds: ${summary.stepIds.join(", ")}`);
           io.stdout(`nodeRegistryIds: ${summary.nodeRegistryIds.join(", ")}`);
+        } else {
+          io.stdout(
+            `managerNodeId: ${summary.managerNodeId ?? "(none; worker-only workflow)"}`,
+          );
+          io.stdout(
+            `entryNodeId: ${summary.entryNodeId ?? "(not set; check workflow authorship)"}`,
+          );
         }
-        io.stdout(
-          `nodes: ${summary.counts.nodes}, nodeRegistry: ${summary.counts.nodeRegistry}, steps: ${summary.counts.steps}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}, workflowCalls: ${summary.counts.workflowCalls}${legacySubWorkflowCountSegment}`,
-        );
+        if (isStepAddressedInspect) {
+          const projection = summary.counts.structuralProjection;
+          if (projection === undefined) {
+            throw new Error(
+              "inspect invariant violated: authored steps require structuralProjection counts",
+            );
+          }
+          io.stdout(
+            `steps: ${summary.counts.steps}, nodeRegistry: ${summary.counts.nodeRegistry}, workflowCalls: ${summary.counts.workflowCalls}, structuralProjection: nodes=${projection.nodes} edges=${projection.edges} loops=${projection.loops}${legacySubWorkflowCountSegment}`,
+          );
+        } else {
+          io.stdout(
+            `nodes: ${summary.counts.nodes}, nodeRegistry: ${summary.counts.nodeRegistry}, steps: ${summary.counts.steps}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}, workflowCalls: ${summary.counts.workflowCalls}${legacySubWorkflowCountSegment}`,
+          );
+        }
         if (summary.workflowCallIds.length > 0) {
           io.stdout(`workflowCallIds: ${summary.workflowCallIds.join(", ")}`);
         }
-        if (summary.compatibility.notes.length > 0) {
-          io.stdout("compatibility:");
-          for (const note of summary.compatibility.notes) {
+        const compat = summary.compatibility;
+        io.stdout(
+          `compatibility: normalizesRoleAuthoredNodesToStructuralKinds=${compat.normalizesRoleAuthoredNodesToStructuralKinds ? "yes" : "no"}, usesEffectiveEntryManagerNodeId=${compat.usesEffectiveEntryManagerNodeId ? "yes" : "no"}, usesLegacyStructuralSubWorkflows=${compat.usesLegacyStructuralSubWorkflows ? "yes" : "no"}`,
+        );
+        if (compat.notes.length > 0) {
+          io.stdout("compatibility notes:");
+          for (const note of compat.notes) {
             io.stdout(`- ${note}`);
           }
         }

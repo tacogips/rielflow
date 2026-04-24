@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Bun's test runner does not load vitest `env`; keep `vitest.config.ts` in sync when adding test-only env.
 watch_mode="false"
 declare -a passthrough_args=()
 

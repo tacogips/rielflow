@@ -553,6 +553,11 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
     ...(input.defaultTimeoutMs === undefined
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
+    ...(input.rejectLegacyWorkflowAuthoring === undefined
+      ? {}
+      : {
+          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
+        }),
   };
   const executionOptions = await resolveWorkflowCatalogOptions(
     input.workflowName,
@@ -609,6 +614,11 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
     ...(input.mockScenario === undefined
       ? {}
       : { mockScenario: input.mockScenario }),
+    ...(input.rejectLegacyWorkflowAuthoring === undefined
+      ? {}
+      : {
+          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
+        }),
     resumeSessionId: existing.value.sessionId,
   });
   if (!result.ok) {
@@ -677,6 +687,11 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
     ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
+    ...(input.rejectLegacyWorkflowAuthoring === undefined
+      ? {}
+      : {
+          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
+        }),
   });
   if (!result.ok) {
     throw new Error(result.error.message);
@@ -898,3 +913,8 @@ export { runWorkflow } from "./workflow/engine";
 export { callNode } from "./workflow/call-node";
 export { callStep } from "./workflow/call-step";
 export { deriveWorkflowVisualization } from "./workflow/visualization";
+export type {
+  WorkflowInspectionCounts,
+  WorkflowInspectionSummary,
+  WorkflowStructuralProjectionCounts,
+} from "./workflow/inspect";

@@ -23,11 +23,19 @@ export interface CallStepFailure extends CallNodeFailure {
   readonly stepId: string;
 }
 
-function rewriteCallStepFailureMessage(
+/** Rewrites `call-node` failure text when the entrypoint was {@link callStep}. */
+export function rewriteCallStepFailureMessage(
   message: string,
   stepId: string,
 ): string {
   return message
+    .replaceAll("cannot call node '", "cannot call step '")
+    .replaceAll("node execution failed", "step execution failed")
+    .replaceAll(
+      "node execution produced no output",
+      "step execution produced no output",
+    )
+    .replaceAll("executable node fields", "executable fields")
     .replaceAll(
       `missing node definition for '${stepId}'`,
       `missing step definition for '${stepId}'`,

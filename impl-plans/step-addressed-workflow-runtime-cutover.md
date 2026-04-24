@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-workflow-steps-and-node-reuse.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/user-qa/qa-step-schema-workflow-calls.md`
 **Created**: 2026-04-24
-**Last Updated**: 2026-04-24
+**Last Updated**: 2026-04-26 (diff review; cross-workflow callee `workflowId` resolution follow-up)
 
 ## Design Document Reference
 
@@ -34,6 +34,24 @@ This plan is intentionally a breaking cutover. Backward compatibility with
 `entryNodeId`, `managerNodeId`, `workflowCalls`, `edges`, `loops`,
 `subWorkflows`, `subWorkflowConversations`, branch/loop judges, and
 `call-node` naming is out of scope.
+
+### Current repository posture (execution vs. target)
+
+The bullets above describe the **target** end state after the cutover is
+finished. Until then, the tree intentionally ships **incrementally**: where
+`workflow.json` authors `steps[]`, public inspection (CLI, library, GraphQL,
+TUI) is **step-first** and omits legacy-only identity fields from summaries;
+the engine and loader may still use compatibility projections and mixed
+validation paths while TASK-003 (engine) and TASK-001 (strict primary-path
+schema) remain in progress (**TASK-005** example/docs slice is complete). Shipped
+`node-combinations-showcase` now uses strict step-addressed authoring (judge
+step transitions replace node-local `repeat`); `workflow-call-simple` invokes a
+sibling workflow via authored `toWorkflowId` step transitions executed as derived
+workflow calls (`__cw:<callerStepId>`) without persisting them on
+`workflow.workflowCalls`. `codex-codex-euthanasia-debate` is now step-addressed
+(judge step + labeled transitions; six rounds in the bundled mock, 56 node
+executions). **Production / operator paths** default to strict authorship (`rejectLegacyWorkflowAuthoring` omitted means strict) via `isStrictWorkflowAuthorshipValidation`; unit tests pass explicit `rejectLegacyWorkflowAuthoring: false` (or, for `runCli` integration cases, `withLegacyWorkflowAuthorshipForCli` setting `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` only for that subprocess contract) so the suite no longer relies on a global test harness env export. All **shipped** `examples/*` bundles still load under explicit strict in `load.test.ts`. This does not abandon the breaking cutover
+goal; it sequences it so surfaces and runtime do not silently diverge mid-migration.
 
 ### Scope
 
@@ -80,6 +98,7 @@ export interface WorkflowTimeoutPolicy {
 export interface WorkflowStepTransition {
   readonly toStepId: string;
   readonly toWorkflowId?: string;
+  readonly resumeStepId?: string;
   readonly label?: string;
 }
 
@@ -273,11 +292,11 @@ interface StepAddressedExampleSet {
 
 | Feature                                      | Depends On                                  | Status      |
 | -------------------------------------------- | ------------------------------------------- | ----------- |
-| Authored schema and bundle I/O               | Existing workflow save/load foundation      | READY       |
+| Authored schema and bundle I/O               | Existing workflow save/load foundation      | IN_PROGRESS |
 | Step execution state and unified `call-step` | Authored schema and bundle I/O              | IN_PROGRESS |
-| Engine and deterministic manager runtime     | Authored schema and step execution state    | BLOCKED     |
+| Engine and deterministic manager runtime     | Authored schema and step execution state    | IN_PROGRESS |
 | Public surfaces and inspection               | Authored schema and step execution state    | IN_PROGRESS |
-| Examples, docs, and regression replacement   | Schema, runtime, and public-surface cutover | BLOCKED     |
+| Examples, docs, and regression replacement   | Schema, runtime, and public-surface cutover | IN_PROGRESS (TASK-005 completed; follow-ups on TASK-001-004) |
 
 ## Completion Criteria
 
@@ -291,6 +310,335 @@ interface StepAddressedExampleSet {
 - [ ] `bun run typecheck:server`, targeted runtime tests, and the full regression suite pass
 
 ## Progress Log
+
+### Session: 2026-04-25 (TASK-001: ambiguous callee manager inference guard)
+
+**Tasks Completed**: Re-checked the working tree against the plan’s *Current repository posture* and `design-workflow-json.md`; no design rewrite or new implementation plan was needed. Diff review found a concrete validation bug in the new cross-workflow callee-entry alignment helpers: when a callee omitted `managerStepId` but authored more than one manager-role step, sync/async validation inferred the callee start step by taking the first manager id instead of treating the callee entry as ambiguous. `src/workflow/validate.ts` now rejects that case unless the callee declares `managerStepId` explicitly, and `src/workflow/validate.test.ts` adds sync + async regressions.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path and remaining legacy-fixture follow-ups), TASK-002 (`call-step` depth), TASK-003 (remaining step-native engine follow-ups), TASK-004 (public surfaces). TASK-005 completed.
+
+**Verification**: `bun test src/workflow/validate.test.ts`, `bun run typecheck`, `bun run typecheck:server`, `bash scripts/run-bun-tests.sh` (928 pass).
+
+### Session: 2026-04-25 (TASK-001/TASK-003: file-backed callee manager-step validation)
+
+**Tasks Completed**: Re-checked the working tree against the plan’s *Current repository posture* and `design-workflow-json.md`; no design rewrite was needed. Found and fixed a validation gap in the new cross-workflow step-transition callee-entry check: it inferred an implicit manager step only from inline `workflow.json.steps[]`, so valid callees that omitted `managerStepId` but declared their single manager-role step in `steps/*.json` could be rejected incorrectly. `src/workflow/validate.ts` now resolves file-backed step definitions while inferring the callee start step for both sync and async validation paths, and `src/workflow/validate.test.ts` adds regressions covering async + sync validation for that authored shape. Full-suite verification then exposed an unrelated library-test isolation issue: `src/lib.test.ts` relied on implicit runtime-db/session-store roots and could observe ambient process state during repository-wide runs, so the test now passes explicit `rootDataDir` and `sessionStoreRoot`.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / legacy fixture follow-ups), TASK-002 (`call-step` depth), TASK-003 (remaining step-native engine follow-ups), TASK-004 (public surfaces). TASK-005 completed.
+
+**Verification**: `bun test src/workflow/validate.test.ts`, `bun run typecheck`, `bun run typecheck:server`, `bash scripts/run-bun-tests.sh`.
+
+### Session: 2026-04-25 (impl iteration: diff review, test script executable, auto-improve deps)
+
+**Tasks Completed**: Re-checked the working tree against the plan’s *Current repository posture* and `design-workflow-json.md` (transitional model unchanged; no design update required). **Diff / hygiene**: `scripts/run-bun-tests.sh` was mode `644`, so `./scripts/run-bun-tests.sh` failed with *Permission denied*; repository now records the script as executable (`755`) so both `./scripts/...` and `bash scripts/...` work. **PROGRESS**: `auto-improve-superviser-mode` **TASK-001** and **TASK-003** no longer list a dependency on `step-addressed-workflow-runtime-cutover:TASK-005` (that cutover task is **Completed**); **TASK-001** `deps: []`, **TASK-003** `deps: ["TASK-002"]` only.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / test legacy default), TASK-002 (`call-step` depth), TASK-003 (step-native engine follow-ups), TASK-004 (public-surface items). TASK-005 completed.
+
+**Verification**: `bash scripts/run-bun-tests.sh` (922 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+### Session: 2026-04-25 (TASK-004: engine lastError step wording)
+
+**Tasks Completed**: Aligned `runWorkflowInternal` failure strings with the existing `workflow.steps === undefined ? "node" : "step"` rerun convention: when a bundle authors `steps[]`, missing-target and non-executable payload failures now say `step` / `executable fields` / `missing step definition` instead of node-only phrasing (matches `rewriteCallStepFailureMessage` / direct `call-step` UX). **Architecture**: still matches the plan’s transitional posture; no design doc change.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / legacy test default), TASK-002 (`call-step` depth), TASK-003 (step-native engine follow-ups), TASK-004 (remaining public-surface items). TASK-005 completed.
+
+**Verification**: `bun run typecheck`, `bun run typecheck:server`, `bash scripts/run-bun-tests.sh` (922 pass).
+
+### Session: 2026-04-25 (README phase table, TASK-001 explicit load flags)
+
+**Tasks Completed**: Aligned `impl-plans/README.md` Phase Dependencies rows for phases **129** and **130** with `impl-plans/PROGRESS.json` (both **IN_PROGRESS**, not READY/PLANNING). **TASK-001** increment: `runtime-readiness.test.ts` now passes explicit `rejectLegacyWorkflowAuthoring` on disk loads—the step-addressed readiness fixture uses **strict** (`true`); the recursive `workflow-call` legacy bundle uses **legacy-compatible** (`false`) on `loadWorkflowFromDisk`. Workflow-call readiness cases that load legacy-shaped on-disk callees via `inspectWorkflowRuntimeReadiness` now pass `rejectLegacyWorkflowAuthoring: false` in probe options so `loadWorkflowByIdFromDisk` inside `probeWorkflowCallRuntime` succeeds without relying on `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT`.
+
+**Tasks In Progress**: TASK-001 (broader per-test explicit flags / drop `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT`), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `env -u DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT bun test src/workflow/runtime-readiness.test.ts`, full `bash scripts/run-bun-tests.sh`, `bun run typecheck`, `bun run typecheck:server`.
+
+### Session: 2026-04-25 (iteration: implementation-plan execution and diff review)
+
+**Tasks Completed**: Re-checked the working tree against the plan’s *Current repository posture* and `design-workflow-json.md` (no design rewrite needed). **Diff / code review**: (1) `loadWorkflowFromDisk` no longer re-spreads `rejectLegacyWorkflowAuthoring: true` when forwarding options into async validation, since `...options` already carries the flag. (2) `impl-plans/README.md` Active Plans table now matches `PROGRESS.json` (`step-addressed-workflow-runtime-cutover` and `auto-improve-superviser-mode` as in progress, not "Ready/Planning" alone). (3) `crossWorkflowCallsFromSteps` documents that `.find` is well-defined because the validator rejects more than one `toWorkflowId` transition on the same step.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / test legacy default, legacy-only code paths), TASK-002 (`call-step` / session depth), TASK-003 (step-native engine follow-ups; queue still compatibility-backed in places), TASK-004 (public-surface tail items). TASK-005 completed.
+
+**Verification**: `bash scripts/run-bun-tests.sh` (922 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+### Session: 2026-04-25 (TASK-003: cross-workflow lowering + execution-merge regressions)
+
+**Tasks Completed**: Re-checked architecture against the plan’s *Current repository posture*: step-derived `__cw:*` rows remain off normalized `workflow.workflowCalls`; engine unions explicit and derived calls via `workflowCallsForExecutionMatch` with `when` gating in `workflowCallMatchesCallerExecution`; queue/`resolveStepExecutionAddress` treat the runtime `nodeId` as the step id when `steps[]` is authored, so derived `callerNodeId: step.id` stays aligned with `executeWorkflowCallsForNode`. Added `cross-workflow-from-steps.test.ts` coverage for (1) `label` → `when` on lowered cross-workflow refs (matches `design-workflow-json` / engine `evaluateBranch` path) and (2) execution merge omitting a derived row when an explicit matching call already owns the same `__cw:` id.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / test legacy default), TASK-002 (`call-step` depth), TASK-003 (step-native engine follow-ups beyond merged workflow-call execution), TASK-004 (public-surface checklist). TASK-005 completed.
+
+**Verification**: `bun test src/workflow/cross-workflow-from-steps.test.ts`, `bun run typecheck`, `bun run typecheck:server`; full suite via `bash scripts/run-bun-tests.sh` after this change.
+
+### Session: 2026-04-25 (TASK-002/TASK-004: call-step terminal-session failure wording)
+
+**Tasks Completed**: Extended `rewriteCallStepFailureMessage` in `src/workflow/call-step.ts` so delegated `call-node` errors that use `cannot call node '` (terminal session guard) read as `cannot call step '` when the entrypoint is `call-step`. Added unit coverage on the rewriter plus a `callStep` regression that persists a completed session and asserts the surfaced message is step-oriented. Verified `bun run typecheck`, `bun run typecheck:server`, and full `bash scripts/run-bun-tests.sh` (920 pass).
+
+**Tasks In Progress**: TASK-001 (strict-primary-path / test legacy default), TASK-003 (step-native engine follow-ups), TASK-004 (remaining public-surface checklist); TASK-002/TASK-004 deepen incrementally. TASK-005 completed.
+
+### Session: 2026-04-25 (diff review: PROGRESS deps, call-node usage parity)
+
+**Tasks Completed**: Corrected `impl-plans/PROGRESS.json` so `step-addressed-workflow-runtime-cutover` **TASK-005** has `deps: []` (examples/docs slice was completed independently; prior `TASK-002`–`TASK-004` deps contradicted recorded status). **TASK-004** follow-up: `call-node` missing-argument usage line now matches `printHelp` by appending the compatibility note to prefer `call-step` for step-addressed workflows; added `cli.test.ts` regression.
+
+**Tasks In Progress**: TASK-001–004 unchanged. Re-verified architecture vs. plan: transitional posture still intentional; full breaking cutover (strict-only tests, step-native engine queue without `workflowCalls` merge) remains future work.
+
+**Verification**: `bun test src/cli.test.ts -t "call-node usage on missing"` and full suite via project script (post-edit).
+
+### Session: 2026-04-26 (TASK-002/TASK-004: call-step failure wording)
+
+**Tasks Completed**: Extended `rewriteCallStepFailureMessage` in `src/workflow/call-step.ts` so delegated `call-node` errors that still used generic “node execution …” / “executable node fields” phrasing are rewritten when the entrypoint is `call-step`. Exported the helper for a focused unit test in `src/workflow/call-step.test.ts`. Re-checked architecture: still matches the plan’s transitional posture (step-first surfaces, `call-step` delegates through `call-node` with step id as execution key).
+
+**Tasks In Progress**: TASK-001 (strict-primary-path depth / test legacy default), TASK-002 (`call-step` depth), TASK-003 (step-native engine follow-ups), TASK-004 (public surfaces); TASK-005 completed.
+
+### Session: 2026-04-26 (diff review: examples copy, load regression title)
+
+**Tasks Completed**: Re-reviewed the working tree against the plan posture (step-derived `__cw:*` workflow calls, `workflowCallsForExecutionMatch` execution order, strict default via `isStrictWorkflowAuthorshipValidation` outside tests). Aligned `examples/README.md` intro with migrated shipped bundles (no longer claims examples are "mixed" mid-cutover; notes test-only legacy loading). Renamed a stale `load.test.ts` case that still mentioned compatibility `workflowCalls` on the parent though `workflow-call-simple` has none. Full `bash scripts/run-bun-tests.sh` green.
+
+**Tasks In Progress**: TASK-001 (strict-only primary path / test harness legacy default), TASK-002 (`call-step` depth), TASK-003 (step-native engine follow-ups), TASK-004 (public-surface tail items); TASK-005 completed.
+
+### Session: 2026-04-25 (architecture check, CLI help: call-node vs call-step)
+
+**Tasks Completed**: Re-verified implementation against the plan’s transitional posture: `normalizeStepAddressedWorkflow` keeps only **explicit** `workflow.workflowCalls` on the normalized bundle; cross-workflow step transitions are **not** merged into that array (runtime uses `crossWorkflowCallsFromSteps` plus `workflowCallsForExecutionMatch` for execution order). Confirmed production authorship defaults remain strict via `isStrictWorkflowAuthorshipValidation` while Vitest keeps `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`. Ran full `bash scripts/run-bun-tests.sh` (917 pass). **TASK-004** follow-up: `printHelp` now labels `call-node` as compatibility and points operators to `call-step` for step-addressed workflows; extended `cli.test.ts` unknown-scope help regression.
+
+**Tasks In Progress**: TASK-001 (strict-primary-path depth / test harness legacy default), TASK-002 (`call-step` session depth), TASK-003 (step-native engine paths beyond the workflow-call primitive), TASK-004 (remaining public-surface checklist items); TASK-005 completed.
+
+### Session: 2026-04-26 (architecture check, `LoadOptions` JSDoc vs strict default)
+
+**Tasks Completed**: Re-verified the working tree against the plan’s transitional posture (step-first inspection; engine uses `workflowCallsForExecutionMatch`; cross-workflow step transitions execute as derived `__cw:*` workflow calls). Ran full `bash scripts/run-bun-tests.sh` (917 pass). Fixed inaccurate `rejectLegacyWorkflowAuthoring` documentation on `LoadOptions` in `src/workflow/types.ts`: an omitted option is not unconditionally strict—it follows `isStrictWorkflowAuthorshipValidation` and `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT` in the test harness.
+
+**Tasks In Progress**: TASK-001–004 unchanged (strict-primary-path depth, `call-step` vs `call-node`, step-native engine follow-ups, public surfaces); TASK-005 completed.
+
+### Session: 2026-04-26 (TASK-003 hygiene: `workflowCallsForExecutionMatch`)
+
+**Tasks Completed**: Extracted the explicit-then-step-derived workflow-call merge used by `executeWorkflowCallsForNode` into `workflowCallsForExecutionMatch()` in `src/workflow/cross-workflow-from-steps.ts`, with JSDoc cross-links to `effectiveWorkflowCalls` so inspection vs execution ordering cannot drift silently. Added unit coverage for explicit array order preservation plus trailing `__cw:*` rows. Synced this plan’s dependency table with actual module progress (no longer marks engine/examples as `BLOCKED`). Full `bash scripts/run-bun-tests.sh`, `bun run typecheck`, `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001 (strict authorship / legacy test default), TASK-002 (`call-step` depth), TASK-003 (remaining step-native engine paths), TASK-004 (public surfaces).
+
+### Session: 2026-04-26 (architecture check: workflow-call execution order vs `effectiveWorkflowCalls`)
+
+**Tasks Completed**: Diff review of `executeWorkflowCallsForNode`: the explicit-then-step-derived merge is **not** equivalent to filtering `effectiveWorkflowCalls` because the latter uses Map insertion order (derived entries then explicit-only ids) while **runtime** must keep authored `workflow.workflowCalls` order for matching explicit calls. Documented in `src/workflow/engine.ts` and on `effectiveWorkflowCalls` in `src/workflow/cross-workflow-from-steps.ts` so refactors do not conflate inspection vs execution ordering. Full `bash scripts/run-bun-tests.sh` (916 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001 (remove validation legacy-env escape hatch in tests / finish strict-only paths), TASK-002 (`call-step` session depth), TASK-003 (further step-native engine paths), TASK-004 (public surfaces). TASK-005 remains completed (examples/docs slice).
+
+### Session: 2026-04-25 (TASK-001: production default strict authorship validation)
+
+**Tasks Completed**: Introduced `isStrictWorkflowAuthorshipValidation()` so omitted `rejectLegacyWorkflowAuthoring` is **strict** outside tests (rejects legacy authored fields on the primary validate/load path). Test and transitional runs set `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` via `scripts/run-bun-tests.sh` and `vitest.config.ts`. Aligned `saveWorkflowToDisk` strict gate with the same helper. Simplified `loadWorkflowFromDisk` validation forwarding. Extended `validate.test.ts` with explicit `legacyWorkflowAuthorshipOk` on compatibility-path cases and a regression that strict default applies when the env var is unset. Ran `bash scripts/run-bun-tests.sh` (916 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-002, TASK-003, TASK-004; TASK-001 checklist items that require removing the test env escape hatch or finishing legacy-only code paths.
+
+### Session: 2026-04-26 (close TASK-005: track assets, unblock dependent plan)
+
+**Tasks Completed**: Staged previously untracked `cross-workflow-from-steps.test.ts`, debate `nodes/node-debate-*.json`, and `prompts/debate-*.md` for `codex-codex-euthanasia-debate` so the strict-load example and bundle are complete in git. Marked `step-addressed-workflow-runtime-cutover` **TASK-005** (examples/docs/regressions) **Completed** in `impl-plans/PROGRESS.json`. Unblocked `auto-improve-superviser-mode` **TASK-001** (was waiting on cutover TASK-005); set phase 130 to in progress. Re-ran `bun test` (915 pass), `bun test src/workflow/cross-workflow-from-steps.test.ts` (4 pass). **Remaining cutover work** stays on TASK-001 (repository-wide `rejectLegacyWorkflowAuthoring: true` default), TASK-002 (call-step/session depth), TASK-003 (step-native engine queue vs `effectiveWorkflowCalls` merge), TASK-004 (public surfaces); architecture still matches the plan’s *Current repository posture*.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004
+
+### Session: 2026-04-26 (TASK-005: migrate `codex-codex-euthanasia-debate` off structural sub-workflows)
+
+**Tasks Completed**: Replaced authored `subWorkflows` / `subWorkflowConversations` / `edges` with `managerStepId`, `entryStepId`, registry `nodes[]`, and `steps[]` (affirmative chain, negative chain, `debate-judge` with `continue_debate` / `!(continue_debate)` labels, `debate-summary`). Added `nodes/node-debate-judge.json`, `nodes/node-debate-summary.json`, prompts, sixth-round mock entries for the negative lane, and fixed `debate-judge` mock to publish branch booleans via adapter `when` (same contract as `foreach-judge`). Updated `EXPECTED_RESULTS.md` (55 transitions, `conversationTurns: 0`), READMEs, `design-node-system-and-session-prompts.md`, and `load.test.ts` (strict load list + all examples omit structural fields). Verified `workflow validate`, mock `workflow run` (56 executions), pending full CI test run.
+
+**Tasks In Progress**: TASK-001 (global strict default / remaining checklist), TASK-002, TASK-003, TASK-004; TASK-005 closer (docs checklist may still have tail items).
+
+**Blockers**: TASK-003 depth (step-native queue vs compatibility merge); TASK-001 if any code path still assumes mixed defaults.
+
+### Session: 2026-04-26 (effectiveWorkflowCalls unit coverage, architecture check)
+
+**Tasks Completed**: Added `src/workflow/cross-workflow-from-steps.test.ts` covering `effectiveWorkflowCalls` (union of explicit and step-derived ids, explicit override on `__cw:` id collision) and `crossWorkflowCallsFromSteps` (undefined steps, missing `resumeStepId`). Confirmed design posture: step-first inspection via `effectiveWorkflowCalls` in `buildInspectionSummary`, runtime/engine still unioning explicit matches with `crossWorkflowCallsFromSteps` in `executeWorkflowCallsForNode`—aligned with "Current repository posture". Full `bun run typecheck`, `bun run typecheck:server`, `bun test` (915 pass).
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004; TASK-005 still blocked on `codex-codex-euthanasia-debate` / strict default until structural example migrates or is replaced.
+
+**Blockers**: Unchanged long pole: legacy debate bundle; repository-wide `rejectLegacyWorkflowAuthoring: true` default; full step-native queue without compatibility `workflowCalls` merge (TASK-003 depth).
+
+### Session: 2026-04-25 (iteration: track cross-workflow helper, diff review, verification)
+
+**Tasks Completed**: Ensured `src/workflow/cross-workflow-from-steps.ts` is tracked in git (was `??` while already imported from `validate.ts`, `engine.ts`, `inspect.ts`, `runtime-readiness.ts`, `node-execution-mailbox.ts`, TUI rendering, and tests). Re-read design posture vs. code: step-first inspection, explicit `workflowCalls` only on normalized bundles when authored, cross-workflow step transitions executed via `crossWorkflowCallsFromSteps` / `effectiveWorkflowCalls` union with explicit calls—matches `design-workflow-json.md` and the plan’s “Current repository posture”. No code defects found requiring changes in this pass.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004; TASK-005 remains blocked on `codex-codex-euthanasia-debate` / strict default sweep.
+
+**Verification**: `bun run typecheck`, `bun run typecheck:server`, full `bun test` (911 pass).
+
+### Session: 2026-04-25 (TASK-003: step-derived cross-workflow calls without normalized-bundle merge)
+
+**Tasks Completed**: Cross-workflow `steps[].transitions` are no longer merged into `workflow.workflowCalls` during `normalizeStepAddressedWorkflow`. Added `src/workflow/cross-workflow-from-steps.ts` (`crossWorkflowCallsFromSteps`, `effectiveWorkflowCalls`). `executeWorkflowCallsForNode` unions explicit `workflowCalls` with step-derived calls using shared caller/`when` matching. Runtime readiness recursion, `buildInspectionSummary`, TUI workflow rendering, and manager mailbox reasons use `effectiveWorkflowCalls`. Validation still uses derived ids for collision checks with explicit `workflowCalls`. Updated `validate.test.ts`, `load.test.ts`, `design-workflow-json.md` (StepTransition `label` / cross-workflow execution note), READMEs, and `workflow-call-simple` EXPECTED_RESULTS wording. Full `bun run typecheck`, `bun run typecheck:server`, and `bun test` green.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-004, TASK-005 (TASK-003 closer: queue still compatibility-backed in other areas; full `call-step` primitive unification remains).
+
+**Blockers**: TASK-001 strict default and TASK-005 full example sweep still gated on `codex-codex-euthanasia-debate`; deeper TASK-003 items (if any) per plan checklists (obsolete structural runtime paths, etc.).
+
+### Session: 2026-04-25 (TASK-001: validation regression — cross-workflow + explicit `workflowCalls` edge cases)
+
+**Tasks Completed**: Added `validate.test.ts` coverage for two previously untested `normalizeStepAddressedWorkflow` boundaries that matter whenever transitional bundles allow top-level `workflowCalls` (`rejectLegacyWorkflowAuthoring: false`): (1) explicit `workflowCalls` targeting the same caller step as an authored `toWorkflowId` step transition is rejected; (2) an explicit `workflowCall.id` that collides with a lowered `__cw:<callerStepId>` id is rejected even when the explicit call is attributed to a different step (reserved-id guard). `bun run typecheck`, `bun run typecheck:server`, and full `bun test` (911 pass).
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged: TASK-003 step-native queue without merged compatibility `workflowCalls`; TASK-001 strict default and TASK-005 full example sweep still gated on `codex-codex-euthanasia-debate` (structural `subWorkflows` / `subWorkflowConversations`).
+
+### Session: 2026-04-25 (TASK-001: regression for lowered transition `label` to `when`)
+
+**Tasks Completed**: Added `validate.test.ts` coverage that a cross-workflow step transition with `label` lowers to `workflowCalls[]` carrying the same string as `when`, matching `design-workflow-json.md` and `normalizeStepAddressedWorkflow`. Ran `bun test src/workflow/validate.test.ts -t "lowers cross-workflow step transition label"` and full `bun test` (909 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged: TASK-003 step-native execution without merged compatibility `workflowCalls`; TASK-001 repository-wide strict default and TASK-005 full example sweep still gated on `codex-codex-euthanasia-debate` (structural `subWorkflows` / `subWorkflowConversations`).
+
+### Session: 2026-04-25 (diff review, workflow-call `when` regression, verification)
+
+**Tasks Completed**: Re-checked the cutover design references and the working tree: transitional architecture (step-first inspection, lowered `workflowCalls` for cross-workflow step transitions) still matches the plan; no new design document or split implementation plan. **Correction (historical log)**: an older 2026-04-24 progress entry still states `node-combinations-showcase` uses legacy ordered-node `repeat`; that is **superseded** by the 2026-04-25 migration in this plan log (`steps[]` + judge-step transitions, strict load coverage). Uncommitted diff review: `executeWorkflowCallsForNode` `when` gating is easy to break without a focused test; added `runWorkflow` regression `skips a workflow call when \`when\` does not match caller output` in `src/workflow/engine.test.ts` using `createWhenGatedWorkflowCallFixture` and `when: "need_review"` (deterministic adapter output does not set it, so the callee is not run and no `workflow-call:*` communication is recorded). Ran `bun test src/workflow/engine.test.ts -t "skips a workflow call when"`, full `bun test` (908 pass), `bun run typecheck`, and `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers** (unchanged for the long pole): TASK-003 step-native execution without merged compatibility `workflowCalls`; repository-wide `rejectLegacyWorkflowAuthoring` default and TASK-005 full example sweep still blocked on `codex-codex-euthanasia-debate` (structural `subWorkflows` / `subWorkflowConversations`).
+
+### Session: 2026-04-26 (architecture check, uncommitted diff review, verification)
+
+**Tasks Completed**: Re-read `design-workflow-json.md` and the active plan against the working tree: the **Current repository posture** (step-first public surfaces, validate-time projection/lowering, engine still consuming merged `workflowCalls` including `__cw:<callerStepId>`) remains the intended incremental ship model toward the breaking cutover; no new design document or replacement plan. Independently reviewed the uncommitted diff: cross-workflow step transitions, callee entry alignment in sync/async validation, `executeWorkflowCallsForNode` `when` gating, example migrations (`workflow-call-simple`, `node-combinations-showcase`), and inspection/CLI/GraphQL/TUI alignment are consistent; no defects found that required a code fix in this pass. Ran full `bun test` (907 pass), `bun run typecheck`, and `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged: TASK-003 step-native execution queue without merged compatibility `workflowCalls`; TASK-001 strict default loading and TASK-005 full example/doc cutover still gated on `codex-codex-euthanasia-debate` and remaining runtime work.
+
+### Session: 2026-04-25 (sync validation: cross-workflow callee entry alignment)
+
+**Tasks Completed**: TASK-001 follow-up: `validateWorkflowBundleDetailed` (sync) now runs the same cross-workflow `toStepId` vs callee entry check as `validateWorkflowBundleDetailedAsync` when `workflowRoot` is set, via shared `parseCalleeWorkflowEntryFromJsonText` and `validateCrossWorkflowCalleeEntryAlignmentSync`. Eliminates a footgun where `validateWorkflowBundle()` could accept mismatched callee targets that async load/save/GraphQL validation would reject. Added `validate.test.ts` regression. `bun run typecheck`, `bun run typecheck:server`, and full `bun test` (907 pass).
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged: TASK-003 step-native queue without merged compatibility `workflowCalls`; TASK-001 strict default and TASK-005 full example migration still blocked on `codex-codex-euthanasia-debate` and remaining runtime work.
+
+### Session: 2026-04-25 (design alignment: step transition `label` vs routing)
+
+**Tasks Completed**: Verified the working tree against the cutover plan: transitional step-first inspection plus compatibility projections and lowered cross-workflow calls still match the intended posture; full `bun run typecheck`, `bun run typecheck:server`, and `bun test` (906 pass). Fixed a real spec drift in `design-docs/specs/design-workflow-json.md`: `StepTransition.label` is not merely descriptive—the loader/validator projects local transitions onto compatibility `edges[]` with `when: label ?? "always"` and maps optional `label` on cross-workflow transitions to lowered `workflowCalls[].when`, consistent with `src/workflow/validate.ts`.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged: TASK-003 step-native queue without merged compatibility `workflowCalls`; TASK-001 repository-wide strict default and TASK-005 complete example/doc replacement still blocked on `codex-codex-euthanasia-debate` (structural `subWorkflows` + `subWorkflowConversations` required for alternating debate turns until a step-native conversation primitive exists or the demo is simplified).
+
+**Notes**: Migrating the euthanasia debate bundle to pure step-addressed authoring without `subWorkflowConversations` would drop or require re-engineering `executeConversationRound` semantics; the explicit legacy example boundary in `src/workflow/load.test.ts` remains intentional.
+
+### Session: 2026-04-25 (TASK-004/TASK-005 copy: cross-workflow step transitions)
+
+**Tasks Completed**: Aligned user-facing guidance with the lowered cross-workflow model: `buildInspectionSummary` compatibility note for structural `subWorkflows` now points authors to `steps[].transitions` with `toWorkflowId` + `resumeStepId` (or explicit `workflowCalls`) instead of naming only workflowCalls. Updated `buildNodeExecutionMailbox` role-authored rules, `parseManagerControlActions` error text, and matching tests (`manager-control`, `prompt-composition`, `engine`). Full `bun run typecheck`, `bun run typecheck:server`, and `bun test` (906 pass). Architecture unchanged: runtime still executes lowered `workflowCalls`; TASK-003 step-native queue without merged calls remains future work.
+
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+
+**Blockers**: Unchanged (TASK-003 engine step-native cross-workflow path; TASK-001 strict default and TASK-005 legacy debate example migration).
+
+### Session: 2026-04-26 (examples README drift after node-combinations migration)
+
+**Tasks Completed**: Diff review follow-up: `examples/README.md` still claimed `node-combinations-showcase` depended on ordered-node `repeat` metadata even though that bundle was migrated to strict step-addressed authoring (judge-step transitions). Updated the intro bullets to describe the current boundary: step-addressed `workflow-call-simple`, structural `subWorkflows` limited to `codex-codex-euthanasia-debate`, removed stale repeat/ordered-node wording. Re-ran `bun run typecheck`, `bun run typecheck:server`, and full `bun test` (906 pass). Architecture/design unchanged; transitional cutover posture still matches the plan opening.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 step-native queue without compat `workflowCalls` merge; TASK-005 / TASK-001 strict default blocked on `codex-codex-euthanasia-debate` and remaining runtime work.
+
+### Session: 2026-04-26 (callee entry alignment for cross-workflow transitions)
+
+**Tasks Completed**: TASK-001/TASK-003 follow-up: `validateWorkflowBundleDetailedAsync` now checks cross-workflow step transitions when `workflowRoot` is set: reads each callee’s `workflow.json` and requires `toStepId` to match the callee’s effective start step (`managerStepId` if present, else `entryStepId` or `entryNodeId`), aligned with `runWorkflowInternal`’s `initialNodeId: workflow.managerNodeId` and `design-workflow-json.md` StepTransition rules. Skips the check when `workflowRoot` is absent (in-memory / sync-only validation). Added `validate.test.ts` coverage for mismatch vs match. Full `bun run typecheck`, `bun run typecheck:server`, and `bun test` green.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Remaining: full step-native queue without compat `workflowCalls` merge; `codex-codex-euthanasia-debate`; other legacy examples for TASK-001 strict default.
+**Notes**: Supersedes the prior “callee toStepId not yet enforced” blocker for disk-backed validation; sync `validateWorkflowBundleDetailed` now applies the same callee FS checks when `workflowRoot` is set (see session “sync validation: cross-workflow callee entry alignment”).
+
+### Session: 2026-04-26 (cross-workflow step transition lowering)
+
+**Tasks Completed**: TASK-003/TASK-005 slice: implemented authored cross-workflow step transitions (`toWorkflowId` + `toStepId` + required `resumeStepId`, optional `label` mapped to runtime gating). Step-addressed validation now lowers each such transition into a deterministic runtime `workflowCall` (`id` `__cw:<callerStepId>`), merges it into the normalized bundle, forbids mixing explicit `workflowCalls` on the same caller step, and caps one cross-workflow transition per step. `executeWorkflowCallsForNode` honors optional `when` on `WorkflowCallRef` via `evaluateBranch`. Migrated `examples/workflow-call-simple` off top-level `workflowCalls` so it loads under `rejectLegacyWorkflowAuthoring: true`; updated docs (`design-docs/specs/design-workflow-json.md`, READMEs, EXPECTED_RESULTS) and tests (`validate`, `load`, `engine`). Ran `bun run typecheck`, `bun run typecheck:server`, and full `bun test`.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers** (at the time of this sub-session): callee entry alignment for `toStepId` was still pending; later implemented in the “callee entry alignment” session above. Remaining: full step-native queue without compat `workflowCalls` merge; `codex-codex-euthanasia-debate`; other legacy examples for TASK-001 strict default.
+**Notes**: Replaces the short-lived “reject toWorkflowId” validation: authors use step transitions; runtime still executes through the workflow-call path until call-step fully subsumes it.
+
+### Session: 2026-04-25 (node-combinations-showcase copy alignment)
+
+**Tasks Completed**: TASK-005 follow-up: aligned manager prompt template, `EXPECTED_RESULTS.md`, `mock-scenario.json` foreach-output summary, and foreach-lane prompts (`divedra-manager`, `foreach-manager`, `foreach-output`) with step-addressed foreach wording (judge transitions / labeled edges) instead of legacy “repeat-based foreach” phrasing. Re-ran `workflow validate`, mock `workflow run` for the bundle, and confirmed prior full `bun test` / typecheck green on the pre-change tree; re-validated mock run after edits.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/`toWorkflowId` transition lowering and step-native queue; TASK-005 `codex-codex-euthanasia-debate` structural migration and remaining `workflowCalls` docs touch-ups; TASK-001 strict default until the legacy debate bundle migrates.
+**Notes**: Architecture still matches “Current repository posture”; no design doc fork. Independent diff review of the prior inspection/TUI/GraphQL slice found no defects requiring code changes in this pass.
+
+### Session: 2026-04-25 (node-combinations-showcase step-addressed migration)
+
+**Tasks Completed**: TASK-001/TASK-005 slice: migrated `examples/node-combinations-showcase/workflow.json` from legacy ordered `nodes[]` with node-local `repeat` to canonical `managerStepId` / `entryStepId`, reusable registry entries (`id` + `nodeFile` only), and explicit `steps[]` transitions. The foreach judge step now declares two transitions with labels `continue_items` and `!(continue_items)` so runtime edge evaluation matches the former synthesized repeat edges without `workflow.loops`. Extended `src/workflow/load.test.ts` strict `rejectLegacyWorkflowAuthoring: true` coverage to include this bundle; updated `examples/README.md` and root `README.md` catalog notes. Verified `workflow validate`, mock `workflow run` (still 22 executions / 21 transitions), `bun test src/workflow/load.test.ts`, `bun run typecheck`, and full `bun test`.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged at the program level: TASK-003 engine/step-native cross-workflow lowering; TASK-005 remaining docs and `workflowCalls` / structural debate example; TASK-001 strict default until those fixtures migrate.
+
+### Session: 2026-04-25 (TUI legacy inspect identity alignment)
+
+**Tasks Completed**: TASK-004 follow-up: `buildWorkflowDefinitionContent` legacy branch now uses the same authorship fallbacks as `workflow inspect` text mode for missing `managerNodeId` / `entryNodeId` (`(not set; check workflow authorship)`), avoiding empty or misleading `undefined` display when optional fields are absent on in-memory bundles. Added a regression that loads a deliberately incomplete legacy-shaped `WorkflowJson` (via test-only assertion) and expects both lines. Re-ran `bun run typecheck` and full `bun test`; all green.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-001 strict global loading (mixed examples), TASK-003 engine/cross-workflow cutover, TASK-005 example and doc migration.
+
+### Session: 2026-04-25 (diff review, verification, architecture)
+
+**Tasks Completed**: Independent review of the working-tree diff for the inspection contract slice: `buildInspectionSummary` (step-first counts, `structuralProjection`, compatibility note gating for effective-entry on legacy-only paths), `workflow inspect` text mode (`isStepAddressedInspect` from authored `steps`, invariant on `structuralProjection`, single `compatibility:` line with three booleans), executable GraphQL `WorkflowCompatibility` on `WorkflowView`, TUI `buildWorkflowDefinitionContent` step-first `identityLines`. Re-ran `bun run typecheck`, `bun run typecheck:server`, and full `bun test`; all green. Transitional design still matches the plan opening plus "Current repository posture"; no design fork or additional implementation plan required. No further code changes needed in this pass.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-001 strict global step-addressed loading (mixed examples), TASK-003 engine/step-native queue and cross-workflow lowering, TASK-005 strict example and doc replacement.
+
+### Session: 2026-04-25 (CLI inspect compatibility flags, text/json parity)
+
+**Tasks Completed**: TASK-004 follow-up: `workflow inspect` text mode now always prints a single `compatibility:` line with the same three booleans as JSON/GraphQL (`normalizesRoleAuthoredNodesToStructuralKinds`, `usesEffectiveEntryManagerNodeId`, `usesLegacyStructuralSubWorkflows`), so operator text output is not silent when `compatibility.notes` is empty. Follow-up notes use a `compatibility notes:` header with the existing bullet list. Extended `create --worker-only` and workflow-call inspect text regressions accordingly.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, TASK-001 strict global loading.
+**Notes**: `bun run typecheck`, `bun run typecheck:server`, and full `bun test` green.
+
+### Session: 2026-04-25 (GraphQL HTTP workflow compatibility)
+
+**Tasks Completed**: TASK-004 follow-up: added `WorkflowCompatibility` to the executable GraphQL schema and `compatibility: WorkflowCompatibility!` on `WorkflowView`, matching `buildInspectionSummary` and the in-process GraphQL tests (which already read `workflow.compatibility`). Extended the worker-only `/graphql` inspection regression to query `compatibility { usesEffectiveEntryManagerNodeId notes }` and assert step-addressed worker-only bundles omit the legacy-only effective-entry normalization note.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, TASK-001 strict global loading.
+**Notes**: `bun run typecheck`, `bun run typecheck:server`, and full `bun test` green.
+
+### Session: 2026-04-25 (architecture note and verification)
+
+**Tasks Completed**: Added a "Current repository posture" subsection to align the plan opening (target breaking cutover) with the shipped transitional model (step-first inspection when `steps[]` is authored, compatibility runtime still active until deeper tasks land). Ran full `bun run typecheck`, `bun run typecheck:server`, and `bun test` on the working tree; all green. Reviewed the uncommitted inspection-contract slice (`buildInspectionSummary`, CLI/GraphQL/TUI, tests): consistent with the posture above; no additional code fixes required in this pass.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, and TASK-001 strict global loading remain the long pole; TASK-004 inspection alignment continues to receive small follow-ups as needed.
+
+### Session: 2026-04-25 (CLI inspect step-addressed predicate)
+
+**Tasks Completed**: Small TASK-004 follow-up: `workflow inspect` text mode now derives step-vs-legacy branching from `loaded.bundle.workflow.steps !== undefined`, matching `buildInspectionSummary` instead of inferring from `counts.structuralProjection` (avoids accidental drift if count shapes change). Added an explicit `structuralProjection` guard in the text counts line so strict TypeScript narrowing stays sound and a broken summary fails fast instead of printing `undefined`.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, and TASK-001 strict global loading remain blocked on legacy/compat fixtures and deeper runtime work.
+**Notes**: `bun run typecheck`, `bun run typecheck:server`, and full `bun test` green after the change.
+
+### Session: 2026-04-24 (impl verification and CLI inspect DRY)
+
+**Tasks Completed**: Architecture/design review against the cutover plan (transitional step-first inspection plus compatibility runtime remains the intended ship posture; no new design document or replacement plan). Full `bun run typecheck`, `bun run typecheck:server`, and `bun test` verification; diff review of the inspection-contract slice (`WorkflowInspectionCounts`, `structuralProjection`, library re-exports, CLI/GraphQL/TUI). Small TASK-004 follow-up: `workflow inspect` text mode now uses a single `isStepAddressedInspect` flag derived from `counts.structuralProjection` instead of duplicating the same predicate.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, and TASK-001 strict global loading remain blocked on remaining legacy/compat examples and deeper runtime work.
+**Notes**: After `src/cli.ts` DRY, `bun test src/cli.test.ts`, `bun run typecheck`, and `bun run typecheck:server` green.
+
+### Session: 2026-04-24 (library inspection type exports)
+
+**Tasks Completed**: Small TASK-004 follow-up: re-exported `WorkflowInspectionSummary`, `WorkflowInspectionCounts`, and `WorkflowStructuralProjectionCounts` from `src/lib.ts` so library consumers can type `inspectWorkflow()` and nested count shapes without importing from `workflow/inspect` internals.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/cross-workflow cutover, TASK-005 strict example migration, and TASK-001 strict global loading remain blocked on mixed legacy fixtures and deeper runtime work.
+**Notes**: Architecture still matches the transitional step-first inspection contract; no design doc changes. `bun run typecheck`, `bun run typecheck:server`, and full `bun test` green after the export addition.
+
+### Session: 2026-04-24 (CLI inspect legacy fallback)
+
+**Tasks Completed**: Small TASK-004 follow-up: legacy `workflow inspect` text mode now uses the same `entryNodeId` missing-value fallback as step-addressed `entryStepId` (`(not set; check workflow authorship)`) instead of printing an empty value after `entryNodeId:`.
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-005 and strict example migration still blocked on TASK-003 engine/cross-workflow cutover and remaining legacy fixtures; TASK-001 strict global loading still blocked on mixed examples.
+**Notes**: Re-checked the plan against the working tree: transitional “step-first inspection, compatibility runtime projection” remains aligned with design references; no new design doc or plan fork required. `bun run typecheck`, `bun run typecheck:server`, and full `bun test` green after the CLI tweak.
+
+### Session: 2026-04-24 (architecture and diff review)
+
+**Tasks Completed**: Independent review of the working-tree inspection-contract slice (`WorkflowInspectionCounts`, `structuralProjection`, optional legacy `entryNodeId` / `managerNodeId`) against the active cutover plan and design references
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged. `node-combinations-showcase` remains on legacy ordered-node authoring with node-local `repeat` (strict step-addressed registry still rejects that pattern; see prior progress notes). `codex-codex-euthanasia-debate` remains on structural `subWorkflows`. TASK-003 engine/step-native queue and full cross-workflow lowering remain pending.
+**Notes**: Design intent (transitional runtime with step-first public inspection) still matches the plan; no replacement design or new plan was required. Confirmed CLI legacy vs step-addressed branches, GraphQL SDL nullability, and TUI definition pane identity lines are mutually consistent with `buildInspectionSummary`. Worker-only **legacy** fixtures still surface top-level node counts and the effective-entry compatibility note; worker-only **scaffolded** step-addressed bundles use `entryStepId` and `structuralProjection` only (see `src/cli.test.ts`). Re-ran `bun run typecheck`, `bun run typecheck:server`, and full `bun test`; all green. No code changes in this pass beyond this log entry.
+
+### Session: 2026-04-24 (agent verification)
+
+**Tasks Completed**: Review and verification of in-progress inspection-contract slice (no additional code changes required)
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-003 engine/deterministic manager cutover and TASK-005 examples/docs replacement remain blocked on deeper runtime work; TASK-001 strict global loading still blocked on remaining legacy fixtures.
+**Notes**: Re-read design references and the active plan against the working-tree diff. The transitional architecture still matches the plan: step-authored bundles keep compatibility runtime projections while inspection surfaces are step-first. Confirmed `WorkflowInspectionCounts` / `structuralProjection` alignment across `buildInspectionSummary`, CLI text/json, executable GraphQL SDL, TUI definition pane, and tests. Ran `bun run typecheck`, `bun run typecheck:server`, and full `bun test`; all green. No defect found that required a follow-up patch in this pass.
+
+### Session: 2026-04-24 (TUI definition pane)
+
+**Tasks Completed**: Partial TASK-004 OpenTUI workflow definition text alignment with step-addressed inspection contract (`buildWorkflowDefinitionContent` omits legacy manager/entry node lines when `steps[]` is authored; step-first labels with CLI-consistent fallbacks)
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-005 blocked on engine/cross-workflow cutover; TASK-003 engine and TASK-001 strict loading still pending.
+**Notes**: Regressions in `src/tui/opentui-screen.test.ts`; `bun run typecheck` and full `bun test` green.
+
+### Session: 2026-04-24 (continuation)
+
+**Tasks Completed**: Partial TASK-001 / TASK-004 step-addressed inspection summary contract (`WorkflowInspectionCounts`, `structuralProjection`, optional legacy `entryNodeId` / `managerNodeId`)
+**Tasks In Progress**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005
+**Blockers**: Unchanged: TASK-005 remains blocked on broader engine/cross-workflow cutover; TASK-003 engine work and TASK-001 strict global loading still pending mixed fixtures.
+**Notes**: Tightened `buildInspectionSummary` so step-addressed bundles no longer surface synthetic `entryNodeId` and expose internal graph sizes only under `counts.structuralProjection` while keeping top-level `steps` / `nodeRegistry` as the primary counts. Updated CLI text output, executable GraphQL SDL (`WorkflowCounts`, nullable `entryNodeId`), and regressions. Added library `inspectWorkflow` assertions for the step-addressed scaffold shape. Re-ran `bun run typecheck` and `bun test` (full suite green).
 
 ### Session: 2026-04-24 (cursor continuation)
 
@@ -788,6 +1136,64 @@ interface StepAddressedExampleSet {
 **Tasks In Progress**: TASK-001, TASK-002, TASK-004
 **Blockers**: The blocker boundary is unchanged. The repository still intentionally supports a mixed transitional state while TASK-003 and TASK-005 remain pending, so the queue engine, cross-workflow lowering, and remaining compatibility examples are still not fully step-native.
 **Notes**: Re-checked the active architecture/design against the current diff before making further changes and did not find a design-level mismatch requiring a replacement document or new implementation plan. Review found a concrete semantic regression in the prior timeout patch instead: `runWorkflow()` had started treating `options.defaultTimeoutMs` as if it were a per-invocation timeout override, even though the documented contract is only a workflow-default override and the engine does not yet thread true invocation-local timeout overrides through manager decisions or queue advancement. Updated `src/workflow/engine.ts` so the workflow-run path now keeps the correct precedence `step-local timeout -> node timeout -> options.defaultTimeoutMs/workflow default`, while preserving the useful step-local timeout support added in this slice. Replaced the invalid regression in `src/workflow/engine.test.ts` with focused coverage that proves `defaultTimeoutMs` does not override authored step/node timeouts and that retry timeout increments still apply when the effective base timeout came from `defaultTimeoutMs`. Re-ran `bun test src/workflow/engine.test.ts`, `bun run typecheck`, and `git diff --check`; all passed. TASK-003 remains in progress because the engine still does not carry true per-invocation timeout overrides through normal workflow scheduling, but the current workflow-run semantics now match the documented transitional architecture instead of implying a capability that does not exist yet.
+
+### Session: 2026-04-26 (TASK-001 probe: strict default in tests, Bun vs Vitest env)
+
+**Tasks Completed**: Confirmed the working tree still matches the plan’s *Current repository posture* (step-first surfaces, derived `__cw:*` cross-workflow calls off normalized `workflow.workflowCalls`, `workflowCallsForExecutionMatch` for engine order). Probed **TASK-001** by removing `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT` from `vitest.config.ts` and `scripts/run-bun-tests.sh`: **159** unit tests failed because they construct legacy-shaped fixtures without passing `rejectLegacyWorkflowAuthoring: false`. Restored the env in both places and added an explicit comment in `vitest.config.ts` that the escape hatch exists until call sites are migrated. Clarified `isStrictWorkflowAuthorshipValidation` JSDoc in `src/workflow/validate.ts` that `bun test` (via `run-bun-tests.sh`) does not read Vitest `env`, so the shell `export` is required for parity with editor Vitest runs. Re-ran `bash scripts/run-bun-tests.sh` (**922** pass), `bun run typecheck`, `bun run typecheck:server`.
+
+**Tasks In Progress**: TASK-001 (next step: opt tests into `rejectLegacyWorkflowAuthoring: false` or migrate fixtures, then drop the global env), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Blockers**: TASK-001 full strict-by-default in tests remains a large fixture/refactor; no design doc change required for this session.
+
+### Session: 2026-04-25 (architecture match and working-tree review)
+
+**Tasks Completed**: Re-validated the **target** cutover (strict step-addressed authoring, step-native engine throughout, `call-step` as the only direct primitive) against the **current** **transitional** tree described in *Current repository posture* and `design-workflow-json.md` (step transitions, `toWorkflowId` + `resumeStepId`, `label` gating of derived cross-workflow calls, deterministic `__cw:<callerStepId>` ids, no persistence of derived rows on `workflow.workflowCalls`). Reviewed the pending git diff: `workflowCallsForExecutionMatch` correctly orders explicit matches then non-colliding step-derived matches; `workflowCallMatchesCallerExecution` applies `when` / `label` via `evaluateBranch` consistently with the design; `loadWorkflowFromDisk` no longer redundantly re-spreads `rejectLegacyWorkflowAuthoring: true` because `...options` already carries the flag; TUI and GraphQL inspection paths align with `effectiveWorkflowCalls` for visible workflow-call lists.
+
+**Tasks In Progress**: TASK-001 (159 tests still depend on the legacy test env until call sites pass `rejectLegacyWorkflowAuthoring: false`); TASK-002, TASK-003, TASK-004; TASK-005 completed.
+
+**Verification (this review)**: `bash scripts/run-bun-tests.sh` (922 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+**Blockers**: None for documentation; TASK-001 scope remains the same.
+
+### Session: 2026-04-25 (TASK-001 increment + child run options; diff review)
+
+**Tasks Completed**: Re-checked architecture vs. plan: still **transitional** (step-first inspection, `workflowCallsForExecutionMatch`, no derived cross-workflow rows on normalized `workflow.workflowCalls`); no design rewrite. **TASK-001**: Added explicit `rejectLegacyWorkflowAuthoring: false` to legacy disk fixtures in `src/workflow/call-node.test.ts` and broadly in `src/workflow/engine.test.ts` so those tests pass under `env -u DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT` (fail count reduced materially; full suite without env still has remaining files). Removed the same flag from **step-addressed** and **template** scenarios in `engine.test.ts` so they exercise strict authorship when the env is unset. **Bug fix / TASK-003 alignment**: `buildChildWorkflowCallOptions` in `src/workflow/engine.ts` now forwards parent `LoadOptions` used for loading children (`rejectLegacyWorkflowAuthoring`, scope/addon roots, resolved source, node addon resolvers) so nested `runWorkflowInternal` loads inherit the parent’s validation/catalog context (fixes callee load failures when the parent opts into legacy-compatible validation).
+
+**Tasks In Progress**: TASK-001 (remaining test files still need explicit flags or fixture migration before dropping `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT`), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `bun run typecheck`, `bun run typecheck:server`, `bash scripts/run-bun-tests.sh` (922 pass); `env -u DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT bun test src/workflow/engine.test.ts src/workflow/call-node.test.ts` (all pass).
+
+### Session: 2026-04-26 (TASK-001: full suite without `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT`)
+
+**Tasks Completed**: **Architecture** unchanged (transitional posture in plan *Current repository posture*). **TASK-001** progress: (1) `load.test.ts` uses shared `testLegacyAuthorshipOk` for legacy/compat disk and catalog loads; step-strict and `rejectLegacyWorkflowAuthoring: true` cases unchanged. (2) `save.test.ts` opts legacy/migration save+load paths into `rejectLegacyWorkflowAuthoring: false`. (3) `lib.test.ts` spreads the same for `callWorkflowNode` and add-on `executeWorkflow` / resume+rerun paths. (4) **Bug fix**: `executeWorkflow`, `resumeWorkflow`, and `rerunWorkflow` in `src/lib.ts` now forward `rejectLegacyWorkflowAuthoring` into `WorkflowRunOptions` (was dropped, so `loadWorkflowFromCatalog` always saw strict default). (5) `cli.test.ts`, `graphql/schema.test.ts`, `server/graphql.test.ts`, `communication-service.test.ts`, `history.test.ts`, `manager-message-service.test.ts`, `runtime-db.test.ts`, and `events/trigger-runner.test.ts` use `beforeEach` to set `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT` to `"true"` only when the outer harness left it **unset**, matching `run-bun-tests.sh` for legacy-shaped CLI/GraphQL/integration fixtures without reintroducing a global process dependency for explicitly migrated tests.
+
+**Tasks In Progress**: TASK-001 (further opt-in or migrate remaining inline legacy), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `env -u DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT bun test` (922 pass), `bun run typecheck`, `bun run typecheck:server`.
+
+### Session: 2026-04-25 (TASK-001: drop global legacy-validation env; explicit test opt-in)
+
+**Tasks Completed**: Removed `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT` from `vitest.config.ts` and `scripts/run-bun-tests.sh`. Dropped per-file `beforeEach` env injection in favor of explicit `rejectLegacyWorkflowAuthoring: false` on load/run options in `history`, `runtime-db`, `manager-message-service`, `communication-service`, `graphql/schema.test.ts`, `server/graphql.test.ts`, and `events/trigger-runner.test.ts`. Added `withLegacyWorkflowAuthorshipForCli` in `cli.test.ts` for integration tests that exercise the real CLI entrypoint against legacy disk bundles (no `LoadOptions` threading). Updated `isStrictWorkflowAuthorshipValidation` / `LoadOptions` documentation in code to match.
+
+**Tasks In Progress**: TASK-001 (remaining checklist: primary-path-only strict authoring in production is already true; broader removal of legacy fixture shapes is still future work), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `bash scripts/run-bun-tests.sh`, `bun test`, `bun run typecheck:server` (922 pass).
+
+### Session: 2026-04-26 (TASK-001: local-transition `resumeStepId` guard)
+
+**Tasks Completed**: Re-checked the working tree against the current step-addressed design and cutover posture; no replacement design doc or new implementation plan was needed. Diff review found a concrete authored-schema gap instead: `normalizeWorkflowStepTransition()` accepted `resumeStepId` even when `toWorkflowId` was absent, silently allowing a cross-workflow-only field on ordinary local transitions. Tightened `src/workflow/validate.ts` so local transitions now reject `resumeStepId`, added a focused regression in `src/workflow/validate.test.ts`, and clarified `design-docs/specs/design-workflow-json.md` that `resumeStepId` must be omitted unless the transition targets another workflow.
+
+**Tasks In Progress**: TASK-001 (remaining checklist: primary-path-only strict authoring in production is already true; broader removal of legacy fixture shapes is still future work), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `bun test src/workflow/validate.test.ts`, `bun run typecheck`, `bun run typecheck:server`.
+
+### Session: 2026-04-26 (TASK-001: cross-workflow callee `workflowId` resolution parity)
+
+**Tasks Completed**: Re-checked the working tree against the current step-addressed design and cutover posture; no design rewrite or replacement implementation plan was needed. Diff review found a runtime/validation mismatch in the new cross-workflow callee-entry alignment helper: `runWorkflowInternal` resolves child workflows by authored `workflowId` via catalog/root lookup, but `src/workflow/validate.ts` still assumed `toWorkflowId` matched the callee directory name (`<workflowRoot>/<toWorkflowId>/workflow.json`). That incorrectly rejected valid bundles when a callee lived in a differently named directory but still authored the requested `workflowId`. Updated sync + async callee-entry validation to scan the workflow root by `workflowId` in the same order the runtime uses (preferred direct directory, then other directories), then infer the start step from the resolved callee bundle. Added focused regressions in `src/workflow/validate.test.ts` for async + sync validation with a directory-name / `workflowId` mismatch.
+
+**Tasks In Progress**: TASK-001 (remaining checklist: primary-path-only strict authoring in production is already true; broader removal of legacy fixture shapes is still future work), TASK-002, TASK-003, TASK-004. TASK-005 completed.
+
+**Verification**: `bun test src/workflow/validate.test.ts`, `bun run typecheck`.
 
 ## Related Plans
 

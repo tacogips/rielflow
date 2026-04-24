@@ -9,6 +9,12 @@ import {
   computeWorkflowRevisionFromFiles,
 } from "./revision";
 import { saveWorkflowToDisk } from "./save";
+import type { LoadOptions } from "./types";
+
+const testLegacyAuthorshipOk: Pick<
+  LoadOptions,
+  "rejectLegacyWorkflowAuthoring"
+> = { rejectLegacyWorkflowAuthoring: false };
 
 const tempDirs: string[] = [];
 
@@ -265,6 +271,7 @@ describe("saveWorkflowToDisk", () => {
     );
 
     const loaded = await loadWorkflowFromDisk("chat-reply", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(loaded.ok).toBe(true);
@@ -278,7 +285,7 @@ describe("saveWorkflowToDisk", () => {
         workflow: loaded.value.bundle.workflow,
         nodePayloads: loaded.value.bundle.nodePayloads,
       },
-      { workflowRoot: root },
+      { ...testLegacyAuthorshipOk, workflowRoot: root },
     );
     expect(saveResult.ok).toBe(true);
     if (!saveResult.ok) {
@@ -368,6 +375,7 @@ describe("saveWorkflowToDisk", () => {
     );
 
     const loaded = await loadWorkflowFromDisk("legacy-demo", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(loaded.ok).toBe(true);
@@ -382,6 +390,7 @@ describe("saveWorkflowToDisk", () => {
         nodePayloads: loaded.value.bundle.nodePayloads,
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );
@@ -467,6 +476,7 @@ describe("saveWorkflowToDisk", () => {
     );
 
     const loaded = await loadWorkflowFromDisk("legacy-demo", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(loaded.ok).toBe(true);
@@ -495,6 +505,7 @@ describe("saveWorkflowToDisk", () => {
         nodePayloads: loaded.value.bundle.nodePayloads,
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );
@@ -1591,6 +1602,7 @@ describe("saveWorkflowToDisk", () => {
         },
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );
@@ -1642,6 +1654,7 @@ describe("saveWorkflowToDisk", () => {
     });
 
     const reloaded = await loadWorkflowFromDisk("minimal-managed", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(reloaded.ok).toBe(true);
@@ -2049,6 +2062,7 @@ describe("saveWorkflowToDisk", () => {
         nodePayloads: {},
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );
@@ -2072,6 +2086,7 @@ describe("saveWorkflowToDisk", () => {
     expect(nodeJsonRaw).toContain('"promptTemplate": "inline manager"');
 
     const reloaded = await loadWorkflowFromDisk("inline-demo", {
+      ...testLegacyAuthorshipOk,
       workflowRoot: root,
     });
     expect(reloaded.ok).toBe(true);
@@ -2125,6 +2140,7 @@ describe("saveWorkflowToDisk", () => {
         },
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );
@@ -2182,6 +2198,7 @@ describe("saveWorkflowToDisk", () => {
         },
       },
       {
+        ...testLegacyAuthorshipOk,
         workflowRoot: root,
       },
     );

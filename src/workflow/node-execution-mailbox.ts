@@ -5,6 +5,7 @@ import {
   normalizeManagerMessageForMailbox,
   normalizePlainTextValue,
 } from "./json-boundary";
+import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import type {
   JsonObject,
@@ -208,7 +209,7 @@ function buildNodeReason(
   if (nodeRef.role === "manager") {
     return hasStructuralSubWorkflowBoundaries(workflow)
       ? "Coordinate the overall workflow plan, child-scope execution, output assessment, and retry decisions."
-      : (workflow.workflowCalls ?? []).length > 0
+      : effectiveWorkflowCalls(workflow).length > 0
         ? "Coordinate the current workflow plan, worker execution, workflow-call decisions, output assessment, and retry decisions."
         : "Coordinate the current workflow plan, worker execution, output assessment, and retry decisions.";
   }
@@ -473,7 +474,7 @@ function buildManagerControlMetadata(input: {
       "Use `retry-node` when a prior worker result is insufficient and that node must run again.",
       "Use `replay-communication` to redeliver an existing communication within the current workflow execution.",
       "Use `execute-optional-node` or `skip-optional-node` only for pending optional nodes owned by this manager.",
-      "Explicit `workflowCalls` run automatically from authored caller nodes; do not emit `start-sub-workflow` or `deliver-to-child-input` for that path.",
+      "Cross-workflow calls (authored as `steps[].transitions` with toWorkflowId or as explicit `workflowCalls`) run automatically from the caller step; do not emit `start-sub-workflow` or `deliver-to-child-input` for that path.",
       "Omit `managerControl` when no runtime control change is needed.",
     ],
   };

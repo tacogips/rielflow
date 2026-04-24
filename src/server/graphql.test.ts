@@ -69,6 +69,7 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
+    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -102,6 +103,7 @@ async function createWorkerOnlyWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -218,6 +220,7 @@ async function createWorkflowCallWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
+      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -258,12 +261,15 @@ describe("GraphQL HTTP transport", () => {
               workflow(workflowName: $workflowName) {
                 workflowId
                 hasManagerNode
-                managerNodeId
-                entryNodeId
+                managerStepId
+                entryStepId
                 workflowCallIds
                 counts {
-                  nodes
+                  steps
                   workflowCalls
+                  structuralProjection {
+                    nodes
+                  }
                 }
               }
             }
@@ -282,12 +288,15 @@ describe("GraphQL HTTP transport", () => {
         workflow: {
           workflowId: "demo",
           hasManagerNode: true,
-          managerNodeId: "divedra-manager",
-          entryNodeId: "divedra-manager",
+          managerStepId: "divedra-manager",
+          entryStepId: "divedra-manager",
           workflowCallIds: [],
           counts: {
-            nodes: 2,
+            steps: 2,
             workflowCalls: 0,
+            structuralProjection: {
+              nodes: 2,
+            },
           },
         },
       },
@@ -312,10 +321,18 @@ describe("GraphQL HTTP transport", () => {
                 hasManagerNode
                 managerNodeId
                 entryNodeId
+                entryStepId
                 workflowCallIds
                 counts {
-                  nodes
+                  steps
                   workflowCalls
+                  structuralProjection {
+                    nodes
+                  }
+                }
+                compatibility {
+                  usesEffectiveEntryManagerNodeId
+                  notes
                 }
               }
             }
@@ -329,21 +346,30 @@ describe("GraphQL HTTP transport", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      data: {
-        workflow: {
-          workflowId: "solo",
-          hasManagerNode: false,
-          managerNodeId: null,
-          entryNodeId: "main-worker",
-          workflowCallIds: [],
-          counts: {
-            nodes: 1,
-            workflowCalls: 0,
-          },
+    const payload = await response.json();
+    expect(payload.data?.workflow).toMatchObject({
+      workflowId: "solo",
+      hasManagerNode: false,
+      managerNodeId: null,
+      entryNodeId: null,
+      entryStepId: "main-worker",
+      workflowCallIds: [],
+      counts: {
+        steps: 1,
+        workflowCalls: 0,
+        structuralProjection: {
+          nodes: 1,
         },
       },
+      compatibility: {
+        usesEffectiveEntryManagerNodeId: true,
+      },
     });
+    expect(
+      payload.data?.workflow?.compatibility?.notes ?? [],
+    ).not.toContain(
+      "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
+    );
   });
 
   test("reports scaffolded managed starters as not runtime-ready over /graphql", async () => {

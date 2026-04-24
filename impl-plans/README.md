@@ -26,8 +26,8 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
-| `step-addressed-workflow-runtime-cutover` | Ready | `design-workflow-json`, `design-node-jump-and-code-manager-runtime`, `design-workflow-steps-and-node-reuse`, `architecture`, `command`, `qa-step-schema-workflow-calls` |
-| `auto-improve-superviser-mode` | Planning | `design-auto-improve-superviser-mode`, `design-node-jump-and-code-manager-runtime`, `architecture`, `command` |
+| `step-addressed-workflow-runtime-cutover` | In Progress | `design-workflow-json`, `design-node-jump-and-code-manager-runtime`, `design-workflow-steps-and-node-reuse`, `architecture`, `command`, `qa-step-schema-workflow-calls` |
+| `auto-improve-superviser-mode` | In Progress | `design-auto-improve-superviser-mode`, `design-node-jump-and-code-manager-runtime`, `architecture`, `command` |
 
 ## Completed Plans
 
@@ -286,8 +286,8 @@ impl-plans/
 | 126   | COMPLETED   | -          |
 | 127   | COMPLETED   | -          |
 | 128   | COMPLETED   | -          |
-| 129   | READY       | Phases 16, 65, 71, 82 |
-| 130   | PLANNING    | Phase 129  |
+| 129   | IN_PROGRESS | Phases 16, 65, 71, 82 |
+| 130   | IN_PROGRESS | Phase 129  |
 
 ### Phase to Plans Mapping
 

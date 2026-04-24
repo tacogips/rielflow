@@ -288,7 +288,10 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       variables: {},
     });
 
-    const loaded = await loadWorkflowFromDisk(workflowName, { workflowRoot });
+    const loaded = await loadWorkflowFromDisk(workflowName, {
+      workflowRoot,
+      rejectLegacyWorkflowAuthoring: true,
+    });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) {
       return;
@@ -692,6 +695,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       ),
       {
         workflowRoot: root,
+        rejectLegacyWorkflowAuthoring: false,
       },
     );
 
@@ -772,6 +776,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       ),
       {
         workflowRoot: root,
+        rejectLegacyWorkflowAuthoring: false,
       },
     );
 
@@ -928,6 +933,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     const loaded = await loadWorkflowFromDisk("runtime-ready-bundle", {
       workflowRoot: root,
+      rejectLegacyWorkflowAuthoring: false,
     });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) {
@@ -938,6 +944,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       loaded.value.bundle,
       {
         workflowRoot: root,
+        rejectLegacyWorkflowAuthoring: false,
       },
     );
 

@@ -15,14 +15,21 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodeTimeoutMs: Int!
   }
 
-  type WorkflowCounts {
+  type WorkflowStructuralProjectionCounts {
     nodes: Int!
-    nodeRegistry: Int!
-    steps: Int!
     edges: Int!
     loops: Int!
+  }
+
+  type WorkflowCounts {
+    steps: Int!
+    nodeRegistry: Int!
     workflowCalls: Int!
     legacySubWorkflows: Int!
+    nodes: Int
+    edges: Int
+    loops: Int
+    structuralProjection: WorkflowStructuralProjectionCounts
   }
 
   type WorkflowAddonSource {
@@ -52,13 +59,20 @@ const GRAPHQL_SCHEMA_TEXT = `
     blockers: [String!]!
   }
 
+  type WorkflowCompatibility {
+    normalizesRoleAuthoredNodesToStructuralKinds: Boolean!
+    usesEffectiveEntryManagerNodeId: Boolean!
+    usesLegacyStructuralSubWorkflows: Boolean!
+    notes: [String!]!
+  }
+
   type WorkflowView {
     workflowName: String!
     workflowId: String!
     description: String!
     hasManagerNode: Boolean!
     managerNodeId: String
-    entryNodeId: String!
+    entryNodeId: String
     managerStepId: String
     entryStepId: String
     stepIds: [String!]!
@@ -71,6 +85,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     artifactWorkflowRoot: String!
     addonSources: [WorkflowAddonSource!]!
     runtime: WorkflowRuntimeReadiness!
+    compatibility: WorkflowCompatibility!
   }
 
   type WorkflowDefinitionView {

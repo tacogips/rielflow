@@ -93,3 +93,4 @@ The `examples/codex-codex-euthanasia-debate/` bundle uses:
   `##prompt ... ## args ...`
 
 This lets each debater keep a stable role across turns while only bootstrapping the session once.
+The workflow uses step-addressed `transitions` and a `debate-judge` step (labeled branches) to schedule rounds instead of structural `subWorkflowConversations`.

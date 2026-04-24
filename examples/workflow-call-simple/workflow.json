@@ -1,6 +1,6 @@
 {
   "workflowId": "workflow-call-simple",
-  "description": "Managed parent workflow authored in the step-addressed shape while the explicit workflowCalls compatibility path still invokes a worker-only review workflow and returns the result to a later step.",
+  "description": "Managed parent workflow in the step-addressed shape: draft-write invokes the worker-only review workflow via a cross-workflow step transition and resumes at apply-review with the callee result.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -11,15 +11,6 @@
   },
   "managerStepId": "divedra-manager",
   "entryStepId": "divedra-manager",
-  "workflowCalls": [
-    {
-      "id": "call-review",
-      "workflowId": "workflow-call-review-target",
-      "callerNodeId": "draft-write",
-      "callerStepId": "draft-write",
-      "resultNodeId": "apply-review"
-    }
-  ],
   "nodes": [
     {
       "id": "divedra-manager",
@@ -47,7 +38,14 @@
     },
     {
       "id": "draft-write",
-      "nodeId": "draft-write"
+      "nodeId": "draft-write",
+      "transitions": [
+        {
+          "toWorkflowId": "workflow-call-review-target",
+          "toStepId": "reviewer",
+          "resumeStepId": "apply-review"
+        }
+      ]
     },
     {
       "id": "apply-review",

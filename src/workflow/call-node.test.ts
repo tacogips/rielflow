@@ -17,6 +17,11 @@ import { loadSession, saveSession } from "./session-store";
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
 
+/** On-disk fixtures use legacy-authored graph fields; keep loads explicit for strict-default harness runs. */
+const legacyAuthoredWorkflowLoadOpts = {
+  rejectLegacyWorkflowAuthoring: false,
+} as const;
+
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), "divedra-call-node-test-"),
@@ -254,6 +259,7 @@ describe("callNode", () => {
     const adapter = new PromptAndAmbientCaptureAdapter();
     const result = await callNode(
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         rootDataDir: path.join(root, "data"),
@@ -304,6 +310,7 @@ describe("callNode", () => {
     });
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       rootDataDir: path.join(root, "data"),
@@ -361,6 +368,7 @@ describe("callNode", () => {
     const adapter = new RepairingAdapter();
     const result = await callNode(
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -530,6 +538,7 @@ describe("callNode", () => {
     const adapter = new InvalidThenFixedAdapter();
     const result = await callNode(
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -595,6 +604,7 @@ describe("callNode", () => {
     expect(saved.ok).toBe(true);
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -626,6 +636,7 @@ describe("callNode", () => {
     });
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -657,6 +668,7 @@ describe("callNode", () => {
     });
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -712,6 +724,7 @@ describe("callNode", () => {
     });
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       rootDataDir,
@@ -769,6 +782,7 @@ describe("callNode", () => {
 
     const result = await callNode(
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -838,6 +852,7 @@ describe("callNode", () => {
     });
 
     const result = await callNode({
+      ...legacyAuthoredWorkflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -882,6 +897,7 @@ describe("callNode", () => {
 
     const result = await callNode(
       {
+        ...legacyAuthoredWorkflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,

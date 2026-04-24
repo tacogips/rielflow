@@ -31,6 +31,7 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
+import { workflowCallsForExecutionMatch } from "./cross-workflow-from-steps";
 import { composeExecutionPrompts } from "./prompt-composition";
 import {
   parseManagerControlPayload,
@@ -92,6 +93,7 @@ import type {
   LoopRule,
   NodePayload,
   SubWorkflowRef,
+  WorkflowCallRef,
   WorkflowEdge,
   WorkflowJson,
   WorkflowTimeoutPolicy,
@@ -925,6 +927,19 @@ function buildChildWorkflowCallOptions(
     ...(options.workflowRoot === undefined
       ? {}
       : { workflowRoot: options.workflowRoot }),
+    ...(options.workflowScope === undefined
+      ? {}
+      : { workflowScope: options.workflowScope }),
+    ...(options.userRoot === undefined ? {} : { userRoot: options.userRoot }),
+    ...(options.projectRoot === undefined
+      ? {}
+      : { projectRoot: options.projectRoot }),
+    ...(options.addonRoot === undefined
+      ? {}
+      : { addonRoot: options.addonRoot }),
+    ...(options.resolvedWorkflowSource === undefined
+      ? {}
+      : { resolvedWorkflowSource: options.resolvedWorkflowSource }),
     ...(options.artifactRoot === undefined
       ? {}
       : { artifactRoot: options.artifactRoot }),
@@ -936,6 +951,21 @@ function buildChildWorkflowCallOptions(
       : { sessionStoreRoot: options.sessionStoreRoot }),
     ...(options.env === undefined ? {} : { env: options.env }),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    ...(options.nodeAddons === undefined
+      ? {}
+      : { nodeAddons: options.nodeAddons }),
+    ...(options.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: options.asyncNodeAddonResolvers }),
+    ...(options.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: options.nodeAddonResolvers }),
+    ...(options.rejectLegacyWorkflowAuthoring === undefined
+      ? {}
+      : {
+          rejectLegacyWorkflowAuthoring:
+            options.rejectLegacyWorkflowAuthoring,
+        }),
     ...(options.workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory: options.workflowWorkingDirectory }),
@@ -1014,6 +1044,35 @@ interface WorkflowCallExecutionResult {
   }[];
 }
 
+function workflowCallMatchesCallerExecution(input: {
+  readonly entry: WorkflowCallRef;
+  readonly callerNodeId: string;
+  readonly callerStepId?: string;
+  readonly callerOutputPayload: Readonly<Record<string, unknown>>;
+}): boolean {
+  const { entry } = input;
+  if (entry.when !== undefined) {
+    if (
+      !evaluateBranch({
+        when: entry.when,
+        output: input.callerOutputPayload,
+      })
+    ) {
+      return false;
+    }
+  }
+  if (entry.callerStepId !== undefined) {
+    if (input.callerStepId === undefined) {
+      return false;
+    }
+    return (
+      entry.callerStepId === input.callerStepId &&
+      entry.callerNodeId === input.callerNodeId
+    );
+  }
+  return entry.callerNodeId === input.callerNodeId;
+}
+
 async function executeWorkflowCallsForNode(input: {
   readonly workflow: WorkflowJson;
   readonly workflowName: string;
@@ -1033,19 +1092,18 @@ async function executeWorkflowCallsForNode(input: {
   readonly guards: EngineExecutionGuards | undefined;
   readonly workflowCallAncestors: readonly string[];
 }): Promise<Result<WorkflowCallExecutionResult, string>> {
-  const relevantCalls = (input.workflow.workflowCalls ?? []).filter(
-    (entry) => {
-      if (entry.callerStepId !== undefined) {
-        if (input.callerStepId === undefined) {
-          return false;
-        }
-        return (
-          entry.callerStepId === input.callerStepId &&
-          entry.callerNodeId === input.callerNodeId
-        );
-      }
-      return entry.callerNodeId === input.callerNodeId;
-    },
+  const matchCtx = {
+    callerNodeId: input.callerNodeId,
+    ...(input.callerStepId === undefined
+      ? {}
+      : { callerStepId: input.callerStepId }),
+    callerOutputPayload: input.callerOutputPayload,
+  };
+  // Union explicit `workflowCalls` with step `toWorkflowId` transitions; order and
+  // dedup rules live in `workflowCallsForExecutionMatch` (differs from `effectiveWorkflowCalls`).
+  const relevantCalls = workflowCallsForExecutionMatch(
+    input.workflow,
+    (entry) => workflowCallMatchesCallerExecution({ entry, ...matchCtx }),
   );
   if (relevantCalls.length === 0) {
     return ok({
@@ -1860,6 +1918,7 @@ async function runWorkflowInternal(
 
   const runtimeVariables = options.runtimeVariables ?? {};
   const workflow = loaded.value.bundle.workflow;
+  const stepAddressedExecution = workflow.steps !== undefined;
   const nodeMap = loaded.value.bundle.nodePayloads;
   const workflowNodes = new Map(
     workflow.nodes.map((entry) => [entry.id, entry]),
@@ -2076,12 +2135,18 @@ async function runWorkflowInternal(
         status: "failed",
         currentNodeId: nodeId,
         endedAt: nowIso(),
-        lastError: `missing node definition for '${nodeId}'`,
+        lastError: stepAddressedExecution
+          ? `missing step definition for '${nodeId}'`
+          : `missing node definition for '${nodeId}'`,
       };
       await saveSession(failed, options);
       return err({
         exitCode: 1,
-        message: failed.lastError ?? "missing node definition",
+        message:
+          failed.lastError ??
+          (stepAddressedExecution
+            ? "missing step definition"
+            : "missing node definition"),
       });
     }
     const pendingOptionalDecision = findPendingOptionalNodeDecision(
@@ -2149,7 +2214,9 @@ async function runWorkflowInternal(
         status: "failed",
         currentNodeId: nodeId,
         endedAt: nowIso(),
-        lastError: `node '${nodeId}' is missing executable node fields`,
+        lastError: stepAddressedExecution
+          ? `step '${nodeId}' is missing executable fields`
+          : `node '${nodeId}' is missing executable node fields`,
       };
       await saveSession(failed, options);
       return err({
@@ -2694,7 +2761,9 @@ async function runWorkflowInternal(
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `node '${nodeId}' is missing agent execution fields`,
+          lastError: stepAddressedExecution
+            ? `step '${nodeId}' is missing agent execution fields`
+            : `node '${nodeId}' is missing agent execution fields`,
         };
         await saveSession(failed, options);
         return err({

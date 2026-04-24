@@ -16,7 +16,10 @@ import {
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
-import { validateWorkflowBundleAsync } from "./validate";
+import {
+  isStrictWorkflowAuthorshipValidation,
+  validateWorkflowBundleAsync,
+} from "./validate";
 import {
   collectPromptTemplateFiles,
   collectWorkflowRevisionNodeFiles,
@@ -1336,7 +1339,7 @@ export async function saveWorkflowToDisk(
   }
 
   const shouldRejectLegacyWorkflowAuthoring =
-    options.rejectLegacyWorkflowAuthoring === true ||
+    isStrictWorkflowAuthorshipValidation(options) ||
     isStepAddressedNormalizedWorkflow(input.workflow);
   const authoredWorkflow = isStepAddressedNormalizedWorkflow(input.workflow)
     ? createPersistedWorkflowJson({
