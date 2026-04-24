@@ -10,7 +10,6 @@ import {
   buildAdapterDivedraHookContext,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
-  type AdapterExecutionInput,
   type AdapterExecutionOutput,
   type AdapterProcessLog,
   type MockNodeScenario,
@@ -21,7 +20,6 @@ import {
   executeNativeNodeWithTimeout,
 } from "./adapter-execution";
 import { DispatchingNodeAdapter } from "./adapters/dispatch";
-import { resolveNodeExecutionBackend } from "./adapters/dispatch";
 import { assembleNodeInput } from "./input-assembly";
 import { normalizeExternalMailboxBusinessPayload } from "./json-boundary";
 import {
@@ -69,8 +67,9 @@ import {
 import {
   createSessionId,
   createSessionState,
+  persistNodeBackendSession,
+  resolveRequestedBackendSession,
   type CommunicationRecord,
-  type NodeBackendSessionRecord,
   type NodeExecutionRecord,
   type OutputRef,
   type PendingOptionalNodeDecision,
@@ -844,6 +843,7 @@ function buildWorkflowCallRuntimeVariables(input: {
   readonly parentWorkflowId: string;
   readonly parentWorkflowExecutionId: string;
   readonly callerNodeId: string;
+  readonly callerStepId?: string;
   readonly workflowCallId: string;
   readonly payload: Readonly<Record<string, unknown>>;
 }): Readonly<Record<string, unknown>> {
@@ -863,6 +863,9 @@ function buildWorkflowCallRuntimeVariables(input: {
       parentWorkflowId: input.parentWorkflowId,
       parentWorkflowExecutionId: input.parentWorkflowExecutionId,
       callerNodeId: input.callerNodeId,
+      ...(input.callerStepId === undefined
+        ? {}
+        : { callerStepId: input.callerStepId }),
       input: input.payload,
     },
   };
@@ -919,6 +922,7 @@ async function persistWorkflowCallArtifact(input: {
   readonly callId: string;
   readonly workflowId: string;
   readonly callerNodeId: string;
+  readonly callerStepId?: string;
   readonly childWorkflowName: string;
   readonly childWorkflowId: string;
   readonly childSession: WorkflowSessionState;
@@ -935,6 +939,9 @@ async function persistWorkflowCallArtifact(input: {
       workflowCallId: input.callId,
       workflowId: input.workflowId,
       callerNodeId: input.callerNodeId,
+      ...(input.callerStepId === undefined
+        ? {}
+        : { callerStepId: input.callerStepId }),
       parentNodeExecId: input.parentNodeExecId,
       childWorkflowName: input.childWorkflowName,
       childWorkflowId: input.childWorkflowId,
@@ -968,6 +975,7 @@ async function executeWorkflowCallsForNode(input: {
   readonly options: WorkflowRunOptions;
   readonly artifactWorkflowRoot: string;
   readonly callerNodeId: string;
+  readonly callerStepId?: string;
   readonly callerNodeExecId: string;
   readonly callerArtifactDir: string;
   readonly callerOutputPayload: Readonly<Record<string, unknown>>;
@@ -980,7 +988,18 @@ async function executeWorkflowCallsForNode(input: {
   readonly workflowCallAncestors: readonly string[];
 }): Promise<Result<WorkflowCallExecutionResult, string>> {
   const relevantCalls = (input.workflow.workflowCalls ?? []).filter(
-    (entry) => entry.callerNodeId === input.callerNodeId,
+    (entry) => {
+      if (entry.callerStepId !== undefined) {
+        if (input.callerStepId === undefined) {
+          return false;
+        }
+        return (
+          entry.callerStepId === input.callerStepId &&
+          entry.callerNodeId === input.callerNodeId
+        );
+      }
+      return entry.callerNodeId === input.callerNodeId;
+    },
   );
   if (relevantCalls.length === 0) {
     return ok({
@@ -1029,6 +1048,9 @@ async function executeWorkflowCallsForNode(input: {
           parentWorkflowId: input.workflow.workflowId,
           parentWorkflowExecutionId: input.session.sessionId,
           callerNodeId: input.callerNodeId,
+          ...(input.callerStepId === undefined
+            ? {}
+            : { callerStepId: input.callerStepId }),
           workflowCallId: workflowCall.id,
           payload: input.callerOutputPayload["payload"] as Readonly<
             Record<string, unknown>
@@ -1065,6 +1087,9 @@ async function executeWorkflowCallsForNode(input: {
       callId: workflowCall.id,
       workflowId: workflowCall.workflowId,
       callerNodeId: input.callerNodeId,
+      ...(input.callerStepId === undefined
+        ? {}
+        : { callerStepId: input.callerStepId }),
       childWorkflowName: loadedChild.value.workflowName,
       childWorkflowId: childWorkflow.workflowId,
       childSession: childResult.value.session,
@@ -1652,91 +1677,101 @@ function cloneSession(session: WorkflowSessionState): WorkflowSessionState {
   };
 }
 
-function resolveRequestedBackendSession(
-  session: WorkflowSessionState,
-  node: AgentNodePayload,
-): AdapterExecutionInput["backendSession"] | undefined {
-  if (node.sessionPolicy === undefined) {
-    return undefined;
-  }
-
-  if (node.sessionPolicy.mode === "new") {
-    return { mode: "new" };
-  }
-
-  const existing = session.nodeBackendSessions?.[node.id];
-  if (existing === undefined) {
-    return { mode: "new" };
-  }
-
-  const backend = resolveNodeExecutionBackend(node);
-  if (existing.backend !== backend) {
-    return { mode: "new" };
-  }
-
+function resolveStepExecutionAddress(
+  workflow: WorkflowJson,
+  nodeId: string,
+): {
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly promptVariant?: string;
+  readonly inheritFromStepId?: string;
+} {
+  const step = workflow.steps?.find((entry) => entry.id === nodeId);
   return {
-    mode: "reuse",
-    sessionId: existing.sessionId,
+    ...(step?.id === undefined ? {} : { stepId: step.id }),
+    ...(step?.nodeId === undefined ? {} : { nodeRegistryId: step.nodeId }),
+    ...(step?.promptVariant === undefined
+      ? {}
+      : { promptVariant: step.promptVariant }),
+    ...(step?.sessionPolicy?.inheritFromStepId === undefined
+      ? {}
+      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
   };
 }
 
-function persistNodeBackendSession(input: {
-  readonly session: WorkflowSessionState;
-  readonly node: AgentNodePayload;
-  readonly nodeExecId: string;
-  readonly provider: string;
-  readonly endedAt: string;
-  readonly backendSession: AdapterExecutionInput["backendSession"];
-  readonly returnedSessionId?: string;
-}): Readonly<Record<string, NodeBackendSessionRecord>> {
-  const current = { ...(input.session.nodeBackendSessions ?? {}) };
-  if (input.node.sessionPolicy?.mode !== "reuse") {
-    return current;
+function resolveBackendSessionSelection(
+  workflow: WorkflowJson,
+  nodeId: string,
+  node: AgentNodePayload,
+): {
+  readonly sessionLookupNodeId?: string;
+  readonly inheritFromStepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly stepId?: string;
+  readonly promptVariant?: string;
+} {
+  if (node.sessionPolicy?.mode !== "reuse") {
+    return {};
   }
 
-  const sessionId = input.returnedSessionId ?? input.backendSession?.sessionId;
-  if (sessionId === undefined) {
-    return current;
-  }
-
-  const existing = current[input.node.id];
-  current[input.node.id] = {
-    nodeId: input.node.id,
-    backend: resolveNodeExecutionBackend(input.node),
-    provider: input.provider,
-    sessionId,
-    createdAt: existing?.createdAt ?? input.endedAt,
-    updatedAt: input.endedAt,
-    lastNodeExecId: input.nodeExecId,
+  const stepExecutionAddress = resolveStepExecutionAddress(workflow, nodeId);
+  return {
+    sessionLookupNodeId: stepExecutionAddress.inheritFromStepId ?? node.id,
+    ...(stepExecutionAddress.inheritFromStepId === undefined
+      ? {}
+      : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
+    ...(stepExecutionAddress.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+    ...(stepExecutionAddress.stepId === undefined
+      ? {}
+      : { stepId: stepExecutionAddress.stepId }),
+    ...(stepExecutionAddress.promptVariant === undefined
+      ? {}
+      : { promptVariant: stepExecutionAddress.promptVariant }),
   };
-  return current;
 }
 
 function buildScenarioExecutableNodePayload(
   node: NodePayload,
   hasScenarioEntry: boolean,
+  allowScenarioFallback: boolean,
+  allowDryRun: boolean,
 ): AgentNodePayload | null {
   const agentNodePayload = asAgentNodePayload(node);
   if (agentNodePayload !== null) {
     return agentNodePayload;
   }
-  if (!hasScenarioEntry) {
-    return null;
-  }
+
   if (
-    node.nodeType !== "command" &&
-    node.nodeType !== "container" &&
-    node.nodeType !== "addon"
+    node.managerType === "code" &&
+    (allowScenarioFallback || allowDryRun) &&
+    node.promptTemplate !== undefined
   ) {
-    return null;
+    return {
+      ...node,
+      nodeType: "agent",
+      model: node.model ?? "deterministic-code-manager",
+      promptTemplate: node.promptTemplate,
+    };
   }
-  const { nodeType: _nodeType, ...rest } = node;
-  return {
-    ...rest,
-    nodeType: "agent",
-    model: `scenario/${node.nodeType}`,
-    promptTemplate: node.promptTemplate ?? "",
-  };
+
+  if (
+    hasScenarioEntry &&
+    (node.nodeType === "command" ||
+      node.nodeType === "container" ||
+      node.nodeType === "addon")
+  ) {
+    const { nodeType: _nodeType, ...rest } = node;
+    return {
+      ...rest,
+      nodeType: "agent",
+      model: `scenario/${node.nodeType}`,
+      promptTemplate: node.promptTemplate ?? "",
+    };
+  }
+
+  return null;
 }
 
 async function runWorkflowInternal(
@@ -1817,16 +1852,17 @@ async function runWorkflowInternal(
 
   let session: WorkflowSessionState;
   if (options.rerunFromSessionId !== undefined) {
+    const rerunTargetLabel = workflow.steps === undefined ? "node" : "step";
     if (options.rerunFromNodeId === undefined) {
       return err({
         exitCode: 1,
-        message: "rerunFromNodeId is required when rerunFromSessionId is set",
+        message: `rerun ${rerunTargetLabel} id is required when rerunFromSessionId is set`,
       });
     }
     if (!workflowNodes.has(options.rerunFromNodeId)) {
       return err({
         exitCode: 1,
-        message: `unknown rerun node '${options.rerunFromNodeId}'`,
+        message: `unknown rerun ${rerunTargetLabel} '${options.rerunFromNodeId}'`,
       });
     }
 
@@ -2044,6 +2080,8 @@ async function runWorkflowInternal(
     const executableNodePayload = buildScenarioExecutableNodePayload(
       nodePayload,
       options.mockScenario?.[nodeId] !== undefined,
+      options.mockScenario !== undefined,
+      options.dryRun === true,
     );
     const agentNodePayload = executableNodePayload;
     const nativeNodePayload =
@@ -2101,6 +2139,11 @@ async function runWorkflowInternal(
       await mkdir(artifactDir, { recursive: true });
 
       const executionNodePayload = agentNodePayload ?? nodePayload;
+      const stepExecutionAddress = resolveStepExecutionAddress(
+        workflow,
+        nodeId,
+      );
+      const mailboxInstanceId = nodeExecId;
       const mergedVariables = mergeVariables(
         executionNodePayload.variables,
         session.runtimeVariables,
@@ -2173,6 +2216,13 @@ async function runWorkflowInternal(
           workflow,
           nodeRef,
           node: executionNodePayload,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { stepId: stepExecutionAddress.stepId }),
+          ...(stepExecutionAddress.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+          mailboxInstanceId,
           nodePayloads: nodeMap,
           runtimeVariables: session.runtimeVariables,
           basePromptText: assembled.promptText,
@@ -2243,7 +2293,14 @@ async function runWorkflowInternal(
         workflowExecutionId: session.sessionId,
         workflowId: workflow.workflowId,
         nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { stepId: stepExecutionAddress.stepId }),
+        ...(stepExecutionAddress.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
         nodeExecId,
+        mailboxInstanceId,
         promptTemplate: executionNodePayload.promptTemplate,
         promptText: assembledPromptText,
         arguments: assembledArguments,
@@ -2251,6 +2308,9 @@ async function runWorkflowInternal(
         upstreamOutputRefs,
         upstreamCommunications: upstreamCommunicationIds,
         executionMailbox,
+        ...(stepExecutionAddress.promptVariant === undefined
+          ? {}
+          : { promptVariant: stepExecutionAddress.promptVariant }),
         restartAttempt,
         ...(previousNodeExecId === undefined
           ? {}
@@ -2380,11 +2440,21 @@ async function runWorkflowInternal(
         );
         const nodeExecution: NodeExecutionRecord = {
           nodeId,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { stepId: stepExecutionAddress.stepId }),
+          ...(stepExecutionAddress.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
           nodeExecId,
+          mailboxInstanceId,
           status: "skipped",
           artifactDir,
           startedAt,
           endedAt,
+          ...(stepExecutionAddress.promptVariant === undefined
+            ? {}
+            : { promptVariant: stepExecutionAddress.promptVariant }),
         };
         const outputRef = outputRefForExecution(
           workflow,
@@ -2403,16 +2473,33 @@ async function runWorkflowInternal(
         );
         await writeJsonFile(path.join(artifactDir, "meta.json"), {
           nodeId,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { stepId: stepExecutionAddress.stepId }),
+          ...(stepExecutionAddress.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
           nodeExecId,
+          mailboxInstanceId,
           status: "skipped",
           startedAt,
           endedAt,
+          ...(stepExecutionAddress.promptVariant === undefined
+            ? {}
+            : { promptVariant: stepExecutionAddress.promptVariant }),
           optionalDecision: "skip",
         });
         await writeJsonFile(path.join(artifactDir, "handoff.json"), {
           schemaVersion: 1,
           generatedAt: endedAt,
           nodeId,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { stepId: stepExecutionAddress.stepId }),
+          ...(stepExecutionAddress.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+          mailboxInstanceId,
           outputRef,
           inputHash: `sha256:${inputHash}`,
           outputHash: `sha256:${outputHash}`,
@@ -2427,11 +2514,21 @@ async function runWorkflowInternal(
             {
               sessionId: session.sessionId,
               nodeId,
+              ...(stepExecutionAddress.stepId === undefined
+                ? {}
+                : { stepId: stepExecutionAddress.stepId }),
+              ...(stepExecutionAddress.nodeRegistryId === undefined
+                ? {}
+                : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
               nodeExecId,
+              mailboxInstanceId,
               status: "skipped",
               artifactDir,
               startedAt,
               endedAt,
+              ...(stepExecutionAddress.promptVariant === undefined
+                ? {}
+                : { promptVariant: stepExecutionAddress.promptVariant }),
               inputJson,
               outputJson,
               inputHash: `sha256:${inputHash}`,
@@ -2560,10 +2657,32 @@ async function runWorkflowInternal(
         });
       }
 
+      const backendSessionSelection =
+        agentNodePayload === null
+          ? undefined
+          : resolveBackendSessionSelection(workflow, nodeId, agentNodePayload);
       let backendSession =
         agentNodePayload === null
           ? undefined
-          : resolveRequestedBackendSession(session, agentNodePayload);
+          : resolveRequestedBackendSession({
+              session,
+              node: agentNodePayload,
+              ...(backendSessionSelection?.sessionLookupNodeId === undefined
+                ? {}
+                : {
+                    sessionLookupNodeId:
+                      backendSessionSelection.sessionLookupNodeId,
+                  }),
+              ...(backendSessionSelection?.nodeRegistryId === undefined
+                ? {}
+                : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+              ...(backendSessionSelection?.inheritFromStepId === undefined
+                ? {}
+                : {
+                    inheritFromStepId:
+                      backendSessionSelection.inheritFromStepId,
+                  }),
+            });
       const composedPrompts = composeExecutionPrompts({
         promptComposition: {
           workflow,
@@ -3100,6 +3219,18 @@ async function runWorkflowInternal(
               session,
               node: agentNodePayload,
               nodeExecId,
+              ...(backendSessionSelection?.stepId === undefined
+                ? {}
+                : { stepId: backendSessionSelection.stepId }),
+              ...(backendSessionSelection?.nodeRegistryId === undefined
+                ? {}
+                : { nodeRegistryId: backendSessionSelection.nodeRegistryId }),
+              ...(backendSessionSelection?.inheritFromStepId === undefined
+                ? {}
+                : {
+                    inheritFromStepId:
+                      backendSessionSelection.inheritFromStepId,
+                  }),
               provider:
                 backendSessionProvider ??
                 outputPayload["provider"]?.toString() ??
@@ -3114,7 +3245,14 @@ async function runWorkflowInternal(
         status: NodeExecutionRecord["status"] = nodeStatus,
       ): NodeExecutionRecord => ({
         nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { stepId: stepExecutionAddress.stepId }),
+        ...(stepExecutionAddress.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
         nodeExecId,
+        mailboxInstanceId,
         status,
         artifactDir,
         startedAt,
@@ -3131,6 +3269,10 @@ async function runWorkflowInternal(
         ...(previousNodeExecId === undefined
           ? {}
           : { restartedFromNodeExecId: previousNodeExecId }),
+        ...(stepExecutionAddress.promptVariant === undefined
+          ? {}
+          : { promptVariant: stepExecutionAddress.promptVariant }),
+        timeoutMs,
       });
       const buildNodeExecutions = (
         status: NodeExecutionRecord["status"] = nodeStatus,
@@ -3594,28 +3736,7 @@ async function runWorkflowInternal(
             nodeExecutionCounts: updatedCounts,
             nodeExecutions: [
               ...session.nodeExecutions,
-              {
-                nodeId,
-                nodeExecId,
-                status: nodeStatus,
-                artifactDir,
-                startedAt,
-                endedAt,
-                ...(restartAttempt === 0
-                  ? {}
-                  : { attempt: restartAttempt + 1 }),
-                ...(outputAttemptCount === 1 ? {} : { outputAttemptCount }),
-                ...(outputValidationErrors.length === 0
-                  ? {}
-                  : { outputValidationErrors }),
-                ...(backendSessionId === undefined ? {} : { backendSessionId }),
-                ...(requestedBackendSessionMode === undefined
-                  ? {}
-                  : { backendSessionMode: requestedBackendSessionMode }),
-                ...(previousNodeExecId === undefined
-                  ? {}
-                  : { restartedFromNodeExecId: previousNodeExecId }),
-              },
+              buildNodeExecutionRecord(),
             ],
             loopIterationCounts: updatedLoopIterationCounts,
             nodeBackendSessions: nextNodeBackendSessions,
@@ -3634,12 +3755,22 @@ async function runWorkflowInternal(
       const outputRaw = `${outputJson}\n`;
       const metaPayload = {
         nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { stepId: stepExecutionAddress.stepId }),
+        ...(stepExecutionAddress.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
         nodeExecId,
+        mailboxInstanceId,
         status: nodeStatus,
         startedAt,
         endedAt,
         model: executionNodePayload.model,
         timeoutMs,
+        ...(stepExecutionAddress.promptVariant === undefined
+          ? {}
+          : { promptVariant: stepExecutionAddress.promptVariant }),
         restartAttempt,
         outputAttemptCount,
         ...(backendSessionId === undefined ? {} : { backendSessionId }),
@@ -3658,11 +3789,22 @@ async function runWorkflowInternal(
         { ...session, workflowId: workflow.workflowId },
         {
           nodeId,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { stepId: stepExecutionAddress.stepId }),
+          ...(stepExecutionAddress.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
           nodeExecId,
+          mailboxInstanceId,
           status: nodeStatus,
           artifactDir,
           startedAt,
           endedAt,
+          ...(stepExecutionAddress.promptVariant === undefined
+            ? {}
+            : { promptVariant: stepExecutionAddress.promptVariant }),
+          timeoutMs,
         },
         nodeId,
       );
@@ -3682,6 +3824,13 @@ async function runWorkflowInternal(
         schemaVersion: 1,
         generatedAt: endedAt,
         nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { stepId: stepExecutionAddress.stepId }),
+        ...(stepExecutionAddress.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+        mailboxInstanceId,
         outputRef,
         inputHash: `sha256:${inputHash}`,
         outputHash: `sha256:${outputHash}`,
@@ -3710,7 +3859,14 @@ async function runWorkflowInternal(
           {
             sessionId: session.sessionId,
             nodeId,
+            ...(stepExecutionAddress.stepId === undefined
+              ? {}
+              : { stepId: stepExecutionAddress.stepId }),
+            ...(stepExecutionAddress.nodeRegistryId === undefined
+              ? {}
+              : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
             nodeExecId,
+            mailboxInstanceId,
             status: nodeStatus,
             artifactDir,
             startedAt,
@@ -3720,6 +3876,10 @@ async function runWorkflowInternal(
             ...(outputValidationErrors.length === 0
               ? {}
               : { outputValidationErrors }),
+            ...(stepExecutionAddress.promptVariant === undefined
+              ? {}
+              : { promptVariant: stepExecutionAddress.promptVariant }),
+            timeoutMs,
             ...(requestedBackendSessionMode === undefined
               ? {}
               : { backendSessionMode: requestedBackendSessionMode }),
@@ -3940,6 +4100,9 @@ async function runWorkflowInternal(
         options,
         artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
         callerNodeId: nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { callerStepId: stepExecutionAddress.stepId }),
         callerNodeExecId: nodeExecId,
         callerArtifactDir: artifactDir,
         callerOutputPayload: outputPayload,

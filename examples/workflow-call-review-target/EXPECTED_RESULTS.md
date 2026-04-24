@@ -24,7 +24,8 @@ bun run src/main.ts workflow inspect workflow-call-review-target --workflow-root
 Expected stable inspection facts:
 
 - `hasManagerNode` is `false`
-- `entryNodeId` is `reviewer`
+- authored `entryStepId` is `reviewer`
+- compatibility inspection still reports `entryNodeId` as `reviewer`
 - `counts.workflowCalls` is `0`
 
 ## Run

@@ -41,7 +41,13 @@ import {
   type ManagerSessionStore,
 } from "../workflow/manager-session-store";
 import { assertCommunicationInManagerScope } from "../workflow/manager-control";
-import { type CommunicationRecord } from "../workflow/session";
+import {
+  createSessionId,
+  resolveCurrentStepId,
+  resolveCurrentStepIdFromWorkflow,
+  type CommunicationRecord,
+  type WorkflowSessionState,
+} from "../workflow/session";
 import {
   listEventReplyDispatchesFromRuntimeDb,
   listRuntimeHookEvents,
@@ -52,12 +58,11 @@ import {
 } from "../workflow/runtime-db";
 import { loadSession, saveSession } from "../workflow/session-store";
 import { listSessions } from "../workflow/session-store";
-import type { WorkflowSessionState } from "../workflow/session";
-import { createSessionId } from "../workflow/session";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
 import { validateWorkflowBundleDetailedAsync } from "../workflow/validate";
 import { deriveWorkflowVisualization } from "../workflow/visualization";
 import { normalizeWorkflowWorkingDirectoryOverride } from "../workflow/working-directory";
+import type { WorkflowJson } from "../workflow/types";
 import type {
   CreateWorkflowDefinitionInput,
   CommunicationConnection,
@@ -95,6 +100,7 @@ import type {
   WorkflowExecutionsQueryInput,
   WorkflowExecutionView,
   WorkflowLookupInput,
+  WorkflowSessionView,
   WorkflowView,
   CommunicationsQueryInput,
   CancelWorkflowExecutionInput,
@@ -543,7 +549,16 @@ async function buildNodeExecutionViewFromState(
     workflowId: session.workflowId,
     workflowExecutionId: session.sessionId,
     nodeId: sessionRecord.nodeId,
+    ...(sessionRecord.stepId === undefined
+      ? {}
+      : { stepId: sessionRecord.stepId }),
+    ...(sessionRecord.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: sessionRecord.nodeRegistryId }),
     nodeExecId: sessionRecord.nodeExecId,
+    ...(sessionRecord.mailboxInstanceId === undefined
+      ? {}
+      : { mailboxInstanceId: sessionRecord.mailboxInstanceId }),
     status: sessionRecord.status,
     startedAt: sessionRecord.startedAt,
     endedAt: sessionRecord.endedAt,
@@ -556,6 +571,12 @@ async function buildNodeExecutionViewFromState(
     ...(sessionRecord.outputValidationErrors === undefined
       ? {}
       : { outputValidationErrors: sessionRecord.outputValidationErrors }),
+    ...(sessionRecord.promptVariant === undefined
+      ? {}
+      : { promptVariant: sessionRecord.promptVariant }),
+    ...(sessionRecord.timeoutMs === undefined
+      ? {}
+      : { timeoutMs: sessionRecord.timeoutMs }),
     ...(sessionRecord.backendSessionId === undefined
       ? {}
       : { backendSessionId: sessionRecord.backendSessionId }),
@@ -623,6 +644,7 @@ async function buildNodeExecutionView(
 
 function toWorkflowExecutionSummary(
   session: WorkflowSessionState,
+  currentStepId: string | null = resolveCurrentStepId(session),
 ): WorkflowExecutionSummary {
   return {
     workflowExecutionId: session.sessionId,
@@ -630,9 +652,70 @@ function toWorkflowExecutionSummary(
     workflowName: session.workflowName,
     status: session.status,
     currentNodeId: session.currentNodeId ?? null,
+    ...(currentStepId === null ? {} : { currentStepId }),
     nodeExecutionCounter: session.nodeExecutionCounter,
     startedAt: session.startedAt,
     endedAt: session.endedAt ?? null,
+  };
+}
+
+interface CurrentStepWorkflowView {
+  readonly workflowId: string;
+  readonly steps?: WorkflowJson["steps"];
+}
+
+async function resolveSessionCurrentStepId(input: {
+  readonly session: WorkflowSessionState;
+  readonly context: GraphqlRequestContext;
+  readonly workflowCache?: Map<
+    string,
+    Promise<CurrentStepWorkflowView | undefined>
+  >;
+}): Promise<string | null> {
+  const currentStepId = resolveCurrentStepId(input.session);
+  if (currentStepId !== null) {
+    return currentStepId;
+  }
+
+  const cache =
+    input.workflowCache ??
+    new Map<string, Promise<CurrentStepWorkflowView | undefined>>();
+  const cacheKey = input.session.workflowName;
+  const cached = cache.get(cacheKey);
+  let pending: Promise<CurrentStepWorkflowView | undefined>;
+  if (cached === undefined) {
+    pending = loadWorkflowFromCatalog(cacheKey, input.context).then((loaded) =>
+      loaded.ok
+        ? {
+            workflowId: loaded.value.bundle.workflow.workflowId,
+            ...(loaded.value.bundle.workflow.steps === undefined
+              ? {}
+              : { steps: loaded.value.bundle.workflow.steps }),
+          }
+        : undefined,
+    );
+    cache.set(cacheKey, pending);
+  } else {
+    pending = cached;
+  }
+  const workflow = await pending;
+  if (workflow?.workflowId !== input.session.workflowId) {
+    return null;
+  }
+
+  return resolveCurrentStepIdFromWorkflow(
+    input.session,
+    workflow.steps === undefined ? undefined : { steps: workflow.steps },
+  );
+}
+
+async function toWorkflowSessionView(
+  session: WorkflowSessionState,
+  context: GraphqlRequestContext,
+): Promise<WorkflowSessionView> {
+  return {
+    ...session,
+    currentStepId: await resolveSessionCurrentStepId({ session, context }),
   };
 }
 
@@ -645,13 +728,22 @@ async function buildWorkflowExecutionConnection(
     throw new Error(listed.error.message);
   }
 
+  const workflowCache = new Map<
+    string,
+    Promise<CurrentStepWorkflowView | undefined>
+  >();
   const loadedSessions = await Promise.all(
     listed.value.map(async (workflowExecutionId) => {
       const loaded = await loadSession(workflowExecutionId, context);
       if (!loaded.ok) {
         return undefined;
       }
-      return toWorkflowExecutionSummary(loaded.value);
+      const currentStepId = await resolveSessionCurrentStepId({
+        session: loaded.value,
+        context,
+        workflowCache,
+      });
+      return toWorkflowExecutionSummary(loaded.value, currentStepId);
     }),
   );
 
@@ -714,7 +806,7 @@ async function buildWorkflowExecutionView(
     ]);
   return {
     workflowExecutionId: input.workflowExecutionId,
-    session: loaded.value,
+    session: await toWorkflowSessionView(loaded.value, context),
     nodeExecutions,
     nodeLogs,
     hookEvents,
@@ -775,7 +867,7 @@ async function buildWorkflowExecutionOverviewView(
     workflowId: session.workflowId,
     workflowName: session.workflowName,
     status: session.status,
-    session,
+    session: await toWorkflowSessionView(session, context),
     nodes,
     communications,
     nodeLogs: runtimeLogs,
@@ -1030,6 +1122,10 @@ async function rerunWorkflowExecutionMutation(
   input: RerunWorkflowExecutionInput,
   context: GraphqlRequestContext,
 ): Promise<RerunWorkflowExecutionPayload> {
+  const rerunTargetId = input.stepId ?? input.nodeId;
+  if (rerunTargetId === undefined) {
+    throw new Error("stepId or nodeId is required");
+  }
   const workingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     input.workingDirectory,
   );
@@ -1044,7 +1140,7 @@ async function rerunWorkflowExecutionMutation(
   const result = await runWorkflow(existing.value.workflowName, {
     ...workflowContext,
     rerunFromSessionId: input.workflowExecutionId,
-    rerunFromNodeId: input.nodeId,
+    rerunFromNodeId: rerunTargetId,
     ...(workingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory: workingDirectory }),
@@ -1067,6 +1163,8 @@ async function rerunWorkflowExecutionMutation(
     workflowExecutionId: result.value.session.sessionId,
     sessionId: result.value.session.sessionId,
     status: result.value.session.status,
+    ...(input.stepId === undefined ? {} : { rerunFromStepId: input.stepId }),
+    ...(input.nodeId === undefined ? {} : { rerunFromNodeId: input.nodeId }),
     exitCode: result.value.exitCode,
   };
 }

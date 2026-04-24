@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { AdapterExecutionInput } from "./adapter";
+import type { AgentNodePayload, WorkflowJson } from "./types";
 
 export type SessionStatus =
   | "running"
@@ -23,7 +25,10 @@ export interface SessionTransition {
 
 export interface NodeExecutionRecord {
   readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
+  readonly mailboxInstanceId?: string;
   readonly status:
     | "succeeded"
     | "failed"
@@ -39,6 +44,8 @@ export interface NodeExecutionRecord {
     readonly path: string;
     readonly message: string;
   }[];
+  readonly promptVariant?: string;
+  readonly timeoutMs?: number;
   readonly backendSessionId?: string;
   readonly backendSessionMode?: "new" | "reuse";
   readonly restartedFromNodeExecId?: string;
@@ -70,7 +77,10 @@ export interface NodeOutputRef {
   readonly workflowId: string;
   readonly subWorkflowId?: string;
   readonly outputNodeId: string;
+  readonly outputStepId?: string;
+  readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
+  readonly mailboxInstanceId?: string;
   readonly artifactDir: string;
 }
 
@@ -137,6 +147,10 @@ export interface CommunicationRecord {
 
 export interface NodeBackendSessionRecord {
   readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly sourceStepId?: string;
+  readonly lastStepId?: string;
   readonly backend: string;
   readonly provider: string;
   readonly sessionId: string;
@@ -254,6 +268,163 @@ export function normalizeSessionState(
     ],
     activeUserActions: [...(session.activeUserActions ?? [])],
   };
+}
+
+export function resolveCurrentStepId(
+  session: Pick<WorkflowSessionState, "currentNodeId" | "nodeExecutions">,
+): string | null {
+  if (session.currentNodeId === undefined) {
+    return null;
+  }
+
+  const currentExecution = [...session.nodeExecutions]
+    .reverse()
+    .find(
+      (execution) =>
+        execution.nodeId === session.currentNodeId ||
+        execution.stepId === session.currentNodeId,
+    );
+  if (currentExecution?.stepId !== undefined) {
+    return currentExecution.stepId;
+  }
+
+  return session.nodeExecutions.some(
+    (execution) => execution.stepId === session.currentNodeId,
+  )
+    ? session.currentNodeId
+    : null;
+}
+
+export function resolveCurrentStepIdFromWorkflow(
+  session: Pick<WorkflowSessionState, "currentNodeId" | "nodeExecutions">,
+  workflow: Pick<WorkflowJson, "steps"> | undefined,
+): string | null {
+  const currentStepId = resolveCurrentStepId(session);
+  if (currentStepId !== null) {
+    return currentStepId;
+  }
+  if (
+    session.currentNodeId === undefined ||
+    workflow?.steps?.some((step) => step.id === session.currentNodeId) !== true
+  ) {
+    return null;
+  }
+  return session.currentNodeId;
+}
+
+function resolveBackendSessionSourceStepId(
+  record: NodeBackendSessionRecord,
+): string | undefined {
+  return record.sourceStepId ?? record.stepId ?? record.nodeId;
+}
+
+function compareBackendSessionRecency(
+  left: NodeBackendSessionRecord,
+  right: NodeBackendSessionRecord,
+): number {
+  return right.updatedAt.localeCompare(left.updatedAt);
+}
+
+export function resolveRequestedBackendSession(input: {
+  readonly session: WorkflowSessionState;
+  readonly node: AgentNodePayload;
+  readonly sessionLookupNodeId?: string;
+  readonly nodeRegistryId?: string;
+  readonly inheritFromStepId?: string;
+}): AdapterExecutionInput["backendSession"] | undefined {
+  if (input.node.sessionPolicy === undefined) {
+    return undefined;
+  }
+
+  if (input.node.sessionPolicy.mode === "new") {
+    return { mode: "new" };
+  }
+
+  if (input.node.executionBackend === undefined) {
+    return { mode: "new" };
+  }
+
+  const compatibleSessions = Object.values(
+    input.session.nodeBackendSessions ?? {},
+  )
+    .filter((record) => record.backend === input.node.executionBackend)
+    .filter((record) =>
+      input.nodeRegistryId === undefined
+        ? record.nodeId === (input.sessionLookupNodeId ?? input.node.id)
+        : record.nodeRegistryId === input.nodeRegistryId ||
+          (record.nodeRegistryId === undefined &&
+            record.nodeId === (input.sessionLookupNodeId ?? input.node.id)),
+    );
+
+  const selected =
+    input.inheritFromStepId === undefined
+      ? compatibleSessions.sort(compareBackendSessionRecency)[0]
+      : compatibleSessions
+          .filter(
+            (record) =>
+              resolveBackendSessionSourceStepId(record) ===
+              input.inheritFromStepId,
+          )
+          .sort(compareBackendSessionRecency)[0];
+  if (selected === undefined) {
+    return { mode: "new" };
+  }
+
+  return {
+    mode: "reuse",
+    sessionId: selected.sessionId,
+  };
+}
+
+export function persistNodeBackendSession(input: {
+  readonly session: WorkflowSessionState;
+  readonly node: AgentNodePayload;
+  readonly nodeExecId: string;
+  readonly provider: string;
+  readonly endedAt: string;
+  readonly backendSession: AdapterExecutionInput["backendSession"];
+  readonly returnedSessionId?: string;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly inheritFromStepId?: string;
+}): Readonly<Record<string, NodeBackendSessionRecord>> {
+  const current = { ...(input.session.nodeBackendSessions ?? {}) };
+  if (input.node.sessionPolicy?.mode !== "reuse") {
+    return current;
+  }
+
+  const sessionId = input.returnedSessionId ?? input.backendSession?.sessionId;
+  if (sessionId === undefined) {
+    return current;
+  }
+
+  if (input.node.executionBackend === undefined) {
+    return current;
+  }
+
+  const recordKey = input.stepId ?? input.node.id;
+  const existing = current[recordKey];
+  const sourceStepId =
+    input.inheritFromStepId ??
+    existing?.sourceStepId ??
+    existing?.stepId ??
+    input.stepId;
+  current[recordKey] = {
+    nodeId: recordKey,
+    ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
+    ...(input.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: input.nodeRegistryId }),
+    ...(sourceStepId === undefined ? {} : { sourceStepId }),
+    ...(input.stepId === undefined ? {} : { lastStepId: input.stepId }),
+    backend: input.node.executionBackend,
+    provider: input.provider,
+    sessionId,
+    createdAt: existing?.createdAt ?? input.endedAt,
+    updatedAt: input.endedAt,
+    lastNodeExecId: input.nodeExecId,
+  };
+  return current;
 }
 
 export function isSafeSessionId(sessionId: string): boolean {

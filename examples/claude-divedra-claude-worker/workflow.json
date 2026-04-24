@@ -1,6 +1,6 @@
 {
   "workflowId": "claude-divedra-claude-worker",
-  "description": "Reference workflow that keeps both divedra coordination and the task node on claude-code-agent, authored as a linear ordered node list.",
+  "description": "Reference workflow that keeps both divedra coordination and the task node on claude-code-agent, authored in the step-addressed workflow shape.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -9,31 +9,75 @@
     "divedraPromptTemplate": "Coordinate {{workflowId}} so the claude-code managers hand off one bounded task to a claude-code worker and keep the result concise.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return a concise business JSON payload."
   },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
       "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "main-divedra",
-      "group": "delivery",
       "nodeFile": "nodes/node-main-divedra.json"
     },
     {
       "id": "workflow-input",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-input.json"
     },
     {
       "id": "claude-task",
-      "group": "delivery",
       "nodeFile": "nodes/node-claude-task.json"
     },
     {
       "id": "workflow-output",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "main-divedra"
+        }
+      ]
+    },
+    {
+      "id": "main-divedra",
+      "nodeId": "main-divedra",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-input"
+        }
+      ]
+    },
+    {
+      "id": "workflow-input",
+      "nodeId": "workflow-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "claude-task"
+        }
+      ]
+    },
+    {
+      "id": "claude-task",
+      "nodeId": "claude-task",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "role": "worker"
     }
   ]
 }

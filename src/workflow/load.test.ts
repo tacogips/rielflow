@@ -1154,9 +1154,9 @@ describe("loadWorkflowFromDisk", () => {
     expect(result.value.bundle.workflow.subWorkflows).toEqual([]);
     expect(
       result.value.bundle.nodePayloads["divedra-manager"]?.executionBackend,
-    ).toBe("claude-code-agent");
+    ).toBeUndefined();
     expect(result.value.bundle.nodePayloads["divedra-manager"]?.model).toBe(
-      "claude-opus-4-1",
+      undefined,
     );
     expect(
       result.value.bundle.nodePayloads["divedra-manager"]?.promptTemplateFile,
@@ -1224,7 +1224,7 @@ describe("loadWorkflowFromDisk", () => {
     ).toBe("codex-agent");
   });
 
-  test("loads step-addressed workflows with file-backed step definitions", async () => {
+  test("loads step-addressed workflows with file-backed step definitions in strict authored-schema mode", async () => {
     const root = await makeTempDir();
     const workflowDirectory = path.join(root, "step-file-demo");
     await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
@@ -1296,6 +1296,7 @@ describe("loadWorkflowFromDisk", () => {
 
     const result = await loadWorkflowFromDisk("step-file-demo", {
       workflowRoot: root,
+      rejectLegacyWorkflowAuthoring: true,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -1320,6 +1321,77 @@ describe("loadWorkflowFromDisk", () => {
     );
     expect(result.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
       "review",
+    );
+  });
+
+  test("rejects legacy node-addressed authored workflows when strict authored-schema mode is enabled", async () => {
+    const root = await makeTempDir();
+    const workflowDirectory = path.join(root, "legacy-strict-reject");
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "legacy-strict-reject",
+      description: "legacy authored workflow",
+      defaults: {
+        nodeTimeoutMs: 120000,
+      },
+      managerNodeId: "divedra-manager",
+      entryNodeId: "divedra-manager",
+      nodes: [
+        {
+          id: "divedra-manager",
+          role: "manager",
+          nodeFile: "node-manager.json",
+        },
+        {
+          id: "worker-1",
+          role: "worker",
+          nodeFile: "node-worker-1.json",
+        },
+      ],
+      edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
+      loops: [],
+    });
+    await writeJson(path.join(workflowDirectory, "node-manager.json"), {
+      id: "divedra-manager",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "manager",
+      variables: {},
+    });
+    await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
+      id: "worker-1",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "worker",
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk("legacy-strict-reject", {
+      workflowRoot: root,
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.entryStepId",
+          message: "must be a non-empty string",
+        }),
+        expect.objectContaining({
+          path: "workflow.managerNodeId",
+          message: "is not part of the step-addressed workflow schema",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps",
+          message: "must be an array",
+        }),
+      ]),
     );
   });
 
@@ -1381,7 +1453,9 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(result.value.bundle.nodePayloads["coder-node"]?.promptVariants).toMatchObject({
+    expect(
+      result.value.bundle.nodePayloads["coder-node"]?.promptVariants,
+    ).toMatchObject({
       "self-review": {
         promptTemplate: "review via file\n",
         promptTemplateFile: "prompts/review.md",
@@ -2102,11 +2176,12 @@ describe("loadWorkflowFromDisk", () => {
     ).toBe(true);
   });
 
-  test("loads the worker-only example without an authored manager node", async () => {
+  test("loads the worker-only example without an authored manager node and accepts its shipped step-addressed authoring in strict mode", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const result = await loadWorkflowFromDisk("worker-only-single-step", {
       workflowRoot: path.resolve(process.cwd(), "examples"),
       artifactRoot,
+      rejectLegacyWorkflowAuthoring: true,
     });
 
     expect(result.ok).toBe(true);
@@ -2115,7 +2190,11 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
     expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
+      "main-worker",
+    ]);
     expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
       "main-worker",
     ]);
@@ -2127,7 +2206,203 @@ describe("loadWorkflowFromDisk", () => {
     ).toContain("Complete the assigned workflow step");
   });
 
-  test("loads the workflow-call examples with explicit parent call metadata and a worker-only callee", async () => {
+  test("loads the chat reply example as a shipped strict step-addressed worker-only bundle", async () => {
+    const artifactRoot = path.join(await makeTempDir(), "artifacts");
+    const result = await loadWorkflowFromDisk("chat-reply-webhook", {
+      workflowRoot: path.resolve(process.cwd(), "examples"),
+      artifactRoot,
+      rejectLegacyWorkflowAuthoring: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryStepId).toBe("reply-to-chat");
+    expect(result.value.bundle.workflow.entryNodeId).toBe("reply-to-chat");
+    expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
+      "reply-to-chat",
+    ]);
+    expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
+      "reply-to-chat",
+    ]);
+    const replyNodePayload = result.value.bundle.nodePayloads["reply-to-chat"];
+    expect(replyNodePayload?.nodeType).toBe("addon");
+    expect(replyNodePayload?.addon?.name).toBe("divedra/chat-reply-worker");
+  });
+
+  test("loads the claude managed examples as shipped strict step-addressed bundles", async () => {
+    const examplesRoot = path.resolve(process.cwd(), "examples");
+
+    for (const [workflowName, expectedStepIds] of [
+      [
+        "claude-divedra-codex-coding",
+        [
+          "divedra-manager",
+          "main-divedra",
+          "workflow-input",
+          "implementation-brief",
+          "implement",
+          "workflow-output",
+        ],
+      ],
+      [
+        "claude-divedra-claude-worker",
+        [
+          "divedra-manager",
+          "main-divedra",
+          "workflow-input",
+          "claude-task",
+          "workflow-output",
+        ],
+      ],
+    ] as const) {
+      const artifactRoot = path.join(await makeTempDir(), "artifacts");
+      const result = await loadWorkflowFromDisk(workflowName, {
+        workflowRoot: examplesRoot,
+        artifactRoot,
+        rejectLegacyWorkflowAuthoring: true,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        continue;
+      }
+
+      expect(result.value.bundle.workflow.hasManagerNode).toBe(true);
+      expect(result.value.bundle.workflow.managerStepId).toBe(
+        "divedra-manager",
+      );
+      expect(result.value.bundle.workflow.entryStepId).toBe("divedra-manager");
+      expect(
+        result.value.bundle.workflow.steps?.map((step) => step.id),
+      ).toEqual(expectedStepIds);
+      expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual(
+        expectedStepIds,
+      );
+    }
+  });
+
+  test("loads additional shipped managed examples as strict step-addressed bundles where their authored schema no longer depends on compatibility-only metadata", async () => {
+    const examplesRoot = path.resolve(process.cwd(), "examples");
+
+    for (const [workflowName, expectedStepIds] of [
+      [
+        "subworkflow-chained-simple",
+        [
+          "divedra-manager",
+          "alpha-manager",
+          "alpha-input",
+          "alpha-worker",
+          "alpha-output",
+          "beta-manager",
+          "beta-input",
+          "beta-worker",
+          "beta-output",
+        ],
+      ],
+      [
+        "first-four-arithmetic-pipeline",
+        [
+          "divedra-manager",
+          "add-manager",
+          "add-input",
+          "add-worker",
+          "add-output",
+          "multiply-manager",
+          "multiply-input",
+          "multiply-worker",
+          "multiply-output",
+          "divide-manager",
+          "divide-input",
+          "divide-worker",
+          "divide-output",
+        ],
+      ],
+    ] as const) {
+      const artifactRoot = path.join(await makeTempDir(), "artifacts");
+      const result = await loadWorkflowFromDisk(workflowName, {
+        workflowRoot: examplesRoot,
+        artifactRoot,
+        rejectLegacyWorkflowAuthoring: true,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        continue;
+      }
+
+      expect(result.value.bundle.workflow.hasManagerNode).toBe(true);
+      expect(result.value.bundle.workflow.managerStepId).toBe(
+        "divedra-manager",
+      );
+      expect(result.value.bundle.workflow.entryStepId).toBe("divedra-manager");
+      expect(
+        result.value.bundle.workflow.steps?.map((step) => step.id),
+      ).toEqual(expectedStepIds);
+      expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual(
+        expectedStepIds,
+      );
+    }
+  });
+
+  test("loads the same-node shared-session example as a strict step-addressed bundle", async () => {
+    const artifactRoot = path.join(await makeTempDir(), "artifacts");
+    const examplesRoot = path.resolve(process.cwd(), "examples");
+    const result = await loadWorkflowFromDisk("same-node-session-echo", {
+      workflowRoot: examplesRoot,
+      artifactRoot,
+      rejectLegacyWorkflowAuthoring: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(true);
+    expect(result.value.bundle.workflow.managerStepId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.entryStepId).toBe("divedra-manager");
+    expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
+      "divedra-manager",
+      "main-divedra",
+      "workflow-input",
+      "echo-request",
+      "answer-request",
+      "workflow-output",
+    ]);
+    expect(
+      result.value.bundle.workflow.nodeRegistry?.map((node) => node.id),
+    ).toEqual([
+      "divedra-manager",
+      "main-divedra",
+      "workflow-input",
+      "echo-session",
+      "workflow-output",
+    ]);
+    expect(
+      result.value.bundle.workflow.steps?.find(
+        (step) => step.id === "answer-request",
+      ),
+    ).toMatchObject({
+      nodeId: "echo-session",
+      promptVariant: "answer",
+      sessionPolicy: {
+        mode: "reuse",
+        inheritFromStepId: "echo-request",
+      },
+    });
+    expect(
+      result.value.bundle.nodePayloads["echo-request"]?.promptTemplate,
+    ).toContain("first visit to the reusable worker node");
+    expect(
+      result.value.bundle.nodePayloads["answer-request"]?.promptTemplate,
+    ).toContain("revisiting the reusable worker node for its answer step");
+  });
+
+  test("loads the workflow-call examples with a step-addressed parent plus compatibility workflow-call metadata and a strict step-addressed worker-only callee", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const examplesRoot = path.resolve(process.cwd(), "examples");
     const parentResult = await loadWorkflowFromDisk("workflow-call-simple", {
@@ -2145,18 +2420,47 @@ describe("loadWorkflowFromDisk", () => {
         id: "call-review",
         workflowId: "workflow-call-review-target",
         callerNodeId: "draft-write",
+        callerStepId: "draft-write",
         resultNodeId: "apply-review",
       },
     ]);
-    expect(parentResult.value.bundle.workflow.managerNodeId).toBe(
+    expect(parentResult.value.bundle.workflow.managerStepId).toBe(
       "divedra-manager",
     );
+    expect(parentResult.value.bundle.workflow.entryStepId).toBe(
+      "divedra-manager",
+    );
+    expect(
+      parentResult.value.bundle.workflow.steps?.map((step) => step.id),
+    ).toEqual(["divedra-manager", "draft-write", "apply-review"]);
+
+    const strictParentResult = await loadWorkflowFromDisk(
+      "workflow-call-simple",
+      {
+        workflowRoot: examplesRoot,
+        artifactRoot,
+        rejectLegacyWorkflowAuthoring: true,
+      },
+    );
+    expect(strictParentResult.ok).toBe(false);
+    if (!strictParentResult.ok) {
+      expect(strictParentResult.error.code).toBe("VALIDATION");
+      expect(strictParentResult.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "workflow.workflowCalls",
+            message: "is not part of the step-addressed workflow schema",
+          }),
+        ]),
+      );
+    }
 
     const calleeResult = await loadWorkflowFromDisk(
       "workflow-call-review-target",
       {
         workflowRoot: examplesRoot,
         artifactRoot,
+        rejectLegacyWorkflowAuthoring: true,
       },
     );
 
@@ -2166,7 +2470,11 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(calleeResult.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(calleeResult.value.bundle.workflow.entryStepId).toBe("reviewer");
     expect(calleeResult.value.bundle.workflow.entryNodeId).toBe("reviewer");
+    expect(
+      calleeResult.value.bundle.workflow.steps?.map((step) => step.id),
+    ).toEqual(["reviewer"]);
     expect(
       calleeResult.value.bundle.workflow.nodes.map((node) => node.id),
     ).toEqual(["reviewer"]);
@@ -2175,6 +2483,7 @@ describe("loadWorkflowFromDisk", () => {
   test("keeps structural sub-workflow authoring limited to the legacy example", async () => {
     const examplesRoot = path.resolve(process.cwd(), "examples");
     const roleAuthoredExamples = [
+      "chat-reply-webhook",
       "worker-only-single-step",
       "workflow-call-simple",
       "workflow-call-review-target",

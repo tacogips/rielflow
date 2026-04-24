@@ -1,5 +1,6 @@
 import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
 import { callNode, type CallNodeInput } from "./workflow/call-node";
+import { callStep, type CallStepInput } from "./workflow/call-step";
 import {
   executeGraphqlRequest,
   type GraphqlClientRequest,
@@ -23,15 +24,24 @@ import {
   listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
-  listRuntimeSessions,
 } from "./workflow/runtime-db";
 import {
   loadSession,
+  listSessions as listStoredSessions,
   type SessionStoreOptions,
 } from "./workflow/session-store";
-import type { WorkflowSessionState } from "./workflow/session";
+import {
+  resolveCurrentStepId,
+  resolveCurrentStepIdFromWorkflow,
+  type WorkflowSessionState,
+} from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/adapter";
-import type { ChatReplyDispatcher, LoadOptions } from "./workflow/types";
+import type { WorkflowExecutionSummary } from "./shared/ui-contract";
+import type {
+  ChatReplyDispatcher,
+  LoadOptions,
+  WorkflowJson,
+} from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 
 export type DivedraOptions = LoadOptions & SessionStoreOptions;
@@ -56,7 +66,8 @@ export interface ResumeWorkflowInput extends DivedraOptions {
 
 export interface RerunWorkflowInput extends DivedraOptions {
   readonly sourceSessionId: string;
-  readonly fromNodeId: string;
+  readonly fromStepId?: string;
+  readonly fromNodeId?: string;
   readonly workflowWorkingDirectory?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
@@ -67,7 +78,9 @@ export interface RerunWorkflowInput extends DivedraOptions {
 }
 
 export interface RuntimeSessionView {
-  readonly session: WorkflowSessionState;
+  readonly session: WorkflowSessionState & {
+    readonly currentStepId: string | null;
+  };
   readonly nodeExecutions: ReturnType<
     typeof listRuntimeNodeExecutions
   > extends Promise<infer T>
@@ -91,6 +104,98 @@ export interface RuntimeSessionView {
 }
 
 export interface CallWorkflowNodeInput extends CallNodeInput {}
+
+export interface CallWorkflowStepInput extends CallStepInput {}
+
+interface CurrentStepWorkflowView {
+  readonly workflowId: string;
+  readonly steps?: WorkflowJson["steps"];
+}
+
+function toWorkflowExecutionSummary(
+  session: WorkflowSessionState,
+  currentStepId: string | null = resolveCurrentStepId(session),
+): WorkflowExecutionSummary {
+  return {
+    workflowExecutionId: session.sessionId,
+    sessionId: session.sessionId,
+    workflowName: session.workflowName,
+    status: session.status,
+    currentNodeId: session.currentNodeId ?? null,
+    ...(currentStepId === null ? {} : { currentStepId }),
+    nodeExecutionCounter: session.nodeExecutionCounter,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt ?? null,
+  };
+}
+
+async function resolveSessionCurrentStepId(input: {
+  readonly session: WorkflowSessionState;
+  readonly options: DivedraOptions;
+  readonly workflowCache?: Map<
+    string,
+    Promise<CurrentStepWorkflowView | undefined>
+  >;
+}): Promise<string | null> {
+  const currentStepId = resolveCurrentStepId(input.session);
+  if (currentStepId !== null) {
+    return currentStepId;
+  }
+
+  const cache =
+    input.workflowCache ??
+    new Map<string, Promise<CurrentStepWorkflowView | undefined>>();
+  const cacheKey = input.session.workflowName;
+  const cached = cache.get(cacheKey);
+  let pending: Promise<CurrentStepWorkflowView | undefined>;
+  if (cached === undefined) {
+    pending = loadWorkflowFromCatalog(cacheKey, input.options).then((loaded) =>
+      loaded.ok
+        ? {
+            workflowId: loaded.value.bundle.workflow.workflowId,
+            ...(loaded.value.bundle.workflow.steps === undefined
+              ? {}
+              : { steps: loaded.value.bundle.workflow.steps }),
+          }
+        : undefined,
+    );
+    cache.set(cacheKey, pending);
+  } else {
+    pending = cached;
+  }
+  const workflow = await pending;
+  if (workflow?.workflowId !== input.session.workflowId) {
+    return null;
+  }
+
+  return resolveCurrentStepIdFromWorkflow(
+    input.session,
+    workflow.steps === undefined ? undefined : { steps: workflow.steps },
+  );
+}
+
+function resolveRerunExecutionTarget(input: {
+  readonly fromStepId?: string;
+  readonly fromNodeId?: string;
+}): {
+  readonly executionNodeId: string;
+  readonly rerunFromStepId?: string;
+  readonly rerunFromNodeId?: string;
+} {
+  const executionNodeId = input.fromStepId ?? input.fromNodeId;
+  if (executionNodeId === undefined) {
+    throw new Error("fromStepId or fromNodeId is required");
+  }
+  return {
+    executionNodeId,
+    ...(input.fromStepId === undefined
+      ? {}
+      : { rerunFromStepId: input.fromStepId }),
+    ...(input.fromNodeId === undefined
+      ? {}
+      : { rerunFromNodeId: input.fromNodeId }),
+  };
+}
 
 export interface WorkflowExecutionClientOptions extends DivedraOptions {
   readonly workflowName: string;
@@ -519,11 +624,14 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
 export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   readonly sessionId: string;
   readonly status: WorkflowSessionState["status"];
+  readonly rerunFromStepId?: string;
+  readonly rerunFromNodeId?: string;
   readonly exitCode: number;
 }> {
   const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     input.workflowWorkingDirectory,
   );
+  const rerunTarget = resolveRerunExecutionTarget(input);
   const source = await loadSession(input.sourceSessionId, input);
   if (!source.ok) {
     throw new Error(source.error.message);
@@ -560,7 +668,7 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       ? {}
       : { mockScenario: input.mockScenario }),
     rerunFromSessionId: source.value.sessionId,
-    rerunFromNodeId: input.fromNodeId,
+    rerunFromNodeId: rerunTarget.executionNodeId,
     ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
     ...(input.maxLoopIterations === undefined
       ? {}
@@ -576,6 +684,12 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   return {
     sessionId: result.value.session.sessionId,
     status: result.value.session.status,
+    ...(rerunTarget.rerunFromStepId === undefined
+      ? {}
+      : { rerunFromStepId: rerunTarget.rerunFromStepId }),
+    ...(rerunTarget.rerunFromNodeId === undefined
+      ? {}
+      : { rerunFromNodeId: rerunTarget.rerunFromNodeId }),
     exitCode: result.value.exitCode,
   };
 }
@@ -592,7 +706,33 @@ export async function getSession(
 }
 
 export async function listSessions(options: DivedraOptions = {}) {
-  return listRuntimeSessions(options);
+  const listed = await listStoredSessions(options);
+  if (!listed.ok) {
+    throw new Error(listed.error.message);
+  }
+
+  const workflowCache = new Map<
+    string,
+    Promise<CurrentStepWorkflowView | undefined>
+  >();
+  const loadedSessions = await Promise.all(
+    listed.value.map(async (sessionId) => {
+      const loaded = await loadSession(sessionId, options);
+      if (!loaded.ok) {
+        return undefined;
+      }
+      const currentStepId = await resolveSessionCurrentStepId({
+        session: loaded.value,
+        options,
+        workflowCache,
+      });
+      return toWorkflowExecutionSummary(loaded.value, currentStepId);
+    }),
+  );
+
+  return loadedSessions
+    .filter((entry): entry is WorkflowExecutionSummary => entry !== undefined)
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 
 export async function getRuntimeSessionView(
@@ -600,6 +740,10 @@ export async function getRuntimeSessionView(
   options: DivedraOptions = {},
 ): Promise<RuntimeSessionView> {
   const session = await getSession(sessionId, options);
+  const currentStepId = await resolveSessionCurrentStepId({
+    session,
+    options,
+  });
   const [nodeExecutions, nodeLogs, hookEvents, replyDispatches] =
     await Promise.all([
       listRuntimeNodeExecutions(sessionId, options),
@@ -610,7 +754,16 @@ export async function getRuntimeSessionView(
         options,
       ),
     ]);
-  return { session, nodeExecutions, nodeLogs, hookEvents, replyDispatches };
+  return {
+    session: {
+      ...session,
+      currentStepId,
+    },
+    nodeExecutions,
+    nodeLogs,
+    hookEvents,
+    replyDispatches,
+  };
 }
 
 export async function callWorkflowNode(input: CallWorkflowNodeInput): Promise<{
@@ -626,6 +779,28 @@ export async function callWorkflowNode(input: CallWorkflowNodeInput): Promise<{
   }
   return {
     sessionId: result.value.session.sessionId,
+    nodeExecId: result.value.nodeExecution.nodeExecId,
+    status: "succeeded",
+    exitCode: result.value.exitCode,
+    output: result.value.output,
+  };
+}
+
+export async function callWorkflowStep(input: CallWorkflowStepInput): Promise<{
+  readonly sessionId: string;
+  readonly stepId: string;
+  readonly nodeExecId: string;
+  readonly status: "succeeded";
+  readonly exitCode: number;
+  readonly output: Readonly<Record<string, unknown>>;
+}> {
+  const result = await callStep(input);
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  return {
+    sessionId: result.value.session.sessionId,
+    stepId: result.value.stepId,
     nodeExecId: result.value.nodeExecution.nodeExecId,
     status: "succeeded",
     exitCode: result.value.exitCode,
@@ -721,4 +896,5 @@ export {
 } from "./workflow/catalog";
 export { runWorkflow } from "./workflow/engine";
 export { callNode } from "./workflow/call-node";
+export { callStep } from "./workflow/call-step";
 export { deriveWorkflowVisualization } from "./workflow/visualization";

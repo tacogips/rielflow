@@ -692,10 +692,13 @@ function createStepAddressedWorkflowForValidation(
         : { containerRuntime: workflow.defaults.containerRuntime }),
     },
     ...(workflow.prompts === undefined ? {} : { prompts: workflow.prompts }),
-    ...(workflow.hasManagerNode === false || workflow.managerStepId === undefined
+    ...(workflow.hasManagerNode === false ||
+    workflow.managerStepId === undefined
       ? {}
       : { managerStepId: workflow.managerStepId }),
-    entryStepId: workflow.entryStepId ?? workflow.entryNodeId!,
+    ...(workflow.entryStepId === undefined
+      ? {}
+      : { entryStepId: workflow.entryStepId }),
     nodes: (workflow.nodeRegistry ?? []).map((node) => ({
       id: node.id,
       ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
@@ -705,7 +708,9 @@ function createStepAddressedWorkflowForValidation(
       id: step.id,
       ...(step.stepFile === undefined ? {} : { stepFile: step.stepFile }),
       nodeId: step.nodeId,
-      ...(step.description === undefined ? {} : { description: step.description }),
+      ...(step.description === undefined
+        ? {}
+        : { description: step.description }),
       ...(step.role === undefined ? {} : { role: step.role }),
       ...(step.promptVariant === undefined
         ? {}
@@ -904,8 +909,7 @@ function hasStepAddressedDerivedNodePayload(input: {
   if (step.promptVariant !== undefined) {
     const promptVariants = stepProjectedPayload["promptVariants"];
     const variantRaw =
-      isRecord(promptVariants) &&
-      isRecord(promptVariants[step.promptVariant])
+      isRecord(promptVariants) && isRecord(promptVariants[step.promptVariant])
         ? promptVariants[step.promptVariant]
         : undefined;
     if (isRecord(variantRaw)) {
@@ -1239,9 +1243,10 @@ async function hydratePromptTemplateFilesForValidation(input: {
 
     const payloadRecord = payload as Record<string, unknown>;
     const hydratedPayload = cloneNodeTemplateAwarePayload(payloadRecord);
-    for (const { path: containerPath, record } of listNodeTemplateFieldContainers(
-      hydratedPayload,
-    )) {
+    for (const {
+      path: containerPath,
+      record,
+    } of listNodeTemplateFieldContainers(hydratedPayload)) {
       for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
         const templateText = record[spec.textField];
         if (typeof templateText === "string" && templateText.length > 0) {
@@ -1330,6 +1335,9 @@ export async function saveWorkflowToDisk(
     return err(existingAuthoredWorkflow.error);
   }
 
+  const shouldRejectLegacyWorkflowAuthoring =
+    options.rejectLegacyWorkflowAuthoring === true ||
+    isStepAddressedNormalizedWorkflow(input.workflow);
   const authoredWorkflow = isStepAddressedNormalizedWorkflow(input.workflow)
     ? createPersistedWorkflowJson({
         workflow: input.workflow,
@@ -1367,6 +1375,9 @@ export async function saveWorkflowToDisk(
     {
       ...options,
       allowResolvedStepFileFields: true,
+      ...(shouldRejectLegacyWorkflowAuthoring
+        ? { rejectLegacyWorkflowAuthoring: true }
+        : {}),
     },
   );
 

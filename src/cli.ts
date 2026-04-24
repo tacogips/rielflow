@@ -22,6 +22,7 @@ import type { EventListenerHandle } from "./events/listener-service";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
 import { callNode, type CallNodeInput } from "./workflow/call-node";
+import { callStep, type CallStepInput } from "./workflow/call-step";
 import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
 import { loadWorkflowFromCatalog, type LoadedWorkflow } from "./workflow/load";
 import {
@@ -29,7 +30,12 @@ import {
   withResolvedWorkflowSourceOptions,
 } from "./workflow/catalog";
 import { inferRootDataDirFromExplicitStorageRoots } from "./workflow/paths";
-import { createSessionId, type WorkflowSessionState } from "./workflow/session";
+import {
+  createSessionId,
+  resolveCurrentStepId,
+  resolveCurrentStepIdFromWorkflow,
+  type WorkflowSessionState,
+} from "./workflow/session";
 import { buildInspectionSummary } from "./workflow/inspect";
 import { collectWorkflowAddonSourceSummaries } from "./workflow/addon-source-summary";
 import { loadSession } from "./workflow/session-store";
@@ -126,6 +132,7 @@ interface ParsedOptions {
   readonly maxSteps?: number;
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
+  readonly timeoutMs?: number;
   readonly host?: string;
   readonly port?: number;
   readonly endpoint?: string;
@@ -138,6 +145,9 @@ interface ParsedOptions {
   readonly workflowName?: string;
   readonly messageJson?: string;
   readonly messageFile?: string;
+  readonly promptVariant?: string;
+  readonly continueSession: boolean;
+  readonly resumeNodeExecId?: string;
   readonly vendor?: string;
   readonly eventRoot?: string;
   readonly eventFile?: string;
@@ -280,6 +290,75 @@ function parseReplyDispatchStatus(
   return undefined;
 }
 
+function buildStepProgressSummaries(session: WorkflowSessionState): readonly {
+  readonly stepId: string;
+  readonly executions: number;
+  readonly restarts: number;
+}[] {
+  const executionCounts = new Map<string, number>();
+  for (const execution of session.nodeExecutions) {
+    if (execution.stepId === undefined) {
+      continue;
+    }
+    executionCounts.set(
+      execution.stepId,
+      (executionCounts.get(execution.stepId) ?? 0) + 1,
+    );
+  }
+
+  return [...executionCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([stepId, executions]) => ({
+      stepId,
+      executions,
+      restarts: session.restartCounts?.[stepId] ?? 0,
+    }));
+}
+
+function formatProgressExecutionCounts(
+  entries: readonly {
+    readonly id: string;
+    readonly executions: number;
+    readonly restarts: number;
+  }[],
+): string {
+  return (
+    entries
+      .map((entry) =>
+        entry.restarts === 0
+          ? `${entry.id}:${String(entry.executions)}`
+          : `${entry.id}:${String(entry.executions)}(restarts=${String(entry.restarts)})`,
+      )
+      .join(", ") || "-"
+  );
+}
+
+async function resolveSessionCurrentStepId(
+  session: WorkflowSessionState,
+  options: CliStorageOptions,
+): Promise<string | null> {
+  const currentStepId = resolveCurrentStepId(session);
+  if (currentStepId !== null) {
+    return currentStepId;
+  }
+
+  const loadedWorkflow = await loadWorkflowFromCatalog(
+    session.workflowName,
+    options,
+  );
+  if (!loadedWorkflow.ok) {
+    return null;
+  }
+  if (loadedWorkflow.value.bundle.workflow.workflowId !== session.workflowId) {
+    return null;
+  }
+
+  return resolveCurrentStepIdFromWorkflow(
+    session,
+    loadedWorkflow.value.bundle.workflow,
+  );
+}
+
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
   let workflowRoot: string | undefined;
@@ -299,6 +378,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let maxSteps: number | undefined;
   let maxLoopIterations: number | undefined;
   let defaultTimeoutMs: number | undefined;
+  let timeoutMs: number | undefined;
   let host: string | undefined;
   let port: number | undefined;
   let endpoint: string | undefined;
@@ -311,6 +391,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let workflowName: string | undefined;
   let messageJson: string | undefined;
   let messageFile: string | undefined;
+  let promptVariant: string | undefined;
+  let continueSession = false;
+  let resumeNodeExecId: string | undefined;
   let vendor: string | undefined;
   let eventRoot: string | undefined;
   let eventFile: string | undefined;
@@ -416,6 +499,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--default-timeout-ms":
         defaultTimeoutMs = parseNumericOption(readNext());
         break;
+      case "--timeout-ms":
+        timeoutMs = parseNumericOption(readNext());
+        break;
       case "--host":
         host = readNext();
         break;
@@ -451,6 +537,15 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--message-file":
         messageFile = readNext();
+        break;
+      case "--prompt-variant":
+        promptVariant = readNext();
+        break;
+      case "--continue-session":
+        continueSession = true;
+        break;
+      case "--resume-node-exec":
+        resumeNodeExecId = readNext();
         break;
       case "--vendor":
         vendor = readNext();
@@ -498,6 +593,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(maxSteps === undefined ? {} : { maxSteps }),
       ...(maxLoopIterations === undefined ? {} : { maxLoopIterations }),
       ...(defaultTimeoutMs === undefined ? {} : { defaultTimeoutMs }),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
       ...(host === undefined ? {} : { host }),
       ...(port === undefined ? {} : { port }),
       ...(endpoint === undefined ? {} : { endpoint }),
@@ -510,6 +606,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(workflowName === undefined ? {} : { workflowName }),
       ...(messageJson === undefined ? {} : { messageJson }),
       ...(messageFile === undefined ? {} : { messageFile }),
+      ...(promptVariant === undefined ? {} : { promptVariant }),
+      continueSession,
+      ...(resumeNodeExecId === undefined ? {} : { resumeNodeExecId }),
       ...(vendor === undefined ? {} : { vendor }),
       ...(eventRoot === undefined ? {} : { eventRoot }),
       ...(eventFile === undefined ? {} : { eventFile }),
@@ -530,7 +629,7 @@ function printHelp(io: CliIo): void {
   io.stdout(
     "  divedra session <status|progress|resume|export|logs> <session-id> [options]",
   );
-  io.stdout("  divedra session rerun <session-id> <node-id> [options]");
+  io.stdout("  divedra session rerun <session-id> <step-id> [options]");
   io.stdout(
     "  divedra tui [workflow-name] [--workflow <name>] [--resume-session <id>] [--variables <path>] [--mock-scenario <path>] [--max-steps <n>]",
   );
@@ -545,6 +644,9 @@ function printHelp(io: CliIo): void {
   );
   io.stdout(
     "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
+  );
+  io.stdout(
+    "  divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-node-exec <id>] [options]",
   );
   io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]",
@@ -571,6 +673,11 @@ function printHelp(io: CliIo): void {
   io.stdout(
     "  logs --format <format>   Print node logs as text, json, or jsonl",
   );
+  io.stdout("  --default-timeout-ms <ms>  Override workflow default timeout");
+  io.stdout("  --timeout-ms <ms>          call-step only");
+  io.stdout("  --prompt-variant <name>    call-step only");
+  io.stdout("  --continue-session         call-step only");
+  io.stdout("  --resume-node-exec <id>    call-step only");
 }
 
 function formatValidationIssues(
@@ -1060,6 +1167,47 @@ function buildLocalCallNodeOverrides(
   };
 }
 
+function buildLocalCallStepOverrides(
+  parsedOptions: ParsedOptions,
+): Pick<
+  CallStepInput,
+  "defaultTimeoutMs" | "dryRun" | "workflowWorkingDirectory" | "overrides"
+> {
+  const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
+    parsedOptions.workingDirectory,
+  );
+  const overrides =
+    parsedOptions.timeoutMs === undefined &&
+    parsedOptions.promptVariant === undefined &&
+    !parsedOptions.continueSession &&
+    parsedOptions.resumeNodeExecId === undefined
+      ? undefined
+      : {
+          ...(parsedOptions.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: parsedOptions.timeoutMs }),
+          ...(parsedOptions.promptVariant === undefined
+            ? {}
+            : { promptVariant: parsedOptions.promptVariant }),
+          ...(parsedOptions.continueSession
+            ? { sessionMode: "reuse" as const }
+            : {}),
+          ...(parsedOptions.resumeNodeExecId === undefined
+            ? {}
+            : { resumeNodeExecId: parsedOptions.resumeNodeExecId }),
+        };
+  return {
+    ...(workflowWorkingDirectory === undefined
+      ? {}
+      : { workflowWorkingDirectory }),
+    ...(parsedOptions.defaultTimeoutMs === undefined
+      ? {}
+      : { defaultTimeoutMs: parsedOptions.defaultTimeoutMs }),
+    ...(parsedOptions.dryRun ? { dryRun: true } : {}),
+    ...(overrides === undefined ? {} : { overrides }),
+  };
+}
+
 async function listWorkflowNames(options: {
   workflowRoot?: string;
   workflowScope?: WorkflowScopeSelector;
@@ -1146,6 +1294,7 @@ export async function loadOpenTuiScreenImplementations(
 interface LocalTuiWorkflowActionInput {
   readonly workflowName: string;
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly rerunFromStepId?: string;
   readonly rerunFromNodeId?: string;
   readonly rerunFromSessionId?: string;
   readonly resumeSessionId?: string;
@@ -1294,6 +1443,7 @@ export function createOpenTuiWorkflowAppOptions(
     },
     rerunWorkflow: async ({
       sourceSessionId,
+      fromStepId,
       fromNodeId,
       runtimeVariables,
     }) => {
@@ -1301,7 +1451,8 @@ export function createOpenTuiWorkflowAppOptions(
       return input.runLocalTuiWorkflow({
         workflowName: source.workflowName,
         rerunFromSessionId: source.sessionId,
-        rerunFromNodeId: fromNodeId,
+        ...(fromStepId === undefined ? {} : { rerunFromStepId: fromStepId }),
+        ...(fromNodeId === undefined ? {} : { rerunFromNodeId: fromNodeId }),
         runtimeVariables: {
           ...input.optionRuntimeVariables,
           ...runtimeVariables,
@@ -1391,17 +1542,40 @@ async function runTui(
         continue;
       }
       const session = loaded.value;
-      const counts = Object.keys(session.nodeExecutionCounts)
+      const currentStepId = resolveCurrentStepIdFromWorkflow(
+        session,
+        loadedWorkflow.ok ? loadedWorkflow.value.bundle.workflow : undefined,
+      );
+      const nodeCounts = Object.keys(session.nodeExecutionCounts)
         .sort((a, b) => a.localeCompare(b))
         .map(
           (nodeId) =>
-            `${nodeId}:${String(session.nodeExecutionCounts[nodeId] ?? 0)}`,
-        )
-        .join(", ");
+            ({
+              id: nodeId,
+              executions: session.nodeExecutionCounts[nodeId] ?? 0,
+              restarts: session.restartCounts?.[nodeId] ?? 0,
+            }) as const,
+        );
+      const stepCounts = buildStepProgressSummaries(session).map((summary) => ({
+        id: summary.stepId,
+        executions: summary.executions,
+        restarts: summary.restarts,
+      }));
+      const currentTargetText =
+        currentStepId === null
+          ? `current=${session.currentNodeId ?? "-"}`
+          : currentStepId === session.currentNodeId ||
+              session.currentNodeId === undefined
+            ? `currentStep=${currentStepId}`
+            : `currentStep=${currentStepId} currentNode=${session.currentNodeId}`;
       io.stdout(
-        `[progress] status=${session.status} current=${session.currentNodeId ?? "-"} totalExec=${String(
+        `[progress] status=${session.status} ${currentTargetText} totalExec=${String(
           session.nodeExecutionCounter,
-        )} queue=${session.queue.join(",") || "-"} nodes=${counts || "-"}`,
+        )} queue=${session.queue.join(",") || "-"}${
+          stepCounts.length === 0
+            ? ""
+            : ` steps=${formatProgressExecutionCounts(stepCounts)}`
+        } nodes=${formatProgressExecutionCounts(nodeCounts)}`,
       );
       terminal =
         session.status === "completed" ||
@@ -1444,6 +1618,7 @@ async function runTui(
   const runLocalTuiWorkflow = async (input: {
     readonly workflowName: string;
     readonly runtimeVariables: Readonly<Record<string, unknown>>;
+    readonly rerunFromStepId?: string;
     readonly rerunFromNodeId?: string;
     readonly rerunFromSessionId?: string;
     readonly resumeSessionId?: string;
@@ -1461,9 +1636,10 @@ async function runTui(
       ...(input.rerunFromSessionId === undefined
         ? {}
         : { rerunFromSessionId: input.rerunFromSessionId }),
-      ...(input.rerunFromNodeId === undefined
+      ...(input.rerunFromStepId === undefined &&
+      input.rerunFromNodeId === undefined
         ? {}
-        : { rerunFromNodeId: input.rerunFromNodeId }),
+        : { rerunFromNodeId: input.rerunFromStepId ?? input.rerunFromNodeId }),
       runtimeVariables: input.runtimeVariables,
     });
     if (!result.ok) {
@@ -2423,6 +2599,92 @@ export async function runCli(
     return result.value.exitCode;
   }
 
+  if (scope === "call-step") {
+    const workflowId = command;
+    const workflowRunId = target;
+    const stepId = positionals[3];
+    if (
+      workflowId === undefined ||
+      workflowRunId === undefined ||
+      stepId === undefined
+    ) {
+      io.stderr("workflow id, workflow run id, and step id are required");
+      io.stderr(
+        "usage: divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-node-exec <id>] [options]",
+      );
+      return 2;
+    }
+    if (graphqlCliTransport !== null) {
+      io.stderr(
+        "call-step currently supports local execution only; omit --endpoint",
+      );
+      return 2;
+    }
+
+    let message: unknown;
+    try {
+      message = await readCallNodeMessage(parsed.options);
+    } catch (error: unknown) {
+      const messageText =
+        error instanceof Error ? error.message : "unknown error";
+      io.stderr(`failed to read call-step message: ${messageText}`);
+      return 1;
+    }
+
+    let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
+    try {
+      mockScenarioOptions = await readMockScenarioOption(
+        parsed.options.mockScenarioPath,
+      );
+    } catch (error: unknown) {
+      const messageText =
+        error instanceof Error ? error.message : "unknown error";
+      io.stderr(`failed to read --mock-scenario file: ${messageText}`);
+      return 1;
+    }
+
+    const result = await callStep({
+      ...sharedOptions,
+      workflowId,
+      workflowRunId,
+      stepId,
+      ...buildLocalCallStepOverrides(parsed.options),
+      ...mockScenarioOptions,
+      ...(message === undefined ? {} : { message }),
+    });
+
+    if (!result.ok) {
+      if (parsed.options.output === "json") {
+        emitJson(io, result.error);
+      } else {
+        io.stderr(`call-step failed: ${result.error.message}`);
+        if (result.error.nodeExecution !== undefined) {
+          io.stderr(`nodeExecId: ${result.error.nodeExecution.nodeExecId}`);
+          io.stderr(`status: ${result.error.nodeExecution.status}`);
+        }
+      }
+      return result.error.exitCode;
+    }
+
+    if (parsed.options.output === "json") {
+      emitJson(io, {
+        sessionId: result.value.session.sessionId,
+        stepId,
+        nodeExecId: result.value.nodeExecution.nodeExecId,
+        status: result.value.nodeExecution.status,
+        output: result.value.output,
+        outputRef: result.value.outputRef,
+        exitCode: result.value.exitCode,
+      });
+    } else {
+      io.stdout(`sessionId: ${result.value.session.sessionId}`);
+      io.stdout(`stepId: ${stepId}`);
+      io.stdout(`nodeExecId: ${result.value.nodeExecution.nodeExecId}`);
+      io.stdout(`status: ${result.value.nodeExecution.status}`);
+    }
+    return result.value.exitCode;
+  }
+
   if (scope === undefined || command === undefined || target === undefined) {
     io.stderr("scope, command, and target are required");
     printHelp(io);
@@ -2549,8 +2811,16 @@ export async function runCli(
           `managerNodeId: ${summary.managerNodeId ?? "(none; worker-only workflow)"}`,
         );
         io.stdout(`entryNodeId: ${summary.entryNodeId}`);
+        if (summary.entryStepId !== undefined) {
+          io.stdout(
+            `managerStepId: ${summary.managerStepId ?? "(implicit or worker-only)"}`,
+          );
+          io.stdout(`entryStepId: ${summary.entryStepId}`);
+          io.stdout(`stepIds: ${summary.stepIds.join(", ")}`);
+          io.stdout(`nodeRegistryIds: ${summary.nodeRegistryIds.join(", ")}`);
+        }
         io.stdout(
-          `nodes: ${summary.counts.nodes}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}, workflowCalls: ${summary.counts.workflowCalls}${legacySubWorkflowCountSegment}`,
+          `nodes: ${summary.counts.nodes}, nodeRegistry: ${summary.counts.nodeRegistry}, steps: ${summary.counts.steps}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}, workflowCalls: ${summary.counts.workflowCalls}${legacySubWorkflowCountSegment}`,
         );
         if (summary.workflowCallIds.length > 0) {
           io.stdout(`workflowCallIds: ${summary.workflowCallIds.join(", ")}`);
@@ -2759,6 +3029,11 @@ export async function runCli(
       }
 
       const countsByNode = session.value.nodeExecutionCounts;
+      const currentStepId = await resolveSessionCurrentStepId(
+        session.value,
+        sharedOptions,
+      );
+      const stepSummaries = buildStepProgressSummaries(session.value);
       const nodeSummaries = Object.keys(countsByNode)
         .sort((a, b) => a.localeCompare(b))
         .map((nodeId) => ({
@@ -2774,8 +3049,10 @@ export async function runCli(
           status: session.value.status,
           queue: session.value.queue,
           currentNodeId: session.value.currentNodeId ?? null,
+          currentStepId,
           totalExecutions: session.value.nodeExecutionCounter,
           nodeSummaries,
+          stepSummaries,
           lastError: session.value.lastError ?? null,
         });
       } else {
@@ -2783,6 +3060,9 @@ export async function runCli(
         io.stdout(`workflow: ${session.value.workflowName}`);
         io.stdout(`status: ${session.value.status}`);
         io.stdout(`currentNodeId: ${session.value.currentNodeId ?? "-"}`);
+        if (currentStepId !== null) {
+          io.stdout(`currentStepId: ${currentStepId}`);
+        }
         io.stdout(`queue: ${session.value.queue.join(",") || "-"}`);
         io.stdout(`totalExecutions: ${session.value.nodeExecutionCounter}`);
         io.stdout("nodeProgress:");
@@ -2791,6 +3071,14 @@ export async function runCli(
             `  - ${summary.nodeId}: executions=${summary.executions}, restarts=${summary.restarts}`,
           );
         });
+        if (stepSummaries.length > 0) {
+          io.stdout("stepProgress:");
+          stepSummaries.forEach((summary) => {
+            io.stdout(
+              `  - ${summary.stepId}: executions=${summary.executions}, restarts=${summary.restarts}`,
+            );
+          });
+        }
       }
       return 0;
     }
@@ -2802,13 +3090,23 @@ export async function runCli(
         return 1;
       }
 
+      const currentStepId = await resolveSessionCurrentStepId(
+        session.value,
+        sharedOptions,
+      );
       if (parsed.options.output === "json") {
-        emitJson(io, session.value);
+        emitJson(io, {
+          ...session.value,
+          currentStepId,
+        });
       } else {
         io.stdout(`sessionId: ${session.value.sessionId}`);
         io.stdout(`workflow: ${session.value.workflowName}`);
         io.stdout(`status: ${session.value.status}`);
         io.stdout(`currentNodeId: ${session.value.currentNodeId ?? "-"}`);
+        if (currentStepId !== null) {
+          io.stdout(`currentStepId: ${currentStepId}`);
+        }
         io.stdout(`queueLength: ${session.value.queue.length}`);
       }
       return 0;
@@ -2919,11 +3217,11 @@ export async function runCli(
     }
 
     if (command === "rerun") {
-      const fromNodeId = positionals[3];
-      if (fromNodeId === undefined) {
-        io.stderr("node id is required for session rerun");
+      const fromStepId = positionals[3];
+      if (fromStepId === undefined) {
+        io.stderr("step id is required for session rerun");
         io.stderr(
-          "usage: divedra session rerun <session-id> <node-id> [options]",
+          "usage: divedra session rerun <session-id> <step-id> [options]",
         );
         return 2;
       }
@@ -2947,7 +3245,7 @@ export async function runCli(
             variables: {
               input: {
                 workflowExecutionId: target,
-                nodeId: fromNodeId,
+                stepId: fromStepId,
                 ...buildRemoteExecutionInput(parsed.options),
               },
             },
@@ -2974,13 +3272,13 @@ export async function runCli(
               sourceSessionId: target,
               sessionId,
               status,
-              rerunFromNodeId: fromNodeId,
+              rerunFromStepId: fromStepId,
               exitCode,
             });
           } else {
             io.stdout(`sourceSessionId: ${target}`);
             io.stdout(`rerun session: ${sessionId}`);
-            io.stdout(`rerunFromNodeId: ${fromNodeId}`);
+            io.stdout(`rerunFromStepId: ${fromStepId}`);
             io.stdout(`status: ${status}`);
           }
           return exitCode;
@@ -3015,7 +3313,7 @@ export async function runCli(
         ...sharedOptions,
         ...buildLocalWorkflowRunOverrides(parsed.options),
         rerunFromSessionId: source.value.sessionId,
-        rerunFromNodeId: fromNodeId,
+        rerunFromNodeId: fromStepId,
         ...mockScenarioOptions,
       });
 
@@ -3029,13 +3327,13 @@ export async function runCli(
           sourceSessionId: source.value.sessionId,
           sessionId: result.value.session.sessionId,
           status: result.value.session.status,
-          rerunFromNodeId: fromNodeId,
+          rerunFromStepId: fromStepId,
           exitCode: result.value.exitCode,
         });
       } else {
         io.stdout(`sourceSessionId: ${source.value.sessionId}`);
         io.stdout(`rerun session: ${result.value.session.sessionId}`);
-        io.stdout(`rerunFromNodeId: ${fromNodeId}`);
+        io.stdout(`rerunFromStepId: ${fromStepId}`);
         io.stdout(`status: ${result.value.session.status}`);
       }
       return result.value.exitCode;

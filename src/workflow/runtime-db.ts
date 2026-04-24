@@ -8,6 +8,7 @@ import type {
   SessionStatus,
   WorkflowSessionState,
 } from "./session";
+import { resolveCurrentStepId } from "./session";
 import type { AdapterProcessLog } from "./adapter";
 import type { LoadOptions } from "./types";
 
@@ -17,7 +18,10 @@ const PROCESS_LOG_MESSAGE_TEXT_LIMIT = 500;
 interface RuntimeNodeExecutionRow {
   readonly sessionId: string;
   readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
+  readonly mailboxInstanceId?: string;
   readonly status: NodeExecutionRecord["status"];
   readonly artifactDir: string;
   readonly startedAt: string;
@@ -25,6 +29,8 @@ interface RuntimeNodeExecutionRow {
   readonly attempt?: number;
   readonly outputAttemptCount?: number;
   readonly outputValidationErrors?: NodeExecutionRecord["outputValidationErrors"];
+  readonly promptVariant?: string;
+  readonly timeoutMs?: number;
   readonly backendSessionMode?: NodeExecutionRecord["backendSessionMode"];
   readonly backendSessionId?: NodeExecutionRecord["backendSessionId"];
   readonly restartedFromNodeExecId?: string;
@@ -42,6 +48,7 @@ export interface RuntimeSessionSummary {
   readonly startedAt: string;
   readonly endedAt: string | null;
   readonly currentNodeId: string | null;
+  readonly currentStepId?: string | null;
   readonly nodeExecutionCounter: number;
   readonly lastError: string | null;
   readonly updatedAt: string;
@@ -51,6 +58,9 @@ export interface RuntimeNodeExecutionSummary {
   readonly sessionId: string;
   readonly nodeExecId: string;
   readonly nodeId: string;
+  readonly stepId?: string | null;
+  readonly nodeRegistryId?: string | null;
+  readonly mailboxInstanceId?: string | null;
   readonly status: string;
   readonly artifactDir: string;
   readonly startedAt: string;
@@ -60,6 +70,8 @@ export interface RuntimeNodeExecutionSummary {
   readonly outputValidationErrors:
     | NodeExecutionRecord["outputValidationErrors"]
     | null;
+  readonly promptVariant?: string | null;
+  readonly timeoutMs?: number | null;
   readonly backendSessionMode: NodeExecutionRecord["backendSessionMode"] | null;
   readonly backendSessionId: NodeExecutionRecord["backendSessionId"] | null;
   readonly restartedFromNodeExecId: string | null;
@@ -260,6 +272,7 @@ interface RuntimeSessionRow {
   readonly started_at: string;
   readonly ended_at: string | null;
   readonly current_node_id: string | null;
+  readonly current_step_id: string | null;
   readonly node_execution_counter: number;
   readonly last_error: string | null;
   readonly updated_at: string;
@@ -276,6 +289,9 @@ function toRuntimeSessionSummary(
     startedAt: row.started_at,
     endedAt: row.ended_at,
     currentNodeId: row.current_node_id,
+    ...(row.current_step_id === null
+      ? {}
+      : { currentStepId: row.current_step_id }),
     nodeExecutionCounter: row.node_execution_counter,
     lastError: row.last_error,
     updatedAt: row.updated_at,
@@ -293,6 +309,7 @@ function ensureSchema(db: Database): void {
       started_at TEXT NOT NULL,
       ended_at TEXT,
       current_node_id TEXT,
+      current_step_id TEXT,
       node_execution_counter INTEGER NOT NULL,
       queue_json TEXT NOT NULL,
       last_error TEXT,
@@ -302,6 +319,9 @@ function ensureSchema(db: Database): void {
       session_id TEXT NOT NULL,
       node_exec_id TEXT NOT NULL,
       node_id TEXT NOT NULL,
+      step_id TEXT,
+      node_registry_id TEXT,
+      mailbox_instance_id TEXT,
       status TEXT NOT NULL,
       artifact_dir TEXT NOT NULL,
       started_at TEXT NOT NULL,
@@ -309,6 +329,8 @@ function ensureSchema(db: Database): void {
       attempt INTEGER,
       output_attempt_count INTEGER,
       output_validation_errors_json TEXT,
+      prompt_variant TEXT,
+      timeout_ms INTEGER,
       backend_session_mode TEXT,
       backend_session_id TEXT,
       restarted_from_node_exec_id TEXT,
@@ -402,22 +424,48 @@ function ensureSchema(db: Database): void {
   const nodeExecutionColumns = db
     .query("PRAGMA table_info(node_executions)")
     .all() as Array<{ name: string }>;
-  const existingColumns = new Set(nodeExecutionColumns.map((row) => row.name));
-  if (!existingColumns.has("output_attempt_count")) {
+  const existingNodeExecutionColumns = new Set(
+    nodeExecutionColumns.map((row) => row.name),
+  );
+  if (!existingNodeExecutionColumns.has("output_attempt_count")) {
     db.exec(
       "ALTER TABLE node_executions ADD COLUMN output_attempt_count INTEGER",
     );
   }
-  if (!existingColumns.has("output_validation_errors_json")) {
+  if (!existingNodeExecutionColumns.has("output_validation_errors_json")) {
     db.exec(
       "ALTER TABLE node_executions ADD COLUMN output_validation_errors_json TEXT",
     );
   }
-  if (!existingColumns.has("backend_session_mode")) {
+  if (!existingNodeExecutionColumns.has("backend_session_mode")) {
     db.exec("ALTER TABLE node_executions ADD COLUMN backend_session_mode TEXT");
   }
-  if (!existingColumns.has("backend_session_id")) {
+  if (!existingNodeExecutionColumns.has("backend_session_id")) {
     db.exec("ALTER TABLE node_executions ADD COLUMN backend_session_id TEXT");
+  }
+  const sessionColumns = db
+    .query("PRAGMA table_info(sessions)")
+    .all() as Array<{
+    name: string;
+  }>;
+  const existingSessionColumns = new Set(sessionColumns.map((row) => row.name));
+  if (!existingSessionColumns.has("current_step_id")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN current_step_id TEXT");
+  }
+  if (!existingNodeExecutionColumns.has("step_id")) {
+    db.exec("ALTER TABLE node_executions ADD COLUMN step_id TEXT");
+  }
+  if (!existingNodeExecutionColumns.has("node_registry_id")) {
+    db.exec("ALTER TABLE node_executions ADD COLUMN node_registry_id TEXT");
+  }
+  if (!existingNodeExecutionColumns.has("mailbox_instance_id")) {
+    db.exec("ALTER TABLE node_executions ADD COLUMN mailbox_instance_id TEXT");
+  }
+  if (!existingNodeExecutionColumns.has("prompt_variant")) {
+    db.exec("ALTER TABLE node_executions ADD COLUMN prompt_variant TEXT");
+  }
+  if (!existingNodeExecutionColumns.has("timeout_ms")) {
+    db.exec("ALTER TABLE node_executions ADD COLUMN timeout_ms INTEGER");
   }
 }
 
@@ -905,8 +953,8 @@ export async function saveSessionSnapshotToRuntimeDb(
     const stmt = db.prepare(`
       INSERT INTO sessions (
         session_id, workflow_name, workflow_id, status, started_at, ended_at,
-        current_node_id, node_execution_counter, queue_json, last_error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        current_node_id, current_step_id, node_execution_counter, queue_json, last_error, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         workflow_name=excluded.workflow_name,
         workflow_id=excluded.workflow_id,
@@ -914,12 +962,14 @@ export async function saveSessionSnapshotToRuntimeDb(
         started_at=excluded.started_at,
         ended_at=excluded.ended_at,
         current_node_id=excluded.current_node_id,
+        current_step_id=excluded.current_step_id,
         node_execution_counter=excluded.node_execution_counter,
         queue_json=excluded.queue_json,
         last_error=excluded.last_error,
         updated_at=excluded.updated_at
     `);
     const updatedAt = new Date().toISOString();
+    const currentStepId = resolveCurrentStepId(session);
     stmt.run(
       session.sessionId,
       session.workflowName,
@@ -928,6 +978,7 @@ export async function saveSessionSnapshotToRuntimeDb(
       session.startedAt,
       session.endedAt ?? null,
       session.currentNodeId ?? null,
+      currentStepId,
       session.nodeExecutionCounter,
       JSON.stringify(session.queue),
       session.lastError ?? null,
@@ -944,16 +995,19 @@ export async function saveNodeExecutionToRuntimeDb(
     const now = new Date().toISOString();
     const nodeStmt = db.prepare(`
       INSERT OR REPLACE INTO node_executions (
-        session_id, node_exec_id, node_id, status, artifact_dir, started_at, ended_at,
-        attempt, output_attempt_count, output_validation_errors_json, backend_session_mode, backend_session_id,
+        session_id, node_exec_id, node_id, step_id, node_registry_id, mailbox_instance_id, status, artifact_dir, started_at, ended_at,
+        attempt, output_attempt_count, output_validation_errors_json, prompt_variant, timeout_ms, backend_session_mode, backend_session_id,
         restarted_from_node_exec_id,
         input_hash, output_hash, input_json, output_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     nodeStmt.run(
       row.sessionId,
       row.nodeExecId,
       row.nodeId,
+      row.stepId ?? null,
+      row.nodeRegistryId ?? null,
+      row.mailboxInstanceId ?? null,
       row.status,
       row.artifactDir,
       row.startedAt,
@@ -963,6 +1017,8 @@ export async function saveNodeExecutionToRuntimeDb(
       row.outputValidationErrors === undefined
         ? null
         : JSON.stringify(row.outputValidationErrors),
+      row.promptVariant ?? null,
+      row.timeoutMs ?? null,
       row.backendSessionMode ?? null,
       row.backendSessionId ?? null,
       row.restartedFromNodeExecId ?? null,
@@ -1122,6 +1178,7 @@ export async function listRuntimeSessions(
           started_at,
           ended_at,
           current_node_id,
+          current_step_id,
           node_execution_counter,
           last_error,
           updated_at
@@ -1149,6 +1206,7 @@ export async function loadRuntimeSessionSummary(
           started_at,
           ended_at,
           current_node_id,
+          current_step_id,
           node_execution_counter,
           last_error,
           updated_at
@@ -1172,6 +1230,9 @@ export async function listRuntimeNodeExecutions(
           session_id,
           node_exec_id,
           node_id,
+          step_id,
+          node_registry_id,
+          mailbox_instance_id,
           status,
           artifact_dir,
           started_at,
@@ -1179,6 +1240,8 @@ export async function listRuntimeNodeExecutions(
           attempt,
           output_attempt_count,
           output_validation_errors_json,
+          prompt_variant,
+          timeout_ms,
           backend_session_mode,
           backend_session_id,
           restarted_from_node_exec_id,
@@ -1195,6 +1258,9 @@ export async function listRuntimeNodeExecutions(
       session_id: string;
       node_exec_id: string;
       node_id: string;
+      step_id: string | null;
+      node_registry_id: string | null;
+      mailbox_instance_id: string | null;
       status: string;
       artifact_dir: string;
       started_at: string;
@@ -1202,6 +1268,8 @@ export async function listRuntimeNodeExecutions(
       attempt: number | null;
       output_attempt_count: number | null;
       output_validation_errors_json: string | null;
+      prompt_variant: string | null;
+      timeout_ms: number | null;
       backend_session_mode: NodeExecutionRecord["backendSessionMode"] | null;
       backend_session_id: NodeExecutionRecord["backendSessionId"] | null;
       restarted_from_node_exec_id: string | null;
@@ -1216,6 +1284,9 @@ export async function listRuntimeNodeExecutions(
       sessionId: row.session_id,
       nodeExecId: row.node_exec_id,
       nodeId: row.node_id,
+      stepId: row.step_id,
+      nodeRegistryId: row.node_registry_id,
+      mailboxInstanceId: row.mailbox_instance_id,
       status: row.status,
       artifactDir: row.artifact_dir,
       startedAt: row.started_at,
@@ -1228,6 +1299,8 @@ export async function listRuntimeNodeExecutions(
           : (JSON.parse(
               row.output_validation_errors_json,
             ) as NodeExecutionRecord["outputValidationErrors"]),
+      promptVariant: row.prompt_variant,
+      timeoutMs: row.timeout_ms,
       backendSessionMode: row.backend_session_mode,
       backendSessionId: row.backend_session_id,
       restartedFromNodeExecId: row.restarted_from_node_exec_id,

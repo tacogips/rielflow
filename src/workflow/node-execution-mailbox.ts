@@ -58,10 +58,13 @@ export interface NodeExecutionMailboxStructure {
 export interface NodeExecutionMailboxMeta {
   readonly protocolVersion: 1;
   readonly mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR";
+  readonly mailboxInstanceId?: string;
   readonly node: {
     readonly workflowId: string;
     readonly workflowDescription: string;
     readonly nodeId: string;
+    readonly stepId?: string;
+    readonly nodeRegistryId?: string;
     readonly nodeKind: string;
   };
   readonly objective: {
@@ -131,6 +134,9 @@ export interface BuildNodeExecutionMailboxInput {
   readonly workflow: WorkflowJson;
   readonly nodeRef: WorkflowNodeRef;
   readonly node: NodePayload;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly mailboxInstanceId?: string;
   readonly nodePayloads: Readonly<Record<string, NodePayload>>;
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly basePromptText: string;
@@ -509,10 +515,17 @@ export function buildNodeExecutionMailbox(
     meta: {
       protocolVersion: 1,
       mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      ...(input.mailboxInstanceId === undefined
+        ? {}
+        : { mailboxInstanceId: input.mailboxInstanceId }),
       node: {
         workflowId: input.workflow.workflowId,
         workflowDescription: input.workflow.description,
         nodeId: input.nodeRef.id,
+        ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
+        ...(input.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: input.nodeRegistryId }),
         nodeKind: describeWorkflowNodeKind(input.nodeRef),
       },
       objective: {

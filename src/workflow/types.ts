@@ -176,6 +176,8 @@ export interface WorkflowCallRef {
   readonly id: string;
   readonly workflowId: string;
   readonly callerNodeId: string;
+  /** Step-addressed: optional; when set must equal `callerNodeId` and limits the call to that step id (disambiguates shared registry nodes). */
+  readonly callerStepId?: string;
   readonly resultNodeId?: string;
 }
 
@@ -649,6 +651,7 @@ export interface LoadOptions {
   readonly nodeAddons?: readonly NodeAddonDefinition[];
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
+  readonly rejectLegacyWorkflowAuthoring?: boolean;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";

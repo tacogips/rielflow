@@ -1,6 +1,6 @@
 {
   "workflowId": "subworkflow-chained-simple",
-  "description": "Minimal runnable bundle authored as an ordered node list with two sequential grouped lanes, where beta consumes the published result from alpha.",
+  "description": "Minimal runnable bundle authored in the step-addressed shape with two sequential grouped lanes, where beta consumes the published result from alpha.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -9,51 +9,131 @@
     "divedraPromptTemplate": "Coordinate {{workflowId}} as two sequential grouped lanes. Run alpha first; after alpha-output succeeds, run beta and pass along the prior published result.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
   },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
       "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "alpha-manager",
-      "group": "alpha-lane",
       "nodeFile": "workflows/alpha/nodes/node-alpha-manager.json"
     },
     {
       "id": "alpha-input",
-      "group": "alpha-lane",
       "nodeFile": "workflows/alpha/nodes/node-alpha-input.json"
     },
     {
       "id": "alpha-worker",
-      "group": "alpha-lane",
       "nodeFile": "workflows/alpha/nodes/node-alpha-worker.json"
     },
     {
       "id": "alpha-output",
-      "group": "alpha-lane",
       "nodeFile": "workflows/alpha/nodes/node-alpha-output.json"
     },
     {
       "id": "beta-manager",
-      "group": "beta-lane",
       "nodeFile": "workflows/beta/nodes/node-beta-manager.json"
     },
     {
       "id": "beta-input",
-      "group": "beta-lane",
       "nodeFile": "workflows/beta/nodes/node-beta-input.json"
     },
     {
       "id": "beta-worker",
-      "group": "beta-lane",
       "nodeFile": "workflows/beta/nodes/node-beta-worker.json"
     },
     {
       "id": "beta-output",
-      "group": "beta-lane",
       "nodeFile": "workflows/beta/nodes/node-beta-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "alpha-manager"
+        }
+      ]
+    },
+    {
+      "id": "alpha-manager",
+      "nodeId": "alpha-manager",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "alpha-input"
+        }
+      ]
+    },
+    {
+      "id": "alpha-input",
+      "nodeId": "alpha-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "alpha-worker"
+        }
+      ]
+    },
+    {
+      "id": "alpha-worker",
+      "nodeId": "alpha-worker",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "alpha-output"
+        }
+      ]
+    },
+    {
+      "id": "alpha-output",
+      "nodeId": "alpha-output",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "beta-manager"
+        }
+      ]
+    },
+    {
+      "id": "beta-manager",
+      "nodeId": "beta-manager",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "beta-input"
+        }
+      ]
+    },
+    {
+      "id": "beta-input",
+      "nodeId": "beta-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "beta-worker"
+        }
+      ]
+    },
+    {
+      "id": "beta-worker",
+      "nodeId": "beta-worker",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "beta-output"
+        }
+      ]
+    },
+    {
+      "id": "beta-output",
+      "nodeId": "beta-output",
+      "role": "worker"
     }
   ]
 }

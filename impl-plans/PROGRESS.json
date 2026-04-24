@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-04-24T12:27:00Z",
+  "lastUpdated": "2026-04-24T13:24:00Z",
   "phases": {
     "1": { "status": "COMPLETED" },
     "2": { "status": "COMPLETED" },
@@ -3093,17 +3093,17 @@
           "deps": []
         },
         "TASK-002": {
-          "status": "Blocked",
+          "status": "In Progress",
           "parallelizable": false,
           "deps": ["TASK-001"]
         },
         "TASK-003": {
-          "status": "Blocked",
+          "status": "In Progress",
           "parallelizable": false,
           "deps": ["TASK-001", "TASK-002"]
         },
         "TASK-004": {
-          "status": "Blocked",
+          "status": "In Progress",
           "parallelizable": true,
           "deps": ["TASK-001", "TASK-002"]
         },
@@ -3131,7 +3131,10 @@
         "TASK-003": {
           "status": "Blocked",
           "parallelizable": false,
-          "deps": ["step-addressed-workflow-runtime-cutover:TASK-005", "TASK-002"]
+          "deps": [
+            "step-addressed-workflow-runtime-cutover:TASK-005",
+            "TASK-002"
+          ]
         },
         "TASK-004": {
           "status": "Blocked",

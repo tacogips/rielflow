@@ -70,6 +70,10 @@ interface WorkflowCallRequirementCandidate {
   readonly sourceNodeIds: readonly string[];
 }
 
+interface CodeManagerRequirementCandidate {
+  readonly sourceNodeIds: readonly string[];
+}
+
 interface AddonEnvRequirementCandidate {
   readonly envName: string;
   readonly addonEnvNames: readonly string[];
@@ -420,6 +424,21 @@ async function probeContainerRunner(
   };
 }
 
+function probeCodeManagerRuntime(
+  candidate: CodeManagerRequirementCandidate,
+): WorkflowRuntimeRequirement {
+  return {
+    id: "workflow-feature:code-manager-runtime",
+    kind: "workflow-feature",
+    label: "code-manager runtime",
+    status: "unsupported",
+    detail:
+      "managerType='code' execution is not available on the current runtime path yet; " +
+      `nodes=${buildSourceNodeList(candidate.sourceNodeIds)}`,
+    sourceNodeIds: candidate.sourceNodeIds,
+  };
+}
+
 function isDockerCliContainerRunner(
   runnerKind: ContainerRunnerKind,
 ): runnerKind is "podman" | "docker" | "nerdctl" {
@@ -481,6 +500,7 @@ function collectRequirements(
   readonly agentBackends: readonly AgentBackendRequirementCandidate[];
   readonly containerRunners: readonly ContainerRunnerRequirementCandidate[];
   readonly addonEnvSources: readonly AddonEnvRequirementCandidate[];
+  readonly codeManager?: CodeManagerRequirementCandidate;
   readonly workflowCall?: WorkflowCallRequirementCandidate;
   readonly commandNodeIds: readonly string[];
   readonly containerNodeIds: readonly string[];
@@ -505,6 +525,7 @@ function collectRequirements(
       nodeIds: Set<string>;
     }
   >();
+  const codeManagerNodeIds = new Set<string>();
   const commandNodeIds = new Set<string>();
   const containerNodeIds = new Set<string>();
   const defaults = bundle.workflow.defaults.containerRuntime;
@@ -512,13 +533,30 @@ function collectRequirements(
     (call) => onlyNodeIds === undefined || onlyNodeIds.has(call.callerNodeId),
   );
 
-  for (const [nodeId, node] of Object.entries(bundle.nodePayloads)) {
+  for (const nodeRef of bundle.workflow.nodes) {
+    const nodeId = nodeRef.id;
     if (onlyNodeIds !== undefined && !onlyNodeIds.has(nodeId)) {
+      continue;
+    }
+
+    const node =
+      bundle.nodePayloads[nodeId] ??
+      bundle.nodePayloads[nodeRef.nodeFile] ??
+      null;
+    if (node === null) {
       continue;
     }
 
     const agentNode = asAgentNodePayload(node);
     if (agentNode !== null) {
+      if (
+        agentNode.managerType === "code" &&
+        agentNode.executionBackend === undefined
+      ) {
+        codeManagerNodeIds.add(nodeId);
+        continue;
+      }
+
       const backend = resolveNodeExecutionBackend(agentNode);
       const existing = agentBackends.get(backend) ?? {
         nodeIds: new Set<string>(),
@@ -527,6 +565,11 @@ function collectRequirements(
       existing.nodeIds.add(nodeId);
       existing.models.add(agentNode.model);
       agentBackends.set(backend, existing);
+      continue;
+    }
+
+    if (node.managerType === "code") {
+      codeManagerNodeIds.add(nodeId);
       continue;
     }
 
@@ -604,6 +647,13 @@ function collectRequirements(
       addonEnvNames: toSortedArray(entry.addonEnvNames),
       sourceNodeIds: toSortedArray(entry.nodeIds),
     })),
+    ...(codeManagerNodeIds.size === 0
+      ? {}
+      : {
+          codeManager: {
+            sourceNodeIds: toSortedArray(codeManagerNodeIds),
+          },
+        }),
     ...(relevantWorkflowCalls.length === 0
       ? {}
       : {
@@ -669,6 +719,10 @@ export async function inspectWorkflowRuntimeReadiness(
 
   for (const candidate of collected.addonEnvSources) {
     requirements.push(probeRequiredAddonEnv(candidate, options.env));
+  }
+
+  if (collected.codeManager !== undefined) {
+    requirements.push(probeCodeManagerRuntime(collected.codeManager));
   }
 
   if (collected.workflowCall !== undefined) {

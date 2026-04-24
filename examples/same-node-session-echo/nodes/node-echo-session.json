@@ -7,5 +7,10 @@
   },
   "promptTemplateFile": "prompts/echo-session.md",
   "sessionStartPromptTemplateFile": "prompts/echo-session-start.md",
+  "promptVariants": {
+    "answer": {
+      "promptTemplateFile": "prompts/echo-session-answer.md"
+    }
+  },
   "variables": {}
 }

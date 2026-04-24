@@ -13,6 +13,20 @@ bun run src/main.ts workflow validate subworkflow-chained-simple --workflow-root
 
 Expected result: the workflow is valid.
 
+## Inspect
+
+Command:
+
+```bash
+bun run src/main.ts workflow inspect subworkflow-chained-simple --workflow-root ./examples --output json
+```
+
+Expected stable inspection facts:
+
+- authored `managerStepId` is `divedra-manager`
+- authored `entryStepId` is `divedra-manager`
+- `stepIds` list `divedra-manager`, `alpha-manager`, `alpha-input`, `alpha-worker`, `alpha-output`, `beta-manager`, `beta-input`, `beta-worker`, and `beta-output`
+
 ## Run
 
 Command:
@@ -45,8 +59,6 @@ Expected final output payload:
 {
   "summary": "Chained lane example completed.",
   "status": "ready",
-  "notes": [
-    "beta-lane followed alpha-lane in ordered node flow"
-  ]
+  "notes": ["beta-lane followed alpha-lane in ordered node flow"]
 }
 ```

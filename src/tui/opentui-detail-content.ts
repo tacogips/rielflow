@@ -96,6 +96,14 @@ function formatCommunications(
   ].join("\n");
 }
 
+function formatExecutionTargetTitle(
+  selectedExecution: NodeExecutionRecord,
+): string {
+  return selectedExecution.stepId === undefined
+    ? `${selectedExecution.nodeId} / ${selectedExecution.nodeExecId}`
+    : `step ${selectedExecution.stepId} / ${selectedExecution.nodeExecId}`;
+}
+
 export async function loadNodeExecutionArtifacts(
   sessionView: RuntimeSessionView,
   selectedExecution: NodeExecutionRecord,
@@ -191,7 +199,7 @@ export async function buildDetailContent(input: {
 
   if (input.detailMode === "inbox") {
     return [
-      `Inbox for ${selectedExecution.nodeId} / ${selectedExecution.nodeExecId}`,
+      `Inbox for ${formatExecutionTargetTitle(selectedExecution)}`,
       "",
       "Mailbox meta.json:",
       summarizeLines(bundle.mailboxMeta, 8_000),
@@ -208,7 +216,7 @@ export async function buildDetailContent(input: {
 
   if (input.detailMode === "outbox") {
     return [
-      `Outbox for ${selectedExecution.nodeId} / ${selectedExecution.nodeExecId}`,
+      `Outbox for ${formatExecutionTargetTitle(selectedExecution)}`,
       "",
       "Execution output.json:",
       summarizeLines(bundle.artifactOutput, 8_000),
@@ -225,7 +233,7 @@ export async function buildDetailContent(input: {
 
   if (input.detailMode === "manager") {
     return [
-      `Manager session for ${selectedExecution.nodeId} / ${selectedExecution.nodeExecId}`,
+      `Manager session for ${formatExecutionTargetTitle(selectedExecution)}`,
       `managerSessionId: ${managerSessionId ?? "(not a manager node)"}`,
       `Timezone: ${resolveSystemTimeZoneLabel()}`,
       "",

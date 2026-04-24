@@ -108,6 +108,7 @@ describe("api-request", () => {
 
   test("ignores invalid optional rerun fields without failing the whole parse", () => {
     const parsed = readWorkflowRerunRequestOptions({
+      fromStepId: "publish-step",
       fromNodeId: "workflow-output",
       runtimeVariables: null,
       mockScenario: [],
@@ -116,24 +117,28 @@ describe("api-request", () => {
     });
 
     expect(parsed).toEqual({
+      fromStepId: "publish-step",
       fromNodeId: "workflow-output",
       runtimeVariables: {},
       defaultTimeoutMs: 2_000,
     });
   });
 
-  test("trims rerun fromNodeId and drops blank values", () => {
+  test("trims rerun fromStepId and fromNodeId and drops blank values", () => {
     expect(
       readWorkflowRerunRequestOptions({
+        fromStepId: " publish-step ",
         fromNodeId: " workflow-output ",
       }),
     ).toEqual({
+      fromStepId: "publish-step",
       fromNodeId: "workflow-output",
       runtimeVariables: {},
     });
 
     expect(
       readWorkflowRerunRequestOptions({
+        fromStepId: "   ",
         fromNodeId: "   ",
       }),
     ).toEqual({

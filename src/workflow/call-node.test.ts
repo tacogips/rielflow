@@ -9,6 +9,7 @@ import {
   type NodeAdapter,
 } from "./adapter";
 import { callNode } from "./call-node";
+import { createWorkflowTemplate } from "./create";
 import { listRuntimeNodeLogs } from "./runtime-db";
 import { createSessionState } from "./session";
 import { loadSession, saveSession } from "./session-store";
@@ -279,6 +280,47 @@ describe("callNode", () => {
       DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
       DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
+  });
+
+  test("supports mock-scenario fallback for scaffolded code-manager nodes without explicit manager scenario entries", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const workflowName = "call-node-template-manager";
+    const sessionId = "sess-call-node-template-manager";
+
+    const created = await createWorkflowTemplate(workflowName, {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    await createCallNodeSession({
+      workflowName,
+      sessionId,
+      sessionStoreRoot,
+    });
+
+    const result = await callNode({
+      workflowRoot: root,
+      artifactRoot: artifactsRoot,
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      nodeId: "divedra-manager",
+      mockScenario: {},
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.nodeExecution.nodeId).toBe("divedra-manager");
+    expect(result.value.output["provider"]).toBe("deterministic-local");
   });
 
   test("retries invalid output in the same node session and publishes accepted output", async () => {

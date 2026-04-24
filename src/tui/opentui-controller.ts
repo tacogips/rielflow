@@ -84,7 +84,8 @@ export interface OpenTuiControllerContext {
   ) => Promise<void>;
   readonly render: () => Promise<void>;
   readonly rerunWorkflow: (input: {
-    readonly fromNodeId: string;
+    readonly fromStepId?: string;
+    readonly fromNodeId?: string;
     readonly runtimeVariables: Readonly<Record<string, unknown>>;
     readonly sourceSessionId: string;
   }) => Promise<{
@@ -324,7 +325,7 @@ export function createOpenTuiController(
       const execution = context.getSelectedHistoryExecution();
       if (session === undefined || execution === undefined) {
         context.setStatus(
-          "Select a historical session and node execution before rerunning",
+          "Select a historical session and execution before rerunning",
         );
         await context.render();
         return;
@@ -354,11 +355,15 @@ export function createOpenTuiController(
         return;
       }
       await context.withBusy(
-        `Rerunning '${execution.nodeId}' from ${session.sessionId}`,
+        `Rerunning ${execution.stepId === undefined ? "node" : "step"} '${
+          execution.stepId ?? execution.nodeId
+        }' from ${session.sessionId}`,
         async () => {
           const result = await context.rerunWorkflow({
             sourceSessionId: session.sessionId,
-            fromNodeId: execution.nodeId,
+            ...(execution.stepId === undefined
+              ? { fromNodeId: execution.nodeId }
+              : { fromStepId: execution.stepId }),
             runtimeVariables,
           });
           await context.refreshWorkflow(session.workflowName, result.sessionId);

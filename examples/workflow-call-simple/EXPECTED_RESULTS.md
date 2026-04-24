@@ -23,7 +23,9 @@ bun run src/main.ts workflow inspect workflow-call-simple --workflow-root ./exam
 
 Expected stable inspection facts:
 
-- `managerNodeId` is `divedra-manager`
+- `managerStepId` is `divedra-manager`
+- `entryStepId` is `divedra-manager`
+- `stepIds` are `["divedra-manager", "draft-write", "apply-review"]`
 - `counts.workflowCalls` is `1`
 - `workflowCallIds` contains `call-review`
 - `subWorkflows` remains omitted from the authored bundle

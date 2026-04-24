@@ -7,12 +7,15 @@ import type { NodeAdapter } from "./adapter";
 import { runWorkflow } from "./engine";
 import {
   deleteRuntimeSession,
+  listRuntimeSessions,
   listRuntimeNodeLogs,
+  loadRuntimeSessionSummary,
   resolveRuntimeDbPath,
   saveCommunicationEventToRuntimeDb,
   saveProcessLogsToRuntimeDb,
+  saveSessionSnapshotToRuntimeDb,
 } from "./runtime-db";
-import type { CommunicationRecord } from "./session";
+import { createSessionState, type CommunicationRecord } from "./session";
 
 const tempDirs: string[] = [];
 
@@ -414,6 +417,58 @@ describe("runtime-db", () => {
     } finally {
       db.close();
     }
+  });
+
+  test("persists current step ids in runtime session summaries", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-step-summary");
+    const session = {
+      ...createSessionState({
+        sessionId: "sess-step-summary",
+        workflowName: "step-summary",
+        workflowId: "step-summary",
+        initialNodeId: "writer-step",
+        runtimeVariables: {},
+      }),
+      currentNodeId: "writer-step",
+      nodeExecutionCounter: 1,
+      nodeExecutionCounts: {
+        "writer-step": 1,
+      },
+      nodeExecutions: [
+        {
+          nodeId: "writer-step",
+          stepId: "writer-step",
+          nodeRegistryId: "writer-node",
+          nodeExecId: "exec-000001",
+          mailboxInstanceId: "exec-000001",
+          status: "succeeded" as const,
+          artifactDir: path.join(root, "artifacts", "writer-step"),
+          startedAt: "2026-04-24T00:00:00.000Z",
+          endedAt: "2026-04-24T00:00:01.000Z",
+          timeoutMs: 975,
+        },
+      ],
+    };
+
+    await saveSessionSnapshotToRuntimeDb(session, options);
+
+    await expect(listRuntimeSessions(options)).resolves.toEqual([
+      expect.objectContaining({
+        sessionId: "sess-step-summary",
+        currentNodeId: "writer-step",
+        currentStepId: "writer-step",
+      }),
+    ]);
+    await expect(
+      loadRuntimeSessionSummary("sess-step-summary", options),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        sessionId: "sess-step-summary",
+        currentNodeId: "writer-step",
+        currentStepId: "writer-step",
+      }),
+    );
   });
 
   test("stores concise process log messages with full text in payload JSON", async () => {

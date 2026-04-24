@@ -1,49 +1,93 @@
 {
   "workflowId": "same-node-session-echo",
-  "description": "Reference workflow authored as an ordered node list that revisits one worker node so it can first echo the request and then answer on the next visit using the same node id and an opt-in reusable backend session.",
+  "description": "Reference workflow authored in the step-addressed model where two distinct steps revisit one reusable worker node so it can first echo the request and then answer on the next visit using an inherited backend session.",
   "defaults": {
     "maxLoopIterations": 2,
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice: once to echo the normalized request, then again to answer using that echoed content.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice through explicit steps: first echo the normalized request, then answer using that echoed content.",
     "workerSystemPromptTemplate": "Return concise business JSON only. Preserve upstream data faithfully and do not invent extra workflow control beyond the current node responsibility."
   },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
-      "node": {
-        "id": "divedra-manager",
-        "executionBackend": "claude-code-agent",
-        "model": "claude-haiku-4-5",
-        "promptTemplateFile": "prompts/divedra-manager.md",
-        "variables": {}
-      }
+      "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "main-divedra",
-      "group": "delivery",
       "nodeFile": "nodes/node-main-divedra.json"
     },
     {
       "id": "workflow-input",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-input.json"
     },
     {
       "id": "echo-session",
-      "group": "delivery",
-      "nodeFile": "nodes/node-echo-session.json",
-      "repeat": {
-        "while": "continue_turn",
-        "maxIterations": 2
-      }
+      "nodeFile": "nodes/node-echo-session.json"
     },
     {
       "id": "workflow-output",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "main-divedra"
+        }
+      ]
+    },
+    {
+      "id": "main-divedra",
+      "nodeId": "main-divedra",
+      "transitions": [
+        {
+          "toStepId": "workflow-input"
+        }
+      ]
+    },
+    {
+      "id": "workflow-input",
+      "nodeId": "workflow-input",
+      "transitions": [
+        {
+          "toStepId": "echo-request"
+        }
+      ]
+    },
+    {
+      "id": "echo-request",
+      "nodeId": "echo-session",
+      "transitions": [
+        {
+          "toStepId": "answer-request"
+        }
+      ]
+    },
+    {
+      "id": "answer-request",
+      "nodeId": "echo-session",
+      "promptVariant": "answer",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "echo-request"
+      },
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output"
     }
   ]
 }

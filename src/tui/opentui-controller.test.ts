@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type { WorkflowSessionState } from "../workflow/session";
+import type {
+  NodeExecutionRecord,
+  WorkflowSessionState,
+} from "../workflow/session";
 import type { RuntimeSessionSummary } from "../workflow/runtime-db";
 import type { NodePayload } from "../workflow/types";
 import {
@@ -113,6 +116,7 @@ interface ControllerHarnessState {
   runStatusError: string | undefined;
   runtimeSessionView: RuntimeSessionView | undefined;
   screenMode: ScreenMode;
+  selectedHistoryExecution: NodeExecutionRecord | undefined;
   selectedSessionSummary: RuntimeSessionSummary | undefined;
   selectedWorkflowName: string | undefined;
   workflowInputDetection: TuiWorkflowInputDetection;
@@ -129,6 +133,16 @@ interface ControllerHarnessOverrides {
       readonly status: WorkflowSessionState["status"];
     }>;
     readonly sessionId: string;
+  }>;
+  rerunWorkflow?: (input: {
+    readonly sourceSessionId: string;
+    readonly fromStepId?: string;
+    readonly fromNodeId?: string;
+    readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  }) => Promise<{
+    readonly exitCode: number;
+    readonly sessionId: string;
+    readonly status: WorkflowSessionState["status"];
   }>;
   withBusy?: (label: string, action: () => Promise<void>) => Promise<void>;
   state?: Partial<ControllerHarnessState>;
@@ -164,6 +178,7 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     runStatusError: undefined,
     runtimeSessionView: undefined,
     screenMode: "run",
+    selectedHistoryExecution: undefined,
     selectedSessionSummary: undefined,
     selectedWorkflowName: "demo",
     workflowInputDetection: {
@@ -198,6 +213,14 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
         }),
       })),
   );
+  const rerunWorkflow = vi.fn(
+    overrides.rerunWorkflow ??
+      (async () => ({
+        exitCode: 0,
+        sessionId: "rerun-1",
+        status: "completed" as const,
+      })),
+  );
   const withBusy = vi.fn(
     overrides.withBusy ??
       (async (_label: string, action: () => Promise<void>) => {
@@ -218,7 +241,7 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     getScreenMode: () => state.screenMode,
     getSelectedChildSubworkflowId: () => undefined,
     getSelectedDefinitionNodeId: () => undefined,
-    getSelectedHistoryExecution: () => undefined,
+    getSelectedHistoryExecution: () => state.selectedHistoryExecution,
     getSelectedManagerSessionId: () => undefined,
     getSelectedNodeExecution: () => undefined,
     getSelectedSessionSummary: () => state.selectedSessionSummary,
@@ -229,11 +252,7 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     refreshAll,
     refreshWorkflow,
     render,
-    rerunWorkflow: async () => ({
-      exitCode: 0,
-      sessionId: "rerun-1",
-      status: "completed" as const,
-    }),
+    rerunWorkflow,
     resetRunState,
     resumeWorkflow: async () => ({
       exitCode: 0,
@@ -278,6 +297,7 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     executeWorkflow,
     refreshWorkflow,
     render,
+    rerunWorkflow,
     resetRunState,
     startRunPolling,
     stopRunPolling,
@@ -397,6 +417,45 @@ describe("createOpenTuiController", () => {
     expect(harness.stopRunPolling).toHaveBeenCalledTimes(1);
     expect(harness.state.runStatusError).toBe("background boom");
     expect(harness.state.lastStatus).toBe("Run failed: background boom");
+  });
+
+  test("rerunWorkflow prefers step-addressed execution targets when available", async () => {
+    const harness = createControllerHarness({
+      state: {
+        inputText: '{ "request": "retry" }',
+        runtimeSessionView: makeRuntimeSessionView({}),
+        selectedHistoryExecution: {
+          artifactDir: "/tmp/demo/executions/step-1",
+          endedAt: "2026-03-26T00:00:10.000Z",
+          nodeExecId: "exec-1",
+          nodeId: "shared-worker",
+          startedAt: "2026-03-26T00:00:05.000Z",
+          status: "succeeded",
+          stepId: "review-step",
+        },
+      },
+    });
+
+    await harness.controller.rerunWorkflow();
+
+    expect(harness.withBusy).toHaveBeenCalledWith(
+      "Rerunning step 'review-step' from sess-1",
+      expect.any(Function),
+    );
+    expect(harness.rerunWorkflow).toHaveBeenCalledWith({
+      sourceSessionId: "sess-1",
+      fromStepId: "review-step",
+      runtimeVariables: {
+        humanInput: { request: "retry" },
+        promptJson: { request: "retry" },
+        rerunPrompt: { request: "retry" },
+        userPromptJson: { request: "retry" },
+      },
+    });
+    expect(harness.refreshWorkflow).toHaveBeenCalledWith("demo", "rerun-1");
+    expect(harness.state.lastStatus).toBe(
+      "Rerun finished: rerun-1 status=completed exitCode=0",
+    );
   });
 });
 

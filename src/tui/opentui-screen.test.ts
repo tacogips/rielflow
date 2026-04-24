@@ -104,6 +104,86 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   };
 }
 
+function makeStepAddressedLoadedWorkflow(): LoadedWorkflow {
+  return {
+    workflowName: "step-addressed-demo",
+    workflowDirectory: "/tmp/step-addressed-demo",
+    artifactWorkflowRoot: "/tmp/artifacts/step-addressed-demo",
+    bundle: {
+      workflow: {
+        workflowId: "step-addressed-demo",
+        description: "step-addressed workflow",
+        defaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120_000,
+        },
+        managerNodeId: "manager-step",
+        entryNodeId: "manager-step",
+        managerStepId: "manager-step",
+        entryStepId: "manager-step",
+        nodeRegistry: [
+          {
+            id: "manager-node",
+            nodeFile: "nodes/node-manager.json",
+          },
+          {
+            id: "writer-node",
+            nodeFile: "nodes/node-writer.json",
+          },
+        ],
+        steps: [
+          {
+            id: "manager-step",
+            nodeId: "manager-node",
+            role: "manager",
+            transitions: [{ toStepId: "writer-step" }],
+          },
+          {
+            id: "writer-step",
+            nodeId: "writer-node",
+            role: "worker",
+          },
+        ],
+        subWorkflows: [],
+        nodes: [
+          {
+            id: "manager-step",
+            kind: "root-manager",
+            role: "manager",
+            nodeFile: "nodes/node-manager.json",
+            completion: { type: "none" },
+          },
+          {
+            id: "writer-step",
+            kind: "task",
+            role: "worker",
+            nodeFile: "nodes/node-writer.json",
+            completion: { type: "none" },
+          },
+        ],
+        edges: [{ from: "manager-step", to: "writer-step", when: "always" }],
+        loops: [],
+        branching: { mode: "fan-out" },
+      },
+      nodePayloads: {
+        "manager-step": {
+          id: "manager-step",
+          model: "manager-model",
+          promptTemplate: "coordinate work",
+          variables: {},
+        },
+        "writer-step": {
+          id: "writer-step",
+          executionBackend: "codex-agent",
+          model: "gpt-5",
+          promptTemplate: "write the change",
+          variables: {},
+        },
+      },
+    },
+  };
+}
+
 function plainStyledText(input: {
   readonly chunks: readonly { text: string }[];
 }) {
@@ -137,6 +217,7 @@ function makeWorkspaceLatestRunView(): RuntimeSessionView {
         },
         {
           nodeId: "workflow-output",
+          stepId: "publish-result",
           nodeExecId: "exec-2",
           status: "succeeded",
           artifactDir: "/tmp/demo/exec-2",
@@ -313,6 +394,19 @@ describe("buildWorkflowDefinitionContent", () => {
     expect(content).toContain("Entry node: worker-1");
     expect(content).not.toContain("Legacy structural sub-workflows:");
   });
+
+  test("surfaces step-addressed execution ids and node registry ids separately", () => {
+    const content = buildWorkflowDefinitionContent(
+      makeStepAddressedLoadedWorkflow(),
+    );
+
+    expect(content).toContain("Entry step: manager-step");
+    expect(content).toContain("Manager step: manager-step");
+    expect(content).toContain("Steps: 2");
+    expect(content).toContain("Step ids: manager-step, writer-step");
+    expect(content).toContain("Node registry: 2");
+    expect(content).toContain("Node registry ids: manager-node, writer-node");
+  });
 });
 
 describe("buildWorkflowSummaryPreview", () => {
@@ -347,6 +441,20 @@ describe("buildWorkflowSummaryPreview", () => {
     expect(content).toContain("- review-call");
     expect(content).toContain("Legacy Structural Sub-Workflows");
     expect(content).toContain("- delivery");
+  });
+
+  test("shows step graph and node registry details for step-addressed bundles", () => {
+    const content = plainStyledText(
+      buildWorkflowSummaryPreview(makeStepAddressedLoadedWorkflow()),
+    );
+
+    expect(content).toContain("Steps: 2");
+    expect(content).toContain("Node registry: 2");
+    expect(content).toContain("Entry: manager-step");
+    expect(content).toContain("Manager: manager-step");
+    expect(content).toContain("Step Graph");
+    expect(content).toContain("Step ids: manager-step, writer-step");
+    expect(content).toContain("Node registry ids: manager-node, writer-node");
   });
 });
 
@@ -504,6 +612,21 @@ describe("buildWorkflowRunPreview", () => {
     expect(content).toContain("- review-call");
     expect(content).not.toContain("Legacy Structural Sub-Workflows");
     expect(content).not.toContain("Legacy structural sub-workflows:");
+  });
+
+  test("shows step-addressed execution details in the run preview", () => {
+    const content = plainStyledText(
+      buildWorkflowRunPreview(makeStepAddressedLoadedWorkflow()),
+    );
+
+    expect(content).toContain("Entry: manager-step");
+    expect(content).toContain("Manager: manager-step");
+    expect(content).toContain("Steps: 2");
+    expect(content).toContain("Node registry: 2");
+    expect(content).toContain("Compatibility nodes: 2");
+    expect(content).toContain("Step Graph");
+    expect(content).toContain("Node registry ids: manager-node, writer-node");
+    expect(content).toContain("- writer-step (WORKER): write the change");
   });
 });
 
@@ -667,7 +790,7 @@ describe("workflow preview text helpers", () => {
             status: "running",
             startedAt: "2026-03-26T00:02:00.000Z",
             endedAt: null,
-            currentNodeId: "workflow-input",
+            currentNodeId: "workflow-output",
             nodeExecutionCounter: 1,
             lastError: null,
             updatedAt: "2026-03-26T00:02:10.000Z",
@@ -708,6 +831,8 @@ describe("workflow preview text helpers", () => {
     expect(text).toContain("Latest Run");
     expect(text).toContain("sessionId: sess-3");
     expect(text).toContain("status:");
+    expect(text).toContain("current step: publish-result");
+    expect(text).toContain("current node: workflow-output");
     expect(text).toContain("Output");
     expect(text).toContain('"summary": "done"');
   });
@@ -739,6 +864,34 @@ describe("workflow preview text helpers", () => {
       "Latest run details unavailable: database temporarily unavailable",
     );
     expect(text).not.toContain("(not available yet)");
+  });
+
+  test("buildWorkflowSelectorHistorySummary falls back to summary currentStepId when the session view is unavailable", () => {
+    const text = plainStyledText(
+      buildWorkflowSelectorHistorySummary({
+        selectedWorkflowName: "demo",
+        sessions: [
+          {
+            sessionId: "sess-3",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "running",
+            startedAt: "2026-03-26T00:02:00.000Z",
+            endedAt: null,
+            currentNodeId: "workflow-output",
+            currentStepId: "publish-result",
+            nodeExecutionCounter: 1,
+            lastError: null,
+            updatedAt: "2026-03-26T00:02:10.000Z",
+          },
+        ],
+        workflowFilterText: "",
+      }),
+    );
+
+    expect(text).toContain("current step: publish-result");
+    expect(text).toContain("current node: workflow-output");
+    expect(text).toContain("(not available yet)");
   });
 
   test("buildWorkflowHistoryHeader includes subworkflow scope metadata", () => {

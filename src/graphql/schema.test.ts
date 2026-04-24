@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { MockNodeScenario } from "../workflow/adapter";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
+import * as workflowEngine from "../workflow/engine";
 import {
   createManagerSessionStore,
   hashManagerAuthToken,
@@ -13,6 +14,8 @@ import {
   saveEventReplyDispatchToRuntimeDb,
   saveHookEventToRuntimeDb,
 } from "../workflow/runtime-db";
+import { createSessionState } from "../workflow/session";
+import { saveSession } from "../workflow/session-store";
 import type {
   NodeAddonDefinition,
   NodeAddonPayloadResolver,
@@ -36,6 +39,7 @@ async function makeTempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -607,6 +611,376 @@ describe("createGraphqlSchema", () => {
     );
   });
 
+  test("derives currentStepId in workflow execution summaries from step-addressed session records", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const sessionId = "sess-schema-step-summary";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "writer-node",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-node",
+        queue: ["writer-node"],
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "writer-node": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "writer-node",
+            stepId: "writer-step",
+            nodeRegistryId: "writer-node",
+            nodeExecId: "exec-writer-1",
+            mailboxInstanceId: "exec-writer-1",
+            status: "succeeded" as const,
+            artifactDir: path.join(
+              options.artifactRoot,
+              "demo",
+              sessionId,
+              "exec-writer-1",
+            ),
+            startedAt: "2026-04-24T05:00:00.000Z",
+            endedAt: "2026-04-24T05:00:10.000Z",
+          },
+        ],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const connection = await schema.query.workflowExecutions(
+      {
+        workflowName: "demo",
+        first: 10,
+      },
+      options,
+    );
+
+    expect(connection.items).toContainEqual(
+      expect.objectContaining({
+        workflowExecutionId: sessionId,
+        sessionId,
+        workflowName: "demo",
+        currentNodeId: "writer-node",
+        currentStepId: "writer-step",
+      }),
+    );
+  });
+
+  test("exposes currentStepId on workflowExecution.session and workflowExecutionOverview.session", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const sessionId = "sess-schema-step-session-view";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "writer-node",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-node",
+        queue: ["writer-node"],
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "writer-node": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "writer-node",
+            stepId: "writer-step",
+            nodeRegistryId: "writer-node",
+            nodeExecId: "exec-writer-1",
+            mailboxInstanceId: "exec-writer-1",
+            status: "succeeded" as const,
+            artifactDir: path.join(
+              options.artifactRoot,
+              "demo",
+              sessionId,
+              "exec-writer-1",
+            ),
+            startedAt: "2026-04-24T05:00:00.000Z",
+            endedAt: "2026-04-24T05:00:10.000Z",
+          },
+        ],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const workflowExecution = await schema.query.workflowExecution(
+      { workflowExecutionId: sessionId },
+      options,
+    );
+    expect(workflowExecution?.session.currentStepId).toBe("writer-step");
+
+    const overview = await schema.query.workflowExecutionOverview(
+      { workflowExecutionId: sessionId },
+      options,
+    );
+    expect(overview?.session.currentStepId).toBe("writer-step");
+  });
+
+  test("derives currentStepId from authored workflow state before the first execution record exists", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const sessionId = "sess-schema-current-target";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "divedra-manager",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "main-worker",
+        queue: ["main-worker"],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const connection = await schema.query.workflowExecutions(
+      {
+        workflowName: "demo",
+        first: 10,
+      },
+      options,
+    );
+    expect(connection.items).toContainEqual(
+      expect.objectContaining({
+        workflowExecutionId: sessionId,
+        currentNodeId: "main-worker",
+        currentStepId: "main-worker",
+      }),
+    );
+
+    const workflowExecution = await schema.query.workflowExecution(
+      { workflowExecutionId: sessionId },
+      options,
+    );
+    expect(workflowExecution?.session.currentNodeId).toBe("main-worker");
+    expect(workflowExecution?.session.currentStepId).toBe("main-worker");
+  });
+
+  test("accepts stepId on rerunWorkflowExecution and lowers it into the current rerun runtime", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const sessionId = "sess-schema-rerun-step";
+    const saved = await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName: "demo",
+        workflowId: "demo",
+        initialNodeId: "divedra-manager",
+        runtimeVariables: {},
+      }),
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-schema-rerun-step-2",
+              workflowName: "demo",
+              workflowId: "demo",
+              initialNodeId: "main-worker",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const schema = createGraphqlSchema();
+    const payload = await schema.mutation.rerunWorkflowExecution(
+      {
+        workflowExecutionId: sessionId,
+        stepId: "main-worker",
+        workingDirectory: " apps/reviewer ",
+        dryRun: true,
+        maxSteps: 3,
+      },
+      options,
+    );
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        rerunFromSessionId: sessionId,
+        rerunFromNodeId: "main-worker",
+        workflowWorkingDirectory: "apps/reviewer",
+        dryRun: true,
+        maxSteps: 3,
+      }),
+    );
+    expect(payload).toMatchObject({
+      workflowExecutionId: "sess-schema-rerun-step-2",
+      sessionId: "sess-schema-rerun-step-2",
+      status: "running",
+      rerunFromStepId: "main-worker",
+      exitCode: 0,
+    });
+  });
+
+  test("accepts differing stepId and nodeId on rerunWorkflowExecution for reusable-node steps", async () => {
+    const root = await makeTempDir();
+    const workflowName = "schema-rerun-step-node-mismatch";
+    const sessionId = "sess-schema-rerun-step-node-mismatch";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: workflowName,
+          description: "schema rerun step-node mismatch fixture",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          entryStepId: "writer-step",
+          nodes: [
+            {
+              id: "writer-node",
+              nodeFile: "nodes/node-writer.json",
+            },
+          ],
+          steps: [
+            {
+              id: "writer-step",
+              nodeId: "writer-node",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "nodes", "node-writer.json"),
+      `${JSON.stringify(
+        {
+          id: "writer-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "writer",
+          variables: {},
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "writer-step",
+        runtimeVariables: {},
+      }),
+      options,
+    );
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-schema-rerun-step-node-mismatch-2",
+              workflowName,
+              workflowId: workflowName,
+              initialNodeId: "writer-step",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const schema = createGraphqlSchema();
+    const payload = await schema.mutation.rerunWorkflowExecution(
+      {
+        workflowExecutionId: sessionId,
+        stepId: "writer-step",
+        nodeId: "writer-node",
+      },
+      options,
+    );
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      workflowName,
+      expect.objectContaining({
+        rerunFromSessionId: sessionId,
+        rerunFromNodeId: "writer-step",
+      }),
+    );
+    expect(payload).toMatchObject({
+      workflowExecutionId: "sess-schema-rerun-step-node-mismatch-2",
+      sessionId: "sess-schema-rerun-step-node-mismatch-2",
+      status: "running",
+      rerunFromStepId: "writer-step",
+      rerunFromNodeId: "writer-node",
+      exitCode: 0,
+    });
+  });
+
   test("exposes worker-only workflows without requiring an authored manager id", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkerOnlyWorkflowFixture(root);
@@ -626,6 +1000,42 @@ describe("createGraphqlSchema", () => {
     expect(workflow?.compatibility.usesEffectiveEntryManagerNodeId).toBe(true);
     expect(workflow?.compatibility.notes).toContain(
       "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
+    );
+  });
+
+  test("reports scaffolded managed starters as not runtime-ready until code-manager runtime lands", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const schema = createGraphqlSchema();
+    const workflow = await schema.query.workflow(
+      { workflowName: "demo" },
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        rootDataDir: path.join(root, "data"),
+        cwd: root,
+      },
+    );
+
+    expect(workflow?.managerStepId).toBe("divedra-manager");
+    expect(workflow?.entryStepId).toBe("divedra-manager");
+    expect(workflow?.stepIds).toEqual(["divedra-manager", "main-worker"]);
+    expect(workflow?.nodeRegistryIds).toEqual([
+      "divedra-manager",
+      "main-worker",
+    ]);
+    expect(workflow?.counts.nodeRegistry).toBe(2);
+    expect(workflow?.counts.steps).toBe(2);
+    expect(workflow?.runtime.ready).toBe(false);
+    expect(workflow?.runtime.blockers).toEqual(
+      expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
     );
   });
 

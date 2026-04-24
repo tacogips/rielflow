@@ -24,6 +24,11 @@ async function writeExecutable(filePath: string, body: string): Promise<void> {
   await writeFile(filePath, `${body}\n`, { mode: 0o755 });
 }
 
+async function writeJson(filePath: string, payload: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
 function makeBundle(
   nodePayloads: Readonly<Record<string, NodePayload>>,
   options: {
@@ -178,6 +183,131 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       kind: "node-executor",
       status: "available",
       sourceNodeIds: ["container-worker"],
+    });
+  });
+
+  test("reports backend-less code managers as unsupported runtime features", async () => {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        manager: {
+          id: "manager",
+          managerType: "code",
+          promptTemplate: "Coordinate the workflow",
+          variables: {},
+        },
+      }),
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "workflow-feature:code-manager-runtime",
+      ),
+    ).toMatchObject({
+      kind: "workflow-feature",
+      status: "unsupported",
+      sourceNodeIds: ["manager"],
+    });
+  });
+
+  test("reports backend-less code managers with resolved prompts as unsupported runtime features", async () => {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        manager: {
+          id: "manager",
+          managerType: "code",
+          model: "deterministic-code-manager",
+          promptTemplate: "Coordinate the workflow",
+          variables: {},
+        },
+      }),
+    );
+
+    expect(readiness.ready).toBe(false);
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "workflow-feature:code-manager-runtime",
+      ),
+    ).toMatchObject({
+      kind: "workflow-feature",
+      status: "unsupported",
+      sourceNodeIds: ["manager"],
+    });
+  });
+
+  test("reports readiness source ids only for executable step-addressed nodes", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const workflowName = "step-readiness";
+    const workflowDirectory = path.join(workflowRoot, workflowName);
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "step-addressed readiness source id fixture",
+      defaults: {
+        maxLoopIterations: 3,
+        nodeTimeoutMs: 120_000,
+      },
+      managerStepId: "manager-step",
+      entryStepId: "manager-step",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+        {
+          id: "worker-node",
+          nodeFile: "nodes/node-worker.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager-step",
+          nodeId: "manager-node",
+          role: "manager",
+          transitions: [{ toStepId: "worker-step" }],
+        },
+        {
+          id: "worker-step",
+          nodeId: "worker-node",
+        },
+      ],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
+      id: "manager-node",
+      promptTemplate: "manager",
+      variables: {},
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-worker.json"), {
+      id: "worker-node",
+      executionBackend: "codex-agent",
+      model: "gpt-5",
+      promptTemplate: "worker",
+      variables: {},
+    });
+
+    const loaded = await loadWorkflowFromDisk(workflowName, { workflowRoot });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+
+    const readiness = await inspectWorkflowRuntimeReadiness(loaded.value.bundle);
+
+    expect(
+      findRequirement(readiness.requirements, "agent-backend:codex-agent"),
+    ).toMatchObject({
+      sourceNodeIds: ["worker-step"],
+    });
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "workflow-feature:code-manager-runtime",
+      ),
+    ).toMatchObject({
+      sourceNodeIds: ["manager-step"],
     });
   });
 

@@ -6,7 +6,8 @@ This worker-only workflow demonstrates the built-in
 Stable assertions:
 
 - The workflow validates under `--workflow-root ./examples`.
-- The authored `reply-to-chat` node uses `addon.name:
+- The authored `reply-to-chat` step targets a reusable node-registry entry that
+  uses `addon.name:
 "divedra/chat-reply-worker"` without a workflow-local node implementation
   file.
 - When dispatched from the `example-reply-webhook` event source with

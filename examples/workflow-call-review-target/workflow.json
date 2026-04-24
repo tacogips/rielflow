@@ -8,12 +8,18 @@
   "prompts": {
     "workerSystemPromptTemplate": "Read runtimeVariables.workflowCall.input and return concise review feedback as business JSON."
   },
-  "entryNodeId": "reviewer",
+  "entryStepId": "reviewer",
   "nodes": [
     {
       "id": "reviewer",
-      "role": "worker",
       "nodeFile": "nodes/node-reviewer.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "reviewer",
+      "nodeId": "reviewer",
+      "role": "worker"
     }
   ]
 }

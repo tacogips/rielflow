@@ -24,7 +24,8 @@ bun run src/main.ts workflow inspect worker-only-single-step --workflow-root ./e
 Expected stable inspection facts:
 
 - `hasManagerNode` is `false`
-- `entryNodeId` is `main-worker`
+- authored `entryStepId` is `main-worker`
+- compatibility inspection still reports `entryNodeId` as `main-worker`
 - `managerNodeId` is omitted from the authored bundle and reported as absent in user-facing summaries
 
 ## Run

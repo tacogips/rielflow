@@ -1,6 +1,6 @@
 {
   "workflowId": "claude-divedra-codex-coding",
-  "description": "Reference workflow that keeps divedra orchestration on claude-code while delegating concrete coding work to codex, authored as a linear ordered node list.",
+  "description": "Reference workflow that keeps divedra orchestration on claude-code while delegating concrete coding work to codex, authored in the step-addressed workflow shape.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -9,36 +9,89 @@
     "divedraPromptTemplate": "Coordinate {{workflowId}} so claude-code managers preserve scope, keep instructions concrete, and hand coding tasks to codex only when the implementation brief is ready. When `divedra gql` is available, use it for manager control actions such as retries and manager-authored routing instead of relying only on prose.",
     "workerSystemPromptTemplate": "Work only on the current node's responsibility. Return a concise business JSON payload that is useful to the next node."
   },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
       "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "main-divedra",
-      "group": "delivery",
       "nodeFile": "nodes/node-main-divedra.json"
     },
     {
       "id": "workflow-input",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-input.json"
     },
     {
       "id": "implementation-brief",
-      "group": "delivery",
       "nodeFile": "nodes/node-implementation-brief.json"
     },
     {
       "id": "implement",
-      "group": "delivery",
       "nodeFile": "nodes/node-implement.json"
     },
     {
       "id": "workflow-output",
-      "group": "delivery",
       "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "main-divedra"
+        }
+      ]
+    },
+    {
+      "id": "main-divedra",
+      "nodeId": "main-divedra",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-input"
+        }
+      ]
+    },
+    {
+      "id": "workflow-input",
+      "nodeId": "workflow-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "implementation-brief"
+        }
+      ]
+    },
+    {
+      "id": "implementation-brief",
+      "nodeId": "implementation-brief",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "implement"
+        }
+      ]
+    },
+    {
+      "id": "implement",
+      "nodeId": "implement",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "role": "worker"
     }
   ]
 }

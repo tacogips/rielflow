@@ -17,6 +17,8 @@ const GRAPHQL_SCHEMA_TEXT = `
 
   type WorkflowCounts {
     nodes: Int!
+    nodeRegistry: Int!
+    steps: Int!
     edges: Int!
     loops: Int!
     workflowCalls: Int!
@@ -34,6 +36,22 @@ const GRAPHQL_SCHEMA_TEXT = `
     scopeRoot: String
   }
 
+  type WorkflowRuntimeRequirement {
+    id: String!
+    kind: String!
+    label: String!
+    status: String!
+    detail: String!
+    sourceNodeIds: [String!]!
+  }
+
+  type WorkflowRuntimeReadiness {
+    ready: Boolean!
+    checkedAt: String!
+    requirements: [WorkflowRuntimeRequirement!]!
+    blockers: [String!]!
+  }
+
   type WorkflowView {
     workflowName: String!
     workflowId: String!
@@ -41,6 +59,10 @@ const GRAPHQL_SCHEMA_TEXT = `
     hasManagerNode: Boolean!
     managerNodeId: String
     entryNodeId: String!
+    managerStepId: String
+    entryStepId: String
+    stepIds: [String!]!
+    nodeRegistryIds: [String!]!
     workflowCallIds: [String!]!
     defaults: WorkflowDefaults!
     counts: WorkflowCounts!
@@ -48,6 +70,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     workflowDirectory: String!
     artifactWorkflowRoot: String!
     addonSources: [WorkflowAddonSource!]!
+    runtime: WorkflowRuntimeReadiness!
   }
 
   type WorkflowDefinitionView {
@@ -67,7 +90,10 @@ const GRAPHQL_SCHEMA_TEXT = `
 
   type NodeExecutionRecord {
     nodeId: String!
+    stepId: String
+    nodeRegistryId: String
     nodeExecId: String!
+    mailboxInstanceId: String
     status: String!
     artifactDir: String!
     startedAt: String!
@@ -75,6 +101,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     attempt: Int
     outputAttemptCount: Int
     outputValidationErrors: JSON
+    promptVariant: String
+    timeoutMs: Int
     backendSessionId: String
     backendSessionMode: String
     restartedFromNodeExecId: String
@@ -89,6 +117,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     endedAt: String
     queue: [String!]!
     currentNodeId: String
+    currentStepId: String
     nodeExecutionCounter: Int!
     nodeExecutionCounts: JSON!
     loopIterationCounts: JSON
@@ -108,6 +137,9 @@ const GRAPHQL_SCHEMA_TEXT = `
     sessionId: String!
     nodeExecId: String!
     nodeId: String!
+    stepId: String
+    nodeRegistryId: String
+    mailboxInstanceId: String
     status: String!
     artifactDir: String!
     startedAt: String!
@@ -115,6 +147,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     attempt: Int
     outputAttemptCount: Int
     outputValidationErrors: JSON
+    promptVariant: String
+    timeoutMs: Int
     backendSessionMode: String
     backendSessionId: String
     restartedFromNodeExecId: String
@@ -195,13 +229,18 @@ const GRAPHQL_SCHEMA_TEXT = `
     workflowId: String!
     workflowExecutionId: String!
     nodeId: String!
+    stepId: String
+    nodeRegistryId: String
     nodeExecId: String!
+    mailboxInstanceId: String
     status: String!
     startedAt: String!
     endedAt: String!
     attempt: Int
     outputAttemptCount: Int
     outputValidationErrors: JSON
+    promptVariant: String
+    timeoutMs: Int
     backendSessionId: String
     backendSessionMode: String
     restartedFromNodeExecId: String
@@ -335,6 +374,8 @@ const GRAPHQL_SCHEMA_TEXT = `
     workflowExecutionId: String!
     sessionId: String!
     status: String!
+    rerunFromStepId: String
+    rerunFromNodeId: String
     exitCode: Int!
   }
 
@@ -414,7 +455,8 @@ const GRAPHQL_SCHEMA_TEXT = `
 
   input RerunWorkflowExecutionInput {
     workflowExecutionId: String!
-    nodeId: String!
+    stepId: String
+    nodeId: String
     runtimeVariables: JSON
     workingDirectory: String
     dryRun: Boolean

@@ -13,6 +13,8 @@ import {
   saveEventReplyDispatchToRuntimeDb,
   saveHookEventToRuntimeDb,
 } from "../workflow/runtime-db";
+import { createSessionState } from "../workflow/session";
+import { saveSession } from "../workflow/session-store";
 import { handleApiRequest } from "./api";
 import { executeGraphqlDocument, handleGraphqlRequest } from "./graphql";
 
@@ -344,6 +346,81 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
+  test("reports scaffolded managed starters as not runtime-ready over /graphql", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkflowByName($workflowName: String!) {
+              workflow(workflowName: $workflowName) {
+                workflowId
+                managerStepId
+                entryStepId
+                stepIds
+                nodeRegistryIds
+                counts {
+                  nodeRegistry
+                  steps
+                }
+                runtime {
+                  ready
+                  blockers
+                }
+              }
+            }
+          `,
+          variables: {
+            workflowName: "demo",
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        workflow: {
+          workflowId: "demo",
+          managerStepId: "divedra-manager",
+          entryStepId: "divedra-manager",
+          stepIds: ["divedra-manager", "main-worker"],
+          nodeRegistryIds: ["divedra-manager", "main-worker"],
+          counts: {
+            nodeRegistry: 2,
+            steps: 2,
+          },
+          runtime: {
+            ready: false,
+            blockers: expect.arrayContaining([
+              expect.stringContaining("code-manager runtime"),
+            ]),
+          },
+        },
+      },
+    });
+  });
+
   test("exposes authored workflowCalls over /graphql workflow inspection", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkflowCallWorkflowFixture(root);
@@ -483,6 +560,294 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
+  test("derives currentStepId in workflow execution summaries over /graphql", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const sessionId = "sess-http-step-summary";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "writer-node",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-node",
+        queue: ["writer-node"],
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "writer-node": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "writer-node",
+            stepId: "writer-step",
+            nodeRegistryId: "writer-node",
+            nodeExecId: "exec-writer-1",
+            mailboxInstanceId: "exec-writer-1",
+            status: "succeeded" as const,
+            artifactDir: path.join(
+              options.artifactRoot,
+              "demo",
+              sessionId,
+              "exec-writer-1",
+            ),
+            startedAt: "2026-04-24T05:00:00.000Z",
+            endedAt: "2026-04-24T05:00:10.000Z",
+          },
+        ],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkflowExecutions($workflowName: String!, $first: Int!) {
+              workflowExecutions(workflowName: $workflowName, first: $first) {
+                totalCount
+                items
+              }
+            }
+          `,
+          variables: {
+            workflowName: "demo",
+            first: 10,
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        workflowExecutions: {
+          totalCount: 1,
+          items: [
+            {
+              workflowExecutionId: sessionId,
+              sessionId,
+              workflowName: "demo",
+              status: "paused",
+              currentNodeId: "writer-node",
+              currentStepId: "writer-step",
+              nodeExecutionCounter: 1,
+              startedAt: expect.any(String),
+              endedAt: null,
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  test("exposes currentStepId on workflowExecution and workflowExecutionOverview session views over /graphql", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const sessionId = "sess-http-step-session-view";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "writer-node",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-node",
+        queue: ["writer-node"],
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "writer-node": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "writer-node",
+            stepId: "writer-step",
+            nodeRegistryId: "writer-node",
+            nodeExecId: "exec-writer-1",
+            mailboxInstanceId: "exec-writer-1",
+            status: "succeeded" as const,
+            artifactDir: path.join(
+              options.artifactRoot,
+              "demo",
+              sessionId,
+              "exec-writer-1",
+            ),
+            startedAt: "2026-04-24T05:00:00.000Z",
+            endedAt: "2026-04-24T05:00:10.000Z",
+          },
+        ],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkflowExecutionSessionViews($workflowExecutionId: String!) {
+              workflowExecution(workflowExecutionId: $workflowExecutionId) {
+                session {
+                  sessionId
+                  currentNodeId
+                  currentStepId
+                }
+              }
+              workflowExecutionOverview(workflowExecutionId: $workflowExecutionId) {
+                session {
+                  sessionId
+                  currentNodeId
+                  currentStepId
+                }
+              }
+            }
+          `,
+          variables: {
+            workflowExecutionId: sessionId,
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        workflowExecution: {
+          session: {
+            sessionId,
+            currentNodeId: "writer-node",
+            currentStepId: "writer-step",
+          },
+        },
+        workflowExecutionOverview: {
+          session: {
+            sessionId,
+            currentNodeId: "writer-node",
+            currentStepId: "writer-step",
+          },
+        },
+      },
+    });
+  });
+
+  test("derives currentStepId from authored workflow state before the first execution record exists over /graphql", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const sessionId = "sess-http-current-target";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "divedra-manager",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "main-worker",
+        queue: ["main-worker"],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkflowExecutionCurrentTarget($workflowName: String!, $workflowExecutionId: String!) {
+              workflowExecutions(workflowName: $workflowName, first: 10) {
+                items
+              }
+              workflowExecution(workflowExecutionId: $workflowExecutionId) {
+                session {
+                  currentNodeId
+                  currentStepId
+                }
+              }
+            }
+          `,
+          variables: {
+            workflowName: "demo",
+            workflowExecutionId: sessionId,
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      data: {
+        workflowExecutions: {
+          items: [
+            {
+              workflowExecutionId: sessionId,
+              sessionId,
+              workflowName: "demo",
+              status: "paused",
+              currentNodeId: "main-worker",
+              currentStepId: "main-worker",
+              nodeExecutionCounter: 0,
+              startedAt: expect.any(String),
+              endedAt: null,
+            },
+          ],
+        },
+        workflowExecution: {
+          session: {
+            currentNodeId: "main-worker",
+            currentStepId: "main-worker",
+          },
+        },
+      },
+    });
+  });
+
   test("exposes workingDirectory on resume workflow execution GraphQL input", async () => {
     const response = await handleGraphqlRequest(
       new Request("http://localhost/graphql", {
@@ -512,6 +877,53 @@ describe("GraphQL HTTP transport", () => {
           inputFields: expect.arrayContaining([
             { name: "workflowExecutionId" },
             { name: "workingDirectory" },
+          ]),
+        },
+      },
+    });
+  });
+
+  test("exposes stepId on rerun workflow execution GraphQL input and payload", async () => {
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            query RerunWorkflowExecutionTypes {
+              inputType: __type(name: "RerunWorkflowExecutionInput") {
+                inputFields {
+                  name
+                }
+              }
+              payloadType: __type(name: "RerunWorkflowExecutionPayload") {
+                fields {
+                  name
+                }
+              }
+            }
+          `,
+        }),
+      }),
+      {},
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: {
+        inputType: {
+          inputFields: expect.arrayContaining([
+            { name: "workflowExecutionId" },
+            { name: "stepId" },
+            { name: "nodeId" },
+          ]),
+        },
+        payloadType: {
+          fields: expect.arrayContaining([
+            { name: "rerunFromStepId" },
+            { name: "rerunFromNodeId" },
           ]),
         },
       },

@@ -14,6 +14,7 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../../workflow/session";
+import { resolveCurrentStepId } from "../../workflow/session";
 import type {
   RuntimeNodeLogEntry,
   RuntimeSessionSummary,
@@ -117,6 +118,24 @@ function formatLatestRunResultForDisplay(input: {
   );
 }
 
+function buildCurrentExecutionLines(input: {
+  readonly currentNodeId: string | null | undefined;
+  readonly currentStepId: string | null | undefined;
+  readonly nodeLabel: string;
+  readonly stepLabel: string;
+}): readonly string[] {
+  const currentNodeId = input.currentNodeId ?? "-";
+  if (input.currentStepId === null || input.currentStepId === undefined) {
+    return [`${input.nodeLabel}: ${currentNodeId}`];
+  }
+  return input.currentStepId === currentNodeId
+    ? [`${input.stepLabel}: ${input.currentStepId}`]
+    : [
+        `${input.stepLabel}: ${input.currentStepId}`,
+        `${input.nodeLabel}: ${currentNodeId}`,
+      ];
+}
+
 function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
   const derivedNodes = buildWorkflowNodeVisualMetadata(loaded);
   const nodeRefById = new Map(
@@ -206,12 +225,17 @@ export function buildWorkflowSummaryPreview(
   }
 
   const workflow = loadedWorkflow.bundle.workflow;
-  const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
-  const managerLabel =
-    workflow.hasManagerNode === false ? "none" : workflow.managerNodeId;
+  const isStepAddressed = workflow.steps !== undefined;
+  const entryExecutionId =
+    workflow.entryStepId ?? workflow.entryNodeId ?? workflow.managerNodeId;
+  const managerExecutionLabel =
+    workflow.managerStepId ??
+    (workflow.hasManagerNode === false ? "none" : workflow.managerNodeId);
   const workflowCallIds = (workflow.workflowCalls ?? []).map(
     (entry) => entry.id,
   );
+  const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
+  const nodeRegistryIds = workflow.nodeRegistry?.map((entry) => entry.id) ?? [];
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -219,15 +243,37 @@ export function buildWorkflowSummaryPreview(
 
   append(
     t`${dim(
-      `Nodes: ${String(workflow.nodes.length)}  Workflow calls: ${String(
+      `${
+        isStepAddressed
+          ? `Steps: ${String(stepIds.length)}  Node registry: ${String(
+              nodeRegistryIds.length,
+            )}  Compatibility nodes: ${String(workflow.nodes.length)}`
+          : `Nodes: ${String(workflow.nodes.length)}`
+      }  Workflow calls: ${String(
         workflowCallIds.length,
       )}${buildLegacySubWorkflowCountSegment(
         workflow.subWorkflows.length,
-      )}  Entry: ${entryNodeId}  Manager: ${managerLabel}`,
+      )}  Entry: ${entryExecutionId}  Manager: ${managerExecutionLabel}`,
     )}`,
   );
   if (hasVisibleText(workflow.description)) {
     append(t`\n\n${brightWhite("Description")}\n${workflow.description}`);
+  }
+  if (isStepAddressed) {
+    append(t`\n\n${brightWhite("Step Graph")}`);
+    append(
+      t`\n- Entry step: ${workflow.entryStepId ?? "(unset)"}\n- Manager step: ${
+        workflow.managerStepId ?? "(implicit or worker-only)"
+      }`,
+    );
+    append(
+      t`\n- Step ids: ${stepIds.length === 0 ? "(none)" : stepIds.join(", ")}`,
+    );
+    append(
+      t`\n- Node registry ids: ${
+        nodeRegistryIds.length === 0 ? "(none)" : nodeRegistryIds.join(", ")
+      }`,
+    );
   }
   appendWorkflowBoundarySections({
     append,
@@ -248,12 +294,17 @@ export function buildWorkflowRunPreview(
 
   const workflow = loadedWorkflow.bundle.workflow;
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
-  const entryNodeId = workflow.entryNodeId ?? workflow.managerNodeId;
-  const managerLabel =
-    workflow.hasManagerNode === false ? "none" : workflow.managerNodeId;
+  const isStepAddressed = workflow.steps !== undefined;
+  const entryExecutionId =
+    workflow.entryStepId ?? workflow.entryNodeId ?? workflow.managerNodeId;
+  const managerExecutionLabel =
+    workflow.managerStepId ??
+    (workflow.hasManagerNode === false ? "none" : workflow.managerNodeId);
   const workflowCallIds = (workflow.workflowCalls ?? []).map(
     (entry) => entry.id,
   );
+  const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
+  const nodeRegistryIds = workflow.nodeRegistry?.map((entry) => entry.id) ?? [];
   const chunks: StyledText["chunks"] = [];
   const append = (value: StyledText): void => {
     chunks.push(...value.chunks);
@@ -261,9 +312,13 @@ export function buildWorkflowRunPreview(
 
   append(
     t`${brightWhite("Workflow:")} ${bold(loadedWorkflow.workflowName)}\n${dim(
-      `ID: ${workflow.workflowId}  Entry: ${entryNodeId}  Manager: ${managerLabel}  Input: ${inputDetection.mode}  Nodes: ${String(
-        workflow.nodes.length,
-      )}  Workflow calls: ${String(
+      `ID: ${workflow.workflowId}  Entry: ${entryExecutionId}  Manager: ${managerExecutionLabel}  Input: ${inputDetection.mode}  ${
+        isStepAddressed
+          ? `Steps: ${String(stepIds.length)}  Node registry: ${String(
+              nodeRegistryIds.length,
+            )}  Compatibility nodes: ${String(workflow.nodes.length)}`
+          : `Nodes: ${String(workflow.nodes.length)}`
+      }  Workflow calls: ${String(
         workflowCallIds.length,
       )}${buildLegacySubWorkflowCountSegment(workflow.subWorkflows.length)}`,
     )}`,
@@ -271,6 +326,19 @@ export function buildWorkflowRunPreview(
 
   if (hasVisibleText(workflow.description)) {
     append(t`\n\n${brightWhite("Description")}\n${workflow.description}`);
+  }
+  if (isStepAddressed) {
+    append(
+      t`\n\n${brightWhite("Step Graph")}\n- Entry step: ${
+        workflow.entryStepId ?? "(unset)"
+      }\n- Manager step: ${
+        workflow.managerStepId ?? "(implicit or worker-only)"
+      }\n- Step ids: ${
+        stepIds.length === 0 ? "(none)" : stepIds.join(", ")
+      }\n- Node registry ids: ${
+        nodeRegistryIds.length === 0 ? "(none)" : nodeRegistryIds.join(", ")
+      }`,
+    );
   }
   appendWorkflowBoundarySections({
     append,
@@ -315,6 +383,8 @@ export function buildWorkflowDefinitionContent(
   const workflowCallIds = (workflow.workflowCalls ?? []).map(
     (entry) => entry.id,
   );
+  const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
+  const nodeRegistryIds = workflow.nodeRegistry?.map((entry) => entry.id) ?? [];
   return [
     `Workflow: ${workflow.workflowId}`,
     `Workflow name: ${loadedWorkflow.workflowName}`,
@@ -329,6 +399,24 @@ export function buildWorkflowDefinitionContent(
         : workflow.managerNodeId
     }`,
     `Entry node: ${workflow.entryNodeId ?? workflow.managerNodeId}`,
+    ...(workflow.entryStepId === undefined
+      ? []
+      : [`Entry step: ${workflow.entryStepId}`]),
+    ...(workflow.managerStepId === undefined
+      ? []
+      : [`Manager step: ${workflow.managerStepId}`]),
+    ...(workflow.steps === undefined
+      ? []
+      : [
+          `Steps: ${String(stepIds.length)}`,
+          `Step ids: ${stepIds.join(", ") || "(none)"}`,
+        ]),
+    ...(workflow.nodeRegistry === undefined
+      ? []
+      : [
+          `Node registry: ${String(nodeRegistryIds.length)}`,
+          `Node registry ids: ${nodeRegistryIds.join(", ") || "(none)"}`,
+        ]),
     `Workflow calls: ${String(workflowCallIds.length)}`,
     ...(workflowCallIds.length === 0
       ? []
@@ -453,18 +541,29 @@ export function buildWorkflowSelectorHistorySummary(input: {
   if (latestSession === undefined) {
     return new StyledText(chunks);
   }
+  const currentExecutionLines = buildCurrentExecutionLines({
+    currentNodeId: latestSession.currentNodeId,
+    currentStepId:
+      input.latestRunSessionView === undefined
+        ? (latestSession.currentStepId ?? null)
+        : resolveCurrentStepId(input.latestRunSessionView.session),
+    nodeLabel: "current node",
+    stepLabel: "current step",
+  });
   const latestRunResult = resolveWorkflowFinalResult(
     input.latestRunSessionView,
   );
   append(
     t`\n\n${brightWhite("Latest Run")}\n${dim(
-      `sessionId: ${latestSession.sessionId}`,
-    )}\nstatus: ${formatStatusLabel(latestSession.status)}\nstarted: ${formatTimestampForDisplay(
-      latestSession.startedAt,
-    )}\nupdated: ${formatTimestampForDisplay(latestSession.updatedAt)}\nended: ${formatOptionalTimestampForDisplay(
-      latestSession.endedAt,
-    )}\ncurrent node: ${latestSession.currentNodeId ?? "-"}\nnode executions: ${String(
-      latestSession.nodeExecutionCounter,
+      [
+        `sessionId: ${latestSession.sessionId}`,
+        `status: ${formatStatusLabel(latestSession.status)}`,
+        `started: ${formatTimestampForDisplay(latestSession.startedAt)}`,
+        `updated: ${formatTimestampForDisplay(latestSession.updatedAt)}`,
+        `ended: ${formatOptionalTimestampForDisplay(latestSession.endedAt)}`,
+        ...currentExecutionLines,
+        `node executions: ${String(latestSession.nodeExecutionCounter)}`,
+      ].join("\n"),
     )}`,
   );
 
@@ -800,6 +899,12 @@ export function buildSummaryDetailHeaderText(input: {
     input.loadedWorkflow.bundle.workflow,
     input.selectedExecution,
   );
+  const currentExecutionLines = buildCurrentExecutionLines({
+    currentNodeId: input.session.currentNodeId,
+    currentStepId: resolveCurrentStepId(input.session),
+    nodeLabel: "Current node",
+    stepLabel: "Current step",
+  });
   const nodeLogs = input.nodeLogs.filter(
     (entry) => entry.nodeExecId === input.selectedExecution.nodeExecId,
   );
@@ -809,13 +914,19 @@ export function buildSummaryDetailHeaderText(input: {
     `Workflow start: ${formatTimestampForDisplay(input.session.startedAt)}`,
     `Workflow end: ${formatOptionalTimestampForDisplay(input.session.endedAt)}`,
     `Node: ${input.selectedExecution.nodeId} [${kind}] status=${input.selectedExecution.status}`,
+    ...(input.selectedExecution.stepId === undefined
+      ? []
+      : [`Step: ${input.selectedExecution.stepId}`]),
+    ...(input.selectedExecution.nodeRegistryId === undefined
+      ? []
+      : [`Node registry: ${input.selectedExecution.nodeRegistryId}`]),
     `Node execution: ${input.selectedExecution.nodeExecId}`,
     `Node start: ${formatTimestampForDisplay(input.selectedExecution.startedAt)}`,
     `Node end: ${formatTimestampForDisplay(input.selectedExecution.endedAt)}`,
     `Artifact dir: ${input.selectedExecution.artifactDir}`,
     `Backend session: ${input.selectedExecution.backendSessionId ?? "(none)"}`,
     `Manager session: ${managerSessionId ?? "(not a manager node)"}`,
-    `Current node: ${input.session.currentNodeId ?? "-"}`,
+    ...currentExecutionLines,
     `Queue: ${input.session.queue.join(",") || "-"}`,
     `Input mode: ${input.inputDetection.mode}`,
     `Input hint: ${input.inputDetection.reason}`,
@@ -856,6 +967,12 @@ export function buildWorkflowRunStatusContent(input: {
   const session = input.runtimeSessionView.session;
   const finalResult = resolveWorkflowFinalResult(input.runtimeSessionView);
   const latestLog = input.runtimeSessionView.nodeLogs.at(-1);
+  const currentExecutionLines = buildCurrentExecutionLines({
+    currentNodeId: session.currentNodeId,
+    currentStepId: resolveCurrentStepId(session),
+    nodeLabel: "Current node",
+    stepLabel: "Current step",
+  });
 
   return [
     `Workflow: ${session.workflowName}`,
@@ -866,7 +983,7 @@ export function buildWorkflowRunStatusContent(input: {
       : []),
     `Started: ${formatTimestampForDisplay(session.startedAt)}`,
     `Ended: ${formatOptionalTimestampForDisplay(session.endedAt)}`,
-    `Current node: ${session.currentNodeId ?? "-"}`,
+    ...currentExecutionLines,
     `Node executions: ${String(session.nodeExecutions.length)}`,
     ...(session.lastError === undefined
       ? []

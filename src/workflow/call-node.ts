@@ -10,7 +10,6 @@ import {
   buildAdapterDivedraHookContext,
   ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
-  type AdapterExecutionInput,
   type AdapterExecutionOutput,
   type AdapterProcessLog,
   type MockNodeScenario,
@@ -20,10 +19,7 @@ import {
   executeAdapterWithTimeout,
   executeNativeNodeWithTimeout,
 } from "./adapter-execution";
-import {
-  DispatchingNodeAdapter,
-  resolveNodeExecutionBackend,
-} from "./adapters/dispatch";
+import { DispatchingNodeAdapter } from "./adapters/dispatch";
 import { assembleNodeInput } from "./input-assembly";
 import {
   validateJsonValueAgainstSchema,
@@ -59,7 +55,8 @@ import {
 } from "./working-directory";
 import {
   isTerminalWorkflowSessionStatus,
-  type NodeBackendSessionRecord,
+  persistNodeBackendSession,
+  resolveRequestedBackendSession,
   type NodeExecutionRecord,
   type OutputRef,
   type WorkflowSessionState,
@@ -70,9 +67,18 @@ import type {
   JsonObject,
   LoadOptions,
   NodePayload,
+  NodePromptVariant,
+  NodeSessionMode,
   WorkflowJson,
 } from "./types";
 import { asAgentNodePayload } from "./types";
+
+export interface DirectExecutionOverrides {
+  readonly promptVariant?: string;
+  readonly sessionMode?: NodeSessionMode;
+  readonly timeoutMs?: number;
+  readonly resumeNodeExecId?: string;
+}
 
 export interface CallNodeInput extends LoadOptions, SessionStoreOptions {
   readonly workflowId: string;
@@ -84,6 +90,7 @@ export interface CallNodeInput extends LoadOptions, SessionStoreOptions {
   readonly dryRun?: boolean;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly defaultTimeoutMs?: number;
+  readonly overrides?: DirectExecutionOverrides;
 }
 
 export interface CallNodeSuccess {
@@ -125,7 +132,11 @@ function resolveTimeoutMs(
   node: NodePayload,
   workflowTimeoutMs: number,
   overrideTimeoutMs: number | undefined,
+  invocationTimeoutMs: number | undefined,
 ): number {
+  if (invocationTimeoutMs !== undefined && invocationTimeoutMs > 0) {
+    return invocationTimeoutMs;
+  }
   if (node.timeoutMs !== undefined) {
     return node.timeoutMs;
   }
@@ -311,64 +322,196 @@ async function resolveCandidatePayload(input: {
   return readCandidatePayloadFromFile(resolvedPath);
 }
 
-function resolveRequestedBackendSession(
-  session: WorkflowSessionState,
+function resolveBackendSessionSelection(
+  workflow: WorkflowJson,
+  nodeId: string,
   node: AgentNodePayload,
-): AdapterExecutionInput["backendSession"] | undefined {
-  if (node.sessionPolicy === undefined) {
-    return undefined;
+): {
+  readonly sessionLookupNodeId?: string;
+  readonly inheritFromStepId?: string;
+} {
+  if (node.sessionPolicy?.mode !== "reuse") {
+    return {};
   }
 
-  if (node.sessionPolicy.mode === "new") {
-    return { mode: "new" };
-  }
-
-  const existing = session.nodeBackendSessions?.[node.id];
-  if (existing === undefined) {
-    return { mode: "new" };
-  }
-
-  const backend = resolveNodeExecutionBackend(node);
-  if (existing.backend !== backend) {
-    return { mode: "new" };
-  }
-
+  const step = workflow.steps?.find((entry) => entry.id === nodeId);
   return {
-    mode: "reuse",
-    sessionId: existing.sessionId,
+    sessionLookupNodeId: step?.sessionPolicy?.inheritFromStepId ?? node.id,
+    ...(step?.sessionPolicy?.inheritFromStepId === undefined
+      ? {}
+      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
   };
 }
 
-function persistNodeBackendSession(input: {
-  readonly session: WorkflowSessionState;
-  readonly node: AgentNodePayload;
-  readonly nodeExecId: string;
-  readonly provider: string;
-  readonly endedAt: string;
-  readonly backendSession: AdapterExecutionInput["backendSession"];
-  readonly returnedSessionId?: string;
-}): Readonly<Record<string, NodeBackendSessionRecord>> {
-  const current = { ...(input.session.nodeBackendSessions ?? {}) };
-  if (input.node.sessionPolicy?.mode !== "reuse") {
-    return current;
+function buildScenarioExecutableNodePayload(input: {
+  readonly node: NodePayload;
+  readonly hasScenarioEntry: boolean;
+  readonly allowScenarioFallback: boolean;
+  readonly allowDryRun: boolean;
+}): AgentNodePayload | null {
+  const agentNodePayload = asAgentNodePayload(input.node);
+  if (agentNodePayload !== null) {
+    return agentNodePayload;
   }
 
-  const sessionId = input.returnedSessionId ?? input.backendSession?.sessionId;
-  if (sessionId === undefined) {
-    return current;
+  if (
+    input.node.managerType === "code" &&
+    (input.allowScenarioFallback || input.allowDryRun) &&
+    input.node.promptTemplate !== undefined
+  ) {
+    return {
+      ...input.node,
+      nodeType: "agent",
+      model: input.node.model ?? "deterministic-code-manager",
+      promptTemplate: input.node.promptTemplate,
+    };
   }
 
-  const existing = current[input.node.id];
-  current[input.node.id] = {
-    nodeId: input.node.id,
-    backend: resolveNodeExecutionBackend(input.node),
-    provider: input.provider,
-    sessionId,
-    createdAt: existing?.createdAt ?? input.endedAt,
-    updatedAt: input.endedAt,
-    lastNodeExecId: input.nodeExecId,
+  if (
+    input.hasScenarioEntry &&
+    (input.node.nodeType === "command" ||
+      input.node.nodeType === "container" ||
+      input.node.nodeType === "addon")
+  ) {
+    const { nodeType: _nodeType, ...rest } = input.node;
+    return {
+      ...rest,
+      nodeType: "agent",
+      model: `scenario/${input.node.nodeType}`,
+      promptTemplate: input.node.promptTemplate ?? "",
+    };
+  }
+
+  return null;
+}
+
+function applyPromptVariantTemplateOverride(input: {
+  readonly payload: NodePayload;
+  readonly variant: NodePromptVariant;
+  readonly templateField:
+    | "systemPromptTemplate"
+    | "promptTemplate"
+    | "sessionStartPromptTemplate";
+  readonly templateFileField:
+    | "systemPromptTemplateFile"
+    | "promptTemplateFile"
+    | "sessionStartPromptTemplateFile";
+}): NodePayload {
+  const variantTemplate = input.variant[input.templateField];
+  const variantTemplateFile = input.variant[input.templateFileField];
+  if (variantTemplate === undefined && variantTemplateFile === undefined) {
+    return input.payload;
+  }
+
+  const {
+    [input.templateField]: _removedTemplate,
+    [input.templateFileField]: _removedTemplateFile,
+    ...payloadWithoutTemplatePair
+  } = input.payload;
+
+  return {
+    ...payloadWithoutTemplatePair,
+    ...(variantTemplate === undefined
+      ? {}
+      : { [input.templateField]: variantTemplate }),
+    ...(variantTemplateFile === undefined
+      ? {}
+      : { [input.templateFileField]: variantTemplateFile }),
   };
-  return current;
+}
+
+function applyPromptVariantOverride(input: {
+  readonly node: NodePayload;
+  readonly promptVariant: string;
+}): Result<NodePayload, string> {
+  const variant = input.node.promptVariants?.[input.promptVariant];
+  if (variant === undefined) {
+    return err(
+      `node '${input.node.id}' does not define prompt variant '${input.promptVariant}'`,
+    );
+  }
+
+  const payload = [
+    {
+      templateField: "systemPromptTemplate" as const,
+      templateFileField: "systemPromptTemplateFile" as const,
+    },
+    {
+      templateField: "promptTemplate" as const,
+      templateFileField: "promptTemplateFile" as const,
+    },
+    {
+      templateField: "sessionStartPromptTemplate" as const,
+      templateFileField: "sessionStartPromptTemplateFile" as const,
+    },
+  ].reduce(
+    (currentPayload, templatePair) =>
+      applyPromptVariantTemplateOverride({
+        payload: currentPayload,
+        variant,
+        templateField: templatePair.templateField,
+        templateFileField: templatePair.templateFileField,
+      }),
+    input.node,
+  );
+
+  return ok(payload);
+}
+
+function applyDirectExecutionOverrides(
+  node: NodePayload,
+  overrides: DirectExecutionOverrides | undefined,
+): Result<NodePayload, string> {
+  if (overrides === undefined) {
+    return ok(node);
+  }
+
+  let resolvedNode = node;
+  if (overrides.promptVariant !== undefined) {
+    const promptVariantResult = applyPromptVariantOverride({
+      node: resolvedNode,
+      promptVariant: overrides.promptVariant,
+    });
+    if (!promptVariantResult.ok) {
+      return promptVariantResult;
+    }
+    resolvedNode = promptVariantResult.value;
+  }
+
+  if (overrides.sessionMode !== undefined) {
+    resolvedNode = {
+      ...resolvedNode,
+      sessionPolicy: {
+        ...(resolvedNode.sessionPolicy === undefined
+          ? {}
+          : resolvedNode.sessionPolicy),
+        mode: overrides.sessionMode,
+      },
+    };
+  }
+
+  return ok(resolvedNode);
+}
+
+function resolveStepExecutionAddress(
+  workflow: WorkflowJson,
+  nodeId: string,
+): {
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly inheritFromStepId?: string;
+} {
+  const step = workflow.steps?.find((entry) => entry.id === nodeId);
+  if (step === undefined) {
+    return {};
+  }
+  return {
+    stepId: step.id,
+    nodeRegistryId: step.nodeId,
+    ...(step.sessionPolicy?.inheritFromStepId === undefined
+      ? {}
+      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
+  };
 }
 
 function findOwningSubWorkflowByRuntimeNodeId(
@@ -415,7 +558,16 @@ function outputRefForExecution(
       ? {}
       : { subWorkflowId: owningSubWorkflow.id }),
     outputNodeId: execution.nodeId,
+    ...(execution.stepId === undefined
+      ? {}
+      : { outputStepId: execution.stepId }),
+    ...(execution.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: execution.nodeRegistryId }),
     nodeExecId: execution.nodeExecId,
+    ...(execution.mailboxInstanceId === undefined
+      ? {}
+      : { mailboxInstanceId: execution.mailboxInstanceId }),
     artifactDir: execution.artifactDir,
   };
 }
@@ -431,10 +583,17 @@ function buildCommitMessageTemplate(
     "Node execution checkpoint for deterministic output-to-input handoff.",
     "",
     `Node-ID: ${ref.outputNodeId}`,
+    ...(ref.outputStepId === undefined ? [] : [`Step-ID: ${ref.outputStepId}`]),
+    ...(ref.nodeRegistryId === undefined
+      ? []
+      : [`Node-Registry-ID: ${ref.nodeRegistryId}`]),
     `Subworkflow-ID: ${ref.subWorkflowId ?? "(unset)"}`,
     `Run-ID: ${ref.workflowExecutionId}`,
     `Workflow-ID: ${ref.workflowId}`,
     `Node-Exec-ID: ${ref.nodeExecId}`,
+    ...(ref.mailboxInstanceId === undefined
+      ? []
+      : [`Mailbox-Instance-ID: ${ref.mailboxInstanceId}`]),
     `Artifact-Dir: ${ref.artifactDir}`,
     `Input-Hash: sha256:${inputHash}`,
     `Output-Hash: sha256:${outputHash}`,
@@ -540,6 +699,15 @@ class MailboxPublisher {
       schemaVersion: 1,
       generatedAt: input.nodeExecution.endedAt,
       nodeId: input.nodeExecution.nodeId,
+      ...(input.nodeExecution.stepId === undefined
+        ? {}
+        : { stepId: input.nodeExecution.stepId }),
+      ...(input.nodeExecution.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
+      ...(input.nodeExecution.mailboxInstanceId === undefined
+        ? {}
+        : { mailboxInstanceId: input.nodeExecution.mailboxInstanceId }),
       outputRef,
       inputHash: `sha256:${inputHash}`,
       outputHash: `sha256:${outputHash}`,
@@ -547,12 +715,24 @@ class MailboxPublisher {
     };
     const metaPayload = {
       nodeId: input.nodeExecution.nodeId,
+      ...(input.nodeExecution.stepId === undefined
+        ? {}
+        : { stepId: input.nodeExecution.stepId }),
+      ...(input.nodeExecution.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
       nodeExecId: input.nodeExecution.nodeExecId,
+      ...(input.nodeExecution.mailboxInstanceId === undefined
+        ? {}
+        : { mailboxInstanceId: input.nodeExecution.mailboxInstanceId }),
       status: input.nodeExecution.status,
       startedAt: input.nodeExecution.startedAt,
       endedAt: input.nodeExecution.endedAt,
       model: input.node.model,
       timeoutMs: input.timeoutMs,
+      ...(input.nodeExecution.promptVariant === undefined
+        ? {}
+        : { promptVariant: input.nodeExecution.promptVariant }),
       ...(input.nodeExecution.outputAttemptCount === undefined
         ? {}
         : { outputAttemptCount: input.nodeExecution.outputAttemptCount }),
@@ -588,7 +768,16 @@ class MailboxPublisher {
         {
           sessionId: input.session.sessionId,
           nodeId: input.nodeExecution.nodeId,
+          ...(input.nodeExecution.stepId === undefined
+            ? {}
+            : { stepId: input.nodeExecution.stepId }),
+          ...(input.nodeExecution.nodeRegistryId === undefined
+            ? {}
+            : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
           nodeExecId: input.nodeExecution.nodeExecId,
+          ...(input.nodeExecution.mailboxInstanceId === undefined
+            ? {}
+            : { mailboxInstanceId: input.nodeExecution.mailboxInstanceId }),
           status: input.nodeExecution.status,
           artifactDir: input.nodeExecution.artifactDir,
           startedAt: input.nodeExecution.startedAt,
@@ -602,6 +791,12 @@ class MailboxPublisher {
                 outputValidationErrors:
                   input.nodeExecution.outputValidationErrors,
               }),
+          ...(input.nodeExecution.promptVariant === undefined
+            ? {}
+            : { promptVariant: input.nodeExecution.promptVariant }),
+          ...(input.nodeExecution.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: input.nodeExecution.timeoutMs }),
           ...(input.requestedBackendSessionMode === undefined
             ? {}
             : { backendSessionMode: input.requestedBackendSessionMode }),
@@ -702,6 +897,10 @@ class ExecutionDispatcher {
         message: `missing node definition for '${input.nodeId}'`,
       });
     }
+    const stepExecutionAddress = resolveStepExecutionAddress(
+      workflow,
+      input.nodeId,
+    );
     if (nodeRef.execution?.mode === "optional") {
       return err({
         session,
@@ -716,6 +915,19 @@ class ExecutionDispatcher {
         message: `node '${input.nodeId}' requests nodeType='user-action', but direct call-node execution is not supported`,
       });
     }
+
+    const nodeWithOverrides = applyDirectExecutionOverrides(
+      nodePayload,
+      input.overrides,
+    );
+    if (!nodeWithOverrides.ok) {
+      return err({
+        session,
+        exitCode: 2,
+        message: nodeWithOverrides.error,
+      });
+    }
+    const executionTargetNode = nodeWithOverrides.value;
 
     if (
       this.#adapter instanceof DispatchingNodeAdapter &&
@@ -738,15 +950,20 @@ class ExecutionDispatcher {
         });
       }
     }
-    const agentNodePayload = asAgentNodePayload(nodePayload);
+    const agentNodePayload = buildScenarioExecutableNodePayload({
+      node: executionTargetNode,
+      hasScenarioEntry: input.mockScenario?.[input.nodeId] !== undefined,
+      allowScenarioFallback: input.mockScenario !== undefined,
+      allowDryRun: input.dryRun === true,
+    });
     const nativeNodePayload =
       agentNodePayload === null &&
-      (nodePayload.nodeType === "command" ||
-        nodePayload.nodeType === "container" ||
-        nodePayload.nodeType === "addon")
-        ? nodePayload
+      (executionTargetNode.nodeType === "command" ||
+        executionTargetNode.nodeType === "container" ||
+        executionTargetNode.nodeType === "addon")
+        ? executionTargetNode
         : null;
-    const executionNodePayload = agentNodePayload ?? nodePayload;
+    const executionNodePayload = agentNodePayload ?? executionTargetNode;
     if (agentNodePayload === null && nativeNodePayload === null) {
       return err({
         session,
@@ -776,6 +993,7 @@ class ExecutionDispatcher {
     const nextExecutionCounter = session.nodeExecutionCounter + 1;
     const executionIndex = (session.nodeExecutionCounts[input.nodeId] ?? 0) + 1;
     const nodeExecId = nextNodeExecId(nextExecutionCounter);
+    const mailboxInstanceId = nodeExecId;
     const artifactDir = path.join(
       loaded.value.artifactWorkflowRoot,
       "executions",
@@ -813,6 +1031,13 @@ class ExecutionDispatcher {
       workflow,
       nodeRef,
       node: executionNodePayload,
+      ...(stepExecutionAddress.stepId === undefined
+        ? {}
+        : { stepId: stepExecutionAddress.stepId }),
+      ...(stepExecutionAddress.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+      mailboxInstanceId,
       nodePayloads: loaded.value.bundle.nodePayloads,
       runtimeVariables: session.runtimeVariables,
       basePromptText: assembled.promptText,
@@ -847,11 +1072,35 @@ class ExecutionDispatcher {
       executionNodePayload,
       workflow.defaults.nodeTimeoutMs,
       input.defaultTimeoutMs,
+      input.overrides?.timeoutMs,
     );
+    const backendSessionSelection =
+      agentNodePayload === null
+        ? undefined
+        : resolveBackendSessionSelection(
+            workflow,
+            input.nodeId,
+            agentNodePayload,
+          );
     let backendSession =
       agentNodePayload === null
         ? undefined
-        : resolveRequestedBackendSession(session, agentNodePayload);
+        : resolveRequestedBackendSession({
+            session,
+            node: agentNodePayload,
+            ...(backendSessionSelection?.sessionLookupNodeId === undefined
+              ? {}
+              : {
+                  sessionLookupNodeId:
+                    backendSessionSelection.sessionLookupNodeId,
+                }),
+            ...(stepExecutionAddress.nodeRegistryId === undefined
+              ? {}
+              : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+            ...(stepExecutionAddress.inheritFromStepId === undefined
+              ? {}
+              : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
+          });
     const composedPrompts = composeExecutionPrompts({
       promptComposition: {
         workflow,
@@ -915,7 +1164,14 @@ class ExecutionDispatcher {
       workflowExecutionId: session.sessionId,
       workflowId: workflow.workflowId,
       nodeId: input.nodeId,
+      ...(stepExecutionAddress.stepId === undefined
+        ? {}
+        : { stepId: stepExecutionAddress.stepId }),
+      ...(stepExecutionAddress.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
       nodeExecId,
+      mailboxInstanceId,
       nodeType: executionNodePayload.nodeType ?? "agent",
       ...(agentNodePayload === null ? {} : { model: agentNodePayload.model }),
       ...(agentNodePayload?.systemPromptTemplate === undefined
@@ -935,6 +1191,9 @@ class ExecutionDispatcher {
       upstreamOutputRefs: [],
       upstreamCommunications: [],
       executionMailbox,
+      ...(input.overrides?.promptVariant === undefined
+        ? {}
+        : { promptVariant: input.overrides.promptVariant }),
       outputContract:
         executionNodePayload.output === undefined
           ? undefined
@@ -946,6 +1205,9 @@ class ExecutionDispatcher {
               publication: buildOutputPublicationPolicy(),
             },
       ...(backendSession === undefined ? {} : { backendSession }),
+      ...(input.overrides?.resumeNodeExecId === undefined
+        ? {}
+        : { resumedFromNodeExecId: input.overrides.resumeNodeExecId }),
       ...(input.message === undefined ? {} : { managerMessage: input.message }),
       dryRun: input.dryRun ?? false,
     };
@@ -1304,7 +1566,14 @@ class ExecutionDispatcher {
     }
     const nodeExecution: NodeExecutionRecord = {
       nodeId: input.nodeId,
+      ...(stepExecutionAddress.stepId === undefined
+        ? {}
+        : { stepId: stepExecutionAddress.stepId }),
+      ...(stepExecutionAddress.nodeRegistryId === undefined
+        ? {}
+        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
       nodeExecId,
+      mailboxInstanceId,
       status: nodeStatus,
       artifactDir,
       startedAt,
@@ -1313,6 +1582,10 @@ class ExecutionDispatcher {
       ...(outputValidationErrors.length === 0
         ? {}
         : { outputValidationErrors }),
+      ...(input.overrides?.promptVariant === undefined
+        ? {}
+        : { promptVariant: input.overrides.promptVariant }),
+      timeoutMs,
       ...(backendSessionId === undefined ? {} : { backendSessionId }),
       ...(requestedBackendSessionMode === undefined
         ? {}
@@ -1326,6 +1599,15 @@ class ExecutionDispatcher {
             session,
             node: agentNodePayload,
             nodeExecId,
+            ...(stepExecutionAddress.stepId === undefined
+              ? {}
+              : { stepId: stepExecutionAddress.stepId }),
+            ...(stepExecutionAddress.nodeRegistryId === undefined
+              ? {}
+              : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+            ...(stepExecutionAddress.inheritFromStepId === undefined
+              ? {}
+              : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
             provider:
               backendSessionProvider ??
               finalOutputPayload?.["provider"]?.toString() ??
@@ -1418,11 +1700,21 @@ class ExecutionDispatcher {
       );
       await writeJsonFile(path.join(artifactDir, "meta.json"), {
         nodeId: input.nodeId,
+        ...(stepExecutionAddress.stepId === undefined
+          ? {}
+          : { stepId: stepExecutionAddress.stepId }),
+        ...(stepExecutionAddress.nodeRegistryId === undefined
+          ? {}
+          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
         nodeExecId,
+        mailboxInstanceId,
         status: nodeStatus,
         startedAt,
         endedAt,
         model: executionNodePayload.model,
+        ...(input.overrides?.promptVariant === undefined
+          ? {}
+          : { promptVariant: input.overrides.promptVariant }),
         timeoutMs,
         ...(outputAttemptCount === 1 ? {} : { outputAttemptCount }),
         ...(outputValidationErrors.length === 0

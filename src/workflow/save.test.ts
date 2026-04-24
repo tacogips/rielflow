@@ -122,6 +122,8 @@ describe("saveWorkflowToDisk", () => {
       "utf8",
     );
     expect(managerNodeText).not.toContain('"managerType"');
+    expect(managerNodeText).not.toContain('"executionBackend"');
+    expect(managerNodeText).not.toContain('"model"');
 
     const reloaded = await loadWorkflowFromDisk("demo", {
       workflowRoot: root,
@@ -131,9 +133,11 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject({
-      managerType: "code",
-    });
+    expect(reloaded.value.bundle.nodePayloads["divedra-manager"]).toMatchObject(
+      {
+        managerType: "code",
+      },
+    );
     expect(
       reloaded.value.bundle.nodePayloads["nodes/node-divedra-manager.json"],
     ).not.toHaveProperty("managerType");
@@ -1123,6 +1127,116 @@ describe("saveWorkflowToDisk", () => {
     );
     expect(managerNodeText).not.toContain('"executionBackend"');
     expect(managerNodeText).not.toContain('"promptTemplate"');
+
+    const strictReloaded = await loadWorkflowFromDisk("step-save-demo", {
+      workflowRoot: root,
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(strictReloaded.ok).toBe(true);
+
+    const invalidStepAddressedSave = await saveWorkflowToDisk(
+      "step-save-demo",
+      {
+        workflow: {
+          ...loaded.value.bundle.workflow,
+          entryStepId: undefined,
+          entryNodeId: "manager-node",
+        },
+        nodePayloads: loaded.value.bundle.nodePayloads,
+      },
+      {
+        workflowRoot: root,
+      },
+    );
+    expect(invalidStepAddressedSave.ok).toBe(false);
+    if (invalidStepAddressedSave.ok) {
+      return;
+    }
+
+    expect(invalidStepAddressedSave.error.code).toBe("VALIDATION");
+    expect(invalidStepAddressedSave.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.entryStepId",
+          message: "must be a non-empty string",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects legacy authored workflows on save when strict authored-schema mode is enabled", async () => {
+    const root = await makeTempDir();
+
+    const saveResult = await saveWorkflowToDisk(
+      "legacy-strict-save",
+      {
+        workflow: {
+          workflowId: "legacy-strict-save",
+          description: "legacy authored workflow",
+          defaults: {
+            nodeTimeoutMs: 120000,
+          },
+          managerNodeId: "divedra-manager",
+          entryNodeId: "divedra-manager",
+          nodes: [
+            {
+              id: "divedra-manager",
+              role: "manager",
+              nodeFile: "nodes/node-manager.json",
+            },
+            {
+              id: "worker-1",
+              role: "worker",
+              nodeFile: "nodes/node-worker-1.json",
+            },
+          ],
+          edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
+          loops: [],
+        },
+        nodePayloads: {
+          "nodes/node-manager.json": {
+            id: "divedra-manager",
+            executionBackend: "codex-agent",
+            model: "gpt-5-nano",
+            promptTemplate: "manager",
+            variables: {},
+          },
+          "nodes/node-worker-1.json": {
+            id: "worker-1",
+            executionBackend: "codex-agent",
+            model: "gpt-5-nano",
+            promptTemplate: "worker",
+            variables: {},
+          },
+        },
+      },
+      {
+        workflowRoot: root,
+        rejectLegacyWorkflowAuthoring: true,
+      },
+    );
+    expect(saveResult.ok).toBe(false);
+    if (saveResult.ok) {
+      return;
+    }
+
+    expect(saveResult.error.code).toBe("VALIDATION");
+    expect(saveResult.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.entryStepId",
+          message: "must be a non-empty string",
+        }),
+        expect.objectContaining({
+          path: "workflow.managerNodeId",
+          message: "is not part of the step-addressed workflow schema",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps",
+          message: "must be an array",
+        }),
+      ]),
+    );
   });
 
   test("persists and cleans up prompt variant template files on save", async () => {
@@ -1281,7 +1395,8 @@ describe("saveWorkflowToDisk", () => {
       "review",
     );
     expect(
-      loaded.value.bundle.nodePayloads["nodes/node-review.json"]?.promptTemplate,
+      loaded.value.bundle.nodePayloads["nodes/node-review.json"]
+        ?.promptTemplate,
     ).toBe("implement");
 
     const saveResult = await saveWorkflowToDisk(
@@ -1316,7 +1431,8 @@ describe("saveWorkflowToDisk", () => {
     }
 
     expect(
-      reloaded.value.bundle.nodePayloads["nodes/node-review.json"]?.promptTemplate,
+      reloaded.value.bundle.nodePayloads["nodes/node-review.json"]
+        ?.promptTemplate,
     ).toBe("implement");
     expect(reloaded.value.bundle.nodePayloads["review"]?.promptTemplate).toBe(
       "review",
@@ -1359,10 +1475,13 @@ describe("saveWorkflowToDisk", () => {
         },
       ],
     });
-    await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
-      id: "manager-node",
-      variables: {},
-    });
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      {
+        id: "manager-node",
+        variables: {},
+      },
+    );
     await writeJson(path.join(workflowDirectory, "nodes", "node-worker.json"), {
       id: "worker-node",
       executionBackend: "codex-agent",

@@ -118,6 +118,8 @@ function makeRuntimeSessionView(artifactDir: string): RuntimeSessionView {
     nodeExecutions: [
       {
         nodeId: "worker",
+        stepId: "review-step",
+        nodeRegistryId: "worker",
         nodeExecId: "nodeexec-1",
         status: "succeeded",
         artifactDir,
@@ -138,6 +140,8 @@ function makeRuntimeSessionView(artifactDir: string): RuntimeSessionView {
         sessionId: "sess-1",
         nodeExecId: "nodeexec-1",
         nodeId: "worker",
+        stepId: "review-step",
+        nodeRegistryId: "worker",
         status: "succeeded",
         artifactDir,
         startedAt: "2026-03-26T00:00:10.000Z",
@@ -228,7 +232,11 @@ describe("buildHistoryDetailPaneState", () => {
 
     expect(state.summaryHeaderVisible).toBe(true);
     expect(state.summaryHeaderText).toContain("Workflow run: sess-1");
+    expect(state.summaryHeaderText).toContain("Step: review-step");
+    expect(state.summaryHeaderText).toContain("Node registry: worker");
     expect(state.summaryHeaderText).toContain("Node execution: nodeexec-1");
+    expect(state.summaryHeaderText).toContain("Current step: review-step");
+    expect(state.summaryHeaderText).toContain("Current node: worker");
     expect(state.summaryHeaderText).toContain(
       `Timezone: ${resolveSystemTimeZoneLabel()}`,
     );
@@ -273,6 +281,9 @@ describe("buildHistoryDetailPaneState", () => {
 
     expect(state.summaryVisible).toBe(false);
     expect(state.textVisible).toBe(true);
+    expect(state.textContent).toContain(
+      "Outbox for step review-step / nodeexec-1",
+    );
     expect(state.textContent).toContain("Execution output.json:");
     expect(state.textContent).toContain('"ok":true');
     expect(state.textContent).toContain("Mailbox outbox/output.json:");
@@ -359,6 +370,9 @@ describe("buildHistoryDetailPaneState", () => {
 
     expect(state.summaryVisible).toBe(false);
     expect(state.textVisible).toBe(true);
+    expect(state.textContent).toContain(
+      "Manager session for step review-step / nodeexec-1",
+    );
     expect(state.textContent).toContain(
       `Timezone: ${resolveSystemTimeZoneLabel()}`,
     );

@@ -118,6 +118,59 @@ function makeUnifiedRoleRaw(): {
   };
 }
 
+function makeValidStepAddressedRaw(): {
+  workflow: unknown;
+  nodePayloads: Record<string, unknown>;
+} {
+  return {
+    workflow: {
+      workflowId: "step-demo",
+      description: "step demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "manager",
+      entryStepId: "manager",
+      nodes: [
+        {
+          id: "manager-node",
+          nodeFile: "nodes/node-manager.json",
+        },
+        {
+          id: "worker-node",
+          nodeFile: "nodes/node-worker.json",
+        },
+      ],
+      steps: [
+        {
+          id: "manager",
+          nodeId: "manager-node",
+          role: "manager",
+          transitions: [{ toStepId: "worker" }],
+        },
+        {
+          id: "worker",
+          nodeId: "worker-node",
+        },
+      ],
+    },
+    nodePayloads: {
+      "nodes/node-manager.json": {
+        id: "manager-node",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "manager",
+        variables: {},
+      },
+      "nodes/node-worker.json": {
+        id: "worker-node",
+        executionBackend: "claude-code-agent",
+        model: "claude-opus-4-1",
+        promptTemplate: "worker",
+        variables: {},
+      },
+    },
+  };
+}
+
 describe("validateWorkflowBundle", () => {
   function expectInvalidNodeKind(kind: string): void {
     const raw = makeValidRaw();
@@ -163,6 +216,50 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.workflow.nodes).toHaveLength(2);
     expect(result.value.workflow.nodes[0]?.role).toBeUndefined();
     expect(result.value.workflow.nodes[1]?.role).toBeUndefined();
+  });
+
+  test("accepts strict step-addressed validation for canonical step-addressed payloads", () => {
+    const result = validateWorkflowBundle(makeValidStepAddressedRaw(), {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.entryStepId).toBe("manager");
+    expect(result.value.workflow.managerStepId).toBe("manager");
+    expect(result.value.workflow.steps?.map((step) => step.id)).toEqual([
+      "manager",
+      "worker",
+    ]);
+  });
+
+  test("rejects legacy node-addressed authoring in strict step-addressed validation mode", () => {
+    const result = validateWorkflowBundleDetailed(makeValidRaw(), {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.entryStepId",
+          message: "must be a non-empty string",
+        }),
+        expect.objectContaining({
+          path: "workflow.managerNodeId",
+          message: "is not part of the step-addressed workflow schema",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps",
+          message: "must be an array",
+        }),
+      ]),
+    );
   });
 
   test("accepts workflow definitions without a top-level description", () => {
@@ -1143,6 +1240,160 @@ describe("validateWorkflowBundle", () => {
         resultNodeId: "worker-2",
       },
     ]);
+  });
+
+  test("accepts compatibility workflowCalls on step-addressed bundles outside strict mode", () => {
+    const raw = makeValidStepAddressedRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker",
+          resultNodeId: "worker",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.workflowCalls).toEqual([
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "worker",
+        resultNodeId: "worker",
+      },
+    ]);
+  });
+
+  test("accepts workflowCalls with callerStepId aligned to the compat execution step id", () => {
+    const raw = makeValidStepAddressedRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker",
+          callerStepId: "worker",
+          resultNodeId: "worker",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.workflowCalls).toEqual([
+      {
+        id: "call-review",
+        workflowId: "review-flow",
+        callerNodeId: "worker",
+        callerStepId: "worker",
+        resultNodeId: "worker",
+      },
+    ]);
+  });
+
+  test("rejects workflowCalls callerStepId that does not exist on the step graph", () => {
+    const raw = makeValidStepAddressedRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker-node",
+          callerStepId: "missing-step",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls[0].callerStepId",
+          message: "must reference an existing step id",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects workflowCalls callerNodeId that disagrees with callerStepId", () => {
+    const raw = makeValidStepAddressedRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "manager",
+          callerStepId: "worker",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls[0].callerNodeId",
+          message: expect.stringContaining("must equal callerStepId"),
+        }),
+      ]),
+    );
+  });
+
+  test("rejects workflowCalls on step-addressed bundles in strict mode", () => {
+    const raw = makeValidStepAddressedRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker",
+          resultNodeId: "worker",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message: "is not part of the step-addressed workflow schema",
+        }),
+      ]),
+    );
   });
 
   test("rejects structural subWorkflows for role-authored bundles", () => {

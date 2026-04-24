@@ -75,11 +75,7 @@ Expected lane terminal payloads:
       "result": "container showcase lane"
     },
     "foreachLane": {
-      "iterations": [
-        "processed-alpha",
-        "processed-beta",
-        "processed-gamma"
-      ],
+      "iterations": ["processed-alpha", "processed-beta", "processed-gamma"],
       "totalIterations": 3
     }
   }

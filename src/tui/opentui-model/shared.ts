@@ -389,6 +389,7 @@ export function buildNodeSelectOption(input: {
   >;
 }): OpenTuiRichSelectOption {
   const nodeType = input.payload?.nodeType ?? "agent";
+  const executionTargetId = input.execution?.stepId ?? input.nodeId;
   const visualMetadata = resolveWorkflowNodeVisualMetadata({
     nodeId: input.nodeId,
     ...(input.visualMetadataByNodeId === undefined
@@ -397,10 +398,15 @@ export function buildNodeSelectOption(input: {
   });
   const kindColor = resolveOpenTuiNodeKindColor(input.kind);
   const typeColor = resolveOpenTuiNodeTypeColor(nodeType);
-  const contextLine = buildNodePreviewContextLine({
+  const contextLineBase = buildNodePreviewContextLine({
     ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
     ...(input.scopeLabel === undefined ? {} : { scopeLabel: input.scopeLabel }),
   });
+  const contextLine =
+    input.execution?.stepId !== undefined &&
+    input.execution.stepId !== input.nodeId
+      ? `${contextLineBase}  node: ${input.nodeId}`
+      : contextLineBase;
   return {
     description: buildNodeRowTypeLine({
       kind: input.kind,
@@ -416,9 +422,9 @@ export function buildNodeSelectOption(input: {
     ],
     labelText: buildNodeRowName({
       indentPrefix: visualMetadata.indentPrefix,
-      nodeId: input.nodeId,
+      nodeId: executionTargetId,
     }),
-    name: input.nodeId,
+    name: executionTargetId,
     statusColor: resolveOpenTuiStatusColor(
       input.execution?.status ?? "pending",
     ),

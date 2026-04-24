@@ -19,6 +19,7 @@ import {
 } from "./cli";
 import type { CliDependencies } from "./cli";
 import * as workflowCallNode from "./workflow/call-node";
+import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
 import { ok } from "./workflow/result";
 import { saveEventReplyDispatchToRuntimeDb } from "./workflow/runtime-db";
@@ -187,6 +188,66 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "node-writer.json"), {
     id: "writer",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "writer",
+    variables: {},
+    output: {
+      description: "writer output",
+      maxValidationAttempts: 2,
+      jsonSchema: {
+        type: "object",
+        required: ["summary"],
+        properties: {
+          summary: { type: "string" },
+        },
+      },
+    },
+  });
+}
+
+async function createCallStepFixture(
+  workflowRoot: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDirectory = path.join(workflowRoot, workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: workflowName,
+    description: "call step cli fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerStepId: "manager-step",
+    entryStepId: "manager-step",
+    nodes: [
+      {
+        id: "manager-node",
+        nodeFile: "nodes/node-manager.json",
+      },
+      {
+        id: "writer-node",
+        nodeFile: "nodes/node-writer.json",
+      },
+    ],
+    steps: [
+      {
+        id: "manager-step",
+        nodeId: "manager-node",
+        role: "manager",
+        transitions: [{ toStepId: "writer-step" }],
+      },
+      {
+        id: "writer-step",
+        nodeId: "writer-node",
+      },
+    ],
+  });
+  await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
+    id: "manager-node",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDirectory, "nodes", "node-writer.json"), {
+    id: "writer-node",
     executionBackend: "codex-agent",
     model: "gpt-5",
     promptTemplate: "writer",
@@ -612,6 +673,91 @@ describe("runCli", () => {
     expect(handle.sessionId).toBe(startedInputs[0]?.sessionId);
   });
 
+  test("createOpenTuiWorkflowAppOptions preserves step-addressed rerun targets", async () => {
+    const root = await makeTempDir();
+    expect(
+      await runCli(
+        ["workflow", "create", "demo", "--workflow-root", root],
+        createIoCapture().io,
+      ),
+    ).toBe(0);
+
+    const rerunInputs: Array<{
+      readonly workflowName: string;
+      readonly runtimeVariables: Readonly<Record<string, unknown>>;
+      readonly rerunFromSessionId?: string;
+      readonly rerunFromStepId?: string;
+      readonly rerunFromNodeId?: string;
+      readonly resumeSessionId?: string;
+      readonly sessionId?: string;
+    }> = [];
+    const session = createSessionState({
+      sessionId: "sess-source",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+
+    const appOptions = createOpenTuiWorkflowAppOptions({
+      deps: {
+        env: {},
+      },
+      io: createIoCapture().io,
+      optionRuntimeVariables: {
+        cliOnlyFlag: true,
+      },
+      runLocalTuiWorkflow: async (input) => {
+        rerunInputs.push(input);
+        return {
+          exitCode: 0,
+          sessionId: "rerun-1",
+          status: "completed",
+        };
+      },
+      sharedOptions: {
+        workflowRoot: root,
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      startLocalTuiWorkflow: async (input) => ({
+        sessionId: input.sessionId,
+        completion: Promise.resolve({
+          exitCode: 0,
+          sessionId: input.sessionId,
+          status: "completed",
+        }),
+      }),
+      workflowNames: ["demo"],
+    });
+
+    await appOptions.rerunWorkflow({
+      sourceSessionId: "sess-source",
+      fromStepId: "review-step",
+      runtimeVariables: {
+        humanInput: {
+          request: "retry",
+        },
+      },
+    });
+
+    expect(rerunInputs).toEqual([
+      {
+        workflowName: "demo",
+        rerunFromSessionId: "sess-source",
+        rerunFromStepId: "review-step",
+        runtimeVariables: {
+          cliOnlyFlag: true,
+          humanInput: {
+            request: "retry",
+          },
+        },
+      },
+    ]);
+  });
+
   test("returns help for unknown scope", async () => {
     const capture = createIoCapture();
     const code = await runCli(["unknown", "cmd", "target"], capture.io);
@@ -708,6 +854,97 @@ describe("runCli", () => {
     expect(inputJson.managerMessage?.instruction).toBe("review this change");
   });
 
+  test("call-step executes locally with structured manager message input", async () => {
+    const root = await makeTempDir();
+    const workflowName = "call-step-cli";
+    const sessionId = "sess-call-step-cli";
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const scenarioPath = path.join(root, "scenario.json");
+    const messagePath = path.join(root, "message.json");
+
+    await createCallStepFixture(root, workflowName);
+    const saved = await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "manager-step",
+        runtimeVariables: {},
+      }),
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+
+    await writeFile(
+      scenarioPath,
+      JSON.stringify(
+        {
+          "writer-step": [
+            {
+              provider: "scenario-mock",
+              when: { always: true },
+              payload: { wrong: true },
+            },
+            {
+              provider: "scenario-mock",
+              when: { always: true },
+              payload: { summary: "cli step ok" },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await writeFile(
+      messagePath,
+      JSON.stringify({ instruction: "review this step" }, null, 2),
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "call-step",
+        workflowName,
+        sessionId,
+        "writer-step",
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionStoreRoot,
+        "--mock-scenario",
+        scenarioPath,
+        "--message-file",
+        messagePath,
+        "--output",
+        "json",
+      ],
+      capture.io,
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      stepId: string;
+      output: { payload: { summary: string } };
+      outputRef: { artifactDir: string };
+    };
+    expect(payload.stepId).toBe("writer-step");
+    expect(payload.output.payload.summary).toBe("cli step ok");
+
+    const inputJson = JSON.parse(
+      await readFile(
+        path.join(payload.outputRef.artifactDir, "input.json"),
+        "utf8",
+      ),
+    ) as { managerMessage?: { instruction?: string } };
+    expect(inputJson.managerMessage?.instruction).toBe("review this step");
+  });
+
   test("create -> validate -> inspect roundtrip", async () => {
     const root = await makeTempDir();
 
@@ -746,14 +983,49 @@ describe("runCli", () => {
       workflowName: string;
       entryNodeId: string;
       managerNodeId?: string;
-      counts: { nodes: number };
-      runtime: { ready: boolean };
+      entryStepId?: string;
+      managerStepId?: string;
+      stepIds: readonly string[];
+      nodeRegistryIds: readonly string[];
+      counts: { nodes: number; nodeRegistry: number; steps: number };
+      runtime: { ready: boolean; blockers: readonly string[] };
     };
     expect(parsed.workflowName).toBe("demo");
     expect(parsed.entryNodeId).toBe("divedra-manager");
     expect(parsed.managerNodeId).toBe("divedra-manager");
+    expect(parsed.entryStepId).toBe("divedra-manager");
+    expect(parsed.managerStepId).toBe("divedra-manager");
+    expect(parsed.stepIds).toEqual(["divedra-manager", "main-worker"]);
+    expect(parsed.nodeRegistryIds).toEqual(["divedra-manager", "main-worker"]);
     expect(parsed.counts.nodes).toBe(2);
-    expect(parsed.runtime.ready).toBe(true);
+    expect(parsed.counts.nodeRegistry).toBe(2);
+    expect(parsed.counts.steps).toBe(2);
+    expect(parsed.runtime.ready).toBe(false);
+    expect(parsed.runtime.blockers).toEqual(
+      expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
+    );
+
+    const inspectTextCapture = createIoCapture();
+    const inspectTextCode = await runCli(
+      ["workflow", "inspect", "demo", "--workflow-root", root],
+      inspectTextCapture.io,
+    );
+    expect(inspectTextCode).toBe(0);
+    expect(inspectTextCapture.stdout.join("\n")).toContain(
+      "managerStepId: divedra-manager",
+    );
+    expect(inspectTextCapture.stdout.join("\n")).toContain(
+      "entryStepId: divedra-manager",
+    );
+    expect(inspectTextCapture.stdout.join("\n")).toContain(
+      "stepIds: divedra-manager, main-worker",
+    );
+    expect(inspectTextCapture.stdout.join("\n")).toContain(
+      "nodeRegistryIds: divedra-manager, main-worker",
+    );
+    expect(inspectTextCapture.stdout.join("\n")).toContain(
+      "nodeRegistry: 2, steps: 2",
+    );
   });
 
   test("workflow commands resolve explicit user scope", async () => {
@@ -1313,6 +1585,67 @@ describe("runCli", () => {
     expect(resumeCapture.stdout.join("\n")).toContain("completed");
   });
 
+  test("tui fallback progress text includes step-addressed state when available", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionsRoot = path.join(root, "sessions");
+    const scenarioPath = path.join(root, "scenario.json");
+    const variablesPath = await writeRuntimeVariablesFile(
+      root,
+      "runtime-variables.json",
+      {
+        humanInput: { request: "start demo workflow" },
+      },
+    );
+    await writeFile(
+      scenarioPath,
+      JSON.stringify(makeDefaultTemplateScenario(), null, 2),
+      "utf8",
+    );
+
+    expect(
+      await runCli(
+        ["workflow", "create", "demo", "--workflow-root", root],
+        createIoCapture().io,
+      ),
+    ).toBe(0);
+
+    const runCapture = createIoCapture();
+    const runCode = await runCli(
+      [
+        "tui",
+        "demo",
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--mock-scenario",
+        scenarioPath,
+        "--variables",
+        variablesPath,
+        "--max-steps",
+        "1",
+      ],
+      runCapture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 7777,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => false,
+      },
+    );
+    expect(runCode).toBe(4);
+
+    const stdout = runCapture.stdout.join("\n");
+    expect(stdout).toContain("[progress]");
+    expect(stdout).toContain("currentStep=");
+    expect(stdout).toContain("steps=");
+  });
+
   test("run with mock scenario and inspect progress + rerun", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
@@ -1424,11 +1757,205 @@ describe("runCli", () => {
     const rerunPayload = JSON.parse(rerunCapture.stdout.join("\n")) as {
       sourceSessionId: string;
       sessionId: string;
-      rerunFromNodeId: string;
+      rerunFromStepId: string;
     };
     expect(rerunPayload.sourceSessionId).toBe(runPayload.sessionId);
     expect(rerunPayload.sessionId).not.toBe(runPayload.sessionId);
-    expect(rerunPayload.rerunFromNodeId).toBe("main-worker");
+    expect(rerunPayload.rerunFromStepId).toBe("main-worker");
+  });
+
+  test("session progress and status expose step-centric execution state", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionsRoot = path.join(root, "sessions");
+    const sessionId = "sess-step-progress";
+    const session = {
+      ...createSessionState({
+        sessionId,
+        workflowName: "demo",
+        workflowId: "demo",
+        initialNodeId: "writer-node",
+        runtimeVariables: {},
+      }),
+      status: "paused" as const,
+      currentNodeId: "writer-node",
+      queue: ["writer-node"],
+      nodeExecutionCounter: 1,
+      nodeExecutionCounts: {
+        "writer-node": 1,
+      },
+      restartCounts: {
+        "writer-step": 2,
+      },
+      nodeExecutions: [
+        {
+          nodeId: "writer-node",
+          stepId: "writer-step",
+          nodeRegistryId: "writer-node",
+          nodeExecId: "exec-writer-1",
+          mailboxInstanceId: "exec-writer-1",
+          status: "succeeded" as const,
+          artifactDir: path.join(
+            artifactsRoot,
+            "demo",
+            sessionId,
+            "exec-writer-1",
+          ),
+          startedAt: "2026-04-24T05:00:00.000Z",
+          endedAt: "2026-04-24T05:00:10.000Z",
+        },
+      ],
+    };
+    const saved = await saveSession(session, {
+      sessionStoreRoot: sessionsRoot,
+    });
+    expect(saved.ok).toBe(true);
+
+    const progressCapture = createIoCapture();
+    const progressCode = await runCli(
+      [
+        "session",
+        "progress",
+        sessionId,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--output",
+        "json",
+      ],
+      progressCapture.io,
+    );
+    expect(progressCode).toBe(0);
+    const progressPayload = JSON.parse(progressCapture.stdout.join("\n")) as {
+      currentNodeId: string | null;
+      currentStepId: string | null;
+      stepSummaries: Array<{
+        stepId: string;
+        executions: number;
+        restarts: number;
+      }>;
+      nodeSummaries: Array<{
+        nodeId: string;
+        executions: number;
+        restarts: number;
+      }>;
+    };
+    expect(progressPayload.currentNodeId).toBe("writer-node");
+    expect(progressPayload.currentStepId).toBe("writer-step");
+    expect(progressPayload.nodeSummaries).toContainEqual({
+      nodeId: "writer-node",
+      executions: 1,
+      restarts: 0,
+    });
+    expect(progressPayload.stepSummaries).toEqual([
+      {
+        stepId: "writer-step",
+        executions: 1,
+        restarts: 2,
+      },
+    ]);
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      [
+        "session",
+        "status",
+        sessionId,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--output",
+        "json",
+      ],
+      statusCapture.io,
+    );
+    expect(statusCode).toBe(0);
+    const statusPayload = JSON.parse(statusCapture.stdout.join("\n")) as {
+      currentNodeId: string | null;
+      currentStepId: string | null;
+    };
+    expect(statusPayload.currentNodeId).toBe("writer-node");
+    expect(statusPayload.currentStepId).toBe("writer-step");
+  });
+
+  test("session progress and status infer the current step from authored workflow state before the first execution record exists", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionsRoot = path.join(root, "sessions");
+    const sessionId = "sess-step-current-target";
+
+    await createCallStepFixture(root, "demo");
+
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager-step",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-step",
+        queue: ["writer-step"],
+      },
+      {
+        sessionStoreRoot: sessionsRoot,
+      },
+    );
+    expect(saved.ok).toBe(true);
+
+    const progressCapture = createIoCapture();
+    const progressCode = await runCli(
+      [
+        "session",
+        "progress",
+        sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--output",
+        "json",
+      ],
+      progressCapture.io,
+    );
+    expect(progressCode).toBe(0);
+    const progressPayload = JSON.parse(progressCapture.stdout.join("\n")) as {
+      currentNodeId: string | null;
+      currentStepId: string | null;
+    };
+    expect(progressPayload.currentNodeId).toBe("writer-step");
+    expect(progressPayload.currentStepId).toBe("writer-step");
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      [
+        "session",
+        "status",
+        sessionId,
+        "--workflow-root",
+        root,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--output",
+        "json",
+      ],
+      statusCapture.io,
+    );
+    expect(statusCode).toBe(0);
+    const statusPayload = JSON.parse(statusCapture.stdout.join("\n")) as {
+      currentNodeId: string | null;
+      currentStepId: string | null;
+    };
+    expect(statusPayload.currentNodeId).toBe("writer-step");
+    expect(statusPayload.currentStepId).toBe("writer-step");
   });
 
   test("session export prints workflow execution logs as JSON", async () => {
@@ -1986,7 +2513,7 @@ describe("runCli", () => {
       variables: {
         input: {
           workflowExecutionId: "sess-remote-001",
-          nodeId: "workflow-output",
+          stepId: "workflow-output",
         },
       },
     });
@@ -1994,7 +2521,7 @@ describe("runCli", () => {
       sourceSessionId: "sess-remote-001",
       sessionId: "sess-remote-002",
       status: "running",
-      rerunFromNodeId: "workflow-output",
+      rerunFromStepId: "workflow-output",
       exitCode: 0,
     });
   });
@@ -2140,6 +2667,13 @@ describe("runCli", () => {
         defaultTimeoutMs: 1200,
       }),
     );
+    expect(JSON.parse(capture.stdout.join("\n"))).toEqual({
+      sourceSessionId: "sess-local-rerun",
+      sessionId: "sess-local-rerun-2",
+      status: "running",
+      rerunFromStepId: "workflow-output",
+      exitCode: 0,
+    });
   });
 
   test("local call-node forwards normalized working directory overrides", async () => {
@@ -2204,6 +2738,87 @@ describe("runCli", () => {
         nodeId: "writer",
         workflowWorkingDirectory: "apps/reviewer",
         defaultTimeoutMs: 750,
+        dryRun: true,
+      }),
+    );
+  });
+
+  test("local call-step forwards normalized working directory and continuation overrides", async () => {
+    const capture = createIoCapture();
+    const session = createSessionState({
+      sessionId: "sess-call-step-local",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "writer-step",
+      runtimeVariables: {},
+    });
+
+    const callStepSpy = vi
+      .spyOn(workflowCallStep, "callStep")
+      .mockResolvedValue(
+        ok({
+          session,
+          stepId: "writer-step",
+          nodeExecution: {
+            nodeId: "writer-step",
+            nodeExecId: "exec-1",
+            status: "succeeded",
+          },
+          output: { ok: true },
+          outputRef: {
+            type: "json",
+            path: "artifacts/output.json",
+          },
+          exitCode: 0,
+        } as unknown as workflowCallStep.CallStepSuccess),
+      );
+
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--working-dir",
+        " apps/reviewer ",
+        "--default-timeout-ms",
+        "750",
+        "--timeout-ms",
+        "975",
+        "--prompt-variant",
+        "review",
+        "--continue-session",
+        "--resume-node-exec",
+        "exec-previous",
+        "--dry-run",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(callStepSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowId: "demo",
+        workflowRunId: "sess-call-step-local",
+        stepId: "writer-step",
+        workflowWorkingDirectory: "apps/reviewer",
+        defaultTimeoutMs: 750,
+        overrides: {
+          timeoutMs: 975,
+          promptVariant: "review",
+          sessionMode: "reuse",
+          resumeNodeExecId: "exec-previous",
+        },
         dryRun: true,
       }),
     );

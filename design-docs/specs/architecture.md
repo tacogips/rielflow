@@ -13,7 +13,7 @@ This document describes the current runtime architecture implemented in `src/wor
 - runtime-owned output validation and publication
 - manager-scoped control-plane access for manager nodes
 
-The current implementation is centered on the persisted workflow session and its queue. Manager nodes are important, but they do not replace the queue-based engine.
+The current implementation is centered on the persisted workflow session and its queue. Manager nodes are important, but they do not replace the queue-based engine. The repository is in a mixed transitional state: step-addressed authoring and several public inspection surfaces are already in place, while some runtime and compatibility paths still retain older node-addressed behavior.
 
 Current direction:
 
@@ -121,7 +121,7 @@ Important validation facts:
 - worker-only workflows are valid when `entryStepId` is explicit
 - `managerStepId`, when present, must resolve to an authored step
 - every step must resolve `nodeId` through the explicit node registry in `workflow.json.nodes[]`
-- dedicated authored fields such as `edges`, `loops`, `branching`, and structural sub-workflow metadata are outside the authored schema
+- in strict step-addressed mode, dedicated authored fields such as `edges`, `loops`, `branching`, and structural sub-workflow metadata are rejected; the repository default still loads a limited compatibility set while cutover work remains in progress
 - cross-scope routing must still target the owning manager boundary
 
 ### Node Add-on Catalog
@@ -241,8 +241,8 @@ Source:
 
 Responsibilities:
 
-- execute cross-workflow calls through the same step-call runtime primitive used for local worker-step invocation
-- treat a workflow call as a call to the target workflow's callable entry step, normally its manager step
+- move cross-workflow calls toward the same step-call runtime primitive used for local worker-step invocation
+- treat the target design for a workflow call as a call to the callee workflow's callable entry step, normally its manager step
 - keep older `workflowCalls` and structural sub-workflow planning behavior isolated as compatibility-only behavior while the runtime migrates
 - converge compatibility `workflowCalls` and ordinary step calls behind one shared call abstraction instead of preserving separate long-term dispatch paths
 - allow validated manager override actions

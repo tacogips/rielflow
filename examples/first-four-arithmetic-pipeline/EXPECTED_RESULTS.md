@@ -13,6 +13,21 @@ bun run src/main.ts workflow validate first-four-arithmetic-pipeline --workflow-
 
 Expected result: the workflow is valid.
 
+## Inspect
+
+Command:
+
+```bash
+bun run src/main.ts workflow inspect first-four-arithmetic-pipeline --workflow-root ./examples --output json
+```
+
+Expected stable inspection facts:
+
+- authored `managerStepId` is `divedra-manager`
+- authored `entryStepId` is `divedra-manager`
+- `stepIds` list the add, multiply, and divide stages in authored order
+- stage payloads still resolve from `workflows/add`, `workflows/multiply`, and `workflows/divide`
+
 ## Run
 
 Command:

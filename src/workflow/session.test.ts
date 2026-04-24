@@ -1,0 +1,291 @@
+import { describe, expect, test } from "vitest";
+import {
+  persistNodeBackendSession,
+  resolveCurrentStepId,
+  resolveCurrentStepIdFromWorkflow,
+  resolveRequestedBackendSession,
+  type WorkflowSessionState,
+} from "./session";
+import type { AgentNodePayload } from "./types";
+
+function makeSession(
+  overrides: Partial<WorkflowSessionState> = {},
+): WorkflowSessionState {
+  return {
+    sessionId: "sess-1",
+    workflowName: "example",
+    workflowId: "example",
+    status: "running",
+    startedAt: "2026-04-24T00:00:00.000Z",
+    queue: [],
+    nodeExecutionCounter: 0,
+    nodeExecutionCounts: {},
+    loopIterationCounts: {},
+    restartCounts: {},
+    restartEvents: [],
+    transitions: [],
+    nodeExecutions: [],
+    communicationCounter: 0,
+    communications: [],
+    conversationTurns: [],
+    nodeBackendSessions: {},
+    pendingOptionalNodeDecisions: [],
+    activeUserActions: [],
+    runtimeVariables: {},
+    ...overrides,
+  };
+}
+
+function makeReusableAgentNode(
+  overrides: Partial<AgentNodePayload> = {},
+): AgentNodePayload {
+  return {
+    id: "review-step",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "review",
+    variables: {},
+    sessionPolicy: { mode: "reuse" },
+    ...overrides,
+  };
+}
+
+describe("resolveCurrentStepId", () => {
+  test("returns null when no current node is active", () => {
+    expect(resolveCurrentStepId(makeSession())).toBeNull();
+  });
+
+  test("returns null for legacy node-addressed sessions without step records", () => {
+    expect(
+      resolveCurrentStepId(
+        makeSession({
+          currentNodeId: "worker-node",
+          nodeExecutions: [
+            {
+              nodeId: "worker-node",
+              nodeExecId: "exec-1",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-1",
+              startedAt: "2026-04-24T00:00:00.000Z",
+              endedAt: "2026-04-24T00:00:01.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("returns the step id for step-addressed executions", () => {
+    expect(
+      resolveCurrentStepId(
+        makeSession({
+          currentNodeId: "review-step",
+          nodeExecutions: [
+            {
+              nodeId: "review-step",
+              stepId: "review-step",
+              nodeRegistryId: "writer-node",
+              nodeExecId: "exec-2",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-2",
+              startedAt: "2026-04-24T00:00:00.000Z",
+              endedAt: "2026-04-24T00:00:01.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe("review-step");
+  });
+
+  test("prefers the latest execution step id when currentNodeId still carries a node id", () => {
+    expect(
+      resolveCurrentStepId(
+        makeSession({
+          currentNodeId: "writer-node",
+          nodeExecutions: [
+            {
+              nodeId: "writer-node",
+              stepId: "draft-step",
+              nodeRegistryId: "writer-node",
+              nodeExecId: "exec-1",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-1",
+              startedAt: "2026-04-24T00:00:00.000Z",
+              endedAt: "2026-04-24T00:00:01.000Z",
+            },
+            {
+              nodeId: "writer-node",
+              stepId: "review-step",
+              nodeRegistryId: "writer-node",
+              nodeExecId: "exec-2",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-2",
+              startedAt: "2026-04-24T00:00:02.000Z",
+              endedAt: "2026-04-24T00:00:03.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe("review-step");
+  });
+
+  test("does not misreport a node id as the current step id in mixed step-addressed sessions", () => {
+    expect(
+      resolveCurrentStepId(
+        makeSession({
+          currentNodeId: "writer-node",
+          nodeExecutions: [
+            {
+              nodeId: "writer-node",
+              stepId: "draft-step",
+              nodeRegistryId: "writer-node",
+              nodeExecId: "exec-1",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-1",
+              startedAt: "2026-04-24T00:00:00.000Z",
+              endedAt: "2026-04-24T00:00:01.000Z",
+            },
+            {
+              nodeId: "review-node",
+              stepId: "review-step",
+              nodeRegistryId: "review-node",
+              nodeExecId: "exec-2",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-2",
+              startedAt: "2026-04-24T00:00:02.000Z",
+              endedAt: "2026-04-24T00:00:03.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe("draft-step");
+
+    expect(
+      resolveCurrentStepId(
+        makeSession({
+          currentNodeId: "future-worker-node",
+          nodeExecutions: [
+            {
+              nodeId: "writer-node",
+              stepId: "draft-step",
+              nodeRegistryId: "writer-node",
+              nodeExecId: "exec-1",
+              status: "succeeded",
+              artifactDir: "/tmp/artifacts/exec-1",
+              startedAt: "2026-04-24T00:00:00.000Z",
+              endedAt: "2026-04-24T00:00:01.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("falls back to the authored current step when no execution record exists yet", () => {
+    expect(
+      resolveCurrentStepIdFromWorkflow(
+        makeSession({
+          currentNodeId: "review-step",
+        }),
+        {
+          steps: [
+            {
+              id: "review-step",
+              nodeId: "writer-node",
+            },
+          ],
+        },
+      ),
+    ).toBe("review-step");
+  });
+});
+
+describe("resolveRequestedBackendSession", () => {
+  test("prefers the latest compatible session whose source provenance matches inheritFromStepId", () => {
+    const session = makeSession({
+      nodeBackendSessions: {
+        "implement-step": {
+          nodeId: "implement-step",
+          stepId: "implement-step",
+          nodeRegistryId: "writer-node",
+          sourceStepId: "implement-step",
+          lastStepId: "implement-step",
+          backend: "codex-agent",
+          provider: "provider-a",
+          sessionId: "session-1",
+          createdAt: "2026-04-24T00:00:00.000Z",
+          updatedAt: "2026-04-24T00:00:00.000Z",
+          lastNodeExecId: "exec-1",
+        },
+        "review-step": {
+          nodeId: "review-step",
+          stepId: "review-step",
+          nodeRegistryId: "writer-node",
+          sourceStepId: "implement-step",
+          lastStepId: "review-step",
+          backend: "codex-agent",
+          provider: "provider-b",
+          sessionId: "session-2",
+          createdAt: "2026-04-24T00:00:00.000Z",
+          updatedAt: "2026-04-24T00:01:00.000Z",
+          lastNodeExecId: "exec-2",
+        },
+      },
+    });
+
+    expect(
+      resolveRequestedBackendSession({
+        session,
+        node: makeReusableAgentNode(),
+        sessionLookupNodeId: "implement-step",
+        nodeRegistryId: "writer-node",
+        inheritFromStepId: "implement-step",
+      }),
+    ).toEqual({
+      mode: "reuse",
+      sessionId: "session-2",
+    });
+  });
+});
+
+describe("persistNodeBackendSession", () => {
+  test("preserves source-step provenance when an inheriting step refreshes the backend session id", () => {
+    const next = persistNodeBackendSession({
+      session: makeSession({
+        nodeBackendSessions: {
+          "implement-step": {
+            nodeId: "implement-step",
+            stepId: "implement-step",
+            nodeRegistryId: "writer-node",
+            sourceStepId: "implement-step",
+            lastStepId: "implement-step",
+            backend: "codex-agent",
+            provider: "provider-a",
+            sessionId: "session-1",
+            createdAt: "2026-04-24T00:00:00.000Z",
+            updatedAt: "2026-04-24T00:00:00.000Z",
+            lastNodeExecId: "exec-1",
+          },
+        },
+      }),
+      node: makeReusableAgentNode(),
+      stepId: "review-step",
+      nodeRegistryId: "writer-node",
+      inheritFromStepId: "implement-step",
+      nodeExecId: "exec-2",
+      provider: "provider-b",
+      endedAt: "2026-04-24T00:01:00.000Z",
+      backendSession: {
+        mode: "reuse",
+        sessionId: "session-1",
+      },
+      returnedSessionId: "session-2",
+    });
+
+    expect(next["review-step"]).toMatchObject({
+      sourceStepId: "implement-step",
+      lastStepId: "review-step",
+      sessionId: "session-2",
+    });
+  });
+});

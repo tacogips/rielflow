@@ -138,7 +138,8 @@ export interface OpenTuiWorkflowAppOptions {
   }) => Promise<OpenTuiWorkflowExecutionHandle>;
   readonly rerunWorkflow: (input: {
     readonly sourceSessionId: string;
-    readonly fromNodeId: string;
+    readonly fromStepId?: string;
+    readonly fromNodeId?: string;
     readonly runtimeVariables: Readonly<Record<string, unknown>>;
   }) => Promise<OpenTuiWorkflowActionResult>;
   readonly resumeWorkflow: (

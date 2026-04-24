@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   callWorkflowNode,
+  callWorkflowStep,
   createNodeAddonPayloadResolver,
   createWorkflowExecutionClient,
   executeWorkflow,
@@ -17,6 +18,7 @@ import {
 import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./lib";
 import type { MockNodeScenario } from "./workflow/adapter";
 import { createWorkflowTemplate } from "./workflow/create";
+import * as workflowEngine from "./workflow/engine";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
 
@@ -71,6 +73,54 @@ async function createCallNodeFixture(
   });
   await writeJson(path.join(workflowDirectory, "node-writer.json"), {
     id: "writer",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "writer",
+    variables: {},
+  });
+}
+
+async function createCallStepFixture(
+  workflowRoot: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDirectory = path.join(workflowRoot, workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: workflowName,
+    description: "call step library fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerStepId: "manager-step",
+    entryStepId: "manager-step",
+    nodes: [
+      {
+        id: "manager-node",
+        nodeFile: "nodes/node-manager.json",
+      },
+      {
+        id: "writer-node",
+        nodeFile: "nodes/node-writer.json",
+      },
+    ],
+    steps: [
+      {
+        id: "manager-step",
+        nodeId: "manager-node",
+        role: "manager",
+        transitions: [{ toStepId: "writer-step" }],
+      },
+      {
+        id: "writer-step",
+        nodeId: "writer-node",
+      },
+    ],
+  });
+  await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
+    id: "manager-node",
+    variables: {},
+  });
+  await writeJson(path.join(workflowDirectory, "nodes", "node-writer.json"), {
+    id: "writer-node",
     executionBackend: "codex-agent",
     model: "gpt-5",
     promptTemplate: "writer",
@@ -230,6 +280,7 @@ function createAsyncThirdPartyAddonDefinition(): NodeAddonDefinition {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -280,7 +331,10 @@ describe("library api", () => {
       fetchSpy.mockRestore();
     }
     expect(summary.workflowName).toBe("demo");
-    expect(summary.runtime.ready).toBe(true);
+    expect(summary.runtime.ready).toBe(false);
+    expect(summary.runtime.blockers).toEqual(
+      expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
+    );
 
     const paused = await executeWorkflow({
       workflowName: "demo",
@@ -311,6 +365,62 @@ describe("library api", () => {
     const runtimeView = await getRuntimeSessionView(paused.sessionId, options);
     expect(runtimeView.nodeExecutions.length).toBeGreaterThan(0);
     expect(runtimeView.nodeLogs.length).toBeGreaterThan(0);
+  });
+
+  test("lists persisted sessions from the session store even when runtime-db indexing fails", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "blocked-root-data");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const startedAt = "2026-04-24T00:00:00.000Z";
+    const endedAt = "2026-04-24T00:01:00.000Z";
+
+    await writeFile(rootDataDir, "not-a-directory\n", "utf8");
+
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-library-list-fallback",
+          workflowName: "step-demo",
+          workflowId: "step-demo",
+          initialNodeId: "writer-step",
+          runtimeVariables: {},
+        }),
+        startedAt,
+        endedAt,
+        currentNodeId: "writer-step",
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "writer-step": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "writer-step",
+            stepId: "writer-step",
+            nodeRegistryId: "writer-node",
+            nodeExecId: "exec-000001",
+            mailboxInstanceId: "exec-000001",
+            status: "succeeded",
+            artifactDir: path.join(root, "artifacts", "exec-000001"),
+            startedAt,
+            endedAt,
+          },
+        ],
+        status: "completed" as const,
+      },
+      {
+        sessionStoreRoot,
+        rootDataDir,
+      },
+    );
+    expect(saved.ok).toBe(true);
+
+    const sessions = await listSessions({
+      sessionStoreRoot,
+      rootDataDir,
+    });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.sessionId).toBe("sess-library-list-fallback");
+    expect(sessions[0]?.currentStepId).toBe("writer-step");
   });
 
   test("calls one workflow node through the library wrapper", async () => {
@@ -354,6 +464,102 @@ describe("library api", () => {
     expect(result.sessionId).toBe(sessionId);
     expect(result.status).toBe("succeeded");
     expect(result.output["payload"]).toEqual({ summary: "library ok" });
+  });
+
+  test("derives currentStepId from authored workflow state before the first execution record exists", async () => {
+    const root = await makeTempDir();
+    const sessionStoreRoot = path.join(root, "sessions");
+    const rootDataDir = path.join(root, "data");
+    const sessionId = "sess-library-current-step";
+
+    await createCallStepFixture(root, "demo");
+
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager-step",
+          runtimeVariables: {},
+        }),
+        status: "paused" as const,
+        currentNodeId: "writer-step",
+        queue: ["writer-step"],
+      },
+      {
+        sessionStoreRoot,
+        rootDataDir,
+      },
+    );
+    expect(saved.ok).toBe(true);
+
+    const sessions = await listSessions({
+      workflowRoot: root,
+      sessionStoreRoot,
+      rootDataDir,
+    });
+    expect(sessions[0]?.currentStepId).toBe("writer-step");
+
+    const runtimeView = await getRuntimeSessionView(sessionId, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot,
+      rootDataDir,
+    });
+    expect(runtimeView.session.currentStepId).toBe("writer-step");
+  });
+
+  test("calls one workflow step through the library wrapper", async () => {
+    const root = await makeTempDir();
+    const workflowName = "call-step-lib";
+    const sessionId = "sess-call-step-lib";
+    const sessionStoreRoot = path.join(root, "sessions");
+
+    await createCallStepFixture(root, workflowName);
+
+    const saved = await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "manager-step",
+        runtimeVariables: {},
+      }),
+      {
+        sessionStoreRoot,
+      },
+    );
+    expect(saved.ok).toBe(true);
+
+    const result = await callWorkflowStep({
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot,
+      workflowId: workflowName,
+      workflowRunId: sessionId,
+      stepId: "writer-step",
+      mockScenario: {
+        "writer-step": {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { summary: "library step ok" },
+        },
+      },
+    });
+
+    expect(result.sessionId).toBe(sessionId);
+    expect(result.stepId).toBe("writer-step");
+    expect(result.status).toBe("succeeded");
+    expect(result.output["payload"]).toEqual({ summary: "library step ok" });
+
+    const runtimeView = await getRuntimeSessionView(sessionId, {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot,
+    });
+    expect(runtimeView.session.currentStepId).toBe("writer-step");
   });
 
   test("executes a fixed workflow through the library client", async () => {
@@ -625,10 +831,75 @@ describe("library api", () => {
     const rerun = await rerunWorkflow({
       ...options,
       sourceSessionId: resumed.sessionId,
-      fromNodeId: "addon-worker",
+      fromStepId: "addon-worker",
     });
     expect(rerun.status).toBe("completed");
     expect(rerun.exitCode).toBe(0);
+    expect(rerun.rerunFromStepId).toBe("addon-worker");
+  });
+
+  test("rerunWorkflow preserves differing step and node ids for reusable-node steps", async () => {
+    const root = await makeTempDir();
+    const workflowName = "rerun-call-step-lib";
+    const sessionId = "sess-rerun-call-step-lib";
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+
+    await createCallStepFixture(root, workflowName);
+    await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "writer-step",
+        runtimeVariables: {},
+      }),
+      options,
+    );
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-rerun-call-step-lib-2",
+              workflowName,
+              workflowId: workflowName,
+              initialNodeId: "writer-step",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const rerun = await rerunWorkflow({
+      ...options,
+      sourceSessionId: sessionId,
+      fromStepId: "writer-step",
+      fromNodeId: "writer-node",
+    });
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      workflowName,
+      expect.objectContaining({
+        rerunFromSessionId: sessionId,
+        rerunFromNodeId: "writer-step",
+      }),
+    );
+    expect(rerun).toMatchObject({
+      sessionId: "sess-rerun-call-step-lib-2",
+      status: "running",
+      rerunFromStepId: "writer-step",
+      rerunFromNodeId: "writer-node",
+      exitCode: 0,
+    });
   });
 
   test("executes a fixed workflow through the endpoint-backed library client", async () => {

@@ -99,6 +99,7 @@ export interface WorkflowValidationOptions
     | "nodeAddonResolvers"
   > {
   readonly allowResolvedStepFileFields?: boolean;
+  readonly rejectLegacyWorkflowAuthoring?: boolean;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -2219,7 +2220,6 @@ function normalizeStepAddressedWorkflow(
   for (const legacyField of [
     "managerNodeId",
     "entryNodeId",
-    "workflowCalls",
     "subWorkflows",
     "subWorkflowConversations",
     "edges",
@@ -2236,6 +2236,34 @@ function normalizeStepAddressedWorkflow(
       );
     }
   }
+
+  const workflowCallsRaw = workflow["workflowCalls"];
+  if (workflowCallsRaw !== undefined) {
+    if (options.rejectLegacyWorkflowAuthoring === true) {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.workflowCalls",
+          "is not part of the step-addressed workflow schema",
+        ),
+      );
+    } else if (!Array.isArray(workflowCallsRaw)) {
+      issues.push(
+        makeIssue(
+          "error",
+          "workflow.workflowCalls",
+          "must be an array when provided",
+        ),
+      );
+    }
+  }
+  const workflowCalls =
+    Array.isArray(workflowCallsRaw) &&
+    options.rejectLegacyWorkflowAuthoring !== true
+      ? workflowCallsRaw
+          .map((entry, index) => normalizeWorkflowCall(entry, index, issues))
+          .filter((entry): entry is WorkflowCallRef => entry !== null)
+      : undefined;
 
   const nodeRegistryRaw = workflow["nodes"];
   if (!Array.isArray(nodeRegistryRaw)) {
@@ -2271,11 +2299,7 @@ function normalizeStepAddressedWorkflow(
     : [];
   if (Array.isArray(stepsRaw) && steps.length === 0) {
     issues.push(
-      makeIssue(
-        "error",
-        "workflow.steps",
-        "must contain at least one step",
-      ),
+      makeIssue("error", "workflow.steps", "must contain at least one step"),
     );
   }
 
@@ -2455,6 +2479,7 @@ function normalizeStepAddressedWorkflow(
     managerNodeId: managerStepId ?? entryStepId,
     hasManagerNode: managerStepId !== undefined,
     entryNodeId: entryStepId,
+    ...(workflowCalls === undefined ? {} : { workflowCalls }),
     ...(managerStepId === undefined ? {} : { managerStepId }),
     entryStepId,
     nodeRegistry,
@@ -2574,6 +2599,22 @@ function normalizeWorkflowCall(
   const workflowId = readStringField(value, "workflowId", path, issues);
   const callerNodeId = readStringField(value, "callerNodeId", path, issues);
 
+  const callerStepIdRaw = value["callerStepId"];
+  let callerStepId: string | undefined;
+  if (callerStepIdRaw !== undefined) {
+    if (typeof callerStepIdRaw === "string" && callerStepIdRaw.length > 0) {
+      callerStepId = callerStepIdRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.callerStepId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
   const resultNodeIdRaw = value["resultNodeId"];
   let resultNodeId: string | undefined;
   if (resultNodeIdRaw !== undefined) {
@@ -2598,6 +2639,7 @@ function normalizeWorkflowCall(
     id,
     workflowId,
     callerNodeId,
+    ...(callerStepId === undefined ? {} : { callerStepId }),
     ...(resultNodeId === undefined ? {} : { resultNodeId }),
   };
 }
@@ -3016,6 +3058,10 @@ function normalizeWorkflow(
   if (!isRecord(workflow)) {
     issues.push(makeIssue("error", "workflow", "must be an object"));
     return null;
+  }
+
+  if (options.rejectLegacyWorkflowAuthoring === true) {
+    return normalizeStepAddressedWorkflow(workflow, issues, options);
   }
 
   if (
@@ -4522,6 +4568,11 @@ function runSemanticValidation(
   const isStepAddressedWorkflow =
     bundle.workflow.nodeRegistry !== undefined &&
     bundle.workflow.steps !== undefined;
+  const authoredSteps = bundle.workflow.steps;
+  const stepIdSet =
+    authoredSteps === undefined
+      ? new Set<string>()
+      : new Set(authoredSteps.map((step) => step.id));
   const nodeIdSet = new Set(bundle.workflow.nodes.map((node) => node.id));
   const nodeOrderByNodeId = new Map(
     bundle.workflow.nodes.map((node, order) => [node.id, order]),
@@ -4745,6 +4796,34 @@ function runSemanticValidation(
           "must reference an existing node id",
         ),
       );
+    }
+
+    if (call.callerStepId !== undefined) {
+      if (!isStepAddressedWorkflow) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.workflowCalls[${index}].callerStepId`,
+            "is only supported when the workflow defines workflow.steps (step-addressed model)",
+          ),
+        );
+      } else if (!stepIdSet.has(call.callerStepId)) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.workflowCalls[${index}].callerStepId`,
+            "must reference an existing step id",
+          ),
+        );
+      } else if (call.callerNodeId !== call.callerStepId) {
+        issues.push(
+          makeIssue(
+            "error",
+            `workflow.workflowCalls[${index}].callerNodeId`,
+            "must equal callerStepId for step-addressed workflows (execution-scoped ids are step ids)",
+          ),
+        );
+      }
     }
 
     if (call.resultNodeId !== undefined && !nodeIdSet.has(call.resultNodeId)) {

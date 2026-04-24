@@ -37,11 +37,12 @@ Expected stable run summary:
 }
 ```
 
-Expected key execution count:
+Expected shared-node execution visits:
 
 ```json
 {
-  "echo-session": 2
+  "echo-request": 1,
+  "answer-request": 1
 }
 ```
 
@@ -56,9 +57,9 @@ Expected final output payload:
   "echoText": "What is the capital of France?",
   "finalAnswer": "The capital of France is Paris.",
   "notes": [
-    "The ordered node list revisits the same node id via repeat.",
-    "The node payload opts into sessionPolicy.mode = reuse.",
-    "The mock scenario demonstrates the two-turn repeat shape; live backend session continuity still depends on the configured backend returning a reusable session id."
+    "Distinct step ids revisit the same reusable node registry entry.",
+    "The answer step inherits the backend session from echo-request and swaps to the answer prompt variant.",
+    "Live backend session continuity still depends on the configured backend returning a reusable session id."
   ]
 }
 ```

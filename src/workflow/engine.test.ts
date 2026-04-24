@@ -9,9 +9,11 @@ import {
   ScenarioNodeAdapter,
 } from "./adapter";
 import type { NodeAdapter } from "./adapter";
+import { createWorkflowTemplate } from "./create";
 import { runWorkflow } from "./engine";
 import { createManagerSessionStore } from "./manager-session-store";
-import { listRuntimeNodeLogs } from "./runtime-db";
+import { listRuntimeNodeExecutions, listRuntimeNodeLogs } from "./runtime-db";
+import { resolveCurrentStepId } from "./session";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 
 const tempDirs: string[] = [];
@@ -602,6 +604,93 @@ class ReusableSessionAdapter implements NodeAdapter {
       completionPassed: true,
       when: { always: true },
       payload: { nodeId: input.nodeId },
+    };
+  }
+}
+
+class StepAddressedInheritedSessionAdapter implements NodeAdapter {
+  readonly calls: Array<{
+    readonly nodeId: string;
+    readonly backendSession?: {
+      readonly mode: "new" | "reuse";
+      readonly sessionId?: string;
+    };
+  }> = [];
+
+  async execute(
+    input: Parameters<NodeAdapter["execute"]>[0],
+  ): Promise<
+    ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
+  > {
+    this.calls.push({
+      nodeId: input.nodeId,
+      ...(input.backendSession === undefined
+        ? {}
+        : { backendSession: input.backendSession }),
+    });
+
+    const sessionId = input.backendSession?.sessionId ?? "shared-session-1";
+    const reused =
+      input.backendSession?.mode === "reuse" &&
+      input.backendSession.sessionId === "shared-session-1";
+
+    return {
+      provider: "test-adapter",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      when: { always: true },
+      payload: {
+        nodeId: input.nodeId,
+        reused,
+      },
+      backendSession: {
+        sessionId,
+      },
+    };
+  }
+}
+
+class RotatingInheritedSessionAdapter implements NodeAdapter {
+  readonly calls: Array<{
+    readonly nodeId: string;
+    readonly backendSession?: {
+      readonly mode: "new" | "reuse";
+      readonly sessionId?: string;
+    };
+  }> = [];
+
+  async execute(
+    input: Parameters<NodeAdapter["execute"]>[0],
+  ): Promise<
+    ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
+  > {
+    this.calls.push({
+      nodeId: input.nodeId,
+      ...(input.backendSession === undefined
+        ? {}
+        : { backendSession: input.backendSession }),
+    });
+
+    const nextSessionId =
+      input.nodeId === "step-a"
+        ? "shared-session-1"
+        : input.nodeId === "step-b"
+          ? "shared-session-2"
+          : "shared-session-3";
+
+    return {
+      provider: "test-adapter",
+      model: input.node.model,
+      promptText: input.promptText,
+      completionPassed: true,
+      when: { always: true },
+      payload: {
+        nodeId: input.nodeId,
+      },
+      backendSession: {
+        sessionId: nextSessionId,
+      },
     };
   }
 }
@@ -1320,6 +1409,125 @@ async function createNodeSessionReuseFixture(
     executionBackend: "codex-agent",
     model: "gpt-5-nano",
     promptTemplate: "return 3",
+    variables: {},
+  });
+}
+
+async function createStepAddressedInheritedSessionReuseFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "step-addressed inherited session reuse fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryStepId: "step-a",
+    nodes: [
+      {
+        id: "writer-node",
+        nodeFile: "nodes/node-writer.json",
+      },
+    ],
+    steps: [
+      {
+        id: "step-a",
+        nodeId: "writer-node",
+        sessionPolicy: {
+          mode: "reuse",
+        },
+        transitions: [{ toStepId: "step-b" }],
+      },
+      {
+        id: "step-b",
+        nodeId: "writer-node",
+        promptVariant: "review",
+        sessionPolicy: {
+          mode: "reuse",
+          inheritFromStepId: "step-a",
+        },
+      },
+    ],
+  });
+
+  await writeJson(path.join(workflowDir, "nodes", "node-writer.json"), {
+    id: "writer-node",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
+    promptTemplate: "implement",
+    promptVariants: {
+      review: {
+        promptTemplate: "review",
+      },
+    },
+    variables: {},
+  });
+}
+
+async function createRotatingInheritedSessionReuseFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "step-addressed inherited session lineage fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryStepId: "step-a",
+    nodes: [
+      {
+        id: "writer-node",
+        nodeFile: "nodes/node-writer.json",
+      },
+    ],
+    steps: [
+      {
+        id: "step-a",
+        nodeId: "writer-node",
+        sessionPolicy: {
+          mode: "reuse",
+        },
+        transitions: [{ toStepId: "step-b" }],
+      },
+      {
+        id: "step-b",
+        nodeId: "writer-node",
+        promptVariant: "review",
+        sessionPolicy: {
+          mode: "reuse",
+          inheritFromStepId: "step-a",
+        },
+        transitions: [{ toStepId: "step-c" }],
+      },
+      {
+        id: "step-c",
+        nodeId: "writer-node",
+        promptVariant: "polish",
+        sessionPolicy: {
+          mode: "reuse",
+          inheritFromStepId: "step-a",
+        },
+      },
+    ],
+  });
+
+  await writeJson(path.join(workflowDir, "nodes", "node-writer.json"), {
+    id: "writer-node",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
+    promptTemplate: "implement",
+    promptVariants: {
+      review: {
+        promptTemplate: "review",
+      },
+      polish: {
+        promptTemplate: "polish",
+      },
+    },
     variables: {},
   });
 }
@@ -2475,6 +2683,179 @@ describe("runWorkflow", () => {
     expect(
       resumed.value.session.nodeBackendSessions?.["step-b"]?.sessionId,
     ).toBe("backend-b-1");
+  });
+
+  test("reuses a prior step backend session when a step inherits from step.sessionPolicy.inheritFromStepId", async () => {
+    const root = await makeTempDir();
+    await createStepAddressedInheritedSessionReuseFixture(
+      root,
+      "step-addressed-inherit-session",
+    );
+    const adapter = new StepAddressedInheritedSessionAdapter();
+
+    const result = await runWorkflow(
+      "step-addressed-inherit-session",
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(adapter.calls).toEqual([
+      {
+        nodeId: "step-a",
+        backendSession: { mode: "new" },
+      },
+      {
+        nodeId: "step-b",
+        backendSession: {
+          mode: "reuse",
+          sessionId: "shared-session-1",
+        },
+      },
+    ]);
+    expect(
+      result.value.session.nodeBackendSessions?.["step-a"]?.sessionId,
+    ).toBe("shared-session-1");
+    expect(
+      result.value.session.nodeBackendSessions?.["step-b"]?.sessionId,
+    ).toBe("shared-session-1");
+  });
+
+  test("persists step-addressed execution metadata for shared-node workflow runs", async () => {
+    const root = await makeTempDir();
+    const artifactRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    await createStepAddressedInheritedSessionReuseFixture(
+      root,
+      "step-addressed-execution-metadata",
+    );
+    const adapter = new StepAddressedInheritedSessionAdapter();
+
+    const result = await runWorkflow(
+      "step-addressed-execution-metadata",
+      {
+        workflowRoot: root,
+        artifactRoot,
+        sessionStoreRoot,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.session.nodeExecutions).toMatchObject([
+      {
+        nodeId: "step-a",
+        stepId: "step-a",
+        nodeRegistryId: "writer-node",
+        nodeExecId: "exec-000001",
+        mailboxInstanceId: "exec-000001",
+        timeoutMs: 120000,
+      },
+      {
+        nodeId: "step-b",
+        stepId: "step-b",
+        nodeRegistryId: "writer-node",
+        nodeExecId: "exec-000002",
+        mailboxInstanceId: "exec-000002",
+        promptVariant: "review",
+        timeoutMs: 120000,
+      },
+    ]);
+    expect(resolveCurrentStepId(result.value.session)).toBe("step-b");
+
+    const runtimeExecutions = await listRuntimeNodeExecutions(
+      result.value.session.sessionId,
+      {
+        artifactRoot,
+      },
+    );
+    expect(runtimeExecutions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "step-a",
+          stepId: "step-a",
+          nodeRegistryId: "writer-node",
+          mailboxInstanceId: "exec-000001",
+          promptVariant: null,
+          timeoutMs: 120000,
+        }),
+        expect.objectContaining({
+          nodeId: "step-b",
+          stepId: "step-b",
+          nodeRegistryId: "writer-node",
+          mailboxInstanceId: "exec-000002",
+          promptVariant: "review",
+          timeoutMs: 120000,
+        }),
+      ]),
+    );
+  });
+
+  test("keeps inherited-session provenance when later steps rotate the backend session id", async () => {
+    const root = await makeTempDir();
+    await createRotatingInheritedSessionReuseFixture(
+      root,
+      "step-addressed-rotating-inherit-session",
+    );
+    const adapter = new RotatingInheritedSessionAdapter();
+
+    const result = await runWorkflow(
+      "step-addressed-rotating-inherit-session",
+      {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(adapter.calls).toEqual([
+      {
+        nodeId: "step-a",
+        backendSession: { mode: "new" },
+      },
+      {
+        nodeId: "step-b",
+        backendSession: {
+          mode: "reuse",
+          sessionId: "shared-session-1",
+        },
+      },
+      {
+        nodeId: "step-c",
+        backendSession: {
+          mode: "reuse",
+          sessionId: "shared-session-2",
+        },
+      },
+    ]);
+    expect(result.value.session.nodeBackendSessions?.["step-b"]).toMatchObject({
+      sourceStepId: "step-a",
+      lastStepId: "step-b",
+      sessionId: "shared-session-2",
+    });
+    expect(result.value.session.nodeBackendSessions?.["step-c"]).toMatchObject({
+      sourceStepId: "step-a",
+      lastStepId: "step-c",
+      sessionId: "shared-session-3",
+    });
   });
 
   test("forwards explicit new session policy without persisting a reusable backend session", async () => {
@@ -5684,6 +6065,41 @@ describe("runWorkflow", () => {
     expect(outputJson.payload.stage).toBe("test-review");
   });
 
+  test("supports mock-scenario fallback for scaffolded code-manager starters without explicit manager scenario entries", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("scenario-template", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const result = await runWorkflow("scenario-template", {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      mockScenario: {},
+      maxSteps: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.exitCode).toBe(4);
+    expect(result.value.session.status).toBe("paused");
+    expect(result.value.session.nodeExecutions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "divedra-manager",
+          status: "succeeded",
+        }),
+      ]),
+    );
+  });
+
   test("supports mock-scenario execution for command and container nodes", async () => {
     const root = await makeTempDir();
     const exampleWorkflowRoot = path.join(process.cwd(), "examples");
@@ -5915,6 +6331,45 @@ describe("runWorkflow", () => {
     expect(rerun.value.session.nodeExecutions).toHaveLength(1);
     expect(rerun.value.session.nodeExecutions[0]?.nodeId).toBe("step-1");
     expect(rerun.value.session.startedAt.length).toBeGreaterThan(0);
+  });
+
+  test("reports step-oriented rerun validation errors for step-addressed workflows", async () => {
+    const root = await makeTempDir();
+    await createStepAddressedInheritedSessionReuseFixture(
+      root,
+      "rerun-step-addressed-error",
+    );
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+
+    const first = await runWorkflow(
+      "rerun-step-addressed-error",
+      options,
+      new ReusableSessionAdapter(),
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+
+    const rerun = await runWorkflow(
+      "rerun-step-addressed-error",
+      {
+        ...options,
+        rerunFromSessionId: first.value.session.sessionId,
+        rerunFromNodeId: "missing-step",
+      },
+      new ReusableSessionAdapter(),
+    );
+    expect(rerun.ok).toBe(false);
+    if (rerun.ok) {
+      return;
+    }
+
+    expect(rerun.error.message).toBe("unknown rerun step 'missing-step'");
   });
 
   test("does not inherit reusable node backend sessions into a rerun session", async () => {

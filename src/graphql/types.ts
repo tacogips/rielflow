@@ -109,9 +109,13 @@ export interface WorkflowView extends WorkflowInspectionSummary {}
 
 export interface WorkflowDefinitionView extends WorkflowResponse {}
 
+export interface WorkflowSessionView extends WorkflowSessionState {
+  readonly currentStepId: string | null;
+}
+
 export interface WorkflowExecutionView {
   readonly workflowExecutionId: string;
-  readonly session: WorkflowSessionState;
+  readonly session: WorkflowSessionView;
   readonly nodeExecutions: readonly RuntimeNodeExecutionSummary[];
   readonly nodeLogs: readonly RuntimeNodeLogEntry[];
   readonly hookEvents: readonly RuntimeHookEventRecord[];
@@ -123,7 +127,7 @@ export interface WorkflowExecutionOverviewView {
   readonly workflowId: string;
   readonly workflowName: string;
   readonly status: WorkflowSessionState["status"];
-  readonly session: WorkflowSessionState;
+  readonly session: WorkflowSessionView;
   readonly nodes: readonly NodeExecutionView[];
   readonly communications: CommunicationConnection;
   readonly nodeLogs: readonly RuntimeNodeLogEntry[];
@@ -141,7 +145,10 @@ export interface NodeExecutionView {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
+  readonly mailboxInstanceId?: string;
   readonly status: NodeExecutionRecord["status"];
   readonly startedAt: string;
   readonly endedAt: string;
@@ -151,6 +158,8 @@ export interface NodeExecutionView {
     readonly path: string;
     readonly message: string;
   }[];
+  readonly promptVariant?: string;
+  readonly timeoutMs?: number;
   readonly backendSessionId?: string;
   readonly backendSessionMode?: "new" | "reuse";
   readonly restartedFromNodeExecId?: string;
@@ -241,7 +250,8 @@ export interface ResumeWorkflowExecutionPayload {
 
 export interface RerunWorkflowExecutionInput {
   readonly workflowExecutionId: string;
-  readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeId?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly workingDirectory?: string;
   readonly dryRun?: boolean;
@@ -254,6 +264,8 @@ export interface RerunWorkflowExecutionPayload {
   readonly workflowExecutionId: string;
   readonly sessionId: string;
   readonly status: WorkflowSessionState["status"];
+  readonly rerunFromStepId?: string;
+  readonly rerunFromNodeId?: string;
   readonly exitCode: number;
 }
 

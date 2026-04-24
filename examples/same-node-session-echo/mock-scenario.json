@@ -33,35 +33,31 @@
       "expectedSecondTurn": "Answer using the echoed content."
     }
   },
-  "echo-session": [
-    {
-      "provider": "scenario-mock",
-      "model": "claude-haiku-4-5",
-      "when": {
-        "continue_turn": true,
-        "loop_exit": false
-      },
-      "payload": {
-        "turn": "echo",
-        "echoText": "What is the capital of France?",
-        "handoff": "Revisit the same node once more and answer from this echoed text."
-      }
+  "echo-request": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
     },
-    {
-      "provider": "scenario-mock",
-      "model": "claude-haiku-4-5",
-      "when": {
-        "continue_turn": false,
-        "loop_exit": true
-      },
-      "payload": {
-        "turn": "answer",
-        "echoText": "What is the capital of France?",
-        "finalAnswer": "The capital of France is Paris.",
-        "memoryNote": "This second visit represents the same node continuing after its earlier echo."
-      }
+    "payload": {
+      "turn": "echo",
+      "echoText": "What is the capital of France?",
+      "handoff": "Revisit the same node once more and answer from this echoed text."
     }
-  ],
+  },
+  "answer-request": {
+    "provider": "scenario-mock",
+    "model": "claude-haiku-4-5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "turn": "answer",
+      "echoText": "What is the capital of France?",
+      "finalAnswer": "The capital of France is Paris.",
+      "memoryNote": "This second visit represents the same node continuing after its earlier echo."
+    }
+  },
   "workflow-output": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
@@ -74,9 +70,9 @@
       "echoText": "What is the capital of France?",
       "finalAnswer": "The capital of France is Paris.",
       "notes": [
-        "The ordered node list revisits the same node id via repeat.",
-        "The node payload opts into sessionPolicy.mode = reuse.",
-        "The mock scenario demonstrates the two-turn repeat shape; live backend session continuity still depends on the configured backend returning a reusable session id."
+        "Distinct step ids revisit the same reusable node registry entry.",
+        "The answer step inherits the backend session from echo-request and swaps to the answer prompt variant.",
+        "Live backend session continuity still depends on the configured backend returning a reusable session id."
       ]
     }
   }

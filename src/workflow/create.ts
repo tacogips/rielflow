@@ -31,8 +31,8 @@ export interface CreateWorkflowTemplateOptions extends LoadOptions {
 interface TemplateNodeDefinition {
   readonly id: string;
   readonly role: "manager" | "worker";
-  readonly executionBackend: "claude-code-agent" | "codex-agent";
-  readonly model: string;
+  readonly executionBackend?: "claude-code-agent" | "codex-agent";
+  readonly model?: string;
   readonly prompt: string;
   readonly includeWorkflowId: boolean;
 }
@@ -51,8 +51,6 @@ const MANAGED_TEMPLATE_NODE_DEFINITIONS = [
   {
     id: "divedra-manager",
     role: "manager",
-    executionBackend: "claude-code-agent",
-    model: "claude-opus-4-1",
     prompt: "Coordinate workflow execution for {{workflowId}}",
     includeWorkflowId: true,
   },
@@ -111,20 +109,25 @@ function createTemplateNodePayload(
   readonly fileName: string;
   readonly payload: {
     readonly id: string;
-    readonly executionBackend: TemplateNodeDefinition["executionBackend"];
-    readonly model: string;
     readonly promptTemplateFile: string;
     readonly variables: Readonly<Record<string, string>>;
+    readonly executionBackend?: Exclude<
+      TemplateNodeDefinition["executionBackend"],
+      undefined
+    >;
+    readonly model?: string;
   };
 } {
   return {
     fileName: templateNodeFileName(definition.id),
     payload: {
       id: definition.id,
-      executionBackend: definition.executionBackend,
-      model: definition.model,
       promptTemplateFile: `prompts/${definition.id}.md`,
       variables: definition.includeWorkflowId ? { workflowId } : {},
+      ...(definition.executionBackend === undefined
+        ? {}
+        : { executionBackend: definition.executionBackend }),
+      ...(definition.model === undefined ? {} : { model: definition.model }),
     },
   };
 }

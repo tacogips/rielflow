@@ -1,6 +1,6 @@
 {
   "workflowId": "workflow-call-simple",
-  "description": "Managed parent workflow that drafts work, invokes a worker-only review workflow through workflowCalls, and resumes with the returned result.",
+  "description": "Managed parent workflow authored in the step-addressed shape while the explicit workflowCalls compatibility path still invokes a worker-only review workflow and returns the result to a later step.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -9,37 +9,49 @@
     "divedraPromptTemplate": "Coordinate {{workflowId}}. Start draft-write first, then wait for the workflow-call review result before apply-review runs.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
   },
-  "managerNodeId": "divedra-manager",
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
   "workflowCalls": [
     {
       "id": "call-review",
       "workflowId": "workflow-call-review-target",
       "callerNodeId": "draft-write",
+      "callerStepId": "draft-write",
       "resultNodeId": "apply-review"
     }
   ],
   "nodes": [
     {
       "id": "divedra-manager",
-      "role": "manager",
       "nodeFile": "nodes/node-divedra-manager.json"
     },
     {
       "id": "draft-write",
-      "role": "worker",
       "nodeFile": "nodes/node-draft-write.json"
     },
     {
       "id": "apply-review",
-      "role": "worker",
       "nodeFile": "nodes/node-apply-review.json"
     }
   ],
-  "edges": [
+  "steps": [
     {
-      "from": "divedra-manager",
-      "to": "draft-write",
-      "when": "always"
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "draft-write"
+        }
+      ]
+    },
+    {
+      "id": "draft-write",
+      "nodeId": "draft-write"
+    },
+    {
+      "id": "apply-review",
+      "nodeId": "apply-review"
     }
   ]
 }

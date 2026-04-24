@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
 import type { NodePayload } from "../workflow/types";
 import {
+  buildNodeSelectOptions,
   buildNodeDefinitionPopupContent,
   buildSessionSelectOptions,
   buildSubworkflowNodeSelectOptions,
@@ -99,6 +100,7 @@ function makeRuntimeSessionView() {
       nodeExecutions: [
         {
           nodeId: "workflow-output",
+          stepId: "publish-result",
           nodeExecId: "exec-1",
           status: "succeeded" as const,
           artifactDir: "/tmp/demo",
@@ -117,6 +119,8 @@ function makeRuntimeSessionView() {
         sessionId: "sess-demo",
         nodeExecId: "exec-1",
         nodeId: "workflow-output",
+        stepId: "publish-result",
+        nodeRegistryId: "workflow-output",
         status: "succeeded",
         artifactDir: "/tmp/demo",
         startedAt: "2026-03-24T00:00:10.000Z",
@@ -243,6 +247,29 @@ describe("buildSubworkflowNodeSelectOptions", () => {
       (options[0] as { detailLines?: readonly string[] } | undefined)
         ?.detailLines?.[1],
     ).toContain("purpose: Normalize the received request");
+  });
+});
+
+describe("buildNodeSelectOptions", () => {
+  test("prefers step ids for execution row labels when they differ from node ids", () => {
+    const loaded = makeLoadedWorkflow({
+      id: "workflow-input",
+      description: "Normalize the received request",
+      model: "input-model",
+      promptTemplate: "Normalize the request",
+      variables: {},
+    });
+
+    const options = buildNodeSelectOptions(
+      loaded,
+      makeRuntimeSessionView().session,
+    );
+
+    expect(options[0]?.name).toContain("publish-result");
+    expect(
+      (options[0] as { detailLines?: readonly string[] } | undefined)
+        ?.detailLines?.[1],
+    ).toContain("node: workflow-output");
   });
 });
 
@@ -537,6 +564,8 @@ describe("buildWorkflowRunStatusContent", () => {
     expect(content).toContain(
       `Started: ${formatTimestampForDisplay("2026-03-24T00:00:00.000Z")}`,
     );
+    expect(content).toContain("Current step: publish-result");
+    expect(content).toContain("Current node: workflow-output");
     expect(content).toContain("Latest log:");
     expect(content).not.toContain("Recent logs:");
   });
