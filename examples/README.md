@@ -27,7 +27,7 @@ tests may still construct legacy fixtures under explicit non-strict validation.
 
 Minimal runnable reference for a manager-less workflow:
 
-- no authored `managerNodeId`
+- no authored `managerStepId`
 - explicit `entryStepId: "main-worker"`
 - one `codex-agent` worker node runs directly from workflow start
 - includes a deterministic mock scenario for validate/inspect/run demos
@@ -53,11 +53,19 @@ bun run src/main.ts workflow run worker-only-single-step \
   --output json
 ```
 
+### `supervised-mock-retry`
+
+Same shape as `worker-only-single-step`, but the bundled `mock-scenario.json` is
+a **two-entry sequence** for the worker: the first entry forces a failure; after
+a supervised outer rerun, the second entry returns success. Use with
+`--auto-improve` to exercise the failure-to-rerun path without custom adapters.
+See `examples/auto-improve/README.md` and `examples/supervised-mock-retry/EXPECTED_RESULTS.md`.
+
 ### `chat-reply-webhook`
 
 Minimal worker-only workflow showing the built-in node add-on catalog:
 
-- no authored `managerNodeId`
+- no authored `managerStepId`
 - explicit `entryStepId: "reply-to-chat"`
 - `steps[]` contains one worker step that targets a reusable node-registry entry
 - no workflow-local worker implementation file is needed
@@ -125,7 +133,7 @@ bun run src/main.ts workflow run workflow-call-simple \
 
 Worker-only callee bundle used by `workflow-call-simple`:
 
-- no authored `managerNodeId`
+- no authored `managerStepId`
 - explicit `entryStepId: "reviewer"`
 - returns its latest succeeded worker result to the caller workflow-call
   contract

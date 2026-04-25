@@ -5,6 +5,7 @@ import { createGraphqlSchema } from "../graphql/schema";
 import type {
   GraphqlRequestContext,
   GraphqlSchemaDependencies,
+  RerunWorkflowExecutionInput,
 } from "../graphql/types";
 
 const GRAPHQL_SCHEMA_TEXT = `
@@ -103,6 +104,47 @@ const GRAPHQL_SCHEMA_TEXT = `
     when: String!
   }
 
+  type AutoImprovePolicy {
+    enabled: Boolean!
+    superviserWorkflowId: String
+    monitorIntervalMs: Int!
+    stallTimeoutMs: Int!
+    maxSupervisedAttempts: Int!
+    maxWorkflowPatches: Int!
+    workflowMutationMode: String!
+    allowTargetedRerun: Boolean
+  }
+
+  type SupervisionIncident {
+    incidentId: String!
+    supervisedAttemptId: String!
+    category: String!
+    summary: String!
+    detectedAt: String!
+  }
+
+  type SupervisionRemediationRecord {
+    remediationId: String!
+    incidentId: String!
+    decidedAt: String!
+    action: String!
+    targetStepId: String
+    reason: String!
+  }
+
+  type SupervisionRunState {
+    supervisionRunId: String!
+    targetWorkflowId: String!
+    superviserWorkflowId: String!
+    status: String!
+    attemptCount: Int!
+    workflowPatchCount: Int!
+    mutableWorkflowDir: String
+    policy: AutoImprovePolicy
+    incidents: [SupervisionIncident!]!
+    remediations: [SupervisionRemediationRecord!]!
+  }
+
   type NodeExecutionRecord {
     nodeId: String!
     stepId: String
@@ -146,6 +188,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodeBackendSessions: JSON!
     runtimeVariables: JSON!
     lastError: String
+    supervision: SupervisionRunState
   }
 
   type RuntimeNodeExecutionSummary {
@@ -618,6 +661,23 @@ export function createExecutableGraphqlSchema(
     typeDefs: GRAPHQL_SCHEMA_TEXT,
     resolvers: {
       JSON: createJsonScalar(),
+      WorkflowSessionState: {
+        supervision(parent: { readonly supervision?: unknown }): unknown {
+          return parent.supervision ?? null;
+        },
+      },
+      SupervisionRunState: {
+        incidents(parent: {
+          readonly incidents?: readonly unknown[];
+        }): unknown {
+          return parent.incidents ?? [];
+        },
+        remediations(parent: {
+          readonly remediations?: readonly unknown[];
+        }): unknown {
+          return parent.remediations ?? [];
+        },
+      },
       Query: {
         workflows(
           _parent: unknown,
@@ -794,22 +854,11 @@ export function createExecutableGraphqlSchema(
         },
         rerunWorkflowExecution(
           _parent: unknown,
-          args: {
-            readonly input: {
-              readonly workflowExecutionId: string;
-              readonly nodeId: string;
-              readonly runtimeVariables?: unknown;
-              readonly workingDirectory?: string;
-              readonly dryRun?: boolean;
-              readonly maxSteps?: number;
-              readonly maxLoopIterations?: number;
-              readonly defaultTimeoutMs?: number;
-            };
-          },
+          args: { readonly input: RerunWorkflowExecutionInput },
           context: GraphqlRequestContext,
         ) {
           return schema.mutation.rerunWorkflowExecution(
-            args.input as never,
+            args.input,
             context,
           );
         },

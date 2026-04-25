@@ -26,13 +26,14 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
-| `step-addressed-workflow-runtime-cutover` | In Progress | `design-workflow-json`, `design-node-jump-and-code-manager-runtime`, `design-workflow-steps-and-node-reuse`, `architecture`, `command`, `qa-step-schema-workflow-calls` |
-| `auto-improve-superviser-mode` | In Progress | `design-auto-improve-superviser-mode`, `design-node-jump-and-code-manager-runtime`, `architecture`, `command` |
+| *(none)* | — | Open a new plan under `impl-plans/` when starting tracked work. |
 
 ## Completed Plans
 
 | Plan                                                     | Completed  | Design Reference                                                                                                 |
 | -------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `step-addressed-workflow-runtime-cutover`               | 2026-04-29 | `design-workflow-json`, `design-node-jump-and-code-manager-runtime`, `design-workflow-steps-and-node-reuse`, `architecture`, `command`, `qa-step-schema-workflow-calls` |
+| `auto-improve-superviser-mode`                          | 2026-04-25 | `design-auto-improve-superviser-mode`, `design-node-jump-and-code-manager-runtime`, `architecture`, `command`     |
 | `scoped-local-addons`                                    | 2026-04-21 | `design-node-addon-catalog-and-chat-reply-worker`, `design-user-scope-workflows`                                 |
 | `event-root-manager-session-stickiness-record-lifecycle` | 2026-04-22 | `design-event-listener-workflow-trigger`                                                                         |
 | `event-root-manager-session-stickiness-binding-scope`    | 2026-04-22 | `design-event-listener-workflow-trigger`                                                                         |
@@ -286,8 +287,8 @@ impl-plans/
 | 126   | COMPLETED   | -          |
 | 127   | COMPLETED   | -          |
 | 128   | COMPLETED   | -          |
-| 129   | IN_PROGRESS | Phases 16, 65, 71, 82 |
-| 130   | IN_PROGRESS | Phase 129  |
+| 129   | COMPLETED   | Phases 16, 65, 71, 82 |
+| 130   | COMPLETED   | Phases 125, 128, 129 (+ earlier foundations) |
 
 ### Phase to Plans Mapping
 
@@ -421,7 +422,7 @@ PHASE_TO_PLANS = {
   126: ["impl-plans/event-root-manager-session-stickiness.md"],
   127: ["impl-plans/event-root-manager-session-stickiness-binding-scope.md"],
   128: ["impl-plans/event-root-manager-session-stickiness-record-lifecycle.md"],
-  129: ["impl-plans/step-addressed-workflow-runtime-cutover.md"],
-  130: ["impl-plans/auto-improve-superviser-mode.md"],
+  129: ["impl-plans/completed/step-addressed-workflow-runtime-cutover.md"],
+  130: ["impl-plans/completed/auto-improve-superviser-mode.md"],
 }
 ```

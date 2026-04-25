@@ -60,9 +60,37 @@ import { deleteWorkflowSessionHistory } from "./workflow/session-history";
 import { deleteWorkflowHistory as deleteWorkflowHistoryForWorkflow } from "./workflow/history";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 import type {
+  AutoImprovePolicy,
   ResolvedWorkflowSource,
   WorkflowScopeSelector,
 } from "./workflow/types";
+
+function parseAutoImprovePolicyFromCliFlags(input: {
+  readonly enabled: boolean;
+  readonly superviserWorkflowId?: string;
+  readonly monitorIntervalMs?: number;
+  readonly stallTimeoutMs?: number;
+  readonly maxSupervisedAttempts?: number;
+  readonly maxWorkflowPatches?: number;
+  readonly workflowMutationMode?: "execution-copy" | "in-place";
+  readonly allowTargetedRerun: boolean;
+}): AutoImprovePolicy | undefined {
+  if (!input.enabled) {
+    return undefined;
+  }
+  return {
+    enabled: true,
+    ...(input.superviserWorkflowId === undefined
+      ? {}
+      : { superviserWorkflowId: input.superviserWorkflowId }),
+    monitorIntervalMs: input.monitorIntervalMs ?? 5000,
+    stallTimeoutMs: input.stallTimeoutMs ?? 60_000,
+    maxSupervisedAttempts: input.maxSupervisedAttempts ?? 5,
+    maxWorkflowPatches: input.maxWorkflowPatches ?? 3,
+    workflowMutationMode: input.workflowMutationMode ?? "execution-copy",
+    ...(input.allowTargetedRerun ? {} : { allowTargetedRerun: false as const }),
+  };
+}
 
 export interface CliIo {
   readonly stdout: (line: string) => void;
@@ -155,6 +183,7 @@ interface ParsedOptions {
   readonly status?: string;
   readonly limit?: number;
   readonly reason?: string;
+  readonly autoImprove?: AutoImprovePolicy;
 }
 
 interface ParsedArgs {
@@ -402,6 +431,14 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let limit: number | undefined;
   let reason: string | undefined;
   let parseError: string | undefined;
+  let autoImprove = false;
+  let superviserWorkflowId: string | undefined;
+  let monitorIntervalMs: number | undefined;
+  let stallTimeoutMs: number | undefined;
+  let maxSupervisedAttempts: number | undefined;
+  let maxWorkflowPatches: number | undefined;
+  let workflowMutationMode: "execution-copy" | "in-place" | undefined;
+  let noAllowTargetedRerun = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -545,8 +582,23 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         continueSession = true;
         break;
       case "--resume-node-exec":
-        resumeNodeExecId = readNext();
+      case "--resume-step-exec": {
+        const nextResumeExec = readNext();
+        if (nextResumeExec === undefined) {
+          parseError = `${token} requires an execution record id`;
+          break;
+        }
+        if (
+          resumeNodeExecId !== undefined &&
+          resumeNodeExecId !== nextResumeExec
+        ) {
+          parseError =
+            "--resume-node-exec and --resume-step-exec must not specify different execution ids";
+          break;
+        }
+        resumeNodeExecId = nextResumeExec;
         break;
+      }
       case "--vendor":
         vendor = readNext();
         break;
@@ -568,10 +620,52 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--reason":
         reason = readNext();
         break;
+      case "--auto-improve":
+        autoImprove = true;
+        break;
+      case "--superviser-workflow":
+        superviserWorkflowId = readNext();
+        break;
+      case "--monitor-interval-ms":
+        monitorIntervalMs = parseNumericOption(readNext());
+        break;
+      case "--stall-timeout-ms":
+        stallTimeoutMs = parseNumericOption(readNext());
+        break;
+      case "--max-supervised-attempts":
+        maxSupervisedAttempts = parseNumericOption(readNext());
+        break;
+      case "--max-workflow-patches":
+        maxWorkflowPatches = parseNumericOption(readNext());
+        break;
+      case "--workflow-mutation-mode": {
+        const mode = readNext();
+        if (mode === "execution-copy" || mode === "in-place") {
+          workflowMutationMode = mode;
+        } else if (mode !== undefined) {
+          parseError = `invalid --workflow-mutation-mode '${mode}'; expected execution-copy or in-place`;
+        }
+        break;
+      }
+      case "--no-allow-targeted-rerun":
+      case "--disable-targeted-rerun":
+        noAllowTargetedRerun = true;
+        break;
       default:
         break;
     }
   }
+
+  const autoImprovePolicy = parseAutoImprovePolicyFromCliFlags({
+    enabled: autoImprove,
+    ...(superviserWorkflowId === undefined ? {} : { superviserWorkflowId }),
+    ...(monitorIntervalMs === undefined ? {} : { monitorIntervalMs }),
+    ...(stallTimeoutMs === undefined ? {} : { stallTimeoutMs }),
+    ...(maxSupervisedAttempts === undefined ? {} : { maxSupervisedAttempts }),
+    ...(maxWorkflowPatches === undefined ? {} : { maxWorkflowPatches }),
+    ...(workflowMutationMode === undefined ? {} : { workflowMutationMode }),
+    allowTargetedRerun: !noAllowTargetedRerun,
+  });
 
   return {
     positionals,
@@ -616,6 +710,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(status === undefined ? {} : { status }),
       ...(limit === undefined ? {} : { limit }),
       ...(reason === undefined ? {} : { reason }),
+      ...(autoImprovePolicy === undefined
+        ? {}
+        : { autoImprove: autoImprovePolicy }),
     },
     ...(parseError === undefined ? {} : { error: parseError }),
   };
@@ -646,7 +743,7 @@ function printHelp(io: CliIo): void {
     "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
   );
   io.stdout(
-    "  divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-node-exec <id>] [options]",
+    "  divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-step-exec <id>] [options]",
   );
   io.stdout(
     "  divedra call-node <workflow-id> <workflow-run-id> <node-id> [--message-json <json> | --message-file <path>] [options]  (compatibility; prefer call-step for step-addressed workflows)",
@@ -677,7 +774,40 @@ function printHelp(io: CliIo): void {
   io.stdout("  --timeout-ms <ms>          call-step only");
   io.stdout("  --prompt-variant <name>    call-step only");
   io.stdout("  --continue-session         call-step only");
-  io.stdout("  --resume-node-exec <id>    call-step only");
+  io.stdout(
+    "  --resume-step-exec <id>    call-step only (execution record id; same as nodeExecId in session state)",
+  );
+  io.stdout(
+    "  --resume-node-exec <id>    call-step only (alias of --resume-step-exec)",
+  );
+  io.stdout("");
+  io.stdout(
+    "Auto-improve (supervision policy; engine retries on terminal failure until success or budgets;",
+  );
+  io.stdout(
+    "  persisted stall watch is active; nested superviser workflow is not wired yet):",
+  );
+  io.stdout(
+    "  --auto-improve               Enable supervised runs with durable supervision state",
+  );
+  io.stdout(
+    "  --superviser-workflow <id>   Reserved superviser bundle id (persisted on session; nested execution is Phase 2)",
+  );
+  io.stdout(
+    "  --monitor-interval-ms <n>    Observation cadence (default 5000)",
+  );
+  io.stdout("  --stall-timeout-ms <n>       Stall threshold (default 60000)");
+  io.stdout("  --max-supervised-attempts <n> Attempt budget (default 5)");
+  io.stdout("  --max-workflow-patches <n>   Patch budget (default 3)");
+  io.stdout(
+    "  --workflow-mutation-mode execution-copy|in-place  (default execution-copy)",
+  );
+  io.stdout(
+    "  --no-allow-targeted-rerun    Disable targeted step reruns (by default they are allowed).",
+  );
+  io.stdout(
+    "                               Deprecated alias: --disable-targeted-rerun",
+  );
 }
 
 function formatValidationIssues(
@@ -748,7 +878,7 @@ async function readMockScenario(pathToJson: string): Promise<MockNodeScenario> {
   const parsed = JSON.parse(content) as unknown;
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(
-      "mock scenario file must contain a JSON object keyed by node id",
+      "mock scenario file must contain a JSON object keyed by step id for step-addressed workflows (legacy bundles: keyed by node id)",
     );
   }
   return parsed as MockNodeScenario;
@@ -1121,6 +1251,7 @@ function buildLocalWorkflowRunOverrides(
   parsedOptions: ParsedOptions,
 ): Pick<
   WorkflowRunOptions,
+  | "autoImprove"
   | "defaultTimeoutMs"
   | "dryRun"
   | "maxLoopIterations"
@@ -1144,6 +1275,9 @@ function buildLocalWorkflowRunOverrides(
       ? {}
       : { defaultTimeoutMs: parsedOptions.defaultTimeoutMs }),
     ...(parsedOptions.dryRun ? { dryRun: true } : {}),
+    ...(parsedOptions.autoImprove === undefined
+      ? {}
+      : { autoImprove: parsedOptions.autoImprove }),
   };
 }
 
@@ -1636,10 +1770,11 @@ async function runTui(
       ...(input.rerunFromSessionId === undefined
         ? {}
         : { rerunFromSessionId: input.rerunFromSessionId }),
-      ...(input.rerunFromStepId === undefined &&
-      input.rerunFromNodeId === undefined
-        ? {}
-        : { rerunFromNodeId: input.rerunFromStepId ?? input.rerunFromNodeId }),
+      ...(input.rerunFromStepId !== undefined
+        ? { rerunFromStepId: input.rerunFromStepId }
+        : input.rerunFromNodeId !== undefined
+          ? { rerunFromNodeId: input.rerunFromNodeId }
+          : {}),
       runtimeVariables: input.runtimeVariables,
     });
     if (!result.ok) {
@@ -2610,7 +2745,7 @@ export async function runCli(
     ) {
       io.stderr("workflow id, workflow run id, and step id are required");
       io.stderr(
-        "usage: divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-node-exec <id>] [options]",
+        "usage: divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-step-exec <id>] [options]",
       );
       return 2;
     }
@@ -2991,16 +3126,10 @@ export async function runCli(
         ...workflowRunOptions,
         runtimeVariables,
         ...mockScenarioOptions,
-        dryRun: parsed.options.dryRun,
+        ...buildLocalWorkflowRunOverrides(parsed.options),
         ...(parsed.options.maxSteps === undefined
           ? {}
           : { maxSteps: parsed.options.maxSteps }),
-        ...(parsed.options.maxLoopIterations === undefined
-          ? {}
-          : { maxLoopIterations: parsed.options.maxLoopIterations }),
-        ...(parsed.options.defaultTimeoutMs === undefined
-          ? {}
-          : { defaultTimeoutMs: parsed.options.defaultTimeoutMs }),
       });
 
       if (!result.ok) {
@@ -3022,6 +3151,9 @@ export async function runCli(
           nodeExecutions: result.value.session.nodeExecutions.length,
           transitions: result.value.session.transitions.length,
           exitCode: result.value.exitCode,
+          ...(result.value.session.supervision === undefined
+            ? {}
+            : { supervision: result.value.session.supervision }),
         });
       } else {
         const sourceLine = formatWorkflowSource(loadedWorkflow.value.source);
@@ -3336,7 +3468,7 @@ export async function runCli(
         ...sharedOptions,
         ...buildLocalWorkflowRunOverrides(parsed.options),
         rerunFromSessionId: source.value.sessionId,
-        rerunFromNodeId: fromStepId,
+        rerunFromStepId: fromStepId,
         ...mockScenarioOptions,
       });
 

@@ -189,3 +189,47 @@ export function isSafeWorkflowId(workflowId: string): boolean {
 export function isSafeWorkflowName(workflowName: string): boolean {
   return isSafeWorkflowId(workflowName);
 }
+
+/** Supervision run ids are minted as `sup-` + hex (see engine). */
+const SUPERVISION_RUN_ID_PATTERN = /^sup-[0-9a-f]{8,64}$/;
+
+export function isSafeSupervisionRunId(id: string): boolean {
+  return SUPERVISION_RUN_ID_PATTERN.test(id);
+}
+
+/**
+ * Directory for an execution-scoped copy of a workflow under the artifact root:
+ * `<artifactRoot>/supervision/<supervisionRunId>/mutable/<workflowId>`.
+ */
+export function resolveSupervisionMutableWorkflowDirectory(
+  artifactRoot: string,
+  supervisionRunId: string,
+  workflowId: string,
+): string | undefined {
+  if (
+    !isSafeSupervisionRunId(supervisionRunId) ||
+    !isSafeWorkflowId(workflowId)
+  ) {
+    return undefined;
+  }
+  return resolveSafeScopedPath(
+    artifactRoot,
+    "supervision",
+    supervisionRunId,
+    "mutable",
+    workflowId,
+  );
+}
+
+/**
+ * Per-supervision-run directory: `<artifactRoot>/supervision/<supervisionRunId>`.
+ */
+export function resolveSupervisionRunDirectory(
+  artifactRoot: string,
+  supervisionRunId: string,
+): string | undefined {
+  if (!isSafeSupervisionRunId(supervisionRunId)) {
+    return undefined;
+  }
+  return resolveSafeScopedPath(artifactRoot, "supervision", supervisionRunId);
+}

@@ -782,6 +782,10 @@ describe("runCli", () => {
     const help = capture.stdout.join("\n");
     expect(help).toContain("Usage:");
     expect(help).toContain("prefer call-step");
+    expect(help).toContain("--superviser-workflow");
+    expect(help).toContain("Phase 2");
+    expect(help).toContain("--no-allow-targeted-rerun");
+    expect(help).toContain("--disable-targeted-rerun");
   });
 
   test("call-node usage on missing args mentions call-step preference", async () => {
@@ -795,92 +799,92 @@ describe("runCli", () => {
 
   test("call-node executes locally with structured manager message input", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
-    const root = await makeTempDir();
-    const workflowName = "call-node-cli";
-    const sessionId = "sess-call-node-cli";
-    const artifactsRoot = path.join(root, "artifacts");
-    const sessionStoreRoot = path.join(root, "sessions");
-    const scenarioPath = path.join(root, "scenario.json");
-    const messagePath = path.join(root, "message.json");
+      const root = await makeTempDir();
+      const workflowName = "call-node-cli";
+      const sessionId = "sess-call-node-cli";
+      const artifactsRoot = path.join(root, "artifacts");
+      const sessionStoreRoot = path.join(root, "sessions");
+      const scenarioPath = path.join(root, "scenario.json");
+      const messagePath = path.join(root, "message.json");
 
-    await createCallNodeFixture(root, workflowName);
-    const saved = await saveSession(
-      createSessionState({
-        sessionId,
-        workflowName,
-        workflowId: workflowName,
-        initialNodeId: "divedra-manager",
-        runtimeVariables: {},
-      }),
-      { sessionStoreRoot },
-    );
-    expect(saved.ok).toBe(true);
+      await createCallNodeFixture(root, workflowName);
+      const saved = await saveSession(
+        createSessionState({
+          sessionId,
+          workflowName,
+          workflowId: workflowName,
+          initialNodeId: "divedra-manager",
+          runtimeVariables: {},
+        }),
+        { sessionStoreRoot },
+      );
+      expect(saved.ok).toBe(true);
 
-    await writeFile(
-      scenarioPath,
-      JSON.stringify(
-        {
-          writer: [
-            {
-              provider: "scenario-mock",
-              when: { always: true },
-              payload: { wrong: true },
-            },
-            {
-              provider: "scenario-mock",
-              when: { always: true },
-              payload: { summary: "cli ok" },
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-    await writeFile(
-      messagePath,
-      JSON.stringify({ instruction: "review this change" }, null, 2),
-      "utf8",
-    );
-
-    const capture = createIoCapture();
-    const code = await runCli(
-      [
-        "call-node",
-        workflowName,
-        sessionId,
-        "writer",
-        "--workflow-root",
-        root,
-        "--artifact-root",
-        artifactsRoot,
-        "--session-store",
-        sessionStoreRoot,
-        "--mock-scenario",
+      await writeFile(
         scenarioPath,
-        "--message-file",
-        messagePath,
-        "--output",
-        "json",
-      ],
-      capture.io,
-    );
-
-    expect(code).toBe(0);
-    const payload = JSON.parse(capture.stdout.join("\n")) as {
-      output: { payload: { summary: string } };
-      outputRef: { artifactDir: string };
-    };
-    expect(payload.output.payload.summary).toBe("cli ok");
-
-    const inputJson = JSON.parse(
-      await readFile(
-        path.join(payload.outputRef.artifactDir, "input.json"),
+        JSON.stringify(
+          {
+            writer: [
+              {
+                provider: "scenario-mock",
+                when: { always: true },
+                payload: { wrong: true },
+              },
+              {
+                provider: "scenario-mock",
+                when: { always: true },
+                payload: { summary: "cli ok" },
+              },
+            ],
+          },
+          null,
+          2,
+        ),
         "utf8",
-      ),
-    ) as { managerMessage?: { instruction?: string } };
-    expect(inputJson.managerMessage?.instruction).toBe("review this change");
+      );
+      await writeFile(
+        messagePath,
+        JSON.stringify({ instruction: "review this change" }, null, 2),
+        "utf8",
+      );
+
+      const capture = createIoCapture();
+      const code = await runCli(
+        [
+          "call-node",
+          workflowName,
+          sessionId,
+          "writer",
+          "--workflow-root",
+          root,
+          "--artifact-root",
+          artifactsRoot,
+          "--session-store",
+          sessionStoreRoot,
+          "--mock-scenario",
+          scenarioPath,
+          "--message-file",
+          messagePath,
+          "--output",
+          "json",
+        ],
+        capture.io,
+      );
+
+      expect(code).toBe(0);
+      const payload = JSON.parse(capture.stdout.join("\n")) as {
+        output: { payload: { summary: string } };
+        outputRef: { artifactDir: string };
+      };
+      expect(payload.output.payload.summary).toBe("cli ok");
+
+      const inputJson = JSON.parse(
+        await readFile(
+          path.join(payload.outputRef.artifactDir, "input.json"),
+          "utf8",
+        ),
+      ) as { managerMessage?: { instruction?: string } };
+      expect(inputJson.managerMessage?.instruction).toBe("review this change");
     });
   });
 
@@ -1163,96 +1167,96 @@ describe("runCli", () => {
 
   test("workflow validate and inspect report scoped local add-on sources", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
-    const root = await makeTempDir();
-    const userRoot = path.join(root, "user");
-    const workflowName = "local-addon-cli";
-    const addonName = "acme/local-echo-worker";
-    const workflowDirectory = path.join(userRoot, "workflows", workflowName);
-    await mkdir(workflowDirectory, { recursive: true });
-    await writeJson(path.join(workflowDirectory, "workflow.json"), {
-      workflowId: workflowName,
-      description: "local add-on cli fixture",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      entryNodeId: "addon-worker",
-      nodes: [
-        {
-          id: "addon-worker",
-          role: "worker",
-          addon: {
-            name: addonName,
-            version: "1",
-            inputs: { message: "from cli" },
+      const root = await makeTempDir();
+      const userRoot = path.join(root, "user");
+      const workflowName = "local-addon-cli";
+      const addonName = "acme/local-echo-worker";
+      const workflowDirectory = path.join(userRoot, "workflows", workflowName);
+      await mkdir(workflowDirectory, { recursive: true });
+      await writeJson(path.join(workflowDirectory, "workflow.json"), {
+        workflowId: workflowName,
+        description: "local add-on cli fixture",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryNodeId: "addon-worker",
+        nodes: [
+          {
+            id: "addon-worker",
+            role: "worker",
+            addon: {
+              name: addonName,
+              version: "1",
+              inputs: { message: "from cli" },
+            },
+            completion: { type: "none" },
           },
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-      branching: { mode: "fan-out" },
-    });
-    await writeLocalAddonManifest({
-      addonRoot: path.join(userRoot, "addons"),
-      name: addonName,
-      version: "1",
-    });
-
-    const validateCapture = createIoCapture();
-    const validateCode = await runCli(
-      [
-        "workflow",
-        "validate",
-        workflowName,
-        "--scope",
-        "user",
-        "--user-root",
-        userRoot,
-        "--output",
-        "json",
-      ],
-      validateCapture.io,
-    );
-    expect(validateCode).toBe(0);
-    const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
-      addonSources?: ReadonlyArray<{
-        readonly nodeId: string;
-        readonly name: string;
-        readonly scope: string;
-        readonly manifestPath: string;
-      }>;
-    };
-    expect(validation.addonSources).toEqual([
-      expect.objectContaining({
-        nodeId: "addon-worker",
+        ],
+        edges: [],
+        loops: [],
+        branching: { mode: "fan-out" },
+      });
+      await writeLocalAddonManifest({
+        addonRoot: path.join(userRoot, "addons"),
         name: addonName,
-        scope: "user",
-        manifestPath: path.join(
-          userRoot,
-          "addons",
-          "acme",
-          "local-echo-worker",
-          "1",
-          "addon.json",
-        ),
-      }),
-    ]);
+        version: "1",
+      });
 
-    const inspectCapture = createIoCapture();
-    const inspectCode = await runCli(
-      [
-        "workflow",
-        "inspect",
-        workflowName,
-        "--scope",
-        "user",
-        "--user-root",
-        userRoot,
-      ],
-      inspectCapture.io,
-    );
-    expect(inspectCode).toBe(0);
-    expect(inspectCapture.stdout.join("\n")).toContain(
-      `addonSource: addon-worker: ${addonName}@1 user`,
-    );
+      const validateCapture = createIoCapture();
+      const validateCode = await runCli(
+        [
+          "workflow",
+          "validate",
+          workflowName,
+          "--scope",
+          "user",
+          "--user-root",
+          userRoot,
+          "--output",
+          "json",
+        ],
+        validateCapture.io,
+      );
+      expect(validateCode).toBe(0);
+      const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
+        addonSources?: ReadonlyArray<{
+          readonly nodeId: string;
+          readonly name: string;
+          readonly scope: string;
+          readonly manifestPath: string;
+        }>;
+      };
+      expect(validation.addonSources).toEqual([
+        expect.objectContaining({
+          nodeId: "addon-worker",
+          name: addonName,
+          scope: "user",
+          manifestPath: path.join(
+            userRoot,
+            "addons",
+            "acme",
+            "local-echo-worker",
+            "1",
+            "addon.json",
+          ),
+        }),
+      ]);
+
+      const inspectCapture = createIoCapture();
+      const inspectCode = await runCli(
+        [
+          "workflow",
+          "inspect",
+          workflowName,
+          "--scope",
+          "user",
+          "--user-root",
+          userRoot,
+        ],
+        inspectCapture.io,
+      );
+      expect(inspectCode).toBe(0);
+      expect(inspectCapture.stdout.join("\n")).toContain(
+        `addonSource: addon-worker: ${addonName}@1 user`,
+      );
     });
   });
 
@@ -1376,13 +1380,7 @@ describe("runCli", () => {
 
     const inspectTextCapture = createIoCapture();
     const inspectTextCode = await runCli(
-      [
-        "workflow",
-        "inspect",
-        "solo",
-        "--workflow-root",
-        root,
-      ],
+      ["workflow", "inspect", "solo", "--workflow-root", root],
       inspectTextCapture.io,
     );
     expect(inspectTextCode).toBe(0);
@@ -1398,107 +1396,109 @@ describe("runCli", () => {
 
   test("inspect reports worker-only workflows without an authored manager node", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
-    const root = await makeTempDir();
-    await createManagerlessWorkflowFixture(root, "worker-only");
+      const root = await makeTempDir();
+      await createManagerlessWorkflowFixture(root, "worker-only");
 
-    const capture = createIoCapture();
-    const code = await runCli(
-      [
-        "workflow",
-        "inspect",
-        "worker-only",
-        "--workflow-root",
-        root,
-        "--output",
-        "json",
-      ],
-      capture.io,
-    );
-    expect(code).toBe(0);
+      const capture = createIoCapture();
+      const code = await runCli(
+        [
+          "workflow",
+          "inspect",
+          "worker-only",
+          "--workflow-root",
+          root,
+          "--output",
+          "json",
+        ],
+        capture.io,
+      );
+      expect(code).toBe(0);
 
-    const parsed = JSON.parse(capture.stdout.join("\n")) as {
-      compatibility: {
-        usesEffectiveEntryManagerNodeId: boolean;
-        notes: readonly string[];
+      const parsed = JSON.parse(capture.stdout.join("\n")) as {
+        compatibility: {
+          usesEffectiveEntryManagerNodeId: boolean;
+          notes: readonly string[];
+        };
+        entryNodeId: string;
+        hasManagerNode: boolean;
+        managerNodeId?: string;
+        counts: { nodes: number };
       };
-      entryNodeId: string;
-      hasManagerNode: boolean;
-      managerNodeId?: string;
-      counts: { nodes: number };
-    };
-    expect(parsed.hasManagerNode).toBe(false);
-    expect(parsed.managerNodeId).toBeUndefined();
-    expect(parsed.entryNodeId).toBe("worker-1");
-    expect(parsed.counts.nodes).toBe(2);
-    expect(parsed.compatibility.usesEffectiveEntryManagerNodeId).toBe(true);
-    expect(parsed.compatibility.notes).toContain(
-      "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
-    );
+      expect(parsed.hasManagerNode).toBe(false);
+      expect(parsed.managerNodeId).toBeUndefined();
+      expect(parsed.entryNodeId).toBe("worker-1");
+      expect(parsed.counts.nodes).toBe(2);
+      expect(parsed.compatibility.usesEffectiveEntryManagerNodeId).toBe(true);
+      expect(parsed.compatibility.notes).toContain(
+        "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
+      );
     });
   });
 
   test("inspect reports authored workflowCalls in json and text output", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
-    const root = await makeTempDir();
-    await createWorkflowCallInspectFixture(root, "workflow-calls");
+      const root = await makeTempDir();
+      await createWorkflowCallInspectFixture(root, "workflow-calls");
 
-    const jsonCapture = createIoCapture();
-    const jsonCode = await runCli(
-      [
-        "workflow",
-        "inspect",
-        "workflow-calls",
-        "--workflow-root",
-        root,
-        "--output",
-        "json",
-      ],
-      jsonCapture.io,
-    );
-    expect(jsonCode).toBe(0);
+      const jsonCapture = createIoCapture();
+      const jsonCode = await runCli(
+        [
+          "workflow",
+          "inspect",
+          "workflow-calls",
+          "--workflow-root",
+          root,
+          "--output",
+          "json",
+        ],
+        jsonCapture.io,
+      );
+      expect(jsonCode).toBe(0);
 
-    const parsed = JSON.parse(jsonCapture.stdout.join("\n")) as {
-      compatibility: {
-        normalizesRoleAuthoredNodesToStructuralKinds: boolean;
-        usesLegacyStructuralSubWorkflows: boolean;
-        notes: readonly string[];
+      const parsed = JSON.parse(jsonCapture.stdout.join("\n")) as {
+        compatibility: {
+          normalizesRoleAuthoredNodesToStructuralKinds: boolean;
+          usesLegacyStructuralSubWorkflows: boolean;
+          notes: readonly string[];
+        };
+        workflowCallIds: readonly string[];
+        counts: { workflowCalls: number; legacySubWorkflows: number };
+        runtime: { ready: boolean };
       };
-      workflowCallIds: readonly string[];
-      counts: { workflowCalls: number; legacySubWorkflows: number };
-      runtime: { ready: boolean };
-    };
-    expect(parsed.workflowCallIds).toEqual(["review-call"]);
-    expect(parsed.counts.workflowCalls).toBe(1);
-    expect(parsed.counts.legacySubWorkflows).toBe(0);
-    expect(parsed.runtime.ready).toBe(true);
-    expect(
-      parsed.compatibility.normalizesRoleAuthoredNodesToStructuralKinds,
-    ).toBe(true);
-    expect(parsed.compatibility.usesLegacyStructuralSubWorkflows).toBe(false);
-    expect(parsed.compatibility.notes).toContain(
-      "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
-    );
+      expect(parsed.workflowCallIds).toEqual(["review-call"]);
+      expect(parsed.counts.workflowCalls).toBe(1);
+      expect(parsed.counts.legacySubWorkflows).toBe(0);
+      expect(parsed.runtime.ready).toBe(true);
+      expect(
+        parsed.compatibility.normalizesRoleAuthoredNodesToStructuralKinds,
+      ).toBe(true);
+      expect(parsed.compatibility.usesLegacyStructuralSubWorkflows).toBe(false);
+      expect(parsed.compatibility.notes).toContain(
+        "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
+      );
 
-    const textCapture = createIoCapture();
-    const textCode = await runCli(
-      ["workflow", "inspect", "workflow-calls", "--workflow-root", root],
-      textCapture.io,
-    );
-    expect(textCode).toBe(0);
-    expect(textCapture.stdout.join("\n")).toContain("workflowCalls: 1");
-    expect(textCapture.stdout.join("\n")).toContain(
-      "workflowCallIds: review-call",
-    );
-    expect(textCapture.stdout.join("\n")).toMatch(
-      /compatibility: normalizesRoleAuthoredNodesToStructuralKinds=yes, usesEffectiveEntryManagerNodeId=no, usesLegacyStructuralSubWorkflows=no/,
-    );
-    expect(textCapture.stdout.join("\n")).toContain("compatibility notes:");
-    expect(textCapture.stdout.join("\n")).toContain(
-      "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
-    );
-    expect(textCapture.stdout.join("\n")).not.toContain("subWorkflows:");
-    expect(textCapture.stdout.join("\n")).not.toContain("legacySubWorkflows:");
-    expect(textCapture.stdout.join("\n")).toContain("runtimeReady: yes");
+      const textCapture = createIoCapture();
+      const textCode = await runCli(
+        ["workflow", "inspect", "workflow-calls", "--workflow-root", root],
+        textCapture.io,
+      );
+      expect(textCode).toBe(0);
+      expect(textCapture.stdout.join("\n")).toContain("workflowCalls: 1");
+      expect(textCapture.stdout.join("\n")).toContain(
+        "workflowCallIds: review-call",
+      );
+      expect(textCapture.stdout.join("\n")).toMatch(
+        /compatibility: normalizesRoleAuthoredNodesToStructuralKinds=yes, usesEffectiveEntryManagerNodeId=no, usesLegacyStructuralSubWorkflows=no/,
+      );
+      expect(textCapture.stdout.join("\n")).toContain("compatibility notes:");
+      expect(textCapture.stdout.join("\n")).toContain(
+        "Role-authored nodes still normalize to structural runtime kinds internally for execution compatibility.",
+      );
+      expect(textCapture.stdout.join("\n")).not.toContain("subWorkflows:");
+      expect(textCapture.stdout.join("\n")).not.toContain(
+        "legacySubWorkflows:",
+      );
+      expect(textCapture.stdout.join("\n")).toContain("runtimeReady: yes");
     });
   });
 
@@ -1556,6 +1556,53 @@ describe("runCli", () => {
     expect(capture.stderr.join("\n")).toContain(
       "workflow runtime readiness failed",
     );
+  });
+
+  test("workflow run passes --auto-improve through to the engine (mock fail then succeed)", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionsRoot = path.join(root, "sessions");
+    const examplesRoot = path.join(process.cwd(), "examples");
+    const scenarioPath = path.join(
+      examplesRoot,
+      "supervised-mock-retry",
+      "mock-scenario.json",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "supervised-mock-retry",
+        "--workflow-root",
+        examplesRoot,
+        "--artifact-root",
+        artifactsRoot,
+        "--session-store",
+        sessionsRoot,
+        "--mock-scenario",
+        scenarioPath,
+        "--auto-improve",
+        "--max-supervised-attempts",
+        "3",
+        "--output",
+        "json",
+      ],
+      capture.io,
+    );
+
+    expect(code).toBe(0);
+    const out = JSON.parse(capture.stdout.join("\n")) as {
+      status: string;
+      supervision?: { status: string; incidents: readonly { category: string }[] };
+    };
+    expect(out.status).toBe("completed");
+    expect(out.supervision).toBeDefined();
+    expect(out.supervision?.status).toBe("succeeded");
+    expect(
+      (out.supervision?.incidents ?? []).some((i) => i.category === "failure"),
+    ).toBe(true);
   });
 
   test("run -> status -> resume flow", async () => {
@@ -2732,7 +2779,7 @@ describe("runCli", () => {
       expect.objectContaining({
         sessionStoreRoot,
         rerunFromSessionId: "sess-local-rerun",
-        rerunFromNodeId: "workflow-output",
+        rerunFromStepId: "workflow-output",
         workflowWorkingDirectory: "apps/reviewer",
         dryRun: true,
         maxSteps: 7,
@@ -2894,6 +2941,156 @@ describe("runCli", () => {
         },
         dryRun: true,
       }),
+    );
+  });
+
+  test("call-step accepts --resume-step-exec as alias for resume execution id", async () => {
+    const capture = createIoCapture();
+    const session = {
+      sessionId: "sess-call-step-local",
+      status: "running" as const,
+      workflowId: "demo",
+      workflowName: "demo",
+      startedAt: "2024-01-01T00:00:00.000Z",
+      queue: [],
+      nodeExecutions: [],
+      nodeExecutionCounter: 0,
+      communications: [],
+      communicationCounter: 0,
+    };
+
+    const callStepSpy = vi
+      .spyOn(workflowCallStep, "callStep")
+      .mockResolvedValue(
+        ok({
+          session,
+          stepId: "writer-step",
+          nodeExecution: {
+            nodeId: "writer-step",
+            nodeExecId: "exec-1",
+            status: "succeeded",
+          },
+          output: { ok: true },
+          outputRef: {
+            type: "json",
+            path: "artifacts/output.json",
+          },
+          exitCode: 0,
+        } as unknown as workflowCallStep.CallStepSuccess),
+      );
+
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--resume-step-exec",
+        "exec-previous",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(callStepSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overrides: { resumeNodeExecId: "exec-previous" },
+      }),
+    );
+  });
+
+  test("call-step rejects conflicting --resume-node-exec and --resume-step-exec values", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--resume-node-exec",
+        "exec-a",
+        "--resume-step-exec",
+        "exec-b",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--resume-node-exec and --resume-step-exec must not specify different execution ids",
+    );
+  });
+
+  test("call-step rejects --resume-step-exec without a value", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--resume-step-exec",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--resume-step-exec requires an execution record id",
+    );
+  });
+
+  test("call-step rejects --resume-step-exec when value is missing before another flag", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--resume-step-exec",
+        "--dry-run",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--resume-step-exec requires an execution record id",
     );
   });
 
@@ -3899,96 +4096,96 @@ describe("runCli", () => {
 
   test("events emit dispatches locally with mock scenario without endpoint", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
-    const root = await makeTempDir();
-    const workflowRoot = path.join(root, ".divedra");
-    const eventRoot = path.join(root, ".divedra-events");
-    const artifactRoot = path.join(root, "data", "workflow");
-    const eventFile = path.join(root, "event.json");
-    const mockScenarioPath = path.join(root, "mock-scenario.json");
-    await createManagerlessWorkflowFixture(workflowRoot, "demo");
-    await mkdir(path.join(eventRoot, "sources"), { recursive: true });
-    await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
-      id: "webhook",
-      kind: "webhook",
-      path: "/events/webhook",
-    });
-    await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
-    await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
-      id: "demo",
-      sourceId: "webhook",
-      workflowName: "demo",
-      match: { eventType: "chat.message" },
-      inputMapping: {
-        mode: "template",
-        template: { request: "{{event.input.text}}" },
-        mirrorToHumanInput: true,
-      },
-      execution: {
-        async: false,
-        allowUnsafeSyncWebhook: true,
-      },
-    });
-    await writeJson(eventFile, {
-      eventId: "evt-local-mock",
-      eventType: "chat.message",
-      input: { text: "hello local mock" },
-    });
-    await writeJson(mockScenarioPath, {
-      "worker-1": {
-        provider: "scenario-mock",
-        payload: { step: "first" },
-      },
-      "worker-2": {
-        provider: "scenario-mock",
-        payload: { step: "second" },
-      },
-    });
-    const fetchImpl = vi.fn(async () =>
-      createJsonResponse({ errors: [{ message: "unexpected fetch" }] }),
-    ) as typeof fetch;
-    const capture = createIoCapture();
+      const root = await makeTempDir();
+      const workflowRoot = path.join(root, ".divedra");
+      const eventRoot = path.join(root, ".divedra-events");
+      const artifactRoot = path.join(root, "data", "workflow");
+      const eventFile = path.join(root, "event.json");
+      const mockScenarioPath = path.join(root, "mock-scenario.json");
+      await createManagerlessWorkflowFixture(workflowRoot, "demo");
+      await mkdir(path.join(eventRoot, "sources"), { recursive: true });
+      await writeJson(path.join(eventRoot, "sources", "webhook.json"), {
+        id: "webhook",
+        kind: "webhook",
+        path: "/events/webhook",
+      });
+      await mkdir(path.join(eventRoot, "bindings"), { recursive: true });
+      await writeJson(path.join(eventRoot, "bindings", "demo.json"), {
+        id: "demo",
+        sourceId: "webhook",
+        workflowName: "demo",
+        match: { eventType: "chat.message" },
+        inputMapping: {
+          mode: "template",
+          template: { request: "{{event.input.text}}" },
+          mirrorToHumanInput: true,
+        },
+        execution: {
+          async: false,
+          allowUnsafeSyncWebhook: true,
+        },
+      });
+      await writeJson(eventFile, {
+        eventId: "evt-local-mock",
+        eventType: "chat.message",
+        input: { text: "hello local mock" },
+      });
+      await writeJson(mockScenarioPath, {
+        "worker-1": {
+          provider: "scenario-mock",
+          payload: { step: "first" },
+        },
+        "worker-2": {
+          provider: "scenario-mock",
+          payload: { step: "second" },
+        },
+      });
+      const fetchImpl = vi.fn(async () =>
+        createJsonResponse({ errors: [{ message: "unexpected fetch" }] }),
+      ) as typeof fetch;
+      const capture = createIoCapture();
 
-    const code = await runCli(
-      [
-        "events",
-        "emit",
-        "webhook",
-        "--workflow-root",
-        workflowRoot,
-        "--artifact-root",
-        artifactRoot,
-        "--event-root",
-        eventRoot,
-        "--event-file",
-        eventFile,
-        "--mock-scenario",
-        mockScenarioPath,
-        "--output",
-        "json",
-      ],
-      capture.io,
-      {
-        startServe: async () => ({
-          host: "127.0.0.1",
-          port: 43173,
-          stop: () => {},
-        }),
-        isInteractiveTerminal: () => true,
-        fetchImpl,
-      },
-    );
-    const payload = JSON.parse(capture.stdout.join("\n")) as {
-      receipts: readonly {
-        status: string;
-        workflowExecutionId: string | null;
-      }[];
-    };
+      const code = await runCli(
+        [
+          "events",
+          "emit",
+          "webhook",
+          "--workflow-root",
+          workflowRoot,
+          "--artifact-root",
+          artifactRoot,
+          "--event-root",
+          eventRoot,
+          "--event-file",
+          eventFile,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--output",
+          "json",
+        ],
+        capture.io,
+        {
+          startServe: async () => ({
+            host: "127.0.0.1",
+            port: 43173,
+            stop: () => {},
+          }),
+          isInteractiveTerminal: () => true,
+          fetchImpl,
+        },
+      );
+      const payload = JSON.parse(capture.stdout.join("\n")) as {
+        receipts: readonly {
+          status: string;
+          workflowExecutionId: string | null;
+        }[];
+      };
 
-    expect(code).toBe(0);
-    expect(capture.stderr).toEqual([]);
-    expect(payload.receipts[0]?.status).toBe("dispatched");
-    expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^div-demo-/);
-    expect(fetchImpl).not.toHaveBeenCalled();
+      expect(code).toBe(0);
+      expect(capture.stderr).toEqual([]);
+      expect(payload.receipts[0]?.status).toBe("dispatched");
+      expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^div-demo-/);
+      expect(fetchImpl).not.toHaveBeenCalled();
     });
   });
 

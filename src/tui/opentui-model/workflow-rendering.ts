@@ -396,8 +396,7 @@ export function buildWorkflowDefinitionContent(
         `Manager node: ${
           workflow.hasManagerNode === false
             ? "(none; worker-only workflow)"
-            : (workflow.managerNodeId ??
-              "(not set; check workflow authorship)")
+            : (workflow.managerNodeId ?? "(not set; check workflow authorship)")
         }`,
         `Entry node: ${
           workflow.entryNodeId ??
@@ -488,6 +487,8 @@ export function buildWorkflowSelectorHistorySummary(input: {
   readonly selectedWorkflowName?: string;
   readonly sessions: readonly RuntimeSessionSummary[];
   readonly workflowFilterText: string;
+  /** When true, execution-count copy refers to steps (step-addressed `workflow.json`). */
+  readonly stepAddressedAuthoring?: boolean;
 }): StyledText {
   if (input.selectedWorkflowName === undefined) {
     return t`${
@@ -568,6 +569,10 @@ export function buildWorkflowSelectorHistorySummary(input: {
   const latestRunResult = resolveWorkflowFinalResult(
     input.latestRunSessionView,
   );
+  const executionCountLabel =
+    input.stepAddressedAuthoring === true
+      ? "step executions"
+      : "node executions";
   append(
     t`\n\n${brightWhite("Latest Run")}\n${dim(
       [
@@ -577,7 +582,7 @@ export function buildWorkflowSelectorHistorySummary(input: {
         `updated: ${formatTimestampForDisplay(latestSession.updatedAt)}`,
         `ended: ${formatOptionalTimestampForDisplay(latestSession.endedAt)}`,
         ...currentExecutionLines,
-        `node executions: ${String(latestSession.nodeExecutionCounter)}`,
+        `${executionCountLabel}: ${String(latestSession.nodeExecutionCounter)}`,
       ].join("\n"),
     )}`,
   );
@@ -629,10 +634,13 @@ export function buildNodeDefinitionPopupContent(input: {
   readonly loadedWorkflow: LoadedWorkflow | undefined;
   readonly nodeId: string | undefined;
 }): { readonly body: string; readonly title: string } {
+  const stepAddr = input.loadedWorkflow?.bundle.workflow.steps !== undefined;
   if (input.loadedWorkflow === undefined || input.nodeId === undefined) {
     return {
-      title: " Node Definition ",
-      body: "No workflow node is selected.",
+      title: stepAddr ? " Node registry entry " : " Node Definition ",
+      body: stepAddr
+        ? "No node registry entry is selected."
+        : "No workflow node is selected.",
     };
   }
   const nodeRef = input.loadedWorkflow.bundle.workflow.nodes.find(
@@ -640,8 +648,12 @@ export function buildNodeDefinitionPopupContent(input: {
   );
   if (nodeRef === undefined) {
     return {
-      title: ` Node Definition: ${input.nodeId} `,
-      body: `Workflow node '${input.nodeId}' was not found.`,
+      title: stepAddr
+        ? ` Node registry: ${input.nodeId} `
+        : ` Node Definition: ${input.nodeId} `,
+      body: stepAddr
+        ? `Node registry entry '${input.nodeId}' was not found.`
+        : `Workflow node '${input.nodeId}' was not found.`,
     };
   }
   const payload = getNormalizedNodePayload(
@@ -649,13 +661,24 @@ export function buildNodeDefinitionPopupContent(input: {
     nodeRef.id,
   );
   return {
-    title: ` Node Definition: ${input.nodeId} `,
+    title: stepAddr
+      ? ` Node registry: ${input.nodeId} `
+      : ` Node Definition: ${input.nodeId} `,
     body: [
       `Workflow: ${input.loadedWorkflow.bundle.workflow.workflowId}`,
-      `Node: ${input.nodeId}`,
-      `Node file: ${nodeRef.nodeFile}`,
-      "",
-      "workflow.json node entry",
+      ...(stepAddr
+        ? [
+            `Registry node id: ${input.nodeId}`,
+            `Node file: ${nodeRef.nodeFile}`,
+            "",
+            "workflow.json nodes[] entry",
+          ]
+        : [
+            `Node: ${input.nodeId}`,
+            `Node file: ${nodeRef.nodeFile}`,
+            "",
+            "workflow.json node entry",
+          ]),
       stringifyJsonForDisplay(nodeRef),
       "",
       "node payload",
@@ -838,6 +861,8 @@ export function buildSubworkflowListOptions(
 export function buildSummaryJsonSelectOptions(input: {
   readonly agentSessionSelection?: DetailAgentSessionSelection;
   readonly bundle: NodeDetailArtifactBundle;
+  /** When true, unavailable-session copy refers to a step execution. */
+  readonly stepAddressedAuthoring?: boolean;
 }): ReadonlyArray<{
   readonly description: string;
   readonly name: string;
@@ -847,6 +872,8 @@ export function buildSummaryJsonSelectOptions(input: {
   const inbox = summarizeJsonBlock(input.bundle.mailboxInput);
   const execOut = summarizeJsonBlock(input.bundle.artifactOutput);
   const mOut = summarizeJsonBlock(input.bundle.mailboxOutput);
+  const execNoun =
+    input.stepAddressedAuthoring === true ? "step execution" : "node execution";
   return [
     ...(input.agentSessionSelection === undefined
       ? []
@@ -855,7 +882,7 @@ export function buildSummaryJsonSelectOptions(input: {
             name: input.agentSessionSelection.title,
             description:
               input.agentSessionSelection.available !== true
-                ? "backend session id is unavailable for this node execution"
+                ? `backend session id is unavailable for this ${execNoun}`
                 : `sessionId: ${input.agentSessionSelection.sessionId ?? "(missing)"}`,
             value: input.agentSessionSelection,
           },

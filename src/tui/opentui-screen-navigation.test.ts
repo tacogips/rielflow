@@ -485,6 +485,20 @@ describe("resolveOpenTuiCopyTarget", () => {
     });
   });
 
+  test("copies the selected step execution id from the history node pane when step-addressed", () => {
+    expect(
+      resolveOpenTuiCopyTarget({
+        focusPane: "nodes",
+        screenMode: "history",
+        stepAddressedAuthoring: true,
+        selectedNodeExecutionId: "nodeexec-42",
+      }),
+    ).toEqual({
+      label: "step execution id",
+      value: "nodeexec-42",
+    });
+  });
+
   test("copies the selected workflow node id from the subworkflow node pane", () => {
     expect(
       resolveOpenTuiCopyTarget({

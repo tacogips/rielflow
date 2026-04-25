@@ -10,7 +10,10 @@ import {
   executeNativeNode,
   type NativeNodeExecutionInput,
 } from "./native-node-executor";
+import { loadRuntimeSessionSummary } from "./runtime-db";
 import { err, ok, type Result } from "./result";
+import { formatSupervisionStallError } from "./superviser";
+import type { SupervisionStallWatch } from "./types";
 
 export interface AdapterExecutionFailure {
   readonly code: AdapterFailureCode;
@@ -66,10 +69,73 @@ function toExecutionFailure(
   };
 }
 
+type SupervisionStallController = {
+  readonly clear: () => void;
+  readonly promise: Promise<never>;
+};
+
+function attachSupervisionStallToAbort(
+  controller: AbortController,
+  supervisionStall: SupervisionStallWatch,
+): SupervisionStallController {
+  let interval: ReturnType<typeof setInterval> | undefined;
+  let done = false;
+  const clear = (): void => {
+    done = true;
+    if (interval !== undefined) {
+      clearInterval(interval);
+      interval = undefined;
+    }
+  };
+  const promise = new Promise<never>((_, reject) => {
+    const runCheck = async (): Promise<void> => {
+      if (done) {
+        return;
+      }
+      try {
+        const s = await loadRuntimeSessionSummary(
+          supervisionStall.sessionId,
+          supervisionStall.loadOptions,
+        );
+        if (done) {
+          return;
+        }
+        if (s === null || s.status !== "running") {
+          return;
+        }
+        const last = new Date(s.updatedAt).getTime();
+        if (Date.now() - last > supervisionStall.stallTimeoutMs) {
+          if (done) {
+            return;
+          }
+          done = true;
+          clear();
+          controller.abort();
+          reject(
+            new AdapterExecutionError(
+              "provider_error",
+              formatSupervisionStallError(supervisionStall.stallTimeoutMs),
+            ),
+          );
+        }
+      } catch {
+        // best-effort; keep polling
+      }
+    };
+    const intervalMs = Math.max(50, supervisionStall.monitorIntervalMs);
+    void runCheck();
+    interval = setInterval(() => {
+      void runCheck();
+    }, intervalMs);
+  });
+  return { clear, promise };
+}
+
 export async function executeAdapterWithTimeout(
   adapter: NodeAdapter,
   input: AdapterExecutionInput,
   timeoutMs: number,
+  supervisionStall?: SupervisionStallWatch,
 ): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -82,6 +148,9 @@ export async function executeAdapterWithTimeout(
       reject(new AdapterExecutionError("timeout", timeoutMessage));
     }, timeoutMs);
   });
+  const stall = supervisionStall
+    ? attachSupervisionStallToAbort(controller, supervisionStall)
+    : undefined;
 
   try {
     const output = await Promise.race([
@@ -90,6 +159,7 @@ export async function executeAdapterWithTimeout(
         signal: controller.signal,
       }),
       timeoutPromise,
+      ...(stall ? [stall.promise] : []),
     ]);
     return ok(output);
   } catch (error: unknown) {
@@ -104,11 +174,15 @@ export async function executeAdapterWithTimeout(
     if (timer !== undefined) {
       clearTimeout(timer);
     }
+    stall?.clear();
   }
 }
 
 export async function executeNativeNodeWithTimeout(
-  input: NativeNodeExecutionInput & { readonly timeoutMs: number },
+  input: NativeNodeExecutionInput & {
+    readonly timeoutMs: number;
+    readonly supervisionStall?: SupervisionStallWatch;
+  },
 ): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
   const controller = new AbortController();
   let timeoutExpired = false;
@@ -117,12 +191,19 @@ export async function executeNativeNodeWithTimeout(
     timeoutExpired = true;
     controller.abort();
   }, input.timeoutMs);
+  const { supervisionStall, ...rest } = input;
+  const stall = supervisionStall
+    ? attachSupervisionStallToAbort(controller, supervisionStall)
+    : undefined;
 
   try {
-    const output = await executeNativeNode(input, {
-      timeoutMs: input.timeoutMs,
-      signal: controller.signal,
-    });
+    const output = await Promise.race([
+      executeNativeNode(rest, {
+        timeoutMs: input.timeoutMs,
+        signal: controller.signal,
+      }),
+      ...(stall ? [stall.promise] : []),
+    ]);
     return ok(output);
   } catch (error: unknown) {
     return err(
@@ -134,5 +215,6 @@ export async function executeNativeNodeWithTimeout(
     );
   } finally {
     clearTimeout(timer);
+    stall?.clear();
   }
 }

@@ -275,11 +275,14 @@ describe("inspectWorkflowRuntimeReadiness", () => {
         },
       ],
     });
-    await writeJson(path.join(workflowDirectory, "nodes", "node-manager.json"), {
-      id: "manager-node",
-      promptTemplate: "manager",
-      variables: {},
-    });
+    await writeJson(
+      path.join(workflowDirectory, "nodes", "node-manager.json"),
+      {
+        id: "manager-node",
+        promptTemplate: "manager",
+        variables: {},
+      },
+    );
     await writeJson(path.join(workflowDirectory, "nodes", "node-worker.json"), {
       id: "worker-node",
       executionBackend: "codex-agent",
@@ -297,7 +300,9 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       return;
     }
 
-    const readiness = await inspectWorkflowRuntimeReadiness(loaded.value.bundle);
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      loaded.value.bundle,
+    );
 
     expect(
       findRequirement(readiness.requirements, "agent-backend:codex-agent"),

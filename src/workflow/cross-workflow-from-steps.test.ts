@@ -147,9 +147,9 @@ describe("workflowCallsForExecutionMatch", () => {
       ],
     };
     const match = (c: WorkflowCallRef) => c.callerNodeId === "s1";
-    expect(workflowCallsForExecutionMatch(workflow, match).map((c) => c.id)).toEqual(
-      ["ex-second", "ex-first", "__cw:s1"],
-    );
+    expect(
+      workflowCallsForExecutionMatch(workflow, match).map((c) => c.id),
+    ).toEqual(["ex-second", "ex-first", "__cw:s1"]);
   });
 
   test("does not append a step-derived call whose id is already taken by a matching explicit call", () => {
@@ -179,7 +179,9 @@ describe("workflowCallsForExecutionMatch", () => {
     };
     const match = (c: WorkflowCallRef) =>
       c.callerNodeId === "s1" && c.callerStepId === "s1";
-    const ids = workflowCallsForExecutionMatch(workflow, match).map((c) => c.id);
+    const ids = workflowCallsForExecutionMatch(workflow, match).map(
+      (c) => c.id,
+    );
     expect(ids).toEqual(["__cw:s1"]);
     expect(workflowCallsForExecutionMatch(workflow, match)).toHaveLength(1);
   });

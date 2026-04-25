@@ -1,5 +1,8 @@
 import { createCommunicationService } from "./communication-service";
-import { loadWorkflowFromDisk } from "./load";
+import {
+  loadWorkflowFromDisk,
+  mergeLoadOptionsForSessionMutableBundle,
+} from "./load";
 import {
   createManagerSessionStore,
   type ManagerIntentSummary,
@@ -128,7 +131,10 @@ export function createManagerMessageService(
 
           const loadedWorkflow = await loadWorkflowFromDisk(
             loadedSession.value.workflowName,
-            options,
+            mergeLoadOptionsForSessionMutableBundle(
+              options,
+              loadedSession.value,
+            ),
           );
           if (!loadedWorkflow.ok) {
             throw new Error(loadedWorkflow.error.message);

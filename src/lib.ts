@@ -15,6 +15,7 @@ import type {
 } from "./graphql/types";
 import {
   buildInspectionSummary,
+  getSupervisionSummary,
   type WorkflowInspectionSummary,
 } from "./workflow/inspect";
 import { loadWorkflowFromCatalog } from "./workflow/load";
@@ -38,6 +39,7 @@ import {
 import type { MockNodeScenario } from "./workflow/adapter";
 import type { WorkflowExecutionSummary } from "./shared/ui-contract";
 import type {
+  AutoImprovePolicy,
   ChatReplyDispatcher,
   LoadOptions,
   WorkflowJson,
@@ -56,17 +58,35 @@ export interface ExecuteWorkflowInput extends DivedraOptions {
   readonly maxSteps?: number;
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
+  /**
+   * Supervised execution: on a new run (not resume/rerun from library), the engine
+   * seeds {@link WorkflowSessionState.supervision} and runs the supervision loop
+   * (retry on terminal target failure) until success or `maxSupervisedAttempts`.
+   */
+  readonly autoImprove?: AutoImprovePolicy;
 }
 
 export interface ResumeWorkflowInput extends DivedraOptions {
   readonly sessionId: string;
   readonly workflowWorkingDirectory?: string;
   readonly mockScenario?: MockNodeScenario;
+  /** Merges into persisted supervision policy when the session was started with `autoImprove`. */
+  readonly autoImprove?: AutoImprovePolicy;
 }
 
 export interface RerunWorkflowInput extends DivedraOptions {
   readonly sourceSessionId: string;
+  /**
+   * Rerun target as a **step id** (step-addressed bundles). When both this and
+   * {@link fromNodeId} are set, the engine resolves execution using the step id;
+   * the node id is still returned for operators when it differs (reusable registry).
+   */
   readonly fromStepId?: string;
+  /**
+   * Rerun target as a **node id** (legacy node-addressed bundles, or companion
+   * field when the step id and reusable node id differ). Ignored for execution
+   * when {@link fromStepId} is set.
+   */
   readonly fromNodeId?: string;
   readonly workflowWorkingDirectory?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
@@ -75,6 +95,7 @@ export interface RerunWorkflowInput extends DivedraOptions {
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
+  readonly autoImprove?: AutoImprovePolicy;
 }
 
 export interface RuntimeSessionView {
@@ -103,6 +124,10 @@ export interface RuntimeSessionView {
     : never;
 }
 
+/**
+ * @deprecated Prefer {@link CallWorkflowStepInput} / {@link callWorkflowStep} for
+ * step-addressed workflows; `nodeId` must be the step id when `steps[]` is authored.
+ */
 export interface CallWorkflowNodeInput extends CallNodeInput {}
 
 export interface CallWorkflowStepInput extends CallStepInput {}
@@ -553,6 +578,9 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
     ...(input.defaultTimeoutMs === undefined
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
+    ...(input.autoImprove === undefined
+      ? {}
+      : { autoImprove: input.autoImprove }),
     ...(input.rejectLegacyWorkflowAuthoring === undefined
       ? {}
       : {
@@ -614,6 +642,9 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
     ...(input.mockScenario === undefined
       ? {}
       : { mockScenario: input.mockScenario }),
+    ...(input.autoImprove === undefined
+      ? {}
+      : { autoImprove: input.autoImprove }),
     ...(input.rejectLegacyWorkflowAuthoring === undefined
       ? {}
       : {
@@ -678,7 +709,14 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       ? {}
       : { mockScenario: input.mockScenario }),
     rerunFromSessionId: source.value.sessionId,
-    rerunFromNodeId: rerunTarget.executionNodeId,
+    ...(input.fromStepId === undefined
+      ? { rerunFromNodeId: rerunTarget.executionNodeId }
+      : { rerunFromStepId: input.fromStepId }),
+    // Match {@link WorkflowRunOptions}: when both are set, the engine uses the step id
+    // for the rerun anchor but may still use the node id for companion bookkeeping.
+    ...(input.fromStepId !== undefined && input.fromNodeId !== undefined
+      ? { rerunFromNodeId: input.fromNodeId }
+      : {}),
     ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
     ...(input.maxLoopIterations === undefined
       ? {}
@@ -687,6 +725,9 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
     ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
+    ...(input.autoImprove === undefined
+      ? {}
+      : { autoImprove: input.autoImprove }),
     ...(input.rejectLegacyWorkflowAuthoring === undefined
       ? {}
       : {
@@ -781,6 +822,11 @@ export async function getRuntimeSessionView(
   };
 }
 
+/**
+ * Direct execution using the historical node-addressed input shape.
+ *
+ * @deprecated Prefer {@link callWorkflowStep} for step-addressed bundles.
+ */
 export async function callWorkflowNode(input: CallWorkflowNodeInput): Promise<{
   readonly sessionId: string;
   readonly nodeExecId: string;
@@ -883,7 +929,9 @@ export type {
 };
 export type {
   AsyncNodeAddonPayloadResolver,
+  AutoImprovePolicy,
   LoadOptions,
+  MutableWorkflowWorkspace,
   NodeAddonDefinition,
   NodeAddonDefinitionResolver,
   NodeAddonPayloadResolver,
@@ -891,7 +939,16 @@ export type {
   NodeAddonResolveResult,
   NodePayload,
   ResolvedWorkflowSource,
+  SupervisionIncident,
+  SupervisionRemediationAction,
+  SupervisionRemediationRecord,
+  SupervisionRunState,
+  SupervisionRunStatus,
+  SupervisionStallWatch,
+  SupervisionSummary,
   ValidationIssue,
+  WorkflowPatchRevisionInput,
+  WorkflowPatchRevisionRecord,
   WorkflowNodeAddonRef,
   WorkflowScopeSelector,
   WorkflowSourceScope,
@@ -902,7 +959,11 @@ export {
   createNodeAddonPayloadResolver,
   createNodeAddonRegistry,
 } from "./workflow/node-addons";
-export { loadWorkflowFromCatalog, loadWorkflowFromDisk } from "./workflow/load";
+export {
+  loadWorkflowFromCatalog,
+  loadWorkflowFromDisk,
+  mergeLoadOptionsForSessionMutableBundle,
+} from "./workflow/load";
 export {
   listWorkflowCatalogSources,
   resolveWorkflowCreateSource,
@@ -910,9 +971,46 @@ export {
   resolveWorkflowSource,
 } from "./workflow/catalog";
 export { runWorkflow } from "./workflow/engine";
+/**
+ * Direct single execution keyed by the materialized node id. For
+ * `steps[]`/`entryStepId` bundles the runtime uses the same id for the
+ * materialized node ref; for new call sites prefer {@link callStep} or
+ * {@link callWorkflowStep}.
+ */
 export { callNode } from "./workflow/call-node";
+/**
+ * Direct single-step execution for step-addressed workflow bundles. Failures
+ * are rewritten to step-oriented messages at this boundary. For a
+ * throw-on-error wrapper, use {@link callWorkflowStep}.
+ */
 export { callStep } from "./workflow/call-step";
+export type {
+  CallStepFailure,
+  CallStepInput,
+  CallStepOverrides,
+  CallStepSuccess,
+} from "./workflow/call-step";
 export { deriveWorkflowVisualization } from "./workflow/visualization";
+export { getSupervisionSummary };
+export {
+  buildMutableWorkflowWorkspace,
+  createExecutionCopyMutableWorkspace,
+  readWorkflowPatchRevisionsFromArtifact,
+  recordWorkflowPatchRevision,
+  type MutableWorkspaceFailure,
+} from "./workflow/mutable-workspace";
+export {
+  buildSupervisionStallWatch,
+  getEngineSupervisionPatcherId,
+  isSupervisionStallLastError,
+  planSupervisionRemediation,
+  resolveSupervisionRerunAnchor,
+  resolveSupervisionRerunTarget,
+  SUPERVISION_STALL_ERROR_PREFIX,
+  type StartSupervisedRunInput,
+  type SupervisionRemediationDecision,
+  type SupervisionRemediationPlan,
+} from "./workflow/superviser";
 export type {
   WorkflowInspectionCounts,
   WorkflowInspectionSummary,

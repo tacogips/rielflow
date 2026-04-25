@@ -2244,6 +2244,30 @@ describe("loadWorkflowFromDisk", () => {
     ).toContain("Complete the assigned workflow step");
   });
 
+  test("loads the supervised-mock-retry example as a shipped strict step-addressed worker-only bundle", async () => {
+    const artifactRoot = path.join(await makeTempDir(), "artifacts");
+    const result = await loadWorkflowFromDisk("supervised-mock-retry", {
+      workflowRoot: path.resolve(process.cwd(), "examples"),
+      artifactRoot,
+      rejectLegacyWorkflowAuthoring: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.workflow.workflowId).toBe("supervised-mock-retry");
+    expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
+    expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
+    expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
+      "main-worker",
+    ]);
+    expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
+      "main-worker",
+    ]);
+  });
+
   test("loads the chat reply example as a shipped strict step-addressed worker-only bundle", async () => {
     const artifactRoot = path.join(await makeTempDir(), "artifacts");
     const result = await loadWorkflowFromDisk("chat-reply-webhook", {
@@ -2512,7 +2536,9 @@ describe("loadWorkflowFromDisk", () => {
     if (!strictParentResult.ok) {
       return;
     }
-    expect(strictParentResult.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect(
+      strictParentResult.value.bundle.workflow.workflowCalls,
+    ).toBeUndefined();
 
     const calleeResult = await loadWorkflowFromDisk(
       "workflow-call-review-target",

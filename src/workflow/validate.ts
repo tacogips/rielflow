@@ -1826,10 +1826,7 @@ function normalizeWorkflowStepTransition(
   const resumeStepIdRaw = value["resumeStepId"];
   let resumeStepId: string | undefined;
   if (resumeStepIdRaw !== undefined) {
-    if (
-      typeof resumeStepIdRaw === "string" &&
-      resumeStepIdRaw.length > 0
-    ) {
+    if (typeof resumeStepIdRaw === "string" && resumeStepIdRaw.length > 0) {
       resumeStepId = resumeStepIdRaw;
     } else {
       issues.push(
@@ -2598,7 +2595,9 @@ function normalizeStepAddressedWorkflow(
     managerNodeId: managerStepId ?? entryStepId,
     hasManagerNode: managerStepId !== undefined,
     entryNodeId: entryStepId,
-    ...(mergedWorkflowCalls === undefined ? {} : { workflowCalls: mergedWorkflowCalls }),
+    ...(mergedWorkflowCalls === undefined
+      ? {}
+      : { workflowCalls: mergedWorkflowCalls }),
     ...(managerStepId === undefined ? {} : { managerStepId }),
     entryStepId,
     nodeRegistry,
@@ -4727,9 +4726,7 @@ function resolveCalleeStepFilePath(
 function inferSingleManagerStepIdFromRawSync(input: {
   readonly raw: Readonly<Record<string, unknown>>;
   readonly workflowDirectory: string;
-}):
-  | { ok: true; managerStepId?: string }
-  | { ok: false; message: string } {
+}): { ok: true; managerStepId?: string } | { ok: false; message: string } {
   const stepsRaw = input.raw["steps"];
   if (!Array.isArray(stepsRaw)) {
     return { ok: true };
@@ -4818,8 +4815,7 @@ async function inferSingleManagerStepIdFromRawAsync(input: {
   readonly raw: Readonly<Record<string, unknown>>;
   readonly workflowDirectory: string;
 }): Promise<
-  | { ok: true; managerStepId?: string }
-  | { ok: false; message: string }
+  { ok: true; managerStepId?: string } | { ok: false; message: string }
 > {
   const stepsRaw = input.raw["steps"];
   if (!Array.isArray(stepsRaw)) {
@@ -4905,7 +4901,9 @@ async function inferSingleManagerStepIdFromRawAsync(input: {
     : { ok: true, managerStepId };
 }
 
-function parseCalleeWorkflowJsonText(text: string):
+function parseCalleeWorkflowJsonText(
+  text: string,
+):
   | { ok: true; raw: Readonly<Record<string, unknown>> }
   | { ok: false; message: string } {
   let raw: unknown;
@@ -5082,9 +5080,7 @@ async function resolveCalleeWorkflowJsonByIdAsync(input: {
 function resolveCalleeWorkflowEntry(input: {
   readonly raw: Readonly<Record<string, unknown>>;
   readonly inferredManagerStepId?: string;
-}):
-  | { ok: true; entry: string }
-  | { ok: false; message: string } {
+}): { ok: true; entry: string } | { ok: false; message: string } {
   const managerStepId = input.raw["managerStepId"];
   const entryStepId = input.raw["entryStepId"];
   const entryNodeId = input.raw["entryNodeId"];
@@ -5136,13 +5132,12 @@ function validateCrossWorkflowCalleeEntryAlignmentSync(
 
   const calleeEntryById = new Map<
     string,
-    | { status: "ok"; entry: string }
-    | { status: "error"; message: string }
+    { status: "ok"; entry: string } | { status: "error"; message: string }
   >();
 
-  function resolveCalleeEntry(calleeId: string):
-    | { ok: true; entry: string }
-    | { ok: false; message: string } {
+  function resolveCalleeEntry(
+    calleeId: string,
+  ): { ok: true; entry: string } | { ok: false; message: string } {
     const cached = calleeEntryById.get(calleeId);
     if (cached !== undefined) {
       return cached.status === "ok"
@@ -5258,14 +5253,12 @@ async function validateCrossWorkflowCalleeEntryAlignment(
 
   const calleeEntryById = new Map<
     string,
-    | { status: "ok"; entry: string }
-    | { status: "error"; message: string }
+    { status: "ok"; entry: string } | { status: "error"; message: string }
   >();
 
-  async function resolveCalleeEntry(calleeId: string): Promise<
-    | { ok: true; entry: string }
-    | { ok: false; message: string }
-  > {
+  async function resolveCalleeEntry(
+    calleeId: string,
+  ): Promise<{ ok: true; entry: string } | { ok: false; message: string }> {
     const cached = calleeEntryById.get(calleeId);
     if (cached !== undefined) {
       return cached.status === "ok"

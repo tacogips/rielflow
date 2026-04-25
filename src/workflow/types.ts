@@ -644,6 +644,11 @@ export function getNormalizedNodePayload(
 }
 
 export interface LoadOptions {
+  /**
+   * When set, load and save the workflow bundle from this directory instead of
+   * `${workflowRoot}/<name>`. Used for execution-copy supervision workspaces.
+   */
+  readonly workflowBundleDirectoryOverride?: string;
   readonly workflowRoot?: string;
   readonly workflowScope?: WorkflowScopeSelector;
   readonly userRoot?: string;
@@ -708,3 +713,132 @@ export const ROOT_DATA_SESSIONS_SUBDIR = "sessions";
 export const ROOT_DATA_FILES_SUBDIR = "files";
 
 export const NODE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
+// --- auto-improve / superviser mode (design-auto-improve-superviser-mode) ---
+
+/**
+ * Input policy for supervised `--auto-improve` runs. Persisted on the session when active.
+ */
+export interface AutoImprovePolicy {
+  readonly enabled: true;
+  readonly superviserWorkflowId?: string;
+  readonly monitorIntervalMs: number;
+  readonly stallTimeoutMs: number;
+  readonly maxSupervisedAttempts: number;
+  readonly maxWorkflowPatches: number;
+  readonly workflowMutationMode: "execution-copy" | "in-place";
+  readonly allowTargetedRerun?: boolean;
+}
+
+/**
+ * Polls the runtime session snapshot row (`sessions.updated_at` from
+ * `saveSessionSnapshotToRuntimeDb`) while a step executes; on stale snapshots,
+ * the adapter or native step execution is aborted (design: persisted timestamps).
+ */
+export interface SupervisionStallWatch {
+  readonly sessionId: string;
+  readonly monitorIntervalMs: number;
+  readonly stallTimeoutMs: number;
+  readonly loadOptions: LoadOptions;
+}
+
+export interface SupervisionIncident {
+  readonly incidentId: string;
+  readonly supervisedAttemptId: string;
+  readonly category: "failure" | "stall" | "budget-exhausted";
+  readonly summary: string;
+  readonly detectedAt: string;
+}
+
+/** Normalized remediation choice recorded after an incident (impl-plan superviser module). */
+export type SupervisionRemediationAction =
+  | "rerun-workflow"
+  | "rerun-step"
+  | "patch-workflow"
+  | "stop-supervision";
+
+export interface SupervisionRemediationRecord {
+  readonly remediationId: string;
+  readonly incidentId: string;
+  readonly decidedAt: string;
+  readonly action: SupervisionRemediationAction;
+  readonly targetStepId?: string;
+  readonly reason: string;
+}
+
+export type SupervisionRunStatus =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "stopped";
+
+/**
+ * Durable supervision cycle state stored on the workflow session record when auto-improve is active.
+ * Policy and remediation history are required for resume-safe supervision (design-auto-improve-superviser-mode).
+ */
+export interface SupervisionRunState {
+  readonly supervisionRunId: string;
+  readonly targetWorkflowId: string;
+  readonly superviserWorkflowId: string;
+  readonly status: SupervisionRunStatus;
+  readonly attemptCount: number;
+  readonly workflowPatchCount: number;
+  /** Active policy for this cycle; omitted in older persisted sessions until backfilled. */
+  readonly policy?: AutoImprovePolicy;
+  /**
+   * Absolute path to the workflow bundle directory (canonical source for in-place, or
+   * execution-scoped copy under the artifact root). Used to resume loads after restart.
+   */
+  readonly mutableWorkflowDir?: string;
+  readonly incidents: readonly SupervisionIncident[];
+  /** Remediation decisions applied during this cycle, newest last. */
+  readonly remediations?: readonly SupervisionRemediationRecord[];
+}
+
+/**
+ * Library/GraphQL-friendly snapshot derived from {@link SupervisionRunState}.
+ */
+export interface SupervisionSummary {
+  readonly supervisionRunId: string;
+  readonly targetWorkflowId: string;
+  readonly superviserWorkflowId: string;
+  readonly status: SupervisionRunStatus;
+  readonly attemptCount: number;
+  readonly workflowPatchCount: number;
+  readonly latestIncidentId?: string;
+  readonly latestRemediationId?: string;
+  readonly mutableWorkflowDir?: string;
+}
+
+/**
+ * Locates a workflow bundle the superviser may mutate. For `execution-copy`, files live under
+ * the artifact root; `in-place` reuses the canonical source directory (design-auto-improve-superviser-mode).
+ */
+export interface MutableWorkflowWorkspace {
+  readonly workflowId: string;
+  readonly sourceWorkflowDir: string;
+  readonly mutableWorkflowDir: string;
+  readonly mutationMode: "execution-copy" | "in-place";
+}
+
+/**
+ * Provenance for a superviser-driven workflow definition patch (impl-plan: revision tracking).
+ */
+export interface WorkflowPatchRevisionInput {
+  readonly supervisionRunId: string;
+  readonly mutableWorkflowDir: string;
+  readonly reason: string;
+  readonly patchedByStepId: string;
+}
+
+/**
+ * A recorded patch revision stored under
+ * `<artifactRoot>/supervision/<supervisionRunId>/patch-revisions.json`.
+ */
+export interface WorkflowPatchRevisionRecord {
+  readonly patchRevisionId: string;
+  readonly recordedAt: string;
+  readonly reason: string;
+  readonly patchedByStepId: string;
+  readonly mutableWorkflowDir: string;
+}

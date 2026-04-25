@@ -99,6 +99,49 @@ describe("session-store", () => {
     expect(loaded.value.activeUserActions).toEqual([]);
   });
 
+  test("save/load roundtrip preserves supervision state", async () => {
+    const root = await makeTempDir();
+    const session: ReturnType<typeof createSessionState> = {
+      ...createSessionState({
+        sessionId: "sess-superv01",
+        workflowName: "wf",
+        workflowId: "wf",
+        initialNodeId: "manager",
+        runtimeVariables: {},
+      }),
+      supervision: {
+        supervisionRunId: "sup-run-1",
+        targetWorkflowId: "wf",
+        superviserWorkflowId: "divedra-superviser",
+        status: "running",
+        attemptCount: 2,
+        workflowPatchCount: 0,
+        incidents: [
+          {
+            incidentId: "inc-1",
+            supervisedAttemptId: "att-1",
+            category: "stall",
+            summary: "no progress",
+            detectedAt: "2026-04-25T12:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const save = await saveSession(session, { sessionStoreRoot: root });
+    expect(save.ok).toBe(true);
+
+    const loaded = await loadSession(session.sessionId, {
+      sessionStoreRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+    expect(loaded.value.supervision?.supervisionRunId).toBe("sup-run-1");
+    expect(loaded.value.supervision?.incidents[0]?.category).toBe("stall");
+  });
+
   test("rejects invalid session id", async () => {
     const root = await makeTempDir();
     const loaded = await loadSession("../bad", { sessionStoreRoot: root });

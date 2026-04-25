@@ -523,6 +523,73 @@ async function createManagerSession(
 }
 
 describe("createGraphqlSchema", () => {
+  test("workflowExecution.session exposes supervision when stored on the session", async () => {
+    const root = await makeTempDir();
+    const sessionRoot = path.join(root, "sessions");
+    const policy = {
+      enabled: true as const,
+      monitorIntervalMs: 5000,
+      stallTimeoutMs: 60_000,
+      maxSupervisedAttempts: 5,
+      maxWorkflowPatches: 3,
+      workflowMutationMode: "execution-copy" as const,
+    };
+    const session = {
+      ...createSessionState({
+        sessionId: "sess-supervision-graphql",
+        workflowName: "demo",
+        workflowId: "demo",
+        initialNodeId: "manager",
+        runtimeVariables: {},
+      }),
+      supervision: {
+        supervisionRunId: "sr-gql",
+        targetWorkflowId: "demo",
+        superviserWorkflowId: "sup",
+        status: "running" as const,
+        attemptCount: 1,
+        workflowPatchCount: 0,
+        policy,
+        incidents: [],
+        remediations: [
+          {
+            remediationId: "rem-1",
+            incidentId: "inc-1",
+            decidedAt: "2026-04-25T00:00:00.000Z",
+            action: "rerun-workflow" as const,
+            reason: "transient",
+          },
+        ],
+      },
+    };
+
+    const save = await saveSession(session, { sessionStoreRoot: sessionRoot });
+    expect(save.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const ctx: GraphqlRequestContext = {
+      cwd: root,
+      sessionStoreRoot: sessionRoot,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      rejectLegacyWorkflowAuthoring: false,
+    };
+
+    const execution = await schema.query.workflowExecution(
+      { workflowExecutionId: session.sessionId },
+      ctx,
+    );
+    expect(execution?.session.supervision?.supervisionRunId).toBe("sr-gql");
+    expect(execution?.session.supervision?.policy?.monitorIntervalMs).toBe(
+      5000,
+    );
+    expect(execution?.session.supervision?.remediations?.length).toBe(1);
+    expect(execution?.session.supervision?.remediations?.[0]?.action).toBe(
+      "rerun-workflow",
+    );
+  });
+
   test("exposes workflow, workflowExecution, communication, communications, and nodeExecution views", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
@@ -863,7 +930,7 @@ describe("createGraphqlSchema", () => {
       "demo",
       expect.objectContaining({
         rerunFromSessionId: sessionId,
-        rerunFromNodeId: "main-worker",
+        rerunFromStepId: "main-worker",
         workflowWorkingDirectory: "apps/reviewer",
         dryRun: true,
         maxSteps: 3,
@@ -975,7 +1042,7 @@ describe("createGraphqlSchema", () => {
       workflowName,
       expect.objectContaining({
         rerunFromSessionId: sessionId,
-        rerunFromNodeId: "writer-step",
+        rerunFromStepId: "writer-step",
       }),
     );
     expect(payload).toMatchObject({
@@ -986,6 +1053,23 @@ describe("createGraphqlSchema", () => {
       rerunFromNodeId: "writer-node",
       exitCode: 0,
     });
+  });
+
+  test("rerunWorkflowExecution rejects when stepId and nodeId are both omitted", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.rerunWorkflowExecution(
+        { workflowExecutionId: "sess-missing-rerun-target" },
+        {
+          workflowRoot: root,
+          artifactRoot: path.join(root, "artifacts"),
+          sessionStoreRoot: path.join(root, "sessions"),
+        },
+      ),
+    ).rejects.toThrow(
+      "stepId is required (nodeId accepted for compatibility with legacy callers)",
+    );
   });
 
   test("exposes worker-only workflows without requiring an authored manager id", async () => {

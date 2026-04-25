@@ -386,7 +386,9 @@ describe("buildWorkflowDefinitionContent", () => {
     expect(content).toContain(
       "Manager node: (not set; check workflow authorship)",
     );
-    expect(content).toContain("Entry node: (not set; check workflow authorship)");
+    expect(content).toContain(
+      "Entry node: (not set; check workflow authorship)",
+    );
   });
 
   test("shows entry-node details for worker-only workflows", () => {
@@ -793,6 +795,30 @@ describe("buildSummaryJsonSelectOptions", () => {
     expect(options[0]?.description).toContain("sessionId: codex-session-1");
     expect(options[1]?.name).toBe("Execution input (input.json)");
   });
+
+  test("uses step execution wording when backend session is unavailable and workflow is step-addressed", () => {
+    const options = buildSummaryJsonSelectOptions({
+      stepAddressedAuthoring: true,
+      agentSessionSelection: {
+        available: false,
+        backend: "codex-agent",
+        kind: "agent-session",
+        title: "AI agent session (codex-agent)",
+      },
+      bundle: {
+        artifactInput: "{}",
+        artifactOutput: "{}",
+        artifactMeta: "{}",
+        mailboxMeta: "{}",
+        mailboxInput: "{}",
+        mailboxOutput: "{}",
+      },
+    });
+
+    expect(options[0]?.description).toBe(
+      "backend session id is unavailable for this step execution",
+    );
+  });
 });
 
 describe("workflow preview text helpers", () => {
@@ -878,8 +904,37 @@ describe("workflow preview text helpers", () => {
     expect(text).toContain("status:");
     expect(text).toContain("current step: publish-result");
     expect(text).toContain("current node: workflow-output");
+    expect(text).toContain("node executions: 1");
     expect(text).toContain("Output");
     expect(text).toContain('"summary": "done"');
+  });
+
+  test("buildWorkflowSelectorHistorySummary labels execution counts as step executions for step-addressed authoring", () => {
+    const text = plainStyledText(
+      buildWorkflowSelectorHistorySummary({
+        stepAddressedAuthoring: true,
+        latestRunSessionView: makeWorkspaceLatestRunView(),
+        selectedWorkflowName: "demo",
+        sessions: [
+          {
+            sessionId: "sess-3",
+            workflowName: "demo",
+            workflowId: "demo",
+            status: "running",
+            startedAt: "2026-03-26T00:02:00.000Z",
+            endedAt: null,
+            currentNodeId: "workflow-output",
+            nodeExecutionCounter: 4,
+            lastError: null,
+            updatedAt: "2026-03-26T00:02:10.000Z",
+          },
+        ],
+        workflowFilterText: "",
+      }),
+    );
+
+    expect(text).toContain("step executions: 4");
+    expect(text).not.toContain("node executions:");
   });
 
   test("buildWorkflowSelectorHistorySummary surfaces latest-run load failures clearly", () => {

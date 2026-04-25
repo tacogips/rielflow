@@ -2,12 +2,14 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { DeterministicNodeAdapter } from "./adapter";
 import { callStep, rewriteCallStepFailureMessage } from "./call-step";
 import { listRuntimeNodeExecutions } from "./runtime-db";
 import { createSessionState } from "./session";
 import { saveSession } from "./session-store";
 
 const tempDirs: string[] = [];
+const deterministicAdapter = new DeterministicNodeAdapter();
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
@@ -730,6 +732,9 @@ describe("callStep", () => {
     expect(rewriteCallStepFailureMessage("node execution failed", stepId)).toBe(
       "step execution failed",
     );
+    expect(rewriteCallStepFailureMessage("node call failed", stepId)).toBe(
+      "step call failed",
+    );
     expect(
       rewriteCallStepFailureMessage(
         "node execution produced no output",
@@ -749,6 +754,85 @@ describe("callStep", () => {
       ),
     ).toBe(
       `cannot call step '${stepId}' on terminal session 'sess-1' with status 'completed'`,
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepId}' is optional and must be executed through the workflow scheduler after an owning-manager decision`,
+        stepId,
+      ),
+    ).toBe(
+      `step '${stepId}' is optional and must be executed through the workflow scheduler after an owning-manager decision`,
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepId}' requests nodeType='user-action', but direct call-node execution is not supported`,
+        stepId,
+      ),
+    ).toBe(
+      `step '${stepId}' requests nodeType='user-action', but direct call-step execution is not supported`,
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        `failed to persist execution mailbox at '${stepId}': disk full`,
+        stepId,
+      ),
+    ).toBe(
+      `failed to persist execution mailbox for step '${stepId}': disk full`,
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepId}' does not define prompt variant 'missing-variant'`,
+        stepId,
+      ),
+    ).toBe(
+      `step '${stepId}' does not define prompt variant 'missing-variant'`,
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        "native node execution timed out",
+        stepId,
+      ),
+    ).toBe("native step execution timed out");
+    expect(
+      rewriteCallStepFailureMessage(
+        "unknown native node execution failure",
+        stepId,
+      ),
+    ).toBe("unknown native step execution failure");
+    expect(
+      rewriteCallStepFailureMessage(
+        "native node execution failed: boom",
+        stepId,
+      ),
+    ).toBe("native step execution failed: boom");
+    expect(
+      rewriteCallStepFailureMessage(
+        "native node did not produce mailbox output at '/tmp/outbox': ENOENT",
+        stepId,
+      ),
+    ).toBe(
+      "native step did not produce mailbox output at '/tmp/outbox': ENOENT",
+    );
+    expect(
+      rewriteCallStepFailureMessage(
+        "native node execution exited with code 1",
+        stepId,
+      ),
+    ).toBe("native step execution exited with code 1");
+    expect(
+      rewriteCallStepFailureMessage(
+        "native node execution exited via signal SIGKILL",
+        stepId,
+      ),
+    ).toBe("native step execution exited via signal SIGKILL");
+    const stepWithMeta = "writer-step+meta";
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepWithMeta}' does not define prompt variant 'v'`,
+        stepWithMeta,
+      ),
+    ).toBe(
+      `step '${stepWithMeta}' does not define prompt variant 'v'`,
     );
   });
 
@@ -795,5 +879,60 @@ describe("callStep", () => {
     expect(result.error.message).toContain("cannot call step");
     expect(result.error.message).toContain("'writer-step'");
     expect(result.error.message).not.toContain("cannot call node");
+  });
+
+  test("rewrites session lastError in failures to match step-oriented call-step wording", async () => {
+    const root = await makeTempDir();
+    const artifactsRoot = path.join(root, "artifacts");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const workflowName = "call-step-mailbox-write-failure";
+    const sessionId = "sess-call-step-mailbox-write-failure";
+
+    await createCallStepFixture(root, workflowName);
+    const saved = await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "manager-step",
+        runtimeVariables: {},
+      }),
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+
+    const blockedMailboxPath = path.join(
+      artifactsRoot,
+      workflowName,
+      "executions",
+      sessionId,
+      "nodes",
+      "writer-step",
+      "exec-000001",
+      "mailbox",
+    );
+    await mkdir(path.dirname(blockedMailboxPath), { recursive: true });
+    await writeFile(blockedMailboxPath, "blocked", "utf8");
+
+    const result = await callStep(
+      {
+        workflowRoot: root,
+        artifactRoot: artifactsRoot,
+        sessionStoreRoot,
+        workflowId: workflowName,
+        workflowRunId: sessionId,
+        stepId: "writer-step",
+      },
+      deterministicAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("execution mailbox for step");
+    expect(result.error.message).not.toContain("execution mailbox at");
+    expect(result.error.session.lastError).toContain("execution mailbox for step");
+    expect(result.error.session.lastError).not.toContain("execution mailbox at");
   });
 });

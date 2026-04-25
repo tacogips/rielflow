@@ -1124,7 +1124,9 @@ async function rerunWorkflowExecutionMutation(
 ): Promise<RerunWorkflowExecutionPayload> {
   const rerunTargetId = input.stepId ?? input.nodeId;
   if (rerunTargetId === undefined) {
-    throw new Error("stepId or nodeId is required");
+    throw new Error(
+      "stepId is required (nodeId accepted for compatibility with legacy callers)",
+    );
   }
   const workingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     input.workingDirectory,
@@ -1140,7 +1142,9 @@ async function rerunWorkflowExecutionMutation(
   const result = await runWorkflow(existing.value.workflowName, {
     ...workflowContext,
     rerunFromSessionId: input.workflowExecutionId,
-    rerunFromNodeId: rerunTargetId,
+    ...(input.stepId !== undefined
+      ? { rerunFromStepId: input.stepId }
+      : { rerunFromNodeId: rerunTargetId }),
     ...(workingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory: workingDirectory }),

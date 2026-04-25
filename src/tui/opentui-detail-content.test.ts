@@ -14,6 +14,26 @@ import {
   type RuntimeSessionView,
 } from "./opentui-model";
 
+function asStepAddressedLoadedWorkflow(
+  base: LoadedWorkflow,
+): LoadedWorkflow {
+  return {
+    ...base,
+    bundle: {
+      ...base.bundle,
+      workflow: {
+        ...base.bundle.workflow,
+        entryStepId: "review-step",
+        managerStepId: "manager-step",
+        steps: [
+          { id: "manager-step", nodeId: "manager" },
+          { id: "review-step", nodeId: "worker" },
+        ],
+      },
+    },
+  };
+}
+
 function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
   return {
     workflowName: "demo",
@@ -202,7 +222,64 @@ describe("buildHistoryDetailPaneState", () => {
     expect(state.summaryHeaderText).toBe("Select a workflow node.");
     expect(state.summaryVisible).toBe(true);
     expect(state.textVisible).toBe(false);
+    expect(state.summaryOptions[0]?.name).toBe("(no node)");
     expect(state.summaryOptions[0]?.value).toBe(OPEN_TUI_EMPTY_SELECT_VALUE);
+  });
+
+  test("step-addressed empty summary placeholder uses step wording in subworkflow mode", async () => {
+    const artifactDir = await createNodeExecutionArtifactDir();
+    const base = makeLoadedWorkflow({
+      id: "worker",
+      executionBackend: "codex-agent",
+      model: "gpt-5",
+      promptTemplate: "Do work",
+      variables: {},
+    });
+    const state = await buildHistoryDetailPaneState({
+      detailMode: "summary",
+      detailViewerBody: "",
+      detailViewerTitle: "",
+      historyViewMode: "subworkflow",
+      inputDetection: {
+        mode: "json",
+        reason: "structured input",
+      },
+      loadedWorkflow: asStepAddressedLoadedWorkflow(base),
+      managerMessages: [],
+      runtimeSessionView: makeRuntimeSessionView(artifactDir),
+      selectedNodeExecution: undefined,
+    });
+
+    expect(state.summaryHeaderText).toBe("Select a workflow step.");
+    expect(state.summaryOptions[0]?.name).toBe("(no step)");
+  });
+
+  test("step-addressed empty summary placeholder uses step wording in workflow mode", async () => {
+    const artifactDir = await createNodeExecutionArtifactDir();
+    const base = makeLoadedWorkflow({
+      id: "worker",
+      executionBackend: "codex-agent",
+      model: "gpt-5",
+      promptTemplate: "Do work",
+      variables: {},
+    });
+    const state = await buildHistoryDetailPaneState({
+      detailMode: "summary",
+      detailViewerBody: "",
+      detailViewerTitle: "",
+      historyViewMode: "workflow",
+      inputDetection: {
+        mode: "json",
+        reason: "structured input",
+      },
+      loadedWorkflow: asStepAddressedLoadedWorkflow(base),
+      managerMessages: [],
+      runtimeSessionView: makeRuntimeSessionView(artifactDir),
+      selectedNodeExecution: undefined,
+    });
+
+    expect(state.summaryHeaderText).toBe("Select a step execution.");
+    expect(state.summaryOptions[0]?.name).toBe("(no step)");
   });
 
   test("builds summary content and agent-session rows for a selected execution", async () => {

@@ -467,6 +467,13 @@ function ensureSchema(db: Database): void {
   if (!existingNodeExecutionColumns.has("timeout_ms")) {
     db.exec("ALTER TABLE node_executions ADD COLUMN timeout_ms INTEGER");
   }
+  const sessionColumnsFinal = db
+    .query("PRAGMA table_info(sessions)")
+    .all() as Array<{ name: string }>;
+  const sessionColumnSet = new Set(sessionColumnsFinal.map((row) => row.name));
+  if (!sessionColumnSet.has("supervision_json")) {
+    db.exec("ALTER TABLE sessions ADD COLUMN supervision_json TEXT");
+  }
 }
 
 function toRuntimeEventReceiptIndexRecord(row: {
@@ -953,8 +960,9 @@ export async function saveSessionSnapshotToRuntimeDb(
     const stmt = db.prepare(`
       INSERT INTO sessions (
         session_id, workflow_name, workflow_id, status, started_at, ended_at,
-        current_node_id, current_step_id, node_execution_counter, queue_json, last_error, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        current_node_id, current_step_id, node_execution_counter, queue_json, last_error,
+        supervision_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         workflow_name=excluded.workflow_name,
         workflow_id=excluded.workflow_id,
@@ -966,6 +974,7 @@ export async function saveSessionSnapshotToRuntimeDb(
         node_execution_counter=excluded.node_execution_counter,
         queue_json=excluded.queue_json,
         last_error=excluded.last_error,
+        supervision_json=excluded.supervision_json,
         updated_at=excluded.updated_at
     `);
     const updatedAt = new Date().toISOString();
@@ -982,6 +991,9 @@ export async function saveSessionSnapshotToRuntimeDb(
       session.nodeExecutionCounter,
       JSON.stringify(session.queue),
       session.lastError ?? null,
+      session.supervision === undefined
+        ? null
+        : JSON.stringify(session.supervision),
       updatedAt,
     );
   });
@@ -1029,6 +1041,10 @@ export async function saveNodeExecutionToRuntimeDb(
       now,
     );
 
+    const finishLogTarget =
+      row.stepId != null && row.stepId !== "" ? "step" : "node";
+    const finishKey =
+      finishLogTarget === "step" ? row.stepId! : row.nodeId;
     insertNodeLog(
       db,
       toNodeLogRow({
@@ -1036,7 +1052,7 @@ export async function saveNodeExecutionToRuntimeDb(
         nodeExecId: row.nodeExecId,
         nodeId: row.nodeId,
         level: row.status === "succeeded" ? "info" : "warning",
-        message: `node ${row.nodeId} finished with status ${row.status}`,
+        message: `${finishLogTarget} ${finishKey} finished with status ${row.status}`,
         payload: {
           inputHash: row.inputHash,
           outputHash: row.outputHash,
@@ -1063,12 +1079,14 @@ function summarizeProcessLogText(text: string): string {
 function formatProcessLogMessage(input: {
   readonly nodeId: string;
   readonly log: AdapterProcessLog;
+  readonly executionLogTarget?: "node" | "step";
 }): string {
+  const target = input.executionLogTarget ?? "node";
   const label =
     input.log.label === undefined || input.log.label.length === 0
       ? ""
       : `${input.log.label} `;
-  return `node ${input.nodeId} ${label}${input.log.stream}: ${summarizeProcessLogText(input.log.text)}`;
+  return `${target} ${input.nodeId} ${label}${input.log.stream}: ${summarizeProcessLogText(input.log.text)}`;
 }
 
 export async function saveProcessLogsToRuntimeDb(
@@ -1078,6 +1096,8 @@ export async function saveProcessLogsToRuntimeDb(
     readonly nodeExecId: string;
     readonly processLogs: readonly AdapterProcessLog[];
     readonly at: string;
+    /** When set to `step`, log lines use `step …` instead of `node …` for the execution key. */
+    readonly executionLogTarget?: "node" | "step";
   },
   options: LoadOptions = {},
 ): Promise<void> {
@@ -1094,7 +1114,13 @@ export async function saveProcessLogsToRuntimeDb(
             nodeId: input.nodeId,
             nodeExecId: input.nodeExecId,
             level: log.stream === "stderr" ? "warning" : "info",
-            message: formatProcessLogMessage({ nodeId: input.nodeId, log }),
+            message: formatProcessLogMessage({
+              nodeId: input.nodeId,
+              log,
+              ...(input.executionLogTarget === undefined
+                ? {}
+                : { executionLogTarget: input.executionLogTarget }),
+            }),
             payload: {
               stream: log.stream,
               text: log.text,

@@ -86,6 +86,17 @@ import {
   type ShortcutKeyEvent,
 } from "../opentui-view-shared";
 
+function isStepAddressedAuthoring(
+  workflow: LoadedWorkflow["bundle"]["workflow"] | undefined,
+): boolean {
+  return workflow?.steps !== undefined;
+}
+
+/** Step-addressed UIs should show the step id when present, not only the registry node id. */
+function primaryStepOrNodeLabel(execution: NodeExecutionRecord): string {
+  return execution.stepId ?? execution.nodeId;
+}
+
 export interface OpenTuiWorkflowActionResult {
   readonly exitCode: number;
   readonly sessionId: string;
@@ -645,6 +656,9 @@ export async function runOpenTuiWorkflowApp(
         : { latestRunSessionView: workspaceLatestRunView }),
       sessions: workflowSessions,
       workflowFilterText,
+      stepAddressedAuthoring: isStepAddressedAuthoring(
+        loadedWorkflow?.bundle.workflow,
+      ),
       ...(currentSelectedWorkflowName === undefined
         ? {}
         : { selectedWorkflowName: currentSelectedWorkflowName }),
@@ -1093,17 +1107,25 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     if (historyViewMode() === "subworkflow") {
-      await withBusy("Switching subworkflow node", async () => {
-        detailMode = "summary";
-        agentSessionPopupOpen = false;
-        await refreshManagerMessages();
-        const execution = selectedHistoryExecution();
-        setStatus(
-          execution === undefined
-            ? "Selected workflow node without an execution yet"
-            : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
-        );
-      });
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+      await withBusy(
+        stepAddr ? "Switching subworkflow step" : "Switching subworkflow node",
+        async () => {
+          detailMode = "summary";
+          agentSessionPopupOpen = false;
+          await refreshManagerMessages();
+          const execution = selectedHistoryExecution();
+          setStatus(
+            execution === undefined
+              ? stepAddr
+                ? "Selected workflow step without an execution yet"
+                : "Selected workflow node without an execution yet"
+              : stepAddr
+                ? `Selected workflow step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
+                : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
+          );
+        },
+      );
       return;
     }
     await withBusy("Switching session", async () => {
@@ -1126,15 +1148,23 @@ export async function runOpenTuiWorkflowApp(
     ) {
       return;
     }
-    await withBusy("Switching workflow node", async () => {
-      nodeDefinitionPopupOpen = false;
-      const nodeId = selectedDefinitionNodeId();
-      setStatus(
-        nodeId === undefined
-          ? "No workflow node selected"
-          : `Selected workflow node '${nodeId}'`,
-      );
-    });
+    const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+    await withBusy(
+      stepAddr ? "Switching node definition" : "Switching workflow node",
+      async () => {
+        nodeDefinitionPopupOpen = false;
+        const nodeId = selectedDefinitionNodeId();
+        setStatus(
+          nodeId === undefined
+            ? stepAddr
+              ? "No node definition selected"
+              : "No workflow node selected"
+            : stepAddr
+              ? `Selected node definition '${nodeId}'`
+              : `Selected workflow node '${nodeId}'`,
+        );
+      },
+    );
   };
 
   const handleNodeSelectionChanged = async (): Promise<void> => {
@@ -1159,15 +1189,20 @@ export async function runOpenTuiWorkflowApp(
       });
       return;
     }
-    await withBusy("Switching node", async () => {
+    const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+    await withBusy(stepAddr ? "Switching step" : "Switching node", async () => {
       detailMode = "summary";
       agentSessionPopupOpen = false;
       await refreshManagerMessages();
       const execution = selectedNodeExecution();
       setStatus(
         execution === undefined
-          ? "No node execution selected"
-          : `Selected node '${execution.nodeId}' (${execution.nodeExecId})`,
+          ? stepAddr
+            ? "No step execution selected"
+            : "No node execution selected"
+          : stepAddr
+            ? `Selected step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
+            : `Selected node '${execution.nodeId}' (${execution.nodeExecId})`,
       );
     });
   };
@@ -1347,10 +1382,15 @@ export async function runOpenTuiWorkflowApp(
     nodeDefinitionPopupTitle = popupContent.title;
     nodeDefinitionPopupTextContent = popupContent.body;
     nodeDefinitionPopup.scrollTop = 0;
+    const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
     setStatus(
       selectedDefinitionNodeId() === undefined
-        ? "No workflow node selected"
-        : `Opened definition for workflow node '${selectedDefinitionNodeId()}'`,
+        ? stepAddr
+          ? "No node definition selected"
+          : "No workflow node selected"
+        : stepAddr
+          ? `Opened node definition for '${selectedDefinitionNodeId()}'`
+          : `Opened definition for workflow node '${selectedDefinitionNodeId()}'`,
     );
     await render();
     applyFocus("nodes");
@@ -1365,8 +1405,16 @@ export async function runOpenTuiWorkflowApp(
       const selection = opt.value;
       detailViewerBody = selection.body;
       const wf = loadedWorkflow?.bundle.workflow.workflowId ?? "workflow";
-      const node = selectedHistoryExecution()?.nodeId ?? "node";
-      detailViewerTitle = `${wf} / ${node} / ${selection.title}`;
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+      const execution = selectedHistoryExecution();
+      const placeholder = stepAddr ? "step" : "node";
+      const id =
+        execution === undefined
+          ? placeholder
+          : stepAddr
+            ? primaryStepOrNodeLabel(execution)
+            : execution.nodeId;
+      detailViewerTitle = `${wf} / ${id} / ${selection.title}`;
       detailMode = "viewer";
       await render();
       applyFocus("detail");
@@ -1381,8 +1429,11 @@ export async function runOpenTuiWorkflowApp(
       selection.backend === undefined ||
       selection.sessionId === undefined
     ) {
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
       setStatus(
-        "AI agent session is unavailable for the selected node execution",
+        stepAddr
+          ? "AI agent session is unavailable for the selected step execution"
+          : "AI agent session is unavailable for the selected node execution",
       );
       await render();
       applyFocus("detail");
@@ -1832,17 +1883,25 @@ export async function runOpenTuiWorkflowApp(
   }): Promise<void> => {
     if (focusPane === "sessions") {
       if (historyViewMode() === "subworkflow") {
-        await withBusy("Loading workflow node details", async () => {
-          detailMode = "summary";
-          agentSessionPopupOpen = false;
-          await refreshManagerMessages();
-          const execution = selectedHistoryExecution();
-          setStatus(
-            execution === undefined
-              ? "Selected workflow node without an execution yet"
-              : `Loaded workflow node '${execution.nodeId}' details`,
-          );
-        });
+        const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+        await withBusy(
+          stepAddr ? "Loading workflow step details" : "Loading workflow node details",
+          async () => {
+            detailMode = "summary";
+            agentSessionPopupOpen = false;
+            await refreshManagerMessages();
+            const execution = selectedHistoryExecution();
+            setStatus(
+              execution === undefined
+                ? stepAddr
+                  ? "Selected workflow step without an execution yet"
+                  : "Selected workflow node without an execution yet"
+                : stepAddr
+                  ? `Loaded workflow step '${primaryStepOrNodeLabel(execution)}' details`
+                  : `Loaded workflow node '${execution.nodeId}' details`,
+            );
+          },
+        );
         detailReturnPane = "sessions";
         applyFocus("detail");
         return;
@@ -1861,8 +1920,11 @@ export async function runOpenTuiWorkflowApp(
         detailMode = "summary";
         detailReturnPane = "sessions";
         applyFocus("detail");
+        const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
         setStatus(
-          `Focused node detail for workflow run '${runtimeSessionView.session.sessionId}'`,
+          stepAddr
+            ? `Focused step detail for workflow run '${runtimeSessionView.session.sessionId}'`
+            : `Focused node detail for workflow run '${runtimeSessionView.session.sessionId}'`,
         );
         renderer.requestRender();
       }
@@ -1873,15 +1935,23 @@ export async function runOpenTuiWorkflowApp(
         await openSubworkflowHistory(selectedChildSubworkflowId());
         return;
       }
-      await withBusy("Loading node details", async () => {
-        await refreshManagerMessages();
-        const execution = selectedNodeExecution();
-        setStatus(
-          execution === undefined
-            ? "No node execution selected"
-            : `Loaded node ${execution.nodeId} details`,
-        );
-      });
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+      await withBusy(
+        stepAddr ? "Loading step details" : "Loading node details",
+        async () => {
+          await refreshManagerMessages();
+          const execution = selectedNodeExecution();
+          setStatus(
+            execution === undefined
+              ? stepAddr
+                ? "No step execution selected"
+                : "No node execution selected"
+              : stepAddr
+                ? `Loaded step ${primaryStepOrNodeLabel(execution)} details`
+                : `Loaded node ${execution.nodeId} details`,
+          );
+        },
+      );
       detailReturnPane = "nodes";
       applyFocus("detail");
       return;
@@ -1940,15 +2010,23 @@ export async function runOpenTuiWorkflowApp(
       } else {
         workflowDefinitionNodeSelect.moveDown(1);
       }
-      await withBusy("Switching workflow node", async () => {
-        nodeDefinitionPopupOpen = false;
-        const nodeId = selectedDefinitionNodeId();
-        setStatus(
-          nodeId === undefined
-            ? "No workflow node selected"
-            : `Selected workflow node '${nodeId}'`,
-        );
-      });
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+      await withBusy(
+        stepAddr ? "Switching node definition" : "Switching workflow node",
+        async () => {
+          nodeDefinitionPopupOpen = false;
+          const nodeId = selectedDefinitionNodeId();
+          setStatus(
+            nodeId === undefined
+              ? stepAddr
+                ? "No node definition selected"
+                : "No workflow node selected"
+              : stepAddr
+                ? `Selected node definition '${nodeId}'`
+                : `Selected workflow node '${nodeId}'`,
+          );
+        },
+      );
       return;
     }
 
@@ -1959,17 +2037,25 @@ export async function runOpenTuiWorkflowApp(
         sessionSelect.moveDown(1);
       }
       if (historyViewMode() === "subworkflow") {
-        await withBusy("Switching subworkflow node", async () => {
-          detailMode = "summary";
-          agentSessionPopupOpen = false;
-          await refreshManagerMessages();
-          const execution = selectedHistoryExecution();
-          setStatus(
-            execution === undefined
-              ? "Selected workflow node without an execution yet"
-              : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
-          );
-        });
+        const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+        await withBusy(
+          stepAddr ? "Switching subworkflow step" : "Switching subworkflow node",
+          async () => {
+            detailMode = "summary";
+            agentSessionPopupOpen = false;
+            await refreshManagerMessages();
+            const execution = selectedHistoryExecution();
+            setStatus(
+              execution === undefined
+                ? stepAddr
+                  ? "Selected workflow step without an execution yet"
+                  : "Selected workflow node without an execution yet"
+                : stepAddr
+                  ? `Selected workflow step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
+                  : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
+            );
+          },
+        );
         return;
       }
       await withBusy("Switching session", async () => {
@@ -2005,15 +2091,20 @@ export async function runOpenTuiWorkflowApp(
         });
         return;
       }
-      await withBusy("Switching node", async () => {
+      const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
+      await withBusy(stepAddr ? "Switching step" : "Switching node", async () => {
         detailMode = "summary";
         agentSessionPopupOpen = false;
         await refreshManagerMessages();
         const execution = selectedNodeExecution();
         setStatus(
           execution === undefined
-            ? "No node execution selected"
-            : `Selected node '${execution.nodeId}' (${execution.nodeExecId})`,
+            ? stepAddr
+              ? "No step execution selected"
+              : "No node execution selected"
+            : stepAddr
+              ? `Selected step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
+              : `Selected node '${execution.nodeId}' (${execution.nodeExecId})`,
         );
       });
       return;

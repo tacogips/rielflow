@@ -1331,7 +1331,13 @@ export async function saveWorkflowToDisk(
   }
 
   const roots = resolveEffectiveRoots(options);
-  const workflowDirectory = path.join(roots.workflowRoot, workflowName);
+  const workflowDirectory =
+    options.workflowBundleDirectoryOverride !== undefined
+      ? path.resolve(
+          options.cwd ?? process.cwd(),
+          options.workflowBundleDirectoryOverride,
+        )
+      : path.join(roots.workflowRoot, workflowName);
   const existingAuthoredWorkflow =
     await readExistingAuthoredWorkflow(workflowDirectory);
   if (!existingAuthoredWorkflow.ok) {

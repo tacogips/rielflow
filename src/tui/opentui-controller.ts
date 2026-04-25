@@ -162,9 +162,12 @@ function buildCopyTargetInput(
     screenMode === "definition"
       ? context.getSelectedDefinitionNodeId()
       : context.getSelectedSubworkflowNodeId();
+  const wf = context.getLoadedWorkflow()?.bundle.workflow;
+  const stepAddressedAuthoring = wf?.steps !== undefined;
   return {
     focusPane: context.getFocusPane(),
     screenMode,
+    ...(stepAddressedAuthoring ? { stepAddressedAuthoring: true as const } : {}),
     ...(loadedWorkflowId === undefined ? {} : { loadedWorkflowId }),
     ...(selectedNodeExecutionId === undefined
       ? {}

@@ -222,7 +222,10 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -237,7 +240,10 @@ describe("validateWorkflowBundle", () => {
   }
 
   test("accepts canonical valid payload", () => {
-    const result = validateWorkflowBundle(makeValidRaw(), legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundle(
+      makeValidRaw(),
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -282,8 +288,7 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path ===
-            "workflow.steps[0].transitions[0].resumeStepId" &&
+          issue.path === "workflow.steps[0].transitions[0].resumeStepId" &&
           issue.message.includes("required when toWorkflowId is set"),
       ),
     ).toBe(true);
@@ -309,8 +314,7 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path ===
-            "workflow.steps[0].transitions[0].resumeStepId" &&
+          issue.path === "workflow.steps[0].transitions[0].resumeStepId" &&
           issue.message.includes("only when toWorkflowId is set"),
       ),
     ).toBe(true);
@@ -335,7 +339,9 @@ describe("validateWorkflowBundle", () => {
       return;
     }
     expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
-    expect(crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps)).toEqual([
+    expect(
+      crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps),
+    ).toEqual([
       {
         id: "__cw:manager",
         workflowId: "other-workflow",
@@ -366,7 +372,9 @@ describe("validateWorkflowBundle", () => {
       return;
     }
     expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
-    expect(crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps)).toEqual([
+    expect(
+      crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps),
+    ).toEqual([
       {
         id: "__cw:manager",
         workflowId: "other-workflow",
@@ -500,8 +508,9 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
 
     const rawOk = makeValidStepAddressedRaw();
-    const stepsOk = (rawOk.workflow as { steps: Array<Record<string, unknown>> })
-      .steps;
+    const stepsOk = (
+      rawOk.workflow as { steps: Array<Record<string, unknown>> }
+    ).steps;
     (stepsOk[0] as { transitions: unknown[] }).transitions = [
       {
         toStepId: "real-entry",
@@ -1070,7 +1079,10 @@ describe("validateWorkflowBundle", () => {
       workflowId: "../demo",
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1220,7 +1232,10 @@ describe("validateWorkflowBundle", () => {
       description: "",
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -1236,7 +1251,10 @@ describe("validateWorkflowBundle", () => {
   });
 
   test("accepts unified role schema", () => {
-    const result = validateWorkflowBundle(makeUnifiedRoleRaw(), legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundle(
+      makeUnifiedRoleRaw(),
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
@@ -2106,7 +2124,10 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2136,7 +2157,10 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2202,7 +2226,10 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2231,7 +2258,10 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -2268,7 +2298,10 @@ describe("validateWorkflowBundle", () => {
         ],
       };
 
-      const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+      const result = validateWorkflowBundleDetailed(
+        raw,
+        legacyWorkflowAuthorshipOk,
+      );
       expect(result.ok).toBe(false);
       if (result.ok) {
         continue;
@@ -2436,7 +2469,10 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4962,7 +4998,10 @@ describe("validateWorkflowBundle", () => {
       variables: {},
     };
 
-    const result = validateWorkflowBundleDetailed(raw, legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
@@ -4999,7 +5038,10 @@ describe("validateWorkflowBundle", () => {
   });
 
   test("does not emit compatibility warnings for canonical payloads", () => {
-    const result = validateWorkflowBundleDetailed(makeValidRaw(), legacyWorkflowAuthorshipOk);
+    const result = validateWorkflowBundleDetailed(
+      makeValidRaw(),
+      legacyWorkflowAuthorshipOk,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;

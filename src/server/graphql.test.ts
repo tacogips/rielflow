@@ -365,9 +365,7 @@ describe("GraphQL HTTP transport", () => {
         usesEffectiveEntryManagerNodeId: true,
       },
     });
-    expect(
-      payload.data?.workflow?.compatibility?.notes ?? [],
-    ).not.toContain(
+    expect(payload.data?.workflow?.compatibility?.notes ?? []).not.toContain(
       "Worker-only workflows normalize entryNodeId to an internal effective managerNodeId during runtime execution.",
     );
   });

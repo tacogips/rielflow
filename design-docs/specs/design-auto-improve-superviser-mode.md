@@ -6,9 +6,7 @@ This document intentionally uses the spelling `superviser` to match the requeste
 
 ## Overview
 
-The current runtime can run, resume, rerun, and inspect workflows, but it does not yet provide a first-class self-healing execution mode.
-
-`auto improve mode` adds that layer.
+The core runtime can run, resume, rerun, and inspect workflows. **Auto improve mode** adds a first-class supervised execution path. **Phase 1** (see [Implementation phasing](#implementation-phasing)) ships this as an engine-orchestrated loop with `--auto-improve`, persisted policy and incidents, stall detection from runtime timestamps, and execution-copy patch audit records. **Phase 2** adds a nested `superviser` workflow and richer remediation nodes; until then, the bullet list below describes the intended end-to-end product shape, with Phase 1 covering the engine-driven subset.
 
 In this mode:
 
@@ -41,6 +39,15 @@ The `superviser` itself should be expressible as an ordinary workflow using the 
 - Blind in-place mutation of the canonical source workflow as the default behavior.
 - Recursive self-supervision by default.
 - Guaranteeing recovery for failures caused by external systems that remain unavailable.
+
+## Implementation phasing
+
+The end-state goals in this document (paired `superviser` **workflow**, add-on or GraphQL control operations, and LLM-driven definition edits) are not all implemented in a single change set. The current tree may ship in phases:
+
+- **Phase 1 (engine-orchestrated loop)**. `divedra workflow run ... --auto-improve` uses an outer `runAutoImproveLoop` in the workflow engine. It runs the **target** workflow, detects terminal **failure** and **stall** (including via persisted `sessions.updated_at` while a step is executing), records **incidents** and **remediations**, applies **attempt** and **patch** budgets, writes **patch revision** audit records under the artifact root for execution-copy bundles, and supports **targeted step rerun** when policy allows. Policy and state are **persisted** on the target session. **GraphQL** and the **library** expose `getSupervisionSummary` / `session.supervision` for inspection. The `superviserWorkflowId` field is reserved: it is stored on the session and intended for a future **nested** paired superviser execution, not executed as a separate workflow in this phase.
+- **Phase 2 (superviser as a workflow)**. Run `superviserWorkflowId` as a normal step-addressed workflow, implement the recommended add-ons (or internal equivalents) for start/status/rerun/load/save of the **target** run, and move remediation decisions and definition edits into superviser- or operator-driven nodes. Until then, the engine loop implements a deterministic, auditable subset of the **decide-remediation** behavior described in [Superviser Workflow Shape](#superviser-workflow-shape) and [Required Superviser Capabilities](#required-superviser-capabilities).
+
+Phase 1 is intentionally compatible with the same session model, artifact layout, and policy contract described elsewhere in this spec so that Phase 2 can attach without reworking operator-visible audit data.
 
 ## Core Model
 
@@ -445,7 +452,7 @@ Initial CLI policy mapping should expose at least:
 - `--max-supervised-attempts`
 - `--max-workflow-patches`
 - `--workflow-mutation-mode execution-copy|in-place`
-- `--disable-targeted-rerun`
+- `--no-allow-targeted-rerun` (deprecated alias: `--disable-targeted-rerun`)
 
 Likely additional control-plane needs:
 

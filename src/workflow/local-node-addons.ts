@@ -338,9 +338,7 @@ async function resolveTemplateFiles(input: {
         continue;
       }
       if (typeof templateFile !== "string" || templateFile.length === 0) {
-        input.issues.push(
-          makeIssue(issuePath, "must be a non-empty string"),
-        );
+        input.issues.push(makeIssue(issuePath, "must be a non-empty string"));
         continue;
       }
       const resolvedPath = resolveAddonRelativePath(input.source, templateFile);

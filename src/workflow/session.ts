@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { AdapterExecutionInput } from "./adapter";
-import type { AgentNodePayload, WorkflowJson } from "./types";
+import type {
+  AgentNodePayload,
+  SupervisionRunState,
+  WorkflowJson,
+} from "./types";
 
 export type SessionStatus =
   | "running"
@@ -205,6 +209,8 @@ export interface WorkflowSessionState {
   readonly activeUserActions?: readonly ActiveUserActionRef[];
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly lastError?: string;
+  /** Present when the session is part of an auto-improve / superviser cycle. */
+  readonly supervision?: SupervisionRunState;
 }
 
 export interface CreateSessionInput {
@@ -267,6 +273,17 @@ export function normalizeSessionState(
       ...(session.pendingOptionalNodeDecisions ?? []),
     ],
     activeUserActions: [...(session.activeUserActions ?? [])],
+    ...(session.supervision === undefined
+      ? {}
+      : {
+          supervision: {
+            ...session.supervision,
+            incidents: [...session.supervision.incidents],
+            ...(session.supervision.remediations === undefined
+              ? {}
+              : { remediations: [...session.supervision.remediations] }),
+          },
+        }),
   };
 }
 

@@ -529,9 +529,12 @@ export function resolveManagerSessionId(
 
 export function buildDetailAgentSessionDescription(
   selection: DetailAgentSessionSelection,
+  stepAddressedAuthoring?: boolean,
 ): string {
+  const execNoun =
+    stepAddressedAuthoring === true ? "step execution" : "node execution";
   return selection.available !== true
-    ? "backend session id is unavailable for this node execution"
+    ? `backend session id is unavailable for this ${execNoun}`
     : `sessionId: ${selection.sessionId ?? "(missing)"}`;
 }
 

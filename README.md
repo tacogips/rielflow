@@ -20,7 +20,7 @@ The current implementation remains the source of truth for shipped behavior, but
 - explicit same-session continuation for different steps that intentionally reuse one node
 - cross-workflow calls using the same execution-address contract as local step calls by targeting the callee workflow manager step
 - migration toward one shared call abstraction for local and cross-workflow dispatch instead of separate long-term paths
-- supervised `--auto-improve` execution as a future extension
+- supervised `--auto-improve` execution (engine outer loop, persisted incidents/remediations, and patch audit; a nested `superviser` workflow is a follow-up; see `design-docs/specs/design-auto-improve-superviser-mode.md`)
 
 Those design documents describe the intended next schema and runtime direction; they are not a claim that every item is already implemented in `src/`.
 
@@ -160,7 +160,7 @@ Primary commands implemented in `src/cli.ts`:
 
 `workflow create <name>` scaffolds a role-based starter with a code-manager default manager node and a `codex-agent` worker node. The generated `workflow.json` prefers the authored-minimal surface and omits compatibility/default fields such as empty `subWorkflows`, synthesized `edges`, default `branching`, and node-level `completion: { "type": "none" }` unless they are needed. Pass `--worker-only` to scaffold a manager-less starter whose authored entry step points at `main-worker`.
 
-`call-step` is the primary direct-call surface during the step-addressed cutover. It accepts targeted continuation controls such as `--prompt-variant <name>`, `--continue-session`, `--timeout-ms <ms>`, and `--resume-node-exec <id>` so a reusable node can be revisited through a specific step with invocation-local overrides.
+`call-step` is the primary direct-call surface during the step-addressed cutover. It accepts targeted continuation controls such as `--prompt-variant <name>`, `--continue-session`, `--timeout-ms <ms>`, and `--resume-step-exec <id>` (alias `--resume-node-exec`) so a reusable node can be revisited through a specific step with invocation-local overrides.
 
 `call-node` remains available only for compatibility with older node-addressed runtime paths. New direct execution tooling should prefer `call-step`.
 
@@ -201,7 +201,7 @@ and labels any remaining structural compatibility count as
 - `--timeout-ms <ms>` for `call-step`
 - `--prompt-variant <name>` for `call-step`
 - `--continue-session` for `call-step`
-- `--resume-node-exec <id>` for `call-step`
+- `--resume-step-exec <id>` for `call-step` (prior execution record id; `--resume-node-exec` is an alias)
 
 Remote execution support:
 
@@ -284,7 +284,7 @@ Typical layout:
 
 Current file roles:
 
-- `workflow.json`: canonical workflow structure, control-flow definition, and node ordering
+- `workflow.json`: canonical workflow structure, control-flow definition, and the step graph (`steps[]` transitions); legacy bundles may still imply control flow via ordered `nodes[]` and synthesized edges
 - `nodes/node-{id}.json`: default location for per-node payloads
 - `workflows/*/nodes/node-{id}.json`: optional grouped-lane or nested authoring layout
 - `prompts/*.md`: prompt bodies referenced by `promptTemplateFile`, `systemPromptTemplateFile`, or `sessionStartPromptTemplateFile`
@@ -320,7 +320,8 @@ Relevant current behavior:
 
 - if `steps[]` is authored, `nodes[]` is a reusable registry rather than execution order
 - if a legacy compatibility bundle omits `edges`, sequential edges are synthesized from node order
-- if exactly one manager-role node exists, `managerNodeId` may be inferred
+- if exactly one manager-role node exists, `managerNodeId` may be inferred (legacy compatibility bundles)
+- if exactly one manager-role step exists, `managerStepId` may be inferred (step-addressed bundles)
 - if no manager exists, compatibility node-addressed bundles require `entryNodeId`, while step-addressed bundles require `entryStepId`
 - non-empty authored `subWorkflows` are reserved for legacy structural compatibility and should not be combined with authored role/control nodes
 - non-empty authored `subWorkflowConversations` are also reserved for legacy structural compatibility and should not be combined with authored role/control nodes

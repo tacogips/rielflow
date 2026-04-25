@@ -187,6 +187,8 @@ export interface OpenTuiCopyTarget {
 
 export interface OpenTuiCopyTargetInput {
   readonly focusPane: FocusPane;
+  /** When the loaded bundle has `steps[]`, copy labels use step-first wording. */
+  readonly stepAddressedAuthoring?: boolean;
   readonly loadedWorkflowId?: string;
   readonly screenMode: ScreenMode;
   readonly selectedNodeExecutionId?: string;

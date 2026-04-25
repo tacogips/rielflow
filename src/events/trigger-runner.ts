@@ -418,9 +418,7 @@ export function createWorkflowTriggerRunner(
           };
         }
         const stickyPlan =
-          stickyResolution.outcome === "resume"
-            ? stickyResolution.plan
-            : null;
+          stickyResolution.outcome === "resume" ? stickyResolution.plan : null;
         const result =
           stickyPlan === null
             ? await createWorkflowExecutionClient(

@@ -10,6 +10,7 @@ import {
   executeWorkflow,
   getRuntimeSessionView,
   getSession,
+  getSupervisionSummary,
   inspectWorkflow,
   listSessions,
   rerunWorkflow,
@@ -912,7 +913,8 @@ describe("library api", () => {
       workflowName,
       expect.objectContaining({
         rerunFromSessionId: sessionId,
-        rerunFromNodeId: "writer-step",
+        rerunFromStepId: "writer-step",
+        rerunFromNodeId: "writer-node",
       }),
     );
     expect(rerun).toMatchObject({
@@ -922,6 +924,66 @@ describe("library api", () => {
       rerunFromNodeId: "writer-node",
       exitCode: 0,
     });
+  });
+
+  test("resumeWorkflow forwards autoImprove to runWorkflow", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-ai-lib";
+    const sessionId = "sess-resume-ai-lib";
+    const options = {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const policy = {
+      enabled: true as const,
+      monitorIntervalMs: 1111,
+      stallTimeoutMs: 60_000,
+      maxSupervisedAttempts: 3,
+      maxWorkflowPatches: 2,
+      workflowMutationMode: "execution-copy" as const,
+    };
+    await saveSession(
+      createSessionState({
+        sessionId,
+        workflowName,
+        workflowId: workflowName,
+        initialNodeId: "step-a",
+        runtimeVariables: {},
+      }),
+      options,
+    );
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: createSessionState({
+            sessionId,
+            workflowName,
+            workflowId: workflowName,
+            initialNodeId: "step-a",
+            runtimeVariables: {},
+          }),
+          exitCode: 0,
+        },
+      });
+
+    await resumeWorkflow({
+      ...options,
+      sessionId,
+      autoImprove: policy,
+    });
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      workflowName,
+      expect.objectContaining({
+        resumeSessionId: sessionId,
+        autoImprove: policy,
+      }),
+    );
+    runWorkflowSpy.mockRestore();
   });
 
   test("executes a fixed workflow through the endpoint-backed library client", async () => {
@@ -1005,5 +1067,101 @@ describe("library api", () => {
         runtimeVariables: { humanInput: { request: "two" } },
       }),
     ).rejects.toThrow("use only one of input or runtimeVariables");
+  });
+});
+
+describe("getSupervisionSummary", () => {
+  test("returns undefined when the session has no supervision block", () => {
+    const session = createSessionState({
+      sessionId: "s1",
+      workflowName: "w",
+      workflowId: "w",
+      initialNodeId: "m",
+      runtimeVariables: {},
+    });
+    expect(getSupervisionSummary(session)).toBeUndefined();
+  });
+
+  test("maps stored supervision to a summary with latest incident id", () => {
+    const session = {
+      ...createSessionState({
+        sessionId: "s1",
+        workflowName: "w",
+        workflowId: "w",
+        initialNodeId: "m",
+        runtimeVariables: {},
+      }),
+      supervision: {
+        supervisionRunId: "run-a",
+        targetWorkflowId: "target-wf",
+        superviserWorkflowId: "sup-wf",
+        status: "running" as const,
+        attemptCount: 3,
+        workflowPatchCount: 1,
+        incidents: [
+          {
+            incidentId: "i1",
+            supervisedAttemptId: "t1",
+            category: "failure" as const,
+            summary: "first",
+            detectedAt: "2026-04-25T00:00:00.000Z",
+          },
+          {
+            incidentId: "i2",
+            supervisedAttemptId: "t2",
+            category: "stall" as const,
+            summary: "second",
+            detectedAt: "2026-04-25T00:01:00.000Z",
+          },
+        ],
+      },
+    };
+    const summary = getSupervisionSummary(session);
+    expect(summary?.latestIncidentId).toBe("i2");
+    expect(summary?.attemptCount).toBe(3);
+    expect(summary?.status).toBe("running");
+    expect(summary?.superviserWorkflowId).toBe("sup-wf");
+    expect(summary?.workflowPatchCount).toBe(1);
+    expect(summary?.latestRemediationId).toBeUndefined();
+  });
+
+  test("maps latest remediation id when remediations are present", () => {
+    const session = {
+      ...createSessionState({
+        sessionId: "s1",
+        workflowName: "w",
+        workflowId: "w",
+        initialNodeId: "m",
+        runtimeVariables: {},
+      }),
+      supervision: {
+        supervisionRunId: "run-b",
+        targetWorkflowId: "target-wf",
+        superviserWorkflowId: "sup-wf",
+        status: "running" as const,
+        attemptCount: 1,
+        workflowPatchCount: 2,
+        incidents: [],
+        remediations: [
+          {
+            remediationId: "r1",
+            incidentId: "i1",
+            decidedAt: "2026-04-25T00:00:00.000Z",
+            action: "rerun-workflow" as const,
+            reason: "retry",
+          },
+          {
+            remediationId: "r2",
+            incidentId: "i2",
+            decidedAt: "2026-04-25T00:01:00.000Z",
+            action: "patch-workflow" as const,
+            reason: "defect",
+          },
+        ],
+      },
+    };
+    const summary = getSupervisionSummary(session);
+    expect(summary?.latestRemediationId).toBe("r2");
+    expect(summary?.workflowPatchCount).toBe(2);
   });
 });

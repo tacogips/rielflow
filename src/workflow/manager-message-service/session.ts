@@ -128,18 +128,20 @@ export function applyOptionalNodeDecision(input: {
   >;
   readonly decidedAt: string;
 }): WorkflowSessionState {
+  const optionalTargetNoun =
+    input.workflow.steps !== undefined ? "step" : "node";
   const currentDecision = findPendingOptionalNodeDecision(
     input.session,
     input.action.nodeId,
   );
   if (currentDecision === undefined || currentDecision.status !== "pending") {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': optional node '${input.action.nodeId}' is not currently pending`,
+      `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${input.action.nodeId}' is not currently pending`,
     );
   }
   if (currentDecision.owningManagerNodeId !== input.managerNodeId) {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': optional node '${input.action.nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
+      `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${input.action.nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
     );
   }
 
@@ -148,7 +150,7 @@ export function applyOptionalNodeDecision(input: {
   );
   if (nodeRef?.execution?.mode !== "optional") {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': node '${input.action.nodeId}' is not optional`,
+      `invalid manager control at '${input.managerNodeId}': ${optionalTargetNoun} '${input.action.nodeId}' is not optional`,
     );
   }
 

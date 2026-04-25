@@ -9,7 +9,8 @@ import {
   type WorkflowRuntimeReadiness,
 } from "./runtime-readiness";
 import { collectWorkflowRevisionNodeFiles } from "./revision";
-import type { LoadOptions } from "./types";
+import type { SupervisionSummary, LoadOptions } from "./types";
+import type { WorkflowSessionState } from "./session";
 
 export interface WorkflowStructuralProjectionCounts {
   readonly nodes: number;
@@ -170,5 +171,38 @@ export async function buildInspectionSummary(
       ...(loaded.source === undefined ? {} : { workflowSource: loaded.source }),
     }),
     runtime: await inspectWorkflowRuntimeReadiness(loaded.bundle, options),
+  };
+}
+
+/**
+ * Returns a compact supervision snapshot when the session carries auto-improve state.
+ */
+export function getSupervisionSummary(
+  session: WorkflowSessionState,
+): SupervisionSummary | undefined {
+  const run = session.supervision;
+  if (run === undefined) {
+    return undefined;
+  }
+  const lastIncident = run.incidents[run.incidents.length - 1];
+  const rem = run.remediations;
+  const lastRemediation =
+    rem === undefined || rem.length === 0 ? undefined : rem[rem.length - 1];
+  return {
+    supervisionRunId: run.supervisionRunId,
+    targetWorkflowId: run.targetWorkflowId,
+    superviserWorkflowId: run.superviserWorkflowId,
+    status: run.status,
+    attemptCount: run.attemptCount,
+    workflowPatchCount: run.workflowPatchCount,
+    ...(lastIncident === undefined
+      ? {}
+      : { latestIncidentId: lastIncident.incidentId }),
+    ...(lastRemediation === undefined
+      ? {}
+      : { latestRemediationId: lastRemediation.remediationId }),
+    ...(run.mutableWorkflowDir === undefined
+      ? {}
+      : { mutableWorkflowDir: run.mutableWorkflowDir }),
   };
 }

@@ -29,7 +29,11 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
-import { loadWorkflowFromDisk } from "./load";
+import {
+  loadWorkflowFromDisk,
+  mergeLoadOptionsForSessionMutableBundle,
+} from "./load";
+import { buildSupervisionStallWatch } from "./superviser";
 import {
   buildAmbientManagerControlPlaneEnvironment,
   createManagerSessionStore,
@@ -77,6 +81,10 @@ export interface DirectExecutionOverrides {
   readonly promptVariant?: string;
   readonly sessionMode?: NodeSessionMode;
   readonly timeoutMs?: number;
+  /**
+   * Prior step/node execution record to continue from (matches session `nodeExecId`;
+   * CLI: `--resume-step-exec` or alias `--resume-node-exec`).
+   */
   readonly resumeNodeExecId?: string;
 }
 
@@ -871,7 +879,10 @@ class ExecutionDispatcher {
       });
     }
 
-    const loaded = await loadWorkflowFromDisk(session.workflowName, input);
+    const loaded = await loadWorkflowFromDisk(
+      session.workflowName,
+      mergeLoadOptionsForSessionMutableBundle(input, session),
+    );
     if (!loaded.ok) {
       return err({
         session,
@@ -1299,6 +1310,7 @@ class ExecutionDispatcher {
           });
         }
 
+        const supervisionStall = buildSupervisionStallWatch(session, input);
         const execution =
           agentNodePayload !== null
             ? await executeAdapterWithTimeout(
@@ -1363,6 +1375,7 @@ class ExecutionDispatcher {
                       }),
                 },
                 timeoutMs,
+                supervisionStall,
               )
             : await executeNativeNodeWithTimeout({
                 workflowDirectory: loaded.value.workflowDirectory,
@@ -1385,6 +1398,7 @@ class ExecutionDispatcher {
                   : { chatReplyDispatcher: input.eventReplyDispatcher }),
                 ...(input.env === undefined ? {} : { env: input.env }),
                 timeoutMs,
+                ...(supervisionStall === undefined ? {} : { supervisionStall }),
               });
 
         try {
@@ -1436,7 +1450,11 @@ class ExecutionDispatcher {
               promptText,
               completionPassed: false,
               when: {},
-              payload: {},
+              payload:
+                execution.error.code === "provider_error" &&
+                execution.error.message.length > 0
+                  ? { providerErrorMessage: execution.error.message }
+                  : {},
               error: execution.error.code,
             };
             break;
@@ -1558,6 +1576,9 @@ class ExecutionDispatcher {
           nodeExecId,
           processLogs,
           at: endedAt,
+          ...(stepExecutionAddress.stepId === undefined
+            ? {}
+            : { executionLogTarget: "step" as const }),
         },
         input,
       );
@@ -1659,8 +1680,20 @@ class ExecutionDispatcher {
       ...(nodeStatus === "succeeded"
         ? {}
         : {
-            lastError:
-              finalOutputPayload?.["error"]?.toString() ?? "node call failed",
+            lastError: (() => {
+              const p = finalOutputPayload?.["payload"];
+              if (typeof p === "object" && p !== null) {
+                const m = (p as Readonly<Record<string, unknown>>)[
+                  "providerErrorMessage"
+                ];
+                if (typeof m === "string" && m.length > 0) {
+                  return m;
+                }
+              }
+              return (
+                finalOutputPayload?.["error"]?.toString() ?? "node call failed"
+              );
+            })(),
           }),
     };
 

@@ -172,6 +172,41 @@ describe("buildNodeDefinitionPopupContent", () => {
     expect(popup.body).toContain("workflow.json node entry");
     expect(popup.body).toContain("node payload");
   });
+
+  test("step-addressed workflow uses registry-oriented popup labels", () => {
+    const base = makeLoadedWorkflow({
+      id: "workflow-input",
+      description: "Normalize the received request",
+      model: "input-model",
+      promptTemplate: "Normalize the request",
+      variables: {},
+    });
+    const loaded: LoadedWorkflow = {
+      ...base,
+      bundle: {
+        ...base.bundle,
+        workflow: {
+          ...base.bundle.workflow,
+          entryStepId: "step-in",
+          managerStepId: "step-mgr",
+          steps: [
+            { id: "step-mgr", nodeId: "divedra-manager" },
+            { id: "step-in", nodeId: "workflow-input" },
+          ],
+        },
+      },
+    };
+
+    const popup = buildNodeDefinitionPopupContent({
+      loadedWorkflow: loaded,
+      nodeId: "workflow-input",
+    });
+
+    expect(popup.title).toContain("Node registry");
+    expect(popup.body).toContain("workflow.json nodes[] entry");
+    expect(popup.body).toContain("Registry node id:");
+    expect(popup.body).toContain("node payload");
+  });
 });
 
 describe("buildSessionSelectOptions", () => {

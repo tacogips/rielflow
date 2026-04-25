@@ -1,0 +1,25 @@
+{
+  "workflowId": "supervised-mock-retry",
+  "description": "Manager-less one-step workflow for demos: first mock response fails, second succeeds when combined with --auto-improve and the bundled two-entry mock scenario (recorded step execution count advances on rerun).",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Work only on the current step's responsibility and return concise business JSON."
+  },
+  "entryStepId": "main-worker",
+  "nodes": [
+    {
+      "id": "main-worker",
+      "nodeFile": "nodes/node-main-worker.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "main-worker",
+      "nodeId": "main-worker",
+      "role": "worker"
+    }
+  ]
+}

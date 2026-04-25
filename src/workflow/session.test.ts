@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  normalizeSessionState,
   persistNodeBackendSession,
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
@@ -49,6 +50,59 @@ function makeReusableAgentNode(
     ...overrides,
   };
 }
+
+describe("normalizeSessionState", () => {
+  test("clones supervision incidents array", () => {
+    const incident = {
+      incidentId: "i1",
+      supervisedAttemptId: "a1",
+      category: "failure" as const,
+      summary: "x",
+      detectedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const base = makeSession({
+      supervision: {
+        supervisionRunId: "sr1",
+        targetWorkflowId: "target",
+        superviserWorkflowId: "sup",
+        status: "running",
+        attemptCount: 1,
+        workflowPatchCount: 0,
+        incidents: [incident],
+      },
+    });
+    const n = normalizeSessionState(base);
+    expect(n.supervision?.incidents).not.toBe(base.supervision?.incidents);
+    expect(n.supervision?.incidents).toEqual(base.supervision?.incidents);
+  });
+
+  test("clones supervision remediations array when present", () => {
+    const remediation = {
+      remediationId: "r1",
+      incidentId: "i1",
+      decidedAt: "2026-01-01T00:00:00.000Z",
+      action: "rerun-workflow" as const,
+      reason: "x",
+    };
+    const base = makeSession({
+      supervision: {
+        supervisionRunId: "sr1",
+        targetWorkflowId: "target",
+        superviserWorkflowId: "sup",
+        status: "running",
+        attemptCount: 1,
+        workflowPatchCount: 0,
+        incidents: [],
+        remediations: [remediation],
+      },
+    });
+    const n = normalizeSessionState(base);
+    expect(n.supervision?.remediations).not.toBe(
+      base.supervision?.remediations,
+    );
+    expect(n.supervision?.remediations).toEqual(base.supervision?.remediations);
+  });
+});
 
 describe("resolveCurrentStepId", () => {
   test("returns null when no current node is active", () => {

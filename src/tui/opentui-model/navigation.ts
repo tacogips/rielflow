@@ -327,7 +327,10 @@ export function resolveOpenTuiCopyTarget(
     input.selectedNodeExecutionId !== undefined
   ) {
     return {
-      label: "node execution id",
+      label:
+        input.stepAddressedAuthoring === true
+          ? "step execution id"
+          : "node execution id",
       value: input.selectedNodeExecutionId,
     };
   }

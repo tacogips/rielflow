@@ -81,9 +81,7 @@ export function listNodeTemplateFieldContainers(
   return containers;
 }
 
-export function collectNodeTemplateFiles(
-  payload: unknown,
-): readonly string[] {
+export function collectNodeTemplateFiles(payload: unknown): readonly string[] {
   if (!isRecord(payload)) {
     return [];
   }

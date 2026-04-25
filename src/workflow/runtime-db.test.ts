@@ -12,6 +12,7 @@ import {
   loadRuntimeSessionSummary,
   resolveRuntimeDbPath,
   saveCommunicationEventToRuntimeDb,
+  saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
   saveSessionSnapshotToRuntimeDb,
 } from "./runtime-db";
@@ -473,6 +474,42 @@ describe("runtime-db", () => {
     );
   });
 
+  test("persists supervision_json on session snapshots", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-supervision-db");
+    const session = {
+      ...createSessionState({
+        sessionId: "sess-supervision-db",
+        workflowName: "wf",
+        workflowId: "wf",
+        initialNodeId: "m",
+        runtimeVariables: {},
+      }),
+      supervision: {
+        supervisionRunId: "sr-1",
+        targetWorkflowId: "wf",
+        superviserWorkflowId: "sup",
+        status: "running" as const,
+        attemptCount: 1,
+        workflowPatchCount: 0,
+        incidents: [],
+      },
+    };
+
+    await saveSessionSnapshotToRuntimeDb(session, options);
+
+    const db = new Database(resolveRuntimeDbPath(options));
+    try {
+      const row = db
+        .query("SELECT supervision_json FROM sessions WHERE session_id = ?")
+        .get("sess-supervision-db") as { supervision_json: string | null };
+      expect(row.supervision_json).toContain("sr-1");
+      expect(row.supervision_json).toContain('"status":"running"');
+    } finally {
+      db.close();
+    }
+  });
+
   test("stores concise process log messages with full text in payload JSON", async () => {
     const root = await makeTempDir();
     const options = makeRuntimeDbOptions(root, "sess-sqlite-process-logs");
@@ -498,6 +535,78 @@ describe("runtime-db", () => {
       readonly text?: string;
     };
     expect(payload.text).toBe(longText);
+  });
+
+  test("process log lines use step label when executionLogTarget is step", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-process-logs-step");
+    await saveProcessLogsToRuntimeDb(
+      {
+        sessionId: "sess-sqlite-process-logs-step",
+        nodeId: "entry-worker",
+        nodeExecId: "exec-000001",
+        processLogs: [{ stream: "stdout", text: "ok\n" }],
+        at: "2026-04-20T00:00:00.000Z",
+        executionLogTarget: "step",
+      },
+      options,
+    );
+    const logs = await listRuntimeNodeLogs("sess-sqlite-process-logs-step", options);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.message.startsWith("step entry-worker ")).toBe(true);
+  });
+
+  test("node execution finish log uses step label when stepId is set", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-finish-step");
+    await saveNodeExecutionToRuntimeDb(
+      {
+        sessionId: "sess-sqlite-finish-step",
+        nodeId: "w1",
+        stepId: "w1",
+        nodeExecId: "exec-000001",
+        status: "succeeded",
+        artifactDir: path.join(root, "a", "b"),
+        startedAt: "2026-04-20T00:00:00.000Z",
+        endedAt: "2026-04-20T00:00:01.000Z",
+        inputJson: "{}",
+        outputJson: "{}",
+        inputHash: "h1",
+        outputHash: "h2",
+      },
+      options,
+    );
+    const logs = await listRuntimeNodeLogs("sess-sqlite-finish-step", options);
+    const finish = logs.find((e) => e.message.includes("finished with status"));
+    expect(finish).toBeDefined();
+    expect(finish?.message).toBe("step w1 finished with status succeeded");
+  });
+
+  test("node execution finish log uses stepId as message key when it differs from nodeId", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root, "sess-sqlite-finish-step-key");
+    await saveNodeExecutionToRuntimeDb(
+      {
+        sessionId: "sess-sqlite-finish-step-key",
+        nodeId: "materialized-exec",
+        stepId: "author-step",
+        nodeExecId: "exec-000001",
+        status: "succeeded",
+        artifactDir: path.join(root, "a", "b"),
+        startedAt: "2026-04-20T00:00:00.000Z",
+        endedAt: "2026-04-20T00:00:01.000Z",
+        inputJson: "{}",
+        outputJson: "{}",
+        inputHash: "h1",
+        outputHash: "h2",
+      },
+      options,
+    );
+    const logs = await listRuntimeNodeLogs("sess-sqlite-finish-step-key", options);
+    const finish = logs.find((e) => e.message.includes("finished with status"));
+    expect(finish?.message).toBe(
+      "step author-step finished with status succeeded",
+    );
   });
 
   test("logs communication event status without implying failed delivery succeeded", async () => {

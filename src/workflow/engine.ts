@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -26,7 +26,16 @@ import {
   validateJsonValueAgainstSchema,
   type JsonSchemaValidationError,
 } from "./json-schema";
-import { loadWorkflowByIdFromDisk, loadWorkflowFromDisk } from "./load";
+import {
+  loadWorkflowByIdFromDisk,
+  loadWorkflowFromDisk,
+  mergeLoadOptionsForSessionMutableBundle,
+} from "./load";
+import {
+  createExecutionCopyMutableWorkspace,
+  recordWorkflowPatchRevision,
+} from "./mutable-workspace";
+import { resolveEffectiveRoots } from "./paths";
 import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
@@ -82,17 +91,27 @@ import {
   type SessionStoreOptions,
 } from "./session-store";
 import {
+  buildSupervisionStallWatch,
+  getEngineSupervisionPatcherId,
+  isSupervisionStallLastError,
+  planSupervisionRemediation,
+} from "./superviser";
+import {
   resolveNodeExecutionWorkingDirectory,
   resolveWorkflowExecutionWorkingDirectory,
 } from "./working-directory";
 import type {
   AgentNodePayload,
+  AutoImprovePolicy,
   ChatReplyDispatcher,
   JsonObject,
   LoadOptions,
   LoopRule,
   NodePayload,
   SubWorkflowRef,
+  SupervisionIncident,
+  SupervisionRemediationRecord,
+  SupervisionRunState,
   WorkflowCallRef,
   WorkflowEdge,
   WorkflowJson,
@@ -110,9 +129,26 @@ export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly dryRun?: boolean;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly mockScenario?: MockNodeScenario;
+  /** When set on a new run (not resume), seeds {@link WorkflowSessionState.supervision} and, unless {@link supervisionLoopExecution} is set, runs the supervision retry loop. */
+  readonly autoImprove?: AutoImprovePolicy;
+  /**
+   * When true, execute the workflow directly without wrapping in the auto-improve outer retry loop
+   * (the loop uses this for inner attempts and for resume/rerun entry points).
+   * @internal
+   */
+  readonly supervisionLoopExecution?: boolean;
   readonly resumeSessionId?: string;
   readonly rerunFromSessionId?: string;
+  /**
+   * Rerun entry id for node-registry workflows without `steps[]`.
+   * When {@link rerunFromStepId} is also set, the step id wins for the rerun target.
+   */
   readonly rerunFromNodeId?: string;
+  /**
+   * Rerun entry step id for step-addressed workflows.
+   * Takes precedence over {@link rerunFromNodeId} when both are supplied (reusable-node bundles).
+   */
+  readonly rerunFromStepId?: string;
   readonly restartOnStuck?: boolean;
   readonly maxStuckRestarts?: number;
   readonly stuckRestartBackoffMs?: number;
@@ -126,6 +162,23 @@ export interface WorkflowRunResult {
 export interface WorkflowRunFailure {
   readonly exitCode: number;
   readonly message: string;
+  /**
+   * Populated when a persisted session exists at the point of failure (e.g. terminal failure
+   * after save) so the auto-improve supervision loop can load state for remediation.
+   */
+  readonly sessionId?: string;
+}
+
+function workflowRunFailure(
+  code: number,
+  message: string,
+  session?: Pick<WorkflowSessionState, "sessionId">,
+): WorkflowRunFailure {
+  return {
+    exitCode: code,
+    message,
+    ...(session === undefined ? {} : { sessionId: session.sessionId }),
+  };
 }
 
 export interface CancellationProbe {
@@ -303,10 +356,9 @@ async function failTerminalSession(
     lastError: message,
   };
   const persisted = await persistTerminalSessionState(failed, options, message);
-  return err({
-    exitCode: 1,
-    message: persisted.ok ? message : persisted.error,
-  });
+  return err(
+    workflowRunFailure(1, persisted.ok ? message : persisted.error, session),
+  );
 }
 
 function stableJson(payload: unknown): string {
@@ -674,6 +726,8 @@ function applyOptionalManagerDecisions(input: {
   },
   string
 > {
+  const optionalTargetNoun =
+    input.workflow.steps !== undefined ? "step" : "node";
   const managerControl = input.managerControl;
   if (managerControl === null) {
     return ok({
@@ -699,7 +753,7 @@ function applyOptionalManagerDecisions(input: {
     const existingAction = actionsByNodeId.get(action.nodeId);
     if (existingAction !== undefined && existingAction.status !== nextStatus) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional node '${action.nodeId}' cannot be both executed and skipped in one manager turn`,
+        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${action.nodeId}' cannot be both executed and skipped in one manager turn`,
       );
     }
     actionsByNodeId.set(action.nodeId, {
@@ -719,17 +773,17 @@ function applyOptionalManagerDecisions(input: {
     );
     if (currentDecision === undefined || currentDecision.status !== "pending") {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional node '${nodeId}' is not currently pending`,
+        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${nodeId}' is not currently pending`,
       );
     }
     if (currentDecision.owningManagerNodeId !== input.managerNodeId) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional node '${nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
+        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
       );
     }
     if (!isOptionalNode(input.workflow, nodeId)) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': node '${nodeId}' is not optional`,
+        `invalid manager control at '${input.managerNodeId}': ${optionalTargetNoun} '${nodeId}' is not optional`,
       );
     }
     pendingOptionalNodeDecisions = upsertPendingOptionalNodeDecision(
@@ -963,8 +1017,7 @@ function buildChildWorkflowCallOptions(
     ...(options.rejectLegacyWorkflowAuthoring === undefined
       ? {}
       : {
-          rejectLegacyWorkflowAuthoring:
-            options.rejectLegacyWorkflowAuthoring,
+          rejectLegacyWorkflowAuthoring: options.rejectLegacyWorkflowAuthoring,
         }),
     ...(options.workflowWorkingDirectory === undefined
       ? {}
@@ -1331,6 +1384,7 @@ async function buildUpstreamInputs(
   session: WorkflowSessionState,
   nodeId: string,
 ): Promise<Result<readonly UpstreamInput[], string>> {
+  const upstreamTargetNoun = workflow.steps !== undefined ? "step" : "node";
   const refs = buildUpstreamOutputRefs(workflow, session, nodeId);
   if (refs.length === 0) {
     return ok([]);
@@ -1341,7 +1395,7 @@ async function buildUpstreamInputs(
     const output = await readOutputPayloadArtifact(ref.artifactDir);
     if (!output.ok) {
       return err(
-        `failed to resolve upstream communication '${ref.communicationId}' for node '${nodeId}': ${output.error}`,
+        `failed to resolve upstream communication '${ref.communicationId}' for ${upstreamTargetNoun} '${nodeId}': ${output.error}`,
       );
     }
     loaded.push({
@@ -1760,7 +1814,7 @@ function readBusinessPayload(
 }
 
 function cloneSession(session: WorkflowSessionState): WorkflowSessionState {
-  return {
+  const next: WorkflowSessionState = {
     ...session,
     queue: [...session.queue],
     nodeExecutionCounts: { ...session.nodeExecutionCounts },
@@ -1778,6 +1832,38 @@ function cloneSession(session: WorkflowSessionState): WorkflowSessionState {
     ],
     activeUserActions: [...(session.activeUserActions ?? [])],
     runtimeVariables: { ...session.runtimeVariables },
+  };
+  if (session.supervision === undefined) {
+    return next;
+  }
+  return {
+    ...next,
+    supervision: {
+      ...session.supervision,
+      incidents: [...session.supervision.incidents],
+      ...(session.supervision.remediations === undefined
+        ? {}
+        : { remediations: [...session.supervision.remediations] }),
+    },
+  };
+}
+
+function createInitialSupervisionRunState(input: {
+  readonly policy: AutoImprovePolicy;
+  readonly targetWorkflowId: string;
+}): SupervisionRunState {
+  const superviserWorkflowId =
+    input.policy.superviserWorkflowId ?? "divedra/default-superviser";
+  return {
+    supervisionRunId: `sup-${randomBytes(10).toString("hex")}`,
+    targetWorkflowId: input.targetWorkflowId,
+    superviserWorkflowId,
+    status: "running",
+    attemptCount: 1,
+    workflowPatchCount: 0,
+    policy: input.policy,
+    incidents: [],
+    remediations: [],
   };
 }
 
@@ -1904,7 +1990,45 @@ async function runWorkflowInternal(
           : "workingDirectory must be a non-empty path when provided",
     });
   }
-  const loaded = await loadWorkflowFromDisk(workflowName, options);
+  const isFreshRootStart =
+    options.resumeSessionId === undefined &&
+    options.rerunFromSessionId === undefined;
+  let preloadedForBundlePath: WorkflowSessionState | undefined;
+  if (options.resumeSessionId !== undefined) {
+    const pre = await loadSession(options.resumeSessionId, options);
+    if (!pre.ok) {
+      return err({ exitCode: 1, message: pre.error.message });
+    }
+    if (pre.value.workflowName !== workflowName) {
+      return err({
+        exitCode: 1,
+        message: "session workflow does not match command workflow",
+      });
+    }
+    preloadedForBundlePath = pre.value;
+  } else if (options.rerunFromSessionId !== undefined) {
+    const pre = await loadSession(options.rerunFromSessionId, options);
+    if (!pre.ok) {
+      return err({ exitCode: 1, message: pre.error.message });
+    }
+    if (pre.value.workflowName !== workflowName) {
+      return err({
+        exitCode: 1,
+        message: "source session workflow does not match command workflow",
+      });
+    }
+    preloadedForBundlePath = pre.value;
+  }
+  const bundlePathOverrideFromSession =
+    preloadedForBundlePath?.supervision?.mutableWorkflowDir;
+  const firstLoadOptions: WorkflowRunOptions = {
+    ...options,
+    ...(options.workflowBundleDirectoryOverride === undefined &&
+    bundlePathOverrideFromSession !== undefined
+      ? { workflowBundleDirectoryOverride: bundlePathOverrideFromSession }
+      : {}),
+  };
+  let loaded = await loadWorkflowFromDisk(workflowName, firstLoadOptions);
   if (!loaded.ok) {
     return err({
       exitCode:
@@ -1916,9 +2040,61 @@ async function runWorkflowInternal(
     });
   }
 
+  let precomputedSupervision: SupervisionRunState | undefined;
+  if (isFreshRootStart && options.autoImprove !== undefined) {
+    const policy = options.autoImprove;
+    if (policy.enabled !== true) {
+      return err({
+        exitCode: 2,
+        message: "autoImprove.enabled must be true when autoImprove is set",
+      });
+    }
+    const initial = createInitialSupervisionRunState({
+      policy,
+      targetWorkflowId: loaded.value.bundle.workflow.workflowId,
+    });
+    const roots = resolveEffectiveRoots(options);
+    const workspace = await createExecutionCopyMutableWorkspace({
+      workflowId: loaded.value.bundle.workflow.workflowId,
+      sourceWorkflowDir: loaded.value.workflowDirectory,
+      artifactRoot: roots.artifactRoot,
+      supervisionRunId: initial.supervisionRunId,
+      mutationMode: policy.workflowMutationMode,
+    });
+    if (!workspace.ok) {
+      return err({
+        exitCode: 1,
+        message: `supervision workspace: ${workspace.error.message}`,
+      });
+    }
+    precomputedSupervision = {
+      ...initial,
+      mutableWorkflowDir: workspace.value.mutableWorkflowDir,
+    };
+    if (workspace.value.mutationMode === "execution-copy") {
+      const reloaded = await loadWorkflowFromDisk(workflowName, {
+        ...options,
+        workflowBundleDirectoryOverride: workspace.value.mutableWorkflowDir,
+      });
+      if (!reloaded.ok) {
+        return err({
+          exitCode:
+            reloaded.error.code === "VALIDATION" ||
+            reloaded.error.code === "INVALID_WORKFLOW_NAME"
+              ? 2
+              : 1,
+          message: reloaded.error.message,
+        });
+      }
+      loaded = reloaded;
+    }
+  }
+
   const runtimeVariables = options.runtimeVariables ?? {};
   const workflow = loaded.value.bundle.workflow;
   const stepAddressedExecution = workflow.steps !== undefined;
+  /** Noun for the execution key (`nodeId` queue item): step id or legacy node id. */
+  const executionTargetNoun = stepAddressedExecution ? "step" : "node";
   const nodeMap = loaded.value.bundle.nodePayloads;
   const workflowNodes = new Map(
     workflow.nodes.map((entry) => [entry.id, entry]),
@@ -1959,28 +2135,35 @@ async function runWorkflowInternal(
 
   let session: WorkflowSessionState;
   if (options.rerunFromSessionId !== undefined) {
+    if (preloadedForBundlePath === undefined) {
+      return err({
+        exitCode: 1,
+        message: "internal: rerun source session missing",
+      });
+    }
+    const source = preloadedForBundlePath;
     const rerunTargetLabel = workflow.steps === undefined ? "node" : "step";
-    if (options.rerunFromNodeId === undefined) {
+    /** Step id wins when both are set (reusable-node bundles may supply both). */
+    const rerunTargetId =
+      options.rerunFromStepId ?? options.rerunFromNodeId;
+    if (rerunTargetId === undefined) {
       return err({
         exitCode: 1,
         message: `rerun ${rerunTargetLabel} id is required when rerunFromSessionId is set`,
       });
     }
-    if (!workflowNodes.has(options.rerunFromNodeId)) {
+    const stepIdSet =
+      workflow.steps === undefined
+        ? undefined
+        : new Set(workflow.steps.map((st) => st.id));
+    const rerunIdKnown =
+      stepIdSet === undefined
+        ? workflowNodes.has(rerunTargetId)
+        : stepIdSet.has(rerunTargetId);
+    if (!rerunIdKnown) {
       return err({
         exitCode: 1,
-        message: `unknown rerun ${rerunTargetLabel} '${options.rerunFromNodeId}'`,
-      });
-    }
-
-    const source = await loadSession(options.rerunFromSessionId, options);
-    if (!source.ok) {
-      return err({ exitCode: 1, message: source.error.message });
-    }
-    if (source.value.workflowName !== workflowName) {
-      return err({
-        exitCode: 1,
-        message: "source session workflow does not match command workflow",
+        message: `unknown rerun ${rerunTargetLabel} '${rerunTargetId}'`,
       });
     }
 
@@ -1988,28 +2171,71 @@ async function runWorkflowInternal(
       sessionId: createSessionId({ workflowId: workflow.workflowId }),
       workflowName,
       workflowId: workflow.workflowId,
-      initialNodeId: options.rerunFromNodeId,
+      initialNodeId: rerunTargetId,
       runtimeVariables: {
-        ...source.value.runtimeVariables,
+        ...source.runtimeVariables,
         ...runtimeVariables,
       },
     });
+    // Supervision outer-loop reruns mint a new session id but the target attempt
+    // continues: preserve per-node execution indices so `ScenarioNodeAdapter` (and
+    // similar sequence semantics) can advance on the next attempt.
+    if (options.supervisionLoopExecution === true) {
+      session = {
+        ...session,
+        nodeExecutionCounter: source.nodeExecutionCounter,
+        nodeExecutionCounts: { ...source.nodeExecutionCounts },
+      };
+    }
   } else if (options.resumeSessionId !== undefined) {
-    const existing = await loadSession(options.resumeSessionId, options);
-    if (!existing.ok) {
-      return err({ exitCode: 1, message: existing.error.message });
+    if (preloadedForBundlePath === undefined) {
+      return err({ exitCode: 1, message: "internal: resume session missing" });
     }
-    if (existing.value.workflowName !== workflowName) {
-      return err({
-        exitCode: 1,
-        message: "session workflow does not match command workflow",
-      });
+    const existing = preloadedForBundlePath;
+    session = cloneSession(existing);
+    if (options.autoImprove !== undefined) {
+      const policy = options.autoImprove;
+      if (policy.enabled !== true) {
+        return err(
+          workflowRunFailure(
+            2,
+            "autoImprove.enabled must be true when autoImprove is set",
+            existing,
+          ),
+        );
+      }
+      if (session.supervision === undefined) {
+        return err(
+          workflowRunFailure(
+            2,
+            "autoImprove on resume requires supervision state on the session (start with workflow run --auto-improve, or omit --auto-improve when resuming a non-supervised session)",
+            existing,
+          ),
+        );
+      }
+      const s = session.supervision;
+      session = {
+        ...session,
+        supervision: {
+          ...s,
+          policy,
+          incidents: [...s.incidents],
+          ...(s.remediations === undefined
+            ? {}
+            : { remediations: [...s.remediations] }),
+        },
+      };
     }
-    session = cloneSession(existing.value);
     if (session.status === "completed") {
+      if (options.autoImprove !== undefined) {
+        await saveSession(session, options);
+      }
       return ok({ session, exitCode: 0 });
     }
     if ((session.activeUserActions?.length ?? 0) > 0) {
+      if (options.autoImprove !== undefined) {
+        await saveSession(session, options);
+      }
       return ok({ session, exitCode: 4 });
     }
     session = {
@@ -2027,6 +2253,49 @@ async function runWorkflowInternal(
       initialNodeId: workflow.managerNodeId,
       runtimeVariables,
     });
+  }
+
+  if (
+    options.autoImprove !== undefined &&
+    options.resumeSessionId === undefined
+  ) {
+    const policy = options.autoImprove;
+    if (policy.enabled !== true) {
+      return err({
+        exitCode: 2,
+        message: "autoImprove.enabled must be true when autoImprove is set",
+      });
+    }
+    let nextSupervision: SupervisionRunState;
+    if (precomputedSupervision !== undefined) {
+      nextSupervision = precomputedSupervision;
+    } else if (preloadedForBundlePath?.supervision !== undefined) {
+      const s = preloadedForBundlePath.supervision;
+      nextSupervision = {
+        ...s,
+        policy,
+        incidents: [...s.incidents],
+        ...(s.remediations === undefined
+          ? {}
+          : { remediations: [...s.remediations] }),
+      };
+    } else if (options.rerunFromSessionId !== undefined) {
+      return err({
+        exitCode: 2,
+        message:
+          "autoImprove on rerun requires supervision state on the source session (for example, use workflow run with --auto-improve first, then rerun with the same policy)",
+      });
+    } else {
+      return err({
+        exitCode: 1,
+        message:
+          "internal: auto-improve supervision was not precomputed; report this as a bug",
+      });
+    }
+    session = {
+      ...session,
+      supervision: nextSupervision,
+    };
   }
 
   if (options.resumeSessionId === undefined) {
@@ -2083,11 +2352,13 @@ async function runWorkflowInternal(
         return ok({ session: persisted.value, exitCode: 0 });
       }
       const exitCode = persisted.value.status === "cancelled" ? 130 : 1;
-      return err({
-        exitCode,
-        message:
+      return err(
+        workflowRunFailure(
+          exitCode,
           persisted.value.lastError ?? `session ${persisted.value.status}`,
-      });
+          persisted.value,
+        ),
+      );
     }
     if (await cancellationProbe.isCancelled(session.sessionId)) {
       const cancelled: WorkflowSessionState = {
@@ -2100,10 +2371,9 @@ async function runWorkflowInternal(
         lastError: "cancelled by external request",
       };
       await saveSession(cancelled, options);
-      return err({
-        exitCode: 130,
-        message: cancelled.lastError ?? "cancelled",
-      });
+      return err(
+        workflowRunFailure(130, cancelled.lastError ?? "cancelled", cancelled),
+      );
     }
 
     if (maxSteps !== undefined && session.nodeExecutionCounter >= maxSteps) {
@@ -2140,14 +2410,16 @@ async function runWorkflowInternal(
           : `missing node definition for '${nodeId}'`,
       };
       await saveSession(failed, options);
-      return err({
-        exitCode: 1,
-        message:
+      return err(
+        workflowRunFailure(
+          1,
           failed.lastError ??
-          (stepAddressedExecution
-            ? "missing step definition"
-            : "missing node definition"),
-      });
+            (stepAddressedExecution
+              ? "missing step definition"
+              : "missing node definition"),
+          failed,
+        ),
+      );
     }
     const pendingOptionalDecision = findPendingOptionalNodeDecision(
       session,
@@ -2219,10 +2491,16 @@ async function runWorkflowInternal(
           : `node '${nodeId}' is missing executable node fields`,
       };
       await saveSession(failed, options);
-      return err({
-        exitCode: 1,
-        message: failed.lastError ?? "invalid agent node payload",
-      });
+      return err(
+        workflowRunFailure(
+          1,
+          failed.lastError ??
+            (stepAddressedExecution
+              ? "invalid step execution payload"
+              : "invalid node execution payload"),
+          failed,
+        ),
+      );
     }
 
     let restartAttempt = 0;
@@ -2281,11 +2559,13 @@ async function runWorkflowInternal(
           lastError: upstreamInputsResult.error,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message:
+        return err(
+          workflowRunFailure(
+            1,
             failed.lastError ?? "upstream communication resolution failed",
-        });
+            failed,
+          ),
+        );
       }
       const upstreamInputs = upstreamInputsResult.value;
       const upstreamBindingInputs = upstreamInputs.map((entry) => ({
@@ -2355,13 +2635,16 @@ async function runWorkflowInternal(
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `input assembly failed at '${nodeId}': ${message}`,
+          lastError: `input assembly failed for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 3,
-          message: failed.lastError ?? "input assembly failed",
-        });
+        return err(
+          workflowRunFailure(
+            3,
+            failed.lastError ?? "input assembly failed",
+            failed,
+          ),
+        );
       }
       if (executionMailbox === undefined) {
         const failed: WorkflowSessionState = {
@@ -2370,13 +2653,16 @@ async function runWorkflowInternal(
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `input assembly failed at '${nodeId}': execution mailbox was not created`,
+          lastError: `input assembly failed for ${executionTargetNoun} '${nodeId}': execution mailbox was not created`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 3,
-          message: failed.lastError ?? "execution mailbox creation failed",
-        });
+        return err(
+          workflowRunFailure(
+            3,
+            failed.lastError ?? "execution mailbox creation failed",
+            failed,
+          ),
+        );
       }
 
       try {
@@ -2392,13 +2678,16 @@ async function runWorkflowInternal(
           status: "failed",
           currentNodeId: nodeId,
           endedAt: nowIso(),
-          lastError: `failed to persist execution mailbox at '${nodeId}': ${message}`,
+          lastError: `failed to persist execution mailbox for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message: failed.lastError ?? "execution mailbox persistence failed",
-        });
+        return err(
+          workflowRunFailure(
+            1,
+            failed.lastError ?? "execution mailbox persistence failed",
+            failed,
+          ),
+        );
       }
 
       const baseInputPayload = {
@@ -2766,10 +3055,16 @@ async function runWorkflowInternal(
             : `node '${nodeId}' is missing agent execution fields`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message: failed.lastError ?? "invalid node execution payload",
-        });
+        return err(
+          workflowRunFailure(
+            1,
+            failed.lastError ??
+              (stepAddressedExecution
+                ? "invalid step execution payload"
+                : "invalid node execution payload"),
+            failed,
+          ),
+        );
       }
 
       const backendSessionSelection =
@@ -2918,7 +3213,7 @@ async function runWorkflowInternal(
             status: "failed",
             currentNodeId: nodeId,
             endedAt: startedAt,
-            lastError: `failed to start manager session at '${nodeId}': ${message}`,
+            lastError: `failed to start manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
           };
           await saveSession(failed, options);
           return err({
@@ -3048,6 +3343,10 @@ async function runWorkflowInternal(
                     validationErrors: retryValidationFeedback,
                     publication: buildOutputPublicationPolicy(),
                   };
+            const supervisionStall = buildSupervisionStallWatch(
+              session,
+              options,
+            );
             const execution =
               agentNodePayload !== null
                 ? await executeAdapterWithTimeout(
@@ -3094,6 +3393,7 @@ async function runWorkflowInternal(
                         : { output: adapterOutputContract }),
                     },
                     timeoutMs,
+                    supervisionStall,
                   )
                 : await executeNativeNodeWithTimeout({
                     workflowDirectory: loaded.value.workflowDirectory,
@@ -3116,6 +3416,9 @@ async function runWorkflowInternal(
                       : { chatReplyDispatcher: options.eventReplyDispatcher }),
                     ...(options.env === undefined ? {} : { env: options.env }),
                     timeoutMs,
+                    ...(supervisionStall === undefined
+                      ? {}
+                      : { supervisionStall }),
                   });
 
             if (!execution.ok) {
@@ -3170,7 +3473,11 @@ async function runWorkflowInternal(
                 promptText: effectivePromptText,
                 completionPassed: false,
                 when: {},
-                payload: {},
+                payload:
+                  execution.error.code === "provider_error" &&
+                  execution.error.message.length > 0
+                    ? { providerErrorMessage: execution.error.message }
+                    : {},
                 error: execution.error.code,
               };
               break;
@@ -3336,6 +3643,9 @@ async function runWorkflowInternal(
             nodeExecId,
             processLogs,
             at: endedAt,
+            ...(stepExecutionAddress.stepId === undefined
+              ? {}
+              : { executionLogTarget: "step" as const }),
           },
           options,
         );
@@ -3470,7 +3780,7 @@ async function runWorkflowInternal(
               communicationCounter: session.communicationCounter,
               communications: session.communications,
               nodeBackendSessions: nextNodeBackendSessions,
-              lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+              lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
             };
             await saveSession(failed, options);
             return err({
@@ -3494,7 +3804,7 @@ async function runWorkflowInternal(
             communicationCounter: session.communicationCounter,
             communications: session.communications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `invalid manager control at '${nodeId}': ${message}`,
+            lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': ${message}`,
           };
           await saveSession(failed, options);
           return err({
@@ -3531,7 +3841,7 @@ async function runWorkflowInternal(
                   communicationCounter: session.communicationCounter,
                   communications: session.communications,
                   nodeBackendSessions: nextNodeBackendSessions,
-                  lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+                  lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
                 };
                 await saveSession(failed, options);
                 return err({
@@ -3552,7 +3862,7 @@ async function runWorkflowInternal(
                 communicationCounter: session.communicationCounter,
                 communications: session.communications,
                 nodeBackendSessions: nextNodeBackendSessions,
-                lastError: `invalid manager control at '${nodeId}': manager execution cannot mix GraphQL manager messages with payload managerControl`,
+                lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': manager execution cannot mix GraphQL manager messages with payload managerControl`,
               };
               await saveSession(failed, options);
               return err({
@@ -3582,7 +3892,7 @@ async function runWorkflowInternal(
                 communicationCounter: session.communicationCounter,
                 communications: session.communications,
                 nodeBackendSessions: nextNodeBackendSessions,
-                lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+                lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
               };
               await saveSession(failed, options);
               return err({
@@ -3607,7 +3917,7 @@ async function runWorkflowInternal(
               communicationCounter: session.communicationCounter,
               communications: session.communications,
               nodeBackendSessions: nextNodeBackendSessions,
-              lastError: `invalid manager control at '${nodeId}': ${message}`,
+              lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': ${message}`,
             };
             await saveSession(failed, options);
             return err({
@@ -3642,7 +3952,7 @@ async function runWorkflowInternal(
               communicationCounter: session.communicationCounter,
               communications: session.communications,
               nodeBackendSessions: nextNodeBackendSessions,
-              lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+              lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
             };
             await saveSession(failed, options);
             return err({
@@ -3662,7 +3972,7 @@ async function runWorkflowInternal(
             communicationCounter: session.communicationCounter,
             communications: session.communications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `invalid manager control at '${nodeId}': only the root manager can start sub-workflows`,
+            lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': only the root manager can start sub-workflows`,
           };
           await saveSession(failed, options);
           return err({
@@ -3696,7 +4006,7 @@ async function runWorkflowInternal(
               communicationCounter: session.communicationCounter,
               communications: session.communications,
               nodeBackendSessions: nextNodeBackendSessions,
-              lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+              lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
             };
             await saveSession(failed, options);
             return err({
@@ -3716,7 +4026,7 @@ async function runWorkflowInternal(
             communicationCounter: session.communicationCounter,
             communications: session.communications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `invalid manager control at '${nodeId}': only a subworkflow-manager can dispatch child input nodes`,
+            lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': only a subworkflow-manager can dispatch child input ${stepAddressedExecution ? "steps" : "nodes"}`,
           };
           await saveSession(failed, options);
           return err({
@@ -3755,7 +4065,7 @@ async function runWorkflowInternal(
             communicationCounter: session.communicationCounter,
             communications: session.communications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+            lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
           };
           await saveSession(failed, options);
           return err({
@@ -3811,13 +4121,16 @@ async function runWorkflowInternal(
           communicationCounter: session.communicationCounter,
           communications: session.communications,
           nodeBackendSessions: nextNodeBackendSessions,
-          lastError: `failed to finalize manager session at '${nodeId}': ${message}`,
+          lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message: failed.lastError ?? "failed to finalize manager session",
-        });
+        return err(
+          workflowRunFailure(
+            1,
+            failed.lastError ?? "failed to finalize manager session",
+            failed,
+          ),
+        );
       }
       const edges = outgoingEdges.get(nodeId) ?? [];
       const matched = edges.filter((edge) => evaluateEdge(edge, outputPayload));
@@ -3870,7 +4183,7 @@ async function runWorkflowInternal(
             ],
             loopIterationCounts: updatedLoopIterationCounts,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `loop transition '${transition}' has no matching edge at '${nodeId}'`,
+            lastError: `loop transition '${transition}' has no matching edge for ${executionTargetNoun} '${nodeId}'`,
           };
           await saveSession(failed, options);
           return err({
@@ -4051,12 +4364,13 @@ async function runWorkflowInternal(
                 communicationCounter: currentCommunicationCounter,
                 communications: currentCommunications,
                 nodeBackendSessions: nextNodeBackendSessions,
-                lastError: `node timeout at '${nodeId}': timeout policy jump target '${jumpId}' is not a known workflow node`,
+                lastError: `${executionTargetNoun} timeout at '${nodeId}': timeout policy jump target '${jumpId}' is not a known workflow ${executionTargetNoun}`,
               };
               await saveSession(failed, options);
               return err({
                 exitCode: 6,
-                message: failed.lastError ?? "node timeout",
+                message:
+                  failed.lastError ?? `${executionTargetNoun} timeout`,
               });
             }
             session = {
@@ -4070,7 +4384,7 @@ async function runWorkflowInternal(
               communicationCounter: currentCommunicationCounter,
               communications: currentCommunications,
               nodeBackendSessions: nextNodeBackendSessions,
-              lastError: `node timeout at '${nodeId}', jumping to '${jumpId}'`,
+              lastError: `${executionTargetNoun} timeout at '${nodeId}', jumping to '${jumpId}'`,
             };
             await saveSession(session, options);
             break;
@@ -4112,7 +4426,7 @@ async function runWorkflowInternal(
             communicationCounter: currentCommunicationCounter,
             communications: currentCommunications,
             nodeBackendSessions: nextNodeBackendSessions,
-            lastError: `stuck detected at '${nodeId}', restarting attempt ${restartAttempt + 1}`,
+            lastError: `stuck detected for ${executionTargetNoun} '${nodeId}', restarting attempt ${restartAttempt + 1}`,
           };
           await saveSession(session, options);
 
@@ -4136,22 +4450,38 @@ async function runWorkflowInternal(
           communicationCounter: currentCommunicationCounter,
           communications: currentCommunications,
           nodeBackendSessions: nextNodeBackendSessions,
-          lastError: `node timeout at '${nodeId}'`,
+          lastError: `${executionTargetNoun} timeout at '${nodeId}'`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 6,
-          message: failed.lastError ?? "node timeout",
-        });
+        return err(
+          workflowRunFailure(
+            6,
+            failed.lastError ?? `${executionTargetNoun} timeout`,
+            failed,
+          ),
+        );
       }
 
       if (nodeStatus === "failed") {
-        const failureReason =
-          outputPayload["error"] === "invalid_output"
-            ? `invalid adapter output at '${nodeId}'`
-            : outputValidationErrors.length > 0
-              ? `output validation failed at '${nodeId}'`
-              : `adapter failure at '${nodeId}'`;
+        const providerErrMessage = (() => {
+          const p = outputPayload["payload"];
+          if (typeof p !== "object" || p === null) {
+            return undefined;
+          }
+          const m = (p as Readonly<Record<string, unknown>>)[
+            "providerErrorMessage"
+          ];
+          return typeof m === "string" && m.length > 0 ? m : undefined;
+        })();
+        const failureReason: string =
+          providerErrMessage !== undefined &&
+          isSupervisionStallLastError(providerErrMessage)
+            ? providerErrMessage
+            : outputPayload["error"] === "invalid_output"
+              ? `invalid adapter output for ${executionTargetNoun} '${nodeId}'`
+              : outputValidationErrors.length > 0
+                ? `output validation failed for ${executionTargetNoun} '${nodeId}'`
+                : `adapter failure for ${executionTargetNoun} '${nodeId}'`;
         const failed: WorkflowSessionState = {
           ...session,
           queue,
@@ -4167,10 +4497,9 @@ async function runWorkflowInternal(
           lastError: failureReason,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 5,
-          message: failed.lastError ?? "adapter failure",
-        });
+        return err(
+          workflowRunFailure(5, failed.lastError ?? "adapter failure", failed),
+        );
       }
 
       const completion = evaluateCompletion({
@@ -4193,14 +4522,17 @@ async function runWorkflowInternal(
           nodeBackendSessions: nextNodeBackendSessions,
           lastError:
             completion.reason === null
-              ? `completion condition not met at '${nodeId}'`
-              : `completion condition not met at '${nodeId}': ${completion.reason}`,
+              ? `completion condition not met for ${executionTargetNoun} '${nodeId}'`
+              : `completion condition not met for ${executionTargetNoun} '${nodeId}': ${completion.reason}`,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 3,
-          message: failed.lastError ?? "completion condition not met",
-        });
+        return err(
+          workflowRunFailure(
+            3,
+            failed.lastError ?? "completion condition not met",
+            failed,
+          ),
+        );
       }
       const consumedCommunicationsResult = await markCommunicationsConsumed(
         { ...session, communications: currentCommunications },
@@ -4225,10 +4557,13 @@ async function runWorkflowInternal(
           lastError: consumedCommunicationsResult.error,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message: failed.lastError ?? "mailbox consumption persistence failed",
-        });
+        return err(
+          workflowRunFailure(
+            1,
+            failed.lastError ?? "mailbox consumption persistence failed",
+            failed,
+          ),
+        );
       }
       currentCommunications = consumedCommunicationsResult.value;
       const transitionCommunications = await Promise.all(
@@ -4314,10 +4649,13 @@ async function runWorkflowInternal(
           lastError: workflowCallResult.error,
         };
         await saveSession(failed, options);
-        return err({
-          exitCode: 1,
-          message: failed.lastError ?? "workflow-call execution failed",
-        });
+        return err(
+          workflowRunFailure(
+            1,
+            failed.lastError ?? "workflow-call execution failed",
+            failed,
+          ),
+        );
       }
       currentCommunications = workflowCallResult.value.communications;
       currentCommunicationCounter =
@@ -4655,12 +4993,14 @@ async function runWorkflowInternal(
       return ok({ session: beforeComplete.value, exitCode: 0 });
     }
     const exitCode = beforeComplete.value.status === "cancelled" ? 130 : 1;
-    return err({
-      exitCode,
-      message:
+    return err(
+      workflowRunFailure(
+        exitCode,
         beforeComplete.value.lastError ??
-        `session ${beforeComplete.value.status}`,
-    });
+          `session ${beforeComplete.value.status}`,
+        beforeComplete.value,
+      ),
+    );
   }
 
   let completed: WorkflowSessionState = {
@@ -4675,12 +5015,16 @@ async function runWorkflowInternal(
     completed,
   );
   if (publishedResultExecution !== undefined) {
+    const publishedTargetId =
+      stepAddressedExecution && publishedResultExecution.stepId !== undefined
+        ? publishedResultExecution.stepId
+        : publishedResultExecution.nodeId;
     const outputPayload = await readOutputPayloadArtifact(
       publishedResultExecution.artifactDir,
     );
     if (!outputPayload.ok) {
       const publicationFailureMessage =
-        `failed to publish selected external output for '${publishedResultExecution.nodeId}' ` +
+        `failed to publish selected external output for ${executionTargetNoun} '${publishedTargetId}' ` +
         `(${publishedResultExecution.nodeExecId}): ${outputPayload.error}`;
       return await failTerminalSession(
         completed,
@@ -4707,7 +5051,7 @@ async function runWorkflowInternal(
           ? error.message
           : "unknown external output publication failure";
       const publicationFailureMessage =
-        `failed to persist external output publication for '${publishedResultExecution.nodeId}' ` +
+        `failed to persist external output publication for ${executionTargetNoun} '${publishedTargetId}' ` +
         `(${publishedResultExecution.nodeExecId}): ${message}`;
       return await failTerminalSession(
         completed,
@@ -4730,9 +5074,279 @@ async function runWorkflowInternal(
     options,
   );
   if (!persistedCompleted.ok) {
-    return err({ exitCode: 1, message: persistedCompleted.error });
+    return err(workflowRunFailure(1, persistedCompleted.error, completed));
   }
   return ok({ session: completed, exitCode: 0 });
+}
+
+/**
+ * Outermost auto-improve cycle: re-run the target after terminal failure until success or
+ * {@link AutoImprovePolicy.maxSupervisedAttempts}, recording incidents and remediations.
+ * In-step stall is detected from persisted `sessions.updated_at` while a step executes
+ * (`executeAdapterWithTimeout` + `buildSupervisionStallWatch`). A nested `superviserWorkflowId`
+ * workflow is still a follow-up.
+ */
+async function runAutoImproveLoop(
+  workflowName: string,
+  options: WorkflowRunOptions,
+  adapter: NodeAdapter | undefined,
+  guards: EngineExecutionGuards | undefined,
+): Promise<Result<WorkflowRunResult, WorkflowRunFailure>> {
+  const policy = options.autoImprove;
+  if (policy === undefined) {
+    return err(workflowRunFailure(1, "internal: autoImprove policy missing"));
+  }
+  const innerBase: WorkflowRunOptions = {
+    ...options,
+    supervisionLoopExecution: true,
+  };
+  let current: WorkflowRunOptions = innerBase;
+
+  for (;;) {
+    const result = await runWorkflowInternal(
+      workflowName,
+      current,
+      adapter,
+      guards,
+    );
+
+    if (result.ok) {
+      const s = result.value.session;
+      if (s.status !== "completed" || result.value.exitCode !== 0) {
+        if (s.supervision !== undefined) {
+          const persisted = await loadSession(s.sessionId, options);
+          if (persisted.ok) {
+            return ok({ ...result.value, session: persisted.value });
+          }
+        }
+        return result;
+      }
+      if (s.supervision !== undefined) {
+        const next: WorkflowSessionState = {
+          ...s,
+          supervision: { ...s.supervision, status: "succeeded" },
+        };
+        const saved = await saveSession(next, options);
+        if (!saved.ok) {
+          return err(workflowRunFailure(1, saved.error.message, next));
+        }
+        return ok({ session: next, exitCode: 0 });
+      }
+      return result;
+    }
+
+    const failure = result.error;
+    if (failure.sessionId === undefined) {
+      return result;
+    }
+    if (failure.exitCode === 130) {
+      return result;
+    }
+
+    const loaded = await loadSession(failure.sessionId, options);
+    if (!loaded.ok) {
+      return result;
+    }
+    const failedSession = loaded.value;
+    if (failedSession.supervision === undefined) {
+      return result;
+    }
+
+    const sup = failedSession.supervision;
+    if (sup.attemptCount >= policy.maxSupervisedAttempts) {
+      const t = nowIso();
+      const lastErr = failedSession.lastError;
+      const terminalIncident: SupervisionIncident = {
+        incidentId: `inc-${randomBytes(6).toString("hex")}`,
+        supervisedAttemptId: failedSession.sessionId,
+        category: isSupervisionStallLastError(lastErr) ? "stall" : "failure",
+        summary: lastErr ?? failure.message,
+        detectedAt: t,
+      };
+      const budgetIncident: SupervisionIncident = {
+        incidentId: `inc-${randomBytes(6).toString("hex")}`,
+        supervisedAttemptId: failedSession.sessionId,
+        category: "budget-exhausted",
+        summary: `max supervised attempts (${policy.maxSupervisedAttempts}) reached`,
+        detectedAt: t,
+      };
+      const remediation: SupervisionRemediationRecord = {
+        remediationId: `rem-${randomBytes(6).toString("hex")}`,
+        incidentId: budgetIncident.incidentId,
+        decidedAt: t,
+        action: "stop-supervision",
+        reason: "supervision attempt budget exhausted",
+      };
+      const nextSession: WorkflowSessionState = {
+        ...failedSession,
+        supervision: {
+          ...sup,
+          status: "stopped",
+          incidents: [...sup.incidents, terminalIncident, budgetIncident],
+          remediations: [...(sup.remediations ?? []), remediation],
+        },
+      };
+      const saved = await saveSession(nextSession, options);
+      if (!saved.ok) {
+        return err(workflowRunFailure(1, saved.error.message, nextSession));
+      }
+      return err(
+        workflowRunFailure(
+          1,
+          nextSession.lastError ?? failure.message,
+          nextSession,
+        ),
+      );
+    }
+
+    const t = nowIso();
+    const lastErr = failedSession.lastError;
+    const failIncident: SupervisionIncident = {
+      incidentId: `inc-${randomBytes(6).toString("hex")}`,
+      supervisedAttemptId: failedSession.sessionId,
+      category: isSupervisionStallLastError(lastErr) ? "stall" : "failure",
+      summary: lastErr ?? failure.message,
+      detectedAt: t,
+    };
+    const nextAttempt = sup.attemptCount + 1;
+
+    const loadOptsForTarget = mergeLoadOptionsForSessionMutableBundle(
+      options,
+      failedSession,
+    );
+    const wfForTarget = await loadWorkflowFromDisk(
+      workflowName,
+      loadOptsForTarget,
+    );
+    if (!wfForTarget.ok) {
+      return err(
+        workflowRunFailure(
+          2,
+          `supervision rerun: load workflow: ${wfForTarget.error.message}`,
+          failedSession,
+        ),
+      );
+    }
+    const remediationPlan = planSupervisionRemediation({
+      policy,
+      sup,
+      workflow: wfForTarget.value.bundle.workflow,
+      session: failedSession,
+      failIncident,
+    });
+
+    if (remediationPlan.kind === "stop-patch-budget") {
+      const tStop = nowIso();
+      const patchBudgetIncident: SupervisionIncident = {
+        incidentId: `inc-${randomBytes(6).toString("hex")}`,
+        supervisedAttemptId: failedSession.sessionId,
+        category: "budget-exhausted",
+        summary: `max workflow patches (${policy.maxWorkflowPatches}) reached; repeated supervised incident: ${lastErr ?? failure.message}`,
+        detectedAt: tStop,
+      };
+      const patchStopRemediation: SupervisionRemediationRecord = {
+        remediationId: `rem-${randomBytes(6).toString("hex")}`,
+        incidentId: patchBudgetIncident.incidentId,
+        decidedAt: tStop,
+        action: "stop-supervision",
+        reason: "workflow patch budget exhausted",
+      };
+      const nextSession: WorkflowSessionState = {
+        ...failedSession,
+        supervision: {
+          ...sup,
+          status: "stopped",
+          incidents: [...sup.incidents, failIncident, patchBudgetIncident],
+          remediations: [...(sup.remediations ?? []), patchStopRemediation],
+        },
+      };
+      const savedP = await saveSession(nextSession, options);
+      if (!savedP.ok) {
+        return err(workflowRunFailure(1, savedP.error.message, nextSession));
+      }
+      return err(
+        workflowRunFailure(
+          1,
+          nextSession.lastError ?? failure.message,
+          nextSession,
+        ),
+      );
+    }
+
+    let nextPatchCount = sup.workflowPatchCount;
+    if (remediationPlan.kind === "patch-then-rerun") {
+      const roots = resolveEffectiveRoots(current);
+      if (sup.mutableWorkflowDir === undefined) {
+        return err(
+          workflowRunFailure(
+            2,
+            "supervision: mutable workflow directory missing; cannot record patch revision",
+            failedSession,
+          ),
+        );
+      }
+      const patchRec = await recordWorkflowPatchRevision({
+        artifactRoot: roots.artifactRoot,
+        supervisionRunId: sup.supervisionRunId,
+        mutableWorkflowDir: sup.mutableWorkflowDir,
+        reason: remediationPlan.patchRecordReason,
+        patchedByStepId: getEngineSupervisionPatcherId(),
+      });
+      if (!patchRec.ok) {
+        return err(
+          workflowRunFailure(
+            2,
+            `supervision: ${patchRec.error.message}`,
+            failedSession,
+          ),
+        );
+      }
+      nextPatchCount += 1;
+    }
+
+    const rem: SupervisionRemediationRecord = {
+      remediationId: `rem-${randomBytes(6).toString("hex")}`,
+      incidentId: failIncident.incidentId,
+      decidedAt: t,
+      action:
+        remediationPlan.kind === "patch-then-rerun"
+          ? "patch-workflow"
+          : remediationPlan.remediationAction,
+      reason:
+        remediationPlan.kind === "patch-then-rerun"
+          ? remediationPlan.patchRecordReason
+          : "automatic target workflow rerun after terminal failure or stall",
+      ...(remediationPlan.targetStepId === undefined
+        ? {}
+        : { targetStepId: remediationPlan.targetStepId }),
+    };
+    const withUpdates: WorkflowSessionState = {
+      ...failedSession,
+      supervision: {
+        ...sup,
+        attemptCount: nextAttempt,
+        workflowPatchCount: nextPatchCount,
+        incidents: [...sup.incidents, failIncident],
+        remediations: [...(sup.remediations ?? []), rem],
+        ...(sup.policy === undefined ? { policy } : {}),
+      },
+    };
+    const saved2 = await saveSession(withUpdates, options);
+    if (!saved2.ok) {
+      return err(workflowRunFailure(1, saved2.error.message, withUpdates));
+    }
+
+    current = {
+      ...innerBase,
+      autoImprove: policy,
+      supervisionLoopExecution: true,
+      rerunFromSessionId: withUpdates.sessionId,
+      rerunFromNodeId: remediationPlan.rerunFromNodeId,
+      ...(remediationPlan.targetStepId === undefined
+        ? {}
+        : { rerunFromStepId: remediationPlan.targetStepId }),
+    };
+  }
 }
 
 export async function runWorkflow(
@@ -4741,5 +5355,17 @@ export async function runWorkflow(
   adapter?: NodeAdapter,
   guards?: EngineExecutionGuards,
 ): Promise<Result<WorkflowRunResult, WorkflowRunFailure>> {
-  return runWorkflowInternal(workflowName, options, adapter, guards, []);
+  if (options.autoImprove === undefined) {
+    return runWorkflowInternal(workflowName, options, adapter, guards, []);
+  }
+  if (options.supervisionLoopExecution === true) {
+    return runWorkflowInternal(workflowName, options, adapter, guards, []);
+  }
+  if (
+    options.resumeSessionId !== undefined ||
+    options.rerunFromSessionId !== undefined
+  ) {
+    return runWorkflowInternal(workflowName, options, adapter, guards, []);
+  }
+  return runAutoImproveLoop(workflowName, options, adapter, guards);
 }

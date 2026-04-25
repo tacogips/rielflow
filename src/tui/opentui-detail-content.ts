@@ -305,15 +305,20 @@ export async function buildHistoryDetailPaneState(input: {
     input.runtimeSessionView === undefined ||
     input.selectedNodeExecution === undefined
   ) {
+    const stepAddr = input.loadedWorkflow?.bundle.workflow.steps !== undefined;
     return {
       summaryHeaderText:
         input.historyViewMode === "workflow"
-          ? "Select a node execution."
-          : "Select a workflow node.",
+          ? stepAddr
+            ? "Select a step execution."
+            : "Select a node execution."
+          : stepAddr
+            ? "Select a workflow step."
+            : "Select a workflow node.",
       summaryHeaderVisible: true,
       summaryOptions: [
         {
-          name: "(no node)",
+          name: stepAddr ? "(no step)" : "(no node)",
           description: "",
           value: OPEN_TUI_EMPTY_SELECT_VALUE,
         },
@@ -339,6 +344,7 @@ export async function buildHistoryDetailPaneState(input: {
     execution: input.selectedNodeExecution,
     payload,
   });
+  const stepAddr = input.loadedWorkflow.bundle.workflow.steps !== undefined;
   return {
     summaryHeaderText: buildSummaryDetailHeaderText({
       session: input.runtimeSessionView.session,
@@ -350,8 +356,12 @@ export async function buildHistoryDetailPaneState(input: {
     summaryHeaderVisible: true,
     summaryOptions: buildSummaryJsonSelectOptions(
       agentSessionSelection === undefined
-        ? { bundle }
-        : { bundle, agentSessionSelection },
+        ? { bundle, stepAddressedAuthoring: stepAddr }
+        : {
+            bundle,
+            agentSessionSelection,
+            stepAddressedAuthoring: stepAddr,
+          },
     ),
     summaryVisible: true,
     textContent: "",

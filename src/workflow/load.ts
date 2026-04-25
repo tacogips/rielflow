@@ -29,6 +29,38 @@ import type {
   ValidationIssue,
 } from "./types";
 
+function resolveWorkflowBundleDirectory(
+  options: LoadOptions,
+  rootsWorkflowRoot: string,
+  workflowName: string,
+): string {
+  if (options.workflowBundleDirectoryOverride !== undefined) {
+    return path.resolve(
+      options.cwd ?? process.cwd(),
+      options.workflowBundleDirectoryOverride,
+    );
+  }
+  return path.join(rootsWorkflowRoot, workflowName);
+}
+
+/**
+ * When a session is tied to a supervision execution copy (or in-place) bundle path,
+ * load that directory instead of the workflow catalog path.
+ */
+export function mergeLoadOptionsForSessionMutableBundle(
+  options: LoadOptions,
+  session: { readonly supervision?: { readonly mutableWorkflowDir?: string } },
+): LoadOptions {
+  const dir = session.supervision?.mutableWorkflowDir;
+  if (dir === undefined) {
+    return options;
+  }
+  if (options.workflowBundleDirectoryOverride !== undefined) {
+    return options;
+  }
+  return { ...options, workflowBundleDirectoryOverride: dir };
+}
+
 export interface LoadedWorkflow {
   readonly workflowName: string;
   readonly workflowDirectory: string;
@@ -295,7 +327,11 @@ export async function loadWorkflowFromDisk(
   }
 
   const roots = resolveEffectiveRoots(options);
-  const workflowDirectory = path.join(roots.workflowRoot, workflowName);
+  const workflowDirectory = resolveWorkflowBundleDirectory(
+    options,
+    roots.workflowRoot,
+    workflowName,
+  );
 
   const workflowPath = path.join(workflowDirectory, "workflow.json");
 
@@ -464,12 +500,16 @@ export async function loadWorkflowByIdFromDisk(
   workflowId: string,
   options: LoadOptions = {},
 ): Promise<Result<LoadedWorkflow, LoadFailure>> {
-  const direct = await loadWorkflowFromDisk(workflowId, options);
+  // Callee resolution always walks the workflow root; never inherit a root run's
+  // execution-copy bundle directory.
+  const { workflowBundleDirectoryOverride: _bdo, ...discoveryOptions } =
+    options;
+  const direct = await loadWorkflowFromDisk(workflowId, discoveryOptions);
   if (direct.ok && direct.value.bundle.workflow.workflowId === workflowId) {
     return direct;
   }
 
-  const roots = resolveEffectiveRoots(options);
+  const roots = resolveEffectiveRoots(discoveryOptions);
   let directoryEntries: Awaited<ReturnType<typeof readdir>>;
   try {
     directoryEntries = await readdir(roots.workflowRoot, {
@@ -502,7 +542,7 @@ export async function loadWorkflowByIdFromDisk(
       continue;
     }
 
-    return await loadWorkflowFromDisk(entry.name, options);
+    return await loadWorkflowFromDisk(entry.name, discoveryOptions);
   }
 
   if (direct.ok) {
