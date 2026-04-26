@@ -562,17 +562,9 @@ function assertWorkflowExecutionScope(
 }
 
 function assertManagerIdentity(
-  input: Pick<SendManagerMessageInput, "managerNodeId" | "managerNodeExecId">,
+  input: Pick<SendManagerMessageInput, "managerNodeExecId">,
   scope: GraphqlManagerScope,
 ): void {
-  if (
-    input.managerNodeId !== undefined &&
-    input.managerNodeId !== scope.session.managerNodeId
-  ) {
-    throw new Error(
-      "managerNodeId does not match the authenticated manager session",
-    );
-  }
   if (
     input.managerNodeExecId !== undefined &&
     input.managerNodeExecId !== scope.session.managerNodeExecId
@@ -1064,7 +1056,7 @@ async function loadScopedCommunicationForManagerMutation(
     communication,
     loadedWorkflow.bundle.workflow,
     {
-      managerNodeId: scope.session.managerNodeId,
+      managerRuntimeId: scope.session.managerNodeId,
       managerKind: managerNodeRef?.kind,
     },
     "GraphQL manager mutation",

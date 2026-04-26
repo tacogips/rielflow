@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+  crossWorkflowDispatchesForExecutionMatch,
   crossWorkflowCallsFromSteps,
   effectiveWorkflowCalls,
-  workflowCallsForExecutionMatch,
+  type CrossWorkflowExecutionDispatch,
+  type EffectiveWorkflowCall,
 } from "./cross-workflow-from-steps";
-import type { WorkflowCallRef, WorkflowJson } from "./types";
+import type { WorkflowJson } from "./types";
 
 describe("crossWorkflowCallsFromSteps", () => {
   test("returns empty for undefined steps", () => {
@@ -50,85 +52,21 @@ describe("crossWorkflowCallsFromSteps", () => {
         callerStepId: "draft-write",
         resultNodeId: "apply-review",
         when: "need_review",
+        source: "step-transition",
       },
     ]);
   });
 });
 
 describe("effectiveWorkflowCalls", () => {
-  test("unions explicit workflowCalls with step-derived calls by id", () => {
-    const workflow: Pick<WorkflowJson, "workflowCalls" | "steps"> = {
-      workflowCalls: [
-        {
-          id: "manual",
-          workflowId: "w1",
-          callerNodeId: "s1",
-        },
-      ],
-      steps: [
-        {
-          id: "s2",
-          nodeId: "n2",
-          transitions: [
-            {
-              toStepId: "x",
-              toWorkflowId: "w2",
-              resumeStepId: "after",
-            },
-          ],
-        },
-      ],
-    };
-    const ids = effectiveWorkflowCalls(workflow)
-      .map((c) => c.id)
-      .sort();
-    expect(ids).toEqual(["__cw:s2", "manual"]);
+  test("legacy node-graph bundles expose no authored workflowCalls", () => {
+    const workflow = {};
+    expect(effectiveWorkflowCalls(workflow)).toEqual([]);
   });
 
-  test("explicit workflow call wins over derived call with the same id", () => {
-    const workflow: Pick<WorkflowJson, "workflowCalls" | "steps"> = {
-      workflowCalls: [
-        {
-          id: "__cw:s1",
-          workflowId: "override-target",
-          callerNodeId: "s1",
-          callerStepId: "s1",
-          resultNodeId: "done",
-        },
-      ],
-      steps: [
-        {
-          id: "s1",
-          nodeId: "n1",
-          transitions: [
-            {
-              toStepId: "callee",
-              toWorkflowId: "derived-target",
-              resumeStepId: "resume",
-            },
-          ],
-        },
-      ],
-    };
-    const effective = effectiveWorkflowCalls(workflow);
-    expect(effective).toHaveLength(1);
-    expect(effective[0]?.workflowId).toBe("override-target");
-    expect(effective[0]?.resultNodeId).toBe("done");
-  });
-
-  test("step-addressed graph uses only step-derived calls (ignores explicit workflowCalls)", () => {
-    const workflow: Pick<
-      WorkflowJson,
-      "entryStepId" | "workflowCalls" | "steps"
-    > = {
+  test("step-addressed graph uses only step-derived calls", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
       entryStepId: "s1",
-      workflowCalls: [
-        {
-          id: "should-be-ignored",
-          workflowId: "from-explicit",
-          callerNodeId: "s1",
-        },
-      ],
       steps: [
         {
           id: "s1",
@@ -147,91 +85,53 @@ describe("effectiveWorkflowCalls", () => {
     expect(effective).toHaveLength(1);
     expect(effective[0]?.id).toBe("__cw:s1");
     expect(effective[0]?.workflowId).toBe("callee");
+    expect(effective[0]?.source).toBe("step-transition");
   });
-});
 
-describe("workflowCallsForExecutionMatch", () => {
-  test("preserves explicit workflowCalls order, then appends non-colliding step-derived calls", () => {
-    const workflow: Pick<WorkflowJson, "workflowCalls" | "steps"> = {
-      workflowCalls: [
-        {
-          id: "ex-second",
-          workflowId: "w2",
-          callerNodeId: "s1",
-        },
-        {
-          id: "ex-first",
-          workflowId: "w1",
-          callerNodeId: "s1",
-        },
-      ],
+  test("labels only step-derived workflowCalls", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
+      entryStepId: "writer",
       steps: [
         {
-          id: "s1",
-          nodeId: "n1",
+          id: "writer",
+          nodeId: "writer-node",
           transitions: [
             {
-              toStepId: "callee",
-              toWorkflowId: "w3",
+              toStepId: "resume",
+              toWorkflowId: "legacy-target",
               resumeStepId: "resume",
             },
           ],
         },
       ],
     };
-    const match = (c: WorkflowCallRef) => c.callerNodeId === "s1";
-    expect(
-      workflowCallsForExecutionMatch(workflow, match).map((c) => c.id),
-    ).toEqual(["ex-second", "ex-first", "__cw:s1"]);
+    const effective = effectiveWorkflowCalls(workflow);
+    expect(effective).toEqual<readonly EffectiveWorkflowCall[]>([
+      {
+        id: "__cw:writer",
+        workflowId: "legacy-target",
+        callerNodeId: "writer",
+        callerStepId: "writer",
+        resultNodeId: "resume",
+        source: "step-transition",
+      },
+    ]);
   });
+});
 
-  test("does not append a step-derived call whose id is already taken by a matching explicit call", () => {
-    const workflow: Pick<WorkflowJson, "workflowCalls" | "steps"> = {
-      workflowCalls: [
-        {
-          id: "__cw:s1",
-          workflowId: "explicit-callee",
-          callerNodeId: "s1",
-          callerStepId: "s1",
-          resultNodeId: "resume-here",
-        },
-      ],
-      steps: [
-        {
-          id: "s1",
-          nodeId: "n1",
-          transitions: [
-            {
-              toStepId: "callee",
-              toWorkflowId: "derived-would-collide",
-              resumeStepId: "other",
-            },
-          ],
-        },
-      ],
-    };
-    const match = (c: WorkflowCallRef) =>
-      c.callerNodeId === "s1" && c.callerStepId === "s1";
-    const ids = workflowCallsForExecutionMatch(workflow, match).map(
-      (c) => c.id,
+describe("crossWorkflowDispatchesForExecutionMatch", () => {
+  test("legacy node-graph bundles expose no execution dispatches", () => {
+    const workflow = {};
+    const match = (dispatch: CrossWorkflowExecutionDispatch) =>
+      dispatch.callerNodeId === "s1";
+    expect(crossWorkflowDispatchesForExecutionMatch(workflow, match)).toEqual(
+      [],
     );
-    expect(ids).toEqual(["__cw:s1"]);
-    expect(workflowCallsForExecutionMatch(workflow, match)).toHaveLength(1);
   });
 
-  test("step-addressed graph ignores explicit workflowCalls for execution match", () => {
-    const workflow: Pick<
-      WorkflowJson,
-      "entryStepId" | "workflowCalls" | "steps"
-    > = {
+  test("step-addressed graph derives execution matches from step transitions", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
       entryStepId: "s1",
-      workflowCalls: [
-        {
-          id: "ex",
-          workflowId: "explicit-wf",
-          callerNodeId: "s1",
-        },
-      ],
       steps: [
         {
           id: "s1",
@@ -246,9 +146,24 @@ describe("workflowCallsForExecutionMatch", () => {
         },
       ],
     };
-    const match = (c: WorkflowCallRef) => c.callerNodeId === "s1";
-    expect(
-      workflowCallsForExecutionMatch(workflow, match).map((c) => c.workflowId),
-    ).toEqual(["derived-wf"]);
+    const match = (dispatch: CrossWorkflowExecutionDispatch) =>
+      dispatch.callerNodeId === "s1";
+    const dispatches = crossWorkflowDispatchesForExecutionMatch(
+      workflow,
+      match,
+    );
+    expect(dispatches.map((dispatch) => dispatch.workflowId)).toEqual([
+      "derived-wf",
+    ]);
+    expect(dispatches[0]?.source).toBe("step-transition");
+  });
+
+  test("does not dispatch legacy authored workflowCalls", () => {
+    const workflow = {};
+    const dispatches = crossWorkflowDispatchesForExecutionMatch(
+      workflow,
+      (dispatch) => dispatch.callerNodeId === "writer",
+    );
+    expect(dispatches).toEqual([]);
   });
 });

@@ -1,5 +1,11 @@
 import type { CommunicationRecord } from "./session";
-import type { NodeKind, NodeRole, WorkflowJson } from "./types";
+import {
+  getStructuralSubWorkflows,
+  resolveWorkflowManagerRuntimeId,
+  type NodeKind,
+  type NodeRole,
+  type WorkflowJson,
+} from "./types";
 
 export type ManagerControlActionType =
   | "planner-note"
@@ -50,7 +56,7 @@ export interface ParsedManagerControl {
 }
 
 export interface ManagerControlParseContext {
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerKind: NodeKind | undefined;
   readonly managerRole?: NodeRole;
 }
@@ -165,14 +171,19 @@ function dedupe(values: readonly string[]): readonly string[] {
   return values.filter((value, index, all) => all.indexOf(value) === index);
 }
 
-function findOwnedSubWorkflow(workflow: WorkflowJson, managerNodeId: string) {
-  return workflow.subWorkflows.find(
-    (entry) => entry.managerNodeId === managerNodeId,
+function findOwnedSubWorkflow(
+  workflow: WorkflowJson,
+  managerRuntimeId: string,
+) {
+  return getStructuralSubWorkflows(workflow).find(
+    (entry) => entry.managerNodeId === managerRuntimeId,
   );
 }
 
 function getOwnedSubWorkflowForNode(workflow: WorkflowJson, nodeId: string) {
-  return workflow.subWorkflows.find((entry) => entry.nodeIds.includes(nodeId));
+  return getStructuralSubWorkflows(workflow).find((entry) =>
+    entry.nodeIds.includes(nodeId),
+  );
 }
 
 function isRootManagerControlContext(
@@ -180,7 +191,7 @@ function isRootManagerControlContext(
   context: ManagerControlParseContext,
 ): boolean {
   return (
-    context.managerNodeId === workflow.managerNodeId &&
+    context.managerRuntimeId === resolveWorkflowManagerRuntimeId(workflow) &&
     context.managerKind !== "subworkflow-manager" &&
     context.managerRole !== "worker"
   );
@@ -204,9 +215,9 @@ function assertOptionalStepDecisionScope(
       `managerControl ${actionType} step '${stepId}' does not exist`,
     );
   }
-  if (node.id === context.managerNodeId) {
+  if (node.id === context.managerRuntimeId) {
     throw new Error(
-      `managerControl ${actionType} step '${stepId}' cannot target the manager node itself`,
+      `managerControl ${actionType} step '${stepId}' cannot target the manager itself`,
     );
   }
   if (node.execution?.mode !== "optional") {
@@ -228,43 +239,24 @@ function assertOptionalStepDecisionScope(
   if (isSubworkflowManagerControlContext(context)) {
     const ownedSubWorkflow = findOwnedSubWorkflow(
       workflow,
-      context.managerNodeId,
+      context.managerRuntimeId,
     );
     if (ownedSubWorkflow === undefined) {
       throw new Error(
-        `manager node '${context.managerNodeId}' does not own a sub-workflow`,
+        `manager '${context.managerRuntimeId}' does not own a sub-workflow`,
       );
     }
     if (!ownedSubWorkflow.nodeIds.includes(stepId)) {
       throw new Error(
-        `managerControl ${actionType} step '${stepId}' must belong to sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerNodeId}'`,
+        `managerControl ${actionType} step '${stepId}' must belong to sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerRuntimeId}'`,
       );
     }
     return;
   }
 
   throw new Error(
-    `manager node '${context.managerNodeId}' does not have a recognized control scope`,
+    `manager '${context.managerRuntimeId}' does not have a recognized control scope`,
   );
-}
-
-function resolveEffectiveCommunicationScope(
-  communication: CommunicationRecord,
-  workflow: WorkflowJson,
-): {
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
-} {
-  const fromSubWorkflowId =
-    communication.fromSubWorkflowId ??
-    getOwnedSubWorkflowForNode(workflow, communication.fromNodeId)?.id;
-  const toSubWorkflowId =
-    communication.toSubWorkflowId ??
-    getOwnedSubWorkflowForNode(workflow, communication.toNodeId)?.id;
-  return {
-    ...(fromSubWorkflowId === undefined ? {} : { fromSubWorkflowId }),
-    ...(toSubWorkflowId === undefined ? {} : { toSubWorkflowId }),
-  };
 }
 
 export function assertCommunicationInManagerScope(
@@ -273,27 +265,47 @@ export function assertCommunicationInManagerScope(
   context: ManagerControlParseContext,
   operationLabel = "managerControl",
 ): void {
-  const effectiveScope = resolveEffectiveCommunicationScope(
-    communication,
+  const expectedFromSubWorkflowId = getOwnedSubWorkflowForNode(
     workflow,
-  );
+    communication.fromNodeId,
+  )?.id;
+  const expectedToSubWorkflowId = getOwnedSubWorkflowForNode(
+    workflow,
+    communication.toNodeId,
+  )?.id;
+  if (
+    communication.fromSubWorkflowId !== undefined &&
+    communication.fromSubWorkflowId !== expectedFromSubWorkflowId
+  ) {
+    throw new Error(
+      `${operationLabel} communication '${communication.communicationId}' fromSubWorkflowId '${communication.fromSubWorkflowId}' does not match node '${communication.fromNodeId}' ownership`,
+    );
+  }
+  if (
+    communication.toSubWorkflowId !== undefined &&
+    communication.toSubWorkflowId !== expectedToSubWorkflowId
+  ) {
+    throw new Error(
+      `${operationLabel} communication '${communication.communicationId}' toSubWorkflowId '${communication.toSubWorkflowId}' does not match node '${communication.toNodeId}' ownership`,
+    );
+  }
 
   if (isSubworkflowManagerControlContext(context)) {
     const ownedSubWorkflow = findOwnedSubWorkflow(
       workflow,
-      context.managerNodeId,
+      context.managerRuntimeId,
     );
     if (ownedSubWorkflow === undefined) {
       throw new Error(
-        `manager node '${context.managerNodeId}' does not own a sub-workflow`,
+        `manager '${context.managerRuntimeId}' does not own a sub-workflow`,
       );
     }
     if (
-      effectiveScope.fromSubWorkflowId !== ownedSubWorkflow.id ||
-      effectiveScope.toSubWorkflowId !== ownedSubWorkflow.id
+      communication.fromSubWorkflowId !== ownedSubWorkflow.id ||
+      communication.toSubWorkflowId !== ownedSubWorkflow.id
     ) {
       throw new Error(
-        `${operationLabel} communication '${communication.communicationId}' must stay within sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerNodeId}'`,
+        `${operationLabel} communication '${communication.communicationId}' must stay within sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerRuntimeId}'`,
       );
     }
     return;
@@ -301,8 +313,8 @@ export function assertCommunicationInManagerScope(
 
   if (isRootManagerControlContext(workflow, context)) {
     if (
-      effectiveScope.fromSubWorkflowId !== undefined ||
-      effectiveScope.toSubWorkflowId !== undefined
+      communication.fromSubWorkflowId !== undefined ||
+      communication.toSubWorkflowId !== undefined
     ) {
       throw new Error(
         `${operationLabel} communication '${communication.communicationId}' is outside root-manager scope; re-invoke the sub-workflow or use the owning subworkflow-manager`,
@@ -312,7 +324,7 @@ export function assertCommunicationInManagerScope(
   }
 
   throw new Error(
-    `manager node '${context.managerNodeId}' does not have a recognized control scope`,
+    `manager '${context.managerRuntimeId}' does not have a recognized control scope`,
   );
 }
 
@@ -352,24 +364,24 @@ export function parseManagerControlActions(
         `managerControl retry step '${action.stepId}' does not exist`,
       );
     }
-    if (action.stepId === context.managerNodeId) {
+    if (action.stepId === context.managerRuntimeId) {
       throw new Error(
-        `managerControl retry step '${action.stepId}' cannot target the manager node itself`,
+        `managerControl retry step '${action.stepId}' cannot target the manager itself`,
       );
     }
     if (isSubworkflowManagerControlContext(context)) {
       const ownedSubWorkflow = findOwnedSubWorkflow(
         workflow,
-        context.managerNodeId,
+        context.managerRuntimeId,
       );
       if (ownedSubWorkflow === undefined) {
         throw new Error(
-          `manager node '${context.managerNodeId}' does not own a sub-workflow`,
+          `manager '${context.managerRuntimeId}' does not own a sub-workflow`,
         );
       }
       if (!ownedSubWorkflow.nodeIds.includes(action.stepId)) {
         throw new Error(
-          `managerControl retry step '${action.stepId}' must belong to sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerNodeId}'`,
+          `managerControl retry step '${action.stepId}' must belong to sub-workflow '${ownedSubWorkflow.id}' owned by '${context.managerRuntimeId}'`,
         );
       }
     }

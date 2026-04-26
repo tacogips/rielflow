@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type { NodePayload, WorkflowJson } from "../workflow/types";
+import {
+  getStructuralSubWorkflows,
+  type NodePayload,
+  type SubWorkflowRef,
+  type WorkflowCallRef,
+  type WorkflowJson,
+} from "../workflow/types";
 import type { RuntimeSessionView } from "./opentui-model";
 import {
   buildOpenTuiFooterShortcutRow,
@@ -34,6 +40,20 @@ import {
   isOpenTuiRerunKey,
   resolveBlurredSelectRedrawTarget,
 } from "./opentui-screen";
+
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
+
+type LegacyWorkflowCallWorkflow = WorkflowJson & {
+  readonly workflowCalls?: readonly WorkflowCallRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
+
+type LegacyEdgeWorkflow = WorkflowJson & {
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
 
 function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   return {
@@ -83,8 +103,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-        branching: { mode: "fan-out" },
-      },
+      } as LegacyStructuralWorkflow,
       nodePayloads: {
         "divedra-manager": {
           id: "divedra-manager",
@@ -117,8 +136,6 @@ function makeStepAddressedLoadedWorkflow(): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "manager-step",
-        entryNodeId: "manager-step",
         managerStepId: "manager-step",
         entryStepId: "manager-step",
         nodeRegistry: [
@@ -144,7 +161,6 @@ function makeStepAddressedLoadedWorkflow(): LoadedWorkflow {
             role: "worker",
           },
         ],
-        subWorkflows: [],
         nodes: [
           {
             id: "manager-step",
@@ -162,9 +178,7 @@ function makeStepAddressedLoadedWorkflow(): LoadedWorkflow {
           },
         ],
         edges: [{ from: "manager-step", to: "writer-step", when: "always" }],
-        loops: [],
-        branching: { mode: "fan-out" },
-      },
+      } as LegacyEdgeWorkflow,
       nodePayloads: {
         "manager-step": {
           id: "manager-step",
@@ -310,7 +324,7 @@ describe("detectWorkflowInputMode", () => {
 });
 
 describe("buildWorkflowDefinitionContent", () => {
-  test("shows a concise workflow summary without dumping raw workflow json", () => {
+  test("ignores removed legacy workflowCalls in the concise workflow summary", () => {
     const baseLoaded = makeLoadedWorkflow({
       id: "workflow-input",
       model: "input-model",
@@ -330,15 +344,15 @@ describe("buildWorkflowDefinitionContent", () => {
               callerNodeId: "workflow-output",
             },
           ],
-        },
+        } as LegacyWorkflowCallWorkflow,
       },
     };
 
     const content = buildWorkflowDefinitionContent(loaded);
 
     expect(content).toContain("Workflow: demo");
-    expect(content).toContain("Workflow calls: 1");
-    expect(content).toContain("Workflow call ids: review-call");
+    expect(content).toContain("Workflow calls: 0");
+    expect(content).not.toContain("Workflow call ids:");
     expect(content).toContain("Legacy structural sub-workflow ids: delivery");
     expect(content).toContain(
       "Use the Nodes pane and press enter to inspect an individual node definition.",
@@ -360,7 +374,6 @@ describe("buildWorkflowDefinitionContent", () => {
             nodeTimeoutMs: 120_000,
           },
           hasManagerNode: true,
-          subWorkflows: [],
           nodes: [
             {
               id: "n1",
@@ -371,7 +384,6 @@ describe("buildWorkflowDefinitionContent", () => {
           ],
           edges: [],
           loops: [],
-          branching: { mode: "fan-out" },
         } as unknown as WorkflowJson,
         nodePayloads: {
           n1: {
@@ -407,7 +419,6 @@ describe("buildWorkflowDefinitionContent", () => {
           managerNodeId: "worker-1",
           hasManagerNode: false,
           entryNodeId: "worker-1",
-          subWorkflows: [],
           nodes: [
             {
               id: "worker-1",
@@ -419,8 +430,7 @@ describe("buildWorkflowDefinitionContent", () => {
           ],
           edges: [],
           loops: [],
-          branching: { mode: "fan-out" },
-        },
+        } as LegacyEdgeWorkflow,
         nodePayloads: {
           "worker-1": {
             id: "worker-1",
@@ -476,7 +486,7 @@ describe("buildWorkflowDefinitionContent", () => {
               block: { type: "plain" },
             },
           ],
-        },
+        } as LegacyStructuralWorkflow,
       },
     };
 
@@ -492,7 +502,7 @@ describe("buildWorkflowDefinitionContent", () => {
 });
 
 describe("buildWorkflowSummaryPreview", () => {
-  test("surfaces workflow calls separately from legacy structural sub-workflows", () => {
+  test("keeps removed legacy workflowCalls out of workflow summaries", () => {
     const baseLoaded = makeLoadedWorkflow({
       id: "workflow-input",
       model: "input-model",
@@ -512,15 +522,15 @@ describe("buildWorkflowSummaryPreview", () => {
               callerNodeId: "workflow-output",
             },
           ],
-        },
+        } as LegacyWorkflowCallWorkflow,
       },
     };
 
     const content = plainStyledText(buildWorkflowSummaryPreview(loaded));
 
-    expect(content).toContain("Workflow calls: 1");
-    expect(content).toContain("Workflow Calls");
-    expect(content).toContain("- review-call");
+    expect(content).toContain("Workflow calls: 0");
+    expect(content).not.toContain("Workflow Calls");
+    expect(content).not.toContain("- review-call");
     expect(content).toContain("Legacy Structural Sub-Workflows");
     expect(content).toContain("- delivery");
   });
@@ -578,7 +588,6 @@ describe("buildWorkflowRunPreview", () => {
           managerNodeId: "worker-1",
           hasManagerNode: false,
           entryNodeId: "worker-1",
-          subWorkflows: [],
           nodes: [
             {
               id: "worker-1",
@@ -590,8 +599,7 @@ describe("buildWorkflowRunPreview", () => {
           ],
           edges: [],
           loops: [],
-          branching: { mode: "fan-out" },
-        },
+        } as LegacyEdgeWorkflow,
         nodePayloads: {
           "worker-1": {
             id: "worker-1",
@@ -610,7 +618,7 @@ describe("buildWorkflowRunPreview", () => {
     expect(content).not.toContain("Legacy structural sub-workflows:");
   });
 
-  test("surfaces workflow call ids without legacy structural labels for role-authored bundles", () => {
+  test("does not surface removed legacy workflow call ids for role-authored bundles", () => {
     const loaded: LoadedWorkflow = {
       workflowName: "workflow-call-parent",
       workflowDirectory: "/tmp/workflow-call-parent",
@@ -632,7 +640,6 @@ describe("buildWorkflowRunPreview", () => {
               resultNodeId: "apply-review",
             },
           ],
-          subWorkflows: [],
           nodes: [
             {
               id: "divedra-manager",
@@ -660,8 +667,7 @@ describe("buildWorkflowRunPreview", () => {
             { from: "divedra-manager", to: "main-worker", when: "always" },
           ],
           loops: [],
-          branching: { mode: "fan-out" },
-        },
+        } as LegacyWorkflowCallWorkflow,
         nodePayloads: {
           "divedra-manager": {
             id: "divedra-manager",
@@ -690,9 +696,9 @@ describe("buildWorkflowRunPreview", () => {
 
     const content = plainStyledText(buildWorkflowRunPreview(loaded));
 
-    expect(content).toContain("Workflow calls: 1");
-    expect(content).toContain("Workflow Calls");
-    expect(content).toContain("- review-call");
+    expect(content).toContain("Workflow calls: 0");
+    expect(content).not.toContain("Workflow Calls");
+    expect(content).not.toContain("- review-call");
     expect(content).not.toContain("Legacy Structural Sub-Workflows");
     expect(content).not.toContain("Legacy structural sub-workflows:");
   });
@@ -1041,7 +1047,7 @@ describe("workflow preview text helpers", () => {
     const text = plainStyledText(
       buildWorkflowHistoryHeader(
         loaded,
-        loaded.bundle.workflow.subWorkflows[0],
+        getStructuralSubWorkflows(loaded.bundle.workflow)[0],
       ),
     );
 
@@ -1075,6 +1081,38 @@ describe("workflow preview text helpers", () => {
     expect(text).not.toContain("demo workflow");
     expect(text).toContain("nodes=3  workflowCalls=0  subWorkflows=1");
     expect(text).not.toContain("demo\n\nnodes=");
+  });
+
+  test("buildWorkflowHistoryHeader counts step-derived workflow calls for step-addressed bundles", () => {
+    const base = makeStepAddressedLoadedWorkflow();
+    const loaded: LoadedWorkflow = {
+      ...base,
+      bundle: {
+        ...base.bundle,
+        workflow: {
+          ...base.bundle.workflow,
+          steps: [
+            base.bundle.workflow.steps![0]!,
+            {
+              ...base.bundle.workflow.steps![1]!,
+              transitions: [
+                {
+                  toStepId: "review-entry",
+                  toWorkflowId: "review-flow",
+                  resumeStepId: "writer-step",
+                  label: "needs-review",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const text = plainStyledText(buildWorkflowHistoryHeader(loaded, undefined));
+
+    expect(text).toContain("step-addressed-demo");
+    expect(text).toContain("nodes=2  workflowCalls=1  subWorkflows=0");
   });
 });
 

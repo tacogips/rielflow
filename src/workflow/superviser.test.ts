@@ -91,23 +91,6 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
     ).toBe("mgr");
   });
 
-  test("uses projected legacy node ids when the target workflow has no authored steps", () => {
-    const legacyWorkflow = {
-      entryNodeId: "manager-node",
-      nodes: [{ id: "manager-node" }, { id: "worker-node" }],
-    } as unknown as WorkflowJson;
-    const legacyStepAddressed =
-      toStepAddressedWorkflowForSupervision(legacyWorkflow);
-    expect(legacyStepAddressed).not.toBeNull();
-    expect(
-      resolveNestedSuperviserAddonRerunFromStepId(
-        undefined,
-        sess("worker-node"),
-        legacyWorkflow,
-        legacyStepAddressed!,
-      ),
-    ).toBe("worker-node");
-  });
 });
 
 function policy(over: Partial<AutoImprovePolicy> = {}): AutoImprovePolicy {
@@ -399,7 +382,7 @@ describe("toStepAddressedWorkflowForSupervision", () => {
     });
   });
 
-  test("projects legacy entryNodeId and nodes to steps", () => {
+  test("returns null for legacy node-graph workflows without authored steps", () => {
     const wf = {
       entryNodeId: "step-1",
       managerNodeId: "step-1",
@@ -408,13 +391,7 @@ describe("toStepAddressedWorkflowForSupervision", () => {
         { id: "step-2", nodeFile: "n2.json", kind: "task" as const },
       ],
     } as unknown as WorkflowJson;
-    const r = toStepAddressedWorkflowForSupervision(wf);
-    expect(r?.entryStepId).toBe("step-1");
-    expect(r?.steps).toEqual([
-      { id: "step-1", nodeId: "step-1" },
-      { id: "step-2", nodeId: "step-2" },
-    ]);
-    expect(r?.managerStepId).toBe("step-1");
+    expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();
   });
 
   test("returns null when steps cannot be derived", () => {

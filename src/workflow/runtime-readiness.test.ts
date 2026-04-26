@@ -9,6 +9,10 @@ import {
 import { loadWorkflowFromDisk } from "./load";
 import type { NormalizedWorkflowBundle, NodePayload } from "./types";
 
+type LegacyEdgeWorkflow = NormalizedWorkflowBundle["workflow"] & {
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
+
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
@@ -32,16 +36,57 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
 function makeBundle(
   nodePayloads: Readonly<Record<string, NodePayload>>,
   options: {
-    readonly workflowCalls?: readonly {
-      readonly id: string;
+    readonly crossWorkflowTransition?: {
       readonly workflowId: string;
-      readonly callerNodeId: string;
-      readonly resultNodeId?: string;
-    }[];
+      readonly toStepId: string;
+      readonly resumeStepId: string;
+    };
   } = {},
 ): NormalizedWorkflowBundle {
   const nodeIds = Object.keys(nodePayloads);
   const managerNodeId = nodeIds[0] ?? "node-1";
+
+  if (options.crossWorkflowTransition !== undefined) {
+    return {
+      workflow: {
+        workflowId: "runtime-ready",
+        description: "runtime readiness fixture",
+        defaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120_000,
+        },
+        hasManagerNode: false,
+        entryStepId: managerNodeId,
+        nodeRegistry: nodeIds.map((id) => ({
+          id,
+          nodeFile: `nodes/node-${id}.json`,
+        })),
+        steps: nodeIds.map((id, index) => ({
+          id,
+          nodeId: id,
+          role: "worker",
+          ...(index === 0
+            ? {
+                transitions: [
+                  {
+                    toStepId: options.crossWorkflowTransition!.toStepId,
+                    toWorkflowId: options.crossWorkflowTransition!.workflowId,
+                    resumeStepId:
+                      options.crossWorkflowTransition!.resumeStepId,
+                  },
+                ],
+              }
+            : {}),
+        })),
+        nodes: nodeIds.map((id) => ({
+          id,
+          role: "worker",
+          nodeFile: `nodes/node-${id}.json`,
+        })),
+      },
+      nodePayloads,
+    };
+  }
 
   return {
     workflow: {
@@ -52,10 +97,6 @@ function makeBundle(
         nodeTimeoutMs: 120_000,
       },
       managerNodeId,
-      ...(options.workflowCalls === undefined
-        ? {}
-        : { workflowCalls: options.workflowCalls }),
-      subWorkflows: [],
       nodes: nodeIds.map((id, index) => ({
         id,
         kind: index === 0 ? "root-manager" : "task",
@@ -63,8 +104,7 @@ function makeBundle(
         completion: { type: "none" },
       })),
       edges: [],
-      branching: { mode: "fan-out" },
-    },
+    } as LegacyEdgeWorkflow,
     nodePayloads,
   };
 }
@@ -689,13 +729,11 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           },
         },
         {
-          workflowCalls: [
-            {
-              id: "call-review",
-              workflowId: "review-flow",
-              callerNodeId: "writer",
-            },
-          ],
+          crossWorkflowTransition: {
+            workflowId: "review-flow",
+            toStepId: "reviewer",
+            resumeStepId: "writer",
+          },
         },
       ),
       {
@@ -770,13 +808,11 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           },
         },
         {
-          workflowCalls: [
-            {
-              id: "call-review",
-              workflowId: "review-flow",
-              callerNodeId: "writer",
-            },
-          ],
+          crossWorkflowTransition: {
+            workflowId: "review-flow",
+            toStepId: "reviewer",
+            resumeStepId: "writer",
+          },
         },
       ),
       {
@@ -813,13 +849,11 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           },
         },
         {
-          workflowCalls: [
-            {
-              id: "call-review",
-              workflowId: "review-flow",
-              callerNodeId: "writer",
-            },
-          ],
+          crossWorkflowTransition: {
+            workflowId: "review-flow",
+            toStepId: "reviewer",
+            resumeStepId: "writer",
+          },
         },
       ),
     );
@@ -848,20 +882,26 @@ describe("inspectWorkflowRuntimeReadiness", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          managerNodeId: "manager",
-          workflowCalls: [
-            {
-              id: "call-review",
-              workflowId: "review-flow",
-              callerNodeId: "manager",
-            },
-          ],
+          managerStepId: "manager",
+          entryStepId: "manager",
           nodes: [
             {
               id: "manager",
-              role: "manager",
               nodeFile: "nodes/node-manager.json",
-              completion: { type: "none" },
+            },
+          ],
+          steps: [
+            {
+              id: "manager",
+              nodeId: "manager",
+              role: "manager",
+              transitions: [
+                {
+                  toStepId: "reviewer",
+                  toWorkflowId: "review-flow",
+                  resumeStepId: "manager",
+                },
+              ],
             },
           ],
         },
@@ -898,20 +938,25 @@ describe("inspectWorkflowRuntimeReadiness", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          entryNodeId: "reviewer",
-          workflowCalls: [
-            {
-              id: "call-parent",
-              workflowId: "runtime-ready",
-              callerNodeId: "reviewer",
-            },
-          ],
+          entryStepId: "reviewer",
           nodes: [
             {
               id: "reviewer",
-              role: "worker",
               nodeFile: "nodes/node-reviewer.json",
-              completion: { type: "none" },
+            },
+          ],
+          steps: [
+            {
+              id: "reviewer",
+              nodeId: "reviewer",
+              role: "worker",
+              transitions: [
+                {
+                  toStepId: "manager",
+                  toWorkflowId: "runtime-ready",
+                  resumeStepId: "reviewer",
+                },
+              ],
             },
           ],
         },

@@ -294,7 +294,6 @@ export interface SendManagerMessageInput {
   readonly attachments?: readonly DataDirFileRef[];
   readonly idempotencyKey?: string;
   readonly managerSessionId?: string;
-  readonly managerNodeId?: string;
   readonly managerNodeExecId?: string;
 }
 

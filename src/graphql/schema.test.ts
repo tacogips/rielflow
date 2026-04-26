@@ -21,6 +21,10 @@ import type {
   NodeAddonPayloadResolver,
   NormalizedWorkflowBundle,
 } from "../workflow/types";
+import {
+  getLegacyEntryNodeId,
+  getLegacyManagerNodeId,
+} from "../workflow/types";
 import { createGraphqlSchema } from "./schema";
 import type { GraphqlRequestContext } from "./types";
 
@@ -100,22 +104,24 @@ function createThirdPartyAddonBundle(): NormalizedWorkflowBundle {
       workflowId: "third-party-addon",
       description: "third-party add-on GraphQL validation fixture",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      entryNodeId: "addon-worker",
+      entryStepId: "addon-worker",
       nodes: [
         {
           id: "addon-worker",
-          role: "worker",
           addon: {
             name: "acme/echo-worker",
             version: "1",
             inputs: { message: "from addon" },
           },
-          completion: { type: "none" },
         },
       ],
-      edges: [],
-      loops: [],
-      branching: { mode: "fan-out" },
+      steps: [
+        {
+          id: "addon-worker",
+          nodeId: "addon-worker",
+          role: "worker",
+        },
+      ],
     } as unknown as NormalizedWorkflowBundle["workflow"],
     nodePayloads: {},
   };
@@ -240,24 +246,36 @@ async function createWorkflowCallWorkflowFixture(root: string) {
         workflowId: "workflow-calls",
         description: "workflow-call graphql schema fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "divedra-manager",
-        workflowCalls: [
-          {
-            id: "review-call",
-            workflowId: "review",
-            callerNodeId: "main-worker",
-          },
-        ],
+        managerStepId: "divedra-manager",
+        entryStepId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
-            role: "manager",
             nodeFile: "nodes/node-divedra-manager.json",
           },
           {
             id: "main-worker",
-            role: "worker",
             nodeFile: "nodes/node-main-worker.json",
+          },
+        ],
+        steps: [
+          {
+            id: "divedra-manager",
+            nodeId: "divedra-manager",
+            role: "manager",
+            transitions: [{ toStepId: "main-worker" }],
+          },
+          {
+            id: "main-worker",
+            nodeId: "main-worker",
+            role: "worker",
+            transitions: [
+              {
+                toStepId: "reviewer",
+                toWorkflowId: "review",
+                resumeStepId: "main-worker",
+              },
+            ],
           },
         ],
       },
@@ -306,12 +324,18 @@ async function createWorkflowCallWorkflowFixture(root: string) {
         workflowId: "review",
         description: "workflow-call graphql schema callee fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        entryNodeId: "reviewer",
+        entryStepId: "reviewer",
         nodes: [
           {
             id: "reviewer",
-            role: "worker",
             nodeFile: "nodes/node-reviewer.json",
+          },
+        ],
+        steps: [
+          {
+            id: "reviewer",
+            nodeId: "reviewer",
+            role: "worker",
           },
         ],
       },
@@ -426,7 +450,6 @@ async function createCompletedGroupedWorkflowFixture(root: string) {
           { from: "workflow-input", to: "workflow-output", when: "always" },
         ],
         loops: [],
-        branching: { mode: "fan-out" },
       },
       null,
       2,
@@ -1448,7 +1471,7 @@ describe("createGraphqlSchema", () => {
     );
   });
 
-  test("exposes authored workflowCalls through workflow inspection", async () => {
+  test("exposes step-derived cross-workflow calls through workflow inspection", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkflowCallWorkflowFixture(root);
     const schema = createGraphqlSchema();
@@ -1458,7 +1481,7 @@ describe("createGraphqlSchema", () => {
       options,
     );
 
-    expect(workflow?.workflowCallIds).toEqual(["review-call"]);
+    expect(workflow?.workflowCallIds).toEqual(["__cw:main-worker"]);
     expect(workflow?.counts.workflowCalls).toBe(1);
     expect(workflow?.runtime.ready).toBe(true);
   });
@@ -1845,13 +1868,18 @@ describe("createGraphqlSchema", () => {
           nodes: [
             {
               id: "addon-worker",
-              role: "worker",
               addon: {
                 name: addonName,
                 version: "1",
                 inputs: { message: "from local graphql" },
               },
-              completion: { type: "none" },
+            },
+          ],
+          steps: [
+            {
+              id: "addon-worker",
+              nodeId: "addon-worker",
+              role: "worker",
             },
           ],
         },
@@ -1956,8 +1984,10 @@ describe("createGraphqlSchema", () => {
     );
     expect(created.workflowName).toBe("solo");
     expect(created.bundle.workflow.hasManagerNode).toBe(false);
-    expect(created.bundle.workflow.entryNodeId).toBe("main-worker");
-    expect(created.bundle.workflow.managerNodeId).toBe("main-worker");
+    expect(created.bundle.workflow.entryStepId).toBe("main-worker");
+    expect(created.bundle.workflow.managerStepId).toBeUndefined();
+    expect(getLegacyEntryNodeId(created.bundle.workflow)).toBeUndefined();
+    expect(getLegacyManagerNodeId(created.bundle.workflow)).toBeUndefined();
 
     const workflowJsonText = await readFile(
       path.join(root, "solo", "workflow.json"),
@@ -2048,8 +2078,6 @@ describe("createGraphqlSchema", () => {
         ...managedWorkflow,
         hasManagerNode: false,
         entryStepId: "main-worker",
-        entryNodeId: "main-worker",
-        edges: [],
         nodeRegistry: [
           {
             id: workerRegistryNode.id,
@@ -2091,8 +2119,18 @@ describe("createGraphqlSchema", () => {
       options,
     );
     expect(reloaded?.bundle.workflow.hasManagerNode).toBe(false);
-    expect(reloaded?.bundle.workflow.managerNodeId).toBe("main-worker");
-    expect(reloaded?.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(reloaded?.bundle.workflow.entryStepId).toBe("main-worker");
+    expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
+    expect(
+      reloaded == null
+        ? undefined
+        : getLegacyManagerNodeId(reloaded.bundle.workflow),
+    ).toBeUndefined();
+    expect(
+      reloaded == null
+        ? undefined
+        : getLegacyEntryNodeId(reloaded.bundle.workflow),
+    ).toBeUndefined();
     expect(reloaded?.bundle.workflow.nodes).toHaveLength(1);
 
     const workflowJsonText = await readFile(
@@ -2148,8 +2186,6 @@ describe("createGraphqlSchema", () => {
         ...managedWorkflow,
         hasManagerNode: false,
         entryStepId: "main-worker",
-        entryNodeId: "main-worker",
-        edges: [],
         nodeRegistry: [
           {
             id: workerRegistryNode.id,
@@ -2193,8 +2229,18 @@ describe("createGraphqlSchema", () => {
       options,
     );
     expect(reloaded?.bundle.workflow.hasManagerNode).toBe(false);
-    expect(reloaded?.bundle.workflow.managerNodeId).toBe("main-worker");
-    expect(reloaded?.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(reloaded?.bundle.workflow.entryStepId).toBe("main-worker");
+    expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
+    expect(
+      reloaded == null
+        ? undefined
+        : getLegacyManagerNodeId(reloaded.bundle.workflow),
+    ).toBeUndefined();
+    expect(
+      reloaded == null
+        ? undefined
+        : getLegacyEntryNodeId(reloaded.bundle.workflow),
+    ).toBeUndefined();
     expect(reloaded?.bundle.workflow.nodes).toHaveLength(1);
   });
 

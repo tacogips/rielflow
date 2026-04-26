@@ -12,6 +12,7 @@ import type {
   WorkflowExecutionOverviewView,
 } from "../graphql/types";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
+import { getStructuralEdges } from "../workflow/types";
 import type {
   NodePayload,
   WorkflowEdge,
@@ -312,7 +313,7 @@ function App() {
     if (currentDefinition === null) {
       return [];
     }
-    return currentDefinition.bundle.workflow.edges
+    return getStructuralEdges(currentDefinition.bundle.workflow)
       .map((edge) => {
         const from = nodeById().get(edge.from);
         const to = nodeById().get(edge.to);

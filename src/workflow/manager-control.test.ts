@@ -4,9 +4,28 @@ import {
   parseManagerControlActions,
   parseManagerControlPayload,
 } from "./manager-control";
-import type { WorkflowJson } from "./types";
+import type {
+  LoopRule,
+  SubWorkflowRef,
+  WorkflowCallRef,
+  WorkflowJson,
+} from "./types";
 
-function makeWorkflow(): WorkflowJson {
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
+
+type LegacyWorkflowCallWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly workflowCalls?: readonly WorkflowCallRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
+
+function makeWorkflow(): LegacyStructuralWorkflow {
   return {
     workflowId: "wf",
     description: "wf",
@@ -65,11 +84,10 @@ function makeWorkflow(): WorkflowJson {
     ],
     edges: [],
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
-function makeRoleWorkflow(): WorkflowJson {
+function makeRoleWorkflow(): LegacyWorkflowCallWorkflow {
   return {
     workflowId: "wf-role",
     description: "role workflow",
@@ -83,7 +101,6 @@ function makeRoleWorkflow(): WorkflowJson {
         resultNodeId: "step-2",
       },
     ],
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -107,7 +124,6 @@ function makeRoleWorkflow(): WorkflowJson {
     ],
     edges: [],
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
@@ -115,7 +131,7 @@ describe("parseManagerControlPayload", () => {
   test("returns null when managerControl is absent", () => {
     expect(
       parseManagerControlPayload({ marker: "plain" }, makeWorkflow(), {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       }),
     ).toBeNull();
@@ -130,7 +146,7 @@ describe("parseManagerControlPayload", () => {
       },
       makeWorkflow(),
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -167,7 +183,7 @@ describe("parseManagerControlPayload", () => {
       },
       workflow,
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: undefined,
         managerRole: "manager",
       },
@@ -188,7 +204,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeRoleWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: undefined,
           managerRole: "manager",
         },
@@ -205,7 +221,7 @@ describe("parseManagerControlPayload", () => {
       },
       makeWorkflow(),
       {
-        managerNodeId: "a-manager",
+        managerRuntimeId: "a-manager",
         managerKind: "subworkflow-manager",
       },
     );
@@ -227,7 +243,7 @@ describe("parseManagerControlPayload", () => {
       ],
       makeWorkflow(),
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -254,7 +270,7 @@ describe("parseManagerControlPayload", () => {
       ],
       makeWorkflow(),
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -285,7 +301,7 @@ describe("parseManagerControlPayload", () => {
       ],
       makeWorkflow(),
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -300,7 +316,7 @@ describe("parseManagerControlPayload", () => {
         [{ type: "retry-node", nodeId: "a-manager" }],
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -311,7 +327,7 @@ describe("parseManagerControlPayload", () => {
         [{ type: "execute-optional-node", nodeId: "step-1" }],
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -328,7 +344,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
       ),
@@ -345,7 +361,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
       ),
@@ -364,7 +380,7 @@ describe("parseManagerControlPayload", () => {
         ],
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -377,7 +393,7 @@ describe("parseManagerControlPayload", () => {
         [{ type: "retry-step", stepId: "   " }],
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -388,7 +404,7 @@ describe("parseManagerControlPayload", () => {
         [{ type: "replay-communication", communicationId: "   " }],
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -407,7 +423,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
@@ -424,7 +440,7 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
       ),
@@ -440,7 +456,7 @@ describe("parseManagerControlPayload", () => {
       },
       makeWorkflow(),
       {
-        managerNodeId: "divedra-manager",
+        managerRuntimeId: "divedra-manager",
         managerKind: "root-manager",
       },
     );
@@ -457,11 +473,11 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
       ),
-    ).toThrow("cannot target the manager node itself");
+    ).toThrow("cannot target the manager itself");
   });
 
   test("rejects optional-node decisions for non-optional or out-of-scope nodes", () => {
@@ -469,14 +485,12 @@ describe("parseManagerControlPayload", () => {
       parseManagerControlPayload(
         {
           managerControl: {
-            actions: [
-              { type: "execute-optional-step", stepId: "a-output" },
-            ],
+            actions: [{ type: "execute-optional-step", stepId: "a-output" }],
           },
         },
         makeWorkflow(),
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
       ),
@@ -491,14 +505,14 @@ describe("parseManagerControlPayload", () => {
         },
         makeWorkflow(),
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
       ),
     ).toThrow("use the owning subworkflow-manager instead");
   });
 
-  test("enforces communication replay scope with legacy boundary fallback", () => {
+  test("enforces communication replay scope from explicit sub-workflow ids only", () => {
     const workflow = makeWorkflow();
 
     expect(() =>
@@ -520,6 +534,8 @@ describe("parseManagerControlPayload", () => {
           },
           deliveryKind: "edge-transition",
           transitionWhen: "legacy",
+          fromSubWorkflowId: "sw-a",
+          toSubWorkflowId: "sw-a",
           status: "delivered",
           deliveryAttemptIds: ["attempt-000001"],
           activeDeliveryAttemptId: "attempt-000001",
@@ -528,12 +544,46 @@ describe("parseManagerControlPayload", () => {
         },
         workflow,
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
         "test replay",
       ),
     ).not.toThrow();
+
+    expect(() =>
+      assertCommunicationInManagerScope(
+        {
+          workflowId: "wf",
+          workflowExecutionId: "sess-1",
+          communicationId: "comm-missing-scope",
+          fromNodeId: "a-manager",
+          toNodeId: "a-input",
+          routingScope: "intra-sub-workflow",
+          sourceNodeExecId: "exec-1b",
+          payloadRef: {
+            workflowId: "wf",
+            workflowExecutionId: "sess-1",
+            outputNodeId: "a-manager",
+            nodeExecId: "exec-1b",
+            artifactDir: "/tmp/out",
+          },
+          deliveryKind: "edge-transition",
+          transitionWhen: "legacy-missing-scope",
+          status: "delivered",
+          deliveryAttemptIds: ["attempt-000001"],
+          activeDeliveryAttemptId: "attempt-000001",
+          createdAt: "2026-03-15T00:00:30.000Z",
+          artifactDir: "/tmp/comm",
+        },
+        workflow,
+        {
+          managerRuntimeId: "a-manager",
+          managerKind: "subworkflow-manager",
+        },
+        "test replay",
+      ),
+    ).toThrow("must stay within sub-workflow 'sw-a'");
 
     expect(() =>
       assertCommunicationInManagerScope(
@@ -554,6 +604,8 @@ describe("parseManagerControlPayload", () => {
           },
           deliveryKind: "edge-transition",
           transitionWhen: "root",
+          fromSubWorkflowId: "sw-a",
+          toSubWorkflowId: "sw-a",
           status: "delivered",
           deliveryAttemptIds: ["attempt-000001"],
           activeDeliveryAttemptId: "attempt-000001",
@@ -562,12 +614,14 @@ describe("parseManagerControlPayload", () => {
         },
         workflow,
         {
-          managerNodeId: "a-manager",
+          managerRuntimeId: "a-manager",
           managerKind: "subworkflow-manager",
         },
         "test replay",
       ),
-    ).toThrow("must stay within sub-workflow 'sw-a'");
+    ).toThrow(
+      "fromSubWorkflowId 'sw-a' does not match node 'divedra-manager' ownership",
+    );
 
     expect(() =>
       assertCommunicationInManagerScope(
@@ -588,6 +642,8 @@ describe("parseManagerControlPayload", () => {
           },
           deliveryKind: "edge-transition",
           transitionWhen: "sub",
+          fromSubWorkflowId: "sw-a",
+          toSubWorkflowId: "sw-a",
           status: "delivered",
           deliveryAttemptIds: ["attempt-000001"],
           activeDeliveryAttemptId: "attempt-000001",
@@ -596,7 +652,7 @@ describe("parseManagerControlPayload", () => {
         },
         workflow,
         {
-          managerNodeId: "divedra-manager",
+          managerRuntimeId: "divedra-manager",
           managerKind: "root-manager",
         },
         "test replay",

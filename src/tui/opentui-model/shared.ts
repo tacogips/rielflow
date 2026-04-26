@@ -11,7 +11,9 @@ import type {
   ArgumentBinding,
   CliAgentBackend,
   NodePayload,
+  SubWorkflowRef,
 } from "../../workflow/types";
+import { getStructuralSubWorkflows } from "../../workflow/types";
 import { describeWorkflowNodeKind } from "../../workflow/node-role";
 import { deriveWorkflowVisualization } from "../../workflow/visualization";
 import type { OpenTuiRichSelectOption } from "../opentui-view-shared";
@@ -114,7 +116,7 @@ export function summarizePromptHelp(
 export function resolveOwningSubWorkflow(
   workflow: LoadedWorkflow["bundle"]["workflow"],
   nodeId: string,
-): LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number] | undefined {
+): SubWorkflowRef | undefined {
   return findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId);
 }
 
@@ -292,7 +294,7 @@ export function buildWorkflowNodeVisualMetadata(
     ),
   );
   const subworkflowScopeNodeIds = new Set<string>();
-  loaded.bundle.workflow.subWorkflows.forEach((subworkflow) => {
+  getStructuralSubWorkflows(loaded.bundle.workflow).forEach((subworkflow) => {
     subworkflowScopeNodeIds.add(subworkflow.managerNodeId);
     subworkflowScopeNodeIds.add(subworkflow.inputNodeId);
     subworkflowScopeNodeIds.add(subworkflow.outputNodeId);

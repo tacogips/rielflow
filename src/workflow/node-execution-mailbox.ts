@@ -12,9 +12,11 @@ import {
   type StepIdentityFields,
 } from "./runtime-addressing";
 import {
+  getStructuralSubWorkflows,
   resolveWorkflowManagerRuntimeId,
   type JsonObject,
   type NodePayload,
+  type SubWorkflowRef,
   type WorkflowJson,
   type WorkflowNodeRef,
 } from "./types";
@@ -153,11 +155,11 @@ export interface BuildNodeExecutionMailboxInput extends StepIdentityFields {
 }
 
 function hasStructuralSubWorkflowBoundaries(workflow: WorkflowJson): boolean {
-  return workflow.subWorkflows.length > 0;
+  return getStructuralSubWorkflows(workflow).length > 0;
 }
 
 function getSubWorkflowOwnedNodeIds(
-  subWorkflow: WorkflowJson["subWorkflows"][number],
+  subWorkflow: SubWorkflowRef,
 ): readonly string[] {
   return [
     ...new Set([
@@ -170,7 +172,7 @@ function getSubWorkflowOwnedNodeIds(
 }
 
 function findOwnedSubWorkflow(workflow: WorkflowJson, nodeId: string) {
-  return workflow.subWorkflows.find((entry) =>
+  return getStructuralSubWorkflows(workflow).find((entry) =>
     getSubWorkflowOwnedNodeIds(entry).includes(nodeId),
   );
 }
@@ -276,7 +278,7 @@ function buildSubWorkflowExpectedReturn(
   subWorkflowId: string,
   nodePayloads: Readonly<Record<string, NodePayload>>,
 ): string {
-  const subWorkflow = workflow.subWorkflows.find(
+  const subWorkflow = getStructuralSubWorkflows(workflow).find(
     (entry) => entry.id === subWorkflowId,
   );
   if (subWorkflow === undefined) {
@@ -302,7 +304,7 @@ function buildManagedChildren(input: {
   const children: NodeExecutionMailboxManagedChild[] = [];
 
   if (nodeRef.kind === "root-manager" || nodeRef.role === "manager") {
-    for (const subWorkflow of workflow.subWorkflows) {
+    for (const subWorkflow of getStructuralSubWorkflows(workflow)) {
       children.push({
         kind: "sub-workflow",
         id: subWorkflow.id,
@@ -319,7 +321,7 @@ function buildManagedChildren(input: {
     }
 
     const ownedNodeIds = new Set(
-      workflow.subWorkflows.flatMap((subWorkflow) =>
+      getStructuralSubWorkflows(workflow).flatMap((subWorkflow) =>
         getSubWorkflowOwnedNodeIds(subWorkflow),
       ),
     );
@@ -385,12 +387,14 @@ function buildMailboxStructure(input: {
     return {
       type: "root-workflow",
       rootManagerNodeId: resolveWorkflowManagerRuntimeId(input.workflow),
-      subWorkflows: input.workflow.subWorkflows.map((subWorkflow) => ({
-        id: subWorkflow.id,
-        managerNodeId: subWorkflow.managerNodeId,
-        inputNodeId: subWorkflow.inputNodeId,
-        outputNodeId: subWorkflow.outputNodeId,
-      })),
+      subWorkflows: getStructuralSubWorkflows(input.workflow).map(
+        (subWorkflow) => ({
+          id: subWorkflow.id,
+          managerNodeId: subWorkflow.managerNodeId,
+          inputNodeId: subWorkflow.inputNodeId,
+          outputNodeId: subWorkflow.outputNodeId,
+        }),
+      ),
       nodes: input.workflow.nodes.map((node) => ({
         id: node.id,
         kind: describeWorkflowNodeKind(node),
@@ -477,7 +481,7 @@ function buildManagerControlMetadata(input: {
       "Use `retry-step` with the execution step id when a prior worker result is insufficient and that step must run again.",
       "Use `replay-communication` to redeliver an existing communication within the current workflow execution.",
       "Use `execute-optional-step` or `skip-optional-step` only for pending optional steps owned by this manager.",
-      "Cross-workflow calls (step-addressed: `steps[].transitions` with `toWorkflowId` and `resumeStepId`; legacy node-graph bundles may still use top-level `workflowCalls`) run automatically from the caller step.",
+      "Cross-workflow calls (step-addressed: `steps[].transitions` with `toWorkflowId` and `resumeStepId`) run automatically from the caller step.",
       "Omit `managerControl` when no runtime control change is needed.",
     ],
   };

@@ -8,6 +8,10 @@ import type {
   SubWorkflowRef,
   WorkflowJson,
 } from "./types";
+import {
+  getStructuralSubWorkflows,
+  resolveWorkflowManagerRuntimeId,
+} from "./types";
 
 function findLatestSucceededExecution(
   session: WorkflowSessionState,
@@ -39,7 +43,7 @@ function sourceSatisfied(
     if (source.subWorkflowId === undefined) {
       return false;
     }
-    const referenced = workflow.subWorkflows.find(
+    const referenced = getStructuralSubWorkflows(workflow).find(
       (entry) => entry.id === source.subWorkflowId,
     );
     if (referenced === undefined) {
@@ -74,7 +78,7 @@ function subWorkflowAlreadyStarted(
   session: WorkflowSessionState,
 ): boolean {
   const targetNodeIds = new Set([subWorkflow.inputNodeId]);
-  if (subWorkflow.managerNodeId !== workflow.managerNodeId) {
+  if (subWorkflow.managerNodeId !== resolveWorkflowManagerRuntimeId(workflow)) {
     targetNodeIds.add(subWorkflow.managerNodeId);
   }
   if (session.queue.some((nodeId) => targetNodeIds.has(nodeId))) {
@@ -118,7 +122,7 @@ export function planRootManagerSubWorkflowStarts(args: {
   readonly session: WorkflowSessionState;
 }): readonly SubWorkflowRef[] {
   const planned: SubWorkflowRef[] = [];
-  for (const subWorkflow of args.workflow.subWorkflows) {
+  for (const subWorkflow of getStructuralSubWorkflows(args.workflow)) {
     if (!autoStartEligible(subWorkflow)) {
       continue;
     }
@@ -138,7 +142,7 @@ export function planSubWorkflowChildInputs(args: {
   readonly session: WorkflowSessionState;
   readonly managerNodeId: string;
 }): readonly string[] {
-  const subWorkflow = args.workflow.subWorkflows.find(
+  const subWorkflow = getStructuralSubWorkflows(args.workflow).find(
     (entry) => entry.managerNodeId === args.managerNodeId,
   );
   if (subWorkflow === undefined) {

@@ -1,4 +1,10 @@
-import type { SubWorkflowRef, WorkflowJson } from "./types";
+import {
+  getStructuralEdges,
+  getStructuralLoops,
+  getStructuralSubWorkflows,
+  type SubWorkflowRef,
+  type WorkflowJson,
+} from "./types";
 
 export interface DerivedVisNode {
   readonly id: string;
@@ -95,31 +101,33 @@ function buildScopeMetadata(
   workflow: WorkflowJson,
   orderByNodeId: ReadonlyMap<string, number>,
 ): ScopeMetadata {
-  const groupIntervals = workflow.subWorkflows
+  const structuralEdges = getStructuralEdges(workflow);
+  const subWorkflows = getStructuralSubWorkflows(workflow);
+  const groupIntervals = subWorkflows
     .map((entry) => resolveSubWorkflowInterval(entry, orderByNodeId))
     .filter((entry): entry is ScopeInterval => entry !== null)
     .sort(compareIntervals);
 
   const colorByGroupScopeId = new Map<string, DerivedVisNode["color"]>();
-  workflow.subWorkflows.forEach((entry) => {
+  subWorkflows.forEach((entry) => {
     colorByGroupScopeId.set(entry.id, colorForSubWorkflow(entry));
   });
 
   const loopIdsRepresentedBySubWorkflow = new Set(
-    workflow.subWorkflows
+    subWorkflows
       .filter((entry) => entry.block?.type === "loop-body")
       .map((entry) => entry.block?.loopId)
       .filter((entry): entry is string => entry !== undefined),
   );
 
-  const loopIntervals = (workflow.loops ?? [])
+  const loopIntervals = getStructuralLoops(workflow)
     .filter((loop) => !loopIdsRepresentedBySubWorkflow.has(loop.id))
     .map((loop) => {
       const judgeOrder = orderByNodeId.get(loop.judgeNodeId);
       if (judgeOrder === undefined) {
         return null;
       }
-      const continueTargetOrders = workflow.edges
+      const continueTargetOrders = structuralEdges
         .filter(
           (edge) =>
             edge.from === loop.judgeNodeId && edge.when === loop.continueWhen,

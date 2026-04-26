@@ -23,6 +23,12 @@ import type {
   NodeAddonDefinition,
   NodeAddonPayloadResolver,
 } from "./types";
+import {
+  getLegacyEntryNodeId,
+  getLegacyManagerNodeId,
+  getStructuralSubWorkflows,
+  resolveWorkflowEntryRuntimeId,
+} from "./types";
 
 /** Opt in to loading legacy-shaped inline fixtures (suite defaults to strict authorship when omitted). */
 const testLegacyAuthorshipOk: Pick<
@@ -106,22 +112,24 @@ async function writeAddonWorkflow(input: {
   await writeJson(path.join(workflowDirectory, "workflow.json"), {
     workflowId: input.workflowName,
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "worker-1",
+    entryStepId: "worker-1",
     nodes: [
       {
         id: "worker-1",
-        role: "worker",
         addon: {
           name: input.addonName,
           ...(input.version === undefined ? {} : { version: input.version }),
           inputs: input.inputs ?? { message: "loaded" },
         },
-        completion: { type: "none" },
       },
     ],
-    edges: [],
-    loops: [],
-    branching: { mode: "fan-out" },
+    steps: [
+      {
+        id: "worker-1",
+        nodeId: "worker-1",
+        role: "worker",
+      },
+    ],
   });
 }
 
@@ -543,7 +551,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -591,7 +598,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -643,7 +649,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
     await writeText(
       path.join(workflowDirectory, "prompts", "divedra-manager.md"),
@@ -690,7 +695,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
     await writeJson(
       path.join(workflowDirectory, "nodes", "node-divedra-manager.json"),
@@ -745,7 +749,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
     await writeFile(
       path.join(externalDirectory, "node-divedra-manager.json"),
@@ -785,8 +788,6 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -808,11 +809,6 @@ describe("loadWorkflowFromDisk", () => {
           completion: { type: "none" },
         },
       ],
-      edges: [
-        { from: "divedra-manager", to: "worker-1", when: "always" },
-        { from: "worker-1", to: "worker-2", when: "always" },
-      ],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -848,9 +844,15 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(result.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
-    expect(result.value.bundle.workflow.managerNodeId).toBe("divedra-manager");
-    expect(result.value.bundle.workflow.subWorkflows).toEqual([]);
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
+    expect(getLegacyManagerNodeId(result.value.bundle.workflow)).toBe(
+      "divedra-manager",
+    );
+    expect(resolveWorkflowEntryRuntimeId(result.value.bundle.workflow)).toBe(
+      "divedra-manager",
+    );
+    expect(getStructuralSubWorkflows(result.value.bundle.workflow)).toEqual([]);
+    expect("subWorkflows" in result.value.bundle.workflow).toBe(false);
     expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("root-manager");
     expect(result.value.bundle.workflow.nodes[2]?.control).toBe("loop-judge");
     expect(result.value.bundle.workflow.nodes[2]?.kind).toBe("loop-judge");
@@ -875,8 +877,6 @@ describe("loadWorkflowFromDisk", () => {
           completion: { type: "none" },
         },
       ],
-      edges: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
@@ -899,14 +899,77 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
-    expect(result.value.bundle.workflow.entryNodeId).toBe("worker-1");
-    expect(result.value.bundle.workflow.managerNodeId).toBe("worker-1");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBe("worker-1");
+    expect(getLegacyManagerNodeId(result.value.bundle.workflow)).toBe(
+      "worker-1",
+    );
     expect(result.value.bundle.workflow.nodes[0]?.kind).toBe("task");
   });
 
-  test("loads authored workflowCalls for later runtime-readiness checks", async () => {
+  test("rejects authored workflowCalls on legacy node-graph bundles during load", async () => {
     const root = await makeTempDir();
     const workflowName = "workflow-call-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow call fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "writer",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          kind: "task",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects authored workflowCalls on role-authored bundles during load", async () => {
+    const root = await makeTempDir();
+    const workflowName = "workflow-call-role-authored";
     const workflowDirectory = path.join(root, workflowName);
     await mkdir(workflowDirectory, { recursive: true });
 
@@ -931,7 +994,6 @@ describe("loadWorkflowFromDisk", () => {
         },
       ],
       edges: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-writer.json"), {
@@ -949,18 +1011,739 @@ describe("loadWorkflowFromDisk", () => {
       artifactRoot: path.join(root, "artifacts"),
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
 
-    expect(result.value.bundle.workflow.workflowCalls).toEqual([
-      {
-        id: "call-review",
-        workflowId: "review-flow",
-        callerNodeId: "writer",
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects empty authored workflowCalls on role-authored bundles during load", async () => {
+    const root = await makeTempDir();
+    const workflowName = "workflow-call-role-authored-empty";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow call fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      workflowCalls: [],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
       },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored workflowCalls during load without traversing legacy call-entry validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "workflow-call-role-authored-step-id";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow call fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "writer",
+          callerStepId: "writer",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some(
+        (issue) => issue.path === "workflow.workflowCalls[0].callerStepId",
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects role-authored edges during load by top-level presence without traversing legacy edge validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "edges-role-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy edges fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      edges: [{ from: "", to: 42, when: "" }],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.edges",
+          message:
+            "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some((issue) =>
+        issue.path.startsWith("workflow.edges[0]."),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects role-authored loops during load by top-level presence without traversing legacy loop validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "loops-role-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy loops fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      loops: [
+        {
+          id: "",
+          judgeNodeId: "",
+          continueWhen: "",
+          exitWhen: "",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.loops",
+          message:
+            "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some((issue) =>
+        issue.path.startsWith("workflow.loops[0]."),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects role-authored managerNodeId and entryNodeId during load by top-level presence without traversing legacy manager-entry semantic checks", async () => {
+    const root = await makeTempDir();
+    const workflowName = "role-manager-entry-legacy-aliases";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy manager-entry fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "missing-manager",
+      entryNodeId: "missing-entry",
+      nodes: [
+        {
+          id: "divedra-manager",
+          role: "manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
+      id: "divedra-manager",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/manage.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(
+      result.error.issues?.filter(
+        (issue) => issue.path === "workflow.managerNodeId",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        path: "workflow.managerNodeId",
+        message:
+          "authored managerNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+      }),
     ]);
+    expect(
+      result.error.issues?.filter(
+        (issue) => issue.path === "workflow.entryNodeId",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        path: "workflow.entryNodeId",
+        message:
+          "authored entryNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+      }),
+    ]);
+  });
+
+  test("rejects empty structural subWorkflows on role-authored bundles during load", async () => {
+    const root = await makeTempDir();
+    const workflowName = "subworkflow-role-authored-empty";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy structural fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      subWorkflows: [],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflows",
+          message:
+            "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects empty structural subWorkflowConversations on role-authored bundles during load", async () => {
+    const root = await makeTempDir();
+    const workflowName = "subworkflow-conversation-role-authored-empty";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy structural fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      subWorkflowConversations: [],
+      nodes: [
+        {
+          id: "writer",
+          role: "worker",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflowConversations",
+          message:
+            "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored legacy structural fields during load by top-level presence even when authored with invalid non-array values", async () => {
+    const cases = [
+      {
+        name: "workflow-call",
+        field: "workflowCalls",
+        value: { invalid: true },
+        message:
+          "authored workflowCalls are legacy compatibility only and are no longer supported",
+      },
+      {
+        name: "edges",
+        field: "edges",
+        value: "invalid",
+        message:
+          "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        name: "loops",
+        field: "loops",
+        value: { invalid: true },
+        message:
+          "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        name: "subworkflows",
+        field: "subWorkflows",
+        value: "invalid",
+        message:
+          "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        name: "subworkflow-conversations",
+        field: "subWorkflowConversations",
+        value: { invalid: true },
+        message:
+          "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      const root = await makeTempDir();
+      const workflowName = `${entry.name}-role-authored-non-array`;
+      const workflowDirectory = path.join(root, workflowName);
+      await mkdir(workflowDirectory, { recursive: true });
+
+      await writeJson(path.join(workflowDirectory, "workflow.json"), {
+        workflowId: workflowName,
+        description: "legacy structural fixture",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryNodeId: "writer",
+        [entry.field]: entry.value,
+        nodes: [
+          {
+            id: "writer",
+            role: "worker",
+            nodeFile: "node-writer.json",
+            completion: { type: "none" },
+          },
+        ],
+      });
+
+      await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+        id: "writer",
+        nodeType: "command",
+        command: {
+          scriptPath: "scripts/write.sh",
+        },
+        variables: {},
+      });
+
+      const result = await loadWorkflowFromDisk(workflowName, {
+        ...testLegacyAuthorshipOk,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        continue;
+      }
+
+      expect(result.error.code).toBe("VALIDATION");
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: `workflow.${entry.field}`,
+            message: entry.message,
+          }),
+        ]),
+      );
+      expect(
+        result.error.issues?.some(
+          (issue) =>
+            issue.path === `workflow.${entry.field}` &&
+            issue.message === "must be an array when provided",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("rejects authored branching during load", async () => {
+    const root = await makeTempDir();
+    const workflowName = "branching-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy branching fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "writer",
+      branching: { mode: "fan-out" },
+      nodes: [
+        {
+          id: "writer",
+          kind: "root-manager",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.branching",
+          message:
+            "authored branching is legacy compatibility only and is no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some(
+        (issue) => issue.path === "workflow.branching.mode",
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects authored subWorkflowConversations on legacy load without traversing conversation entry validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "legacy-empty-companions";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "legacy compatibility companion fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerNodeId: "writer",
+      entryNodeId: "writer",
+      subWorkflowConversations: [
+        {
+          id: "conv-1",
+          participantsIds: ["writer"],
+          maxTurns: 1,
+          stopWhen: "done",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          kind: "root-manager",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "writer",
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflowConversations",
+          message:
+            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some((issue) =>
+        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects authored workflowCalls during load without traversing legacy call-entry validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "workflow-call-step-id-authored";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow call fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryNodeId: "writer",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "writer",
+          callerStepId: "writer",
+        },
+      ],
+      nodes: [
+        {
+          id: "writer",
+          kind: "task",
+          nodeFile: "node-writer.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    });
+
+    await writeJson(path.join(workflowDirectory, "node-writer.json"), {
+      id: "writer",
+      nodeType: "command",
+      command: {
+        scriptPath: "scripts/write.sh",
+      },
+      variables: {},
+    });
+
+    const result = await loadWorkflowFromDisk(workflowName, {
+      ...testLegacyAuthorshipOk,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.issues?.some(
+        (issue) => issue.path === "workflow.workflowCalls[0].callerStepId",
+      ),
+    ).toBe(false);
   });
 
   test("preserves canonical container build metadata for worker nodes during load", async () => {
@@ -973,8 +1756,6 @@ describe("loadWorkflowFromDisk", () => {
       workflowId: workflowName,
       description: "sample",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -989,9 +1770,6 @@ describe("loadWorkflowFromDisk", () => {
           completion: { type: "none" },
         },
       ],
-      edges: [],
-      loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -1051,7 +1829,6 @@ describe("loadWorkflowFromDisk", () => {
       managerNodeId: "missing",
       nodes: [],
       edges: [],
-      branching: { mode: "fan-out" },
     });
 
     const result = await loadWorkflowFromDisk(workflowName, {
@@ -1092,7 +1869,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -1162,18 +1938,24 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflow.nodes[0]?.id).toBe("divedra-manager");
-    expect(result.value.bundle.workflow.entryNodeId).toBe("divedra-manager");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
     expect(result.value.bundle.workflow.managerStepId).toBe("divedra-manager");
     expect(result.value.bundle.workflow.entryStepId).toBe("divedra-manager");
     expect(result.value.bundle.workflow.nodes[0]?.role).toBe("manager");
     expect(result.value.bundle.workflow.nodes[1]?.role).toBe("worker");
+    expect(
+      (result.value.bundle.workflow as unknown as Record<string, unknown>)[
+        "branching"
+      ],
+    ).toBeUndefined();
     expect(
       result.value.bundle.workflow.prompts?.divedraPromptTemplate,
     ).toContain("Coordinate");
     expect(
       result.value.bundle.workflow.prompts?.workerSystemPromptTemplate,
     ).toContain("assigned node task");
-    expect(result.value.bundle.workflow.subWorkflows).toEqual([]);
+    expect(getStructuralSubWorkflows(result.value.bundle.workflow)).toEqual([]);
+    expect("subWorkflows" in result.value.bundle.workflow).toBe(false);
     expect(
       result.value.bundle.nodePayloads["divedra-manager"]?.executionBackend,
     ).toBeUndefined();
@@ -1230,9 +2012,11 @@ describe("loadWorkflowFromDisk", () => {
     }
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
-    expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
     expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
-    expect(result.value.bundle.workflow.managerNodeId).toBe("main-worker");
+    expect(
+      getLegacyManagerNodeId(result.value.bundle.workflow),
+    ).toBeUndefined();
     expect(result.value.bundle.workflow.nodes.map((node) => node.id)).toEqual([
       "main-worker",
     ]);
@@ -1580,7 +2364,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -1635,7 +2418,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -1705,7 +2487,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -1771,21 +2552,23 @@ describe("loadWorkflowFromDisk", () => {
     await writeJson(path.join(workflowDirectory, "workflow.json"), {
       workflowId: workflowName,
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      entryNodeId: "worker-1",
+      entryStepId: "worker-1",
       nodes: [
         {
           id: "worker-1",
-          role: "worker",
           addon: {
             name: "acme/echo-worker",
             inputs: { message: "loaded" },
           },
-          completion: { type: "none" },
         },
       ],
-      edges: [],
-      loops: [],
-      branching: { mode: "fan-out" },
+      steps: [
+        {
+          id: "worker-1",
+          nodeId: "worker-1",
+          role: "worker",
+        },
+      ],
     });
 
     const resolver: NodeAddonPayloadResolver = (input) =>
@@ -1817,6 +2600,8 @@ describe("loadWorkflowFromDisk", () => {
       executionBackend: "official/openai-sdk",
       variables: { message: "loaded" },
     });
+    expect(result.value.bundle.workflow.entryStepId).toBe("worker-1");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
   });
 
   test("loads third-party add-on refs when an async definition is provided", async () => {
@@ -1827,22 +2612,24 @@ describe("loadWorkflowFromDisk", () => {
     await writeJson(path.join(workflowDirectory, "workflow.json"), {
       workflowId: workflowName,
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      entryNodeId: "worker-1",
+      entryStepId: "worker-1",
       nodes: [
         {
           id: "worker-1",
-          role: "worker",
           addon: {
             name: "acme/async-echo-worker",
             version: "1",
             inputs: { message: "loaded async" },
           },
-          completion: { type: "none" },
         },
       ],
-      edges: [],
-      loops: [],
-      branching: { mode: "fan-out" },
+      steps: [
+        {
+          id: "worker-1",
+          nodeId: "worker-1",
+          role: "worker",
+        },
+      ],
     });
 
     const addon: NodeAddonDefinition = {
@@ -1874,6 +2661,8 @@ describe("loadWorkflowFromDisk", () => {
       executionBackend: "official/openai-sdk",
       variables: { message: "loaded async" },
     });
+    expect(result.value.bundle.workflow.entryStepId).toBe("worker-1");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
   });
 
   test("resolves user-scope local add-on manifests", async () => {
@@ -2229,7 +3018,7 @@ describe("loadWorkflowFromDisk", () => {
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
     expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
-    expect(result.value.bundle.workflow.entryNodeId).toBe("main-worker");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
     expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
       "main-worker",
     ]);
@@ -2257,7 +3046,9 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(result.value.bundle.workflow.workflowId).toBe("supervised-mock-retry");
+    expect(result.value.bundle.workflow.workflowId).toBe(
+      "supervised-mock-retry",
+    );
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
     expect(result.value.bundle.workflow.entryStepId).toBe("main-worker");
     expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
@@ -2283,7 +3074,7 @@ describe("loadWorkflowFromDisk", () => {
 
     expect(result.value.bundle.workflow.hasManagerNode).toBe(false);
     expect(result.value.bundle.workflow.entryStepId).toBe("reply-to-chat");
-    expect(result.value.bundle.workflow.entryNodeId).toBe("reply-to-chat");
+    expect(getLegacyEntryNodeId(result.value.bundle.workflow)).toBeUndefined();
     expect(result.value.bundle.workflow.steps?.map((step) => step.id)).toEqual([
       "reply-to-chat",
     ]);
@@ -2513,7 +3304,7 @@ describe("loadWorkflowFromDisk", () => {
       return;
     }
 
-    expect(parentResult.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect("workflowCalls" in parentResult.value.bundle.workflow).toBe(false);
     expect(parentResult.value.bundle.workflow.managerStepId).toBe(
       "divedra-manager",
     );
@@ -2536,9 +3327,9 @@ describe("loadWorkflowFromDisk", () => {
     if (!strictParentResult.ok) {
       return;
     }
-    expect(
-      strictParentResult.value.bundle.workflow.workflowCalls,
-    ).toBeUndefined();
+    expect("workflowCalls" in strictParentResult.value.bundle.workflow).toBe(
+      false,
+    );
 
     const calleeResult = await loadWorkflowFromDisk(
       "workflow-call-review-target",
@@ -2556,7 +3347,9 @@ describe("loadWorkflowFromDisk", () => {
 
     expect(calleeResult.value.bundle.workflow.hasManagerNode).toBe(false);
     expect(calleeResult.value.bundle.workflow.entryStepId).toBe("reviewer");
-    expect(calleeResult.value.bundle.workflow.entryNodeId).toBe("reviewer");
+    expect(
+      getLegacyEntryNodeId(calleeResult.value.bundle.workflow),
+    ).toBeUndefined();
     expect(
       calleeResult.value.bundle.workflow.steps?.map((step) => step.id),
     ).toEqual(["reviewer"]);
@@ -2708,7 +3501,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(path.join(workflowDirectory, "node-divedra-manager.json"), {
@@ -2757,7 +3549,6 @@ describe("loadWorkflowFromDisk", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     });
 
     await writeJson(

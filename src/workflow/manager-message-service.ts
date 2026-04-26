@@ -146,7 +146,7 @@ export function createManagerMessageService(
             normalizedActions as readonly unknown[],
             workflow,
             {
-              managerNodeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerNodeId,
               managerKind: managerNodeRef?.kind,
             },
           );
@@ -217,7 +217,7 @@ export function createManagerMessageService(
                     sourceCommunication,
                     workflow,
                     {
-                      managerNodeId: managerSession.managerNodeId,
+                      managerRuntimeId: managerSession.managerNodeId,
                       managerKind: managerNodeRef?.kind,
                     },
                     "managerControl replay-communication",

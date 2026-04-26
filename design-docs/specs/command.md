@@ -45,6 +45,12 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Accepts `--working-dir` / `--working-directory` to override the workflow execution working directory for the rerun.
   - Step ids are the only supported rerun target on active command/control surfaces; do not add node-id aliases to new APIs.
   - `--nested-superviser` is not a valid rerun flag; nested supervision is meaningful only for supervised start/resume flows.
+- `session continue <source-workflow-execution-id> --start-step <step-id> --after-step-run <step-run-id>`
+  - Planned history-linked continuation mode. Starts a new workflow execution from `startStepId` while importing source history through one concrete prior step run.
+  - `after-step-run` is resolved against the merged step-run timeline visible from the source workflow execution, so the chosen anchor may belong to imported ancestry rather than only the source run's local rows.
+- `session step-runs <workflow-execution-id>`
+  - Planned operator inspection surface for the merged ordered step-run history (`timelineOrdinal`, `executionOrdinal`, `stepRunId`, `stepId`, status, imported, lineage) visible from one workflow execution.
+  - Existing `session status`, `session progress`, and low-level `nodeExecutions` inspection remain local-session views unless an explicit imported-history mode is requested.
 - `session export <session-id>`
   - Export the persisted workflow run as JSON to stdout or to a file.
   - Includes session state, runtime step/node execution rows, runtime node logs, and communication snapshots.

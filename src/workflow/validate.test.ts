@@ -11,11 +11,58 @@ import {
   validateWorkflowBundleDetailed,
 } from "./validate";
 import {
+  getLegacyAuthoredEdges,
+  getLegacyAuthoredLoops,
+  getLegacyEntryNodeId,
+  getLegacyManagerNodeId,
+  getStructuralEdges,
+  getStructuralLoops,
+  getStructuralSubWorkflows,
+  resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerRuntimeId,
   type NodeAddonDefinition,
   type NodeAddonPayloadResolver,
   type WorkflowJson,
 } from "./types";
+
+describe("resolveWorkflowEntryRuntimeId", () => {
+  test("uses entryStepId when entryStepId and steps are present", () => {
+    expect(
+      resolveWorkflowEntryRuntimeId({
+        entryStepId: "entry-step",
+        steps: [],
+        entryNodeId: "stale-compat-entry",
+      } as unknown as WorkflowJson),
+    ).toBe("entry-step");
+  });
+
+  test("uses entryNodeId for legacy node-graph bundles", () => {
+    expect(
+      resolveWorkflowEntryRuntimeId({
+        entryNodeId: "legacy-entry",
+        managerNodeId: "legacy-manager",
+      } as unknown as WorkflowJson),
+    ).toBe("legacy-entry");
+  });
+
+  test("falls back to managerNodeId for legacy manager-only bundles", () => {
+    expect(
+      resolveWorkflowEntryRuntimeId({
+        managerNodeId: "legacy-manager",
+      } as unknown as WorkflowJson),
+    ).toBe("legacy-manager");
+  });
+
+  test("throws for legacy bundles that expose neither entryNodeId nor managerNodeId", () => {
+    expect(() =>
+      resolveWorkflowEntryRuntimeId({
+        workflowId: "broken-legacy-entry",
+      } as WorkflowJson),
+    ).toThrowError(
+      "workflow 'broken-legacy-entry' has no entry runtime id; expected entryNodeId or managerNodeId on a legacy node-graph bundle",
+    );
+  });
+});
 
 describe("resolveWorkflowManagerRuntimeId", () => {
   test("uses managerStepId ?? entryStepId when entryStepId and steps are present", () => {
@@ -46,6 +93,104 @@ describe("resolveWorkflowManagerRuntimeId", () => {
       } as unknown as WorkflowJson),
     ).toBe("root");
   });
+
+  test("throws for legacy bundles that expose neither managerNodeId nor entryNodeId", () => {
+    expect(() =>
+      resolveWorkflowManagerRuntimeId({
+        workflowId: "broken-legacy",
+      } as WorkflowJson),
+    ).toThrowError(
+      "workflow 'broken-legacy' has no manager runtime id; expected managerNodeId or entryNodeId on a legacy node-graph bundle",
+    );
+  });
+});
+
+describe("getStructuralEdges", () => {
+  test("derives step-addressed local edges from step transitions instead of compatibility workflow.edges", () => {
+    expect(
+      getStructuralEdges({
+        entryStepId: "manager",
+        steps: [
+          {
+            id: "manager",
+            nodeId: "manager-node",
+            transitions: [
+              { toStepId: "worker", label: "always" },
+              {
+                toStepId: "child-entry",
+                toWorkflowId: "child-flow",
+                resumeStepId: "after-child",
+              },
+            ],
+          },
+          {
+            id: "worker",
+            nodeId: "worker-node",
+            transitions: [{ toStepId: "after-child", label: "done" }],
+          },
+          { id: "after-child", nodeId: "after-child-node" },
+        ],
+        edges: [{ from: "stale", to: "edge", when: "never" }],
+      } as unknown as WorkflowJson),
+    ).toEqual([
+      { from: "manager", to: "worker", when: "always" },
+      { from: "worker", to: "after-child", when: "done" },
+    ]);
+  });
+
+  test("uses authored workflow.edges for legacy node-graph bundles", () => {
+    expect(
+      getStructuralEdges({
+        edges: [{ from: "root", to: "worker", when: "always" }],
+      } as unknown as WorkflowJson),
+    ).toEqual([{ from: "root", to: "worker", when: "always" }]);
+  });
+
+  test("derives sequential legacy edges from node order when workflow.edges is omitted", () => {
+    expect(
+      getStructuralEdges({
+        nodes: [
+          { id: "root", nodeFile: "node-root.json" },
+          {
+            id: "repeat",
+            nodeFile: "node-repeat.json",
+            repeat: { while: "again", restartAt: "root" },
+          },
+          { id: "done", nodeFile: "node-done.json" },
+        ],
+      } as unknown as WorkflowJson),
+    ).toEqual([
+      { from: "root", to: "repeat", when: "always" },
+      { from: "repeat", to: "root", when: "again" },
+      { from: "repeat", to: "done", when: "!(again)" },
+    ]);
+  });
+});
+
+describe("getStructuralLoops", () => {
+  test("derives legacy repeat loops from node.repeat without requiring workflow.loops", () => {
+    expect(
+      getStructuralLoops({
+        nodes: [
+          { id: "root", nodeFile: "node-root.json" },
+          {
+            id: "repeat",
+            nodeFile: "node-repeat.json",
+            repeat: { while: "again", restartAt: "root", maxIterations: 2 },
+          },
+          { id: "done", nodeFile: "node-done.json" },
+        ],
+      } as unknown as WorkflowJson),
+    ).toEqual([
+      {
+        id: "repeat-repeat",
+        judgeNodeId: "repeat",
+        continueWhen: "again",
+        exitWhen: "!(again)",
+        maxIterations: 2,
+      },
+    ]);
+  });
 });
 
 /** Opt in to legacy node-ordered / structural authoring for tests of the compatibility validator path. */
@@ -63,7 +208,6 @@ function makeValidRaw(): {
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
       managerNodeId: "divedra-manager",
-      subWorkflows: [],
       nodes: [
         {
           id: "divedra-manager",
@@ -80,7 +224,6 @@ function makeValidRaw(): {
       ],
       edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
       loops: [],
-      branching: { mode: "fan-out" },
     },
     nodePayloads: {
       "node-divedra-manager.json": {
@@ -110,8 +253,6 @@ function makeUnifiedRoleRaw(): {
       workflowId: "unified-demo",
       description: "unified demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -133,11 +274,6 @@ function makeUnifiedRoleRaw(): {
           completion: { type: "none" },
         },
       ],
-      edges: [
-        { from: "divedra-manager", to: "worker-1", when: "always" },
-        { from: "worker-1", to: "worker-2", when: "always" },
-      ],
-      branching: { mode: "fan-out" },
     },
     nodePayloads: {
       "node-divedra-manager.json": {
@@ -163,6 +299,17 @@ function makeUnifiedRoleRaw(): {
       },
     },
   };
+}
+
+function deleteLegacyBranchingField(workflow: unknown): void {
+  const workflowRecord = workflow as {
+    branching?: unknown;
+    edges?: unknown;
+    loops?: unknown;
+  };
+  delete workflowRecord.branching;
+  delete workflowRecord.edges;
+  delete workflowRecord.loops;
 }
 
 function makeValidStepAddressedRaw(): {
@@ -334,9 +481,7 @@ describe("validateWorkflowBundle", () => {
       "default-superviser",
       "workflow.json",
     );
-    const workflow = JSON.parse(
-      readFileSync(workflowPath, "utf8"),
-    ) as unknown;
+    const workflow = JSON.parse(readFileSync(workflowPath, "utf8")) as unknown;
     const result = validateWorkflowBundleDetailed(
       { workflow, nodePayloads: {} },
       { rejectLegacyWorkflowAuthoring: true },
@@ -411,7 +556,12 @@ describe("validateWorkflowBundle", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect("workflowCalls" in result.value.bundle.workflow).toBe(false);
+    expect(
+      (result.value.bundle.workflow as unknown as Record<string, unknown>)[
+        "branching"
+      ],
+    ).toBeUndefined();
     expect(
       crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps),
     ).toEqual([
@@ -421,6 +571,7 @@ describe("validateWorkflowBundle", () => {
         callerNodeId: "manager",
         callerStepId: "manager",
         resultNodeId: "worker",
+        source: "step-transition",
       },
     ]);
   });
@@ -444,7 +595,12 @@ describe("validateWorkflowBundle", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.bundle.workflow.workflowCalls).toBeUndefined();
+    expect("workflowCalls" in result.value.bundle.workflow).toBe(false);
+    expect(
+      (result.value.bundle.workflow as unknown as Record<string, unknown>)[
+        "branching"
+      ],
+    ).toBeUndefined();
     expect(
       crossWorkflowCallsFromSteps(result.value.bundle.workflow.steps),
     ).toEqual([
@@ -455,6 +611,7 @@ describe("validateWorkflowBundle", () => {
         callerStepId: "manager",
         resultNodeId: "worker",
         when: "need_review",
+        source: "step-transition",
       },
     ]);
   });
@@ -603,6 +760,96 @@ describe("validateWorkflowBundle", () => {
         (issue) =>
           issue.path === "workflow.steps[0].transitions[0].toStepId" &&
           issue.message.includes("real-entry"),
+      ),
+    ).toBe(true);
+  });
+
+  test("async validation rejects a legacy entryNodeId-only callee for step-addressed cross-workflow transitions", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wf-cross-legacy-callee-"));
+    const calleeName = "legacy-callee";
+    await mkdir(path.join(root, calleeName), { recursive: true });
+    await writeFile(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "legacy callee",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryNodeId: "legacy-entry",
+        nodes: [],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "legacy-entry",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = await validateWorkflowBundleAsync(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toWorkflowId" &&
+          issue.message.includes("must declare managerStepId or entryStepId"),
+      ),
+    ).toBe(true);
+  });
+
+  test("sync validation rejects a legacy entryNodeId-only callee for step-addressed cross-workflow transitions", () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), "wf-cross-legacy-callee-sync-"),
+    );
+    const calleeName = "legacy-callee-sync";
+    mkdirSync(path.join(root, calleeName), { recursive: true });
+    writeFileSync(
+      path.join(root, calleeName, "workflow.json"),
+      JSON.stringify({
+        workflowId: calleeName,
+        description: "legacy callee",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryNodeId: "legacy-entry",
+        nodes: [],
+      }),
+      "utf8",
+    );
+
+    const raw = makeValidStepAddressedRaw();
+    const steps = (raw.workflow as { steps: Array<Record<string, unknown>> })
+      .steps;
+    (steps[0] as { transitions: unknown[] }).transitions = [
+      {
+        toStepId: "legacy-entry",
+        toWorkflowId: calleeName,
+        resumeStepId: "worker",
+      },
+    ];
+
+    const result = validateWorkflowBundleDetailed(raw, {
+      rejectLegacyWorkflowAuthoring: true,
+      workflowRoot: root,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.steps[0].transitions[0].toWorkflowId" &&
+          issue.message.includes("must declare managerStepId or entryStepId"),
       ),
     ).toBe(true);
   });
@@ -1107,6 +1354,36 @@ describe("validateWorkflowBundle", () => {
     expect(result.value.workflow.description).toBe("");
   });
 
+  test("rejects authored branching on legacy node-graph bundles", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      branching: { mode: "fan-out" },
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.branching",
+          message:
+            "authored branching is legacy compatibility only and is no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some((issue) => issue.path === "workflow.branching.mode"),
+    ).toBe(false);
+  });
+
   test("rejects workflow ids that are unsafe for runtime filesystem namespaces", () => {
     const raw = makeValidRaw();
     raw.workflow = {
@@ -1295,7 +1572,10 @@ describe("validateWorkflowBundle", () => {
       return;
     }
 
-    expect(result.value.workflow.entryNodeId).toBe("divedra-manager");
+    expect(getLegacyEntryNodeId(result.value.workflow)).toBeUndefined();
+    expect(resolveWorkflowEntryRuntimeId(result.value.workflow)).toBe(
+      "divedra-manager",
+    );
     expect(result.value.workflow.nodes[0]?.role).toBe("manager");
     expect(result.value.workflow.nodes[2]?.control).toBe("loop-judge");
     expect(result.value.workflow.nodes[2]?.kind).toBe("loop-judge");
@@ -1383,10 +1663,7 @@ describe("validateWorkflowBundle", () => {
       "implement",
       "review",
     ]);
-    expect(result.value.workflow.edges).toEqual([
-      { from: "manager", to: "implement", when: "always" },
-      { from: "implement", to: "review", when: "always" },
-    ]);
+    expect(getLegacyAuthoredEdges(result.value.workflow)).toBeUndefined();
     expect(result.value.nodePayloads["manager"]?.managerType).toBe("code");
     expect(result.value.nodePayloads["implement"]?.promptTemplate).toBe(
       "implement",
@@ -1882,7 +2159,7 @@ describe("validateWorkflowBundle", () => {
     ).toBe("first turn");
   });
 
-  test("accepts simplified sequential schema and synthesizes edges plus repeat loops", () => {
+  test("accepts simplified sequential schema and derives edges plus repeat loop projections", () => {
     const raw = {
       workflow: {
         workflowId: "simplified-sequential",
@@ -1958,16 +2235,24 @@ describe("validateWorkflowBundle", () => {
       return;
     }
 
-    expect(result.value.workflow.managerNodeId).toBe("divedra-manager");
-    expect(result.value.workflow.entryNodeId).toBe("divedra-manager");
-    expect(result.value.workflow.subWorkflows).toEqual([]);
-    expect(result.value.workflow.edges).toEqual([
+    expect(getLegacyManagerNodeId(result.value.workflow)).toBe(
+      "divedra-manager",
+    );
+    expect(getLegacyEntryNodeId(result.value.workflow)).toBeUndefined();
+    expect(resolveWorkflowEntryRuntimeId(result.value.workflow)).toBe(
+      "divedra-manager",
+    );
+    expect(getStructuralSubWorkflows(result.value.workflow)).toEqual([]);
+    expect("subWorkflows" in result.value.workflow).toBe(false);
+    expect(getLegacyAuthoredEdges(result.value.workflow)).toBeUndefined();
+    expect(getLegacyAuthoredLoops(result.value.workflow)).toBeUndefined();
+    expect(getStructuralEdges(result.value.workflow)).toEqual([
       { from: "divedra-manager", to: "step-1", when: "always" },
       { from: "step-1", to: "repeat-step", when: "always" },
       { from: "repeat-step", to: "repeat-step", when: "continue_turn" },
       { from: "repeat-step", to: "done-step", when: "!(continue_turn)" },
     ]);
-    expect(result.value.workflow.loops).toEqual([
+    expect(getStructuralLoops(result.value.workflow)).toEqual([
       {
         id: "repeat-repeat-step",
         judgeNodeId: "repeat-step",
@@ -1986,16 +2271,17 @@ describe("validateWorkflowBundle", () => {
         workflowId: "repeat-with-edges",
         description: "repeat with explicit edges",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        managerNodeId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
-            role: "manager",
+            kind: "root-manager",
             nodeFile: "node-divedra-manager.json",
             completion: { type: "none" },
           },
           {
             id: "repeat-step",
-            role: "worker",
+            kind: "task",
             nodeFile: "node-repeat-step.json",
             repeat: {
               while: "continue_turn",
@@ -2004,7 +2290,7 @@ describe("validateWorkflowBundle", () => {
           },
           {
             id: "done-step",
-            role: "worker",
+            kind: "task",
             nodeFile: "node-done-step.json",
             completion: { type: "none" },
           },
@@ -2053,7 +2339,42 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("accepts workflowCalls as authored metadata", () => {
+  test("rejects authored workflowCalls by top-level presence on legacy node-graph bundles", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      entryNodeId: "divedra-manager",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker-1",
+          resultNodeId: "worker-1",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects non-empty authored workflowCalls on role-authored bundles", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -2067,20 +2388,422 @@ describe("validateWorkflowBundle", () => {
       ],
     };
 
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
 
-    expect(result.value.workflow.workflowCalls).toEqual([
-      {
-        id: "call-review",
-        workflowId: "review-flow",
-        callerNodeId: "worker-1",
-        resultNodeId: "worker-2",
-      },
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects empty authored workflowCalls on role-authored bundles", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored workflowCalls by top-level presence without traversing legacy call-entry validation", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "writer",
+          callerStepId: "writer",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some(
+        (issue) => issue.path === "workflow.workflowCalls[0].callerStepId",
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects authored edges on role-authored bundles", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      edges: [{ from: "divedra-manager", to: "worker-1", when: "always" }],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.edges",
+          message:
+            "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored edges by top-level presence without traversing legacy edge validation", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      edges: [{ from: "", to: 42, when: "" }],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.edges",
+          message:
+            "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some((issue) => issue.path.startsWith("workflow.edges[0].")),
+    ).toBe(false);
+  });
+
+  test("rejects authored loops on role-authored bundles", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      loops: [
+        {
+          id: "legacy-loop",
+          judgeNodeId: "worker-1",
+          continueWhen: "always",
+          exitWhen: "never",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.loops",
+          message:
+            "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored loops by top-level presence without traversing legacy loop validation", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      loops: [
+        {
+          id: "",
+          judgeNodeId: "",
+          continueWhen: "",
+          exitWhen: "",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.loops",
+          message:
+            "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some((issue) => issue.path.startsWith("workflow.loops[0].")),
+    ).toBe(false);
+  });
+
+  test("rejects authored branching on role-authored bundles by top-level presence", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      branching: { mode: "legacy-fan-out" },
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.branching",
+          message:
+            "authored branching is legacy compatibility only and is no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some((issue) => issue.path === "workflow.branching.mode"),
+    ).toBe(false);
+  });
+
+  test("rejects authored managerNodeId and entryNodeId on role-authored bundles with a manager-role node", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      managerNodeId: "divedra-manager",
+      entryNodeId: "divedra-manager",
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.managerNodeId",
+          message:
+            "authored managerNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+        }),
+        expect.objectContaining({
+          path: "workflow.entryNodeId",
+          message:
+            "authored entryNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects role-authored managerNodeId and entryNodeId by top-level presence without traversing legacy manager-entry semantic checks", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      managerNodeId: "missing-manager",
+      entryNodeId: "missing-entry",
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.filter((issue) => issue.path === "workflow.managerNodeId"),
+    ).toEqual([
+      expect.objectContaining({
+        path: "workflow.managerNodeId",
+        message:
+          "authored managerNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+      }),
     ]);
+    expect(
+      result.error.filter((issue) => issue.path === "workflow.entryNodeId"),
+    ).toEqual([
+      expect.objectContaining({
+        path: "workflow.entryNodeId",
+        message:
+          "authored entryNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+      }),
+    ]);
+  });
+
+  test("rejects empty authored workflowCalls by top-level presence on legacy node-graph bundles", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      entryNodeId: "divedra-manager",
+      workflowCalls: [],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+  });
+
+  test("rejects authored subWorkflowConversations by top-level presence without traversing legacy conversation-entry validation", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      entryNodeId: "divedra-manager",
+      subWorkflowConversations: [
+        {
+          id: "conv-1",
+          participantsIds: ["divedra-manager"],
+          maxTurns: 1,
+          stopWhen: "done",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflowConversations" &&
+          issue.message ===
+            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some((issue) =>
+        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects authored workflowCalls by top-level presence without traversing legacy call-entry validation", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      entryNodeId: "divedra-manager",
+      workflowCalls: [
+        {
+          id: "call-review",
+          workflowId: "review-flow",
+          callerNodeId: "worker-1",
+          callerStepId: "worker-1",
+          resultNodeId: "worker-1",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.workflowCalls",
+          message:
+            "authored workflowCalls are legacy compatibility only and are no longer supported",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some(
+        (issue) => issue.path === "workflow.workflowCalls[0].callerStepId",
+      ),
+    ).toBe(false);
   });
 
   test("rejects top-level workflowCalls on step-addressed bundles outside strict mode", () => {
@@ -2116,18 +2839,13 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects top-level workflowCalls on step-addressed bundles in strict mode", () => {
+  test("rejects top-level workflowCalls by presence on step-addressed bundles in strict mode", () => {
     const raw = makeValidStepAddressedRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      workflowCalls: [
-        {
-          id: "call-review",
-          workflowId: "review-flow",
-          callerNodeId: "worker",
-          resultNodeId: "worker",
-        },
-      ],
+      workflowCalls: {
+        id: "call-review",
+      },
     };
 
     const result = validateWorkflowBundleDetailed(raw, {
@@ -2142,7 +2860,7 @@ describe("validateWorkflowBundle", () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: "workflow.workflowCalls",
-          message: "is not part of the step-addressed workflow schema; use step transitions with toWorkflowId and resumeStepId for cross-workflow calls",
+          message: "is not part of the step-addressed workflow schema",
         }),
       ]),
     );
@@ -2164,6 +2882,77 @@ describe("validateWorkflowBundle", () => {
           block: { type: "plain" },
         },
       ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflows" &&
+          issue.message.includes("legacy compatibility only"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects role-authored subWorkflows by top-level presence without traversing legacy subWorkflow entry validation", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      subWorkflows: [
+        {
+          id: "legacy-lane",
+          description: "legacy lane",
+          managerNodeId: "",
+          inputNodeId: "missing-input",
+          outputNodeId: "missing-output",
+          nodeIds: [],
+          inputSources: [{ type: "not-a-real-source" }],
+          block: { type: "not-a-real-block" },
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflows",
+          message:
+            "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path.startsWith("workflow.subWorkflows[0].managerNodeId") ||
+          issue.path.startsWith("workflow.subWorkflows[0].inputSources") ||
+          issue.path.startsWith("workflow.subWorkflows[0].block"),
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects empty structural subWorkflows for role-authored bundles", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      subWorkflows: [],
     };
 
     const result = validateWorkflowBundleDetailed(
@@ -2214,6 +3003,152 @@ describe("validateWorkflowBundle", () => {
           issue.message.includes("legacy compatibility only"),
       ),
     ).toBe(true);
+  });
+
+  test("rejects role-authored subWorkflowConversations by top-level presence without traversing legacy conversation entry validation", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      subWorkflowConversations: [
+        {
+          id: "legacy-conversation",
+          participants: ["only-one"],
+          maxTurns: 0,
+          stopWhen: "",
+          conversationPolicy: "unsupported",
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflowConversations",
+          message:
+            "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+        }),
+      ]),
+    );
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path.startsWith(
+            "workflow.subWorkflowConversations[0].participants",
+          ) ||
+          issue.path.startsWith(
+            "workflow.subWorkflowConversations[0].conversationPolicy",
+          ),
+      ),
+    ).toBe(false);
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflowConversations[0].maxTurns" ||
+          issue.path === "workflow.subWorkflowConversations[0].stopWhen",
+      ),
+    ).toBe(false);
+  });
+
+  test("rejects empty structural subWorkflowConversations for role-authored bundles", () => {
+    const raw = makeUnifiedRoleRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      subWorkflowConversations: [],
+    };
+
+    const result = validateWorkflowBundleDetailed(
+      raw,
+      legacyWorkflowAuthorshipOk,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflowConversations" &&
+          issue.message.includes("legacy compatibility only"),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects role-authored legacy structural fields by top-level presence even when authored with invalid non-array values", () => {
+    const cases = [
+      {
+        field: "workflowCalls",
+        value: { invalid: true },
+        message:
+          "authored workflowCalls are legacy compatibility only and are no longer supported",
+      },
+      {
+        field: "edges",
+        value: "invalid",
+        message:
+          "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        field: "loops",
+        value: { invalid: true },
+        message:
+          "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        field: "subWorkflows",
+        value: "invalid",
+        message:
+          "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+      {
+        field: "subWorkflowConversations",
+        value: { invalid: true },
+        message:
+          "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      const raw = makeUnifiedRoleRaw();
+      raw.workflow = {
+        ...(raw.workflow as Record<string, unknown>),
+        [entry.field]: entry.value,
+      };
+
+      const result = validateWorkflowBundleDetailed(
+        raw,
+        legacyWorkflowAuthorshipOk,
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        continue;
+      }
+
+      expect(result.error).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: `workflow.${entry.field}`,
+            message: entry.message,
+          }),
+        ]),
+      );
+      expect(
+        result.error.some(
+          (issue) =>
+            issue.path === `workflow.${entry.field}` &&
+            issue.message === "must be an array when provided",
+        ),
+      ).toBe(false);
+    }
   });
 
   test("rejects structural boundary node kinds for role-authored bundles", () => {
@@ -2277,8 +3212,6 @@ describe("validateWorkflowBundle", () => {
           completion: { type: "none" },
         },
       ],
-      edges: [{ from: "worker-1", to: "worker-2", when: "always" }],
-      workflowCalls: [],
     };
     delete (raw.workflow as Record<string, unknown>)["managerNodeId"];
     delete raw.nodePayloads["node-divedra-manager.json"];
@@ -2290,14 +3223,16 @@ describe("validateWorkflowBundle", () => {
     }
 
     expect(result.value.workflow.hasManagerNode).toBe(false);
-    expect(result.value.workflow.managerNodeId).toBe("worker-1");
-    expect(result.value.workflow.entryNodeId).toBe("worker-1");
+    expect(getLegacyManagerNodeId(result.value.workflow)).toBe("worker-1");
+    expect(getLegacyEntryNodeId(result.value.workflow)).toBe("worker-1");
   });
 
   test("rejects multiple manager-role nodes", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
+      managerNodeId: "divedra-manager",
+      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -2578,6 +3513,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2634,6 +3570,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2685,6 +3622,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2754,6 +3692,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2817,6 +3756,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2888,6 +3828,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -2941,6 +3882,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3008,6 +3950,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3063,6 +4006,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3130,6 +4074,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3183,6 +4128,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3251,6 +4197,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3299,6 +4246,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3348,6 +4296,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3390,6 +4339,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3434,6 +4384,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3475,6 +4426,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3516,6 +4468,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3617,6 +4570,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3655,6 +4609,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
@@ -3732,6 +4687,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const resolver: NodeAddonPayloadResolver = (input) => {
@@ -3792,6 +4748,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const addon: NodeAddonDefinition = {
@@ -3847,6 +4804,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const addon: NodeAddonDefinition = {
@@ -4208,6 +5166,7 @@ describe("validateWorkflowBundle", () => {
         },
       ],
     };
+    deleteLegacyBranchingField(raw.workflow);
     delete raw.nodePayloads["node-worker-1.json"];
 
     const unhandledResolver: NodeAddonPayloadResolver = () => undefined;
@@ -5512,7 +6471,6 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -5614,7 +6572,6 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -5699,7 +6656,6 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -5786,7 +6742,6 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -5879,7 +6834,6 @@ describe("validateWorkflowBundle", () => {
       ],
       edges: [],
       loops: [],
-      branching: { mode: "fan-out" },
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -5927,7 +6881,7 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("accepts typed subWorkflows and subWorkflowConversations", () => {
+  test("rejects authored subWorkflowConversations on legacy node-graph bundles by top-level presence", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -6080,23 +7034,23 @@ describe("validateWorkflowBundle", () => {
     };
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
-    expect(result.value.workflow.prompts?.divedraPromptTemplate).toBe(
-      "Coordinate {{topic}}.",
-    );
-    expect(result.value.workflow.prompts?.workerSystemPromptTemplate).toBe(
-      "Return the node payload for {{topic}}.",
-    );
-    expect(result.value.workflow.subWorkflows).toHaveLength(2);
-    expect(result.value.workflow.subWorkflows[0]?.block?.type).toBe(
-      "branch-block",
-    );
-    expect(result.value.workflow.subWorkflowConversations?.[0]?.id).toBe(
-      "conv-1",
-    );
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow.subWorkflowConversations" &&
+          issue.message ===
+            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
+      ),
+    ).toBe(true);
+    expect(
+      result.error.some((issue) =>
+        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
+      ),
+    ).toBe(false);
   });
 
   test("rejects loop-body sub-workflow blocks that do not reference an existing loop", () => {
@@ -7571,11 +8525,14 @@ describe("validateWorkflowBundle", () => {
       "workflow.subWorkflows[0].inputSources[0].selectionPolicy:is currently unsupported",
     );
     expect(messages).toContain(
-      "workflow.subWorkflowConversations[0].conversationPolicy:is currently unsupported",
+      "workflow.subWorkflowConversations:authored subWorkflowConversations are legacy compatibility only and are no longer supported",
+    );
+    expect(messages).not.toContain(
+      "workflow.subWorkflowConversations[0].conversationPolicy",
     );
   });
 
-  test("rejects legacy sub-workflow aliases inputs and participantsIds", () => {
+  test("rejects legacy sub-workflow aliases inputs without traversing removed conversation entry aliases", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -7720,10 +8677,15 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path ===
-            "workflow.subWorkflowConversations[0].participantsIds" &&
-          issue.message.includes("not supported"),
+          issue.path === "workflow.subWorkflowConversations" &&
+          issue.message ===
+            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
       ),
     ).toBe(true);
+    expect(
+      result.error.some((issue) =>
+        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
+      ),
+    ).toBe(false);
   });
 });

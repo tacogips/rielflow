@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
 import { resolveNodeExecutionMailboxArtifactPaths } from "../workflow/node-execution-mailbox";
 import type { WorkflowSessionState } from "../workflow/session";
-import type { NodePayload } from "../workflow/types";
+import type { NodePayload, WorkflowJson } from "../workflow/types";
 import { buildHistoryDetailPaneState } from "./opentui-detail-content";
 import {
   OPEN_TUI_EMPTY_SELECT_VALUE,
@@ -13,6 +13,10 @@ import {
   resolveSystemTimeZoneLabel,
   type RuntimeSessionView,
 } from "./opentui-model";
+
+type LegacyEdgeWorkflow = WorkflowJson & {
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
 
 function asStepAddressedLoadedWorkflow(
   base: LoadedWorkflow,
@@ -48,7 +52,6 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
           nodeTimeoutMs: 120_000,
         },
         managerNodeId: "manager",
-        subWorkflows: [],
         nodes: [
           {
             id: "manager",
@@ -65,8 +68,7 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-        branching: { mode: "fan-out" },
-      },
+      } as LegacyEdgeWorkflow,
       nodePayloads: {
         manager: {
           id: "manager",

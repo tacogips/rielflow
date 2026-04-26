@@ -1,17 +1,23 @@
 import { describe, expect, test } from "vitest";
 import { deriveWorkflowVisualization } from "./visualization";
-import type { WorkflowJson } from "./types";
+import type { LoopRule, SubWorkflowRef, WorkflowJson } from "./types";
+
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
 
 function makeBaseWorkflow(
   nodes: readonly string[],
   edges: readonly { from: string; to: string; when: string }[],
-): WorkflowJson {
+): LegacyStructuralWorkflow {
   return {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: nodes.map((id) => ({
       id,
       nodeFile: `node-${id}.json`,
@@ -20,7 +26,6 @@ function makeBaseWorkflow(
     })),
     edges,
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
@@ -90,7 +95,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -164,7 +169,7 @@ describe("deriveWorkflowVisualization", () => {
           inputSources: [{ type: "human-input" }],
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow: grouped,
@@ -243,7 +248,7 @@ describe("deriveWorkflowVisualization", () => {
           block: { type: "branch-block" },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -358,7 +363,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -460,7 +465,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -608,7 +613,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -741,7 +746,7 @@ describe("deriveWorkflowVisualization", () => {
           block: { type: "plain" },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,

@@ -50,13 +50,14 @@ Current compatibility-removal sequence (see
 - workflow validation/load/save should reject legacy **authored** fields by default
   (`isStrictWorkflowAuthorshipValidation` in `validate.ts`, unless
   `rejectLegacyWorkflowAuthoring: false` or `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`)
-- normalized `WorkflowJson` may still **synthesize** runtime companions
-  (for example `managerNodeId`, structural `subWorkflows`, `edges`) from
-  step-addressed authoring until that plan’s module 1 fully removes them; new
-  bundles should be step-only
-- runtime cross-workflow execution still unions explicit `workflowCalls` (legacy
-  path) with step-derived `__cw:*` calls (`cross-workflow-from-steps.ts`); the
-  target end state is step transitions only
+- normalized `WorkflowJson` no longer synthesizes step-addressed compatibility
+  companions such as `managerNodeId`, structural `subWorkflows`, `edges`, or
+  repeat-driven `loops`; remaining legacy node-graph compatibility is still
+  removal-only debt tracked by that plan’s module 1
+- step-addressed cross-workflow execution already derives only step-transition
+  `__cw:*` dispatches, while explicit top-level `workflowCalls` remain isolated
+  to the legacy node-graph compatibility path (`cross-workflow-from-steps.ts`);
+  the target end state is step transitions only
 - phase-2 superviser-control add-on identifiers are part of the runtime control
   surface and should stay centralized; duplicating the same `divedra/*`
   catalog across validation, add-on resolution, and native execution is
@@ -128,6 +129,21 @@ It owns:
 - step jump resolution and timeout-policy routing
 - manager-control validation
 - final workflow-output publication
+
+Planned extension:
+
+- history-linked continuation from one concrete prior step run into a new
+  workflow execution; see `design-docs/specs/design-step-run-history-rerun.md`
+- continued runs keep `session.nodeExecutions`, `session.communications`,
+  backend-session handles, and other mutable execution state local to the owning
+  run; imported provenance is exposed through dedicated merged-history readers
+  instead of mutating the meaning of existing local session fields
+- runtime helpers that currently scan only local `session.nodeExecutions` or
+  `session.communications` for upstream resolution or published workflow output
+  must be reviewed explicitly during continuation work; the current hotspots are
+  in `buildUpstreamOutputRefs()`, `buildUpstreamInputs()`,
+  `findLatestPublishedWorkflowResult()`, and
+  `findLatestWorkflowCallResultExecution()` in `src/workflow/engine.ts`
 
 Execution-time working directory is resolved separately from workflow/artifact/session root resolution.
 
@@ -477,6 +493,13 @@ Delivery kinds:
 - `external-output`
 
 This mailbox layer is the architectural boundary that lets one workflow execution, cross-workflow invocation, and external callers use the same handoff model.
+
+Planned continuation extension:
+
+- a new workflow execution may import a prefix of one prior workflow
+  execution's step-run history by reference, anchored by a concrete
+  `stepRunId`/`nodeExecId` plus execution ordinal, rather than by step id
+  alone; see `design-docs/specs/design-step-run-history-rerun.md`
 
 Worker nodes do not consume that canonical transport layout directly.
 Before each node execution, the runtime compiles a worker-facing execution

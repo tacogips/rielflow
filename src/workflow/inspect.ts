@@ -9,7 +9,13 @@ import {
   type WorkflowRuntimeReadiness,
 } from "./runtime-readiness";
 import { collectWorkflowRevisionNodeFiles } from "./revision";
-import type { SupervisionSummary, LoadOptions } from "./types";
+import {
+  isStepAddressedWorkflow,
+  getStructuralEdges,
+  getStructuralLoops,
+  type SupervisionSummary,
+  type LoadOptions,
+} from "./types";
 import type { WorkflowSessionState } from "./session";
 
 export interface WorkflowStructuralProjectionCounts {
@@ -63,7 +69,7 @@ export async function buildInspectionSummary(
   options: LoadOptions = {},
 ): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
-  const isStepAddressed = workflow.steps !== undefined;
+  const isStepAddressed = isStepAddressedWorkflow(workflow);
   const stepIds = workflow.steps?.map((step) => step.id) ?? [];
   const nodeRegistryIds =
     workflow.nodeRegistry?.map((node) => node.id) ??
@@ -74,8 +80,8 @@ export async function buildInspectionSummary(
       ? workflow.nodes.length
       : workflow.nodeRegistry.length;
   const stepCount = workflow.steps?.length ?? workflow.nodes.length;
-  const edgeCount = workflow.edges.length;
-  const loopCount = workflow.loops?.length ?? 0;
+  const edgeCount = getStructuralEdges(workflow).length;
+  const loopCount = getStructuralLoops(workflow).length;
   const structuralGraphCounts: WorkflowStructuralProjectionCounts = {
     nodes: workflow.nodes.length,
     edges: edgeCount,

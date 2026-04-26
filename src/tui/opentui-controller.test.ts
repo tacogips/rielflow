@@ -5,7 +5,7 @@ import type {
   WorkflowSessionState,
 } from "../workflow/session";
 import type { RuntimeSessionSummary } from "../workflow/runtime-db";
-import type { NodePayload } from "../workflow/types";
+import type { NodePayload, WorkflowJson } from "../workflow/types";
 import {
   createOpenTuiController,
   resolveEditorTextForLoadedSession,
@@ -17,6 +17,10 @@ import type {
   ScreenMode,
   TuiWorkflowInputDetection,
 } from "./opentui-model";
+
+type LegacyEdgeWorkflow = WorkflowJson & {
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
 
 function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   return {
@@ -32,7 +36,6 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
           nodeTimeoutMs: 120_000,
         },
         managerNodeId: "divedra-manager",
-        subWorkflows: [],
         nodes: [
           {
             id: "divedra-manager",
@@ -49,8 +52,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-        branching: { mode: "fan-out" },
-      },
+      } as LegacyEdgeWorkflow,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",

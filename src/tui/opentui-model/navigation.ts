@@ -1,6 +1,10 @@
 import type { LoadedWorkflow } from "../../workflow/load";
 import type { NodeExecutionRecord } from "../../workflow/session";
-import type { NodePayload } from "../../workflow/types";
+import {
+  getStructuralSubWorkflows,
+  type NodePayload,
+  type SubWorkflowRef,
+} from "../../workflow/types";
 import {
   OPEN_TUI_EMPTY_SELECT_VALUE,
   type DetailAgentSessionSelection,
@@ -403,9 +407,7 @@ export function filterWorkflowNames(
 
 export function resolveHistoryPaneLabels(input: {
   readonly hasRuntimeSession: boolean;
-  readonly subworkflow:
-    | LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number]
-    | undefined;
+  readonly subworkflow: SubWorkflowRef | undefined;
 }): HistoryPaneLabels {
   if (input.subworkflow === undefined) {
     return {
@@ -518,14 +520,15 @@ export function resolveHistoryRevertAction(input: {
 export function resolveDirectChildSubworkflows(input: {
   readonly parentSubworkflowId: string;
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
-}): readonly LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number][] {
-  const parent = input.workflow.subWorkflows.find(
+}): readonly SubWorkflowRef[] {
+  const subWorkflows = getStructuralSubWorkflows(input.workflow);
+  const parent = subWorkflows.find(
     (entry) => entry.id === input.parentSubworkflowId,
   );
   if (parent === undefined) {
     return [];
   }
-  const descendants = input.workflow.subWorkflows.filter((candidate) => {
+  const descendants = subWorkflows.filter((candidate) => {
     if (candidate.id === parent.id) {
       return false;
     }

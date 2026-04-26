@@ -4,9 +4,31 @@ import {
   composeExecutionPrompt,
   composeExecutionPrompts,
 } from "./prompt-composition";
-import type { NodePayload, WorkflowJson, WorkflowNodeRef } from "./types";
+import {
+  getStructuralSubWorkflows,
+  type LoopRule,
+  type NodePayload,
+  type WorkflowCallRef,
+  type SubWorkflowRef,
+  type WorkflowJson,
+  type WorkflowNodeRef,
+} from "./types";
 
-function makeWorkflow(): WorkflowJson {
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
+
+type LegacyWorkflowCallWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly workflowCalls?: readonly WorkflowCallRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
+
+function makeWorkflow(): LegacyStructuralWorkflow {
   return {
     workflowId: "wf",
     description: "Ship a release safely.",
@@ -66,11 +88,10 @@ function makeWorkflow(): WorkflowJson {
     ],
     edges: [{ from: "workflow-input", to: "implement", when: "always" }],
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
-function makeRoleWorkflow(): WorkflowJson {
+function makeRoleWorkflow(): LegacyWorkflowCallWorkflow {
   return {
     workflowId: "role-wf",
     description: "Coordinate a direct manager-worker workflow.",
@@ -88,7 +109,6 @@ function makeRoleWorkflow(): WorkflowJson {
         resultNodeId: "publish",
       },
     ],
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -108,7 +128,6 @@ function makeRoleWorkflow(): WorkflowJson {
     ],
     edges: [{ from: "implement", to: "publish", when: "always" }],
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
@@ -248,11 +267,11 @@ describe("composeExecutionPrompt", () => {
     const prompt = composeExecutionPrompt({
       workflow: {
         ...workflow,
-        subWorkflows: workflow.subWorkflows.map((entry) => ({
+        subWorkflows: getStructuralSubWorkflows(workflow).map((entry) => ({
           ...entry,
           nodeIds: ["implement"],
         })),
-      },
+      } as LegacyStructuralWorkflow,
       nodeRef: makeNodeRef(),
       node: makeNode(),
       nodePayloads: makeNodePayloads(),
@@ -373,7 +392,7 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompt).toContain(
-      "workflow-call decisions, output assessment, and retry decisions",
+      "worker execution, output assessment, and retry decisions",
     );
     expect(prompt).toContain('"type":"retry-step","stepId":"<step-id>"');
     expect(prompt).toContain(

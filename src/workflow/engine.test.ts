@@ -1146,7 +1146,6 @@ async function createRoleManagedWorkflowFixture(
     workflowId: workflowName,
     description: "role-managed fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -1185,39 +1184,45 @@ async function createRoleManagedWorkflowFixture(
 async function createWorkflowCallFixture(
   root: string,
   workflowName: string,
+  calleeStartStepId = "reviewer",
 ): Promise<void> {
   const workflowDir = path.join(root, workflowName);
   await mkdir(workflowDir, { recursive: true });
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "workflow call fixture",
+    description: "step-addressed workflow call fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "writer",
-    workflowCalls: [
-      {
-        id: "call-review",
-        workflowId: "review-flow",
-        callerNodeId: "writer",
-        resultNodeId: "review-result",
-      },
-    ],
+    entryStepId: "writer",
     nodes: [
       {
         id: "writer",
-        role: "worker",
         nodeFile: "node-writer.json",
-        completion: { type: "none" },
       },
       {
         id: "review-result",
-        role: "worker",
         nodeFile: "node-review-result.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [],
-    branching: { mode: "fan-out" },
+    steps: [
+      {
+        id: "writer",
+        nodeId: "writer",
+        role: "worker",
+        transitions: [
+          {
+            toWorkflowId: "review-flow",
+            toStepId: calleeStartStepId,
+            resumeStepId: "review-result",
+          },
+        ],
+      },
+      {
+        id: "review-result",
+        nodeId: "review-result",
+        role: "worker",
+      },
+    ],
   });
 
   await writeJson(path.join(workflowDir, "node-writer.json"), {
@@ -1251,34 +1256,39 @@ async function createWhenGatedWorkflowCallFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "workflow call fixture (when-gated)",
+    description: "step-addressed workflow call fixture (when-gated)",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "writer",
-    workflowCalls: [
-      {
-        id: "call-review",
-        workflowId: "review-flow",
-        callerNodeId: "writer",
-        resultNodeId: "review-result",
-        when: "need_review",
-      },
-    ],
+    entryStepId: "writer",
     nodes: [
       {
         id: "writer",
-        role: "worker",
         nodeFile: "node-writer.json",
-        completion: { type: "none" },
       },
       {
         id: "review-result",
-        role: "worker",
         nodeFile: "node-review-result.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [],
-    branching: { mode: "fan-out" },
+    steps: [
+      {
+        id: "writer",
+        nodeId: "writer",
+        role: "worker",
+        transitions: [
+          {
+            toWorkflowId: "review-flow",
+            toStepId: "reviewer",
+            resumeStepId: "review-result",
+            label: "need_review",
+          },
+        ],
+      },
+      {
+        id: "review-result",
+        nodeId: "review-result",
+        role: "worker",
+      },
+    ],
   });
 
   await writeJson(path.join(workflowDir, "node-writer.json"), {
@@ -1307,25 +1317,16 @@ async function createWorkflowCallCalleeFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "workflow call callee fixture",
+    description: "step-addressed workflow call callee fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "reviewer",
+    entryStepId: "reviewer",
     nodes: [
       {
         id: "reviewer",
-        role: "worker",
         nodeFile: "node-reviewer.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "done",
-        kind: "output",
-        nodeFile: "node-done.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [{ from: "reviewer", to: "done", when: "always" }],
-    branching: { mode: "fan-out" },
+    steps: [{ id: "reviewer", nodeId: "reviewer", role: "worker" }],
   });
 
   await writeJson(path.join(workflowDir, "node-reviewer.json"), {
@@ -1333,14 +1334,6 @@ async function createWorkflowCallCalleeFixture(
     executionBackend: "codex-agent",
     model: "gpt-5-nano",
     promptTemplate: "review",
-    variables: {},
-  });
-
-  await writeJson(path.join(workflowDir, "node-done.json"), {
-    id: "done",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "done",
     variables: {},
   });
 }
@@ -1354,25 +1347,33 @@ async function createManagedWorkflowCallCalleeWithoutOutputFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "managed workflow call callee without published output",
+    description: "step-addressed managed workflow call callee without published output",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
+    managerStepId: "divedra-manager",
+    entryStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
         nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
       },
       {
         id: "reviewer",
-        role: "worker",
         nodeFile: "node-reviewer.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [{ from: "divedra-manager", to: "reviewer", when: "always" }],
-    branching: { mode: "fan-out" },
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+        transitions: [{ toStepId: "reviewer" }],
+      },
+      {
+        id: "reviewer",
+        nodeId: "reviewer",
+        role: "worker",
+      },
+    ],
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1845,14 +1846,6 @@ async function createSubWorkflowRuntimeFixture(
         outputNodeId: "b-output",
         nodeIds: ["b-manager", "b-input", "b-output"],
         inputSources: [{ type: "sub-workflow-output", subWorkflowId: "sw-a" }],
-      },
-    ],
-    subWorkflowConversations: [
-      {
-        id: "conv-1",
-        participants: ["sw-a", "sw-b"],
-        maxTurns: 3,
-        stopWhen: "done",
       },
     ],
     nodes: [
@@ -3241,7 +3234,7 @@ describe("runWorkflow", () => {
     expect(resumed.error.sessionId).toBe(first.value.session.sessionId);
   });
 
-  test("executes authored workflowCalls and delivers child workflow results", async () => {
+  test("executes step-addressed cross-workflow transitions and delivers child workflow results", async () => {
     const root = await makeTempDir();
     await createWorkflowCallFixture(root, "workflow-call-fixture");
     await createWorkflowCallCalleeFixture(root, "review-flow");
@@ -3267,7 +3260,7 @@ describe("runWorkflow", () => {
       result.value.session.nodeExecutions.map((entry) => entry.nodeId),
     ).toEqual(["writer", "review-result"]);
     const workflowCallCommunication = result.value.session.communications.find(
-      (entry) => entry.transitionWhen === "workflow-call:call-review",
+      (entry) => entry.transitionWhen === "workflow-call:__cw:writer",
     );
     expect(workflowCallCommunication).toBeDefined();
     expect(workflowCallCommunication?.toNodeId).toBe("review-result");
@@ -3324,14 +3317,16 @@ describe("runWorkflow", () => {
       return;
     }
 
-    expect(result.error.message).toContain("workflow runtime readiness failed");
-    expect(result.error.message).toContain("workflow-call targets");
-    expect(result.error.message).toContain("review-flow");
+    expect(result.error.message).toContain("workflow validation failed");
   });
 
   test("fails workflow-call result delivery when a managed callee has no published output", async () => {
     const root = await makeTempDir();
-    await createWorkflowCallFixture(root, "workflow-call-fixture");
+    await createWorkflowCallFixture(
+      root,
+      "workflow-call-fixture",
+      "divedra-manager",
+    );
     await createManagedWorkflowCallCalleeWithoutOutputFixture(
       root,
       "review-flow",
@@ -3353,7 +3348,7 @@ describe("runWorkflow", () => {
       return;
     }
 
-    expect(result.error.message).toContain("workflow-call 'call-review'");
+    expect(result.error.message).toContain("workflow-call '__cw:writer'");
     expect(result.error.message).toContain(
       "completed without a result execution for 'review-result'",
     );
@@ -4121,6 +4116,7 @@ describe("runWorkflow", () => {
     const root = await makeTempDir();
     const artifactRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
+    const rootDataDir = path.join(root, "data");
     await createStepAddressedInheritedSessionReuseFixture(
       root,
       "step-addressed-execution-metadata",
@@ -4133,6 +4129,7 @@ describe("runWorkflow", () => {
         workflowRoot: root,
         artifactRoot,
         sessionStoreRoot,
+        rootDataDir,
       },
       adapter,
     );
@@ -4167,6 +4164,7 @@ describe("runWorkflow", () => {
       result.value.session.sessionId,
       {
         artifactRoot,
+        rootDataDir,
       },
     );
     expect(runtimeExecutions).toEqual(
@@ -8334,18 +8332,7 @@ describe("runWorkflow", () => {
     expect(executionOrder.indexOf("b-output")).toBeGreaterThan(
       executionOrder.indexOf("b-input"),
     );
-    expect(
-      (result.value.session.conversationTurns ?? []).length,
-    ).toBeGreaterThan(0);
-    expect(result.value.session.conversationTurns?.[0]?.fromSubWorkflowId).toBe(
-      "sw-a",
-    );
-    expect(result.value.session.conversationTurns?.[0]?.toSubWorkflowId).toBe(
-      "sw-b",
-    );
-    expect(
-      result.value.session.conversationTurns?.[0]?.communicationId,
-    ).toMatch(/^comm-\d{6}$/);
+    expect(result.value.session.conversationTurns ?? []).toEqual([]);
 
     const bInputExec = result.value.session.nodeExecutions.find(
       (entry) => entry.nodeId === "b-input",
@@ -8402,10 +8389,7 @@ describe("runWorkflow", () => {
     const conversationCommunication = result.value.session.communications.find(
       (entry) => entry.deliveryKind === "conversation-turn",
     );
-    expect(conversationCommunication).toBeDefined();
-    expect(conversationCommunication?.fromSubWorkflowId).toBe("sw-a");
-    expect(conversationCommunication?.toSubWorkflowId).toBe("sw-b");
-    expect(conversationCommunication?.payloadRef.outputNodeId).toBe("a-output");
+    expect(conversationCommunication).toBeUndefined();
 
     const parentToSubWorkflowCommunication =
       result.value.session.communications.find(
@@ -8517,111 +8501,6 @@ describe("runWorkflow", () => {
     expect(rootToAManagerCommunications[0]?.toSubWorkflowId).toBe("sw-a");
   });
 
-  test("fails deterministically when a conversation sender output artifact is corrupted", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-corrupt-conversation";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-
-    const options = {
-      ...legacyAuthoredWorkflowLoadOpts,
-      workflowRoot: root,
-      artifactRoot: path.join(root, "artifacts"),
-      sessionStoreRoot: path.join(root, "sessions"),
-    };
-
-    const paused = await runWorkflow(
-      workflowName,
-      {
-        ...options,
-        sessionId: "sess-corrupt-conversation",
-        runtimeVariables: {
-          humanInput: { topic: "demo" },
-        },
-        maxSteps: 4,
-      },
-      deterministicAdapter,
-    );
-    expect(paused.ok).toBe(true);
-    if (!paused.ok) {
-      return;
-    }
-    expect(paused.value.session.status).toBe("paused");
-
-    const senderExec = paused.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "a-output",
-    );
-    expect(senderExec).toBeDefined();
-    if (senderExec === undefined) {
-      return;
-    }
-    await writeFile(
-      path.join(senderExec.artifactDir, "output.json"),
-      '"corrupted"\n',
-      "utf8",
-    );
-
-    const resumed = await runWorkflow(
-      workflowName,
-      {
-        ...options,
-        resumeSessionId: paused.value.session.sessionId,
-      },
-      deterministicAdapter,
-    );
-
-    expect(resumed.ok).toBe(false);
-    if (!resumed.ok) {
-      expect(resumed.error.exitCode).toBe(1);
-      expect(resumed.error.message).toContain(
-        "failed to resolve upstream communication",
-      );
-      expect(resumed.error.message).toContain("comm-");
-      expect(resumed.error.message).toContain("divedra-manager");
-      expect(resumed.error.message).toContain("a-output");
-    }
-  });
-
-  test("replays multi-turn sub-workflow conversations through manager mailboxes", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-multi-turn-conversation";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        sessionId: "sess-multi-turn-conversation",
-        runtimeVariables: { humanInput: { topic: "ping-pong" } },
-      },
-      deterministicAdapter,
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    const conversationTurns = result.value.session.conversationTurns ?? [];
-    expect(conversationTurns).toHaveLength(3);
-    expect(
-      conversationTurns.map(
-        (entry) => `${entry.fromSubWorkflowId}->${entry.toSubWorkflowId}`,
-      ),
-    ).toEqual(["sw-a->sw-b", "sw-b->sw-a", "sw-a->sw-b"]);
-
-    const aInputExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "a-input",
-    );
-    const bInputExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "b-input",
-    );
-    expect(aInputExecutions).toHaveLength(2);
-    expect(bInputExecutions).toHaveLength(2);
-  });
-
   test("subworkflow-manager forwards its own output to the child input", async () => {
     const root = await makeTempDir();
     const workflowName = "subworkflow-manager-forwarding";
@@ -8726,7 +8605,7 @@ describe("runWorkflow", () => {
     expect(bInputExecutions.length).toBeGreaterThan(0);
   });
 
-  test("exposes conversation routing metadata in transcript bindings", async () => {
+  test("passes an empty transcript binding when legacy sub-workflow conversations are removed", async () => {
     const root = await makeTempDir();
     const workflowName = "subworkflow-transcript-metadata";
     await createSubWorkflowRuntimeFixture(root, workflowName);
@@ -8787,16 +8666,7 @@ describe("runWorkflow", () => {
       };
     };
 
-    expect(inputJson.arguments.transcript.length).toBeGreaterThan(0);
-    expect(inputJson.arguments.transcript[0]?.fromManagerNodeId).toBe(
-      "a-manager",
-    );
-    expect(inputJson.arguments.transcript[0]?.toManagerNodeId).toBe(
-      "b-manager",
-    );
-    expect(inputJson.arguments.transcript[0]?.communicationId).toMatch(
-      /^comm-\d{6}$/,
-    );
+    expect(inputJson.arguments.transcript).toEqual([]);
   });
 
   test("rejects a sub-workflow that attempts to reuse the root manager", async () => {

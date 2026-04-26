@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-unified-workflow-role-model.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/specs/notes.md`
 **Created**: 2026-04-25
-**Last Updated**: 2026-04-26 (review slice: shared output-ref helper reuse + targeted verification; prior review slices retained)
+**Last Updated**: 2026-04-26 (module 1 slice: stop re-authoring redundant legacy `entryNodeId` on save)
 
 ## Design Document Reference
 
@@ -76,7 +76,7 @@ target end state is one active workflow model:
 
 #### `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/create.ts`
 
-**Status**: In Progress (strict `WorkflowJson` typing surfaced test cast fixes; full field removal still pending)
+**Status**: In Progress (manager/entry alias cleanup, callee entry fallback removal, step-addressed `branching` projection removal, legacy normalized `branching` projection removal, dead normalized `WorkflowJson.branching` companion/save passthrough removal, authored legacy `workflow.branching` rejection plus removal from the authored workflow type and save pre-validation scrub path, primary authored/public `AuthoredWorkflowJson` now omits the remaining legacy top-level compatibility fields and save-only raw compatibility reads are isolated behind internal record aliases, empty structural `subWorkflows` omission on both step-addressed and legacy normalized bundles, authored `workflowCalls` are now rejected outright by top-level presence across legacy node-graph, role-authored, and step-addressed save/load validation paths, authored `subWorkflowConversations` are now also rejected outright by top-level presence across legacy node-graph, role-authored, and step-addressed save/load validation paths, role-authored `edges` / `loops` / `subWorkflows` / `subWorkflowConversations` now also reject malformed non-array authored values by top-level presence instead of keeping dead legacy shape-validation branches alive, role-authored `edges` / `loops` rejection now also skips legacy edge/loop entry normalization, role-authored `subWorkflows` / `subWorkflowConversations` rejection now also skips legacy structural entry normalization, managed role-authored `managerNodeId` / `entryNodeId` rejection plus save-time stripping, managed role-authored legacy manager/entry aliases no longer drive downstream semantic manager-entry validation, step-addressed save-time rejection of legacy-only top-level `entryNodeId` / `managerNodeId` / `workflowCalls` / any top-level `edges` / structural companions, normalized-legacy save canonicalization that no longer re-authors synthesized `edges` / default `branching` on fresh save, strips redundant legacy `entryNodeId` aliases when they only mirror `managerNodeId`, and now also strips raw-input no-op legacy companions on node-graph saves, shared `getStructuralEdges(...)` projection for local routing, shared `getStructuralLoops(...)` projection for repeat semantics, primary normalized/public `WorkflowJson` no longer exposes legacy-authored `managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflowConversations`, or `loops`, step-addressed normalized bundles no longer synthesize `workflow.edges`, legacy normalized bundles no longer synthesize omitted sequential `workflow.edges`, repeat-driven `workflow.loops`, or managed-entry `entryNodeId` aliases, and runtime/readiness/inspection helpers now derive cross-workflow rows only from `steps[].transitions`; broader field removal still pending)
 
 ```typescript
 export interface WorkflowJson {
@@ -102,19 +102,57 @@ export interface WorkflowStepTransition {
 - [ ] Remove authored compatibility fields from the primary workflow types:
       `managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
       `subWorkflowConversations`, `edges`, `loops`, and `branching` (partial: step-addressed
-      validation rejects top-level `workflowCalls`; legacy node-graph path unchanged)
+      validation/save now reject top-level `workflowCalls` by presence without
+      traversing malformed-array compatibility checks, authored legacy
+      `workflowCalls` are now rejected outright by presence across legacy
+      node-graph, role-authored, and step-addressed paths, managed role-authored
+      bundles now reject authored `managerNodeId` / `entryNodeId`, authored
+      role/control bundles now also reject legacy
+      `edges` / `loops` by presence without traversing legacy edge/loop
+      validation, authored role/control bundles now also reject
+      `subWorkflows` / `subWorkflowConversations` by presence without
+      traversing legacy structural entry validation, managed role-authored
+      bundles now ignore stale authored `managerNodeId` / `entryNodeId` during
+      downstream semantic manager-entry validation, authored legacy
+      `workflow.branching` is now rejected outright and removed from the
+      authored workflow type/save scrub path, and empty legacy `loops` and
+      `subWorkflowConversations` are omitted from normalized bundles, primary
+      authored/public `AuthoredWorkflowJson` no
+      longer advertises top-level legacy `managerNodeId`, `entryNodeId`,
+      `workflowCalls`, `subWorkflows`, `subWorkflowConversations`, `edges`, or
+      `loops`, primary normalized/public `WorkflowJson` no longer
+      exposes `managerNodeId`, `entryNodeId`, `workflowCalls`,
+      `subWorkflowConversations`, legacy-authored `edges`, or
+      legacy-authored `loops` directly,
+      repeat-driven legacy `workflow.loops` are no longer synthesized onto
+      normalized bundles, and legacy authored `WorkflowCallRef` no longer carries step-derived
+      `callerStepId`
+      metadata; legacy node-graph path otherwise unchanged)
 - [ ] Delete validator branches that normalize or synthesize structural
       compatibility bundles
 - [ ] Stop deriving `edges`, loop projections, and manager/entry node aliases
-      from authored legacy shapes
+      from authored legacy shapes (partial: step-addressed manager/entry aliases,
+      synthesized `branching`, empty structural `subWorkflows`, and normalized
+      `workflow.edges` companions are removed from step-addressed bundles, and
+      engine/inspection/validation/viewer readers now derive local routing and
+      repeat loop projections through shared helpers instead of assuming
+      normalized `workflow.edges` / `workflow.loops`; omitted legacy node-graph
+      local edges, repeat loops, and managed-entry `entryNodeId` aliases are
+      now helper-derived instead of being synthesized onto normalized bundles,
+      but persisted legacy node-graph `edges` / broader structural companions
+      remain)
 - [ ] Resolve callee start targets strictly from `managerStepId ?? entryStepId`
-- [ ] Make create/save/load emit only strict step-addressed bundles
+      (partial: step-addressed cross-workflow validator no longer falls back to
+      legacy `entryNodeId`; remaining runtime/legacy cleanup still open)
+- [ ] Make create/save/load emit only strict step-addressed bundles (partial:
+      save no longer re-authors non-empty structural `subWorkflows` onto copied
+      legacy node-graph bundles; broader legacy load/save cutover remains)
 
 ### 2. Runtime and Control Cleanup
 
 #### `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/sub-workflow.ts`, `src/workflow/conversation.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts`
 
-**Status**: IN_PROGRESS (shared step-identity projection consolidation landed; broader union/compatibility removal still pending)
+**Status**: IN_PROGRESS (shared step-identity projection consolidation landed; step-addressed cross-workflow execution now bypasses `WorkflowCallRef` compatibility synthesis; helper/read-model projections also use dedicated derived cross-workflow rows instead of reusing authored `WorkflowCallRef`; supervision rerun planning no longer projects legacy node-graph workflows into synthetic step graphs; manager-control replay scope now requires explicit communication `fromSubWorkflowId` / `toSubWorkflowId` metadata instead of inferring legacy scope from node ids; dead mixed step+legacy workflow-call union helper branches are removed, authored legacy `workflowCalls` no longer execute on the node-graph path, and legacy `subWorkflowConversations` / `conversation-turn` runtime execution are removed; root/sub structural branching cleanup still remains)
 
 ```typescript
 export interface ExecutionAddress {
@@ -143,8 +181,11 @@ export type ManagerControlActionType =
       removed from the parser)
 - [ ] Remove root/sub-workflow runtime branching from engine, conversation, and
       helper layers
-- [ ] Lower all cross-workflow execution through one step-transition dispatch
-      path instead of unioning authored `workflowCalls`
+- [x] Lower all cross-workflow execution through one step-transition dispatch
+      path instead of unioning authored `workflowCalls` (engine/runtime/readiness
+      helpers now derive cross-workflow execution rows only from
+      `steps[].transitions`; authored top-level `workflowCalls` are rejected and
+      no longer execute)
 - [ ] Keep the current branch's superviser-control features working without
       reintroducing node-addressed or structural compatibility semantics
 
@@ -152,7 +193,7 @@ export type ManagerControlActionType =
 
 #### `src/lib.ts`, `src/cli.ts`, `src/workflow/inspect.ts`, `src/server/graphql-executable-schema.ts`, `src/graphql/schema.ts`, `src/workflow/visualization.ts`, `src/tui/**/*`
 
-**Status**: IN_PROGRESS
+**Status**: IN_PROGRESS (GraphQL worker-only test alignment, TUI step-derived workflow-call preview parity, GraphQL/load fixture alignment away from legacy worker-only + authored `workflowCalls`, and GraphQL `sendManagerMessage.managerNodeId` input removal landed; broader node-id/public-surface cleanup still pending)
 
 ```typescript
 export interface WorkflowInspectionSummary {
@@ -285,6 +326,1206 @@ interface VerificationCommandSet {
 | Architecture fit       | Repository still matches the intended phase-133 end state                                                                                  | FAIL                                                                                                            | Modules 1-4 remain open: remove authored compatibility schema, root/sub runtime branching, structural `subWorkflows`, and legacy docs/examples                                      |
 
 ## Progress Log
+
+### Session: 2026-04-26 20:14 JST (module 1 slice: stop re-authoring redundant legacy `entryNodeId` on save)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended strict
+step-addressed direction, so no new design document or replacement
+implementation plan was needed. Continued module 1 by deleting another
+unnecessary legacy save-path alias in `src/workflow/save.ts`: legacy
+node-graph bundles no longer persist `workflow.entryNodeId` when it is only a
+redundant mirror of the persisted `workflow.managerNodeId`. This keeps the
+remaining legacy runtime path intact for manager-less workflows, but trims the
+public/persisted compatibility surface instead of carrying a duplicate entry
+alias forward on copied legacy bundles. Updated `src/workflow/save.test.ts`
+accordingly: legacy copy regressions now assert that redundant `entryNodeId`
+is omitted, and a focused manager-less regression confirms a distinct authored
+`entryNodeId` still survives when it remains the only entry alias.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal and rejection of the
+remaining node-graph-only structural fields. Module 2 runtime/control cleanup
+still remains open for root/sub branching and other legacy node-graph special
+cases. Module 3 public-surface cleanup still remains open beyond the current
+GraphQL/TUI step-addressing changes.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/save.test.ts src/workflow/load.test.ts --runInBand`.
+This remains an incremental phase-133 slice, not plan completion, so
+`PROGRESS.json` status does not change and remains `In Progress`.
+
+### Session: 2026-04-26 20:01 JST (module 1 slice: stop re-authoring structural legacy `subWorkflows` on save)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended strict
+step-addressed direction, so no new design document or replacement
+implementation plan was needed. Continued module 1 by deleting the save-path
+branch in `src/workflow/save.ts` that re-authored non-empty legacy
+`workflow.subWorkflows` back into persisted `workflow.json` when copying or
+re-saving a loaded legacy bundle. The runtime helper surface remains
+step-addressed-first, but the persistence surface now removes another obsolete
+structural compatibility companion instead of preserving it. Updated
+`src/workflow/save.test.ts` with a focused regression that loads a legacy
+node-graph bundle containing a structural sub-workflow, saves it under a new
+name, and asserts the surviving behavior only: the copied workflow keeps the
+legacy manager/entry ids and explicit legacy `edges` still needed by the
+remaining node-graph path, but no longer re-authors `subWorkflows`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`subWorkflows` input
+rejection, remaining non-step structural branches, and deeper legacy
+node-graph load/save input paths). Module 2 runtime/control cleanup still
+remains open for root/sub branching and the remaining legacy node-graph
+dispatch union path. Module 3 public-surface cleanup still remains open beyond
+the current GraphQL/TUI step-addressing updates.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/save.test.ts --runInBand`
+(`51` pass). This remains an incremental phase-133
+slice, not plan completion, so `PROGRESS.json` status does not change and
+remains `In Progress`.
+
+### Session: 2026-04-26 19:57 JST (module 1/2 slice: remove authored legacy `subWorkflowConversations` end-to-end)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued modules 1 and 2 by
+removing authored top-level `workflow.subWorkflowConversations` end-to-end
+instead of keeping the remaining legacy structural conversation branch alive.
+In `src/workflow/types.ts`, the legacy `SubWorkflowConversation` type and
+helper reader were deleted. In `src/workflow/validate.ts`, authored
+`subWorkflowConversations` are now rejected outright by top-level presence on
+legacy node-graph bundles as well as role-authored bundles, and the dead legacy
+conversation-entry normalization/semantic-validation branches were removed. In
+`src/workflow/save.ts`, save no longer preserves or canonicalizes authored
+`subWorkflowConversations`. In `src/workflow/engine.ts`, the legacy
+conversation-turn execution branch was deleted, and
+`src/workflow/conversation.ts` plus its dedicated test file were removed as
+unreachable compatibility code. Focused workflow tests were updated to the
+surviving behavior only: validator/load/save coverage now expects top-level
+rejection without traversing removed conversation-entry fields, and the
+sub-workflow engine fixture no longer authors conversations while transcript
+bindings remain empty.
+
+**Tasks In Progress**: Module 1 still remains open for the other legacy
+structural companions (`subWorkflows`, `edges`, `loops`, manager/entry node
+aliases) on the remaining node-graph path. Module 2 still remains open for
+deeper root/sub-workflow runtime branching cleanup outside the removed
+conversation-turn path. Module 3 broader node-id/public-surface cleanup and
+module 4 examples/docs retirement both remain open.
+
+**Blockers**: `src/workflow/engine.test.ts` is already broadly red on the
+current branch outside this slice. After the removal landed, a targeted engine
+run still failed across many unrelated cases with generic `workflow validation
+failed` results that are not specific to the removed conversation path, so this
+iteration kept verification focused on the validator/load/save suites plus a
+direct runtime repro.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`311` pass),
+`bun run typecheck:server`
+(`tsc --noEmit` passed),
+and a direct `bun` runtime repro of a legacy structural sub-workflow fixture
+confirmed load/run success without authored `subWorkflowConversations`.
+Plan status remains `In Progress`, so `impl-plans/PROGRESS.json` did not
+require a status update in this slice.
+
+### Session: 2026-04-26 19:46 JST (module 1/2 slice: remove authored legacy workflowCalls end-to-end)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued modules 1 and 2 by
+removing authored top-level `workflow.workflowCalls` end-to-end instead of
+preserving the remaining legacy node-graph execution branch. In
+`src/workflow/validate.ts`, authored `workflowCalls` are now rejected outright
+by top-level presence across legacy node-graph, role-authored, and
+step-addressed save/load validation paths, and the old authored
+`workflowCalls` entry-normalization / semantic-validation branches were
+deleted. In `src/workflow/save.ts`, re-save projection no longer re-persists
+legacy `workflowCalls`. In `src/workflow/cross-workflow-from-steps.ts` and
+`src/workflow/engine.ts`, runtime/readiness/inspection dispatch now derives
+cross-workflow calls only from step-addressed `steps[].transitions`, so the
+legacy node-graph authored `workflowCalls` execution path is gone. Follow-up
+cleanup updated `src/workflow/node-execution-mailbox.ts` to stop documenting
+removed legacy `workflowCalls`, converted the GraphQL HTTP/runtime-readiness
+fixtures that still covered cross-workflow behavior to step-derived
+step-addressed calls, and updated TUI/prompt-composition tests so removed
+legacy `workflowCalls` are ignored rather than surfaced.
+
+**Tasks In Progress**: Module 1 still remains open for the other legacy
+structural companions (`subWorkflows`, `subWorkflowConversations`, `edges`,
+`loops`, manager/entry node aliases) on the node-graph path. Module 2 still
+remains open for root/sub-workflow runtime branching cleanup outside the
+removed `workflowCalls` path. Module 3 broader node-id/public-surface cleanup
+and module 4 examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/cross-workflow-from-steps.test.ts`
+(`319` pass),
+`bun test src/workflow/runtime-readiness.test.ts src/server/graphql.test.ts src/graphql/schema.test.ts src/tui/opentui-screen.test.ts src/workflow/prompt-composition.test.ts src/workflow/manager-control.test.ts`
+(`178` pass),
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:27 JST (module 2 slice: require step-addressed supervision reruns)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 2 by removing
+the supervision-specific legacy fallback that still projected node-addressed
+workflows into synthetic steps. `src/workflow/superviser.ts` now accepts only
+authored `entryStepId` plus non-empty `steps` for supervision rerun planning,
+and both `src/workflow/engine.ts` and
+`src/workflow/superviser-runtime-control-impl.ts` now fail with step-addressed
+precondition errors instead of advertising legacy `entryNodeId` support. The
+focused runtime-control regression in
+`src/workflow/superviser-runtime-control-impl.test.ts` was inverted so a valid
+legacy node-graph target now fails fast and never reaches `runWorkflow`, while
+`src/workflow/superviser.test.ts` now asserts that legacy node-graph bundles
+return `null` from `toStepAddressedWorkflowForSupervision(...)`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining runtime-visible legacy node-graph schema
+branches, especially validator/runtime handling for actual legacy structural
+companions and authored workflow-call execution. Module 2 runtime/control
+cleanup still remains open for deeper root/sub branching cleanup and the
+remaining explicit legacy node-graph workflow-call execution path. Module 3
+broader public-surface cleanup and module 4 examples/docs retirement both
+remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/superviser.test.ts src/workflow/superviser-runtime-control-impl.test.ts`
+(`30` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:22 JST (module 3 slice: remove GraphQL `sendManagerMessage.managerNodeId`)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 3 by removing
+the caller-supplied `managerNodeId` compatibility field from the public
+GraphQL `SendManagerMessageInput` contract in
+`src/server/graphql-executable-schema.ts`, `src/graphql/types.ts`, and
+`src/graphql/schema.ts`. Manager-scoped GraphQL mutations now rely on the
+authenticated manager session plus optional `managerNodeExecId` consistency
+checks instead of accepting a node-addressed execution identity from the
+caller. While verifying this slice, the targeted server GraphQL suite exposed a
+stale fixture in `src/server/graphql.test.ts` that still authored top-level
+`workflowCalls` on a role-authored bundle; that fixture was corrected to the
+surviving legacy node-graph form (`kind`-authored nodes) so the test continues
+to cover the remaining compatibility behavior without weakening the new
+validation rules. Added a focused HTTP regression asserting that legacy
+`managerNodeId` is now rejected as an unknown GraphQL input field.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining runtime-visible legacy node-graph schema
+branches, especially validator/runtime handling for actual legacy structural
+companions and authored workflow-call execution. Module 2 runtime/control
+cleanup still remains open for root/sub branching cleanup and the remaining
+explicit legacy node-graph workflow-call execution path. Module 3 broader
+public-surface cleanup and module 4 examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/server/graphql.test.ts src/graphql/schema.test.ts --runInBand`
+(`56` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:17 JST (module 1 slice: reject step-addressed legacy `workflowCalls` by top-level presence)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 1 by
+removing the last dead step-addressed compatibility branch that still treated
+top-level `workflow.workflowCalls` specially in `src/workflow/validate.ts` and
+`src/workflow/save.ts`. Step-addressed bundles now reject `workflowCalls`
+purely by top-level presence, matching the rest of the banned legacy
+companions, instead of first traversing legacy array-shape checks and emitting
+different wording for malformed values. Updated the focused regressions in
+`src/workflow/validate.test.ts` and `src/workflow/save.test.ts` so the
+surviving behavior is asserted directly: malformed step-addressed
+`workflowCalls` inputs now fail with the same schema-level incompatibility
+diagnostic as populated ones.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining runtime-visible legacy node-graph schema
+branches, especially validator/runtime handling for actual legacy structural
+companions and authored workflow-call execution. Module 2 runtime/control
+cleanup still remains open for root/sub branching cleanup and the remaining
+explicit legacy node-graph workflow-call execution path. Module 3
+public-surface cleanup and module 4 examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/save.test.ts`
+(`233` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:14 JST (module 1 slice: reject malformed role-authored legacy structural companions by top-level presence)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 1 by
+tightening `src/workflow/validate.ts` so role-authored bundles now reject any
+top-level presence of legacy `workflowCalls`, `edges`, `loops`,
+`subWorkflows`, and `subWorkflowConversations`, even when those authored values
+are malformed non-array shapes. That removes the remaining dead validator
+branches that were still reporting legacy array-shape errors (`must be an
+array when provided`) for role-authored bundles instead of failing immediately
+on the unsupported compatibility field. Updated the focused regressions in
+`src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, and
+`src/workflow/save.test.ts` so validation, load, and save all assert the
+surviving behavior only: malformed role-authored legacy structural companions
+fail on the top-level compatibility field and do not fall back into legacy
+shape-validation wording.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining runtime-visible legacy node-graph schema
+branches, especially the validator/runtime handling for real legacy structural
+companions and authored workflow-call execution. Module 2 runtime/control
+cleanup still remains open for root/sub branching cleanup and the remaining
+explicit legacy node-graph workflow-call execution path. Module 3
+public-surface cleanup and module 4 examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`310` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:10 JST (module 1 slice: tighten the primary authored workflow type surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 1 by
+tightening the primary authored workflow type surface in `src/workflow/types.ts`:
+`AuthoredWorkflowJson` no longer inherits a permissive string index signature
+and no longer advertises legacy top-level compatibility keys such as
+`managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
+`subWorkflowConversations`, `edges`, and `loops`. In `src/workflow/save.ts`,
+the remaining save-time compatibility inspection was kept explicit by routing
+those raw authored-key reads through a local record-typed alias instead of the
+public authored type. Added `src/workflow/types.test.ts` as a compile-time
+guardrail so `typecheck` now fails if those legacy keys are accidentally
+reintroduced onto `AuthoredWorkflowJson`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining runtime-visible legacy node-graph schema
+branches, especially the validator/runtime handling for legacy structural
+companions and authored workflow-call execution. Module 2 runtime/control
+cleanup still remains open for root/sub branching cleanup and the remaining
+explicit legacy node-graph workflow-call execution path. Module 3
+public-surface cleanup and module 4 examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/types.test.ts src/workflow/save.test.ts --runInBand`
+(`50` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 18:57 JST (module 1 slice: remove authored legacy `branching` support)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and this implementation plan, so
+no design pivot or replacement plan was needed. Continued module 1 by
+removing authored legacy `workflow.branching` support end-to-end:
+`AuthoredWorkflowJson` in `src/workflow/types.ts` no longer advertises the
+field, `src/workflow/validate.ts` now rejects any authored top-level
+`workflow.branching` instead of still accepting it on the legacy node-graph
+path, and `src/workflow/save.ts` no longer strips `branching` before
+validation in a way that would have hidden the unsupported field during save.
+Updated `src/workflow/load.test.ts`, `src/workflow/save.test.ts`, and
+`src/workflow/validate.test.ts` so positive fixtures no longer depend on
+authored `branching`, and the focused regressions now assert the surviving
+behavior only: authored `workflow.branching` is rejected outright.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy node-graph schema branches, especially the
+remaining authored/public compatibility fields and deeper structural validator
+paths. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4
+examples/docs retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`307` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 18:52 JST (module 1 slice: remove normalized legacy `entryNodeId` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface still matches the active design docs and the existing phase-133
+implementation plan, so no design pivot or replacement plan was needed.
+Continued module 1 by removing `entryNodeId` from the primary normalized
+`WorkflowJson` surface in `src/workflow/types.ts`, adding
+`getLegacyEntryNodeId(...)` for the remaining legacy node-graph access, and
+switching the remaining persistence, semantic validation, and supervision
+projection reads to that helper. Updated the focused workflow and GraphQL
+tests so they assert the surviving helper-based legacy behavior instead of
+reaching through the normalized/public workflow type.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining compatibility identifiers, especially the
+still-exposed normalized `managerNodeId` alias and the broader legacy
+node-graph normalization branches. Module 2 runtime/control cleanup still
+remains open for root/sub branching cleanup and the remaining explicit legacy
+node-graph workflow-call execution path. Module 3 public-surface cleanup and
+module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/superviser.test.ts src/workflow/runtime-addressing.test.ts src/graphql/schema.test.ts --runInBand`
+(`373` pass)
+and
+`bun run typecheck:server`
+(`tsc --noEmit` passed). Plan status remains `In Progress`, so
+`impl-plans/PROGRESS.json` did not require a status update in this slice.
+
+### Session: 2026-04-26 19:06 JST (module 1/3 slice: reject role-authored legacy `edges` / `loops`)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended step-addressed runtime/public
+surface remains correct, and the active phase-133 plan is still the right
+implementation plan, so no replacement design or new plan split was needed.
+Continued module 1 by tightening `src/workflow/validate.ts` so role-authored
+bundles now reject legacy top-level `edges` and `loops` the same way they
+already reject legacy `workflowCalls`, `branching`, and structural companions.
+The validator now fails on top-level presence and no longer descends into
+legacy edge/loop entry normalization for that path. Updated the focused
+load/save/validate regressions and trimmed surviving role-authored fixtures so
+they stop carrying empty compatibility `edges` / `loops`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the remaining compatibility identifiers and the broader legacy
+node-graph normalization branches. Module 2 runtime/control cleanup still
+remains open for root/sub branching cleanup and the remaining explicit legacy
+node-graph workflow-call execution path. Module 3 public-surface cleanup and
+module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts`
+and
+`bun run typecheck:server`
+
+### Session: 2026-04-26 18:38 JST (module 1/3 slice: remove normalized legacy `loops` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the legacy field removal by deleting `loops` from
+the primary normalized `WorkflowJson` type in `src/workflow/types.ts`, adding
+`getLegacyAuthoredLoops(...)` for the remaining raw legacy node-graph read
+path, and updating `src/workflow/save.ts` so legacy persistence reads authored
+loop companions through that helper instead of the primary normalized/public
+workflow surface. Aligned the affected workflow tests so they assert surviving
+helper-based legacy behavior rather than direct public-property access.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of the remaining legacy compatibility fields
+from the normalized/public workflow surface, especially the still-exposed
+manager/entry compatibility ids and the validator branches that still
+materialize broader structural legacy bundles. Module 2 runtime/control cleanup
+still remains open for root/sub branching cleanup and the remaining explicit
+legacy node-graph workflow-call execution path. Module 3 public-surface cleanup
+and module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts src/workflow/conversation.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/sub-workflow.test.ts src/workflow/visualization.test.ts --runInBand`
+(`361` pass). Plan status remains `In Progress`, so `impl-plans/PROGRESS.json`
+did not require a status update in this slice.
+
+### Session: 2026-04-26 18:35 JST (module 1/3 slice: remove normalized legacy `edges` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the legacy field removal by deleting `edges` from
+the primary normalized `WorkflowJson` type in `src/workflow/types.ts` and
+keeping the remaining legacy node-graph authored-edge access behind the new
+`getLegacyAuthoredEdges(...)` helper only. Updated `src/workflow/save.ts` so
+legacy persistence reads authored edge companions through that helper instead
+of the primary normalized workflow surface, and aligned the affected workflow
+and TUI fixture tests so legacy node-graph bundles explicitly opt into the
+helper-only edge companion rather than treating `workflow.edges` as part of the
+default normalized/public type.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of the remaining legacy compatibility fields
+from the normalized/public workflow surface, especially the still-exposed
+legacy `loops`, manager/entry compatibility ids, and the validator branches
+that still materialize broader structural legacy bundles. Module 2
+runtime/control cleanup still remains open for root/sub branching cleanup and
+the remaining explicit legacy node-graph workflow-call execution path. Module 3
+public-surface cleanup and module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts src/workflow/conversation.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/runtime-addressing.test.ts src/workflow/runtime-readiness.test.ts src/workflow/sub-workflow.test.ts src/workflow/visualization.test.ts src/tui/opentui-controller.test.ts src/tui/opentui-detail-content.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`471` pass). Plan status remains `In Progress`, so `impl-plans/PROGRESS.json`
+did not require a status update in this slice.
+
+### Session: 2026-04-26 18:22 JST (module 1/3 slice: remove normalized `workflowCalls` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the legacy field removal by deleting
+`workflowCalls` from the primary normalized `WorkflowJson` type in
+`src/workflow/types.ts` and routing the remaining legacy node-graph access
+through `getLegacyWorkflowCalls(...)` only. Updated
+`src/workflow/save.ts` and `src/workflow/cross-workflow-from-steps.ts` so
+legacy persistence and dispatch helpers read compatibility workflow-call data
+through that helper instead of the primary normalized surface. Aligned the
+affected tests in `src/workflow/*.test.ts` and `src/tui/opentui-screen.test.ts`
+so they assert surviving helper-based legacy behavior rather than direct public
+property access on normalized workflows.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of the remaining legacy compatibility fields
+from the normalized/public workflow surface, especially the still-persisted
+legacy node-graph `edges` / `loops` companions and broader validator branches
+that still materialize structural legacy bundles. Module 2 runtime/control
+cleanup still remains open for root/sub branching cleanup and the remaining
+explicit legacy node-graph workflow-call execution path. Module 3
+public-surface cleanup and module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/runtime-readiness.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`427` pass). Plan status remains `In Progress`, so `impl-plans/PROGRESS.json`
+did not require a status update in this slice.
+
+### Session: 2026-04-26 18:17 JST (module 1/3 slice: remove normalized `subWorkflows` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the legacy field removal by deleting
+`subWorkflows` from the primary normalized `WorkflowJson` type in
+`src/workflow/types.ts` and routing the remaining legacy persistence/read paths
+through `getStructuralSubWorkflows(...)` instead of direct normalized-property
+access. Updated `src/workflow/save.ts` to persist structural sub-workflows only
+through that helper, removed compatibility-only empty `subWorkflows: []`
+fixtures from step-addressed/public-surface tests, and aligned the remaining
+legacy structural tests so they assert helper-based behavior rather than direct
+public access to the compatibility field.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of the remaining legacy compatibility fields
+from the normalized/public workflow surface, especially `workflowCalls`, the
+still-persisted legacy node-graph `edges` / `loops`, and broader validator
+branches that still materialize structural companions for legacy bundles.
+Module 2 runtime/control cleanup still remains open for root/sub branching
+cleanup and the remaining explicit legacy node-graph workflow-call execution
+path. Module 3 public-surface cleanup and module 4 example/doc retirement both
+remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/conversation.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/runtime-addressing.test.ts src/workflow/runtime-readiness.test.ts src/workflow/sub-workflow.test.ts src/workflow/visualization.test.ts src/tui/opentui-controller.test.ts src/tui/opentui-detail-content.test.ts src/tui/opentui-screen-navigation.test.ts src/tui/opentui-screen-runtime.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`516` pass). Plan status remains `In Progress`, so `impl-plans/PROGRESS.json`
+did not require a status update in this slice.
+
+### Session: 2026-04-26 18:12 JST (module 1/3 slice: remove normalized `subWorkflowConversations` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the legacy field removal by deleting
+`subWorkflowConversations` from the primary normalized `WorkflowJson` type in
+`src/workflow/types.ts` and keeping the legacy runtime/save path behind
+`getLegacySubWorkflowConversations(...)` only. Updated
+`src/workflow/save.ts` so legacy re-save persistence reads conversation
+companions through that helper instead of the primary workflow surface, and
+aligned the focused workflow tests so they assert the surviving helper-based
+behavior rather than direct public access to the compatibility field.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of the remaining legacy compatibility fields
+from the normalized/public workflow surface, especially `workflowCalls`,
+`subWorkflows`, and the still-persisted legacy node-graph structural
+companions. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/conversation.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts --runInBand`
+(`304` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 16:16 JST (module 1 slice: ignore stale legacy manager-entry aliases during managed role-authored validation)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the authored-schema/validation cutover by tightening
+`src/workflow/validate.ts` so managed role-authored bundles no longer let stale
+legacy `managerNodeId` / `entryNodeId` aliases drive downstream manager-entry
+inference or semantic validation once those top-level compatibility fields have
+already been rejected. Added focused regressions in
+`src/workflow/validate.test.ts` and `src/workflow/load.test.ts` to prove that
+direct validation and load-time validation now stop at the intended top-level
+compatibility errors instead of leaking secondary legacy manager-entry
+diagnostics. Also added a save-path regression in `src/workflow/save.test.ts`
+to pin the existing canonicalization contract: save strips those stale aliases
+before validation rather than persisting them back out.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`296` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 16:09 JST (module 1 slice: stop traversing legacy structural entry validation on role-authored bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the authored-schema/validation cutover by tightening
+`src/workflow/validate.ts` so role-authored bundles that carry legacy
+`subWorkflows` or `subWorkflowConversations` now fail only on the top-level
+compatibility-presence rule instead of also traversing nested legacy structural
+entry validation. Added focused regression coverage in
+`src/workflow/validate.test.ts` and `src/workflow/save.test.ts` to prove that
+malformed legacy structural entries on role-authored bundles no longer leak
+secondary nested diagnostics through direct validation or save-time validation.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`293` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 16:02 JST (module 1 slice: drop dead normalized branching companion from runtime/save surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the authored-schema cleanup by removing the dead
+normalized `WorkflowJson.branching` compatibility companion from
+`src/workflow/types.ts` and deleting the unreachable legacy save passthrough in
+`src/workflow/save.ts`. This matches current runtime behavior: validation may
+still accept authored legacy `branching` as compatibility input, but normalized
+bundles already omit it and save canonicalization already strips it. Updated the
+affected workflow/TUI fixture suites so typed normalized `WorkflowJson` test
+objects no longer construct that dead field, while the remaining assertions now
+check the runtime object shape through plain record access where needed.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`286` pass),
+plus
+`bun test src/workflow/conversation.test.ts src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/runtime-addressing.test.ts src/workflow/runtime-readiness.test.ts src/workflow/sub-workflow.test.ts src/workflow/visualization.test.ts src/tui/opentui-controller.test.ts src/tui/opentui-detail-content.test.ts src/tui/opentui-screen-navigation.test.ts src/tui/opentui-screen-runtime.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`220` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:57 JST (module 1/3 slice: isolate legacy subWorkflowConversations behind helper readers)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. While reviewing the remaining runtime and validation seams, I
+found that `subWorkflowConversations` was still being read directly from
+`WorkflowJson` even though step-addressed bundles reject that authored
+compatibility companion. Added
+`getLegacySubWorkflowConversations(...)` in `src/workflow/types.ts` and routed
+the remaining runtime/validation readers through it in
+`src/workflow/conversation.ts` and `src/workflow/validate.ts`, so the active
+step-addressed model no longer relies on the primary workflow surface exposing
+that legacy field. Added focused regression coverage in
+`src/workflow/conversation.test.ts` to assert that step-addressed workflows
+ignore legacy conversation companions entirely.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/conversation.test.ts src/workflow/validate.test.ts src/workflow/engine.test.ts --runInBand`
+(`287` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:53 JST (module 1/2 review slice: remove mixed workflowCalls helper input shapes)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. Continued the cleanup by tightening
+`src/workflow/cross-workflow-from-steps.ts` so the shared cross-workflow
+projection helpers now take an explicit step-addressed-or-legacy source shape
+instead of advertising a mixed `steps + workflowCalls` contract that validated
+step-addressed bundles can never expose. Simplified the focused helper tests in
+`src/workflow/cross-workflow-from-steps.test.ts` so they no longer construct
+impossible hybrid step-addressed bundles with authored top-level
+`workflowCalls`, leaving rejection coverage to `src/workflow/validate.test.ts`.
+While rerunning focused verification, I also found and fixed an outdated
+continuation fixture in `src/workflow/runtime-readiness.test.ts` that still
+mixed legacy `workflowCalls` with role-authored nodes; it now uses true legacy
+kind-authored node-graph fixtures so the recursive workflow-call readiness test
+exercises the intended compatibility path again.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/runtime-readiness.test.ts src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`310` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:48 JST (module 1 slice: stop normalizing implicit legacy entryNodeId aliases)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. While reviewing the dirty continuation diff, I found another
+remaining legacy companion synthesis seam: managed legacy node-graph bundles
+were still normalizing `entryNodeId` even when the author only declared
+`managerNodeId`. Tightened `src/workflow/validate.ts` so normalized legacy
+bundles now keep authored `entryNodeId` only when it was actually present in
+the source workflow, while shared entry resolution continues to flow through
+`resolveWorkflowEntryRuntimeId(...)`. Updated the focused load/save/validate
+regressions so they assert runtime entry resolution through the helper instead
+of depending on the synthesized compatibility alias.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`286` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:44 JST (module 1/2 slice: isolate legacy workflowCalls from step-addressed readers)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. While reviewing the continuation diff, I found one remaining
+shape-drift seam: shared helpers and semantic validation still treated
+`workflow.workflowCalls` as if it were part of the active step-addressed model,
+even though step-addressed validation/load already reject that authored field.
+Narrowed that seam by adding shared `isStepAddressedWorkflow(...)` and
+`getLegacyWorkflowCalls(...)` helpers in `src/workflow/types.ts`, routing
+cross-workflow projections and inspection through the shared shape guard, and
+limiting semantic `workflowCalls` checks in `src/workflow/validate.ts` to the
+legacy node-graph path only. Also corrected the stale architecture note that
+still described step-addressed runtime execution as a mixed union with explicit
+legacy `workflowCalls`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`295` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:38 JST (module 2 slice: rename manager-control parser/runtime context to step-safe runtime ids)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no replacement design or new implementation
+plan was needed. While reviewing the active diff for remaining direct
+node-addressed assumptions, I found that manager-control parsing and optional
+decision application still threaded a `managerNodeId` context name even on the
+active step-addressed runtime path where the value is a runtime step id. Narrowed
+that seam by renaming the parser/control context to `managerRuntimeId`,
+removing local "manager node" wording from manager-control diagnostics, and
+updating the engine, manager-message-service, and GraphQL manager-mutation
+callers to pass the shared runtime id rather than a node-addressed alias.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/manager-control.test.ts src/workflow/manager-message-service.test.ts src/graphql/schema.test.ts --runInBand`
+(`60` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:32 JST (module 2 slice: remove dead mixed workflow-call union helper path)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended architecture still matches the
+active plan, so no replacement design or new implementation plan was needed.
+Reviewed the remaining cross-workflow helper seam and found that
+`src/workflow/cross-workflow-from-steps.ts` still carried a mixed union path
+that tried to merge explicit legacy `workflow.workflowCalls` with step-derived
+`steps[].transitions` rows on the same normalized workflow object. That shape is
+no longer a meaningful validated load target: current validation/load now treat
+bundles as either step-addressed (`entryStepId` + `steps[]`, explicit
+`workflowCalls` rejected/ignored) or legacy node-graph (`workflowCalls`
+compatibility only). Simplified `effectiveWorkflowCalls(...)` and
+`crossWorkflowDispatchesForExecutionMatch(...)` so step-addressed bundles use
+only derived `__cw:*` transitions while legacy node-graph bundles preserve only
+their authored top-level `workflowCalls`. Updated the focused helper tests and
+the engine comment to match the actual architecture.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining explicit legacy node-graph workflow-call
+execution path. Module 3 public-surface cleanup and module 4 example/doc
+retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/engine.test.ts --runInBand`
+(`114` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:28 JST (module 1 slice: canonicalize raw legacy save no-op companions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended architecture still matches the
+active plan, so no replacement design or new implementation plan was needed.
+While reviewing the dirty continuation diff, I found a save-path gap rather
+than a design gap: raw legacy workflow saves could still preserve no-op
+compatibility companions (`workflowCalls: []`, structural empty arrays, default
+`branching`, and synthesized `edges`) when those keys were present in the
+incoming JSON, even though loaded/normalized legacy bundles already omitted
+them. Tightened `src/workflow/save.ts` so this canonicalization now runs only
+for true legacy node-graph save candidates, preserving validation failures for
+step-addressed or role/control-authored inputs. Added a focused regression in
+`src/workflow/save.test.ts` that exercises the existing-bundle raw-save path and
+asserts those no-op companions are stripped while structural routing still
+reloads through `getStructuralEdges(...)`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+non-empty authored `workflowCalls`, structural `subWorkflows`, and other direct
+node-addressed companions that are still part of the legacy schema/type
+surface. Module 2 runtime/control cleanup still remains open for root/sub
+branching cleanup and the remaining legacy node-graph cross-workflow dispatch
+union path. Module 3 public-surface cleanup and module 4 example/doc retirement
+both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`286` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:24 JST (module 1/3 slice: route remaining entry/sub-workflow compatibility reads through shared helpers)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended architecture still matches the
+active plan, so no replacement design or new implementation plan was needed.
+Reviewed the active diff and ran a broader continuation sweep
+(`bun run typecheck:server` plus
+`bun test src/workflow/engine.test.ts src/tui/opentui-screen.test.ts src/workflow/visualization.test.ts --runInBand`)
+to confirm there was no hidden regression to fix first. Continued the cleanup
+with a small helper-oriented slice: `src/workflow/types.ts` now exposes
+`resolveWorkflowEntryRuntimeId(...)` alongside the existing manager runtime-id
+helper, `src/tui/opentui-model/workflow-rendering.ts` now uses those shared
+helpers for legacy entry/manager preview text instead of raw
+`entryNodeId`/`managerNodeId` fallbacks, and `src/workflow/validate.ts` now
+uses `getStructuralSubWorkflows(...)` for semantic validation instead of
+re-reading the optional compatibility field directly. Added focused helper
+coverage in `src/workflow/validate.test.ts` so step-addressed and legacy entry
+resolution semantics are asserted explicitly.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+`workflowCalls`, structural `subWorkflows`, and direct node-addressed
+companions that are still persisted or publicly exposed. Module 2
+runtime/control cleanup still remains open for root/sub branching cleanup and
+the remaining legacy node-graph cross-workflow dispatch union path. Module 3
+public-surface cleanup and module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`246` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:18 JST (module 1 slice: stop synthesizing repeat-driven legacy `workflow.loops` companions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended architecture still matches the
+active plan, so no replacement design or new implementation plan was needed.
+Continued module 1 by removing another normalized legacy companion:
+`src/workflow/validate.ts` no longer synthesizes repeat-driven
+`workflow.loops` onto normalized legacy bundles. Added
+`getStructuralLoops(...)` in `src/workflow/types.ts` so runtime, inspection,
+validation, and visualization now derive repeat loop projections from authored
+`workflow.loops` plus node-local `repeat` metadata at read time instead of
+depending on a materialized normalized field. During verification I found two
+real continuation gaps in `src/workflow/engine.test.ts`: workflow-call runtime
+fixtures were still authored with legacy `workflowCalls` on role-authored
+parents that the current validator now correctly rejects, and one runtime DB
+assertion relied on implicit root-data-dir inference. I converted those
+workflow-call parents/callees to the active step-addressed cross-workflow form,
+aligned the missing-callee expectation with the earlier validation failure, and
+made the runtime DB assertion use an explicit `rootDataDir`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+`workflowCalls`, structural `subWorkflows`, and direct node-addressed
+companions that are still persisted or publicly exposed. Module 2
+runtime/control cleanup still remains open for root/sub branching cleanup and
+the remaining legacy node-graph cross-workflow dispatch union path. Module 3
+public-surface cleanup and module 4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/engine.test.ts src/workflow/visualization.test.ts --runInBand`
+(`394` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:10 JST (module 1 slice: stop synthesizing omitted legacy `workflow.edges` companions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. The intended architecture still matches the
+active plan, so no replacement design or new implementation plan was needed,
+but `design-docs/specs/architecture.md` had a stale implementation note that
+still claimed step-addressed normalization could synthesize compatibility
+`managerNodeId` / `subWorkflows` / `edges`; I corrected that note to match the
+current code. Continued module 1 by removing another normalized compatibility
+companion from the legacy node-graph path: when a legacy bundle omits authored
+top-level `workflow.edges`, `src/workflow/validate.ts` now keeps the normalized
+bundle free of synthesized `edges` and uses `getStructuralEdges(...)` as the
+shared reader-time projection for sequential/repeat routing instead. Preserved
+legacy validation diagnostics for invalid repeat/restart authoring, added a
+focused helper regression in `src/workflow/validate.test.ts`, and updated the
+legacy reload/save regressions in `src/workflow/save.test.ts` so they assert
+derived edges through the shared helper rather than relying on a normalized
+compatibility field.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles, especially
+`workflowCalls`, `loops`, structural `subWorkflows`, and other direct
+node-addressed companions. Module 2 runtime/control cleanup still remains open
+for root/sub branching cleanup and the remaining legacy node-graph
+cross-workflow dispatch union path. Module 3 public-surface cleanup and module
+4 example/doc retirement both remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`280` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 15:05 JST (module 3/4 follow-up slice: convert stale GraphQL/load fixtures to strict step-addressed bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no new design document or replacement
+implementation plan was needed. While reviewing the active diff and running a
+broader verification sweep, I found a real continuation gap in tests that were
+not supposed to preserve compatibility behavior: worker-only add-on fixtures in
+`src/workflow/load.test.ts` and `src/graphql/schema.test.ts` were still authored
+as legacy `entryNodeId`/`edges`/`branching` bundles, and a GraphQL workflow
+inspection fixture still depended on authored top-level `workflowCalls` on a
+role-authored parent. Converted those fixtures to strict step-addressed
+worker-only/managed bundles with `entryStepId`, `steps[]`, and step-transition
+cross-workflow dispatch (`__cw:main-worker`), and removed stale
+`edges: []` companions from the GraphQL worker-only save-conversion bundles that
+the current save validator now correctly rejects.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles. Module 2
+runtime/control cleanup still remains open for root/sub branching cleanup and
+the remaining legacy node-graph cross-workflow dispatch union path. Module 3
+public-surface cleanup still remains open for production callers that still
+expose or describe legacy compatibility surfaces beyond these aligned tests and
+fixtures. Module 4 broader example/doc retirement still remains open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/load.test.ts src/graphql/schema.test.ts --runInBand`
+(`178` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:57 JST (module 1 slice: stop synthesizing step-addressed `workflow.edges` companions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no new design document or replacement
+implementation plan was needed. Continued module 1 by removing normalized
+step-addressed `workflow.edges` synthesis from `src/workflow/validate.ts` and
+making `getStructuralEdges(...)` the authoritative reader path for local
+step-to-step routing. Tightened `src/workflow/save.ts` so step-addressed saves
+now reject any top-level `workflow.edges` companion, even when it exactly
+matches the step graph, instead of silently tolerating a copied legacy field.
+During verification this exposed a real continuation bug in the worker-only
+conversion save tests: those fixtures were still carrying `edges: []` from the
+old normalized shape, so I updated them to use the strict step-addressed bundle
+they are actually meant to model and added a focused regression that matched
+top-level `edges` are rejected too.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of legacy compatibility fields and the
+remaining normalization branches around legacy node-graph bundles. Module 2
+runtime/control cleanup still remains open for root/sub branching cleanup and
+the remaining legacy node-graph cross-workflow dispatch union path. Module 3
+public-surface cleanup still remains open for callers that still expose or
+describe legacy compatibility surfaces.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`279` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:52 JST (module 1/2 slice: split legacy authored workflowCalls from step-derived projections)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no new design document or replacement
+implementation plan was needed. Continued the compatibility-removal work by
+separating authored legacy `workflow.workflowCalls` from step-derived helper
+projections: `src/workflow/types.ts` no longer models authored
+`WorkflowCallRef` with step-only `callerStepId`, and
+`src/workflow/cross-workflow-from-steps.ts` now returns dedicated
+source-tagged derived rows for inspection/runtime helpers instead of reusing the
+legacy authored type. Updated the focused workflow-call helper tests plus the
+step-addressed validation expectations so derived step-transition projections
+explicitly report `source: "step-transition"` while legacy authored
+`workflowCalls` remain labeled as compatibility-only projections.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader removal of top-level legacy compatibility fields and
+their remaining normalization branches. Module 2 runtime/control cleanup still
+remains open for root/sub branching cleanup and the remaining legacy node-graph
+cross-workflow dispatch union path. Module 3 public-surface cleanup still
+remains open for callers that still expose or describe legacy compatibility
+surfaces beyond this helper/type split.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`289` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:19 JST (module 1 slice: centralize structural edge projection for step-addressed readers)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed-first cleanup, so no new design document or replacement
+implementation plan was needed. Continued module 1 by adding a shared
+`getStructuralEdges(...)` helper in `src/workflow/types.ts` that derives local
+step-addressed routing from `steps[].transitions` instead of assuming
+step-addressed bundles must expose the legacy `workflow.edges` companion.
+Switched `src/workflow/engine.ts`, `src/workflow/validate.ts`,
+`src/workflow/inspect.ts`, `src/workflow/visualization.ts`, and
+`src/web/workflow-viewer.tsx` to use that helper, and added focused regression
+coverage in `src/workflow/validate.test.ts` proving that step-addressed readers
+prefer derived edges while legacy node-graph bundles still use authored
+`workflow.edges`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for actual removal of synthesized `edges`, `loops`, and other
+legacy structural companions from normalized bundles. Module 2 runtime/control
+cleanup still remains open for the broader root/sub branching cleanup and the
+remaining legacy node-graph cross-workflow union path. Module 3 public-surface
+cleanup still remains open beyond the structural-edge reader isolation landed
+here.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/cross-workflow-from-steps.test.ts src/workflow/sub-workflow.test.ts --runInBand`
+(`298` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
 
 ### Session: 2026-04-26 (review slice: shared runtime-addressing reuse + unit coverage)
 
@@ -1082,9 +2323,802 @@ and `git diff --check` (`142` pass). The design assessment is unchanged: the
 remaining mismatch is the unfinished compatibility-removal surface already
 tracked by modules 1-4, not the step-addressed architecture itself.
 
+### Session: 2026-04-26 12:29 JST (module 1 slice: remove step-addressed manager/entry compatibility aliases)
+
+**Tasks Completed**: Normalized step-addressed workflows no longer synthesize
+compatibility `managerNodeId` / `entryNodeId` in
+`src/workflow/validate.ts`; the shared `WorkflowJson` typing in
+`src/workflow/types.ts` now treats `managerNodeId` as legacy-only optional
+state and keeps `resolveWorkflowManagerRuntimeId(...)` as the canonical runtime
+helper for step-addressed execution. Updated root-manager scope checks in
+`src/workflow/manager-control.ts` and root-vs-child startup handling in
+`src/workflow/sub-workflow.ts` to compare against the step-aware runtime helper
+instead of direct compatibility aliases. Adjusted the OpenTUI summary/run
+preview plus load/save expectations so shipped strict step-addressed bundles
+now expose `entryStepId` / `managerStepId` without requiring the old node-id
+aliases.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`, `branching`) and the remaining legacy
+node-graph validation branches. Module 2 runtime/control cleanup still remains
+open for root/sub branching and cross-workflow dispatch unification.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`247` pass). This is an incremental phase-133 slice, not plan completion, so
+the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 12:49 JST (module 1 slice: remove legacy callee entry fallback from step-addressed cross-workflow validation)
+
+**Tasks Completed**: Re-checked the current architecture against the intended
+phase-133 target before changing code. The design still matches the intended
+purpose, so no new design document or replacement implementation plan was
+needed. In `src/workflow/validate.ts`, step-addressed cross-workflow callee
+alignment now resolves the callee start contract strictly through
+`managerStepId`, inferred single manager-role step, or `entryStepId`; it no
+longer accepts legacy `entryNodeId` when validating authored step transitions.
+Updated the sync/async diagnostics to describe the step-addressed start
+contract explicitly and added focused regression coverage in
+`src/workflow/validate.test.ts` proving that entry-node-only legacy callees are
+rejected for step-addressed cross-workflow transitions.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`, `branching`) and the remaining legacy
+node-graph validation branches. Module 2 runtime/control cleanup still remains
+open for root/sub branching and cross-workflow dispatch unification.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`249` pass). This is an incremental phase-133 slice, not plan completion, so
+the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 12:54 JST (module 2 slice: execute step-addressed cross-workflow dispatches directly from step transitions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 intent before implementation. It still matches the intended
+step-addressed target, so no design rewrite or replacement implementation plan
+was needed. In `src/workflow/cross-workflow-from-steps.ts`, engine-only
+cross-workflow execution now uses a dedicated `CrossWorkflowExecutionDispatch`
+shape and derives step-addressed dispatch rows directly from
+`steps[].transitions` instead of synthesizing `WorkflowCallRef` compatibility
+records first. In `src/workflow/engine.ts`, the child-workflow execution path
+now consumes those dispatch rows while preserving the existing legacy
+`workflow.workflowCalls` compatibility behavior and artifact ids
+(`workflow-call:__cw:<stepId>`). Added focused regression coverage in
+`src/workflow/cross-workflow-from-steps.test.ts` for step-addressed dispatch
+source labeling plus the preserved legacy compatibility labeling.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`, `branching`) and the remaining legacy
+node-graph validation branches. Module 2 runtime/control cleanup still remains
+open for root/sub branching and the legacy node-graph cross-workflow dispatch
+union path.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/cross-workflow-from-steps.test.ts src/workflow/engine.test.ts --runInBand`
+(`115` pass). This is an incremental phase-133 slice, not plan completion, so
+the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 12:59 JST (module 1 slice: stop synthesizing legacy branching on step-addressed normalized workflows)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before implementation. It still matches the intended
+step-addressed direction, so no design rewrite or replacement implementation
+plan was needed. In `src/workflow/validate.ts`, step-addressed normalization no
+longer synthesizes the legacy `branching: { mode: "fan-out" }` companion onto
+normalized workflows. In `src/workflow/types.ts`, `WorkflowJson.branching` is
+now optional so the normalized contract matches that cleanup, while legacy
+node-graph bundles may still carry authored branching metadata. Added focused
+regression assertions in `src/workflow/validate.test.ts`,
+`src/workflow/load.test.ts`, and `src/workflow/save.test.ts` proving that
+strict step-addressed validation, load, and save/reload flows keep
+`workflow.branching` absent.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`) and the remaining legacy node-graph
+validation branches. Module 2 runtime/control cleanup still remains open for
+root/sub branching and the legacy node-graph cross-workflow dispatch union
+path.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand`
+(`259` pass). This is an incremental phase-133 slice, not plan completion, so
+the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:03 JST (module 3 follow-up slice: align GraphQL worker-only expectations with strict step-addressed bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before implementation. It still matches the intended
+step-addressed direction, so no design rewrite or replacement implementation
+plan was needed. Updated `src/graphql/schema.test.ts` and
+`src/server/graphql.test.ts` so GraphQL create/save worker-only coverage now
+asserts `entryStepId` plus the absence of compatibility `managerNodeId` /
+`entryNodeId` on normalized step-addressed bundles instead of expecting the
+removed aliases. Also dropped the stale `entryNodeId` injection from the
+worker-only save-mutation conversion fixtures so the tests exercise the current
+strict step-addressed input shape rather than a compatibility-leaning variant.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`) and the remaining legacy node-graph
+validation branches. Module 2 runtime/control cleanup still remains open for
+root/sub branching and the legacy node-graph cross-workflow dispatch union
+path. Module 3 public-surface cleanup still remains open beyond this follow-up
+test realignment.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/graphql/schema.test.ts src/server/graphql.test.ts --runInBand`
+(`55` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:08 JST (module 3 follow-up slice: derive TUI history workflow-call counts from step transitions)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before implementation. It still matches the intended
+step-addressed direction, so no design rewrite or replacement implementation
+plan was needed. In `src/tui/opentui-model/workflow-rendering.ts`, the history
+header now counts effective cross-workflow calls through
+`effectiveWorkflowCalls(...)` instead of reading only authored
+`workflow.workflowCalls`, so step-addressed workflows with
+`steps[].transitions` no longer display a stale `workflowCalls=0` summary. In
+`src/tui/opentui-screen.test.ts`, the step-addressed TUI fixture no longer
+injects removed `managerNodeId` / `entryNodeId` compatibility aliases, and new
+coverage asserts that step-derived cross-workflow transitions surface as
+`workflowCalls=1` in the history header.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`) and the remaining legacy node-graph
+validation branches. Module 2 runtime/control cleanup still remains open for
+root/sub branching and the legacy node-graph cross-workflow dispatch union
+path. Module 3 public-surface cleanup still remains open beyond this TUI
+parity fix.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/tui/opentui-screen.test.ts src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`321` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:10 JST (module 1 follow-up slice: fail fast on broken legacy manager runtime ids)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. During git-diff review I found a real runtime
+contract risk in the prior slice: `resolveWorkflowManagerRuntimeId(...)` had
+started falling back to `workflow.workflowId` when a legacy normalized bundle
+carried neither `managerNodeId` nor `entryNodeId`, which can invent a fake
+runtime address and hide a broken compatibility bundle. Tightened the helper in
+`src/workflow/types.ts` so step-addressed bundles still resolve
+`managerStepId ?? entryStepId`, legacy bundles still resolve
+`managerNodeId`/`entryNodeId`, and malformed legacy bundles now throw with an
+explicit contract error instead of routing on a fabricated id. Added focused
+coverage in `src/workflow/validate.test.ts` for the new fail-fast behavior.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`) and the remaining legacy node-graph
+validation branches. Module 2 runtime/control cleanup still remains open for
+root/sub branching and the legacy node-graph cross-workflow dispatch union
+path. Module 3 public-surface cleanup still remains open beyond this runtime-id
+contract fix.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/engine.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`355` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:14 JST (module 2 follow-up slice: execute cross-workflow step transitions through explicit dispatch rows)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before extending the runtime cleanup. It still matches the
+intended step-addressed direction, so no replacement design document or new
+implementation plan was needed. During git-diff review I found that the engine
+still framed cross-workflow execution in terms of `WorkflowCallRef`, even after
+step-addressed normalization stopped materializing compatibility
+`workflow.workflowCalls` for `steps[].transitions`. Tightened
+`src/workflow/cross-workflow-from-steps.ts` and `src/workflow/engine.ts` so
+step-addressed execution now consumes explicit `CrossWorkflowExecutionDispatch`
+rows derived directly from step transitions, while legacy node-graph bundles
+still label authored `workflowCalls` as compatibility-only dispatches on the
+fallback path. Added focused coverage in
+`src/workflow/cross-workflow-from-steps.test.ts` for dispatch ordering/source
+tags, and re-checked adjacent worker-only GraphQL/TUI/load/save expectations so
+they no longer assume removed compatibility manager/entry aliases on strict
+step-addressed bundles.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`,
+`subWorkflows`, `edges`, `loops`) and the remaining legacy node-graph
+validation branches. Module 2 runtime/control cleanup still remains open for
+root/sub branching and the remaining legacy node-graph dispatch union path
+outside this execution-row cutover. Module 3 public-surface cleanup still
+remains open beyond the worker-only GraphQL/TUI expectation realignment.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/cross-workflow-from-steps.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(targeted suites passed). This remains an incremental phase-133 slice, not
+plan completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:22 JST (module 1 follow-up slice: omit empty structural `subWorkflows` on step-addressed bundles)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 cleanup by
+removing the empty structural `subWorkflows` companion from
+`normalizeStepAddressedWorkflow` in `src/workflow/validate.ts`; step-addressed
+normalized bundles now omit that legacy structural field instead of
+synthesizing `[]`. Added `getStructuralSubWorkflows(...)` in
+`src/workflow/types.ts` and migrated runtime / OpenTUI / visualization readers
+to treat structural sub-workflow metadata as optional legacy state rather than a
+required normalized array. This keeps legacy node-graph bundles unchanged while
+stopping step-addressed consumers from depending on the compatibility field.
+Updated focused expectations in load/validate/TUI/sub-workflow tests and one
+prompt-composition test for the new optional field contract.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for the broader legacy companion set (`workflowCalls`, `edges`,
+`loops`, and remaining non-step structural branches). Module 2 runtime/control
+cleanup still remains open for root/sub branching and the remaining legacy
+node-graph dispatch union path. Module 3 public-surface cleanup still remains
+open beyond the structural sub-workflow optionalization.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/sub-workflow.test.ts src/tui/opentui-screen.test.ts --runInBand`
+(`332` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:26 JST (module 1 follow-up slice: reject authored workflowCalls.callerStepId)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 validator
+cleanup by treating top-level authored `workflow.workflowCalls` as legacy
+node-addressed metadata only: `src/workflow/validate.ts` now rejects authored
+`workflowCalls[*].callerStepId` instead of carrying the dead step-addressed
+branch, while derived step-transition dispatches still use `callerStepId`
+through `cross-workflow-from-steps.ts`. Updated `src/workflow/types.ts` to
+document that split explicitly and added focused validate/load/save coverage
+proving authored legacy bundles fail when they attempt to carry step-scoped
+workflow-call metadata.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls` itself,
+`edges`, `loops`, and remaining non-step structural branches). Module 2
+runtime/control cleanup still remains open for root/sub branching and the
+remaining legacy node-graph dispatch union path. Module 3 public-surface
+cleanup still remains open beyond the current validation tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`253` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:30 JST (module 1 follow-up slice: reject role-authored legacy workflowCalls)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 validator
+cleanup by rejecting non-empty authored `workflow.workflowCalls` whenever a
+bundle already uses authored `role` / `control` nodes:
+`src/workflow/validate.ts` now treats those mixed bundles the same way it
+already treats structural `subWorkflows` and `subWorkflowConversations`,
+keeping `workflowCalls` on the pure legacy node-graph path only. Updated
+focused coverage in `src/workflow/validate.test.ts`,
+`src/workflow/load.test.ts`, and `src/workflow/save.test.ts` so accepted
+workflow-call fixtures stay explicitly legacy (`kind`-authored nodes) while
+role-authored load/save surfaces now fail with the new compatibility-removal
+diagnostic.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls` itself,
+`edges`, `loops`, and remaining non-step structural branches). Module 2
+runtime/control cleanup still remains open for root/sub branching and the
+remaining legacy node-graph dispatch union path. Module 3 public-surface
+cleanup still remains open beyond the current validation tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`256` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:33 JST (module 1 follow-up slice: omit empty structural `subWorkflows` on legacy normalization)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 compatibility
+cleanup by removing the remaining normalized `subWorkflows: []` synthesis from
+the legacy node-graph validator path in `src/workflow/validate.ts`; empty
+structural sub-workflow metadata is now omitted on both strict step-addressed
+and legacy normalized bundles unless a real structural boundary is authored.
+Updated `src/workflow/types.ts` commentary to match the narrower compatibility
+surface and added focused load/validate/save coverage proving that legacy
+workflows still load, but normalized and re-saved bundles no longer keep the
+empty structural companion.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls`, `edges`,
+`loops`, and remaining non-step structural branches). Module 2 runtime/control
+cleanup still remains open for root/sub branching and the remaining legacy
+node-graph dispatch union path. Module 3 public-surface cleanup still remains
+open beyond the structural compatibility-field shrinkage.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`257` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:37 JST (module 1 follow-up slice: treat authored workflowCalls as legacy-only and omit empty companions)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 compatibility
+cleanup in `src/workflow/validate.ts` by tightening top-level
+`workflow.workflowCalls` handling on the remaining legacy validator path:
+role-authored bundles now reject the field even when authored as an empty
+array, and normalized legacy bundles now omit empty `workflowCalls` instead of
+preserving a compatibility-only `[]` companion. Updated focused regressions in
+`src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, and
+`src/workflow/save.test.ts` to cover the stricter role-authored rejection and
+the load/save cleanup path for legacy bundles that previously carried empty
+workflow-call metadata.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls`, `edges`,
+`loops`, and remaining non-step structural branches). Module 2 runtime/control
+cleanup still remains open for root/sub branching and the remaining legacy
+node-graph dispatch union path. Module 3 public-surface cleanup still remains
+open beyond the current validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`262` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:43 JST (module 1 follow-up slice: omit empty legacy loops and sub-workflow conversation companions)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 compatibility
+cleanup in `src/workflow/validate.ts` by making legacy normalization omit two
+more empty compatibility-only companions: authored `loops: []` and authored
+`subWorkflowConversations: []` now normalize away instead of surviving as
+empty arrays on legacy node-graph bundles. Added focused regressions in
+`src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, and
+`src/workflow/save.test.ts` to cover the normalized omission and the
+load/save round trip for legacy bundles that previously preserved those empty
+arrays.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges` and remaining
+non-step structural branches). Module 2 runtime/control cleanup still remains
+open for root/sub branching and the remaining legacy node-graph dispatch union
+path. Module 3 public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`265` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
 ## Related Plans
 
 - **Previous**: `impl-plans/completed/step-addressed-workflow-runtime-cutover.md`
 - **Previous**: `impl-plans/workflow-role-unification-structural-cleanup.md`
 - **Completed (preserve behavior)**: `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md`
 - **Depends On**: completed step-addressed/runtime cleanup work already landed on this branch
+
+### Session: 2026-04-26 13:47 JST (module 1 follow-up slice: avoid re-authoring synthesized legacy save companions)
+
+**Tasks Completed**: Re-checked the active architecture/design against the
+phase-133 target before editing. It still matches the intended
+step-addressed direction, so no replacement design document or new
+implementation plan was needed. Continued the bounded module-1 compatibility
+cleanup in `src/workflow/save.ts` by tightening the legacy save canonicalizer
+for the case where a **loaded normalized legacy bundle** is saved into a fresh
+workflow directory with no existing authored file to diff against. That path
+previously treated synthesized/default compatibility companions as if they had
+been authored and would re-persist sequential `edges` plus default
+`branching: { "mode": "fan-out" }` just because those fields existed on the
+normalized object. Save now keeps the core legacy entry/manager identifiers but
+only re-authors those legacy companion fields when they remain meaningful
+instead of synthesized defaults. Added a focused regression in
+`src/workflow/save.test.ts` that loads a legacy bundle, saves it under a new
+workflow name, and verifies the fresh `workflow.json` no longer re-authors
+synthesized `edges` / default `branching` while reload semantics stay intact.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls`, `edges`,
+`loops`, and remaining non-step structural branches). Module 2 runtime/control
+cleanup still remains open for root/sub branching and the remaining legacy
+node-graph dispatch union path. Module 3 public-surface cleanup still remains
+open beyond the current validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`266` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 13:54 JST (module 1 slice: reject managed role-authored manager/entry compatibility ids)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 intent before editing. It still matches the intended step-addressed
+target, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/validate.ts` by rejecting authored
+`managerNodeId` / `entryNodeId` when a legacy node-graph bundle already
+declares manager-role nodes, keeping those compatibility ids authored only for
+manager-less worker-only legacy bundles that still need an explicit entry.
+Updated `src/workflow/save.ts` so save canonicalization strips those two fields
+when migrating a loaded managed legacy bundle to role-authored nodes, which
+prevents fresh role-authored saves from re-persisting managed compatibility ids
+just because they were present on the normalized input object. Adjusted focused
+load/save/validate coverage so managed role-authored fixtures omit the legacy
+fields, migration saves assert they stay omitted on disk, and explicit
+manager-role compatibility-id authoring now fails validation.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and broader strict step-addressed persistence
+cleanup). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`267` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:00 JST (module 1 slice: reject legacy-only top-level fields on step-addressed save input)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 intent before editing. It still matches the intended step-addressed
+target, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/save.ts` by tightening the
+step-addressed save path: instead of silently discarding stale legacy-only
+top-level fields from an in-memory step-addressed workflow object,
+`saveWorkflowToDisk(...)` now reports validation issues when callers try to
+save `managerNodeId`, `entryNodeId`, top-level `workflowCalls`, or other
+structural legacy companions on a step-addressed bundle. Kept the existing
+save-time projection of normalized runtime companions such as `edges` and
+materialized `nodes[]` so legitimate re-saves of loaded step-addressed bundles
+still work, but the legacy-only authored fields now fail fast instead of being
+masked by persistence. Updated focused save coverage so worker-only step
+conversion fixtures stop reintroducing `entryNodeId`, the existing invalid
+step-addressed save test now asserts the new `entryNodeId` rejection, and a
+new regression test covers stale top-level `workflowCalls` on step-addressed
+save input.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and stricter removal of legacy node-graph input
+paths beyond the save seam). Module 2 runtime/control cleanup still remains
+open for root/sub branching and the remaining legacy node-graph dispatch union
+path. Module 3 public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`268` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:04 JST (module 1 slice: stop synthesizing default legacy branching on normalized node-graph bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 intent before editing. It still matches the intended step-addressed
+target, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/validate.ts` by removing the last
+default `branching: { mode: "fan-out" }` projection from normalized legacy
+node-graph bundles. The runtime does not consume `workflow.branching`, and
+save/load canonicalization had already stopped re-authoring the default field,
+so continuing to synthesize it in normalized validator output was pure
+compatibility residue. Added focused validation coverage proving a legacy
+workflow without authored `branching` now keeps the field absent after
+normalization, and updated the legacy save/reload regression in
+`src/workflow/save.test.ts` so a copied legacy workflow no longer expects the
+default branch companion to reappear on reload.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and stricter removal of legacy node-graph input
+paths beyond the current save/validate seams). Module 2 runtime/control cleanup
+still remains open for root/sub branching and the remaining legacy node-graph
+dispatch union path. Module 3 public-surface cleanup still remains open beyond
+the current validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`269` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:06 JST (module 1 slice: reject stale legacy `edges` on step-addressed save input)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 intent before editing. It still matches the intended step-addressed
+target, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/save.ts` by aligning the
+step-addressed save-time legacy-field guard with strict validation without
+breaking normal re-saves of normalized bundles: save now tolerates the
+validator-derived local `edges[]` companion that already matches the current
+step graph, but rejects stale or mutated top-level `workflow.edges` data
+instead of silently dropping it during save projection. Added focused save
+coverage in `src/workflow/save.test.ts` proving that a loaded step-addressed
+workflow cannot be re-saved after a stale compatibility `edges[]` array is
+reattached in memory with routing that diverges from `steps[].transitions`.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`workflowCalls`, `loops`,
+remaining non-step structural branches, and deeper legacy node-graph save/load
+input paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`270` pass). This remains an incremental phase-133 slice, not plan completion,
+so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 14:13 JST (module 1 slice: reject authored empty structural companions on role-authored bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended step-addressed
+direction, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/validate.ts` by tightening the
+role-authored compatibility guard for structural legacy companions:
+`workflow.subWorkflows` and `workflow.subWorkflowConversations` are now rejected
+by authored-field presence, not only when the arrays are non-empty. This closes
+the remaining empty-array loophole that still allowed role/control bundles to
+carry those legacy structural fields during validation, load, and save.
+Added focused regression coverage in `src/workflow/validate.test.ts`,
+`src/workflow/load.test.ts`, and `src/workflow/save.test.ts` proving that empty
+authored arrays now fail on role-authored bundles while legacy node-graph
+round-trip cleanup still omits empty structural companions on re-save/load.
+While verifying the slice, `bun run typecheck:server` also surfaced a local
+typing gap in `src/workflow/save.ts`; tightened
+`createStepAddressedLocalEdges(...)` to preserve the narrowed string step id
+through the `flatMap` path.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and deeper legacy node-graph save/load input
+paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`276` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 16:06 JST (module 1 slice: stop traversing legacy workflow-call entry validation on role-authored bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended step-addressed
+direction, so no new design document or replacement implementation plan was
+needed. Continued module 1 in `src/workflow/validate.ts` by isolating the
+remaining legacy `workflowCalls` normalization path away from role-authored
+bundles: once authored role/control nodes are present, validation now rejects
+top-level `workflow.workflowCalls` by presence without descending into legacy
+per-entry normalization such as `callerStepId` checks. This keeps the active
+role-authored path from traversing deeper legacy workflow-call branches while
+preserving legacy node-graph validation for actual compatibility bundles.
+Added focused regressions in `src/workflow/validate.test.ts`,
+`src/workflow/load.test.ts`, and `src/workflow/save.test.ts` proving that
+role-authored bundles with legacy `workflowCalls` fail on the top-level field
+only and no longer surface nested legacy-call entry diagnostics.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and deeper legacy node-graph save/load input
+paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`289` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 18:29 JST (module 1 slice: reject authored legacy `branching` on role-authored bundles)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended strict
+step-addressed direction, so no new design document or replacement
+implementation plan was needed. Continued module 1 in `src/workflow/validate.ts`
+by isolating another legacy-authored top-level field away from role/control
+bundles: authored `workflow.branching` is now rejected by presence once a
+bundle uses authored role/control nodes, and validation no longer descends into
+legacy `workflow.branching.mode` checks for that path. Updated
+`src/workflow/validate.test.ts`, `src/workflow/load.test.ts`, and
+`src/workflow/save.test.ts` to remove obsolete tolerated `branching` noise from
+positive role-authored fixtures and to add focused regressions proving that
+role-authored load/save/validate fail on the top-level field only.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`edges`, `loops`, remaining
+non-step structural branches, and deeper legacy node-graph save/load input
+paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+validator/persistence tightening.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`
+(`300` pass). This remains an incremental phase-133 slice, not plan
+completion, so the plan and `PROGRESS.json` remain `In Progress`.
+
+### Session: 2026-04-26 19:04 JST (module 1 slice: remove normalized legacy `managerNodeId` from the primary workflow surface)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended strict
+step-addressed direction, so no new design document or replacement
+implementation plan was needed. Continued module 1 by removing
+`managerNodeId` from the primary normalized/public `WorkflowJson` surface in
+`src/workflow/types.ts` and moving the remaining legacy node-graph access
+behind a new `getLegacyManagerNodeId(...)` helper. Updated
+`src/workflow/validate.ts`, `src/workflow/save.ts`, and
+`src/workflow/superviser.ts` so validation, persistence, and supervision
+projection use the helper or the existing runtime-id resolvers instead of
+depending on the compatibility field directly. Updated the affected tests in
+`src/workflow/load.test.ts`, `src/workflow/save.test.ts`,
+`src/workflow/validate.test.ts`, and `src/graphql/schema.test.ts` to assert the
+surviving behavior only, and tightened several legacy-only test fixture helper
+types (`conversation`, `manager-control`, `prompt-composition`,
+`runtime-addressing`, `sub-workflow`, and `visualization`) so they opt into the
+removed alias explicitly rather than assuming the primary workflow surface still
+carries it. As part of the same cleanup, removed a stale legacy
+`workflow.branching` fixture from the grouped GraphQL manager-scope test so it
+matches the new authored-schema rejection behavior already enforced by module 1.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`subWorkflows`, remaining
+non-step structural branches, and deeper legacy node-graph save/load input
+paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching and the remaining legacy node-graph dispatch union path. Module 3
+public-surface cleanup still remains open beyond the current
+type-surface/helper cutover.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts src/workflow/superviser.test.ts src/graphql/schema.test.ts --runInBand`
+(`365` pass). This remains an incremental phase-133 slice, not plan
+completion, so `PROGRESS.json` status does not change and remains
+`In Progress`.
+
+### Session: 2026-04-26 19:32 JST (module 2 slice: require explicit communication sub-workflow scope for replay)
+
+**Tasks Completed**: Re-checked the current architecture/design against the
+phase-133 target before editing. It still matches the intended strict
+step-addressed direction, so no new design document or replacement
+implementation plan was needed. Continued module 2 by removing the
+manager-control replay fallback that inferred sub-workflow ownership from
+`communication.fromNodeId` / `communication.toNodeId` when
+`fromSubWorkflowId` / `toSubWorkflowId` were absent. `assertCommunicationInManagerScope(...)`
+in `src/workflow/manager-control.ts` now trusts only explicit communication
+scope metadata for subworkflow-manager replay and additionally rejects
+communications whose explicit sub-workflow ids do not match the owning nodes.
+Updated `src/workflow/manager-control.test.ts` so the surviving behavior is
+asserted directly: explicit sub-workflow scope passes, missing scope metadata is
+rejected, and malformed explicit scope/node combinations are also rejected.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover still
+remains open for broader legacy companion removal (`subWorkflows`, remaining
+non-step structural branches, and deeper legacy node-graph save/load input
+paths). Module 2 runtime/control cleanup still remains open for root/sub
+branching in other helper/runtime paths and the remaining legacy node-graph
+dispatch union path. Module 3 public-surface cleanup still remains open beyond
+the current type-surface/helper cutover.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`
+and
+`bun test src/workflow/manager-control.test.ts --runInBand`
+(`19` pass). This remains an incremental phase-133 slice, not plan
+completion, so `PROGRESS.json` status does not change and remains
+`In Progress`.

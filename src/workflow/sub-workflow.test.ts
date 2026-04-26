@@ -4,9 +4,21 @@ import {
   planSubWorkflowChildInputs,
 } from "./sub-workflow";
 import type { WorkflowSessionState } from "./session";
-import type { WorkflowJson } from "./types";
+import {
+  getStructuralSubWorkflows,
+  type LoopRule,
+  type SubWorkflowRef,
+  type WorkflowJson,
+} from "./types";
 
-function makeWorkflow(): WorkflowJson {
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+  readonly loops?: readonly LoopRule[];
+};
+
+function makeWorkflow(): LegacyStructuralWorkflow {
   return {
     workflowId: "wf",
     description: "wf",
@@ -78,7 +90,6 @@ function makeWorkflow(): WorkflowJson {
     ],
     edges: [],
     loops: [],
-    branching: { mode: "fan-out" },
   };
 }
 
@@ -148,7 +159,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
       ...makeWorkflow(),
       subWorkflows: [
         {
-          ...makeWorkflow().subWorkflows[0]!,
+          ...getStructuralSubWorkflows(makeWorkflow())[0]!,
           managerNodeId: "a-manager",
         },
       ],
@@ -161,7 +172,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
           completion: { type: "none" },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
     const session = makeSession({
       queue: ["divedra-manager", "a-manager"],
       runtimeVariables: { humanInput: { topic: "x" } },
@@ -177,7 +188,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
       ...makeWorkflow(),
       subWorkflows: [
         {
-          ...makeWorkflow().subWorkflows[0]!,
+          ...getStructuralSubWorkflows(makeWorkflow())[0]!,
           managerNodeId: "a-manager",
         },
       ],
@@ -190,7 +201,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
           completion: { type: "none" },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
     const session = makeSession({
       runtimeVariables: { humanInput: { topic: "x" } },
       communications: [
@@ -233,11 +244,11 @@ describe("planRootManagerSubWorkflowStarts", () => {
       ...makeWorkflow(),
       subWorkflows: [
         {
-          ...makeWorkflow().subWorkflows[0]!,
+          ...getStructuralSubWorkflows(makeWorkflow())[0]!,
           block: { type: "branch-block" as const },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
     const session = makeSession({
       runtimeVariables: { humanInput: { topic: "x" } },
     });
@@ -252,7 +263,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
       ...makeWorkflow(),
       subWorkflows: [
         {
-          ...makeWorkflow().subWorkflows[0]!,
+          ...getStructuralSubWorkflows(makeWorkflow())[0]!,
           block: { type: "loop-body" as const, loopId: "main-loop" },
         },
       ],
@@ -273,7 +284,7 @@ describe("planRootManagerSubWorkflowStarts", () => {
           completion: { type: "none" },
         },
       ],
-    } satisfies WorkflowJson;
+    } satisfies LegacyStructuralWorkflow;
     const session = makeSession({
       runtimeVariables: { humanInput: { topic: "x" } },
     });
@@ -293,11 +304,11 @@ describe("planSubWorkflowChildInputs", () => {
         ...workflow,
         subWorkflows: [
           {
-            ...workflow.subWorkflows[0]!,
+            ...getStructuralSubWorkflows(workflow)[0]!,
             managerNodeId: "a-manager",
           },
         ],
-      },
+      } as LegacyStructuralWorkflow,
       session,
       managerNodeId: "a-manager",
     });
@@ -314,11 +325,11 @@ describe("planSubWorkflowChildInputs", () => {
         ...workflow,
         subWorkflows: [
           {
-            ...workflow.subWorkflows[0]!,
+            ...getStructuralSubWorkflows(workflow)[0]!,
             managerNodeId: "a-manager",
           },
         ],
-      },
+      } as LegacyStructuralWorkflow,
       session,
       managerNodeId: "a-manager",
     });
@@ -364,11 +375,11 @@ describe("planSubWorkflowChildInputs", () => {
         ...workflow,
         subWorkflows: [
           {
-            ...workflow.subWorkflows[0]!,
+            ...getStructuralSubWorkflows(workflow)[0]!,
             managerNodeId: "a-manager",
           },
         ],
-      },
+      } as LegacyStructuralWorkflow,
       session,
       managerNodeId: "a-manager",
     });
@@ -395,11 +406,11 @@ describe("planSubWorkflowChildInputs", () => {
         ...workflow,
         subWorkflows: [
           {
-            ...workflow.subWorkflows[0]!,
+            ...getStructuralSubWorkflows(workflow)[0]!,
             managerNodeId: "a-manager",
           },
         ],
-      },
+      } as LegacyStructuralWorkflow,
       session,
       managerNodeId: "a-manager",
     });

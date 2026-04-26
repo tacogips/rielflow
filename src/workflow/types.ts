@@ -178,8 +178,6 @@ export interface WorkflowCallRef {
   readonly id: string;
   readonly workflowId: string;
   readonly callerNodeId: string;
-  /** Step-addressed: optional; when set must equal `callerNodeId` and limits the call to that step id (disambiguates shared registry nodes). */
-  readonly callerStepId?: string;
   readonly resultNodeId?: string;
   /**
    * When set, the call runs only if this branch predicate matches the caller output
@@ -248,59 +246,42 @@ export interface SubWorkflowRef {
   readonly block?: SubWorkflowBlock;
 }
 
-export interface SubWorkflowConversation {
-  readonly id: string;
-  readonly participants: readonly string[];
-  readonly maxTurns: number;
-  readonly stopWhen: string;
-}
-
 /**
- * Top-level `workflow.json` before normalization. Two validation paths exist:
+ * Supported authored `workflow.json` surface before normalization.
+ *
+ * Two validation paths exist:
  * - **Step-addressed (strict)**: with `entryStepId` and `steps`, {@link import("./validate").isStrictWorkflowAuthorshipValidation}
- *   gates rejection of legacy graph keys in favor of `nodes` and step `transitions` (see `normalizeStepAddressedWorkflow`
- *   in `validate.ts` for the authoritative rejected-field list, including top-level
- *   `managerNodeId`, `entryNodeId`, `subWorkflows`, `subWorkflowConversations`, `edges`, `loops`,
- *   `branching`, and `workflowCalls`).
- * - **Legacy node graph**: `normalizeWorkflow` may still accept some of those fields until phase 133
- *   module 1 removes the compatibility types and branches.
+ *   gates rejection of legacy graph keys in favor of `nodes` and step `transitions`.
+ * - **Legacy node graph**: `normalizeWorkflow` may still accept some legacy top-level compatibility keys
+ *   until phase 133 module 1 removes the remaining branches.
+ *
+ * Those legacy compatibility keys are intentionally omitted from this primary authored type surface.
+ * Internal cleanup code that still needs to inspect raw authored compatibility input should do so
+ * through explicit record-typed aliases instead of depending on `AuthoredWorkflowJson` itself.
  */
-export interface AuthoredWorkflowJson
-  extends Readonly<Record<string, unknown>> {
+export interface AuthoredWorkflowJson {
   readonly workflowId: string;
   readonly description?: string;
   readonly defaults: WorkflowDefaults;
   readonly prompts?: WorkflowPrompts;
-  readonly managerNodeId?: string;
-  readonly entryNodeId?: string;
   readonly managerStepId?: string;
   readonly entryStepId?: string;
-  /**
-   * Legacy **node-graph** authoring only. Step-addressed bundles (`entryStepId` + `steps`) must
-   * not use this field; cross-workflow calls use `steps[].transitions` with `toWorkflowId` /
-   * `resumeStepId` instead (see `design-workflow-json.md`).
-   */
-  readonly workflowCalls?: readonly WorkflowCallRef[];
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
   readonly nodes: readonly (
     | AuthoredWorkflowNodeRef
     | WorkflowNodeRegistryRef
   )[];
   readonly steps?: readonly AuthoredWorkflowStepRef[];
-  readonly edges?: readonly WorkflowEdge[];
-  readonly loops?: readonly LoopRule[];
-  readonly branching?: {
-    readonly mode: "fan-out";
-  };
 }
 
 /**
  * Normalized workflow from validation/load. {@link AuthoredWorkflowJson} may omit
  * several fields; the validator projects step graphs and, while phase 133
- * (`impl-plans/workflow-legacy-compatibility-removal.md`) is in progress, may
- * still synthesize legacy runtime companions (`managerNodeId`, `edges`, empty
- * structural `subWorkflows`, `branching`, etc.) from step-addressed authoring.
+ * (`impl-plans/workflow-legacy-compatibility-removal.md`) is in progress, still
+ * carries some legacy compatibility fields for node-graph bundles. Runtime
+ * readers should prefer shared structural projections such as
+ * {@link getStructuralEdges} and {@link getStructuralLoops} instead of
+ * assuming every legacy-shaped companion is materialized on the normalized
+ * bundle.
  * New authoring should be step-only (`entryStepId`, `steps`, `nodes` registry);
  * use {@link isStrictWorkflowAuthorshipValidation} / `rejectLegacyWorkflowAuthoring`
  * to reject node-graph-only bundles when loading.
@@ -310,30 +291,75 @@ export interface WorkflowJson {
   readonly description: string;
   readonly defaults: WorkflowDefaults;
   readonly prompts?: WorkflowPrompts;
-  /**
-   * Compatibility name retained while phase 133 is in progress. For normalized
-   * **step-addressed** bundles, validation sets this to `managerStepId ?? entryStepId`
-   * (the same id space as the engine queue and materialized `nodes[].id` for the
-   * manager/entry **step**), not necessarily the underlying registry id from
-   * `steps[].nodeId`. Legacy node-graph bundles use the root manager's node id
-   * here. Prefer {@link resolveWorkflowManagerRuntimeId} at call sites.
-   */
-  readonly managerNodeId: string;
   readonly hasManagerNode?: boolean;
-  readonly entryNodeId?: string;
   readonly managerStepId?: string;
   readonly entryStepId?: string;
   readonly nodeRegistry?: readonly WorkflowNodeRegistryRef[];
   readonly steps?: readonly WorkflowStepRef[];
-  readonly workflowCalls?: readonly WorkflowCallRef[];
-  readonly subWorkflows: readonly SubWorkflowRef[];
-  readonly subWorkflowConversations?: readonly SubWorkflowConversation[];
   readonly nodes: readonly WorkflowNodeRef[];
-  readonly edges: readonly WorkflowEdge[];
-  readonly loops?: readonly LoopRule[];
-  readonly branching: {
-    readonly mode: "fan-out";
-  };
+}
+
+export function isStepAddressedWorkflow(
+  workflow: Pick<WorkflowJson, "entryStepId" | "steps">,
+): workflow is Pick<WorkflowJson, "entryStepId" | "steps"> & {
+  readonly entryStepId: string;
+  readonly steps: readonly WorkflowStepRef[];
+} {
+  return workflow.entryStepId !== undefined && workflow.steps !== undefined;
+}
+
+type WorkflowWithLegacyManagerNodeId = WorkflowJson & {
+  readonly managerNodeId?: string;
+};
+
+/**
+ * Legacy node-graph bundles may still expose `managerNodeId` while phase 133
+ * removes the remaining compatibility aliases from the primary normalized
+ * surface. Callers that still need the raw authored alias should read it
+ * through this helper instead of depending on `WorkflowJson` directly.
+ */
+export function getLegacyManagerNodeId(
+  workflow: WorkflowWithLegacyManagerNodeId,
+): string | undefined {
+  return workflow.managerNodeId;
+}
+
+type WorkflowWithLegacyEntryNodeId = WorkflowJson & {
+  readonly entryNodeId?: string;
+};
+
+/**
+ * Legacy node-graph bundles may still expose `entryNodeId` while phase 133
+ * removes the remaining compatibility aliases from the primary normalized
+ * surface. Callers that still need the raw authored alias should read it
+ * through this helper instead of depending on `WorkflowJson` directly.
+ */
+export function getLegacyEntryNodeId(
+  workflow: WorkflowWithLegacyEntryNodeId,
+): string | undefined {
+  return workflow.entryNodeId;
+}
+
+/**
+ * Primary entry **runtime** id for new-session bootstrap and UI/runtime
+ * previews. For step-addressed normalized bundles (`entryStepId` and `steps`
+ * present), returns `entryStepId` (a **step** id). For legacy node-graph
+ * bundles, returns `entryNodeId ?? managerNodeId` (node id). Throws if a
+ * supposed normalized legacy bundle exposes neither entry nor manager ids,
+ * because silently inventing a fallback would hide a broken workflow contract.
+ */
+export function resolveWorkflowEntryRuntimeId(workflow: WorkflowJson): string {
+  if (isStepAddressedWorkflow(workflow)) {
+    return workflow.entryStepId;
+  }
+  const legacyEntryRuntimeId =
+    getLegacyEntryNodeId(workflow) ?? getLegacyManagerNodeId(workflow);
+  if (legacyEntryRuntimeId !== undefined) {
+    return legacyEntryRuntimeId;
+  }
+  throw new Error(
+    `workflow '${workflow.workflowId}' has no entry runtime id; expected entryNodeId or managerNodeId on a legacy node-graph bundle`,
+  );
 }
 
 /**
@@ -341,19 +367,174 @@ export interface WorkflowJson {
  * new-session bootstrap. For step-addressed normalized bundles (`entryStepId`
  * and `steps` present), returns `managerStepId ?? entryStepId` (a **step** id
  * in the same id space as `session.queue` items and the manager step's
- * materialized `nodes[].id`), not `steps[].nodeId` from the registry. Call sites
- * comparing to session/manager context should use this rather than re-reading
- * {@link WorkflowJson.managerNodeId} (slated for removal in
- * `impl-plans/workflow-legacy-compatibility-removal.md`). For legacy node-graph
- * bundles, returns the root `managerNodeId` (node id).
+ * materialized `nodes[].id`), not `steps[].nodeId` from the registry. For
+ * legacy node-graph bundles, returns the root `managerNodeId` (node id). Throws
+ * if a supposed normalized legacy bundle exposes neither `managerNodeId` nor
+ * `entryNodeId`, because inventing a fallback runtime id would hide a broken
+ * workflow contract.
  */
 export function resolveWorkflowManagerRuntimeId(
   workflow: WorkflowJson,
 ): string {
-  if (workflow.steps !== undefined && workflow.entryStepId !== undefined) {
+  if (isStepAddressedWorkflow(workflow)) {
     return workflow.managerStepId ?? workflow.entryStepId;
   }
-  return workflow.managerNodeId;
+  const legacyManagerRuntimeId =
+    getLegacyManagerNodeId(workflow) ?? getLegacyEntryNodeId(workflow);
+  if (legacyManagerRuntimeId !== undefined) {
+    return legacyManagerRuntimeId;
+  }
+  throw new Error(
+    `workflow '${workflow.workflowId}' has no manager runtime id; expected managerNodeId or entryNodeId on a legacy node-graph bundle`,
+  );
+}
+
+type WorkflowWithStructuralSubWorkflows = WorkflowJson & {
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+};
+
+/**
+ * Structural sub-workflow definitions remain a legacy node-graph companion.
+ * Step-addressed bundles reject authored `subWorkflows`, so runtime and
+ * save/load callers should read them through this helper instead of assuming
+ * the primary workflow surface exposes the field.
+ */
+export function getStructuralSubWorkflows(
+  workflow: WorkflowWithStructuralSubWorkflows,
+): readonly SubWorkflowRef[] {
+  return workflow.subWorkflows ?? [];
+}
+
+type WorkflowWithLegacyEdges = WorkflowJson & {
+  readonly edges?: readonly WorkflowEdge[];
+};
+
+/**
+ * Authored `workflow.edges` remain a legacy node-graph companion. Callers that
+ * need the raw persisted shape should read it through this helper instead of
+ * depending on the primary normalized workflow surface.
+ */
+export function getLegacyAuthoredEdges(
+  workflow: WorkflowWithLegacyEdges,
+): readonly WorkflowEdge[] | undefined {
+  return workflow.edges;
+}
+
+type WorkflowWithLegacyLoops = WorkflowJson & {
+  readonly loops?: readonly LoopRule[];
+};
+
+/**
+ * Authored `workflow.loops` remain a legacy node-graph companion. Callers that
+ * need the raw persisted shape should read it through this helper instead of
+ * depending on the primary normalized workflow surface.
+ */
+export function getLegacyAuthoredLoops(
+  workflow: WorkflowWithLegacyLoops,
+): readonly LoopRule[] | undefined {
+  return workflow.loops;
+}
+
+function buildRepeatExitExpression(whileExpression: string): string {
+  return `!(${whileExpression})`;
+}
+
+function buildRepeatLoops(
+  nodes: readonly Pick<WorkflowNodeRef, "id" | "repeat">[],
+): readonly LoopRule[] {
+  return nodes.flatMap((node) =>
+    node.repeat === undefined
+      ? []
+      : [
+          {
+            id: `repeat-${node.id}`,
+            judgeNodeId: node.id,
+            continueWhen: node.repeat.while,
+            exitWhen: buildRepeatExitExpression(node.repeat.while),
+            ...(node.repeat.maxIterations === undefined
+              ? {}
+              : { maxIterations: node.repeat.maxIterations }),
+          } satisfies LoopRule,
+        ],
+  );
+}
+
+/**
+ * Loop rules stay authored on legacy `workflow.loops` when present. When a
+ * legacy workflow instead uses node-local `repeat`, readers should derive the
+ * effective loop projection rather than depending on a synthesized normalized
+ * `workflow.loops` companion. Explicit loop ids win over derived repeat ids.
+ */
+export function getStructuralLoops(
+  workflow: Pick<WorkflowJson, "nodes"> & WorkflowWithLegacyLoops,
+): readonly LoopRule[] {
+  const explicitLoops = getLegacyAuthoredLoops(workflow) ?? [];
+  const derivedRepeatLoops = buildRepeatLoops(workflow.nodes);
+  if (explicitLoops.length === 0) {
+    return derivedRepeatLoops;
+  }
+  if (derivedRepeatLoops.length === 0) {
+    return explicitLoops;
+  }
+
+  const loopsById = new Map<string, LoopRule>(
+    explicitLoops.map((loop) => [loop.id, loop]),
+  );
+  for (const derivedLoop of derivedRepeatLoops) {
+    if (!loopsById.has(derivedLoop.id)) {
+      loopsById.set(derivedLoop.id, derivedLoop);
+    }
+  }
+  return [...loopsById.values()];
+}
+
+/**
+ * Step-addressed workflows should derive local routing edges from
+ * `steps[].transitions` instead of depending on the legacy `workflow.edges`
+ * companion. Legacy node-graph bundles use authored `workflow.edges` when
+ * present; otherwise, sequential routing is derived from node order plus repeat
+ * metadata.
+ */
+export function getStructuralEdges(
+  workflow: Pick<WorkflowJson, "entryStepId" | "steps" | "nodes"> &
+    WorkflowWithLegacyEdges,
+): readonly WorkflowEdge[] {
+  if (isStepAddressedWorkflow(workflow)) {
+    return workflow.steps.flatMap((step) =>
+      (step.transitions ?? [])
+        .filter((transition) => transition.toWorkflowId === undefined)
+        .map((transition) => ({
+          from: step.id,
+          to: transition.toStepId,
+          when: transition.label ?? "always",
+        })),
+    );
+  }
+  const authoredLegacyEdges = getLegacyAuthoredEdges(workflow);
+  if (authoredLegacyEdges !== undefined) {
+    return authoredLegacyEdges;
+  }
+
+  const edges: WorkflowEdge[] = [];
+  workflow.nodes.forEach((node, index) => {
+    const nextNode = workflow.nodes[index + 1];
+    if (nextNode === undefined) {
+      return;
+    }
+    if (node.repeat === undefined) {
+      edges.push({ from: node.id, to: nextNode.id, when: "always" });
+      return;
+    }
+
+    const restartAt = node.repeat.restartAt ?? node.id;
+    edges.push({ from: node.id, to: restartAt, when: node.repeat.while });
+    edges.push({
+      from: node.id,
+      to: nextNode.id,
+      when: buildRepeatExitExpression(node.repeat.while),
+    });
+  });
+  return edges;
 }
 
 export interface ArgumentBinding {

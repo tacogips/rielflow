@@ -46,7 +46,10 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
-import { workflowCallsForExecutionMatch } from "./cross-workflow-from-steps";
+import {
+  crossWorkflowDispatchesForExecutionMatch,
+  type CrossWorkflowExecutionDispatch,
+} from "./cross-workflow-from-steps";
 import { composeExecutionPrompts } from "./prompt-composition";
 import {
   parseManagerControlPayload,
@@ -70,7 +73,6 @@ import {
   resolveStepExecutionAddress,
   toStepIdentityFields,
 } from "./runtime-addressing";
-import { executeConversationRound } from "./conversation";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
   buildAmbientManagerControlPlaneEnvironment,
@@ -132,12 +134,17 @@ import type {
   SupervisionIncident,
   SupervisionRemediationRecord,
   SupervisionRunState,
-  WorkflowCallRef,
   WorkflowEdge,
   WorkflowJson,
   WorkflowTimeoutPolicy,
 } from "./types";
-import { asAgentNodePayload, resolveWorkflowManagerRuntimeId } from "./types";
+import {
+  asAgentNodePayload,
+  getStructuralEdges,
+  getStructuralLoops,
+  getStructuralSubWorkflows,
+  resolveWorkflowManagerRuntimeId,
+} from "./types";
 
 export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly sessionId?: string;
@@ -621,7 +628,9 @@ function findOwningSubWorkflowByInputNodeId(
   workflow: WorkflowJson,
   nodeId: string,
 ): SubWorkflowRef | undefined {
-  return workflow.subWorkflows.find((entry) => entry.inputNodeId === nodeId);
+  return getStructuralSubWorkflows(workflow).find(
+    (entry) => entry.inputNodeId === nodeId,
+  );
 }
 
 function findNodeRef(workflow: WorkflowJson, nodeId: string) {
@@ -693,7 +702,7 @@ function applyOptionalManagerDecisions(input: {
   readonly managerControl: ParsedManagerControl | null;
   readonly session: WorkflowSessionState;
   readonly workflow: WorkflowJson;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly decidedAt: string;
 }): Result<
@@ -730,7 +739,7 @@ function applyOptionalManagerDecisions(input: {
     const existingAction = actionsByNodeId.get(action.stepId);
     if (existingAction !== undefined && existingAction.status !== nextStatus) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${action.stepId}' cannot be both executed and skipped in one manager turn`,
+        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${action.stepId}' cannot be both executed and skipped in one manager turn`,
       );
     }
     actionsByNodeId.set(action.stepId, {
@@ -750,17 +759,17 @@ function applyOptionalManagerDecisions(input: {
     );
     if (currentDecision === undefined || currentDecision.status !== "pending") {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${nodeId}' is not currently pending`,
+        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${nodeId}' is not currently pending`,
       );
     }
-    if (currentDecision.owningManagerNodeId !== input.managerNodeId) {
+    if (currentDecision.owningManagerNodeId !== input.managerRuntimeId) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
+        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${nodeId}' is owned by '${currentDecision.owningManagerNodeId}'`,
       );
     }
     if (!isOptionalNode(input.workflow, nodeId)) {
       return err(
-        `invalid manager control at '${input.managerNodeId}': ${optionalTargetNoun} '${nodeId}' is not optional`,
+        `invalid manager control at '${input.managerRuntimeId}': ${optionalTargetNoun} '${nodeId}' is not optional`,
       );
     }
     pendingOptionalNodeDecisions = upsertPendingOptionalNodeDecision(
@@ -793,7 +802,11 @@ function mailboxDeliveryManagerNodeId(
     return rootManagerId;
   }
 
-  if (workflow.subWorkflows.some((entry) => entry.managerNodeId === toNodeId)) {
+  if (
+    getStructuralSubWorkflows(workflow).some(
+      (entry) => entry.managerNodeId === toNodeId,
+    )
+  ) {
     return rootManagerId;
   }
 
@@ -820,7 +833,9 @@ function resolveCommunicationBoundary(input: {
     input.workflow,
     input.toNodeId,
   );
-  const recipientManagerSubWorkflow = input.workflow.subWorkflows.find(
+  const recipientManagerSubWorkflow = getStructuralSubWorkflows(
+    input.workflow,
+  ).find(
     (entry) => entry.managerNodeId === input.toNodeId,
   );
 
@@ -1068,7 +1083,7 @@ interface WorkflowCallExecutionResult {
 }
 
 function workflowCallMatchesCallerExecution(input: {
-  readonly entry: WorkflowCallRef;
+  readonly entry: CrossWorkflowExecutionDispatch;
   readonly callerNodeId: string;
   readonly callerStepId?: string;
   readonly callerOutputPayload: Readonly<Record<string, unknown>>;
@@ -1122,15 +1137,14 @@ async function executeWorkflowCallsForNode(input: {
       : { callerStepId: input.callerStepId }),
     callerOutputPayload: input.callerOutputPayload,
   };
-  // Cross-workflow dispatch: step-addressed bundles use only step-derived `__cw:*` rows
-  // from `steps[].transitions`. Legacy node graphs union explicit `workflow.workflowCalls`
-  // with step-derived rows (see `workflowCallsForExecutionMatch` in `cross-workflow-from-steps.ts`).
-  // Order and dedup rules differ from `effectiveWorkflowCalls` on the legacy union path.
-  const relevantCalls = workflowCallsForExecutionMatch(
+  // Cross-workflow dispatch: only step-addressed bundles derive execution rows
+  // from `steps[].transitions`. Legacy node-graph bundles no longer dispatch
+  // authored top-level `workflow.workflowCalls`.
+  const relevantDispatches = crossWorkflowDispatchesForExecutionMatch(
     input.workflow,
     (entry) => workflowCallMatchesCallerExecution({ entry, ...matchCtx }),
   );
-  if (relevantCalls.length === 0) {
+  if (relevantDispatches.length === 0) {
     return ok({
       communications: input.currentCommunications,
       communicationCounter: input.communicationCounter,
@@ -1148,23 +1162,23 @@ async function executeWorkflowCallsForNode(input: {
     readonly when: string;
   }> = [];
 
-  for (const workflowCall of relevantCalls) {
+  for (const dispatch of relevantDispatches) {
     if (
-      input.workflowCallAncestors.includes(workflowCall.workflowId) ||
-      input.workflow.workflowId === workflowCall.workflowId
+      input.workflowCallAncestors.includes(dispatch.workflowId) ||
+      input.workflow.workflowId === dispatch.workflowId
     ) {
       return err(
-        `workflow-call '${workflowCall.id}' would recurse into '${workflowCall.workflowId}', which is not supported`,
+        `workflow-call '${dispatch.id}' would recurse into '${dispatch.workflowId}', which is not supported`,
       );
     }
 
     const loadedChild = await loadWorkflowByIdFromDisk(
-      workflowCall.workflowId,
+      dispatch.workflowId,
       input.options,
     );
     if (!loadedChild.ok) {
       return err(
-        `workflow-call '${workflowCall.id}' target '${workflowCall.workflowId}' could not be loaded: ${loadedChild.error.message}`,
+        `workflow-call '${dispatch.id}' target '${dispatch.workflowId}' could not be loaded: ${loadedChild.error.message}`,
       );
     }
 
@@ -1180,7 +1194,7 @@ async function executeWorkflowCallsForNode(input: {
           ...(input.callerStepId === undefined
             ? {}
             : { callerStepId: input.callerStepId }),
-          workflowCallId: workflowCall.id,
+          workflowCallId: dispatch.id,
           payload: input.callerOutputPayload["payload"] as Readonly<
             Record<string, unknown>
           >,
@@ -1192,7 +1206,7 @@ async function executeWorkflowCallsForNode(input: {
     );
     if (!childResult.ok) {
       return err(
-        `workflow-call '${workflowCall.id}' failed: ${childResult.error.message}`,
+        `workflow-call '${dispatch.id}' failed: ${childResult.error.message}`,
       );
     }
 
@@ -1212,8 +1226,8 @@ async function executeWorkflowCallsForNode(input: {
 
     await persistWorkflowCallArtifact({
       artifactDir: input.callerArtifactDir,
-      callId: workflowCall.id,
-      workflowId: workflowCall.workflowId,
+      callId: dispatch.id,
+      workflowId: dispatch.workflowId,
       callerNodeId: input.callerNodeId,
       ...(input.callerStepId === undefined
         ? {}
@@ -1222,21 +1236,21 @@ async function executeWorkflowCallsForNode(input: {
       childWorkflowId: childWorkflow.workflowId,
       childSession: childResult.value.session,
       parentNodeExecId: input.callerNodeExecId,
-      ...(workflowCall.resultNodeId === undefined
+      ...(dispatch.resultNodeId === undefined
         ? {}
-        : { resultNodeId: workflowCall.resultNodeId }),
+        : { resultNodeId: dispatch.resultNodeId }),
       ...(childOutputRef === undefined
         ? {}
         : { resultOutputRef: childOutputRef }),
     });
 
-    if (workflowCall.resultNodeId === undefined) {
+    if (dispatch.resultNodeId === undefined) {
       continue;
     }
 
     if (childResultExecution === undefined || childOutputRef === undefined) {
       return err(
-        `workflow-call '${workflowCall.id}' completed without a result execution for '${workflowCall.resultNodeId}'`,
+        `workflow-call '${dispatch.id}' completed without a result execution for '${dispatch.resultNodeId}'`,
       );
     }
 
@@ -1245,14 +1259,14 @@ async function executeWorkflowCallsForNode(input: {
     );
     if (!childOutput.ok) {
       return err(
-        `workflow-call '${workflowCall.id}' produced an unreadable result: ${childOutput.error}`,
+        `workflow-call '${dispatch.id}' produced an unreadable result: ${childOutput.error}`,
       );
     }
 
     const boundary = resolveCommunicationBoundary({
       workflow: input.workflow,
       fromNodeId: input.callerNodeId,
-      toNodeId: workflowCall.resultNodeId,
+      toNodeId: dispatch.resultNodeId,
     });
     const communication = await persistCommunicationArtifact({
       artifactWorkflowRoot: input.artifactWorkflowRoot,
@@ -1261,7 +1275,7 @@ async function executeWorkflowCallsForNode(input: {
       workflowExecutionId: input.session.sessionId,
       communicationCounter: currentCommunicationCounter,
       fromNodeId: input.callerNodeId,
-      toNodeId: workflowCall.resultNodeId,
+      toNodeId: dispatch.resultNodeId,
       ...(boundary.fromSubWorkflowId === undefined
         ? {}
         : { fromSubWorkflowId: boundary.fromSubWorkflowId }),
@@ -1270,23 +1284,23 @@ async function executeWorkflowCallsForNode(input: {
         : { toSubWorkflowId: boundary.toSubWorkflowId }),
       routingScope: boundary.routingScope,
       deliveryKind: "edge-transition",
-      transitionWhen: `workflow-call:${workflowCall.id}`,
+      transitionWhen: `workflow-call:${dispatch.id}`,
       sourceNodeExecId: input.callerNodeExecId,
       payloadRef: childOutputRef,
       outputRaw: childOutput.value.raw,
       deliveredByNodeId: mailboxDeliveryManagerNodeId(
         input.workflow,
-        workflowCall.resultNodeId,
+        dispatch.resultNodeId,
       ),
       createdAt: input.createdAt,
     });
     currentCommunicationCounter += 1;
     currentCommunications.push(communication);
-    queuedNodeIds.push(workflowCall.resultNodeId);
+    queuedNodeIds.push(dispatch.resultNodeId);
     transitions.push({
       from: input.callerNodeId,
-      to: workflowCall.resultNodeId,
-      when: `workflow-call:${workflowCall.id}`,
+      to: dispatch.resultNodeId,
+      when: `workflow-call:${dispatch.id}`,
     });
   }
 
@@ -2031,7 +2045,7 @@ async function runWorkflowInternal(
     workflow.nodes.map((entry) => [entry.id, entry]),
   );
   const loopRuleByJudgeNodeId = new Map<string, LoopRule>(
-    (workflow.loops ?? []).map((entry) => [entry.judgeNodeId, entry]),
+    getStructuralLoops(workflow).map((entry) => [entry.judgeNodeId, entry]),
   );
   const effectiveAdapter =
     adapter ??
@@ -2278,7 +2292,7 @@ async function runWorkflowInternal(
   }
 
   const outgoingEdges = new Map<string, WorkflowEdge[]>();
-  workflow.edges.forEach((edge) => {
+  getStructuralEdges(workflow).forEach((edge) => {
     const current = outgoingEdges.get(edge.from);
     if (current) {
       current.push(edge);
@@ -3676,7 +3690,7 @@ async function runWorkflowInternal(
             businessPayload === null
               ? null
               : parseManagerControlPayload(businessPayload, workflow, {
-                  managerNodeId: nodeId,
+                  managerRuntimeId: nodeId,
                   managerKind: nodeRef.kind,
                   ...(nodeRef.role === undefined
                     ? {}
@@ -3855,7 +3869,7 @@ async function runWorkflowInternal(
         managerControl,
         session,
         workflow,
-        managerNodeId: nodeId,
+        managerRuntimeId: nodeId,
         managerNodeExecId: nodeExecId,
         decidedAt: endedAt,
       });
@@ -4528,9 +4542,9 @@ async function runWorkflowInternal(
           managerPlannedInputs.push(subWorkflow.managerNodeId);
         }
         const persistedChildInputs: CommunicationRecord[] = [];
-        const rootManagedSubWorkflows = workflow.subWorkflows.filter(
-          (entry) => entry.managerNodeId === nodeId,
-        );
+        const rootManagedSubWorkflows = getStructuralSubWorkflows(
+          workflow,
+        ).filter((entry) => entry.managerNodeId === nodeId);
         for (const subWorkflow of rootManagedSubWorkflows) {
           const forwardedPayloads = upstreamInputs
             .filter((entry) => entry.toSubWorkflowId === subWorkflow.id)
@@ -4605,135 +4619,12 @@ async function runWorkflowInternal(
         ...managerPlannedCommunications,
       ];
 
-      let conversationTurns = [...(session.conversationTurns ?? [])];
-      let conversationPlannedInputs: string[] = [];
-      if (isManagerNodeRef(nodeRef)) {
-        const conversationRound = await executeConversationRound({
-          workflow,
-          workflowExecutionId: session.sessionId,
-          session: {
-            ...session,
-            nodeExecutions,
-            conversationTurns,
-            communicationCounter: currentCommunicationCounter,
-            communications: currentCommunications,
-          },
-        });
-
-        if (conversationRound.status === "failed") {
-          const failed: WorkflowSessionState = {
-            ...session,
-            queue,
-            status: "failed",
-            currentNodeId: nodeId,
-            endedAt,
-            nodeExecutionCounter: nextExecutionCounter,
-            nodeExecutionCounts: updatedCounts,
-            nodeExecutions,
-            loopIterationCounts: updatedLoopIterationCounts,
-            communicationCounter: currentCommunicationCounter,
-            communications: currentCommunications,
-            conversationTurns,
-            nodeBackendSessions: nextNodeBackendSessions,
-            lastError: "conversation round execution failed",
-          };
-          await saveSession(failed, options);
-          return err({
-            exitCode: 1,
-            message: failed.lastError ?? "conversation round execution failed",
-          });
-        }
-
-        if (conversationRound.turns.length > 0) {
-          const successfulTurnDeliveries: Array<{
-            readonly turn: (typeof conversationRound.turns)[number];
-            readonly communication: CommunicationRecord;
-            readonly receiverManagerNodeId: string;
-          }> = [];
-          for (const turn of conversationRound.turns) {
-            if (turn.toManagerNodeId === undefined) {
-              continue;
-            }
-            const parsedOutput = await readOutputPayloadArtifact(
-              turn.outputRef.artifactDir,
-            );
-            if (!parsedOutput.ok) {
-              const failed: WorkflowSessionState = {
-                ...session,
-                queue,
-                status: "failed",
-                currentNodeId: nodeId,
-                endedAt,
-                nodeExecutionCounter: nextExecutionCounter,
-                nodeExecutionCounts: updatedCounts,
-                nodeExecutions,
-                loopIterationCounts: updatedLoopIterationCounts,
-                communicationCounter: currentCommunicationCounter,
-                communications: currentCommunications,
-                conversationTurns,
-                nodeBackendSessions: nextNodeBackendSessions,
-                lastError:
-                  `failed to resolve conversation output for '${turn.fromSubWorkflowId}' -> '${turn.toSubWorkflowId}': ` +
-                  parsedOutput.error,
-              };
-              await saveSession(failed, options);
-              return err({
-                exitCode: 1,
-                message:
-                  failed.lastError ?? "conversation output resolution failed",
-              });
-            }
-            const communication = await persistCommunicationArtifact({
-              artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
-              runtimeLogOptions: options,
-              workflowId: workflow.workflowId,
-              workflowExecutionId: session.sessionId,
-              communicationCounter: currentCommunicationCounter,
-              fromNodeId: turn.fromManagerNodeId,
-              toNodeId: turn.toManagerNodeId,
-              fromSubWorkflowId: turn.fromSubWorkflowId,
-              toSubWorkflowId: turn.toSubWorkflowId,
-              routingScope: "cross-sub-workflow",
-              deliveryKind: "conversation-turn",
-              transitionWhen: `conversation:${turn.conversationId}:${turn.turnIndex}`,
-              sourceNodeExecId: turn.outputRef.nodeExecId,
-              payloadRef: turn.outputRef,
-              outputRaw: parsedOutput.value.raw,
-              deliveredByNodeId: resolveWorkflowManagerRuntimeId(workflow),
-              createdAt: endedAt,
-            });
-            currentCommunicationCounter += 1;
-            successfulTurnDeliveries.push({
-              turn,
-              communication,
-              receiverManagerNodeId: turn.toManagerNodeId,
-            });
-          }
-          currentCommunications = [
-            ...currentCommunications,
-            ...successfulTurnDeliveries.map((entry) => entry.communication),
-          ];
-          conversationTurns = [
-            ...conversationTurns,
-            ...successfulTurnDeliveries.map((entry) => ({
-              ...entry.turn,
-              communicationId: entry.communication.communicationId,
-              sentAt: endedAt,
-            })),
-          ];
-          conversationPlannedInputs = successfulTurnDeliveries.map(
-            (entry) => entry.receiverManagerNodeId,
-          );
-        }
-      }
-
       const retryStepIds = managerControl?.retryStepIds ?? [];
       const nextQueue = [
         ...queue,
         ...transitionNextNodes,
         ...workflowCallResult.value.queuedNodeIds,
         ...managerPlannedInputs,
-        ...conversationPlannedInputs,
         ...queuedOptionalDecisionNodeIds,
       ].filter((value, index, all) => all.indexOf(value) === index);
       const nextQueueWithRetries = [...nextQueue, ...retryStepIds].filter(
@@ -4752,7 +4643,9 @@ async function runWorkflowInternal(
         nodeExecutions,
         communicationCounter: currentCommunicationCounter,
         communications: currentCommunications,
-        conversationTurns,
+        ...(session.conversationTurns === undefined
+          ? {}
+          : { conversationTurns: session.conversationTurns }),
         nodeBackendSessions: nextNodeBackendSessions,
         pendingOptionalNodeDecisions: isOptionalExecutionNode
           ? removePendingOptionalNodeDecision(
@@ -5013,7 +4906,7 @@ async function runAutoImproveLoop(
       return err(
         workflowRunFailure(
           2,
-          "supervision rerun requires entryStepId+steps or legacy entryNodeId+nodes on the target workflow",
+          "supervision rerun requires entryStepId with non-empty steps on the target workflow",
           failedSession,
         ),
       );

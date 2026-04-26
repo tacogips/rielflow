@@ -288,7 +288,7 @@ export function buildSuperviserRuntimeControl(input: {
       );
       if (stepAddressed === null) {
         return err(
-          "rerun-workflow: target workflow must have entryStepId with non-empty steps, or legacy entryNodeId with nodes",
+          "rerun-workflow: target workflow must have entryStepId with non-empty steps",
         );
       }
       const child = stripForChildRun(base);

@@ -1,4 +1,9 @@
-import type { AgentNodePayload, SubWorkflowRef, WorkflowJson } from "./types";
+import {
+  getStructuralSubWorkflows,
+  type AgentNodePayload,
+  type SubWorkflowRef,
+  type WorkflowJson,
+} from "./types";
 
 export interface StepIdentityFields {
   readonly stepId?: string;
@@ -70,7 +75,7 @@ export function findOwningSubWorkflowByRuntimeNodeId(
   workflow: WorkflowJson,
   runtimeNodeId: string,
 ): SubWorkflowRef | undefined {
-  return workflow.subWorkflows.find((entry) => {
+  return getStructuralSubWorkflows(workflow).find((entry) => {
     if (entry.nodeIds?.includes(runtimeNodeId) ?? false) {
       return true;
     }

@@ -1,4 +1,4 @@
-import type { WorkflowJson } from "../types";
+import { getStructuralSubWorkflows, type WorkflowJson } from "../types";
 import type {
   PendingOptionalNodeDecision,
   WorkflowSessionState,
@@ -62,7 +62,7 @@ export function findOwnedSubWorkflow(
   workflow: WorkflowJson,
   managerNodeId: string,
 ) {
-  return workflow.subWorkflows.find(
+  return getStructuralSubWorkflows(workflow).find(
     (entry) => entry.managerNodeId === managerNodeId,
   );
 }

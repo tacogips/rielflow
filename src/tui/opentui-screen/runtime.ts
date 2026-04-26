@@ -20,7 +20,11 @@ import type {
   WorkflowSessionState,
 } from "../../workflow/session";
 import type { RuntimeSessionSummary } from "../../workflow/runtime-db";
-import type { CliAgentBackend } from "../../workflow/types";
+import {
+  getStructuralSubWorkflows,
+  type CliAgentBackend,
+  type SubWorkflowRef,
+} from "../../workflow/types";
 import {
   buildNodeDefinitionPopupContent,
   buildNodeSelectOptions,
@@ -470,7 +474,7 @@ export async function runOpenTuiWorkflowApp(
   };
 
   const currentSubworkflow = ():
-    | LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number]
+    | SubWorkflowRef
     | undefined => {
     if (loadedWorkflow === undefined) {
       return undefined;
@@ -479,7 +483,7 @@ export async function runOpenTuiWorkflowApp(
     if (subworkflowId === undefined) {
       return undefined;
     }
-    return loadedWorkflow.bundle.workflow.subWorkflows.find(
+    return getStructuralSubWorkflows(loadedWorkflow.bundle.workflow).find(
       (entry) => entry.id === subworkflowId,
     );
   };
@@ -1064,7 +1068,7 @@ export async function runOpenTuiWorkflowApp(
       await options.loadWorkflowDefinition(workflowName);
     loadedWorkflow = nextLoadedWorkflow;
     subworkflowPath = subworkflowPath.filter((subworkflowId) =>
-      nextLoadedWorkflow.bundle.workflow.subWorkflows.some(
+      getStructuralSubWorkflows(nextLoadedWorkflow.bundle.workflow).some(
         (entry) => entry.id === subworkflowId,
       ),
     );
@@ -1619,7 +1623,7 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     if (
-      !loadedWorkflow.bundle.workflow.subWorkflows.some(
+      !getStructuralSubWorkflows(loadedWorkflow.bundle.workflow).some(
         (entry) => entry.id === subworkflowId,
       )
     ) {

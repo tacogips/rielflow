@@ -120,24 +120,45 @@ async function createWorkflowCallWorkflowFixture(root: string) {
         workflowId: "workflow-calls",
         description: "workflow-call http fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "divedra-manager",
-        workflowCalls: [
-          {
-            id: "review-call",
-            workflowId: "review",
-            callerNodeId: "main-worker",
-          },
-        ],
+        managerStepId: "divedra-manager",
+        entryStepId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
-            role: "manager",
             nodeFile: "nodes/node-divedra-manager.json",
           },
           {
             id: "main-worker",
-            role: "worker",
             nodeFile: "nodes/node-main-worker.json",
+          },
+          {
+            id: "apply-review",
+            nodeFile: "nodes/node-apply-review.json",
+          },
+        ],
+        steps: [
+          {
+            id: "divedra-manager",
+            nodeId: "divedra-manager",
+            role: "manager",
+            transitions: [{ toStepId: "main-worker" }],
+          },
+          {
+            id: "main-worker",
+            nodeId: "main-worker",
+            role: "worker",
+            transitions: [
+              {
+                toStepId: "reviewer",
+                toWorkflowId: "review",
+                resumeStepId: "apply-review",
+              },
+            ],
+          },
+          {
+            id: "apply-review",
+            nodeId: "apply-review",
+            role: "worker",
           },
         ],
       },
@@ -176,6 +197,21 @@ async function createWorkflowCallWorkflowFixture(root: string) {
     )}\n`,
     "utf8",
   );
+  await writeFile(
+    path.join(workflowDir, "nodes", "node-apply-review.json"),
+    `${JSON.stringify(
+      {
+        id: "apply-review",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "apply review",
+        variables: {},
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 
   const reviewDir = path.join(root, "review");
   await mkdir(path.join(reviewDir, "nodes"), { recursive: true });
@@ -186,12 +222,18 @@ async function createWorkflowCallWorkflowFixture(root: string) {
         workflowId: "review",
         description: "workflow-call http callee fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        entryNodeId: "reviewer",
+        entryStepId: "reviewer",
         nodes: [
           {
             id: "reviewer",
-            role: "worker",
             nodeFile: "nodes/node-reviewer.json",
+          },
+        ],
+        steps: [
+          {
+            id: "reviewer",
+            nodeId: "reviewer",
+            role: "worker",
           },
         ],
       },
@@ -435,7 +477,7 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
-  test("exposes authored workflowCalls over /graphql workflow inspection", async () => {
+  test("exposes step-derived cross-workflow calls over /graphql workflow inspection", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkflowCallWorkflowFixture(root);
 
@@ -470,7 +512,7 @@ describe("GraphQL HTTP transport", () => {
       data: {
         workflow: {
           workflowId: "workflow-calls",
-          workflowCallIds: ["review-call"],
+          workflowCallIds: ["__cw:main-worker"],
           counts: {
             workflowCalls: 1,
           },
@@ -1627,27 +1669,31 @@ describe("GraphQL HTTP transport", () => {
           readonly bundle: {
             readonly workflow: {
               readonly hasManagerNode: boolean;
-              readonly managerNodeId: string;
-              readonly entryNodeId: string;
+              readonly managerNodeId?: string;
+              readonly entryNodeId?: string;
+              readonly managerStepId?: string;
+              readonly entryStepId?: string;
             };
           };
         };
       };
     };
-    expect(createJson).toMatchObject({
-      data: {
-        createWorkflowDefinition: {
-          workflowName: "solo",
-          bundle: {
-            workflow: {
-              hasManagerNode: false,
-              managerNodeId: "main-worker",
-              entryNodeId: "main-worker",
-            },
-          },
-        },
-      },
-    });
+    expect(createJson.data.createWorkflowDefinition.workflowName).toBe("solo");
+    expect(
+      createJson.data.createWorkflowDefinition.bundle.workflow.hasManagerNode,
+    ).toBe(false);
+    expect(
+      createJson.data.createWorkflowDefinition.bundle.workflow.entryStepId,
+    ).toBe("main-worker");
+    expect(
+      createJson.data.createWorkflowDefinition.bundle.workflow.managerStepId,
+    ).toBeUndefined();
+    expect(
+      createJson.data.createWorkflowDefinition.bundle.workflow.managerNodeId,
+    ).toBeUndefined();
+    expect(
+      createJson.data.createWorkflowDefinition.bundle.workflow.entryNodeId,
+    ).toBeUndefined();
 
     const workflowJsonText = await readFile(
       path.join(root, "solo", "workflow.json"),
@@ -1909,6 +1955,53 @@ describe("GraphQL HTTP transport", () => {
         queuedNodeIds: ["main-worker"],
       },
     });
+  });
+
+  test("rejects legacy managerNodeId on sendManagerMessage GraphQL input", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    await createManagerSession(root, session.sessionId);
+
+    const response = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer secret",
+        },
+        body: JSON.stringify({
+          query: `
+            mutation SendMessage($input: SendManagerMessageInput!) {
+              sendManagerMessage(input: $input) {
+                accepted
+              }
+            }
+          `,
+          variables: {
+            input: {
+              workflowId: "demo",
+              workflowExecutionId: session.sessionId,
+              managerSessionId: "mgrsess-000001",
+              managerNodeId: "divedra-manager",
+              message: "Retry the main worker node.",
+              actions: [{ type: "retry-step", stepId: "main-worker" }],
+            },
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.data).toBeNull();
+    expect(payload.errors).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'Field "managerNodeId" is not defined by type "SendManagerMessageInput"',
+        ),
+      }),
+    ]);
   });
 
   test("rejects manager attachments outside the authenticated workflow execution namespace", async () => {

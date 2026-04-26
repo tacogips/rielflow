@@ -549,7 +549,6 @@ const GRAPHQL_SCHEMA_TEXT = `
     attachments: JSON
     idempotencyKey: String
     managerSessionId: String
-    managerNodeId: String
     managerNodeExecId: String
   }
 

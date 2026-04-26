@@ -1,19 +1,24 @@
-import type { WorkflowCallRef, WorkflowJson, WorkflowStepRef } from "./types";
+import {
+  isStepAddressedWorkflow,
+  type WorkflowJson,
+  type WorkflowStepRef,
+} from "./types";
 
 /**
- * When set, cross-workflow dispatch is **only** from `steps[].transitions` (see
- * {@link crossWorkflowCallsFromSteps}). Explicit `workflow.workflowCalls` is ignored
- * (validated step-addressed bundles omit it; see `impl-plans/workflow-legacy-compatibility-removal.md`).
+ * Runtime/inspection projection for cross-workflow links. Cross-workflow calls
+ * are derived only from step-addressed `steps[].transitions`.
  */
-function isStepAddressedCrossWorkflowDispatch(
-  workflow: Pick<WorkflowJson, "entryStepId" | "steps">,
-): boolean {
-  return (
-    workflow.entryStepId !== undefined &&
-    workflow.steps !== undefined &&
-    workflow.steps.length > 0
-  );
+export interface EffectiveWorkflowCall {
+  readonly id: string;
+  readonly workflowId: string;
+  readonly callerNodeId: string;
+  readonly callerStepId?: string;
+  readonly resultNodeId?: string;
+  readonly when?: string;
+  readonly source: "legacy-workflow-call" | "step-transition";
 }
+
+export type CrossWorkflowExecutionDispatch = EffectiveWorkflowCall;
 
 /**
  * Cross-workflow step transitions are authored on `steps[].transitions` and executed
@@ -23,11 +28,11 @@ function isStepAddressedCrossWorkflowDispatch(
  */
 export function crossWorkflowCallsFromSteps(
   steps: readonly WorkflowStepRef[] | undefined,
-): readonly WorkflowCallRef[] {
+): readonly EffectiveWorkflowCall[] {
   if (steps === undefined) {
     return [];
   }
-  const out: WorkflowCallRef[] = [];
+  const out: EffectiveWorkflowCall[] = [];
   for (const step of steps) {
     // Step-addressed validation allows at most one `toWorkflowId` transition per step.
     const cross = step.transitions?.find((t) => t.toWorkflowId !== undefined);
@@ -46,65 +51,43 @@ export function crossWorkflowCallsFromSteps(
       callerStepId: step.id,
       resultNodeId: cross.resumeStepId,
       ...(when === undefined ? {} : { when }),
+      source: "step-transition",
     });
   }
   return out;
 }
 
-/**
- * For step-addressed normalized workflows (`entryStepId` + `steps[]`), returns only
- * step-derived cross-workflow calls. Otherwise, unions explicit `workflowCalls`
- * with step-derived rows; explicit ids win on id collision. Iteration order
- * follows Map insertion (derived, then explicit-only) in the legacy union path.
- * Workflow-call **execution** uses {@link workflowCallsForExecutionMatch} instead.
- */
-export function effectiveWorkflowCalls(
-  workflow: Pick<
-    WorkflowJson,
-    "workflowCalls" | "steps" | "entryStepId"
-  >,
-): readonly WorkflowCallRef[] {
-  if (isStepAddressedCrossWorkflowDispatch(workflow)) {
-    return crossWorkflowCallsFromSteps(workflow.steps);
-  }
-  const explicit = workflow.workflowCalls ?? [];
-  const derived = crossWorkflowCallsFromSteps(workflow.steps);
-  const byId = new Map<string, WorkflowCallRef>();
-  for (const d of derived) {
-    byId.set(d.id, d);
-  }
-  for (const e of explicit) {
-    byId.set(e.id, e);
-  }
-  return [...byId.values()];
+function crossWorkflowDispatchesFromSteps(
+  steps: readonly WorkflowStepRef[] | undefined,
+): readonly CrossWorkflowExecutionDispatch[] {
+  return crossWorkflowCallsFromSteps(steps);
 }
 
 /**
- * Workflow-call rows to execute for the current caller, in **engine** order: explicit
- * `workflow.workflowCalls` matches preserve their authored array order, then step-derived
- * `__cw:*` rows that match and whose ids are not already taken by an explicit match.
- *
- * Do not implement this by filtering {@link effectiveWorkflowCalls} in the legacy
- * union case: inspection uses a different id merge order (derived first, then
- * explicit-only) for stable summaries.
+ * For step-addressed normalized workflows (`entryStepId` + `steps[]`), returns
+ * only step-derived cross-workflow calls. Legacy node-graph bundles no longer
+ * expose authored top-level `workflowCalls`.
  */
-export function workflowCallsForExecutionMatch(
-  workflow: Pick<
-    WorkflowJson,
-    "workflowCalls" | "steps" | "entryStepId"
-  >,
-  match: (call: WorkflowCallRef) => boolean,
-): readonly WorkflowCallRef[] {
-  if (isStepAddressedCrossWorkflowDispatch(workflow)) {
-    return crossWorkflowCallsFromSteps(workflow.steps).filter(match);
+export function effectiveWorkflowCalls(
+  workflow: Pick<WorkflowJson, "entryStepId" | "steps">,
+): readonly EffectiveWorkflowCall[] {
+  if (!isStepAddressedWorkflow(workflow)) {
+    return [];
   }
-  const explicitMatches = (workflow.workflowCalls ?? []).filter(match);
-  const stepDerivedMatches = crossWorkflowCallsFromSteps(workflow.steps).filter(
-    match,
-  );
-  const seenIds = new Set(explicitMatches.map((c) => c.id));
-  return [
-    ...explicitMatches,
-    ...stepDerivedMatches.filter((c) => !seenIds.has(c.id)),
-  ];
+  return crossWorkflowCallsFromSteps(workflow.steps);
+}
+
+/**
+ * Cross-workflow execution rows for the current caller. Step-addressed workflows
+ * derive execution dispatches directly from `steps[].transitions`; legacy
+ * node-graph bundles do not execute authored `workflow.workflowCalls`.
+ */
+export function crossWorkflowDispatchesForExecutionMatch(
+  workflow: Pick<WorkflowJson, "entryStepId" | "steps">,
+  match: (dispatch: CrossWorkflowExecutionDispatch) => boolean,
+): readonly CrossWorkflowExecutionDispatch[] {
+  if (!isStepAddressedWorkflow(workflow)) {
+    return [];
+  }
+  return crossWorkflowDispatchesFromSteps(workflow.steps).filter(match);
 }

@@ -7,9 +7,16 @@ import {
   type StepExecutionAddress,
   toStepIdentityFields,
 } from "./runtime-addressing";
-import type { AgentNodePayload, WorkflowJson } from "./types";
+import type { AgentNodePayload, SubWorkflowRef, WorkflowJson } from "./types";
 
-function makeWorkflow(): WorkflowJson {
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly managerNodeId?: string;
+  readonly entryNodeId?: string;
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+  readonly edges?: readonly { from: string; to: string; when: string }[];
+};
+
+function makeWorkflow(): LegacyStructuralWorkflow {
   return {
     workflowId: "demo",
     description: "runtime addressing test fixture",
@@ -113,9 +120,6 @@ function makeWorkflow(): WorkflowJson {
       },
     ],
     edges: [],
-    branching: {
-      mode: "fan-out",
-    },
   };
 }
 

@@ -8,7 +8,12 @@ import {
   type NodeExecutionMailbox,
   type PromptCompositionUpstreamInput,
 } from "./node-execution-mailbox";
-import type { NodePayload, WorkflowJson, WorkflowNodeRef } from "./types";
+import {
+  getStructuralSubWorkflows,
+  type NodePayload,
+  type WorkflowJson,
+  type WorkflowNodeRef,
+} from "./types";
 
 export interface PromptCompositionInput {
   readonly workflow: WorkflowJson;
@@ -43,7 +48,8 @@ function usesStructuralManagerCompatibility(
   nodeRef: WorkflowNodeRef,
 ): boolean {
   return (
-    nodeRef.kind === "subworkflow-manager" || workflow.subWorkflows.length > 0
+    nodeRef.kind === "subworkflow-manager" ||
+    getStructuralSubWorkflows(workflow).length > 0
   );
 }
 

@@ -112,23 +112,15 @@ async function writeLegacyWorkflowBundle(input: {
         workflowId: input.workflowId,
         description: "legacy target workflow",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "manager-node",
         entryNodeId: "manager-node",
         nodes: [
           {
             id: "manager-node",
-            role: "manager",
+            role: "worker",
             nodeFile: "nodes/node-manager-node.json",
             completion: { type: "none" },
           },
-          {
-            id: "worker-node",
-            role: "worker",
-            nodeFile: "nodes/node-worker-node.json",
-            completion: { type: "none" },
-          },
         ],
-        edges: [{ from: "manager-node", to: "worker-node", when: "always" }],
       },
       null,
       2,
@@ -142,20 +134,6 @@ async function writeLegacyWorkflowBundle(input: {
         executionBackend: "codex-agent",
         model: "gpt-5-nano",
         promptTemplate: "manager",
-        variables: {},
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(
-    path.join(workflowDir, "nodes/node-worker-node.json"),
-    `${JSON.stringify(
-      {
-        id: "worker-node",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "worker",
         variables: {},
       },
       null,
@@ -355,7 +333,7 @@ describe("buildSuperviserRuntimeControl", () => {
     }
   });
 
-  test("rerunTargetWorkflow keeps the current legacy node id when the target workflow is node-addressed", async () => {
+  test("rerunTargetWorkflow rejects node-addressed target workflows", async () => {
     const workflowRoot = await mkdtemp(
       path.join(tmpdir(), "divedra-superviser-control-legacy-"),
     );
@@ -381,7 +359,7 @@ describe("buildSuperviserRuntimeControl", () => {
           initialNodeId: "manager-node",
           runtimeVariables: {},
         }),
-        currentNodeId: "worker-node",
+        currentNodeId: "manager-node",
       };
       const saved = await saveSession(persisted, { sessionStoreRoot });
       expect(saved.ok).toBe(true);
@@ -418,11 +396,13 @@ describe("buildSuperviserRuntimeControl", () => {
         sessionId: auth.targetSessionId,
       });
 
-      expect(result.ok).toBe(true);
-      expect(recordedCalls).toHaveLength(1);
-      expect(recordedCalls[0]?.rerunFromSessionId).toBe(auth.targetSessionId);
-      expect(recordedCalls[0]?.rerunFromStepId).toBe("worker-node");
-      expect(recordedCalls[0]?.autoImprove).toEqual(defaultPolicy);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe(
+          "rerun-workflow: target workflow must have entryStepId with non-empty steps",
+        );
+      }
+      expect(recordedCalls).toHaveLength(0);
     } finally {
       await rm(workflowRoot, { recursive: true, force: true });
     }

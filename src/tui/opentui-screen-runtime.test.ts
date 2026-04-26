@@ -1,6 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type { NodePayload } from "../workflow/types";
+import type {
+  NodePayload,
+  SubWorkflowRef,
+  WorkflowJson,
+} from "../workflow/types";
 import {
   buildNodeSelectOptions,
   buildNodeDefinitionPopupContent,
@@ -13,6 +17,10 @@ import {
   resolveWorkflowPreviewIndent,
 } from "./opentui-model";
 import { focusOpenTuiTarget } from "./opentui-screen";
+
+type LegacyStructuralWorkflow = WorkflowJson & {
+  readonly subWorkflows?: readonly SubWorkflowRef[];
+};
 
 function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   return {
@@ -62,8 +70,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-        branching: { mode: "fan-out" },
-      },
+      } as LegacyStructuralWorkflow,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",

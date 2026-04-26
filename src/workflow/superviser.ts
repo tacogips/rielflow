@@ -72,39 +72,25 @@ export type StepAddressedWorkflowForSupervision = Pick<
 /**
  * Builds the step graph {@link planSupervisionRemediation} needs. Authored
  * step-addressed bundles pass through when `entryStepId` is set and `steps` is
- * non-empty. If `entryStepId` is set but `steps` is missing or empty, returns
- * `null` (does not fall back to legacy `entryNodeId` / `nodes`). Legacy
- * node-graph bundles (no `entryStepId`) are projected so step ids align with
- * node registry ids, matching how the engine executes legacy shapes.
+ * non-empty. Otherwise returns `null`; supervision rerun planning no longer
+ * projects legacy node-graph bundles into synthetic step graphs.
  */
 export function toStepAddressedWorkflowForSupervision(
   wf: WorkflowJson,
 ): StepAddressedWorkflowForSupervision | null {
-  if (wf.entryStepId !== undefined) {
-    const steps = wf.steps;
-    if (steps === undefined || steps.length === 0) {
-      return null;
-    }
-    return {
-      entryStepId: wf.entryStepId,
-      steps,
-      ...(wf.managerStepId === undefined
-        ? {}
-        : { managerStepId: wf.managerStepId }),
-    };
+  if (wf.entryStepId === undefined) {
+    return null;
   }
-  if (wf.entryNodeId === undefined || wf.nodes === undefined) {
+  const steps = wf.steps;
+  if (steps === undefined || steps.length === 0) {
     return null;
   }
   return {
-    entryStepId: wf.entryNodeId,
-    steps: wf.nodes.map((n) => ({
-      id: n.id,
-      nodeId: n.id,
-    })),
-    ...(wf.managerNodeId === undefined
+    entryStepId: wf.entryStepId,
+    steps,
+    ...(wf.managerStepId === undefined
       ? {}
-      : { managerStepId: wf.managerNodeId }),
+      : { managerStepId: wf.managerStepId }),
   };
 }
 
