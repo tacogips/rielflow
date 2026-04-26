@@ -1,18 +1,19 @@
 import type { AgentNodePayload, SubWorkflowRef, WorkflowJson } from "./types";
 
-export interface StepExecutionAddress {
+export interface StepIdentityFields {
   readonly stepId?: string;
   readonly nodeRegistryId?: string;
+}
+
+export interface StepExecutionAddress extends StepIdentityFields {
   readonly promptVariant?: string;
   readonly timeoutMs?: number;
   readonly inheritFromStepId?: string;
 }
 
-export interface BackendSessionSelection {
+export interface BackendSessionSelection extends StepIdentityFields {
   readonly sessionLookupNodeId?: string;
   readonly inheritFromStepId?: string;
-  readonly nodeRegistryId?: string;
-  readonly stepId?: string;
   readonly promptVariant?: string;
 }
 
@@ -34,30 +35,31 @@ export function resolveStepExecutionAddress(
   };
 }
 
+export function toStepIdentityFields(
+  input: StepIdentityFields,
+): StepIdentityFields {
+  return {
+    ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
+    ...(input.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: input.nodeRegistryId }),
+  };
+}
+
 export function resolveBackendSessionSelection(
-  workflow: WorkflowJson,
-  runtimeNodeId: string,
+  stepExecutionAddress: StepExecutionAddress,
   node: AgentNodePayload,
 ): BackendSessionSelection {
   if (node.sessionPolicy?.mode !== "reuse") {
     return {};
   }
 
-  const stepExecutionAddress = resolveStepExecutionAddress(
-    workflow,
-    runtimeNodeId,
-  );
   return {
     sessionLookupNodeId: stepExecutionAddress.inheritFromStepId ?? node.id,
     ...(stepExecutionAddress.inheritFromStepId === undefined
       ? {}
       : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
-    ...(stepExecutionAddress.nodeRegistryId === undefined
-      ? {}
-      : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
-    ...(stepExecutionAddress.stepId === undefined
-      ? {}
-      : { stepId: stepExecutionAddress.stepId }),
+    ...toStepIdentityFields(stepExecutionAddress),
     ...(stepExecutionAddress.promptVariant === undefined
       ? {}
       : { promptVariant: stepExecutionAddress.promptVariant }),

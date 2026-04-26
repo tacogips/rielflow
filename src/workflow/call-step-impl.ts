@@ -50,10 +50,10 @@ import { composeExecutionPrompts } from "./prompt-composition";
 import { err, ok, type Result } from "./result";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
-  findOwningSubWorkflowByRuntimeNodeId,
   isRootScopeOutputNode,
   resolveBackendSessionSelection,
   resolveStepExecutionAddress,
+  toStepIdentityFields,
 } from "./runtime-addressing";
 import {
   saveNodeExecutionToRuntimeDb,
@@ -69,6 +69,7 @@ import {
   resolveWorkflowExecutionWorkingDirectory,
 } from "./working-directory";
 import {
+  buildOutputRefForExecution,
   isTerminalWorkflowSessionStatus,
   persistNodeBackendSession,
   resolveRequestedBackendSession,
@@ -499,37 +500,6 @@ function applyDirectExecutionOverrides(
   return ok(resolvedNode);
 }
 
-function outputRefForExecution(
-  workflow: WorkflowJson,
-  session: WorkflowSessionState,
-  execution: NodeExecutionRecord,
-): OutputRef {
-  const owningSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
-    workflow,
-    execution.nodeId,
-  );
-  return {
-    kind: "node-output",
-    workflowExecutionId: session.sessionId,
-    workflowId: session.workflowId,
-    ...(owningSubWorkflow === undefined
-      ? {}
-      : { subWorkflowId: owningSubWorkflow.id }),
-    outputNodeId: execution.nodeId,
-    ...(execution.stepId === undefined
-      ? {}
-      : { outputStepId: execution.stepId }),
-    ...(execution.nodeRegistryId === undefined
-      ? {}
-      : { nodeRegistryId: execution.nodeRegistryId }),
-    nodeExecId: execution.nodeExecId,
-    ...(execution.mailboxInstanceId === undefined
-      ? {}
-      : { mailboxInstanceId: execution.mailboxInstanceId }),
-    artifactDir: execution.artifactDir,
-  };
-}
-
 function buildCommitMessageTemplate(
   inputHash: string,
   outputHash: string,
@@ -644,25 +614,23 @@ class MailboxPublisher {
     readonly timeoutMs: number;
     readonly requestedBackendSessionMode?: NodeExecutionRecord["backendSessionMode"];
   }): Promise<OutputRef> {
+    const nodeExecutionIdentityFields = toStepIdentityFields(
+      input.nodeExecution,
+    );
     const outputJson = stableJson(input.outputPayload);
     const outputRaw = `${outputJson}\n`;
     const inputHash = sha256Hex(input.inputJson);
     const outputHash = sha256Hex(outputJson);
-    const outputRef = outputRefForExecution(
-      input.workflow,
-      input.session,
-      input.nodeExecution,
-    );
+    const outputRef = buildOutputRefForExecution({
+      workflow: input.workflow,
+      session: input.session,
+      execution: input.nodeExecution,
+    });
     const handoffPayload = {
       schemaVersion: 1,
       generatedAt: input.nodeExecution.endedAt,
       nodeId: input.nodeExecution.nodeId,
-      ...(input.nodeExecution.stepId === undefined
-        ? {}
-        : { stepId: input.nodeExecution.stepId }),
-      ...(input.nodeExecution.nodeRegistryId === undefined
-        ? {}
-        : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
+      ...nodeExecutionIdentityFields,
       ...(input.nodeExecution.mailboxInstanceId === undefined
         ? {}
         : { mailboxInstanceId: input.nodeExecution.mailboxInstanceId }),
@@ -673,12 +641,7 @@ class MailboxPublisher {
     };
     const metaPayload = {
       nodeId: input.nodeExecution.nodeId,
-      ...(input.nodeExecution.stepId === undefined
-        ? {}
-        : { stepId: input.nodeExecution.stepId }),
-      ...(input.nodeExecution.nodeRegistryId === undefined
-        ? {}
-        : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
+      ...nodeExecutionIdentityFields,
       nodeExecId: input.nodeExecution.nodeExecId,
       ...(input.nodeExecution.mailboxInstanceId === undefined
         ? {}
@@ -726,12 +689,7 @@ class MailboxPublisher {
         {
           sessionId: input.session.sessionId,
           nodeId: input.nodeExecution.nodeId,
-          ...(input.nodeExecution.stepId === undefined
-            ? {}
-            : { stepId: input.nodeExecution.stepId }),
-          ...(input.nodeExecution.nodeRegistryId === undefined
-            ? {}
-            : { nodeRegistryId: input.nodeExecution.nodeRegistryId }),
+          ...nodeExecutionIdentityFields,
           nodeExecId: input.nodeExecution.nodeExecId,
           ...(input.nodeExecution.mailboxInstanceId === undefined
             ? {}
@@ -862,6 +820,7 @@ class ExecutionDispatcher {
       workflow,
       input.stepId,
     );
+    const stepIdentityFields = toStepIdentityFields(stepExecutionAddress);
     if (nodeRef.execution?.mode === "optional") {
       return err({
         session,
@@ -992,12 +951,7 @@ class ExecutionDispatcher {
       workflow,
       nodeRef,
       node: executionNodePayload,
-      ...(stepExecutionAddress.stepId === undefined
-        ? {}
-        : { stepId: stepExecutionAddress.stepId }),
-      ...(stepExecutionAddress.nodeRegistryId === undefined
-        ? {}
-        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+      ...stepIdentityFields,
       mailboxInstanceId,
       nodePayloads: loaded.value.bundle.nodePayloads,
       runtimeVariables: session.runtimeVariables,
@@ -1039,10 +993,13 @@ class ExecutionDispatcher {
       agentNodePayload === null
         ? undefined
         : resolveBackendSessionSelection(
-            workflow,
-            input.stepId,
+            stepExecutionAddress,
             agentNodePayload,
           );
+    const backendSessionIdentityFields =
+      backendSessionSelection === undefined
+        ? undefined
+        : toStepIdentityFields(backendSessionSelection);
     let backendSession =
       agentNodePayload === null
         ? undefined
@@ -1055,12 +1012,12 @@ class ExecutionDispatcher {
                   sessionLookupNodeId:
                     backendSessionSelection.sessionLookupNodeId,
                 }),
-            ...(stepExecutionAddress.nodeRegistryId === undefined
+            ...(backendSessionIdentityFields ?? {}),
+            ...(backendSessionSelection?.inheritFromStepId === undefined
               ? {}
-              : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
-            ...(stepExecutionAddress.inheritFromStepId === undefined
-              ? {}
-              : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
+              : {
+                  inheritFromStepId: backendSessionSelection.inheritFromStepId,
+                }),
           });
     const composedPrompts = composeExecutionPrompts({
       promptComposition: {
@@ -1125,12 +1082,7 @@ class ExecutionDispatcher {
       workflowExecutionId: session.sessionId,
       workflowId: workflow.workflowId,
       nodeId: input.stepId,
-      ...(stepExecutionAddress.stepId === undefined
-        ? {}
-        : { stepId: stepExecutionAddress.stepId }),
-      ...(stepExecutionAddress.nodeRegistryId === undefined
-        ? {}
-        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+      ...stepIdentityFields,
       nodeExecId,
       mailboxInstanceId,
       nodeType: executionNodePayload.nodeType ?? "agent",
@@ -1540,12 +1492,7 @@ class ExecutionDispatcher {
     }
     const nodeExecution: NodeExecutionRecord = {
       nodeId: input.stepId,
-      ...(stepExecutionAddress.stepId === undefined
-        ? {}
-        : { stepId: stepExecutionAddress.stepId }),
-      ...(stepExecutionAddress.nodeRegistryId === undefined
-        ? {}
-        : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+      ...stepIdentityFields,
       nodeExecId,
       mailboxInstanceId,
       status: nodeStatus,
@@ -1573,12 +1520,7 @@ class ExecutionDispatcher {
             session,
             node: agentNodePayload,
             nodeExecId,
-            ...(stepExecutionAddress.stepId === undefined
-              ? {}
-              : { stepId: stepExecutionAddress.stepId }),
-            ...(stepExecutionAddress.nodeRegistryId === undefined
-              ? {}
-              : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+            ...stepIdentityFields,
             ...(stepExecutionAddress.inheritFromStepId === undefined
               ? {}
               : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
@@ -1686,12 +1628,7 @@ class ExecutionDispatcher {
       );
       await writeJsonFile(path.join(artifactDir, "meta.json"), {
         nodeId: input.stepId,
-        ...(stepExecutionAddress.stepId === undefined
-          ? {}
-          : { stepId: stepExecutionAddress.stepId }),
-        ...(stepExecutionAddress.nodeRegistryId === undefined
-          ? {}
-          : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
+        ...stepIdentityFields,
         nodeExecId,
         mailboxInstanceId,
         status: nodeStatus,

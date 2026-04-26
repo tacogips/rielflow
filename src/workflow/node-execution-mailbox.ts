@@ -8,6 +8,10 @@ import {
 import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import {
+  toStepIdentityFields,
+  type StepIdentityFields,
+} from "./runtime-addressing";
+import {
   resolveWorkflowManagerRuntimeId,
   type JsonObject,
   type NodePayload,
@@ -70,10 +74,8 @@ export interface NodeExecutionMailboxMeta {
     readonly workflowId: string;
     readonly workflowDescription: string;
     readonly nodeId: string;
-    readonly stepId?: string;
-    readonly nodeRegistryId?: string;
     readonly nodeKind: string;
-  };
+  } & StepIdentityFields;
   readonly objective: {
     readonly reason: string;
     readonly expectedReturn: string;
@@ -137,12 +139,10 @@ export interface NodeExecutionMailboxArtifactPaths {
   readonly inputPath: string;
 }
 
-export interface BuildNodeExecutionMailboxInput {
+export interface BuildNodeExecutionMailboxInput extends StepIdentityFields {
   readonly workflow: WorkflowJson;
   readonly nodeRef: WorkflowNodeRef;
   readonly node: NodePayload;
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
   readonly mailboxInstanceId?: string;
   readonly nodePayloads: Readonly<Record<string, NodePayload>>;
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
@@ -486,6 +486,7 @@ function buildManagerControlMetadata(input: {
 export function buildNodeExecutionMailbox(
   input: BuildNodeExecutionMailboxInput,
 ): NodeExecutionMailbox {
+  const stepIdentityFields = toStepIdentityFields(input);
   const reservedContextKeys = new Set([
     "humanInput",
     "workflowOutput",
@@ -526,10 +527,7 @@ export function buildNodeExecutionMailbox(
         workflowId: input.workflow.workflowId,
         workflowDescription: input.workflow.description,
         nodeId: input.nodeRef.id,
-        ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
-        ...(input.nodeRegistryId === undefined
-          ? {}
-          : { nodeRegistryId: input.nodeRegistryId }),
+        ...stepIdentityFields,
         nodeKind: describeWorkflowNodeKind(input.nodeRef),
       },
       objective: {

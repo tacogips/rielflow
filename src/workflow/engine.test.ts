@@ -4189,6 +4189,48 @@ describe("runWorkflow", () => {
         }),
       ]),
     );
+
+    const [stepAExecution, stepBExecution] = result.value.session.nodeExecutions;
+    expect(stepAExecution).toBeDefined();
+    expect(stepBExecution).toBeDefined();
+    if (stepAExecution === undefined || stepBExecution === undefined) {
+      return;
+    }
+
+    const stepAHandoff = JSON.parse(
+      await readFile(
+        path.join(stepAExecution.artifactDir, "handoff.json"),
+        "utf8",
+      ),
+    ) as {
+      outputRef: {
+        outputStepId?: string;
+        nodeRegistryId?: string;
+        mailboxInstanceId?: string;
+      };
+    };
+    const stepBHandoff = JSON.parse(
+      await readFile(
+        path.join(stepBExecution.artifactDir, "handoff.json"),
+        "utf8",
+      ),
+    ) as {
+      outputRef: {
+        outputStepId?: string;
+        nodeRegistryId?: string;
+        mailboxInstanceId?: string;
+      };
+    };
+    expect(stepAHandoff.outputRef).toMatchObject({
+      outputStepId: "step-a",
+      nodeRegistryId: "writer-node",
+      mailboxInstanceId: "exec-000001",
+    });
+    expect(stepBHandoff.outputRef).toMatchObject({
+      outputStepId: "step-b",
+      nodeRegistryId: "writer-node",
+      mailboxInstanceId: "exec-000002",
+    });
   });
 
   test("keeps inherited-session provenance when later steps rotate the backend session id", async () => {

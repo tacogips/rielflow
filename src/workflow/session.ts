@@ -1,5 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { AdapterExecutionInput } from "./adapter";
+import {
+  findOwningSubWorkflowByRuntimeNodeId,
+  type StepIdentityFields,
+  toStepIdentityFields,
+} from "./runtime-addressing";
 import type {
   AgentNodePayload,
   SupervisionRunState,
@@ -27,10 +32,8 @@ export interface SessionTransition {
   readonly when: string;
 }
 
-export interface NodeExecutionRecord {
+export interface NodeExecutionRecord extends StepIdentityFields {
   readonly nodeId: string;
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
   readonly mailboxInstanceId?: string;
   readonly status:
@@ -149,10 +152,8 @@ export interface CommunicationRecord {
   readonly artifactDir: string;
 }
 
-export interface NodeBackendSessionRecord {
+export interface NodeBackendSessionRecord extends StepIdentityFields {
   readonly nodeId: string;
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
   readonly sourceStepId?: string;
   readonly lastStepId?: string;
   readonly backend: string;
@@ -211,6 +212,48 @@ export interface WorkflowSessionState {
   readonly lastError?: string;
   /** Present when the session is part of an auto-improve / superviser cycle. */
   readonly supervision?: SupervisionRunState;
+}
+
+function toOutputRefIdentityFields(
+  input: StepIdentityFields,
+): Pick<OutputRef, "outputStepId" | "nodeRegistryId"> {
+  const stepIdentityFields = toStepIdentityFields(input);
+  return {
+    ...(stepIdentityFields.stepId === undefined
+      ? {}
+      : { outputStepId: stepIdentityFields.stepId }),
+    ...(stepIdentityFields.nodeRegistryId === undefined
+      ? {}
+      : { nodeRegistryId: stepIdentityFields.nodeRegistryId }),
+  };
+}
+
+export function buildOutputRefForExecution(input: {
+  readonly workflow: WorkflowJson;
+  readonly session: Pick<WorkflowSessionState, "sessionId" | "workflowId">;
+  readonly execution: NodeExecutionRecord;
+  readonly runtimeNodeId?: string;
+}): OutputRef {
+  const runtimeNodeId = input.runtimeNodeId ?? input.execution.nodeId;
+  const owningSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
+    input.workflow,
+    runtimeNodeId,
+  );
+  return {
+    kind: "node-output",
+    workflowExecutionId: input.session.sessionId,
+    workflowId: input.session.workflowId,
+    ...(owningSubWorkflow === undefined
+      ? {}
+      : { subWorkflowId: owningSubWorkflow.id }),
+    outputNodeId: runtimeNodeId,
+    ...toOutputRefIdentityFields(input.execution),
+    nodeExecId: input.execution.nodeExecId,
+    ...(input.execution.mailboxInstanceId === undefined
+      ? {}
+      : { mailboxInstanceId: input.execution.mailboxInstanceId }),
+    artifactDir: input.execution.artifactDir,
+  };
 }
 
 export interface CreateSessionInput {
@@ -342,13 +385,14 @@ function compareBackendSessionRecency(
   return right.updatedAt.localeCompare(left.updatedAt);
 }
 
-export function resolveRequestedBackendSession(input: {
-  readonly session: WorkflowSessionState;
-  readonly node: AgentNodePayload;
-  readonly sessionLookupNodeId?: string;
-  readonly nodeRegistryId?: string;
-  readonly inheritFromStepId?: string;
-}): AdapterExecutionInput["backendSession"] | undefined {
+export function resolveRequestedBackendSession(
+  input: {
+    readonly session: WorkflowSessionState;
+    readonly node: AgentNodePayload;
+    readonly sessionLookupNodeId?: string;
+    readonly inheritFromStepId?: string;
+  } & StepIdentityFields,
+): AdapterExecutionInput["backendSession"] | undefined {
   if (input.node.sessionPolicy === undefined) {
     return undefined;
   }
@@ -393,18 +437,18 @@ export function resolveRequestedBackendSession(input: {
   };
 }
 
-export function persistNodeBackendSession(input: {
-  readonly session: WorkflowSessionState;
-  readonly node: AgentNodePayload;
-  readonly nodeExecId: string;
-  readonly provider: string;
-  readonly endedAt: string;
-  readonly backendSession: AdapterExecutionInput["backendSession"];
-  readonly returnedSessionId?: string;
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
-  readonly inheritFromStepId?: string;
-}): Readonly<Record<string, NodeBackendSessionRecord>> {
+export function persistNodeBackendSession(
+  input: {
+    readonly session: WorkflowSessionState;
+    readonly node: AgentNodePayload;
+    readonly nodeExecId: string;
+    readonly provider: string;
+    readonly endedAt: string;
+    readonly backendSession: AdapterExecutionInput["backendSession"];
+    readonly returnedSessionId?: string;
+    readonly inheritFromStepId?: string;
+  } & StepIdentityFields,
+): Readonly<Record<string, NodeBackendSessionRecord>> {
   const current = { ...(input.session.nodeBackendSessions ?? {}) };
   if (input.node.sessionPolicy?.mode !== "reuse") {
     return current;
@@ -428,10 +472,7 @@ export function persistNodeBackendSession(input: {
     input.stepId;
   current[recordKey] = {
     nodeId: recordKey,
-    ...(input.stepId === undefined ? {} : { stepId: input.stepId }),
-    ...(input.nodeRegistryId === undefined
-      ? {}
-      : { nodeRegistryId: input.nodeRegistryId }),
+    ...toStepIdentityFields(input),
     ...(sourceStepId === undefined ? {} : { sourceStepId }),
     ...(input.stepId === undefined ? {} : { lastStepId: input.stepId }),
     backend: input.node.executionBackend,

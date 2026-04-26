@@ -4,6 +4,8 @@ import {
   isRootScopeOutputNode,
   resolveBackendSessionSelection,
   resolveStepExecutionAddress,
+  type StepExecutionAddress,
+  toStepIdentityFields,
 } from "./runtime-addressing";
 import type { AgentNodePayload, WorkflowJson } from "./types";
 
@@ -137,6 +139,10 @@ describe("resolveStepExecutionAddress", () => {
 
 describe("resolveBackendSessionSelection", () => {
   test("preserves the shared-node session lineage for reusable steps", () => {
+    const stepExecutionAddress = resolveStepExecutionAddress(
+      makeWorkflow(),
+      "writer-step",
+    );
     const reusableNode: AgentNodePayload = {
       id: "writer-step",
       nodeType: "agent",
@@ -150,11 +156,7 @@ describe("resolveBackendSessionSelection", () => {
     };
 
     expect(
-      resolveBackendSessionSelection(
-        makeWorkflow(),
-        "writer-step",
-        reusableNode,
-      ),
+      resolveBackendSessionSelection(stepExecutionAddress, reusableNode),
     ).toEqual({
       sessionLookupNodeId: "manager-step",
       inheritFromStepId: "manager-step",
@@ -165,6 +167,10 @@ describe("resolveBackendSessionSelection", () => {
   });
 
   test("returns no selection metadata when the node does not reuse a session", () => {
+    const stepExecutionAddress = resolveStepExecutionAddress(
+      makeWorkflow(),
+      "writer-step",
+    );
     const freshNode: AgentNodePayload = {
       id: "writer-step",
       nodeType: "agent",
@@ -178,8 +184,22 @@ describe("resolveBackendSessionSelection", () => {
     };
 
     expect(
-      resolveBackendSessionSelection(makeWorkflow(), "writer-step", freshNode),
+      resolveBackendSessionSelection(stepExecutionAddress, freshNode),
     ).toEqual({});
+  });
+});
+
+describe("toStepIdentityFields", () => {
+  test("returns only the execution identity fields used across runtime records", () => {
+    const executionAddress: StepExecutionAddress = {
+      stepId: "writer-step",
+      nodeRegistryId: "writer-node",
+      promptVariant: "review",
+    };
+    expect(toStepIdentityFields(executionAddress)).toEqual({
+      stepId: "writer-step",
+      nodeRegistryId: "writer-node",
+    });
   });
 });
 
