@@ -170,7 +170,7 @@ interface ParsedOptions {
   readonly messageFile?: string;
   readonly promptVariant?: string;
   readonly continueSession: boolean;
-  readonly resumeNodeExecId?: string;
+  readonly resumeStepExecId?: string;
   readonly vendor?: string;
   readonly eventRoot?: string;
   readonly eventFile?: string;
@@ -462,7 +462,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let messageFile: string | undefined;
   let promptVariant: string | undefined;
   let continueSession = false;
-  let resumeNodeExecId: string | undefined;
+  let resumeStepExecId: string | undefined;
   let vendor: string | undefined;
   let eventRoot: string | undefined;
   let eventFile: string | undefined;
@@ -790,21 +790,17 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         continueSession = true;
         break;
       case "--resume-node-exec":
+        readNext();
+        parseError ??=
+          "--resume-node-exec has been removed; use --resume-step-exec";
+        break;
       case "--resume-step-exec": {
         const nextResumeExec = readNext();
         if (nextResumeExec === undefined) {
           parseError = `${token} requires an execution record id`;
           break;
         }
-        if (
-          resumeNodeExecId !== undefined &&
-          resumeNodeExecId !== nextResumeExec
-        ) {
-          parseError =
-            "--resume-node-exec and --resume-step-exec must not specify different execution ids";
-          break;
-        }
-        resumeNodeExecId = nextResumeExec;
+        resumeStepExecId = nextResumeExec;
         break;
       }
       case "--vendor": {
@@ -1022,7 +1018,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(messageFile === undefined ? {} : { messageFile }),
       ...(promptVariant === undefined ? {} : { promptVariant }),
       continueSession,
-      ...(resumeNodeExecId === undefined ? {} : { resumeNodeExecId }),
+      ...(resumeStepExecId === undefined ? {} : { resumeStepExecId }),
       ...(vendor === undefined ? {} : { vendor }),
       ...(eventRoot === undefined ? {} : { eventRoot }),
       ...(eventFile === undefined ? {} : { eventFile }),
@@ -1094,9 +1090,6 @@ function printHelp(io: CliIo): void {
   io.stdout("  --continue-session         call-step only");
   io.stdout(
     "  --resume-step-exec <id>    call-step only (execution record id; same as nodeExecId in session state)",
-  );
-  io.stdout(
-    "  --resume-node-exec <id>    call-step only (alias of --resume-step-exec)",
   );
   io.stdout("");
   io.stdout(
@@ -1623,7 +1616,7 @@ function buildLocalCallStepOverrides(
     parsedOptions.timeoutMs === undefined &&
     parsedOptions.promptVariant === undefined &&
     !parsedOptions.continueSession &&
-    parsedOptions.resumeNodeExecId === undefined
+    parsedOptions.resumeStepExecId === undefined
       ? undefined
       : {
           ...(parsedOptions.timeoutMs === undefined
@@ -1635,9 +1628,9 @@ function buildLocalCallStepOverrides(
           ...(parsedOptions.continueSession
             ? { sessionMode: "reuse" as const }
             : {}),
-          ...(parsedOptions.resumeNodeExecId === undefined
+          ...(parsedOptions.resumeStepExecId === undefined
             ? {}
-            : { resumeNodeExecId: parsedOptions.resumeNodeExecId }),
+            : { resumeStepExecId: parsedOptions.resumeStepExecId }),
         };
   return {
     ...(workflowWorkingDirectory === undefined

@@ -160,7 +160,7 @@ forcing all nodes into a Dockerfile-driven model.
 Current runtime behavior:
 
 - workflow validation accepts and preserves the container metadata
-- `runWorkflow()` and `call-node` execute container nodes through the native
+- `runWorkflow()` and `call-step` execute container nodes through the native
   executor
 - the runtime prepares mailbox bind mounts, optional workspace and durable
   mounts, and captures `stdout.log` / `stderr.log`

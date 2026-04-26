@@ -299,7 +299,7 @@ describe("callStep", () => {
         promptVariant: "review",
         sessionMode: "reuse",
         timeoutMs: 3210,
-        resumeNodeExecId: "exec-previous",
+        resumeStepExecId: "exec-previous",
       },
     });
 
@@ -727,7 +727,7 @@ describe("callStep", () => {
     });
   });
 
-  test("rewriteCallStepFailureMessage maps generic call-node execution errors to step wording", () => {
+  test("rewriteCallStepFailureMessage maps generic node-oriented execution errors to step wording", () => {
     const stepId = "writer-step";
     expect(rewriteCallStepFailureMessage("node execution failed", stepId)).toBe(
       "step execution failed",
@@ -769,7 +769,7 @@ describe("callStep", () => {
         stepId,
       ),
     ).toBe(
-      `step '${stepId}' requests nodeType='user-action', but direct call-step execution is not supported`,
+      `step '${stepId}' requests nodeType='user-action', but direct step execution is not supported`,
     );
     expect(
       rewriteCallStepFailureMessage(
@@ -825,6 +825,14 @@ describe("callStep", () => {
         stepId,
       ),
     ).toBe("native step execution exited via signal SIGKILL");
+    expect(
+      rewriteCallStepFailureMessage(
+        `node '${stepId}' requests nodeType='user-action', but direct call-step execution is not supported`,
+        stepId,
+      ),
+    ).toBe(
+      `step '${stepId}' requests nodeType='user-action', but direct step execution is not supported`,
+    );
     const stepWithMeta = "writer-step+meta";
     expect(
       rewriteCallStepFailureMessage(

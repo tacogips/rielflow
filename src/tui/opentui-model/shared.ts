@@ -1,6 +1,7 @@
 import { StyledText, bold, dim, fg, t } from "@opentui/core";
 import { normalizeCliAgentBackend } from "../../workflow/backend";
 import type { LoadedWorkflow } from "../../workflow/load";
+import { findOwningSubWorkflowByRuntimeNodeId } from "../../workflow/runtime-addressing";
 import type {
   NodeExecutionRecord,
   WorkflowSessionState,
@@ -114,13 +115,7 @@ export function resolveOwningSubWorkflow(
   workflow: LoadedWorkflow["bundle"]["workflow"],
   nodeId: string,
 ): LoadedWorkflow["bundle"]["workflow"]["subWorkflows"][number] | undefined {
-  return workflow.subWorkflows.find(
-    (entry) =>
-      entry.managerNodeId === nodeId ||
-      entry.inputNodeId === nodeId ||
-      entry.outputNodeId === nodeId ||
-      entry.nodeIds.includes(nodeId),
-  );
+  return findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId);
 }
 
 export function resolveNodePurpose(input: {

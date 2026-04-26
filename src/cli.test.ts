@@ -3124,7 +3124,7 @@ describe("runCli", () => {
         "--prompt-variant",
         "review",
         "--continue-session",
-        "--resume-node-exec",
+        "--resume-step-exec",
         "exec-previous",
         "--dry-run",
         "--output",
@@ -3153,14 +3153,14 @@ describe("runCli", () => {
           timeoutMs: 975,
           promptVariant: "review",
           sessionMode: "reuse",
-          resumeNodeExecId: "exec-previous",
+          resumeStepExecId: "exec-previous",
         },
         dryRun: true,
       }),
     );
   });
 
-  test("call-step accepts --resume-step-exec as alias for resume execution id", async () => {
+  test("call-step accepts --resume-step-exec for resume execution id", async () => {
     const capture = createIoCapture();
     const session = {
       sessionId: "sess-call-step-local",
@@ -3220,12 +3220,40 @@ describe("runCli", () => {
     expect(code).toBe(0);
     expect(callStepSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        overrides: { resumeNodeExecId: "exec-previous" },
+        overrides: { resumeStepExecId: "exec-previous" },
       }),
     );
   });
 
-  test("call-step rejects conflicting --resume-node-exec and --resume-step-exec values", async () => {
+  test("call-step rejects removed --resume-node-exec", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "call-step",
+        "demo",
+        "sess-call-step-local",
+        "writer-step",
+        "--resume-node-exec",
+        "exec-a",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--resume-node-exec has been removed; use --resume-step-exec",
+    );
+  });
+
+  test("call-step rejects removed --resume-node-exec without treating its value as a positional argument", async () => {
     const capture = createIoCapture();
     const code = await runCli(
       [
@@ -3251,7 +3279,7 @@ describe("runCli", () => {
 
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
-      "--resume-node-exec and --resume-step-exec must not specify different execution ids",
+      "--resume-node-exec has been removed; use --resume-step-exec",
     );
   });
 

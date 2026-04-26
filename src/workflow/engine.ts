@@ -63,6 +63,12 @@ import {
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
 } from "./runtime-db";
+import {
+  findOwningSubWorkflowByRuntimeNodeId,
+  isRootScopeOutputNode,
+  resolveBackendSessionSelection,
+  resolveStepExecutionAddress,
+} from "./runtime-addressing";
 import { executeConversationRound } from "./conversation";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
@@ -129,10 +135,7 @@ import type {
   WorkflowJson,
   WorkflowTimeoutPolicy,
 } from "./types";
-import {
-  asAgentNodePayload,
-  resolveWorkflowManagerRuntimeId,
-} from "./types";
+import { asAgentNodePayload, resolveWorkflowManagerRuntimeId } from "./types";
 
 export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly sessionId?: string;
@@ -612,22 +615,6 @@ async function readOutputPayloadArtifact(
   }
 }
 
-function findOwningSubWorkflowByRuntimeNodeId(
-  workflow: WorkflowJson,
-  nodeId: string,
-): SubWorkflowRef | undefined {
-  return workflow.subWorkflows.find((entry) => {
-    if (entry.nodeIds?.includes(nodeId) ?? false) {
-      return true;
-    }
-    return (
-      entry.managerNodeId === nodeId ||
-      entry.inputNodeId === nodeId ||
-      entry.outputNodeId === nodeId
-    );
-  });
-}
-
 function outputRefForExecution(
   workflow: WorkflowJson,
   session: WorkflowSessionState,
@@ -656,17 +643,6 @@ function findOwningSubWorkflowByInputNodeId(
   nodeId: string,
 ): SubWorkflowRef | undefined {
   return workflow.subWorkflows.find((entry) => entry.inputNodeId === nodeId);
-}
-
-function findOwningSubWorkflowByNodeId(
-  workflow: WorkflowJson,
-  nodeId: string,
-): SubWorkflowRef | undefined {
-  return findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId);
-}
-
-function isRootScopeNode(workflow: WorkflowJson, nodeId: string): boolean {
-  return findOwningSubWorkflowByNodeId(workflow, nodeId) === undefined;
 }
 
 function findNodeRef(workflow: WorkflowJson, nodeId: string) {
@@ -827,14 +803,6 @@ function applyOptionalManagerDecisions(input: {
     pendingOptionalNodeDecisions,
     queuedNodeIds: dedupeNodeIds(queuedNodeIds),
   });
-}
-
-function isRootScopeOutputNode(
-  workflow: WorkflowJson,
-  nodeId: string,
-): boolean {
-  const node = workflow.nodes.find((entry) => entry.id === nodeId);
-  return node?.kind === "output" && isRootScopeNode(workflow, nodeId);
 }
 
 function mailboxDeliveryManagerNodeId(
@@ -1913,63 +1881,6 @@ function cloneSupervisionForContinuedRun(
     ...(source.remediations === undefined
       ? {}
       : { remediations: [...source.remediations] }),
-  };
-}
-
-function resolveStepExecutionAddress(
-  workflow: WorkflowJson,
-  nodeId: string,
-): {
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
-  readonly promptVariant?: string;
-  readonly timeoutMs?: number;
-  readonly inheritFromStepId?: string;
-} {
-  const step = workflow.steps?.find((entry) => entry.id === nodeId);
-  return {
-    ...(step?.id === undefined ? {} : { stepId: step.id }),
-    ...(step?.nodeId === undefined ? {} : { nodeRegistryId: step.nodeId }),
-    ...(step?.promptVariant === undefined
-      ? {}
-      : { promptVariant: step.promptVariant }),
-    ...(step?.timeoutMs === undefined ? {} : { timeoutMs: step.timeoutMs }),
-    ...(step?.sessionPolicy?.inheritFromStepId === undefined
-      ? {}
-      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
-  };
-}
-
-function resolveBackendSessionSelection(
-  workflow: WorkflowJson,
-  nodeId: string,
-  node: AgentNodePayload,
-): {
-  readonly sessionLookupNodeId?: string;
-  readonly inheritFromStepId?: string;
-  readonly nodeRegistryId?: string;
-  readonly stepId?: string;
-  readonly promptVariant?: string;
-} {
-  if (node.sessionPolicy?.mode !== "reuse") {
-    return {};
-  }
-
-  const stepExecutionAddress = resolveStepExecutionAddress(workflow, nodeId);
-  return {
-    sessionLookupNodeId: stepExecutionAddress.inheritFromStepId ?? node.id,
-    ...(stepExecutionAddress.inheritFromStepId === undefined
-      ? {}
-      : { inheritFromStepId: stepExecutionAddress.inheritFromStepId }),
-    ...(stepExecutionAddress.nodeRegistryId === undefined
-      ? {}
-      : { nodeRegistryId: stepExecutionAddress.nodeRegistryId }),
-    ...(stepExecutionAddress.stepId === undefined
-      ? {}
-      : { stepId: stepExecutionAddress.stepId }),
-    ...(stepExecutionAddress.promptVariant === undefined
-      ? {}
-      : { promptVariant: stepExecutionAddress.promptVariant }),
   };
 }
 
@@ -3995,7 +3906,6 @@ async function runWorkflowInternal(
             });
           }
         }
-
       }
       const optionalManagerDecisionsResult = applyOptionalManagerDecisions({
         managerControl,
@@ -5174,9 +5084,8 @@ async function runAutoImproveLoop(
       );
     }
     const targetWorkflow = wfForTarget.value.bundle.workflow;
-    const workflowForSupervision = toStepAddressedWorkflowForSupervision(
-      targetWorkflow,
-    );
+    const workflowForSupervision =
+      toStepAddressedWorkflowForSupervision(targetWorkflow);
     if (workflowForSupervision === null) {
       return err(
         workflowRunFailure(

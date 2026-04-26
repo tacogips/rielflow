@@ -159,7 +159,7 @@ Primary commands implemented in `src/cli.ts`:
 
 `workflow create <name>` scaffolds a role-based starter with a code-manager default manager node and a `codex-agent` worker node. The generated `workflow.json` prefers the authored-minimal surface and omits compatibility/default fields such as empty `subWorkflows`, synthesized `edges`, default `branching`, and node-level `completion: { "type": "none" }` unless they are needed. Pass `--worker-only` to scaffold a manager-less starter whose authored entry step points at `main-worker`.
 
-`call-step` is the direct-call surface during the step-addressed cutover. It accepts targeted continuation controls such as `--prompt-variant <name>`, `--continue-session`, `--timeout-ms <ms>`, and `--resume-step-exec <id>` (alias `--resume-node-exec`) so a reusable node can be revisited through a specific step with invocation-local overrides.
+`call-step` is the direct-call surface during the step-addressed cutover. It accepts targeted continuation controls such as `--prompt-variant <name>`, `--continue-session`, `--timeout-ms <ms>`, and `--resume-step-exec <id>` so a reusable node can be revisited through a specific step with invocation-local overrides.
 
 `serve` and `web serve` start the local Bun HTTP server. The root page serves a read-only Solid workflow viewer with the workflow node graph, execution run list, and selected run logs.
 
@@ -198,7 +198,7 @@ effective cross-workflow call count as `workflowCalls` (derived from authored
 - `--timeout-ms <ms>` for `call-step`
 - `--prompt-variant <name>` for `call-step`
 - `--continue-session` for `call-step`
-- `--resume-step-exec <id>` for `call-step` (prior execution record id; `--resume-node-exec` is an alias)
+- `--resume-step-exec <id>` for `call-step` (prior execution record id)
 
 Remote execution support:
 

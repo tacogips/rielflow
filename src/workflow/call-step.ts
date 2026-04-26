@@ -11,8 +11,7 @@ import {
 export interface CallStepOverrides extends DirectExecutionOverrides {}
 
 export interface CallStepInput
-  extends Omit<CallStepExecutionInput, "nodeId" | "overrides"> {
-  readonly stepId: string;
+  extends Omit<CallStepExecutionInput, "overrides"> {
   readonly overrides?: CallStepOverrides;
 }
 
@@ -24,66 +23,61 @@ export interface CallStepFailure extends CallStepExecutionFailure {
   readonly stepId: string;
 }
 
-function escapeRegExpChars(value: string): string {
-  return value.replace(/[\\^$*+?.()|[\]{}]/g, "\\$&");
-}
+const CALL_STEP_LITERAL_MESSAGE_REPLACEMENTS = [
+  [
+    "direct call-node execution is not supported",
+    "direct step execution is not supported",
+  ],
+  [
+    "direct call-step execution is not supported",
+    "direct step execution is not supported",
+  ],
+  [
+    "native node did not produce mailbox output",
+    "native step did not produce mailbox output",
+  ],
+  ["native node execution", "native step execution"],
+  ["cannot call node '", "cannot call step '"],
+  ["node execution produced no output", "step execution produced no output"],
+  ["node execution failed", "step execution failed"],
+  ["node call failed", "step call failed"],
+  ["executable node fields", "executable fields"],
+  ["call-node", "call-step"],
+  ["call node", "call step"],
+] as const;
 
-/** Rewrites `call-node` failure text when the entrypoint was {@link callStep}. */
+/** Rewrites leftover node-oriented failure text for {@link callStep}. */
 export function rewriteCallStepFailureMessage(
   message: string,
   stepId: string,
 ): string {
-  const promptVariantPattern = new RegExp(
-    `node '${escapeRegExpChars(stepId)}' does not define prompt variant`,
-    "g",
-  );
-  message = message.replace(
-    promptVariantPattern,
-    `step '${stepId}' does not define prompt variant`,
-  );
-  return message
-    .replaceAll("native node execution", "native step execution")
-    .replaceAll(
-      "native node did not produce mailbox output",
-      "native step did not produce mailbox output",
-    )
-    .replaceAll("cannot call node '", "cannot call step '")
-    .replaceAll("node execution failed", "step execution failed")
-    .replaceAll("node call failed", "step call failed")
-    .replaceAll(
-      "node execution produced no output",
-      "step execution produced no output",
-    )
-    .replaceAll("executable node fields", "executable fields")
-    .replaceAll(
+  const stepScopedReplacements = [
+    [
       `missing node definition for '${stepId}'`,
       `missing step definition for '${stepId}'`,
-    )
-    .replaceAll(`node '${stepId}'`, `step '${stepId}'`)
-    .replaceAll(
+    ],
+    [`node '${stepId}'`, `step '${stepId}'`],
+    [
       `execution mailbox at '${stepId}'`,
       `execution mailbox for step '${stepId}'`,
-    )
-    .replaceAll("call-node", "call-step")
-    .replaceAll("call node", "call step");
+    ],
+  ] as const;
+  return [...CALL_STEP_LITERAL_MESSAGE_REPLACEMENTS, ...stepScopedReplacements]
+    .reduce(
+      (currentMessage, [before, after]) =>
+        currentMessage.replaceAll(before, after),
+      message,
+    );
 }
 
 export async function callStep(
   input: CallStepInput,
   adapter?: NodeAdapter,
 ): Promise<Result<CallStepSuccess, CallStepFailure>> {
-  // Step-addressed validation materializes each step as a runtime node ref with
-  // `nodes[].id === step.id` (see `normalizeStepAddressedWorkflow`), and node
-  // payloads are keyed the same way in the loaded bundle. Delegate to the
-  // internal direct step executor using that execution address without
-  // re-resolving `step.nodeId` here.
-  const result = await callStepExecution(
-    {
-      ...input,
-      nodeId: input.stepId,
-    },
-    adapter,
-  );
+  // Delegate straight to the internal direct-step executor. The runtime keeps
+  // `nodeExecution.nodeId` in the materialized step id namespace, while
+  // `nodeRegistryId` preserves the reusable payload registry id separately.
+  const result = await callStepExecution(input, adapter);
 
   if (!result.ok) {
     const message = rewriteCallStepFailureMessage(

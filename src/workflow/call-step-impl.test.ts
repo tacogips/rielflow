@@ -24,7 +24,7 @@ const legacyAuthoredWorkflowLoadOpts = {
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "divedra-call-node-test-"),
+    path.join(os.tmpdir(), "divedra-call-step-test-"),
   );
   tempDirs.push(directory);
   return directory;
@@ -34,7 +34,7 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-async function createCallNodeFixture(
+async function createCallStepFixture(
   workflowRoot: string,
   workflowName: string,
 ): Promise<void> {
@@ -43,7 +43,7 @@ async function createCallNodeFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "call-node fixture",
+    description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
     nodes: [
@@ -93,7 +93,7 @@ async function createCallNodeFixture(
   });
 }
 
-async function createRoleManagedCallNodeFixture(
+async function createRoleManagedCallStepFixture(
   workflowRoot: string,
   workflowName: string,
 ): Promise<void> {
@@ -102,7 +102,7 @@ async function createRoleManagedCallNodeFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "role-managed call-node fixture",
+    description: "role-managed call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
     nodes: [
@@ -140,15 +140,15 @@ async function createRoleManagedCallNodeFixture(
   });
 }
 
-async function createOptionalCallNodeFixture(
+async function createOptionalCallStepFixture(
   workflowRoot: string,
   workflowName: string,
 ): Promise<void> {
-  await createCallNodeFixture(workflowRoot, workflowName);
+  await createCallStepFixture(workflowRoot, workflowName);
   const workflowDir = path.join(workflowRoot, workflowName);
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "call-node fixture",
+    description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerNodeId: "divedra-manager",
     nodes: [
@@ -175,11 +175,11 @@ async function createOptionalCallNodeFixture(
   });
 }
 
-async function createUserActionCallNodeFixture(
+async function createUserActionCallStepFixture(
   workflowRoot: string,
   workflowName: string,
 ): Promise<void> {
-  await createCallNodeFixture(workflowRoot, workflowName);
+  await createCallStepFixture(workflowRoot, workflowName);
   const workflowDir = path.join(workflowRoot, workflowName);
   await writeJson(path.join(workflowDir, "node-writer.json"), {
     id: "writer",
@@ -193,7 +193,7 @@ async function createUserActionCallNodeFixture(
   });
 }
 
-async function createCallNodeSession(input: {
+async function createCallStepSession(input: {
   readonly workflowName: string;
   readonly sessionId: string;
   readonly sessionStoreRoot: string;
@@ -246,11 +246,11 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-role-manager";
-    const sessionId = "sess-call-node-role-manager";
+    const workflowName = "call-step-role-manager";
+    const sessionId = "sess-call-step-role-manager";
 
-    await createRoleManagedCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createRoleManagedCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -266,7 +266,7 @@ describe("callStepExecution", () => {
         sessionStoreRoot,
         workflowId: workflowName,
         workflowRunId: sessionId,
-        nodeId: "divedra-manager",
+        stepId: "divedra-manager",
         message: { instruction: "plan the work" },
       },
       adapter,
@@ -292,8 +292,8 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-template-manager";
-    const sessionId = "sess-call-node-template-manager";
+    const workflowName = "call-step-template-manager";
+    const sessionId = "sess-call-step-template-manager";
 
     const created = await createWorkflowTemplate(workflowName, {
       workflowRoot: root,
@@ -303,7 +303,7 @@ describe("callStepExecution", () => {
       return;
     }
 
-    await createCallNodeSession({
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -317,7 +317,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "divedra-manager",
+      stepId: "divedra-manager",
       mockScenario: {},
     });
 
@@ -334,11 +334,11 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-demo";
-    const sessionId = "sess-call-node-demo";
+    const workflowName = "call-step-demo";
+    const sessionId = "sess-call-step-demo";
 
-    await createCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -374,7 +374,7 @@ describe("callStepExecution", () => {
         sessionStoreRoot,
         workflowId: workflowName,
         workflowRunId: sessionId,
-        nodeId: "writer",
+        stepId: "writer",
         message: { instruction: "produce review json" },
       },
       adapter,
@@ -502,11 +502,11 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-retry-invalid-output";
-    const sessionId = "sess-call-node-retry-invalid-output";
+    const workflowName = "call-step-retry-invalid-output";
+    const sessionId = "sess-call-step-retry-invalid-output";
 
-    await createCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -544,7 +544,7 @@ describe("callStepExecution", () => {
         sessionStoreRoot,
         workflowId: workflowName,
         workflowRunId: sessionId,
-        nodeId: "writer",
+        stepId: "writer",
       },
       adapter,
     );
@@ -577,14 +577,14 @@ describe("callStepExecution", () => {
     );
   });
 
-  test("rejects direct node calls for completed sessions", async () => {
+  test("rejects direct step calls for completed sessions", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-terminal-session";
-    const sessionId = "sess-call-node-terminal-session";
+    const workflowName = "call-step-terminal-session";
+    const sessionId = "sess-call-step-terminal-session";
 
-    await createCallNodeFixture(root, workflowName);
+    await createCallStepFixture(root, workflowName);
     const saved = await saveSession(
       {
         ...createSessionState({
@@ -610,7 +610,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "writer",
+      stepId: "writer",
     });
 
     expect(result.ok).toBe(false);
@@ -621,15 +621,15 @@ describe("callStepExecution", () => {
     expect(result.error.message).toContain("completed");
   });
 
-  test("rejects direct node calls for optional workflow nodes", async () => {
+  test("rejects direct step calls for optional workflow nodes", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-optional";
-    const sessionId = "sess-call-node-optional";
+    const workflowName = "call-step-optional";
+    const sessionId = "sess-call-step-optional";
 
-    await createOptionalCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createOptionalCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -642,7 +642,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "writer",
+      stepId: "writer",
     });
 
     expect(result.ok).toBe(false);
@@ -653,15 +653,15 @@ describe("callStepExecution", () => {
     expect(result.error.message).toContain("workflow scheduler");
   });
 
-  test("rejects direct node calls for user-action nodes", async () => {
+  test("rejects direct step calls for user-action nodes", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-user-action";
-    const sessionId = "sess-call-node-user-action";
+    const workflowName = "call-step-user-action";
+    const sessionId = "sess-call-step-user-action";
 
-    await createUserActionCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createUserActionCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -674,7 +674,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "writer",
+      stepId: "writer",
     });
 
     expect(result.ok).toBe(false);
@@ -683,26 +683,26 @@ describe("callStepExecution", () => {
     }
     expect(result.error.message).toContain("nodeType='user-action'");
     expect(result.error.message).toContain(
-      "direct call-node execution is not supported",
+      "direct step execution is not supported",
     );
   });
 
-  test("persists native command process logs for direct node calls", async () => {
+  test("persists native command process logs for direct step calls", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
     const rootDataDir = path.join(root, "data");
-    const workflowName = "call-node-command-logs";
-    const sessionId = "sess-call-node-command-logs";
+    const workflowName = "call-step-command-logs";
+    const sessionId = "sess-call-step-command-logs";
 
-    await createCallNodeFixture(root, workflowName);
+    await createCallStepFixture(root, workflowName);
     const scriptsDir = path.join(root, workflowName, "scripts");
     await mkdir(scriptsDir, { recursive: true });
     await writeFile(
       path.join(scriptsDir, "write-output.sh"),
       [
         "#!/bin/sh",
-        'echo "call-node command stdout"',
+        'echo "call-step command stdout"',
         'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
         `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
         "",
@@ -717,7 +717,7 @@ describe("callStepExecution", () => {
         scriptPath: "scripts/write-output.sh",
       },
     });
-    await createCallNodeSession({
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -731,7 +731,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "writer",
+      stepId: "writer",
     });
 
     expect(result.ok).toBe(true);
@@ -748,7 +748,7 @@ describe("callStepExecution", () => {
         (entry) =>
           entry.nodeId === "writer" &&
           entry.message.includes("stdout") &&
-          entry.message.includes("call-node command stdout"),
+          entry.message.includes("call-step command stdout"),
       ),
     ).toBe(true);
   });
@@ -757,11 +757,11 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-mailbox-write-failure";
-    const sessionId = "sess-call-node-mailbox-write-failure";
+    const workflowName = "call-step-mailbox-write-failure";
+    const sessionId = "sess-call-step-mailbox-write-failure";
 
-    await createCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -788,7 +788,7 @@ describe("callStepExecution", () => {
         sessionStoreRoot,
         workflowId: workflowName,
         workflowRunId: sessionId,
-        nodeId: "writer",
+        stepId: "writer",
       },
       deterministicAdapter,
     );
@@ -817,10 +817,10 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-podman";
-    const sessionId = "sess-call-node-podman";
+    const workflowName = "call-step-podman";
+    const sessionId = "sess-call-step-podman";
 
-    await createCallNodeFixture(root, workflowName);
+    await createCallStepFixture(root, workflowName);
     await writeJson(path.join(root, workflowName, "node-writer.json"), {
       id: "writer",
       nodeType: "container",
@@ -845,7 +845,7 @@ describe("callStepExecution", () => {
         },
       },
     });
-    await createCallNodeSession({
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -858,7 +858,7 @@ describe("callStepExecution", () => {
       sessionStoreRoot,
       workflowId: workflowName,
       workflowRunId: sessionId,
-      nodeId: "writer",
+      stepId: "writer",
     });
 
     expect(result.ok).toBe(false);
@@ -872,11 +872,11 @@ describe("callStepExecution", () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
-    const workflowName = "call-node-plain-message";
-    const sessionId = "sess-call-node-plain-message";
+    const workflowName = "call-step-plain-message";
+    const sessionId = "sess-call-step-plain-message";
 
-    await createCallNodeFixture(root, workflowName);
-    await createCallNodeSession({
+    await createCallStepFixture(root, workflowName);
+    await createCallStepSession({
       workflowName,
       sessionId,
       sessionStoreRoot,
@@ -903,7 +903,7 @@ describe("callStepExecution", () => {
         sessionStoreRoot,
         workflowId: workflowName,
         workflowRunId: sessionId,
-        nodeId: "writer",
+        stepId: "writer",
         message: "review this change",
       },
       new PlainMessageAdapter(),

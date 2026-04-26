@@ -50,6 +50,12 @@ import { composeExecutionPrompts } from "./prompt-composition";
 import { err, ok, type Result } from "./result";
 import { inspectWorkflowRuntimeReadiness } from "./runtime-readiness";
 import {
+  findOwningSubWorkflowByRuntimeNodeId,
+  isRootScopeOutputNode,
+  resolveBackendSessionSelection,
+  resolveStepExecutionAddress,
+} from "./runtime-addressing";
+import {
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
 } from "./runtime-db";
@@ -88,16 +94,18 @@ export interface DirectExecutionOverrides {
   readonly sessionMode?: NodeSessionMode;
   readonly timeoutMs?: number;
   /**
-   * Prior step/node execution record to continue from (matches session `nodeExecId`;
-   * CLI: `--resume-step-exec` or alias `--resume-node-exec`).
+   * Prior step execution record to continue from (matches session
+   * `nodeExecId`; CLI: `--resume-step-exec`).
    */
-  readonly resumeNodeExecId?: string;
+  readonly resumeStepExecId?: string;
 }
 
-export interface CallStepExecutionInput extends LoadOptions, SessionStoreOptions {
+export interface CallStepExecutionInput
+  extends LoadOptions,
+    SessionStoreOptions {
   readonly workflowId: string;
   readonly workflowRunId: string;
-  readonly nodeId: string;
+  readonly stepId: string;
   readonly workflowWorkingDirectory?: string;
   readonly message?: unknown;
   readonly mockScenario?: MockNodeScenario;
@@ -341,27 +349,6 @@ async function resolveCandidatePayload(input: {
   return readCandidatePayloadFromFile(resolvedPath);
 }
 
-function resolveBackendSessionSelection(
-  workflow: WorkflowJson,
-  nodeId: string,
-  node: AgentNodePayload,
-): {
-  readonly sessionLookupNodeId?: string;
-  readonly inheritFromStepId?: string;
-} {
-  if (node.sessionPolicy?.mode !== "reuse") {
-    return {};
-  }
-
-  const step = workflow.steps?.find((entry) => entry.id === nodeId);
-  return {
-    sessionLookupNodeId: step?.sessionPolicy?.inheritFromStepId ?? node.id,
-    ...(step?.sessionPolicy?.inheritFromStepId === undefined
-      ? {}
-      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
-  };
-}
-
 function buildScenarioExecutableNodePayload(input: {
   readonly node: NodePayload;
   readonly hasScenarioEntry: boolean;
@@ -510,54 +497,6 @@ function applyDirectExecutionOverrides(
   }
 
   return ok(resolvedNode);
-}
-
-function resolveStepExecutionAddress(
-  workflow: WorkflowJson,
-  nodeId: string,
-): {
-  readonly stepId?: string;
-  readonly nodeRegistryId?: string;
-  readonly inheritFromStepId?: string;
-} {
-  const step = workflow.steps?.find((entry) => entry.id === nodeId);
-  if (step === undefined) {
-    return {};
-  }
-  return {
-    stepId: step.id,
-    nodeRegistryId: step.nodeId,
-    ...(step.sessionPolicy?.inheritFromStepId === undefined
-      ? {}
-      : { inheritFromStepId: step.sessionPolicy.inheritFromStepId }),
-  };
-}
-
-function findOwningSubWorkflowByRuntimeNodeId(
-  workflow: WorkflowJson,
-  nodeId: string,
-) {
-  return workflow.subWorkflows.find((entry) => {
-    if (entry.nodeIds?.includes(nodeId) ?? false) {
-      return true;
-    }
-    return (
-      entry.managerNodeId === nodeId ||
-      entry.inputNodeId === nodeId ||
-      entry.outputNodeId === nodeId
-    );
-  });
-}
-
-function isRootScopeOutputNode(
-  workflow: WorkflowJson,
-  nodeId: string,
-): boolean {
-  const node = workflow.nodes.find((entry) => entry.id === nodeId);
-  return (
-    node?.kind === "output" &&
-    findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId) === undefined
-  );
 }
 
 function outputRefForExecution(
@@ -879,7 +818,7 @@ class ExecutionDispatcher {
       return err({
         session,
         exitCode: 1,
-        message: `cannot call node '${input.nodeId}' on terminal session '${session.sessionId}' with status '${session.status}'`,
+        message: `cannot call step '${input.stepId}' on terminal session '${session.sessionId}' with status '${session.status}'`,
       });
     }
     if (session.workflowId !== input.workflowId) {
@@ -910,31 +849,31 @@ class ExecutionDispatcher {
     }
 
     const workflow = loaded.value.bundle.workflow;
-    const nodeRef = workflow.nodes.find((entry) => entry.id === input.nodeId);
-    const nodePayload = loaded.value.bundle.nodePayloads[input.nodeId];
+    const nodeRef = workflow.nodes.find((entry) => entry.id === input.stepId);
+    const nodePayload = loaded.value.bundle.nodePayloads[input.stepId];
     if (nodeRef === undefined || nodePayload === undefined) {
       return err({
         session,
         exitCode: 1,
-        message: `missing node definition for '${input.nodeId}'`,
+        message: `missing step definition for '${input.stepId}'`,
       });
     }
     const stepExecutionAddress = resolveStepExecutionAddress(
       workflow,
-      input.nodeId,
+      input.stepId,
     );
     if (nodeRef.execution?.mode === "optional") {
       return err({
         session,
         exitCode: 1,
-        message: `node '${input.nodeId}' is optional and must be executed through the workflow scheduler after an owning-manager decision`,
+        message: `step '${input.stepId}' is optional and must be executed through the workflow scheduler after an owning-manager decision`,
       });
     }
     if (nodePayload.nodeType === "user-action") {
       return err({
         session,
         exitCode: 1,
-        message: `node '${input.nodeId}' requests nodeType='user-action', but direct call-node execution is not supported`,
+        message: `step '${input.stepId}' requests nodeType='user-action', but direct step execution is not supported`,
       });
     }
 
@@ -961,7 +900,7 @@ class ExecutionDispatcher {
         {
           ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
           ...(input.env === undefined ? {} : { env: input.env }),
-          onlyNodeIds: new Set([input.nodeId]),
+          onlyNodeIds: new Set([input.stepId]),
         },
       );
       if (!readiness.ready) {
@@ -974,7 +913,7 @@ class ExecutionDispatcher {
     }
     const agentNodePayload = buildScenarioExecutableNodePayload({
       node: executionTargetNode,
-      hasScenarioEntry: input.mockScenario?.[input.nodeId] !== undefined,
+      hasScenarioEntry: input.mockScenario?.[input.stepId] !== undefined,
       allowScenarioFallback: input.mockScenario !== undefined,
       allowDryRun: input.dryRun === true,
     });
@@ -990,7 +929,7 @@ class ExecutionDispatcher {
       return err({
         session,
         exitCode: 1,
-        message: `node '${input.nodeId}' is missing executable node fields`,
+        message: `step '${input.stepId}' is missing executable fields`,
       });
     }
     let workflowWorkingDirectory: string;
@@ -1013,7 +952,7 @@ class ExecutionDispatcher {
     }
 
     const nextExecutionCounter = session.nodeExecutionCounter + 1;
-    const executionIndex = (session.nodeExecutionCounts[input.nodeId] ?? 0) + 1;
+    const executionIndex = (session.nodeExecutionCounts[input.stepId] ?? 0) + 1;
     const nodeExecId = nextNodeExecId(nextExecutionCounter);
     const mailboxInstanceId = nodeExecId;
     const artifactDir = path.join(
@@ -1021,7 +960,7 @@ class ExecutionDispatcher {
       "executions",
       session.sessionId,
       "nodes",
-      input.nodeId,
+      input.stepId,
       nodeExecId,
     );
     await mkdir(artifactDir, { recursive: true });
@@ -1077,9 +1016,9 @@ class ExecutionDispatcher {
       const failedSession: WorkflowSessionState = {
         ...session,
         status: "failed",
-        currentNodeId: input.nodeId,
+        currentNodeId: input.stepId,
         endedAt: nowIso(),
-        lastError: `failed to persist execution mailbox at '${input.nodeId}': ${message}`,
+        lastError: `failed to persist execution mailbox for step '${input.stepId}': ${message}`,
       };
       const persisted = await saveSession(failedSession, input);
       return err({
@@ -1101,7 +1040,7 @@ class ExecutionDispatcher {
         ? undefined
         : resolveBackendSessionSelection(
             workflow,
-            input.nodeId,
+            input.stepId,
             agentNodePayload,
           );
     let backendSession =
@@ -1158,7 +1097,7 @@ class ExecutionDispatcher {
         environment: buildAmbientManagerControlPlaneEnvironment({
           workflowId: workflow.workflowId,
           workflowExecutionId: session.sessionId,
-          managerNodeId: input.nodeId,
+          managerNodeId: input.stepId,
           managerNodeExecId: nodeExecId,
           managerSessionId,
           authToken: managerAuthToken,
@@ -1169,7 +1108,7 @@ class ExecutionDispatcher {
         managerSessionId,
         workflowId: workflow.workflowId,
         workflowExecutionId: session.sessionId,
-        managerNodeId: input.nodeId,
+        managerNodeId: input.stepId,
         managerNodeExecId: nodeExecId,
         status: "active",
         createdAt: startedAt,
@@ -1185,7 +1124,7 @@ class ExecutionDispatcher {
       sessionId: session.sessionId,
       workflowExecutionId: session.sessionId,
       workflowId: workflow.workflowId,
-      nodeId: input.nodeId,
+      nodeId: input.stepId,
       ...(stepExecutionAddress.stepId === undefined
         ? {}
         : { stepId: stepExecutionAddress.stepId }),
@@ -1227,9 +1166,9 @@ class ExecutionDispatcher {
               publication: buildOutputPublicationPolicy(),
             },
       ...(backendSession === undefined ? {} : { backendSession }),
-      ...(input.overrides?.resumeNodeExecId === undefined
+      ...(input.overrides?.resumeStepExecId === undefined
         ? {}
-        : { resumedFromNodeExecId: input.overrides.resumeNodeExecId }),
+        : { resumedFromNodeExecId: input.overrides.resumeStepExecId }),
       ...(input.message === undefined ? {} : { managerMessage: input.message }),
       dryRun: input.dryRun ?? false,
     };
@@ -1287,7 +1226,7 @@ class ExecutionDispatcher {
             : buildReservedCandidateSubmissionPath({
                 workflowId: workflow.workflowId,
                 workflowExecutionId: session.sessionId,
-                nodeId: input.nodeId,
+                nodeId: input.stepId,
                 nodeExecId,
                 outputAttemptId,
               });
@@ -1329,7 +1268,7 @@ class ExecutionDispatcher {
                 {
                   workflowId: workflow.workflowId,
                   workflowExecutionId: session.sessionId,
-                  nodeId: input.nodeId,
+                  nodeId: input.stepId,
                   nodeExecId,
                   node: agentNodePayload,
                   workingDirectory: resolveNodeExecutionWorkingDirectory(
@@ -1349,7 +1288,7 @@ class ExecutionDispatcher {
                   divedraHookContext: buildAdapterDivedraHookContext({
                     workflowId: workflow.workflowId,
                     workflowExecutionId: session.sessionId,
-                    nodeId: input.nodeId,
+                    nodeId: input.stepId,
                     nodeExecId,
                     ...(agentNodePayload.executionBackend === undefined
                       ? {}
@@ -1395,7 +1334,7 @@ class ExecutionDispatcher {
                 workflowId: workflow.workflowId,
                 workflowDescription: workflow.description,
                 workflowExecutionId: session.sessionId,
-                nodeId: input.nodeId,
+                nodeId: input.stepId,
                 nodeExecId,
                 node: executionNodePayload,
                 workflowDefaults: workflow.defaults,
@@ -1586,7 +1525,7 @@ class ExecutionDispatcher {
       await saveProcessLogsToRuntimeDb(
         {
           sessionId: session.sessionId,
-          nodeId: input.nodeId,
+          nodeId: input.stepId,
           nodeExecId,
           processLogs,
           at: endedAt,
@@ -1600,7 +1539,7 @@ class ExecutionDispatcher {
       // runtime DB process logs are best-effort
     }
     const nodeExecution: NodeExecutionRecord = {
-      nodeId: input.nodeId,
+      nodeId: input.stepId,
       ...(stepExecutionAddress.stepId === undefined
         ? {}
         : { stepId: stepExecutionAddress.stepId }),
@@ -1659,7 +1598,7 @@ class ExecutionDispatcher {
         managerSessionId,
         workflowId: workflow.workflowId,
         workflowExecutionId: session.sessionId,
-        managerNodeId: input.nodeId,
+        managerNodeId: input.stepId,
         managerNodeExecId: nodeExecId,
         status: nodeStatus === "succeeded" ? "completed" : "failed",
         createdAt: startedAt,
@@ -1674,16 +1613,16 @@ class ExecutionDispatcher {
     session = {
       ...session,
       status: "running",
-      currentNodeId: input.nodeId,
+      currentNodeId: input.stepId,
       nodeExecutionCounter: nextExecutionCounter,
       nodeExecutionCounts: {
         ...session.nodeExecutionCounts,
-        [input.nodeId]: executionIndex,
+        [input.stepId]: executionIndex,
       },
       nodeExecutions: [...session.nodeExecutions, nodeExecution],
       nodeBackendSessions: nextNodeBackendSessions,
       ...(finalOutputPayload !== undefined &&
-      isRootScopeOutputNode(workflow, input.nodeId)
+      isRootScopeOutputNode(workflow, input.stepId)
         ? {
             runtimeVariables: {
               ...session.runtimeVariables,
@@ -1705,7 +1644,7 @@ class ExecutionDispatcher {
                 }
               }
               return (
-                finalOutputPayload?.["error"]?.toString() ?? "node call failed"
+                finalOutputPayload?.["error"]?.toString() ?? "step call failed"
               );
             })(),
           }),
@@ -1714,7 +1653,7 @@ class ExecutionDispatcher {
     if (finalOutputPayload === undefined) {
       session = {
         ...session,
-        lastError: "node execution produced no output",
+        lastError: "step execution produced no output",
       };
       const persisted = await saveSession(session, input);
       return err({
@@ -1722,7 +1661,7 @@ class ExecutionDispatcher {
         nodeExecution,
         exitCode: 1,
         message: persisted.ok
-          ? "node execution produced no output"
+          ? "step execution produced no output"
           : persisted.error.message,
       });
     }
@@ -1746,7 +1685,7 @@ class ExecutionDispatcher {
         `${stableJson(finalOutputPayload)}\n`,
       );
       await writeJsonFile(path.join(artifactDir, "meta.json"), {
-        nodeId: input.nodeId,
+        nodeId: input.stepId,
         ...(stepExecutionAddress.stepId === undefined
           ? {}
           : { stepId: stepExecutionAddress.stepId }),
@@ -1786,7 +1725,7 @@ class ExecutionDispatcher {
         nodeExecution,
         exitCode: nodeStatus === "timed_out" ? 6 : 5,
         message:
-          finalOutputPayload["error"]?.toString() ?? "node execution failed",
+          finalOutputPayload["error"]?.toString() ?? "step execution failed",
       });
     }
 

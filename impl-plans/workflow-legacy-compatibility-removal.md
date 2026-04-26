@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-unified-workflow-role-model.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/specs/notes.md`
 **Created**: 2026-04-25
-**Last Updated**: 2026-04-26 (review slice: nested superviser legacy rerun targeting; prior review slices retained)
+**Last Updated**: 2026-04-26 (review slice: shared runtime-addressing reuse + unit coverage; prior review slices retained)
 
 ## Design Document Reference
 
@@ -102,7 +102,7 @@ export interface WorkflowStepTransition {
 
 ### 2. Runtime and Control Cleanup
 
-#### `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/sub-workflow.ts`, `src/workflow/conversation.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts`
+#### `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/sub-workflow.ts`, `src/workflow/conversation.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts`
 
 **Status**: IN_PROGRESS
 
@@ -263,7 +263,97 @@ interface VerificationCommandSet {
 - [ ] `bun run typecheck:server`, `bun test`, and `bun run build` pass after
       the cleanup
 
+## Review Check Matrix
+
+| Area | Check | Current Result | Follow-up |
+| ---- | ----- | -------------- | --------- |
+| Design direction | Runtime/control surfaces stay step-addressed rather than reintroducing node-addressed public API | PASS | Keep removing remaining compatibility fields under modules 1-4 |
+| CLI surface | Removed direct-call aliases fail clearly and do not create parser ambiguity | PASS (this iteration tightened `--resume-node-exec` handling) | Delete other removed compatibility aliases as they surface |
+| Error contract | `call-step` failure wording is centralized instead of growing one-off string rewrites | PASS (this iteration replaced ad hoc rewrites with a shared mapping table) | Continue shrinking leftover node-oriented internals so fewer rewrites are needed |
+| Shared runtime helpers | Engine, direct-step execution, and UI/read-model helpers should resolve step addresses and root-scope ownership through one implementation | PASS (new `runtime-addressing.ts` now owns shared helper logic and this iteration reuses it from the TUI model) | Keep moving legacy-only helper branches behind shared contracts as phase 133 continues |
+| DRY/SOLID | Shared parser and runtime helper logic should have one responsibility and one change point | PARTIAL (improved this iteration) | `call-step-impl` now accepts `stepId` end-to-end and shares runtime-addressing helpers with `engine.ts`, but broader legacy cleanup still spans validator/runtime/inspection layers |
+| Architecture fit | Repository still matches the intended phase-133 end state | FAIL | Modules 1-4 remain open: remove authored compatibility schema, root/sub runtime branching, structural `subWorkflows`, and legacy docs/examples |
+
 ## Progress Log
+
+### Session: 2026-04-26 (review slice: shared runtime-addressing reuse + unit coverage)
+
+**Tasks Completed**: Continued the maintainability review after the direct-step
+runtime cleanup and found one more duplicated ownership rule outside the engine:
+the OpenTUI shared model still carried its own copy of "which structural
+sub-workflow owns this runtime node id?" while `engine.ts` and
+`call-step-impl.ts` had already moved to `src/workflow/runtime-addressing.ts`.
+Replaced the TUI-local copy with the shared helper and added focused unit tests
+for `resolveStepExecutionAddress`, `resolveBackendSessionSelection`,
+`findOwningSubWorkflowByRuntimeNodeId`, and `isRootScopeOutputNode` so future
+cleanup can validate the shared contract without relying only on large engine
+and call-step integration suites. Also renamed the lingering
+`createCallNodeSession` test helper in `call-step-impl.test.ts` to
+`createCallStepSession` so the direct-step test surface no longer carries stale
+legacy command naming.
+
+**Tasks In Progress**: Module 2 remains in progress for broader runtime/control
+cleanup; module 1 authored-schema removal, structural sub-workflow cleanup, and
+public-surface/doc retirement remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice:
+`bun run typecheck:server`,
+`bun test src/workflow/runtime-addressing.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/workflow/engine.test.ts src/cli.test.ts --runInBand`,
+and `git diff --check`. This iteration improves DRY by making TUI/runtime
+ownership semantics share one implementation and by isolating the new helper
+behavior behind direct unit coverage.
+
+### Session: 2026-04-26 (review slice: shared runtime-addressing cleanup)
+
+**Tasks Completed**: Reviewed the active step-runtime diff against the
+phase-133 maintainability goal and found a concrete DRY violation still live
+after the recent `stepId` cleanup: `engine.ts` and `call-step-impl.ts` each
+kept their own copies of step execution address resolution, backend-session
+selection wiring, and root-scope output ownership checks. Extracted those shared
+rules into `src/workflow/runtime-addressing.ts`, removed the duplicate
+implementations from both runtime entry points, and renamed the direct-step
+runtime test fixtures away from historical `call-node` wording so the active
+execution path reads consistently in code and tests.
+
+**Tasks In Progress**: Module 2 remains in progress for broader runtime/control
+cleanup; module 1 authored-schema removal, structural sub-workflow cleanup, and
+public-surface/doc retirement remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice: `bun run typecheck:server`,
+`git diff --check`, and
+`bun test src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/workflow/engine.test.ts src/cli.test.ts --runInBand`
+(`219` pass). This slice improves maintainability by removing helper drift
+between the direct-step and scheduler runtimes without changing the broader
+phase-133 architecture assessment.
+
+### Session: 2026-04-26 (review slice: direct step runtime boundary cleanup)
+
+**Tasks Completed**: Reviewed the current direct execution path against the
+phase-133 step-addressed target and found a remaining maintainability seam:
+public `call-step` was step-addressed, but `call-step-impl` still exposed a
+`nodeId`-shaped input boundary and then relied on wrapper rewrites to translate
+several internal failures back to step wording. Refactored
+`CallStepExecutionInput` and the direct execution path to accept `stepId`
+end-to-end, updated direct-step runtime failures to emit step-oriented wording
+at the source, and kept persisted runtime records stable by continuing to store
+materialized execution ids in `nodeExecution.nodeId` while preserving the
+reusable payload id separately as `nodeRegistryId`. Updated focused runtime
+tests and the architecture note to record that internal boundary cleanup.
+
+**Tasks In Progress**: Module 2 remains in progress for broader runtime/control
+cleanup; module 1 authored-schema removal, structural sub-workflow cleanup, and
+public-surface/doc retirement remain open.
+
+**Blockers**: None.
+
+**Notes**: Verification for this slice: `bun run typecheck:server` and
+`bun test src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/cli.test.ts --runInBand`
+(`114` pass). This slice improves DRY/SOLID within the direct-step executor but
+does not change the larger architecture mismatch already tracked in this plan.
 
 ### Session: 2026-04-26 (review slice: shared workflow-bundle input validation)
 
@@ -850,6 +940,33 @@ runtime/control cleanup beyond this target-session verification hardening.
 **Notes**: This iteration addressed code quality, DRY, and an overlooked safety
 check in the active implementation. The existing step-addressed/nested-superviser
 design remains the correct architectural direction for phase 133.
+
+### Session: 2026-04-26 (review slice: removed direct-call alias leftovers)
+
+**Tasks Completed**: Reviewed the recent public-surface cleanup against the
+current tree and found two remaining phase-133 leftovers after the direct-call
+deprecation work. The local `call-step` CLI/parser/test path now treats
+`--resume-step-exec` as the only supported continuation flag, consumes the
+removed `--resume-node-exec` value before failing, and rejects the alias with
+an explicit migration error. Refactored `rewriteCallStepFailureMessage()` to use
+one replacement table instead of accumulating special-case chained rewrites, and
+added regression coverage for the intermediate `direct call-step execution...`
+wording. Also corrected `design-docs/specs/design-container-runtime-contract.md`
+so the runtime section describes `call-step` rather than the deleted
+`call-node` surface.
+
+**Tasks In Progress**: Module 1 authored-schema / validator cutover; module 2
+runtime/control cleanup beyond the deprecated direct-call alias and wording
+removal.
+
+**Blockers**: None.
+
+**Notes**: This slice intentionally cleaned up residual parser/wiring drift
+rather than changing architecture. Verification: `bun run typecheck:server`
+and `bun test src/cli.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts --runInBand`
+(`114` pass). The broader compatibility model (`managerNodeId`,
+`entryNodeId`, `workflowCalls`, structural `subWorkflows`) still remains on the
+active phase 133 checklist.
 
 ## Related Plans
 
