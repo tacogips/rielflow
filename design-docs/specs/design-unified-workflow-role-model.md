@@ -4,9 +4,9 @@ This document defines the target workflow model where `manager` and `worker` are
 
 ## Overview
 
-The current implementation uses structural node kinds such as `root-manager`, `subworkflow-manager`, `input`, and `output`, plus `subWorkflows[]` boundary metadata. That model makes nested workflow execution a first-class structural concept.
+Strict authored `workflow.json` follows the step-addressed contract in `design-workflow-json.md` (`entryStepId`, `steps`, optional `managerStepId`); top-level `managerNodeId`, `entryNodeId`, and `subWorkflows` are rejected, and role-authored bundles reject structural boundary kinds such as `subworkflow-manager`, `input`, and `output`. A narrowed legacy **node-graph** load path (non-strict validation) can still run graphs declared only as `nodes[]` with inferred entry/manager via helpers, without persisting or accepting those removed top-level aliases as the active authoring model.
 
-The requested direction is different:
+The target execution semantics remain:
 
 - a workflow is an ordinary reusable execution unit
 - a called workflow is only called "sub-workflow" for convenience
@@ -20,7 +20,7 @@ This is therefore an execution-model redesign, not another manager-kind rename.
 ## Goals
 
 - Use one authored node-role vocabulary: `manager` and `worker`
-- Allow `workflow.managerNodeId` to be optional
+- Allow `managerStepId` to be omitted for worker-only workflows
 - Keep the constraint that a workflow has at most one manager
 - Treat manager nodes as fixed agent coordinators rather than generic executable node types
 - Make workflow-to-workflow invocation explicit without introducing structural `subworkflow-manager`, `input`, or `output` node roles
@@ -31,7 +31,7 @@ This is therefore an execution-model redesign, not another manager-kind rename.
 
 - Redesigning agent adapters or execution backends
 - Removing branch or loop control flow from the workflow model
-- Preserving backward compatibility for the just-landed `root-manager` / `subworkflow-manager` authored schema
+- Preserving removed structural authoring (`subworkflow-manager`, top-level `subWorkflows`, and other keys rejected in `design-workflow-json.md`)
 - Defining every migration script detail in this document
 
 ## Core Model
@@ -106,35 +106,26 @@ Validation semantics:
 
 ### Workflow Entry
 
-The current runtime uses `managerNodeId` as the mandatory root entry. That is too strict for worker-only workflows.
+Authoring uses the step-addressed contract from `design-workflow-json.md`: `entryStepId`, `steps[]`,
+the reusable node registry in `nodes[]`, and optional `managerStepId`. Session and control-plane
+APIs may still expose a field named `managerNodeId`; there it is a **step** id in the same id space
+as `steps[].id`, not a legacy top-level `workflow.json` alias (those names are rejected on disk).
 
-The target model should use:
-
-```typescript
-interface WorkflowJson {
-  readonly workflowId: string;
-  readonly description: string;
-  readonly defaults: WorkflowDefaults;
-  readonly prompts?: WorkflowPrompts;
-  readonly managerNodeId?: string;
-  readonly entryNodeId?: string;
-  readonly workflowCalls?: readonly WorkflowCallRef[];
-  readonly nodes: readonly WorkflowNodeRef[];
-  readonly edges: readonly WorkflowEdge[];
-  readonly loops?: readonly LoopRule[];
-  readonly branching: {
-    readonly mode: "fan-out";
-  };
-}
-```
+Shape matches `AuthoredWorkflowJson` in `src/workflow/types.ts` (see `design-workflow-json.md` for
+the full field list): `workflowId`, `defaults`, `entryStepId`, `nodes[]`, `steps[]`, optional
+`managerStepId`, `description`, and `prompts`.
 
 Entry rules:
 
-- if `managerNodeId` is present, it is the default entry node
-- if `managerNodeId` is absent, `entryNodeId` must be present
-- a workflow may never declare more than one manager
+- `entryStepId` names the step where a new run starts
+- when a manager exists, `managerStepId` may override which step is treated as the manager anchor;
+  otherwise explicit `role: "manager"` on exactly one step (or a single manager-role step) defines it
+- worker-only workflows omit `managerStepId` and still declare a valid `entryStepId`
 
-This document intentionally prefers explicit `entryNodeId` over implicit graph inference when no manager exists. That keeps worker-only workflows deterministic and validation-friendly.
+A separate, non-strict **legacy node-graph** load path (optional `nodes[]` without `steps[]`) may
+still infer a graph entry node id for execution; it does not reintroduce authored top-level
+`managerNodeId` / `entryNodeId` / `subWorkflows` as valid authoring (`validate.ts`
+`REJECTED_AUTHORED_*` keys).
 
 ### Workflow Invocation
 
@@ -179,20 +170,21 @@ The target validator should enforce:
 - `role`, when present, must be `manager` or `worker`
 - `control`, when present, must be `none`, `branch-judge`, or `loop-judge`
 - at most one node may use `role: "manager"`
-- `managerNodeId`, when present, must reference that manager node
-- `entryNodeId` is required when `managerNodeId` is absent
-- `entryNodeId` and `managerNodeId` must reference existing nodes
+- step-addressed bundles: `entryStepId` and `steps[]` are required; optional `managerStepId` must
+  reference an existing step id when present
+- authored top-level `managerNodeId`, `entryNodeId`, `subWorkflows`, `workflowCalls`, and other
+  keys listed under `REJECTED_AUTHORED_*` in `validate.ts` / `design-workflow-json.md` are rejected
 - manager nodes must use the agent execution path only
-- structural `subWorkflows[].managerNodeId`, `inputNodeId`, `outputNodeId`, boundary `nodeIds`, and non-empty structural `subWorkflowConversations[]` metadata are removed from the active role-authored schema
+- structural sub-workflow authoring metadata is out of scope for the active schema (validation rejects
+  top-level presence rather than normalizing it)
 
 ## Runtime Implications
 
-The current engine behavior that must be removed or redesigned includes:
+Removed or retired engine behavior (historical reference; do not reintroduce):
 
-- root-manager-only workflow start assumptions
-- subworkflow-manager-owned child-input auto-delivery
+- structural `subworkflow-manager` execution branches and child-input auto-delivery
 - structural cross-boundary mailbox validation keyed on sub-workflow ownership
-- manager control rules that distinguish root-manager versus subworkflow-manager scope
+- manager control scope split between root versus nested structural managers
 - prompt/mailbox rendering that enumerates structural child input/output boundaries
 
 The replacement direction is:

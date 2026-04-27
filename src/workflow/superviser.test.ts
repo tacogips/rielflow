@@ -384,8 +384,6 @@ describe("toStepAddressedWorkflowForSupervision", () => {
 
   test("returns null for legacy node-graph workflows without authored steps", () => {
     const wf = {
-      entryNodeId: "step-1",
-      managerNodeId: "step-1",
       nodes: [
         { id: "step-1", nodeFile: "n1.json", kind: "task" as const },
         { id: "step-2", nodeFile: "n2.json", kind: "task" as const },
@@ -406,7 +404,6 @@ describe("toStepAddressedWorkflowForSupervision", () => {
     const wf = {
       entryStepId: "a",
       steps: [],
-      entryNodeId: "legacy",
       nodes: [{ id: "legacy", nodeFile: "n.json" }],
     } as unknown as WorkflowJson;
     expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();

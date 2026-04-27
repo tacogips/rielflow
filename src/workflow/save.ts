@@ -18,6 +18,9 @@ import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
 import {
   isStrictWorkflowAuthorshipValidation,
+  REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS,
+  REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
+  REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
   validateWorkflowBundleAsync,
 } from "./validate";
 import {
@@ -106,32 +109,17 @@ function collectStepAddressedSaveLegacyFieldIssues(
   }
 
   const issues: SaveValidationIssue[] = [];
-  for (const legacyField of [
-    "managerNodeId",
-    "entryNodeId",
-    "workflowCalls",
-    "subWorkflows",
-    "subWorkflowConversations",
-    "loops",
-    "branching",
-  ] as const) {
+  for (const legacyField of REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS) {
     if (workflow[legacyField] !== undefined) {
       issues.push(
         makeSaveValidationIssue(
           `workflow.${legacyField}`,
-          "is not part of the step-addressed workflow schema",
+          legacyField === "edges"
+            ? REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE
+            : REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
         ),
       );
     }
-  }
-
-  if (workflow["edges"] !== undefined) {
-    issues.push(
-      makeSaveValidationIssue(
-        "workflow.edges",
-        "is not part of the step-addressed workflow schema; local step-to-step routing must be authored on workflow.steps[].transitions",
-      ),
-    );
   }
 
   return issues;
@@ -144,7 +132,11 @@ function hasOwnKey(
   return value !== undefined && Object.hasOwn(value, key);
 }
 
-function stripPersistedWorkflowNodeCompatibilityFields(node: unknown): unknown {
+/**
+ * Authored `workflow.json` must not carry both `role` and redundant `kind`;
+ * normalized bundles may populate both during load.
+ */
+function stripRedundantKindWhenRolePresentOnNode(node: unknown): unknown {
   if (typeof node !== "object" || node === null) {
     return node;
   }
@@ -156,22 +148,21 @@ function stripPersistedWorkflowNodeCompatibilityFields(node: unknown): unknown {
   return nodeRecord;
 }
 
-function stripPersistedWorkflowCompatibilityFields(workflow: unknown): unknown {
+/** Strips in-memory `hasManagerNode` only; all other keys are validated as-authored. */
+function stripNormalizedOnlyWorkflowTopLevelFields(
+  workflow: unknown,
+): unknown {
   if (typeof workflow !== "object" || workflow === null) {
     return workflow;
   }
 
   const workflowRecord = { ...(workflow as Record<string, unknown>) };
-  const hasManagerNode = workflowRecord["hasManagerNode"];
   delete workflowRecord["hasManagerNode"];
-  if (hasManagerNode === false) {
-    delete workflowRecord["managerNodeId"];
-  }
 
   const nodesRaw = workflowRecord["nodes"];
   if (Array.isArray(nodesRaw)) {
     workflowRecord["nodes"] = nodesRaw.map(
-      stripPersistedWorkflowNodeCompatibilityFields,
+      stripRedundantKindWhenRolePresentOnNode,
     );
   }
 
@@ -345,18 +336,6 @@ function isDefaultContainerRuntime(value: unknown): boolean {
   );
 }
 
-function hasManagerRoleNode(nodes: readonly unknown[]): boolean {
-  return nodes.some(
-    (node) =>
-      isRecord(node) &&
-      (node["role"] === "manager" || node["kind"] === "root-manager"),
-  );
-}
-
-function hasAuthoredManagerRoleNode(nodes: readonly unknown[]): boolean {
-  return nodes.some((node) => isRecord(node) && node["role"] === "manager");
-}
-
 function hasAuthoredRoleOrControlNode(nodes: readonly unknown[]): boolean {
   return nodes.some(
     (node) =>
@@ -488,7 +467,7 @@ function prepareAuthoredWorkflowForSave(input: {
     hasOwnKey(input.workflow, "hasManagerNode") &&
     !isStepAddressedNormalizedWorkflow(input.workflow) &&
     !isRecord(input.existingAuthoredWorkflow);
-  const incomingWorkflow = stripPersistedWorkflowCompatibilityFields(
+  const incomingWorkflow = stripNormalizedOnlyWorkflowTopLevelFields(
     input.workflow,
   );
   if (!isRecord(incomingWorkflow)) {
@@ -536,21 +515,9 @@ function prepareAuthoredWorkflowForSave(input: {
   const incomingNodes = Array.isArray(preparedWorkflow["nodes"])
     ? preparedWorkflow["nodes"]
     : [];
-  const hasManagedRoleNode = hasAuthoredManagerRoleNode(incomingNodes);
-  const shouldCanonicalizeLegacyCompatibilityNoops =
+  const shouldCanonicalizeRedundantLegacyGraphCompanions =
     !Array.isArray(preparedWorkflow["steps"]) &&
     !hasAuthoredRoleOrControlNode(incomingNodes);
-  if (
-    hasManagedRoleNode ||
-    !shouldPersistTopLevelField({
-      existingAuthoredWorkflow,
-      incomingWorkflow,
-      key: "managerNodeId",
-    }) ||
-    preparedWorkflow["hasManagerNode"] === false
-  ) {
-    delete preparedWorkflow["managerNodeId"];
-  }
   const existingNodesById = buildAuthoredNodesById(existingAuthoredWorkflow);
   preparedWorkflow["nodes"] = incomingNodes.map((node) =>
     prepareAuthoredWorkflowNodeForSave({
@@ -566,27 +533,8 @@ function prepareAuthoredWorkflowForSave(input: {
     }),
   );
 
-  const shouldKeepEntryNode =
-    hasManagedRoleNode === false &&
-    (hasManagerRoleNode(incomingNodes) === false ||
-      shouldPersistTopLevelField({
-        existingAuthoredWorkflow,
-        incomingWorkflow: preparedWorkflow,
-        key: "entryNodeId",
-      }));
-  if (!shouldKeepEntryNode) {
-    delete preparedWorkflow["entryNodeId"];
-  }
-  if (
-    typeof preparedWorkflow["managerNodeId"] === "string" &&
-    typeof preparedWorkflow["entryNodeId"] === "string" &&
-    preparedWorkflow["managerNodeId"] === preparedWorkflow["entryNodeId"]
-  ) {
-    delete preparedWorkflow["entryNodeId"];
-  }
-
   const synthesizedEdges = createSequentialEdgesFromNodes(incomingNodes);
-  if (shouldCanonicalizeLegacyCompatibilityNoops) {
+  if (shouldCanonicalizeRedundantLegacyGraphCompanions) {
     if (
       Array.isArray(preparedWorkflow["edges"]) &&
       edgesMatch(preparedWorkflow["edges"], synthesizedEdges)

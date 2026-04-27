@@ -214,9 +214,9 @@ export interface OutputSelectionPolicy {
 }
 
 /**
- * Authored `workflow.json` shape (see `design-docs/specs/design-workflow-json.md`). Validation
- * rejects additional top-level keys outside the step-addressed schema; save/load may still read
- * loose record shapes internally.
+ * Authored `workflow.json` step-addressed surface (`design-workflow-json.md`). Legacy
+ * top-level node/structural aliases are compile-time and validation-time errors; see
+ * `REJECTED_AUTHORED_*` exports in `validate.ts` (not session/runtime `managerNodeId`).
  */
 export interface AuthoredWorkflowJson {
   readonly workflowId: string;
@@ -233,10 +233,10 @@ export interface AuthoredWorkflowJson {
 }
 
 /**
- * Normalized workflow from validation/load. Top-level `managerNodeId` / `entryNodeId` are not
- * stored; use {@link resolveWorkflowManagerRuntimeId}, {@link resolveWorkflowEntryRuntimeId},
- * {@link getStructuralEdges}, and {@link getStructuralLoops}. Prefer step-addressed authoring
- * (`entryStepId`, `steps`); `rejectLegacyWorkflowAuthoring` can enforce that at load.
+ * Normalized workflow from validation/load: step fields (`entryStepId`, `steps`, optional
+ * `managerStepId`) and node registry or node-graph `nodes`. Entry and manager runtime ids come from
+ * {@link resolveWorkflowEntryRuntimeId} and {@link resolveWorkflowManagerRuntimeId}; local routing
+ * and repeat loops from {@link getStructuralEdges} and {@link getStructuralLoops}.
  */
 export interface WorkflowJson {
   readonly workflowId: string;
@@ -265,9 +265,8 @@ type WorkflowWithLegacyEdges = WorkflowJson & {
 };
 
 /**
- * Authored `workflow.edges` remain a legacy node-graph companion. Callers that
- * need the raw persisted shape should read it through this helper instead of
- * depending on the primary normalized workflow surface.
+ * Optional persisted `workflow.edges` on legacy node-graph bundles. Local routing is projected via
+ * {@link getStructuralEdges} (step graphs use `steps[].transitions` instead).
  */
 export function getLegacyAuthoredEdges(
   workflow: WorkflowWithLegacyEdges,
@@ -280,9 +279,8 @@ type WorkflowWithLegacyLoops = WorkflowJson & {
 };
 
 /**
- * Authored `workflow.loops` remain a legacy node-graph companion. Callers that
- * need the raw persisted shape should read it through this helper instead of
- * depending on the primary normalized workflow surface.
+ * Optional persisted `workflow.loops` on legacy node-graph bundles. Effective loop rules are
+ * projected via {@link getStructuralLoops}.
  */
 export function getLegacyAuthoredLoops(
   workflow: WorkflowWithLegacyLoops,
@@ -395,8 +393,7 @@ export function getStructuralEdges(
 /**
  * Infers the legacy node-graph "graph entry" node id from {@link getStructuralEdges}
  * (no node id that appears as a `to` value). Ties are broken by workflow
- * `nodes` document order. Normalized bundles do not store authored
- * `entryNodeId` / `managerNodeId`.
+ * `nodes` document order. Step-addressed bundles use `entryStepId` instead of this inference.
  */
 export function inferLegacyNodeGraphGraphEntryNodeId(
   workflow: WorkflowJson,
@@ -937,10 +934,10 @@ export interface LoadOptions {
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
   /**
-   * Legacy authoring gate: `true` always rejects legacy fields; `false` always allows them.
-   * When omitted, `validate.ts` uses `isStrictWorkflowAuthorshipValidation`: strict by default,
-   * unless `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` is set in the environment (used only
-   * where options cannot be threaded, such as selected `runCli` integration tests).
+   * Strict (default) step-addressed normalization vs legacy node-graph when the bundle is not
+   * step-addressed (`false`). Disallowed top-level keys: `REJECTED_AUTHORED_*` in `validate.ts`.
+   * Save drops only in-memory `hasManagerNode` before validation. Omitted: strict unless
+   * `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`.
    */
   readonly rejectLegacyWorkflowAuthoring?: boolean;
 }

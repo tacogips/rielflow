@@ -82,6 +82,44 @@ import {
 export const REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE =
   "is not part of the step-addressed workflow schema";
 
+/**
+ * Rejection text for top-level `workflow.edges` on step-addressed bundles (local
+ * routing belongs on `workflow.steps[].transitions`).
+ */
+export const REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE =
+  "is not part of the step-addressed workflow schema; local step-to-step routing must be authored on workflow.steps[].transitions";
+
+/**
+ * Authored `workflow.json` only: legacy top-level node/structural aliases rejected in the
+ * legacy node-graph normalizer. Step graphs use
+ * {@link REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS} (superset). Unrelated to
+ * session/API fields that reuse the name `managerNodeId` for a **step** id.
+ */
+export const REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS = [
+  "managerNodeId",
+  "entryNodeId",
+  "subWorkflows",
+] as const;
+
+/** Step-addressed-only rejects: present on step graphs but not in the legacy node-graph top-level rejection set. */
+export const REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS = [
+  "workflowCalls",
+  "subWorkflowConversations",
+  "edges",
+  "loops",
+  "branching",
+] as const;
+
+/**
+ * Full set of disallowed top-level `workflow.json` keys when the bundle is
+ * treated as step-addressed (`entryStepId` with `nodes` and `steps`), including
+ * {@link REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS}.
+ */
+export const REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS = [
+  ...REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS,
+  ...REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS,
+] as const;
+
 interface RawBundle {
   readonly workflow: unknown;
   readonly nodePayloads: Readonly<Record<string, unknown>>;
@@ -112,11 +150,16 @@ export interface WorkflowValidationOptions
 }
 
 /**
- * When true, authored bundles must use step-addressed-only fields (legacy authoring rejected).
- * Explicit `false`/`true` always wins; when omitted, production defaults to strict. Callers that
- * load legacy-shaped fixtures (including unit tests) should pass `rejectLegacyWorkflowAuthoring:
- * false` on `LoadOptions`. Setting `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true` still makes
- * omission non-strict for processes that cannot thread options (for example some `runCli` tests).
+ * Controls whether `normalizeWorkflow` may take the legacy **node-graph** branch (no `steps` and
+ * no `entryStepId` / `managerStepId`).
+ *
+ * When this returns `true`, only {@link normalizeStepAddressedWorkflow} runs. When it returns
+ * `false`, step-shaped bundles (any of `steps`, `entryStepId`, `managerStepId`) still use
+ * {@link normalizeStepAddressedWorkflow}; only pure node-graph inputs use the legacy normalizer.
+ *
+ * Explicit `rejectLegacyWorkflowAuthoring: false` / `true` always wins; when omitted, production
+ * defaults to strict unless `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`. Callers loading legacy
+ * **node-graph** disk fixtures should pass `rejectLegacyWorkflowAuthoring: false`.
  */
 export function isStrictWorkflowAuthorshipValidation(
   options: Pick<WorkflowValidationOptions, "rejectLegacyWorkflowAuthoring">,
@@ -2271,22 +2314,15 @@ function normalizeStepAddressedWorkflow(
     }
   }
 
-  for (const legacyField of [
-    "managerNodeId",
-    "entryNodeId",
-    "workflowCalls",
-    "subWorkflows",
-    "subWorkflowConversations",
-    "edges",
-    "loops",
-    "branching",
-  ] as const) {
+  for (const legacyField of REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS) {
     if (workflow[legacyField] !== undefined) {
       issues.push(
         makeIssue(
           "error",
           `workflow.${legacyField}`,
-          REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
+          legacyField === "edges"
+            ? REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE
+            : REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
         ),
       );
     }
@@ -2745,11 +2781,7 @@ function normalizeWorkflow(
     );
     description = null;
   }
-  for (const key of [
-    "managerNodeId",
-    "entryNodeId",
-    "subWorkflows",
-  ] as const) {
+  for (const key of REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS) {
     if (workflow[key] !== undefined) {
       issues.push(
         makeIssue(
@@ -4566,7 +4598,8 @@ function resolveCalleeWorkflowEntry(input: {
  * When `workflowRoot` is available, ensures each cross-workflow step transition's
  * `toStepId` matches the step id where the callee run starts: `managerStepId` when
  * present, otherwise `entryStepId` (or an inferred single manager-role step).
- * Legacy callee `entryNodeId` is not used for this contract.
+ * Callee start steps are resolved from `managerStepId`, `entryStepId`, or a
+ * single manager-role step only (not from rejected legacy top-level node alias fields on disk).
  */
 function validateCrossWorkflowCalleeEntryAlignmentSync(
   bundle: NormalizedWorkflowBundle,

@@ -25,7 +25,7 @@ Expected stable inspection facts:
 
 - `hasManagerNode` is `false`
 - authored `entryStepId` is `reviewer`
-- compatibility inspection still reports `entryNodeId` as `reviewer`
+- inspection reports `entryStepId` as `reviewer` and does not surface a top-level `entryNodeId` field
 - `counts.workflowCalls` is `0`
 
 ## Run

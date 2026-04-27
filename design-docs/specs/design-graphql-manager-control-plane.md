@@ -249,8 +249,7 @@ This separation avoids overloading a user- or manager-authored freeform message 
 
 Manager send must be scope-bound:
 
-- root manager may request root-scope actions and sub-workflow starts
-- subworkflow-manager may request only actions within its owned sub-workflow
+- the active manager (root or step-addressed manager role) may request actions allowed for the current workflow graph and `workflowCall` / cross-execution handoffs; structural nested sub-workflow managers are not a separate scope
 - worker nodes do not get manager-session credentials
 
 Required ambient identity for LLM-triggered CLI use:
@@ -412,7 +411,7 @@ Even if `communicationId` is practically unique within a workflow execution, all
 `Communication` query responses must include:
 
 - identifiers: `workflowId`, `workflowExecutionId`, `communicationId`
-- sender/recipient: `fromNodeId`, `toNodeId`, `fromSubWorkflowId`, `toSubWorkflowId`
+- sender/recipient: `fromNodeId`, `toNodeId`
 - lifecycle: `status`, `deliveryKind`, `routingScope`, `transitionWhen`
 - provenance: `sourceNodeExecId`, `payloadRef`
 - delivery bookkeeping: `deliveryAttemptIds`, `activeDeliveryAttemptId`
@@ -481,20 +480,10 @@ Communication replay and delivery retry are manager-scoped control-plane mutatio
 
 Rules:
 
-- root-manager scope may target only root-scope communications
-  - effective root scope means both sender and recipient resolve outside any sub-workflow
-- subworkflow-manager scope may target only communications that stay entirely within the subworkflow-manager's owned sub-workflow
-  - effective sub-workflow scope means both sender and recipient resolve to that owned sub-workflow
-- root managers must not replay or retry communications that cross a sub-workflow boundary or operate entirely inside a child sub-workflow
-  - those cases must be handled by re-invoking the sub-workflow or by the owning subworkflow-manager
-- subworkflow-managers must not replay or retry parent-to-sub-workflow, cross-sub-workflow, or root-scope communications
+- replay and retry remain manager-scoped: the acting manager must own the delivery attempt for the targeted communication (same rules as other control-plane mutations)
+- `routingScope` is `intra-workflow` for normal graph deliveries and `external-mailbox` for boundary human input / published output; persisted artifacts may still carry legacy scope strings until re-saved, but loaders normalize them to the current enum
 
-Compatibility rule for previously persisted artifacts:
-
-- scope enforcement should first use `fromSubWorkflowId` and `toSubWorkflowId`
-- if either side is absent on a legacy record, the runtime should derive the effective scope from workflow node ownership of `fromNodeId` and `toNodeId`
-
-This keeps current artifacts usable during migration while still enforcing the intended control boundary.
+Scope enforcement for replay and retry uses resolved manager ownership for `fromNodeId` and `toNodeId` against the loaded workflow graph together with `routingScope`. Structural sub-workflow identity fields are not part of the active communication record.
 
 ## Manager Send Semantics
 
@@ -532,18 +521,20 @@ For HTTP GraphQL calls, the ambient manager-session context is carried by transp
 
 The GraphQL mutation must accept a typed action list rather than relying on runtime interpretation of freeform prose for privileged operations.
 
-Supported first-iteration action variants:
+Supported action variants (must match `src/workflow/manager-control.ts`; structural sub-workflow control actions are **not** supported):
 
 - `planner-note`
   - stores an informational note only
-- `start-sub-workflow`
-  - `{ subWorkflowId }`
-- `deliver-to-child-input`
-  - `{ inputNodeId }`
-- `retry-node`
-  - `{ nodeId }`
+- `retry-step`
+  - `{ stepId }` (step / node-runtime id in the loaded workflow)
+- `execute-optional-step`
+  - `{ stepId }`
+- `skip-optional-step`
+  - `{ stepId, reason? }`
 - `replay-communication`
   - `{ communicationId, reason? }`
+
+Removed / rejected at parse time (do not use in payloads): `start-sub-workflow`, `deliver-to-child-input`, `retry-node`, `execute-optional-node`, `skip-optional-node`, and other non-step action shapes.
 
 Rules:
 
@@ -560,9 +551,8 @@ Rules:
 3. Persist the raw manager message into a manager-session log.
 4. Validate the typed action envelope into one or more:
    - planner-only update,
-   - child-start request,
-   - child-input delivery request,
-   - node retry request,
+   - step retry request,
+   - optional-step execute/skip requests,
    - communication replay request,
    - informational/no-op note.
 5. Validate ownership and workflow-structure constraints.
@@ -609,16 +599,15 @@ The current mailbox persistence model assumes each durable communication referen
 That assumption is valid for:
 
 - ordinary node-to-node edge transitions,
-- conversation turns between sub-workflow managers,
+- conversation turns between managers in the same workflow execution,
 - replay/retry of an existing communication.
 
 It is not yet sufficient for a manager-authored `sendManagerMessage` request that originates during an active manager tool session before the manager node has published a final `output.json`.
 
 Implications:
 
-- `planner-note`, `retry-node`, and `replay-communication` can be implemented immediately on top of the current foundation
-- direct manager-authored mailbox sends such as `deliver-to-child-input` require a new durable payload provenance model
-- `start-sub-workflow` may be represented as a queue/planner action without mailbox materialization in the interim, but mailbox-backed child-start payloads also require the same provenance work
+- `planner-note`, `retry-step`, optional-step actions, and `replay-communication` are implemented on top of the current foundation (node-output and manager-message `payloadRef` shapes as in `design-data-model.md`)
+- historical designs that relied on `deliver-to-child-input` / `start-sub-workflow` as manager-control actions are retired; any future manager-originated mailbox send that is not covered by the current discriminated `payloadRef` union would need an explicit new design slice
 
 Required follow-up design direction:
 
@@ -641,14 +630,14 @@ Concrete direction for the next implementation slice:
   - `payload.attachments`
   - `payload.actions`
 - widen `payloadRef` to a discriminated union with a shared artifact locator:
-  - `NodeOutputRef { kind: "node-output", workflowId, workflowExecutionId, subWorkflowId?, outputNodeId, nodeExecId, artifactDir }`
-  - `ManagerMessagePayloadRef { kind: "manager-message", workflowId, workflowExecutionId, subWorkflowId?, outputNodeId, nodeExecId, artifactDir, managerSessionId, managerMessageId, managerNodeId, managerNodeExecId }`
+  - `NodeOutputRef { kind: "node-output", workflowId, workflowExecutionId, outputNodeId, nodeExecId, artifactDir }`
+  - `ManagerMessagePayloadRef { kind: "manager-message", workflowId, workflowExecutionId, outputNodeId, nodeExecId, artifactDir, managerSessionId, managerMessageId, managerNodeId, managerNodeExecId }`
 - preserve `sourceNodeExecId` on the communication record:
   - for node-output-backed deliveries it remains the producing node execution id
   - for manager-message-backed deliveries it is the active `managerNodeExecId`
 - keep replay/retry compatibility by reading the existing communication outbox payload first and falling back to `payloadRef.artifactDir/output.json`
 
-With that widened provenance model in place, `deliver-to-child-input` can be accepted for an owning subworkflow-manager because the mailbox delivery now has durable source artifacts even before the manager node publishes its final node output.
+With that widened provenance model in place, manager-message-backed communications remain replayable using the same artifact tree rules as today; optional future extensions would be new action types and an explicit compatibility plan, not the removed structural control actions.
 
 ### Output Shape
 

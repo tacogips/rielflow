@@ -198,7 +198,6 @@ Recommended additive session fields:
 interface PendingOptionalNodeDecision {
   readonly nodeId: string;
   readonly owningManagerNodeId: string;
-  readonly subWorkflowId?: string;
   readonly requestedAt: string;
   readonly status: "pending" | "execute" | "skip";
   readonly decidedAt?: string;

@@ -28,19 +28,7 @@ A workflow bundle contains:
 
 ### `WorkflowJson`
 
-Current fields:
-
-- `workflowId`
-- `description`
-- `defaults`
-- optional `prompts`
-- `managerNodeId`
-- `subWorkflows`
-- optional `subWorkflowConversations`
-- `nodes`
-- `edges`
-- optional `loops`
-- `branching`
+Authoring and normalized shapes are defined in `src/workflow/types.ts` (`AuthoredWorkflowJson`, `WorkflowJson`). Step-addressed bundles use `entryStepId`, `steps`, and a parallel `nodeRegistry` (plus optional `managerStepId`). Legacy node-graph `workflow.json` may list companion fields such as `edges` / optional `loops`; top-level `managerNodeId` / `entryNodeId` are **rejected** by validation (use node `kind` / `role` and structural edges; the normalized `WorkflowJson` never carries those keys). Runners and UI use `resolveWorkflowManagerRuntimeId` / `resolveWorkflowEntryRuntimeId` and structural edge projection instead. Authored `subWorkflows`, `branching`, `workflowCalls`, and related structural conversation metadata are rejected by validation.
 
 ### `WorkflowDefaults`
 
@@ -66,20 +54,12 @@ Current `NodeKind`:
 - `branch-judge`
 - `loop-judge`
 - `root-manager`
-- `subworkflow-manager`
 - `input`
 - `output`
 
-### `SubWorkflowRef`
+### Structural sub-workflows (removed from the type surface)
 
-- `id`
-- `description`
-- `managerNodeId`
-- `inputNodeId`
-- `outputNodeId`
-- `nodeIds`
-- `inputSources`
-- optional `block`
+The legacy structural `subWorkflows` graph (`SubWorkflowRef`, nested input sources, and block metadata) is no longer modeled in `src/workflow/types.ts`. Disk bundles that still declare `workflow.subWorkflows` fail validation; tests that need a stand-in shape define local fixture types instead of importing shared types.
 
 ### `SubWorkflowConversation`
 
@@ -312,8 +292,6 @@ Fields:
 - `communicationId`
 - `fromNodeId`
 - `toNodeId`
-- optional `fromSubWorkflowId`
-- optional `toSubWorkflowId`
 - `routingScope`
 - `sourceNodeExecId`
 - `payloadRef`
@@ -335,10 +313,10 @@ Fields:
 
 ### Routing Scopes
 
-- `parent-to-sub-workflow`
-- `cross-sub-workflow`
-- `intra-sub-workflow`
-- `external-mailbox`
+- `intra-workflow` — node-to-node (or step-to-step) delivery within the same workflow execution artifact root
+- `external-mailbox` — human input / published workflow output and other boundary I/O
+
+On load, `normalizeSessionState` runs each communication’s `routingScope` through `normalizeCommunicationRoutingScope`: only `external-mailbox` is kept; any other persisted string is coerced to `intra-workflow` (including obsolete labels from older builds).
 
 ### Delivery Kinds
 
@@ -370,7 +348,6 @@ Fields:
 - optional `kind: "node-output"`
 - `workflowExecutionId`
 - `workflowId`
-- optional `subWorkflowId`
 - `outputNodeId`
 - `nodeExecId`
 - `artifactDir`
@@ -383,15 +360,13 @@ The runtime uses `OutputRef` to point at canonical published node output artifac
 
 - `conversationId`
 - `turnIndex`
-- `fromSubWorkflowId`
-- `toSubWorkflowId`
 - `fromManagerNodeId`
 - `toManagerNodeId`
 - `communicationId`
 - `outputRef`
 - `sentAt`
 
-This model tracks cross-sub-workflow conversation routing after manager-node execution.
+This model tracks manager-to-manager conversation turns using the same communication and `OutputRef` identity fields as edge deliveries.
 
 ## Runtime Variables
 
@@ -468,11 +443,10 @@ This DB is intentionally secondary to the filesystem artifact contract.
 Important current rules:
 
 - node ids must match the repository's slug-like id pattern
-- `workflow.managerNodeId` must point at the root manager
-- sub-workflow boundaries must be internally consistent and non-overlapping
+- for legacy node-graph bundles, exactly one `kind: "root-manager"` node (or a single `role: "manager"` node) is required unless the flow is manager-less, with manager/entry **runtime** ids derived from the graph; normalized bundles do not carry `workflow.managerNodeId` as stored convenience fields
 - branch/loop block semantics are validated against edges and loops
 - `output` contracts reject unsupported fields
-- `kind: "root-manager"` and `kind: "subworkflow-manager"` are the canonical manager roles
+- `kind: "root-manager"` is the canonical **kind** for the workflow manager node; structural `subworkflow-manager` kind strings are rejected
 
 Important current absences:
 

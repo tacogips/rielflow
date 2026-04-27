@@ -17,7 +17,10 @@ import {
   resolveWorkflowManagerRuntimeId,
   type LoadOptions,
 } from "./types";
-import { REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE } from "./validate";
+import {
+  REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
+  REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
+} from "./validate";
 
 const testLegacyAuthorshipOk: Pick<
   LoadOptions,
@@ -161,7 +164,7 @@ describe("saveWorkflowToDisk", () => {
     ).not.toHaveProperty("managerType");
   });
 
-  test("keeps worker-only workflows authored without compatibility manager fields on save", async () => {
+  test("keeps worker-only workflows authored without top-level manager fields on save", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("solo", {
       workflowRoot: root,
@@ -1193,7 +1196,6 @@ describe("saveWorkflowToDisk", () => {
       {
         workflow: {
           ...loaded.value.bundle.workflow,
-          entryStepId: undefined,
           entryNodeId: "manager-node",
         },
         nodePayloads: loaded.value.bundle.nodePayloads,
@@ -1213,10 +1215,6 @@ describe("saveWorkflowToDisk", () => {
         expect.objectContaining({
           path: "workflow.entryNodeId",
           message: "is not part of the step-addressed workflow schema",
-        }),
-        expect.objectContaining({
-          path: "workflow.entryStepId",
-          message: "must be a non-empty string",
         }),
       ]),
     );
@@ -1318,8 +1316,7 @@ describe("saveWorkflowToDisk", () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: "workflow.edges",
-          message:
-            "is not part of the step-addressed workflow schema; local step-to-step routing must be authored on workflow.steps[].transitions",
+          message: REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
         }),
       ]),
     );
@@ -1368,8 +1365,7 @@ describe("saveWorkflowToDisk", () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: "workflow.edges",
-          message:
-            "is not part of the step-addressed workflow schema; local step-to-step routing must be authored on workflow.steps[].transitions",
+          message: REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
         }),
       ]),
     );
@@ -1825,7 +1821,7 @@ describe("saveWorkflowToDisk", () => {
     ).toBe(false);
   });
 
-  test("strips role-authored managerNodeId and entryNodeId on save before legacy manager-entry semantic checks can fire", async () => {
+  test("rejects save when role-authored input includes disallowed top-level managerNodeId or entryNodeId (not stripped; same as load/validate for on-disk workflow.json)", async () => {
     const root = await makeTempDir();
 
     const saveResult = await saveWorkflowToDisk(
@@ -1864,38 +1860,23 @@ describe("saveWorkflowToDisk", () => {
         rejectLegacyWorkflowAuthoring: false,
       },
     );
-    expect(saveResult.ok).toBe(true);
-    if (!saveResult.ok) {
+    expect(saveResult.ok).toBe(false);
+    if (saveResult.ok) {
       return;
     }
-
-    const workflowJsonText = await readFile(
-      path.join(root, "role-manager-entry-legacy-aliases", "workflow.json"),
-      "utf8",
+    expect(saveResult.error.code).toBe("VALIDATION");
+    expect(saveResult.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.managerNodeId",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
+        }),
+        expect.objectContaining({
+          path: "workflow.entryNodeId",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
+        }),
+      ]),
     );
-    expect(workflowJsonText).not.toContain('"managerNodeId"');
-    expect(workflowJsonText).not.toContain('"entryNodeId"');
-
-    const reloaded = await loadWorkflowFromDisk(
-      "role-manager-entry-legacy-aliases",
-      {
-        workflowRoot: root,
-        rejectLegacyWorkflowAuthoring: false,
-      },
-    );
-    expect(reloaded.ok).toBe(true);
-    if (!reloaded.ok) {
-      return;
-    }
-
-    expect(
-      resolveWorkflowManagerRuntimeId(reloaded.value.bundle.workflow),
-    ).toBe("divedra-manager");
-    expect(
-      (reloaded.value.bundle.workflow as unknown as Record<string, unknown>)[
-        "entryNodeId"
-      ],
-    ).toBeUndefined();
   });
 
   test("rejects save when role-authored bundles declare empty structural subWorkflows", async () => {
@@ -2034,18 +2015,7 @@ describe("saveWorkflowToDisk", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120000,
           },
-          subWorkflows: [
-            {
-              id: "legacy-lane",
-              description: "legacy lane",
-              managerNodeId: "",
-              inputNodeId: "missing-input",
-              outputNodeId: "missing-output",
-              nodeIds: [],
-              inputSources: [{ type: "not-a-real-source" }],
-              block: { type: "not-a-real-block" },
-            },
-          ],
+          subWorkflows: [{ id: "legacy-lane" }],
           nodes: [
             {
               id: "writer",
@@ -2086,14 +2056,6 @@ describe("saveWorkflowToDisk", () => {
         }),
       ]),
     );
-    expect(
-      saveResult.error.issues?.some(
-        (issue) =>
-          issue.path.startsWith("workflow.subWorkflows[0].managerNodeId") ||
-          issue.path.startsWith("workflow.subWorkflows[0].inputSources") ||
-          issue.path.startsWith("workflow.subWorkflows[0].block"),
-      ),
-    ).toBe(false);
   });
 
   test("rejects save when role-authored bundles declare empty structural subWorkflowConversations", async () => {
@@ -2280,7 +2242,6 @@ describe("saveWorkflowToDisk", () => {
               maxLoopIterations: 3,
               nodeTimeoutMs: 120000,
             },
-            entryNodeId: "writer",
             [entry.field]: entry.value,
             nodes: [
               {
@@ -2451,40 +2412,12 @@ describe("saveWorkflowToDisk", () => {
       workflowId: "legacy-authored-subworkflows",
       description: "legacy workflow with authored structural sub-workflows",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      subWorkflows: [
-        {
-          id: "review-lane",
-          description: "review lane",
-          managerNodeId: "review-manager",
-          inputNodeId: "review-input",
-          outputNodeId: "review-output",
-          nodeIds: ["review-manager", "review-input", "review-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
+      subWorkflows: [{ id: "review-lane" }],
       nodes: [
         {
           id: "divedra-manager",
           kind: "root-manager",
           nodeFile: "nodes/node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "review-manager",
-          kind: "task",
-          nodeFile: "nodes/node-review-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "review-input",
-          kind: "input",
-          nodeFile: "nodes/node-review-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "review-output",
-          kind: "output",
-          nodeFile: "nodes/node-review-output.json",
           completion: { type: "none" },
         },
       ],
@@ -2497,36 +2430,6 @@ describe("saveWorkflowToDisk", () => {
         executionBackend: "codex-agent",
         model: "gpt-5-nano",
         promptTemplate: "manager",
-        variables: {},
-      },
-    );
-    await writeJson(
-      path.join(workflowDirectory, "nodes", "node-review-manager.json"),
-      {
-        id: "review-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "review-manager",
-        variables: {},
-      },
-    );
-    await writeJson(
-      path.join(workflowDirectory, "nodes", "node-review-input.json"),
-      {
-        id: "review-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "review-input",
-        variables: {},
-      },
-    );
-    await writeJson(
-      path.join(workflowDirectory, "nodes", "node-review-output.json"),
-      {
-        id: "review-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "review-output",
         variables: {},
       },
     );
@@ -2564,18 +2467,7 @@ describe("saveWorkflowToDisk", () => {
       description:
         "legacy workflow with invalid authored structural sub-workflows",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      subWorkflows: [
-        {
-          id: "review-lane",
-          description: "review lane",
-          managerNodeId: "",
-          inputNodeId: "missing-input",
-          outputNodeId: "missing-output",
-          nodeIds: [],
-          inputSources: [{ type: "not-a-real-source" }],
-          block: { type: "not-a-real-block" },
-        },
-      ],
+      subWorkflows: [{ id: "review-lane" }],
       nodes: [
         {
           id: "divedra-manager",
@@ -2618,14 +2510,6 @@ describe("saveWorkflowToDisk", () => {
         }),
       ]),
     );
-    expect(
-      loaded.error.issues?.some(
-        (issue) =>
-          issue.path.startsWith("workflow.subWorkflows[0].managerNodeId") ||
-          issue.path.startsWith("workflow.subWorkflows[0].inputSources") ||
-          issue.path.startsWith("workflow.subWorkflows[0].block"),
-      ),
-    ).toBe(false);
   });
 
   test("rejects save when legacy workflows still author subWorkflowConversations", async () => {
@@ -2774,7 +2658,7 @@ describe("saveWorkflowToDisk", () => {
     expect(workflowJsonText).not.toContain('"loops"');
   });
 
-  test("drops no-op legacy compatibility companions when saving raw legacy workflow input over an existing bundle", async () => {
+  test("drops no-op legacy graph companion arrays when saving raw legacy workflow input over an existing bundle", async () => {
     const root = await makeTempDir();
     const workflowDirectory = path.join(root, "legacy-raw-noop-companions");
     await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
@@ -3003,7 +2887,7 @@ describe("saveWorkflowToDisk", () => {
     ).toBeUndefined();
   });
 
-  test("does not persist legacy entryNodeId on save; still resolves entry at runtime for manager-less bundles", async () => {
+  test("manager-less legacy roundtrip save does not write top-level managerNodeId or entryNodeId; entry still infers at runtime", async () => {
     const root = await makeTempDir();
     const workflowDirectory = path.join(root, "legacy-managerless-save");
     await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
@@ -3376,7 +3260,7 @@ describe("saveWorkflowToDisk", () => {
     expect(reloaded.value.bundle.workflow.entryStepId).toBe("manager");
   });
 
-  test("preserves omitted normalized workflow fields instead of leaking compatibility defaults on save", async () => {
+  test("preserves omitted normalized workflow fields instead of leaking derived defaults on save", async () => {
     const root = await makeTempDir();
 
     const saveResult = await saveWorkflowToDisk(

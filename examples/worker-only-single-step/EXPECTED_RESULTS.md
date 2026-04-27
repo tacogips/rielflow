@@ -25,7 +25,7 @@ Expected stable inspection facts:
 
 - `hasManagerNode` is `false`
 - authored `entryStepId` is `main-worker`
-- the step-first inspection summary does not emit legacy-only fields such as `entryNodeId` or `managerNodeId`; `managerStepId` is absent for this worker-only bundle (the loaded workflow object may still carry a normalized `entryNodeId` for runtime compatibility)
+- the step-first inspection summary does not emit top-level `entryNodeId` or `managerNodeId`; `managerStepId` is absent for this worker-only bundle
 
 ## Run
 

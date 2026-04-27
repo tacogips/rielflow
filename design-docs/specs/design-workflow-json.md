@@ -150,7 +150,8 @@ Validation rules:
 - `managerStepId`, when present, must resolve to an authored step
 - every step must reference a node registry entry through `nodeId`
 - `steps[]` must be non-empty
-- dedicated authored fields such as `workflowCalls`, `edges`, `loops`, `branching`, `subWorkflows`, and `subWorkflowConversations` are not part of the schema
+- dedicated legacy top-level fields are rejected by key set: all step-addressed bundles use `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` in `src/workflow/validate.ts` (includes `managerNodeId`, `entryNodeId`, `subWorkflows`, `workflowCalls`, `subWorkflowConversations`, `edges`, `loops`, and `branching`); the legacy **node-graph** load branch additionally rejects the subset `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (`managerNodeId`, `entryNodeId`, `subWorkflows`). The exact rejection strings are defined alongside those exports
+- the save path may strip only normalized in-memory `hasManagerNode` from workflow input before writing; it does not strip `managerNodeId`, `entryNodeId`, `subWorkflows`, or other disallowed keys (validation rejects them, same as for on-disk `workflow.json`)
 - the validator rejects top-level `workflow.workflowCalls` whenever the bundle is treated as step-addressed (`entryStepId` with `steps[]`); use step transitions instead
 - cross-workflow invocation uses the same execution-address model as ordinary step calls rather than a dedicated top-level `workflowCalls` section
 - calling another workflow means targeting an explicit step in that workflow; the canonical workflow-level entry is the callee workflow's `managerStepId`, or `entryStepId` when the callee is worker-only
@@ -474,7 +475,6 @@ Supported `source` values:
 
 - `variables`
 - `node-output`
-- `sub-workflow-output`
 - `workflow-output`
 - `human-input`
 - `conversation-transcript`
