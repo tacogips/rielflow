@@ -153,10 +153,10 @@ Current runtime contract for this transition:
 - after `callerNodeId` succeeds, matching workflow calls execute in authored order
 - the callee receives a reserved `runtimeVariables.workflowCall` object containing:
   - the workflow-call id
-  - the parent workflow id and execution id
+  - the invoking workflow id and execution id (serialized as `parentWorkflowId` and `parentWorkflowExecutionId` for on-disk and template compatibility; they name the caller, not a structural sub-workflow parent)
   - the caller node id
   - the caller business payload as `workflowCall.input`
-- runtime-owned call artifacts are written under the caller execution artifact directory
+- runtime-owned call artifacts are written under the caller execution artifact directory as `workflow-calls/<call-id>.json`; preferred JSON fields use caller/callee naming (`callerNodeExecId`, `calleeWorkflowId`, …). Legacy `parentNodeExecId` / `child*` keys mirror the same values for older tooling and do not denote a structural parent/child workflow
 - when `resultNodeId` is present, the callee result is delivered to that node as an ordinary upstream communication with transition key `workflow-call:<id>`
 - the callee result is selected from the callee's published workflow output when available, and otherwise falls back to the latest succeeded callee node execution for role-authored worker-only workflows
 - recursive or self-referential workflow-call chains are unsupported in this transition runtime and should fail readiness/execution rather than re-enter indefinitely

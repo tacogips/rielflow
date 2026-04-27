@@ -31,7 +31,7 @@ import {
   toStepAddressedWorkflowForSupervision,
 } from "./superviser";
 
-function stripForChildRun(o: WorkflowRunOptions): WorkflowRunOptions {
+function stripRunOptionsForSuperviserControlPlane(o: WorkflowRunOptions): WorkflowRunOptions {
   const {
     nestedSuperviserDriver: _n,
     superviserControl: _c,
@@ -47,13 +47,14 @@ function stripForChildRun(o: WorkflowRunOptions): WorkflowRunOptions {
 }
 
 /**
- * Strips run-scoped options so a nested superviser or target child run does not inherit the wrong
- * session routing fields.
+ * Strips outer-run routing, auto-improve loop, and nested-superviser driver fields so invocations
+ * of the supervised target workflow from the superviser control plane do not inherit the wrong
+ * `sessionId`, resume, or rerun context.
  */
 export function workflowRunBaseForSuperviserControl(
   o: WorkflowRunOptions,
 ): WorkflowRunOptions {
-  return stripForChildRun(o);
+  return stripRunOptionsForSuperviserControlPlane(o);
 }
 
 function targetSessionMismatchError(operation: string): string {
@@ -196,16 +197,16 @@ export function buildSuperviserRuntimeControl(input: {
       if (!targetSessionResult.ok) {
         return targetSessionResult;
       }
-      const child = stripForChildRun(base);
+      const baseForTargetRun = stripRunOptionsForSuperviserControlPlane(base);
       const runtimeVariables =
         start.runtimeVariables === undefined
-          ? child.runtimeVariables
+          ? baseForTargetRun.runtimeVariables
           : {
-              ...(child.runtimeVariables ?? {}),
+              ...(baseForTargetRun.runtimeVariables ?? {}),
               ...start.runtimeVariables,
             };
       const r = await runWorkflow(targetWorkflowName, {
-        ...child,
+        ...baseForTargetRun,
         ...(runtimeVariables === undefined ? {} : { runtimeVariables }),
         autoImprove: start.autoImprove ?? defaultPolicy,
         resumeSessionId: auth.targetSessionId,
@@ -291,7 +292,7 @@ export function buildSuperviserRuntimeControl(input: {
           "rerun-workflow: target workflow must have entryStepId with non-empty steps",
         );
       }
-      const child = stripForChildRun(base);
+      const baseForTargetRun = stripRunOptionsForSuperviserControlPlane(base);
       const rerunFromStepId = resolveNestedSuperviserAddonRerunFromStepId(
         rerunInput.rerunFromStepId,
         targetSession,
@@ -299,7 +300,7 @@ export function buildSuperviserRuntimeControl(input: {
         stepAddressed,
       );
       const res = await runWorkflow(targetWorkflowName, {
-        ...child,
+        ...baseForTargetRun,
         autoImprove: defaultPolicy,
         rerunFromSessionId: rerunInput.sessionId,
         rerunFromStepId,

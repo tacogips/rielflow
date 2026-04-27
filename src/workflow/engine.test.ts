@@ -1235,7 +1235,7 @@ async function createWorkflowCallFixture(
 /**
  * Like {@link createWorkflowCallFixture} but the workflow call is conditioned with
  * `when: "need_review"`. Deterministic adapter output does not satisfy it, so the
- * callee is never run (see `executeWorkflowCallsForNode` gating by `entry.when`).
+ * callee is never run (see `executeCrossWorkflowDispatchesForNode` gating by `entry.when`).
  */
 async function createWhenGatedWorkflowCallFixture(
   root: string,
@@ -2988,7 +2988,7 @@ describe("runWorkflow", () => {
     expect(resumed.error.sessionId).toBe(first.value.session.sessionId);
   });
 
-  test("executes step-addressed cross-workflow transitions and delivers child workflow results", async () => {
+  test("executes step-addressed cross-workflow transitions and delivers callee workflow results", async () => {
     const root = await makeTempDir();
     await createWorkflowCallFixture(root, "workflow-call-fixture");
     await createWorkflowCallCalleeFixture(root, "review-flow");
@@ -3020,6 +3020,36 @@ describe("runWorkflow", () => {
     expect(workflowCallCommunication?.toNodeId).toBe("review-result");
     expect(workflowCallCommunication?.payloadRef.workflowId).toBe(
       "review-flow",
+    );
+
+    const writerExecution = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "writer",
+    );
+    expect(writerExecution).toBeDefined();
+    const crossWfArtifactPath = path.join(
+      root,
+      "artifacts",
+      "workflow-call-fixture",
+      "executions",
+      result.value.session.sessionId,
+      "nodes",
+      "writer",
+      writerExecution!.nodeExecId,
+      "workflow-calls",
+      "__cw:writer.json",
+    );
+    const crossWfParsed = JSON.parse(
+      await readFile(crossWfArtifactPath, "utf8"),
+    ) as Record<string, unknown>;
+    expect(crossWfParsed["calleeWorkflowId"]).toBe("review-flow");
+    expect(crossWfParsed["callerNodeExecId"]).toBe(
+      crossWfParsed["parentNodeExecId"],
+    );
+    expect(crossWfParsed["childWorkflowId"]).toBe(
+      crossWfParsed["calleeWorkflowId"],
+    );
+    expect(crossWfParsed["childSessionId"]).toBe(
+      crossWfParsed["calleeSessionId"],
     );
   });
 
@@ -3102,7 +3132,9 @@ describe("runWorkflow", () => {
       return;
     }
 
-    expect(result.error.message).toContain("workflow-call '__cw:writer'");
+    expect(result.error.message).toContain(
+      "cross-workflow dispatch '__cw:writer'",
+    );
     expect(result.error.message).toContain(
       "completed without a result execution for 'review-result'",
     );

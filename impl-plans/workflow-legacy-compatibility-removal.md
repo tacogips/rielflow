@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-unified-workflow-role-model.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/specs/notes.md`
 **Created**: 2026-04-25
-**Last Updated**: 2026-04-27 (module 2: unified `executeWorkflowCallsForNode` invocation path after node completion; typecheck + full test run; session log)
+**Last Updated**: 2026-04-27 (module 2: cross-workflow dispatch artifact caller/callee keys + design alignment; progress log)
 
 ## Design Document Reference
 
@@ -159,7 +159,7 @@ export interface WorkflowStepTransition {
 
 #### `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/session.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts` (structural `sub-workflow` / `conversation` modules removed; do not reintroduce)
 
-**Status**: IN_PROGRESS (same as above; 2026-04-27 also DRYed manager detection in `node-execution-mailbox.ts` via `isManagerNodeRef`, unified legacy `root-manager` manager reason copy with role-manager text, and replaced mailbox prompt headings that implied parent/child structural sub-workflows—persisted `structure.type` remains `root-workflow` for compatibility; remaining checklist work is deeper engine/session branching and validator `root-manager` inference rules)
+**Status**: IN_PROGRESS (same as above; 2026-04-27 also DRYed manager detection in `node-execution-mailbox.ts` via `isManagerNodeRef`, unified legacy `root-manager` manager reason copy with role-manager text, and replaced mailbox prompt headings that implied parent/child structural sub-workflows—persisted `structure.type` remains `root-workflow` for compatibility; 2026-04-27 also added preferred `caller*`/`callee*` fields on `workflow-calls/*.json` alongside legacy `parent*`/`child*` mirrors; remaining checklist work is deeper engine/session branching and validator `root-manager` inference rules)
 
 ```typescript
 export interface ExecutionAddress {
@@ -290,7 +290,7 @@ interface VerificationCommandSet {
 | Module                                                   | File Path                                                                                                                                                                                                                                                                           | Status      | Tests                                                                                                                                                                                                                                                   |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Authored schema and validation cutover                   | `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/create.ts`                                                                                                                                                       | In Progress | `bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`                                                                                                                                                |
-| Runtime and control cleanup                              | `src/workflow/engine.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/sub-workflow.ts`, `src/workflow/conversation.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts` | In Progress | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/workflow/superviser-control.test.ts src/workflow/superviser-runtime-control-impl.test.ts --runInBand` |
+| Runtime and control cleanup                              | `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/session.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts` | In Progress | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/workflow/superviser-control.test.ts src/workflow/superviser-runtime-control-impl.test.ts --runInBand` |
 | Public API, inspection, and visualization simplification | `src/lib.ts`, `src/cli.ts`, `src/workflow/inspect.ts`, `src/server/graphql-executable-schema.ts`, `src/workflow/visualization.ts`, `src/tui/**/*`                                                                                                                                   | In Progress | `bun test src/lib.test.ts src/cli.test.ts src/graphql/schema.test.ts src/tui/opentui-screen.test.ts --runInBand`                                                                                                                                        |
 | Examples, tests, and design-doc retirement               | `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts`, `impl-plans/*.md`                                                                                                                                                                                       | NOT_STARTED | targeted example, CLI, GraphQL, and workflow fixture coverage                                                                                                                                                                                           |
 | Verification and closeout                                | repository-wide                                                                                                                                                                                                                                                                     | NOT_STARTED | `bun run typecheck:server`, `bun test`, `bun run build`                                                                                                                                                                                                 |
@@ -333,6 +333,55 @@ interface VerificationCommandSet {
 | Architecture fit       | Repository still matches the intended phase-133 end state                                                                                  | PARTIAL                                                                                                         | Authored `workflow.json` rejection lists and save-only `hasManagerNode` strip are verified in `src/workflow` (2026-04-27); `design-unified-workflow-role-model.md` entry/validation bullets match step-addressed authoring and `REJECTED_AUTHORED_*`. Engine/mailbox slice (2026-04-27) removed dead `mailboxDeliveryManagerNodeId`, renamed `isRootScopeOutputNode` to `isWorkflowOutputKindNode`, and de-emphasized structural parent/child mailbox copy; `impl-plans/runtime-owned-external-output-publication.md` Summary aligned with output-**kind** semantics. Full end state still blocked on non-`src/workflow` examples, validator `root-manager` inference, and broader fixture retirement.                                                                                                                                                          |
 
 ## Progress Log
+
+### Session: 2026-04-27 (module 2: engine cross-workflow dispatch internal naming + user-facing error strings)
+
+**Tasks Completed**:
+- `src/workflow/engine.ts`: Renamed internal helpers to match step-derived cross-workflow execution (not authored `workflowCalls`): `executeWorkflowCallsForNode` -> `executeCrossWorkflowDispatchesForNode`, `WorkflowCallExecutionResult` -> `CrossWorkflowDispatchExecutionResult`, `findLatestWorkflowCallResultExecution` -> `findLatestCrossWorkflowCalleeResultExecution`, `buildWorkflowCallRuntimeVariables` -> `buildCrossWorkflowCalleeRuntimeVariables`, `persistWorkflowCallArtifact` -> `persistCrossWorkflowDispatchArtifact`. Added `CROSS_WORKFLOW_DISPATCH_TRANSITION_WHEN_PREFIX` (`workflow-call:`) with JSDoc documenting persisted compatibility; `transitionWhen` / transition `when` values unchanged. User-visible `err(...)` messages now say `cross-workflow dispatch` instead of `workflow-call`. On-disk artifact dir `workflow-calls/`, artifact JSON keys (`child*`, `parentNodeExecId`, etc.), and `runtimeVariables.workflowCall` shape unchanged.
+- `src/workflow/engine.test.ts`: Updated assertion for the renamed error prefix on missing callee result execution.
+
+**Tasks In Progress**: Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review. Modules 3-4: GraphQL/inspect wording, examples, fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server` (pass)
+- `bun test src/workflow/engine.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand` (105 pass)
+- `bun test --runInBand` (1105 pass, 74 files)
+
+### Session: 2026-04-27 (module 2: caller/callee + superviser control-plane naming — verification and merge review)
+
+**Tasks Completed**:
+- Re-ran `bun run typecheck:server` (pass).
+- Re-ran `bun test src/workflow/engine.test.ts src/workflow/superviser-runtime-control-impl.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand` (112 pass, 0 fail).
+- Re-ran `bun test --runInBand` (1105 pass, 0 fail, 74 files).
+- Reviewed worktree diff: `buildWorkflowCallRuntimeVariables` / `buildCrossWorkflowCalleeRunOptions` / `persistWorkflowCallArtifact` / `crossWorkflowDispatchMatchesCallerExecution` / `crossWorkflowDispatchResult` naming; `stripRunOptionsForSuperviserControlPlane` in `superviser-runtime-control-impl.ts`. Serialized `workflowCall` and workflow-call artifact JSON keys remain backward-compatible (`parentWorkflowId`, `parentWorkflowExecutionId`, `parentNodeExecId`, `child*`, `nestedSuperviserSessionId`). `design-unified-workflow-role-model.md` documents invoking workflow vs historical parent key names. Architecture fit: step-addressed cross-workflow dispatch and flat superviser control; protected `architecture.md` / `design-step-run-history-rerun.md` unchanged.
+
+**Tasks In Progress**: Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review. Modules 3-4: GraphQL/inspect wording, examples, fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server`
+- `bun test src/workflow/engine.test.ts src/workflow/superviser-runtime-control-impl.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand`
+- `bun test --runInBand` (use when engine/superviser/cross-workflow touch is broad)
+
+### Session: 2026-04-27 (module 2: engine cross-workflow + superviser driver flat wording)
+
+**Tasks Completed**:
+- `src/workflow/engine.ts`: `buildWorkflowCallRuntimeVariables` uses `callerRuntimeVariables` / `callerWorkflowId` / `callerWorkflowExecutionId` (serialized `workflowCall.parentWorkflowId` / `parentWorkflowExecutionId` unchanged). `buildNestedCrossWorkflowRunOptions` renamed to `buildCrossWorkflowCalleeRunOptions` with JSDoc (sibling bundle invocation, not structural child). `persistWorkflowCallArtifact` inputs `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSession`; on-disk artifact keys `parentNodeExecId` / `child*` unchanged. JSDoc on `findLatestWorkflowCallResultExecution` for callee output handoff vs manager-less fallback. Renamed `workflowCallMatchesCallerExecution` to `crossWorkflowDispatchMatchesCallerExecution`. Post-node completion uses local `crossWorkflowDispatchResult`; rare fallback message `cross-workflow dispatch execution failed`. `crossWorkflowInvocationStack` JSDoc describes call-stack cycle guard (not structural nesting). `runNestedSuperviserSessionDriver` locals renamed away from `nested`/`WithNested` session phrasing to `superviserRunSessionId` / `sessionWithSuperviserRunId` / `resumeSuperviserRunSession`; load failure prefix `nested superviser: load session for superviser run:` (no structural sub-workflow implication; distinct from loading the superviser bundle by id); persisted `nestedSuperviserSessionId` field unchanged.
+- `src/workflow/superviser-runtime-control-impl.ts`: internal `stripForChildRun` renamed to `stripRunOptionsForSuperviserControlPlane`; JSDoc and locals `baseForTargetRun` replace misleading “child” run naming for supervised target invocations.
+- `design-docs/specs/design-unified-workflow-role-model.md`: `workflowCall` runtime-variable bullet — invoking workflow vs serialized parent key names (protected `architecture.md` / `design-step-run-history-rerun.md` untouched).
+- `src/workflow/engine.test.ts`: test title uses callee workflow results (not child).
+
+**Tasks In Progress**: Module 2: validator `root-manager` / single-manager graph inference; optional deeper `conversationTurns` / session-string review. Modules 3-4: GraphQL/inspect wording, examples, fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server` (pass)
+- `bun test src/workflow/engine.test.ts src/workflow/superviser-runtime-control-impl.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand` (112 pass)
+- `bun test --runInBand` (1105 pass, 74 files)
 
 ### Session: 2026-04-27 (module 2: unified cross-workflow dispatch invocation path)
 
@@ -4601,3 +4650,21 @@ Full-repo `bun test` not re-run this session.
 - `bun run typecheck:server` (pass)
 - `bun test src/workflow/manager-control.test.ts src/workflow/manager-message-service.test.ts --runInBand` (21 pass)
 - `bun test src/graphql/schema.test.ts --runInBand` (33 pass)
+
+### Session: 2026-04-27 (module 2: cross-workflow artifact JSON — caller/callee field names)
+
+**Tasks Completed**:
+- **Production (`src/workflow/engine.ts`)**: `persistCrossWorkflowDispatchArtifact` now writes preferred `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSessionId`, and `calleeSessionStatus` alongside the existing legacy `parentNodeExecId` / `child*` keys (same values; backward-compatible). JSDoc updated accordingly.
+- **Design (`design-docs/specs/design-unified-workflow-role-model.md`)**: Workflow invocation bullet documents `workflow-calls/<call-id>.json` preferred caller/callee fields vs legacy mirrored keys (protected `architecture.md` / `design-step-run-history-rerun.md` unchanged).
+- **Tests (`src/workflow/engine.test.ts`)**: Cross-workflow integration test asserts artifact path content for canonical and legacy key parity.
+
+**Tasks In Progress**:
+- Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review; optional rename of `runtimeVariables.workflowCall` serialized keys (would require callee prompt/template migration if pursued).
+- Modules 3–4: GraphQL/inspect `workflowCall*` read-model wording, examples and fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server` (pass)
+- `bun test src/workflow/engine.test.ts --runInBand` (`96` pass)
+- `bun test --runInBand` (full suite pass)
