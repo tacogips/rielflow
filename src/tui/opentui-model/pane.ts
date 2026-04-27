@@ -45,10 +45,7 @@ function formatHelpShortcutSection(section: OpenTuiShortcutSection): string {
 }
 
 export function resolveOpenTuiShortcutSections(input: {
-  readonly navigation: Pick<
-    OpenTuiNavigationState,
-    "historyViewMode" | "screenMode"
-  >;
+  readonly navigation: Pick<OpenTuiNavigationState, "screenMode">;
 }): readonly OpenTuiShortcutSection[] {
   if (input.navigation.screenMode === "workspace") {
     return [
@@ -125,22 +122,12 @@ export function resolveOpenTuiShortcutSections(input: {
     ];
   }
 
-  const historyFooterForward =
-    input.navigation.historyViewMode === "workflow"
-      ? "l runs->nodes/subworkflow"
-      : "l nodes->list/child";
+  const historyFooterForward = "l runs->nodes/detail";
   const historyHelpForward =
-    input.navigation.historyViewMode === "workflow"
-      ? "l: workflow runs -> nodes, subworkflow row -> subworkflow view"
-      : "l: workflow nodes -> workflow list, workflow list -> child subworkflow";
-  const historyFooterRevert =
-    input.navigation.historyViewMode === "workflow"
-      ? "h nodes->runs/parent"
-      : "h list->nodes/parent";
+    "l: workflow runs -> nodes, nodes -> run detail, detail -> input";
+  const historyFooterRevert = "h detail->nodes/parent";
   const historyHelpRevert =
-    input.navigation.historyViewMode === "workflow"
-      ? "h: nodes -> workflow runs, workflow runs -> workspace"
-      : "h: workflow list -> workflow nodes, workflow nodes -> parent view";
+    "h: input -> detail -> nodes -> runs, runs -> definition/workspace";
   return [
     {
       entries: [
@@ -169,16 +156,9 @@ export function resolveOpenTuiShortcutSections(input: {
         shortcut("n new-run", "n: open new-run screen"),
         shortcut("R rerun", "R: rerun selected node"),
         shortcut("u resume", "u: resume selected session"),
+        shortcut("d delete run", "workflow runs: d opens delete confirmation"),
         shortcut(
-          input.navigation.historyViewMode === "workflow"
-            ? "d delete run"
-            : undefined,
-          "workflow runs: d opens delete confirmation",
-        ),
-        shortcut(
-          input.navigation.historyViewMode === "workflow"
-            ? "D delete-all"
-            : undefined,
+          "D delete-all",
           "workflow runs: D runs workflow history delete-all for the current workflow",
         ),
         shortcut("y copy id", "y: copy focused id"),
@@ -388,7 +368,7 @@ export function buildWorkflowHistoryStatusMessage(input: {
   return [
     input.message,
     "",
-    `Screen=history/${input.navigation.historyViewMode}  Focus=${input.navigation.focusPane}  Detail=${input.navigation.detailMode}  InputMode=${input.workflowInputDetection.mode}  Editing=${String(
+    `Screen=history  Focus=${input.navigation.focusPane}  Detail=${input.navigation.detailMode}  InputMode=${input.workflowInputDetection.mode}  Editing=${String(
       input.navigation.editingInput,
     )}  Busy=${String(input.busy)}`,
     `Input syntax=${input.inputSyntax.summary}`,
@@ -399,10 +379,7 @@ export function buildWorkflowHistoryStatusMessage(input: {
 }
 
 export function buildOpenTuiFooterShortcutRow(input: {
-  readonly navigation: Pick<
-    OpenTuiNavigationState,
-    "historyViewMode" | "screenMode"
-  >;
+  readonly navigation: Pick<OpenTuiNavigationState, "screenMode">;
 }): string {
   return resolveOpenTuiShortcutSections({
     navigation: input.navigation,

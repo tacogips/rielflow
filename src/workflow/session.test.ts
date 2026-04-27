@@ -5,6 +5,7 @@ import {
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
   resolveRequestedBackendSession,
+  type CommunicationRecord,
   type WorkflowSessionState,
 } from "./session";
 import type { AgentNodePayload } from "./types";
@@ -52,6 +53,45 @@ function makeReusableAgentNode(
 }
 
 describe("normalizeSessionState", () => {
+  test("normalizes non-external communication routingScope values on load", () => {
+    const sampleComm = {
+      workflowId: "wf",
+      workflowExecutionId: "sess-1",
+      communicationId: "comm-1",
+      fromNodeId: "a",
+      toNodeId: "b",
+      routingScope: "obsolete-or-unknown-in-graph-label",
+      sourceNodeExecId: "exec-1",
+      payloadRef: {
+        workflowExecutionId: "sess-1",
+        workflowId: "wf",
+        outputNodeId: "a",
+        nodeExecId: "exec-1",
+        artifactDir: "/tmp/x",
+      },
+      deliveryKind: "edge-transition" as const,
+      transitionWhen: "edge",
+      status: "delivered" as const,
+      deliveryAttemptIds: ["attempt-1"],
+      activeDeliveryAttemptId: "attempt-1",
+      createdAt: "2026-04-24T00:00:00.000Z",
+      deliveredAt: "2026-04-24T00:00:00.000Z",
+      artifactDir: "/tmp/comm",
+    } as unknown as CommunicationRecord;
+
+    const normalized = normalizeSessionState(
+      makeSession({ communications: [sampleComm] }),
+    );
+    expect(normalized.communications[0]?.routingScope).toBe("intra-workflow");
+
+    const external = normalizeSessionState(
+      makeSession({
+        communications: [{ ...sampleComm, routingScope: "external-mailbox" }],
+      }),
+    );
+    expect(external.communications[0]?.routingScope).toBe("external-mailbox");
+  });
+
   test("clones supervision incidents array", () => {
     const incident = {
       incidentId: "i1",

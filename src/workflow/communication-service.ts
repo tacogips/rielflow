@@ -422,12 +422,6 @@ export function createCommunicationService(
             communicationId: replayedCommunicationId,
             fromNodeId: sourceCommunication.fromNodeId,
             toNodeId: sourceCommunication.toNodeId,
-            ...(sourceCommunication.fromSubWorkflowId === undefined
-              ? {}
-              : { fromSubWorkflowId: sourceCommunication.fromSubWorkflowId }),
-            ...(sourceCommunication.toSubWorkflowId === undefined
-              ? {}
-              : { toSubWorkflowId: sourceCommunication.toSubWorkflowId }),
             routingScope: sourceCommunication.routingScope,
             sourceNodeExecId: sourceCommunication.sourceNodeExecId,
             deliveryKind: "manual-rerun",
@@ -446,12 +440,6 @@ export function createCommunicationService(
             fromNodeId: sourceCommunication.fromNodeId,
             toNodeId: sourceCommunication.toNodeId,
             sourceNodeExecId: sourceCommunication.sourceNodeExecId,
-            ...(sourceCommunication.fromSubWorkflowId === undefined
-              ? {}
-              : { fromSubWorkflowId: sourceCommunication.fromSubWorkflowId }),
-            ...(sourceCommunication.toSubWorkflowId === undefined
-              ? {}
-              : { toSubWorkflowId: sourceCommunication.toSubWorkflowId }),
             routingScope: sourceCommunication.routingScope,
             deliveryKind: "manual-rerun",
             activeDeliveryAttemptId: deliveryAttemptId,
@@ -538,12 +526,6 @@ export function createCommunicationService(
             communicationId: replayedCommunicationId,
             fromNodeId: sourceCommunication.fromNodeId,
             toNodeId: sourceCommunication.toNodeId,
-            ...(sourceCommunication.fromSubWorkflowId === undefined
-              ? {}
-              : { fromSubWorkflowId: sourceCommunication.fromSubWorkflowId }),
-            ...(sourceCommunication.toSubWorkflowId === undefined
-              ? {}
-              : { toSubWorkflowId: sourceCommunication.toSubWorkflowId }),
             routingScope: sourceCommunication.routingScope,
             sourceNodeExecId: sourceCommunication.sourceNodeExecId,
             payloadRef: sourceCommunication.payloadRef,

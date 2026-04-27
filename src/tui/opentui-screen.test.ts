@@ -1,9 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
 import {
-  getStructuralSubWorkflows,
   type NodePayload,
-  type SubWorkflowRef,
   type WorkflowCallRef,
   type WorkflowJson,
 } from "../workflow/types";
@@ -41,11 +39,6 @@ import {
   resolveBlurredSelectRedrawTarget,
 } from "./opentui-screen";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly edges?: readonly { from: string; to: string; when: string }[];
-};
-
 type LegacyWorkflowCallWorkflow = WorkflowJson & {
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly edges?: readonly { from: string; to: string; when: string }[];
@@ -68,19 +61,6 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [
-          {
-            id: "delivery",
-            description: "delivery",
-            managerNodeId: "divedra-manager",
-            inputNodeId: "workflow-input",
-            outputNodeId: "workflow-output",
-            nodeIds: ["workflow-input", "workflow-output"],
-            inputSources: [{ type: "human-input" }],
-            block: { type: "plain" },
-          },
-        ],
         nodes: [
           {
             id: "divedra-manager",
@@ -103,7 +83,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as LegacyStructuralWorkflow,
+      } as WorkflowJson,
       nodePayloads: {
         "divedra-manager": {
           id: "divedra-manager",
@@ -353,7 +333,7 @@ describe("buildWorkflowDefinitionContent", () => {
     expect(content).toContain("Workflow: demo");
     expect(content).toContain("Workflow calls: 0");
     expect(content).not.toContain("Workflow call ids:");
-    expect(content).toContain("Legacy structural sub-workflow ids: delivery");
+    expect(content).not.toContain("Legacy structural sub-workflow");
     expect(content).toContain(
       "Use the Nodes pane and press enter to inspect an individual node definition.",
     );
@@ -416,9 +396,7 @@ describe("buildWorkflowDefinitionContent", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          managerNodeId: "worker-1",
           hasManagerNode: false,
-          entryNodeId: "worker-1",
           nodes: [
             {
               id: "worker-1",
@@ -466,39 +444,6 @@ describe("buildWorkflowDefinitionContent", () => {
     expect(content).not.toContain("Legacy structural");
   });
 
-  test("omits legacy structural sub-workflow lines for step-addressed loads even if compatible subWorkflow entries remain", () => {
-    const base = makeStepAddressedLoadedWorkflow();
-    const loaded: LoadedWorkflow = {
-      ...base,
-      bundle: {
-        ...base.bundle,
-        workflow: {
-          ...base.bundle.workflow,
-          subWorkflows: [
-            {
-              id: "delivery",
-              description: "delivery",
-              managerNodeId: "manager-step",
-              inputNodeId: "writer-step",
-              outputNodeId: "writer-step",
-              nodeIds: ["manager-step", "writer-step"],
-              inputSources: [{ type: "human-input" }],
-              block: { type: "plain" },
-            },
-          ],
-        } as LegacyStructuralWorkflow,
-      },
-    };
-
-    const def = buildWorkflowDefinitionContent(loaded);
-    expect(def).not.toContain("Legacy structural");
-    expect(plainStyledText(buildWorkflowSummaryPreview(loaded))).not.toContain(
-      "Legacy Structural",
-    );
-    expect(plainStyledText(buildWorkflowRunPreview(loaded))).not.toContain(
-      "Legacy structural",
-    );
-  });
 });
 
 describe("buildWorkflowSummaryPreview", () => {
@@ -531,8 +476,8 @@ describe("buildWorkflowSummaryPreview", () => {
     expect(content).toContain("Workflow calls: 0");
     expect(content).not.toContain("Workflow Calls");
     expect(content).not.toContain("- review-call");
-    expect(content).toContain("Legacy Structural Sub-Workflows");
-    expect(content).toContain("- delivery");
+    expect(content).not.toContain("Legacy Structural Sub-Workflows");
+    expect(content).not.toContain("- delivery");
   });
 
   test("shows step graph and node registry details for step-addressed bundles", () => {
@@ -585,9 +530,7 @@ describe("buildWorkflowRunPreview", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          managerNodeId: "worker-1",
           hasManagerNode: false,
-          entryNodeId: "worker-1",
           nodes: [
             {
               id: "worker-1",
@@ -631,7 +574,6 @@ describe("buildWorkflowRunPreview", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          managerNodeId: "divedra-manager",
           workflowCalls: [
             {
               id: "review-call",
@@ -1036,27 +978,6 @@ describe("workflow preview text helpers", () => {
     expect(text).toContain("(not available yet)");
   });
 
-  test("buildWorkflowHistoryHeader includes subworkflow scope metadata", () => {
-    const loaded = makeLoadedWorkflow({
-      id: "workflow-input",
-      model: "input-model",
-      promptTemplate: "Collect the request",
-      variables: {},
-    });
-
-    const text = plainStyledText(
-      buildWorkflowHistoryHeader(
-        loaded,
-        getStructuralSubWorkflows(loaded.bundle.workflow)[0],
-      ),
-    );
-
-    expect(text).toContain("demo");
-    expect(text).toContain("demo workflow");
-    expect(text).toContain("scope=delivery");
-    expect(text).toContain("manager=divedra-manager");
-  });
-
   test("buildWorkflowHistoryHeader omits the description line when it is absent", () => {
     const loadedWithDescription = makeLoadedWorkflow({
       id: "workflow-input",
@@ -1075,11 +996,12 @@ describe("workflow preview text helpers", () => {
       },
     };
 
-    const text = plainStyledText(buildWorkflowHistoryHeader(loaded, undefined));
+    const text = plainStyledText(buildWorkflowHistoryHeader(loaded));
 
     expect(text).toContain("demo");
     expect(text).not.toContain("demo workflow");
-    expect(text).toContain("nodes=3  workflowCalls=0  subWorkflows=1");
+    expect(text).toContain("nodes=3  workflowCalls=0");
+    expect(text).not.toContain("subWorkflows=");
     expect(text).not.toContain("demo\n\nnodes=");
   });
 
@@ -1109,10 +1031,11 @@ describe("workflow preview text helpers", () => {
       },
     };
 
-    const text = plainStyledText(buildWorkflowHistoryHeader(loaded, undefined));
+    const text = plainStyledText(buildWorkflowHistoryHeader(loaded));
 
     expect(text).toContain("step-addressed-demo");
-    expect(text).toContain("nodes=2  workflowCalls=1  subWorkflows=0");
+    expect(text).toContain("nodes=2  workflowCalls=1");
+    expect(text).not.toContain("subWorkflows=");
   });
 });
 
@@ -1237,7 +1160,6 @@ describe("buildWorkflowHistoryStatusMessage", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "nodes",
-          historyViewMode: "workflow",
           screenMode: "definition",
         },
         workflowCount: 2,
@@ -1266,7 +1188,6 @@ describe("buildWorkflowHistoryStatusMessage", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "input",
-          historyViewMode: "workflow",
           screenMode: "run",
         },
         workflowCount: 2,
@@ -1295,7 +1216,6 @@ describe("buildWorkflowHistoryStatusMessage", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "sessions",
-          historyViewMode: "workflow",
           screenMode: "history",
         },
         workflowCount: 2,
@@ -1324,7 +1244,6 @@ describe("buildWorkflowHistoryStatusMessage", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "sessions",
-          historyViewMode: "workflow",
           screenMode: "history",
         },
         workflowCount: 2,
@@ -1355,7 +1274,6 @@ describe("buildWorkflowHistoryStatusMessage", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "detail",
-          historyViewMode: "workflow",
           screenMode: "history",
         },
         workflowCount: 2,
@@ -1374,7 +1292,6 @@ describe("buildOpenTuiFooterShortcutRow", () => {
     expect(
       buildOpenTuiFooterShortcutRow({
         navigation: {
-          historyViewMode: "workflow",
           screenMode: "workspace",
         },
       }),
@@ -1385,7 +1302,6 @@ describe("buildOpenTuiFooterShortcutRow", () => {
     expect(
       buildOpenTuiFooterShortcutRow({
         navigation: {
-          historyViewMode: "workflow",
           screenMode: "definition",
         },
       }),
@@ -1396,22 +1312,27 @@ describe("buildOpenTuiFooterShortcutRow", () => {
     expect(
       buildOpenTuiFooterShortcutRow({
         navigation: {
-          historyViewMode: "workflow",
           screenMode: "history",
         },
       }),
     ).toContain("D delete-all");
   });
 
-  test("returns subworkflow-history shortcuts on one line", () => {
+  test("includes history forward and revert hints on one line", () => {
     expect(
       buildOpenTuiFooterShortcutRow({
         navigation: {
-          historyViewMode: "subworkflow",
           screenMode: "history",
         },
       }),
-    ).toContain("h list->nodes/parent");
+    ).toContain("l runs->nodes/detail");
+    expect(
+      buildOpenTuiFooterShortcutRow({
+        navigation: {
+          screenMode: "history",
+        },
+      }),
+    ).toContain("h detail->nodes/parent");
   });
 });
 
@@ -1629,7 +1550,6 @@ describe("resolveDirectionalNavigationAction", () => {
         direction: "forward",
         navigation: {
           focusPane: "workflows",
-          historyViewMode: "workflow",
           screenMode: "workspace",
         },
       }),
@@ -1642,7 +1562,6 @@ describe("resolveDirectionalNavigationAction", () => {
         direction: "forward",
         navigation: {
           focusPane: "nodes",
-          historyViewMode: "workflow",
           screenMode: "definition",
         },
       }),
@@ -1655,7 +1574,6 @@ describe("resolveDirectionalNavigationAction", () => {
         direction: "forward",
         navigation: {
           focusPane: "sessions",
-          historyViewMode: "workflow",
           screenMode: "history",
         },
       }),
@@ -1667,17 +1585,34 @@ describe("resolveDirectionalNavigationAction", () => {
     });
   });
 
-  test("maps history subworkflow revert navigation from sessions to closing the scope", () => {
+  test("maps history forward navigation from nodes to run detail", () => {
     expect(
       resolveDirectionalNavigationAction({
-        direction: "revert",
+        direction: "forward",
         navigation: {
-          focusPane: "sessions",
-          historyViewMode: "subworkflow",
+          focusPane: "nodes",
           screenMode: "history",
         },
       }),
-    ).toEqual({ kind: "close-subworkflow" });
+    ).toEqual({
+      kind: "focus",
+      focusPane: "detail",
+      nextDetailMode: "summary",
+      status: "Focused run detail",
+    });
+  });
+
+  test("maps history revert navigation from sessions to workspace by default", () => {
+    expect(
+      resolveDirectionalNavigationAction({
+        direction: "revert",
+        historyRootReturnScreen: "workspace",
+        navigation: {
+          focusPane: "sessions",
+          screenMode: "history",
+        },
+      }),
+    ).toEqual({ kind: "open-workspace" });
   });
 });
 

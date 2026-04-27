@@ -17,7 +17,7 @@ import { loadSession, saveSession } from "./session-store";
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
 
-/** On-disk fixtures use legacy-authored graph fields; keep loads explicit for strict-default harness runs. */
+/** On-disk fixtures use legacy node-graph `edges` (no authored `branching`); keep loads explicit for strict-default harness runs. */
 const legacyAuthoredWorkflowLoadOpts = {
   rejectLegacyWorkflowAuthoring: false,
 } as const;
@@ -45,7 +45,6 @@ async function createCallStepFixture(
     workflowId: workflowName,
     description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -60,9 +59,7 @@ async function createCallStepFixture(
         completion: { type: "none" },
       },
     ],
-    edges: [],
-    loops: [],
-    branching: { mode: "fan-out" },
+    edges: [{ from: "divedra-manager", to: "writer", when: "always" }],
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -104,23 +101,21 @@ async function createRoleManagedCallStepFixture(
     workflowId: workflowName,
     description: "role-managed call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
+        kind: "root-manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
         id: "writer",
-        role: "worker",
+        kind: "task",
         nodeFile: "node-writer.json",
         completion: { type: "none" },
       },
     ],
-    edges: [],
-    branching: { mode: "fan-out" },
+    edges: [{ from: "divedra-manager", to: "writer", when: "always" }],
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -150,7 +145,6 @@ async function createOptionalCallStepFixture(
     workflowId: workflowName,
     description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -169,9 +163,7 @@ async function createOptionalCallStepFixture(
         },
       },
     ],
-    edges: [],
-    loops: [],
-    branching: { mode: "fan-out" },
+    edges: [{ from: "divedra-manager", to: "writer", when: "always" }],
   });
 }
 
@@ -242,7 +234,7 @@ class PromptAndAmbientCaptureAdapter implements NodeAdapter {
 }
 
 describe("callStepExecution", () => {
-  test("treats role-authored managers as managers for prompt assembly and ambient manager context", async () => {
+  test("treats root-manager kind as manager for prompt assembly and ambient manager context", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
     const sessionStoreRoot = path.join(root, "sessions");
@@ -278,7 +270,7 @@ describe("callStepExecution", () => {
     }
 
     expect(adapter.calls).toHaveLength(1);
-    expect(adapter.calls[0]?.promptText).toContain("Node kind: manager");
+    expect(adapter.calls[0]?.promptText).toContain("Node kind: root-manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
       DIVEDRA_WORKFLOW_ID: workflowName,

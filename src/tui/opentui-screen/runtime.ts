@@ -20,11 +20,7 @@ import type {
   WorkflowSessionState,
 } from "../../workflow/session";
 import type { RuntimeSessionSummary } from "../../workflow/runtime-db";
-import {
-  getStructuralSubWorkflows,
-  type CliAgentBackend,
-  type SubWorkflowRef,
-} from "../../workflow/types";
+import { type CliAgentBackend } from "../../workflow/types";
 import {
   buildNodeDefinitionPopupContent,
   buildNodeSelectOptions,
@@ -33,13 +29,10 @@ import {
   buildWorkflowDefinitionContent,
   buildWorkflowDefinitionNodeSelectOptions,
   buildSessionSelectOptions,
-  findLatestNodeExecution,
   buildWorkflowHistoryHeader,
   buildWorkflowRunPreview,
   buildWorkflowSelectorHistorySummary,
   buildWorkflowSelectorPreview,
-  buildSubworkflowListOptions,
-  buildSubworkflowNodeSelectOptions,
   buildWorkflowHistoryStatusMessage,
   buildWorkflowRunStatusContent,
   describeTuiWorkflowInputSyntax,
@@ -57,7 +50,6 @@ import {
   resolvePopupConfirmAction,
   resolvePopupRevertAction,
   resolvePopupScrollDelta,
-  resolveOwningSubWorkflow,
   resolveHistoryPaneLabels,
   resolveHistoryPaneNavigationMode,
   resolveManagerSessionId,
@@ -70,7 +62,6 @@ import type {
   DetailMode,
   DetailReturnPane,
   FocusPane,
-  HistoryViewMode,
   OpenTuiNavigationState,
   RuntimeSessionView,
   ScreenMode,
@@ -344,7 +335,6 @@ export async function runOpenTuiWorkflowApp(
   let detailReturnPane: DetailReturnPane = "nodes";
   let detailViewerTitle = "";
   let detailViewerBody = "";
-  let subworkflowPath: string[] = [];
   let historyReturnsToDefinition = false;
   let workflowFilterText = "";
   let workflowFilterTextBeforePopup = "";
@@ -373,7 +363,6 @@ export async function runOpenTuiWorkflowApp(
     detailReturnPane,
     editingInput,
     focusPane,
-    historyViewMode: historyViewMode(),
     screenMode,
   });
   const historyRootReturnScreen = (): "definition" | "workspace" =>
@@ -385,9 +374,7 @@ export async function runOpenTuiWorkflowApp(
   const isConfirmKey = (key: KeyEvent): boolean =>
     isEnterKey(key) || isCtrlMKey(key);
   const isDeleteHistoryAllowed = (): boolean =>
-    screenMode === "history" &&
-    historyViewMode() === "workflow" &&
-    focusPane === "sessions";
+    screenMode === "history" && focusPane === "sessions";
 
   const selectedWorkflowName = (): string | undefined => {
     const option = workflowSelect.getSelectedOption();
@@ -463,8 +450,6 @@ export async function runOpenTuiWorkflowApp(
     return resolveManagerSessionId(loadedWorkflow.bundle.workflow, execution);
   };
 
-  const currentSubworkflowId = (): string | undefined => subworkflowPath.at(-1);
-
   const selectedDefinitionNodeId = (): string | undefined => {
     const option = workflowDefinitionNodeSelect.getSelectedOption();
     if (option === null || option.value === OPEN_TUI_EMPTY_SELECT_VALUE) {
@@ -473,57 +458,8 @@ export async function runOpenTuiWorkflowApp(
     return String(option.value);
   };
 
-  const currentSubworkflow = ():
-    | SubWorkflowRef
-    | undefined => {
-    if (loadedWorkflow === undefined) {
-      return undefined;
-    }
-    const subworkflowId = currentSubworkflowId();
-    if (subworkflowId === undefined) {
-      return undefined;
-    }
-    return getStructuralSubWorkflows(loadedWorkflow.bundle.workflow).find(
-      (entry) => entry.id === subworkflowId,
-    );
-  };
-
-  const historyViewMode = (): HistoryViewMode =>
-    currentSubworkflowId() === undefined ? "workflow" : "subworkflow";
-
-  const selectedSubworkflowNodeId = (): string | undefined => {
-    const subworkflow = currentSubworkflow();
-    if (subworkflow === undefined) {
-      return undefined;
-    }
-    const option = sessionSelect.getSelectedOption();
-    if (option === null || option.value === OPEN_TUI_EMPTY_SELECT_VALUE) {
-      return subworkflow.nodeIds[0];
-    }
-    return String(option.value);
-  };
-
-  const selectedChildSubworkflowId = (): string | undefined => {
-    const option = nodeSelect.getSelectedOption();
-    if (option === null || option.value === OPEN_TUI_EMPTY_SELECT_VALUE) {
-      return undefined;
-    }
-    return String(option.value);
-  };
-
-  const selectedHistoryExecution = (): NodeExecutionRecord | undefined => {
-    if (runtimeSessionView === undefined) {
-      return undefined;
-    }
-    if (historyViewMode() === "workflow") {
-      return selectedNodeExecution();
-    }
-    const nodeId = selectedSubworkflowNodeId();
-    if (nodeId === undefined) {
-      return undefined;
-    }
-    return findLatestNodeExecution(runtimeSessionView.session, nodeId);
-  };
+  const selectedHistoryExecution = (): NodeExecutionRecord | undefined =>
+    selectedNodeExecution();
 
   const selectedWorkspaceWorkflowId = (): string | undefined => {
     const selected = selectedWorkflowName();
@@ -599,13 +535,9 @@ export async function runOpenTuiWorkflowApp(
 
   const render = async (): Promise<void> => {
     const navigation = navigationState();
-    const preferredSubworkflowNodeId = selectedSubworkflowNodeId();
-    const preferredChildSubworkflowId = selectedChildSubworkflowId();
     const preferredDefinitionNodeId = selectedDefinitionNodeId();
-    const activeSubworkflow = currentSubworkflow();
     const historyPaneLabels = resolveHistoryPaneLabels({
       hasRuntimeSession: runtimeSessionView !== undefined,
-      subworkflow: activeSubworkflow,
     });
 
     syncFilteredWorkflowNames(
@@ -638,7 +570,6 @@ export async function runOpenTuiWorkflowApp(
       ...(currentSelectedWorkflowName === undefined
         ? {}
         : { selectedWorkflowName: currentSelectedWorkflowName }),
-      subworkflowPath,
     });
     selectorPreviewText.content = buildWorkflowSelectorPreview({
       filteredWorkflowNamesCount: filteredWorkflowNames.length,
@@ -669,10 +600,7 @@ export async function runOpenTuiWorkflowApp(
     footerText.content = buildOpenTuiFooterShortcutRow({
       navigation,
     });
-    historyHeaderText.content = buildWorkflowHistoryHeader(
-      loadedWorkflow,
-      activeSubworkflow,
-    );
+    historyHeaderText.content = buildWorkflowHistoryHeader(loadedWorkflow);
     workflowDefinitionText.content =
       buildWorkflowDefinitionContent(loadedWorkflow);
     runWorkflowText.content = buildWorkflowRunPreview(loadedWorkflow);
@@ -690,42 +618,18 @@ export async function runOpenTuiWorkflowApp(
 
     suppressSessionSelectionChange = true;
     try {
-      if (historyViewMode() === "workflow") {
-        sessionSelect.options = [
-          ...buildSessionSelectOptions(workflowSessions),
-        ];
-        if (workflowSessions.length === 0) {
-          sessionSelect.setSelectedIndex(0);
-        } else if (runtimeSessionView !== undefined) {
-          selectBoundedIndex(
-            sessionSelect,
-            workflowSessions.findIndex(
-              (session) =>
-                session.sessionId === runtimeSessionView?.session.sessionId,
-            ),
-            workflowSessions.length,
-          );
-        }
-      } else {
-        sessionSelect.options = [
-          ...buildSubworkflowNodeSelectOptions(
-            loadedWorkflow,
-            runtimeSessionView?.session,
-            activeSubworkflow?.id,
+      sessionSelect.options = [...buildSessionSelectOptions(workflowSessions)];
+      if (workflowSessions.length === 0) {
+        sessionSelect.setSelectedIndex(0);
+      } else if (runtimeSessionView !== undefined) {
+        selectBoundedIndex(
+          sessionSelect,
+          workflowSessions.findIndex(
+            (session) =>
+              session.sessionId === runtimeSessionView?.session.sessionId,
           ),
-        ];
-        if (sessionSelect.options.length === 0) {
-          sessionSelect.setSelectedIndex(0);
-        } else {
-          const selectedIndex = sessionSelect.options.findIndex(
-            (option) => option.value === preferredSubworkflowNodeId,
-          );
-          selectBoundedIndex(
-            sessionSelect,
-            selectedIndex < 0 ? 0 : selectedIndex,
-            sessionSelect.options.length,
-          );
-        }
+          workflowSessions.length,
+        );
       }
     } finally {
       suppressSessionSelectionChange = false;
@@ -754,51 +658,29 @@ export async function runOpenTuiWorkflowApp(
 
     suppressNodeSelectionChange = true;
     try {
-      if (historyViewMode() === "workflow") {
-        nodeSelect.options = [
-          ...buildNodeSelectOptions(
-            loadedWorkflow,
-            runtimeSessionView?.session,
-          ),
-        ];
-        if (nodeSelect.options.length === 0) {
-          nodeSelect.setSelectedIndex(0);
-        } else {
-          const sessionView = runtimeSessionView;
-          if (sessionView === undefined) {
-            nodeSelect.setSelectedIndex(0);
-          } else {
-            const selectedExecution = selectedNodeExecution();
-            const selectedIndex =
-              selectedExecution === undefined
-                ? sessionView.session.nodeExecutions.length - 1
-                : sessionView.session.nodeExecutions.findIndex(
-                    (entry) =>
-                      entry.nodeExecId === selectedExecution.nodeExecId,
-                  );
-            selectBoundedIndex(
-              nodeSelect,
-              selectedIndex < 0
-                ? sessionView.session.nodeExecutions.length - 1
-                : selectedIndex,
-              sessionView.session.nodeExecutions.length,
-            );
-          }
-        }
+      nodeSelect.options = [
+        ...buildNodeSelectOptions(loadedWorkflow, runtimeSessionView?.session),
+      ];
+      if (nodeSelect.options.length === 0) {
+        nodeSelect.setSelectedIndex(0);
       } else {
-        nodeSelect.options = [
-          ...buildSubworkflowListOptions(loadedWorkflow, activeSubworkflow?.id),
-        ];
-        if (nodeSelect.options.length === 0) {
+        const sessionView = runtimeSessionView;
+        if (sessionView === undefined) {
           nodeSelect.setSelectedIndex(0);
         } else {
-          const selectedIndex = nodeSelect.options.findIndex(
-            (option) => option.value === preferredChildSubworkflowId,
-          );
+          const selectedExecution = selectedNodeExecution();
+          const selectedIndex =
+            selectedExecution === undefined
+              ? sessionView.session.nodeExecutions.length - 1
+              : sessionView.session.nodeExecutions.findIndex(
+                  (entry) => entry.nodeExecId === selectedExecution.nodeExecId,
+                );
           selectBoundedIndex(
             nodeSelect,
-            selectedIndex < 0 ? 0 : selectedIndex,
-            nodeSelect.options.length,
+            selectedIndex < 0
+              ? sessionView.session.nodeExecutions.length - 1
+              : selectedIndex,
+            sessionView.session.nodeExecutions.length,
           );
         }
       }
@@ -828,7 +710,6 @@ export async function runOpenTuiWorkflowApp(
         detailMode,
         detailViewerBody,
         detailViewerTitle,
-        historyViewMode: historyViewMode(),
         inputDetection: workflowInputDetection,
         loadedWorkflow,
         managerMessages,
@@ -857,7 +738,6 @@ export async function runOpenTuiWorkflowApp(
     focusPane = nextFocusPane;
     const historyPaneLabels = resolveHistoryPaneLabels({
       hasRuntimeSession: runtimeSessionView !== undefined,
-      subworkflow: currentSubworkflow(),
     });
     const paneChrome = resolveOpenTuiPaneChrome({
       filterText: workflowFilterText,
@@ -1046,7 +926,6 @@ export async function runOpenTuiWorkflowApp(
     preferredSessionId?: string,
   ): Promise<void> => {
     if (workflowName === undefined) {
-      subworkflowPath = [];
       loadedWorkflow = undefined;
       selectorPreviewWorkflow = undefined;
       workflowSessions = [];
@@ -1067,11 +946,6 @@ export async function runOpenTuiWorkflowApp(
     const nextLoadedWorkflow =
       await options.loadWorkflowDefinition(workflowName);
     loadedWorkflow = nextLoadedWorkflow;
-    subworkflowPath = subworkflowPath.filter((subworkflowId) =>
-      getStructuralSubWorkflows(nextLoadedWorkflow.bundle.workflow).some(
-        (entry) => entry.id === subworkflowId,
-      ),
-    );
     selectorPreviewWorkflow = loadedWorkflow;
     workflowInputDetection = detectWorkflowInputMode(loadedWorkflow);
     workflowSessions = await options.listWorkflowSessions(workflowName);
@@ -1107,30 +981,6 @@ export async function runOpenTuiWorkflowApp(
       focusPane !== "sessions" ||
       isSelectionChangeUiBlocked()
     ) {
-      return;
-    }
-    if (historyViewMode() === "subworkflow") {
-      const stepAddr = isStepAddressedAuthoring(
-        loadedWorkflow?.bundle.workflow,
-      );
-      await withBusy(
-        stepAddr ? "Switching subworkflow step" : "Switching subworkflow node",
-        async () => {
-          detailMode = "summary";
-          agentSessionPopupOpen = false;
-          await refreshManagerMessages();
-          const execution = selectedHistoryExecution();
-          setStatus(
-            execution === undefined
-              ? stepAddr
-                ? "Selected workflow step without an execution yet"
-                : "Selected workflow node without an execution yet"
-              : stepAddr
-                ? `Selected workflow step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
-                : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
-          );
-        },
-      );
       return;
     }
     await withBusy("Switching session", async () => {
@@ -1179,19 +1029,6 @@ export async function runOpenTuiWorkflowApp(
       focusPane !== "nodes" ||
       isSelectionChangeUiBlocked()
     ) {
-      return;
-    }
-    if (historyViewMode() === "subworkflow") {
-      await withBusy("Switching child workflow", async () => {
-        detailMode = "summary";
-        agentSessionPopupOpen = false;
-        const subworkflowId = selectedChildSubworkflowId();
-        setStatus(
-          subworkflowId === undefined
-            ? "No child workflow selected"
-            : `Selected child workflow '${subworkflowId}'`,
-        );
-      });
       return;
     }
     const stepAddr = isStepAddressedAuthoring(loadedWorkflow?.bundle.workflow);
@@ -1524,7 +1361,6 @@ export async function runOpenTuiWorkflowApp(
     const workspaceWorkflowName =
       loadedWorkflow?.workflowName ?? selectedWorkflowName();
     screenMode = "workspace";
-    subworkflowPath = [];
     historyReturnsToDefinition = false;
     editingInput = false;
     confirmPopupKind = "none";
@@ -1550,7 +1386,6 @@ export async function runOpenTuiWorkflowApp(
     }
     await withBusy(`Loading workflow '${workflowName}'`, async () => {
       await refreshWorkflow(workflowName);
-      subworkflowPath = [];
       historyReturnsToDefinition = false;
       screenMode = "definition";
       detailMode = "summary";
@@ -1574,7 +1409,6 @@ export async function runOpenTuiWorkflowApp(
     }
     await withBusy(`Loading workflow '${workflowName}'`, async () => {
       await refreshWorkflow(workflowName, preferredSessionId);
-      subworkflowPath = [];
       historyReturnsToDefinition = screenMode === "definition";
       screenMode = "history";
       detailMode = "summary";
@@ -1596,7 +1430,6 @@ export async function runOpenTuiWorkflowApp(
     }
     await withBusy(`Loading workflow '${workflowName}'`, async () => {
       await refreshWorkflow(workflowName);
-      subworkflowPath = [];
       historyReturnsToDefinition = false;
       resetRunState();
       screenMode = "run";
@@ -1608,53 +1441,6 @@ export async function runOpenTuiWorkflowApp(
       setStatus(`Opened new run for '${workflowName}'`);
     });
     applyFocus("input");
-  };
-
-  const openSubworkflowHistory = async (
-    subworkflowId: string | undefined,
-  ): Promise<void> => {
-    if (
-      subworkflowId === undefined ||
-      loadedWorkflow === undefined ||
-      runtimeSessionView === undefined
-    ) {
-      setStatus("Select a workflow-backed node before opening a subworkflow");
-      await render();
-      return;
-    }
-    if (
-      !getStructuralSubWorkflows(loadedWorkflow.bundle.workflow).some(
-        (entry) => entry.id === subworkflowId,
-      )
-    ) {
-      setStatus(`Unknown subworkflow '${subworkflowId}'`);
-      await render();
-      return;
-    }
-    subworkflowPath = [...subworkflowPath, subworkflowId];
-    detailMode = "summary";
-    agentSessionPopupOpen = false;
-    nodeDefinitionPopupOpen = false;
-    await render();
-    applyFocus("sessions");
-    setStatus(`Opened subworkflow '${subworkflowId}'`);
-  };
-
-  const closeSubworkflowHistory = async (): Promise<void> => {
-    if (subworkflowPath.length === 0) {
-      return;
-    }
-    const closedSubworkflowId = subworkflowPath.at(-1);
-    subworkflowPath = subworkflowPath.slice(0, -1);
-    detailMode = "summary";
-    agentSessionPopupOpen = false;
-    await render();
-    applyFocus(subworkflowPath.length === 0 ? "nodes" : "sessions");
-    setStatus(
-      subworkflowPath.length === 0
-        ? `Returned from subworkflow '${closedSubworkflowId ?? ""}'`
-        : `Returned to parent subworkflow '${subworkflowPath.at(-1) ?? ""}'`,
-    );
   };
 
   const openRunConfirmationImpl = async (): Promise<void> => {
@@ -1802,19 +1588,16 @@ export async function runOpenTuiWorkflowApp(
     copyToClipboard: tryCopyToClipboard,
     executeWorkflow: options.executeWorkflow,
     getFocusPane: () => focusPane,
-    getHistoryViewMode: historyViewMode,
     getInputText: () => inputTextarea.plainText,
     getLoadedWorkflow: () => loadedWorkflow,
     getPendingRunRuntimeVariables: () => pendingRunRuntimeVariables,
     getRuntimeSessionView: () => runtimeSessionView,
     getScreenMode: () => screenMode,
-    getSelectedChildSubworkflowId: selectedChildSubworkflowId,
     getSelectedDefinitionNodeId: selectedDefinitionNodeId,
     getSelectedHistoryExecution: selectedHistoryExecution,
     getSelectedManagerSessionId: selectedManagerSessionId,
     getSelectedNodeExecution: selectedNodeExecution,
     getSelectedSessionSummary: selectedSessionSummary,
-    getSelectedSubworkflowNodeId: selectedSubworkflowNodeId,
     getSelectedWorkflowName: selectedWorkflowName,
     getSelectedWorkspaceWorkflowId: selectedWorkspaceWorkflowId,
     getWorkflowInputDetection: () => workflowInputDetection,
@@ -1891,34 +1674,6 @@ export async function runOpenTuiWorkflowApp(
     readonly focusAfterSessionLoad?: "detail";
   }): Promise<void> => {
     if (focusPane === "sessions") {
-      if (historyViewMode() === "subworkflow") {
-        const stepAddr = isStepAddressedAuthoring(
-          loadedWorkflow?.bundle.workflow,
-        );
-        await withBusy(
-          stepAddr
-            ? "Loading workflow step details"
-            : "Loading workflow node details",
-          async () => {
-            detailMode = "summary";
-            agentSessionPopupOpen = false;
-            await refreshManagerMessages();
-            const execution = selectedHistoryExecution();
-            setStatus(
-              execution === undefined
-                ? stepAddr
-                  ? "Selected workflow step without an execution yet"
-                  : "Selected workflow node without an execution yet"
-                : stepAddr
-                  ? `Loaded workflow step '${primaryStepOrNodeLabel(execution)}' details`
-                  : `Loaded workflow node '${execution.nodeId}' details`,
-            );
-          },
-        );
-        detailReturnPane = "sessions";
-        applyFocus("detail");
-        return;
-      }
       await withBusy("Loading session", async () => {
         await refreshSessionView(selectedSessionSummary()?.sessionId);
         if (runtimeSessionView !== undefined) {
@@ -1946,10 +1701,6 @@ export async function runOpenTuiWorkflowApp(
       return;
     }
     if (focusPane === "nodes") {
-      if (historyViewMode() === "subworkflow") {
-        await openSubworkflowHistory(selectedChildSubworkflowId());
-        return;
-      }
       const stepAddr = isStepAddressedAuthoring(
         loadedWorkflow?.bundle.workflow,
       );
@@ -2055,32 +1806,6 @@ export async function runOpenTuiWorkflowApp(
       } else {
         sessionSelect.moveDown(1);
       }
-      if (historyViewMode() === "subworkflow") {
-        const stepAddr = isStepAddressedAuthoring(
-          loadedWorkflow?.bundle.workflow,
-        );
-        await withBusy(
-          stepAddr
-            ? "Switching subworkflow step"
-            : "Switching subworkflow node",
-          async () => {
-            detailMode = "summary";
-            agentSessionPopupOpen = false;
-            await refreshManagerMessages();
-            const execution = selectedHistoryExecution();
-            setStatus(
-              execution === undefined
-                ? stepAddr
-                  ? "Selected workflow step without an execution yet"
-                  : "Selected workflow node without an execution yet"
-                : stepAddr
-                  ? `Selected workflow step '${primaryStepOrNodeLabel(execution)}' (${execution.nodeExecId})`
-                  : `Selected workflow node '${execution.nodeId}' (${execution.nodeExecId})`,
-            );
-          },
-        );
-        return;
-      }
       await withBusy("Switching session", async () => {
         await refreshSessionView(selectedSessionSummary()?.sessionId);
         detailMode = "summary";
@@ -2100,19 +1825,6 @@ export async function runOpenTuiWorkflowApp(
         nodeSelect.moveUp(1);
       } else {
         nodeSelect.moveDown(1);
-      }
-      if (historyViewMode() === "subworkflow") {
-        await withBusy("Switching child workflow", async () => {
-          detailMode = "summary";
-          agentSessionPopupOpen = false;
-          const subworkflowId = selectedChildSubworkflowId();
-          setStatus(
-            subworkflowId === undefined
-              ? "No child workflow selected"
-              : `Selected child workflow '${subworkflowId}'`,
-          );
-        });
-        return;
       }
       const stepAddr = isStepAddressedAuthoring(
         loadedWorkflow?.bundle.workflow,
@@ -2178,23 +1890,6 @@ export async function runOpenTuiWorkflowApp(
         applyFocus(action.focusPane);
         setStatus(action.status);
         await render();
-        return;
-      case "open-subworkflow":
-        if (historyViewMode() === "subworkflow") {
-          await openSubworkflowHistory(selectedChildSubworkflowId());
-          return;
-        }
-        await openSubworkflowHistory(
-          loadedWorkflow === undefined
-            ? undefined
-            : resolveOwningSubWorkflow(
-                loadedWorkflow.bundle.workflow,
-                selectedNodeExecution()?.nodeId ?? "",
-              )?.id,
-        );
-        return;
-      case "close-subworkflow":
-        await closeSubworkflowHistory();
         return;
     }
   };

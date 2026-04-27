@@ -684,7 +684,6 @@ describe("inspectWorkflowRuntimeReadiness", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          entryNodeId: "reviewer",
           nodes: [
             {
               id: "reviewer",
@@ -766,7 +765,6 @@ describe("inspectWorkflowRuntimeReadiness", () => {
             maxLoopIterations: 3,
             nodeTimeoutMs: 120_000,
           },
-          entryNodeId: "reviewer",
           nodes: [
             {
               id: "reviewer",

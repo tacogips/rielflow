@@ -3,17 +3,7 @@ import type { WorkflowNodeRef } from "./types";
 export function isManagerNodeRef(
   nodeRef: Pick<WorkflowNodeRef, "kind" | "role">,
 ): boolean {
-  return (
-    nodeRef.role === "manager" ||
-    nodeRef.kind === "root-manager" ||
-    nodeRef.kind === "subworkflow-manager"
-  );
-}
-
-export function isSubworkflowManagerNodeRef(
-  nodeRef: Pick<WorkflowNodeRef, "kind">,
-): boolean {
-  return nodeRef.kind === "subworkflow-manager";
+  return nodeRef.role === "manager" || nodeRef.kind === "root-manager";
 }
 
 export function describeWorkflowNodeKind(

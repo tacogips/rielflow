@@ -9,15 +9,13 @@ import {
   validateWorkflowBundleAsync,
   validateWorkflowBundle,
   validateWorkflowBundleDetailed,
+  REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
 } from "./validate";
 import {
   getLegacyAuthoredEdges,
   getLegacyAuthoredLoops,
-  getLegacyEntryNodeId,
-  getLegacyManagerNodeId,
   getStructuralEdges,
   getStructuralLoops,
-  getStructuralSubWorkflows,
   resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerRuntimeId,
   type NodeAddonDefinition,
@@ -36,30 +34,54 @@ describe("resolveWorkflowEntryRuntimeId", () => {
     ).toBe("entry-step");
   });
 
-  test("uses entryNodeId for legacy node-graph bundles", () => {
+  test("uses graph entry (no incoming) for legacy node-graph bundles", () => {
     expect(
       resolveWorkflowEntryRuntimeId({
-        entryNodeId: "legacy-entry",
-        managerNodeId: "legacy-manager",
+        workflowId: "w",
+        hasManagerNode: true,
+        defaults: { maxLoopIterations: 2, nodeTimeoutMs: 1 },
+        nodes: [
+          { id: "legacy-entry", kind: "input", nodeFile: "a.json" },
+          {
+            id: "legacy-manager",
+            kind: "root-manager",
+            nodeFile: "b.json",
+          },
+        ],
+        edges: [
+          { from: "legacy-entry", to: "legacy-manager", when: "always" },
+        ],
       } as unknown as WorkflowJson),
     ).toBe("legacy-entry");
   });
 
-  test("falls back to managerNodeId for legacy manager-only bundles", () => {
+  test("resolves single-node legacy entry to the sole node (manager root)", () => {
     expect(
       resolveWorkflowEntryRuntimeId({
-        managerNodeId: "legacy-manager",
+        workflowId: "w",
+        hasManagerNode: true,
+        defaults: { maxLoopIterations: 2, nodeTimeoutMs: 1 },
+        nodes: [
+          {
+            id: "legacy-manager",
+            kind: "root-manager",
+            nodeFile: "b.json",
+          },
+        ],
       } as unknown as WorkflowJson),
     ).toBe("legacy-manager");
   });
 
-  test("throws for legacy bundles that expose neither entryNodeId nor managerNodeId", () => {
+  test("throws for legacy bundles with no nodes to infer entry from", () => {
     expect(() =>
       resolveWorkflowEntryRuntimeId({
         workflowId: "broken-legacy-entry",
-      } as WorkflowJson),
+        description: "",
+        defaults: { maxLoopIterations: 2, nodeTimeoutMs: 1 },
+        nodes: [],
+      } as unknown as WorkflowJson),
     ).toThrowError(
-      "workflow 'broken-legacy-entry' has no entry runtime id; expected entryNodeId or managerNodeId on a legacy node-graph bundle",
+      "workflow 'broken-legacy-entry' has no resolvable graph entry node id for legacy node-graph bundles",
     );
   });
 });
@@ -86,21 +108,34 @@ describe("resolveWorkflowManagerRuntimeId", () => {
     ).toBe("e");
   });
 
-  test("uses managerNodeId for legacy node-graph bundles", () => {
+  test("uses root-manager kind for legacy node-graph manager runtime id", () => {
     expect(
       resolveWorkflowManagerRuntimeId({
-        managerNodeId: "root",
+        workflowId: "w",
+        hasManagerNode: true,
+        defaults: { maxLoopIterations: 2, nodeTimeoutMs: 1 },
+        nodes: [
+          {
+            id: "root",
+            kind: "root-manager",
+            nodeFile: "a.json",
+          },
+        ],
       } as unknown as WorkflowJson),
     ).toBe("root");
   });
 
-  test("throws for legacy bundles that expose neither managerNodeId nor entryNodeId", () => {
+  test("throws for legacy bundles with no resolvable manager / entry", () => {
     expect(() =>
       resolveWorkflowManagerRuntimeId({
         workflowId: "broken-legacy",
-      } as WorkflowJson),
+        description: "",
+        defaults: { maxLoopIterations: 2, nodeTimeoutMs: 1 },
+        nodes: [],
+        hasManagerNode: true,
+      } as unknown as WorkflowJson),
     ).toThrowError(
-      "workflow 'broken-legacy' has no manager runtime id; expected managerNodeId or entryNodeId on a legacy node-graph bundle",
+      "workflow 'broken-legacy' has no resolvable manager runtime id for legacy node-graph bundles",
     );
   });
 });
@@ -207,7 +242,6 @@ function makeValidRaw(): {
       workflowId: "demo",
       description: "demo",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -571,7 +605,6 @@ describe("validateWorkflowBundle", () => {
         callerNodeId: "manager",
         callerStepId: "manager",
         resultNodeId: "worker",
-        source: "step-transition",
       },
     ]);
   });
@@ -611,7 +644,6 @@ describe("validateWorkflowBundle", () => {
         callerStepId: "manager",
         resultNodeId: "worker",
         when: "need_review",
-        source: "step-transition",
       },
     ]);
   });
@@ -1330,10 +1362,6 @@ describe("validateWorkflowBundle", () => {
           message: "must be a non-empty string",
         }),
         expect.objectContaining({
-          path: "workflow.managerNodeId",
-          message: "is not part of the step-addressed workflow schema",
-        }),
-        expect.objectContaining({
           path: "workflow.steps",
           message: "must be an array",
         }),
@@ -1572,7 +1600,8 @@ describe("validateWorkflowBundle", () => {
       return;
     }
 
-    expect(getLegacyEntryNodeId(result.value.workflow)).toBeUndefined();
+    expect("entryNodeId" in result.value.workflow).toBe(false);
+    expect("managerNodeId" in result.value.workflow).toBe(false);
     expect(resolveWorkflowEntryRuntimeId(result.value.workflow)).toBe(
       "divedra-manager",
     );
@@ -2235,14 +2264,15 @@ describe("validateWorkflowBundle", () => {
       return;
     }
 
-    expect(getLegacyManagerNodeId(result.value.workflow)).toBe(
+    expect("managerNodeId" in result.value.workflow).toBe(false);
+    expect("entryNodeId" in result.value.workflow).toBe(false);
+    expect(resolveWorkflowManagerRuntimeId(result.value.workflow)).toBe(
       "divedra-manager",
     );
-    expect(getLegacyEntryNodeId(result.value.workflow)).toBeUndefined();
     expect(resolveWorkflowEntryRuntimeId(result.value.workflow)).toBe(
       "divedra-manager",
     );
-    expect(getStructuralSubWorkflows(result.value.workflow)).toEqual([]);
+    expect("subWorkflows" in result.value.workflow).toBe(false);
     expect("subWorkflows" in result.value.workflow).toBe(false);
     expect(getLegacyAuthoredEdges(result.value.workflow)).toBeUndefined();
     expect(getLegacyAuthoredLoops(result.value.workflow)).toBeUndefined();
@@ -2271,7 +2301,6 @@ describe("validateWorkflowBundle", () => {
         workflowId: "repeat-with-edges",
         description: "repeat with explicit edges",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
@@ -2653,13 +2682,11 @@ describe("validateWorkflowBundle", () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: "workflow.managerNodeId",
-          message:
-            "authored managerNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
         }),
         expect.objectContaining({
           path: "workflow.entryNodeId",
-          message:
-            "authored entryNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
         }),
       ]),
     );
@@ -2687,8 +2714,7 @@ describe("validateWorkflowBundle", () => {
     ).toEqual([
       expect.objectContaining({
         path: "workflow.managerNodeId",
-        message:
-          "authored managerNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+        message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       }),
     ]);
     expect(
@@ -2696,8 +2722,7 @@ describe("validateWorkflowBundle", () => {
     ).toEqual([
       expect.objectContaining({
         path: "workflow.entryNodeId",
-        message:
-          "authored entryNodeId is legacy compatibility only and cannot be combined with authored manager-role nodes",
+        message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       }),
     ]);
   });
@@ -2706,7 +2731,6 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      entryNodeId: "divedra-manager",
       workflowCalls: [],
     };
 
@@ -2734,7 +2758,6 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      entryNodeId: "divedra-manager",
       subWorkflowConversations: [
         {
           id: "conv-1",
@@ -2769,7 +2792,6 @@ describe("validateWorkflowBundle", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      entryNodeId: "divedra-manager",
       workflowCalls: [
         {
           id: "call-review",
@@ -2897,7 +2919,7 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "workflow.subWorkflows" &&
-          issue.message.includes("legacy compatibility only"),
+          issue.message === REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       ),
     ).toBe(true);
   });
@@ -2933,8 +2955,7 @@ describe("validateWorkflowBundle", () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: "workflow.subWorkflows",
-          message:
-            "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
         }),
       ]),
     );
@@ -2968,7 +2989,7 @@ describe("validateWorkflowBundle", () => {
       result.error.some(
         (issue) =>
           issue.path === "workflow.subWorkflows" &&
-          issue.message.includes("legacy compatibility only"),
+          issue.message === REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       ),
     ).toBe(true);
   });
@@ -3034,7 +3055,7 @@ describe("validateWorkflowBundle", () => {
         expect.objectContaining({
           path: "workflow.subWorkflowConversations",
           message:
-            "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
         }),
       ]),
     );
@@ -3106,14 +3127,13 @@ describe("validateWorkflowBundle", () => {
       {
         field: "subWorkflows",
         value: "invalid",
-        message:
-          "authored subWorkflows are legacy compatibility only and cannot be combined with authored role/control nodes",
+        message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       },
       {
         field: "subWorkflowConversations",
         value: { invalid: true },
         message:
-          "authored subWorkflowConversations are legacy compatibility only and cannot be combined with authored role/control nodes",
+          "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
       },
     ] as const;
 
@@ -3152,7 +3172,7 @@ describe("validateWorkflowBundle", () => {
   });
 
   test("rejects structural boundary node kinds for role-authored bundles", () => {
-    for (const kind of ["subworkflow-manager", "input", "output"] as const) {
+    for (const kind of ["input", "output"] as const) {
       const raw = makeUnifiedRoleRaw();
       raw.workflow = {
         ...(raw.workflow as Record<string, unknown>),
@@ -3191,12 +3211,40 @@ describe("validateWorkflowBundle", () => {
     }
   });
 
-  test("accepts manager-less worker-only workflows with explicit entryNodeId", () => {
+  test("rejects removed argumentBindings source sub-workflow-output", () => {
+    const raw = makeValidRaw();
+    raw.nodePayloads["node-worker-1.json"] = {
+      ...(raw.nodePayloads["node-worker-1.json"] as Record<string, unknown>),
+      argumentBindings: [
+        {
+          targetPath: "task.upstream",
+          source: "sub-workflow-output",
+          sourceRef: "divedra-manager",
+          required: false,
+        },
+      ],
+    };
+
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(
+      result.error.some(
+        (issue) =>
+          issue.path ===
+            "nodePayloads.node-worker-1.json.argumentBindings[0].source" &&
+          issue.message === "must be a valid binding source",
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts manager-less worker-only workflows with inferrable graph entry", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
       managerNodeId: undefined,
-      entryNodeId: "worker-1",
       nodes: [
         {
           id: "worker-1",
@@ -3204,17 +3252,12 @@ describe("validateWorkflowBundle", () => {
           nodeFile: "node-worker-1.json",
           completion: { type: "none" },
         },
-        {
-          id: "worker-2",
-          role: "worker",
-          control: "loop-judge",
-          nodeFile: "node-worker-2.json",
-          completion: { type: "none" },
-        },
       ],
     };
     delete (raw.workflow as Record<string, unknown>)["managerNodeId"];
+    delete (raw.workflow as Record<string, unknown>)["entryNodeId"];
     delete raw.nodePayloads["node-divedra-manager.json"];
+    delete raw.nodePayloads["node-worker-2.json"];
 
     const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
     expect(result.ok).toBe(true);
@@ -3223,16 +3266,18 @@ describe("validateWorkflowBundle", () => {
     }
 
     expect(result.value.workflow.hasManagerNode).toBe(false);
-    expect(getLegacyManagerNodeId(result.value.workflow)).toBe("worker-1");
-    expect(getLegacyEntryNodeId(result.value.workflow)).toBe("worker-1");
+    expect(resolveWorkflowManagerRuntimeId(result.value.workflow)).toBe(
+      "worker-1",
+    );
+    expect(resolveWorkflowEntryRuntimeId(result.value.workflow)).toBe(
+      "worker-1",
+    );
   });
 
   test("rejects multiple manager-role nodes", () => {
     const raw = makeUnifiedRoleRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      managerNodeId: "divedra-manager",
-      entryNodeId: "divedra-manager",
       nodes: [
         {
           id: "divedra-manager",
@@ -3257,8 +3302,10 @@ describe("validateWorkflowBundle", () => {
     }
 
     expect(
-      result.error.some((issue) =>
-        issue.message.includes("at most one manager node"),
+      result.error.some(
+        (issue) =>
+          issue.path === "workflow" &&
+          issue.message.includes("exactly one manager-role node"),
       ),
     ).toBe(true);
   });
@@ -3361,16 +3408,15 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects legacy sub-manager node kind", () => {
-    expectInvalidNodeKind("sub-manager");
-  });
-
-  test("rejects legacy manager node kind", () => {
-    expectInvalidNodeKind("manager");
-  });
-
-  test("rejects branded sub-workflow manager node kind", () => {
-    expectInvalidNodeKind("sub-divedra-manager");
+  test.each(
+    [
+      ["sub-manager"],
+      ["manager"],
+      ["sub-divedra-manager"],
+      ["subworkflow-manager"],
+    ] as const,
+  )("rejects invalid or legacy node kind %s", (kind) => {
+    expectInvalidNodeKind(kind);
   });
 
   test("accepts optional execution policy on workflow nodes", () => {
@@ -6333,18 +6379,16 @@ describe("validateWorkflowBundle", () => {
     expect(messages).toContain(
       "workflow.nodes[0].id:must match ^[a-z0-9][a-z0-9-]{1,63}$",
     );
-    expect(messages).toContain(
-      "workflow.managerNodeId:must reference an existing node id",
-    );
   });
 
-  test("rejects workflow managerNodeId that does not reference a root manager node", () => {
+  test("rejects manager-role node with task kind; inferred manager must be root-manager", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
       nodes: [
         {
           id: "divedra-manager",
+          role: "manager",
           kind: "task",
           nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
@@ -6368,11 +6412,11 @@ describe("validateWorkflowBundle", () => {
       .map((entry) => `${entry.path}:${entry.message}`)
       .join("\n");
     expect(messages).toContain(
-      "workflow.managerNodeId:must reference a node with kind 'root-manager'",
+      "workflow:inferred manager node must use kind 'root-manager'",
     );
   });
 
-  test("rejects additional root-manager nodes that are not workflow.managerNodeId", () => {
+  test("rejects additional root-manager nodes when a single manager is already defined", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
@@ -6410,485 +6454,21 @@ describe("validateWorkflowBundle", () => {
     ).toBe(true);
   });
 
-  test("rejects duplicate sub-workflow boundary nodes that make routing ambiguous", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      workflowId: "demo",
-      description: "demo",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      subWorkflows: [
-        {
-          id: "sw-a",
-          description: "A",
-          managerNodeId: "sub-manager-a",
-          inputNodeId: "input-a",
-          outputNodeId: "output-a",
-          nodeIds: ["sub-manager-a", "input-a", "output-a"],
-          inputSources: [{ type: "human-input" }],
-        },
-        {
-          id: "sw-b",
-          description: "B",
-          managerNodeId: "sub-manager-a",
-          inputNodeId: "input-a",
-          outputNodeId: "output-b",
-          nodeIds: ["sub-manager-a", "input-a", "output-b"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sub-manager-a",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sub-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "input-a",
-          kind: "input",
-          nodeFile: "node-input-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "output-a",
-          kind: "output",
-          nodeFile: "node-output-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "output-b",
-          kind: "output",
-          nodeFile: "node-output-b.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sub-manager-a.json": {
-        id: "sub-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sub-manager-a",
-        variables: {},
-      },
-      "node-input-a.json": {
-        id: "input-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "input-a",
-        variables: {},
-      },
-      "node-output-a.json": {
-        id: "output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "output-a",
-        variables: {},
-      },
-      "node-output-b.json": {
-        id: "output-b",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "output-b",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    expect(
-      result.error.some(
-        (issue) => issue.path === "workflow.subWorkflows[1].managerNodeId",
-      ),
-    ).toBe(true);
-    expect(
-      result.error.some(
-        (issue) => issue.path === "workflow.subWorkflows[1].inputNodeId",
-      ),
-    ).toBe(true);
-  });
-
-  test("requires sub-workflow nodeIds membership lists", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      workflowId: "demo",
-      description: "demo",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      subWorkflows: [
-        {
-          id: "sw-a",
-          description: "A",
-          managerNodeId: "sub-manager-a",
-          inputNodeId: "input-a",
-          outputNodeId: "output-a",
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sub-manager-a",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sub-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "input-a",
-          kind: "input",
-          nodeFile: "node-input-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "output-a",
-          kind: "output",
-          nodeFile: "node-output-a.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sub-manager-a.json": {
-        id: "sub-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sub-manager-a",
-        variables: {},
-      },
-      "node-input-a.json": {
-        id: "input-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "input-a",
-        variables: {},
-      },
-      "node-output-a.json": {
-        id: "output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "output-a",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    expect(
-      result.error.some(
-        (issue) => issue.path === "workflow.subWorkflows[0].nodeIds",
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects reused boundary nodes inside the same sub-workflow", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      workflowId: "demo",
-      description: "demo",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      subWorkflows: [
-        {
-          id: "sw-a",
-          description: "A",
-          managerNodeId: "sub-manager-a",
-          inputNodeId: "sub-manager-a",
-          outputNodeId: "sub-output-a",
-          nodeIds: ["sub-manager-a", "sub-output-a"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sub-manager-a",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sub-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sub-output-a",
-          kind: "output",
-          nodeFile: "node-sub-output-a.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sub-manager-a.json": {
-        id: "sub-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sub-manager-a",
-        variables: {},
-      },
-      "node-sub-output-a.json": {
-        id: "sub-output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sub-output-a",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[0].managerNodeId" &&
-          issue.message.includes("same node as inputNodeId"),
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects duplicate nodeIds within the same sub-workflow", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      workflowId: "demo",
-      description: "demo",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      subWorkflows: [
-        {
-          id: "sw-a",
-          description: "A",
-          managerNodeId: "sub-manager-a",
-          inputNodeId: "input-a",
-          outputNodeId: "output-a",
-          nodeIds: ["sub-manager-a", "input-a", "output-a", "input-a"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sub-manager-a",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sub-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "input-a",
-          kind: "input",
-          nodeFile: "node-input-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "output-a",
-          kind: "output",
-          nodeFile: "node-output-a.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sub-manager-a.json": {
-        id: "sub-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sub-manager-a",
-        variables: {},
-      },
-      "node-input-a.json": {
-        id: "input-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "input-a",
-        variables: {},
-      },
-      "node-output-a.json": {
-        id: "output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "output-a",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[0].nodeIds[3]" &&
-          issue.message.includes("duplicate node id 'input-a'"),
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects sub-workflow managerNodeId that does not reference a subworkflow-manager node", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      workflowId: "demo",
-      description: "demo",
-      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      managerNodeId: "divedra-manager",
-      subWorkflows: [
-        {
-          id: "sw-a",
-          description: "A",
-          managerNodeId: "plain-manager-a",
-          inputNodeId: "input-a",
-          outputNodeId: "output-a",
-          nodeIds: ["plain-manager-a", "input-a", "output-a"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "plain-manager-a",
-          kind: "root-manager",
-          nodeFile: "node-plain-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "input-a",
-          kind: "input",
-          nodeFile: "node-input-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "output-a",
-          kind: "output",
-          nodeFile: "node-output-a.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-plain-manager-a.json": {
-        id: "plain-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "plain-manager-a",
-        variables: {},
-      },
-      "node-input-a.json": {
-        id: "input-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "input-a",
-        variables: {},
-      },
-      "node-output-a.json": {
-        id: "output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "output-a",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[0].managerNodeId" &&
-          issue.message.includes("kind 'subworkflow-manager'"),
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects authored subWorkflowConversations on legacy node-graph bundles by top-level presence", () => {
+  test("rejects authored subWorkflows by top-level presence on legacy node-graph bundles", () => {
     const raw = makeValidRaw();
     raw.workflow = {
       ...(raw.workflow as Record<string, unknown>),
-      prompts: {
-        divedraPromptTemplate: "Coordinate {{topic}}.",
-        workerSystemPromptTemplate: "Return the node payload for {{topic}}.",
-      },
+      subWorkflows: [
+        {
+          id: "legacy-lane",
+          description: "legacy lane",
+          managerNodeId: "sw-manager",
+          inputNodeId: "sw-input",
+          outputNodeId: "sw-output",
+          nodeIds: ["sw-manager", "sw-input", "sw-output"],
+          inputSources: [{ type: "human-input" }],
+        },
+      ],
       nodes: [
         {
           id: "divedra-manager",
@@ -6897,82 +6477,25 @@ describe("validateWorkflowBundle", () => {
           completion: { type: "none" },
         },
         {
-          id: "branch-judge",
-          kind: "branch-judge",
-          nodeFile: "node-branch-judge.json",
+          id: "sw-manager",
+          kind: "task",
+          nodeFile: "node-sw-manager.json",
           completion: { type: "none" },
         },
         {
-          id: "sw1-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw1-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-input",
+          id: "sw-input",
           kind: "input",
-          nodeFile: "node-sw1-input.json",
+          nodeFile: "node-sw-input.json",
           completion: { type: "none" },
         },
         {
-          id: "sw1-output",
+          id: "sw-output",
           kind: "output",
-          nodeFile: "node-sw1-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw2-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-input",
-          kind: "input",
-          nodeFile: "node-sw2-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-output",
-          kind: "output",
-          nodeFile: "node-sw2-output.json",
+          nodeFile: "node-sw-output.json",
           completion: { type: "none" },
         },
       ],
-      edges: [
-        { from: "divedra-manager", to: "branch-judge", when: "always" },
-        { from: "branch-judge", to: "sw1-manager", when: "take_sw1" },
-        { from: "sw1-output", to: "sw2-manager", when: "always" },
-      ],
-      subWorkflows: [
-        {
-          id: "sw1",
-          description: "first",
-          managerNodeId: "sw1-manager",
-          inputNodeId: "sw1-input",
-          outputNodeId: "sw1-output",
-          nodeIds: ["sw1-manager", "sw1-input", "sw1-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "branch-block" },
-        },
-        {
-          id: "sw2",
-          description: "second",
-          managerNodeId: "sw2-manager",
-          inputNodeId: "sw2-input",
-          outputNodeId: "sw2-output",
-          nodeIds: ["sw2-manager", "sw2-input", "sw2-output"],
-          inputSources: [{ type: "sub-workflow-output", subWorkflowId: "sw1" }],
-        },
-      ],
-      subWorkflowConversations: [
-        {
-          id: "conv-1",
-          participants: ["sw1", "sw2"],
-          maxTurns: 4,
-          stopWhen: "done",
-        },
-      ],
+      edges: [],
     };
     raw.nodePayloads = {
       "node-divedra-manager.json": {
@@ -6982,53 +6505,25 @@ describe("validateWorkflowBundle", () => {
         promptTemplate: "manager",
         variables: {},
       },
-      "node-sw1-manager.json": {
-        id: "sw1-manager",
+      "node-sw-manager.json": {
+        id: "sw-manager",
         executionBackend: "codex-agent",
         model: "gpt-5-nano",
-        promptTemplate: "m1",
+        promptTemplate: "sw-manager",
         variables: {},
       },
-      "node-branch-judge.json": {
-        id: "branch-judge",
+      "node-sw-input.json": {
+        id: "sw-input",
         executionBackend: "codex-agent",
         model: "gpt-5-nano",
-        promptTemplate: "judge",
+        promptTemplate: "sw-input",
         variables: {},
       },
-      "node-sw1-input.json": {
-        id: "sw1-input",
+      "node-sw-output.json": {
+        id: "sw-output",
         executionBackend: "codex-agent",
         model: "gpt-5-nano",
-        promptTemplate: "in1",
-        variables: {},
-      },
-      "node-sw1-output.json": {
-        id: "sw1-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "out1",
-        variables: {},
-      },
-      "node-sw2-manager.json": {
-        id: "sw2-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "m2",
-        variables: {},
-      },
-      "node-sw2-input.json": {
-        id: "sw2-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "in2",
-        variables: {},
-      },
-      "node-sw2-output.json": {
-        id: "sw2-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "out2",
+        promptTemplate: "sw-output",
         variables: {},
       },
     };
@@ -7041,1101 +6536,69 @@ describe("validateWorkflowBundle", () => {
     expect(
       result.error.some(
         (issue) =>
-          issue.path === "workflow.subWorkflowConversations" &&
-          issue.message ===
-            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
+          issue.path === "workflow.subWorkflows" &&
+          issue.message === REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
       ),
     ).toBe(true);
+  });
+
+  test("rejects authored subWorkflows on legacy node-graph bundles without traversing structural entry validation", () => {
+    const raw = makeValidRaw();
+    raw.workflow = {
+      ...(raw.workflow as Record<string, unknown>),
+      subWorkflows: [
+        {
+          id: "legacy-lane",
+          description: "legacy lane",
+          managerNodeId: "",
+          inputNodeId: "missing-input",
+          outputNodeId: "missing-output",
+          nodeIds: [],
+          inputSources: [{ type: "not-a-real-source" }],
+          block: { type: "not-a-real-block" },
+        },
+      ],
+      nodes: [
+        {
+          id: "divedra-manager",
+          kind: "root-manager",
+          nodeFile: "node-divedra-manager.json",
+          completion: { type: "none" },
+        },
+      ],
+      edges: [],
+    };
+    raw.nodePayloads = {
+      "node-divedra-manager.json": {
+        id: "divedra-manager",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "manager",
+        variables: {},
+      },
+    };
+
+    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.subWorkflows",
+          message: REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
+        }),
+      ]),
+    );
     expect(
-      result.error.some((issue) =>
-        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
+      result.error.some(
+        (issue) =>
+          issue.path.startsWith("workflow.subWorkflows[0].managerNodeId") ||
+          issue.path.startsWith("workflow.subWorkflows[0].inputSources") ||
+          issue.path.startsWith("workflow.subWorkflows[0].block"),
       ),
     ).toBe(false);
-  });
-
-  test("rejects loop-body sub-workflow blocks that do not reference an existing loop", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-loop-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-input",
-          kind: "input",
-          nodeFile: "node-loop-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-output",
-          kind: "output",
-          nodeFile: "node-loop-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [{ from: "divedra-manager", to: "loop-manager", when: "always" }],
-      subWorkflows: [
-        {
-          id: "loop-body",
-          description: "loop body",
-          managerNodeId: "loop-manager",
-          inputNodeId: "loop-input",
-          outputNodeId: "loop-output",
-          nodeIds: ["loop-manager", "loop-input", "loop-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "missing-loop" },
-        },
-      ],
-      loops: [],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-loop-manager.json": {
-        id: "loop-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-manager",
-        variables: {},
-      },
-      "node-loop-input.json": {
-        id: "loop-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-input",
-        variables: {},
-      },
-      "node-loop-output.json": {
-        id: "loop-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) => issue.path === "workflow.subWorkflows[0].block.loopId",
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects duplicate loop-body sub-workflows for the same loop", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-manager-a",
-          kind: "subworkflow-manager",
-          nodeFile: "node-loop-manager-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-input-a",
-          kind: "input",
-          nodeFile: "node-loop-input-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-output-a",
-          kind: "output",
-          nodeFile: "node-loop-output-a.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-manager-b",
-          kind: "subworkflow-manager",
-          nodeFile: "node-loop-manager-b.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-input-b",
-          kind: "input",
-          nodeFile: "node-loop-input-b.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-output-b",
-          kind: "output",
-          nodeFile: "node-loop-output-b.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-judge",
-          kind: "loop-judge",
-          nodeFile: "node-loop-judge.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [
-        { from: "divedra-manager", to: "loop-manager-a", when: "always" },
-        { from: "loop-judge", to: "loop-manager-a", when: "continue_round" },
-        { from: "loop-judge", to: "divedra-manager", when: "loop_exit" },
-      ],
-      subWorkflows: [
-        {
-          id: "loop-body-a",
-          description: "loop body a",
-          managerNodeId: "loop-manager-a",
-          inputNodeId: "loop-input-a",
-          outputNodeId: "loop-output-a",
-          nodeIds: ["loop-manager-a", "loop-input-a", "loop-output-a"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "main-loop" },
-        },
-        {
-          id: "loop-body-b",
-          description: "loop body b",
-          managerNodeId: "loop-manager-b",
-          inputNodeId: "loop-input-b",
-          outputNodeId: "loop-output-b",
-          nodeIds: ["loop-manager-b", "loop-input-b", "loop-output-b"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "main-loop" },
-        },
-      ],
-      loops: [
-        {
-          id: "main-loop",
-          judgeNodeId: "loop-judge",
-          continueWhen: "continue_round",
-          exitWhen: "loop_exit",
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-loop-manager-a.json": {
-        id: "loop-manager-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-manager-a",
-        variables: {},
-      },
-      "node-loop-input-a.json": {
-        id: "loop-input-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-input-a",
-        variables: {},
-      },
-      "node-loop-output-a.json": {
-        id: "loop-output-a",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-output-a",
-        variables: {},
-      },
-      "node-loop-manager-b.json": {
-        id: "loop-manager-b",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-manager-b",
-        variables: {},
-      },
-      "node-loop-input-b.json": {
-        id: "loop-input-b",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-input-b",
-        variables: {},
-      },
-      "node-loop-output-b.json": {
-        id: "loop-output-b",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-output-b",
-        variables: {},
-      },
-      "node-loop-judge.json": {
-        id: "loop-judge",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-judge",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[1].block.loopId" &&
-          issue.message.includes("already assigned to loop-body subWorkflow"),
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects branch-block sub-workflows that are not entered from a branch-judge", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "prepare",
-          kind: "task",
-          nodeFile: "node-prepare.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "branch-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-branch-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "branch-input",
-          kind: "input",
-          nodeFile: "node-branch-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "branch-output",
-          kind: "output",
-          nodeFile: "node-branch-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [
-        { from: "divedra-manager", to: "prepare", when: "always" },
-        { from: "prepare", to: "branch-manager", when: "always" },
-      ],
-      subWorkflows: [
-        {
-          id: "branch-body",
-          description: "branch body",
-          managerNodeId: "branch-manager",
-          inputNodeId: "branch-input",
-          outputNodeId: "branch-output",
-          nodeIds: ["branch-manager", "branch-input", "branch-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "branch-block" },
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-prepare.json": {
-        id: "prepare",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "prepare",
-        variables: {},
-      },
-      "node-branch-manager.json": {
-        id: "branch-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "branch-manager",
-        variables: {},
-      },
-      "node-branch-input.json": {
-        id: "branch-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "branch-input",
-        variables: {},
-      },
-      "node-branch-output.json": {
-        id: "branch-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "branch-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) => issue.path === "workflow.subWorkflows[0].block.type",
-      ),
-    ).toBe(true);
-  });
-
-  test("rejects loop-body sub-workflows whose linked loop does not continue into the sub-workflow manager", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-loop-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-input",
-          kind: "input",
-          nodeFile: "node-loop-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-output",
-          kind: "output",
-          nodeFile: "node-loop-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-worker",
-          kind: "task",
-          nodeFile: "node-loop-worker.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-judge",
-          kind: "loop-judge",
-          nodeFile: "node-loop-judge.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [
-        { from: "divedra-manager", to: "loop-manager", when: "always" },
-        { from: "loop-judge", to: "loop-worker", when: "continue_round" },
-        { from: "loop-judge", to: "divedra-manager", when: "loop_exit" },
-      ],
-      subWorkflows: [
-        {
-          id: "loop-body",
-          description: "loop body",
-          managerNodeId: "loop-manager",
-          inputNodeId: "loop-input",
-          outputNodeId: "loop-output",
-          nodeIds: ["loop-manager", "loop-input", "loop-worker", "loop-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "main-loop" },
-        },
-      ],
-      loops: [
-        {
-          id: "main-loop",
-          judgeNodeId: "loop-judge",
-          continueWhen: "continue_round",
-          exitWhen: "loop_exit",
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-loop-manager.json": {
-        id: "loop-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-manager",
-        variables: {},
-      },
-      "node-loop-input.json": {
-        id: "loop-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-input",
-        variables: {},
-      },
-      "node-loop-output.json": {
-        id: "loop-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-output",
-        variables: {},
-      },
-      "node-loop-worker.json": {
-        id: "loop-worker",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-worker",
-        variables: {},
-      },
-      "node-loop-judge.json": {
-        id: "loop-judge",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "loop-judge",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[0].block.loopId" &&
-          issue.message.includes("continue edge to manager 'loop-manager'"),
-      ),
-    ).toBe(true);
-  });
-
-  test("allows nested sub-workflow vertical groups", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-a-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-input",
-          kind: "input",
-          nodeFile: "node-a-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-inner-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-a-inner-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-inner-input",
-          kind: "input",
-          nodeFile: "node-a-inner-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-inner-output",
-          kind: "output",
-          nodeFile: "node-a-inner-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-output",
-          kind: "output",
-          nodeFile: "node-a-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      subWorkflows: [
-        {
-          id: "a",
-          description: "a",
-          managerNodeId: "a-manager",
-          inputNodeId: "a-input",
-          outputNodeId: "a-output",
-          nodeIds: ["a-manager", "a-input", "a-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-        {
-          id: "a-inner",
-          description: "a-inner",
-          managerNodeId: "a-inner-manager",
-          inputNodeId: "a-inner-input",
-          outputNodeId: "a-inner-output",
-          nodeIds: ["a-inner-manager", "a-inner-input", "a-inner-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-a-manager.json": {
-        id: "a-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-manager",
-        variables: {},
-      },
-      "node-a-input.json": {
-        id: "a-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-in",
-        variables: {},
-      },
-      "node-a-inner-manager.json": {
-        id: "a-inner-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-inner-manager",
-        variables: {},
-      },
-      "node-a-inner-input.json": {
-        id: "a-inner-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-inner-in",
-        variables: {},
-      },
-      "node-a-inner-output.json": {
-        id: "a-inner-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-inner-out",
-        variables: {},
-      },
-      "node-a-output.json": {
-        id: "a-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-out",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(true);
-  });
-
-  test("rejects crossing sub-workflow vertical groups", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-a-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-input",
-          kind: "input",
-          nodeFile: "node-a-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-b-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-input",
-          kind: "input",
-          nodeFile: "node-b-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-output",
-          kind: "output",
-          nodeFile: "node-a-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-output",
-          kind: "output",
-          nodeFile: "node-b-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      subWorkflows: [
-        {
-          id: "a",
-          description: "a",
-          managerNodeId: "a-manager",
-          inputNodeId: "a-input",
-          outputNodeId: "a-output",
-          nodeIds: ["a-manager", "a-input", "a-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-        {
-          id: "b",
-          description: "b",
-          managerNodeId: "b-manager",
-          inputNodeId: "b-input",
-          outputNodeId: "b-output",
-          nodeIds: ["b-manager", "b-input", "b-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-a-manager.json": {
-        id: "a-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-manager",
-        variables: {},
-      },
-      "node-a-input.json": {
-        id: "a-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-in",
-        variables: {},
-      },
-      "node-a-output.json": {
-        id: "a-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-out",
-        variables: {},
-      },
-      "node-b-manager.json": {
-        id: "b-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-manager",
-        variables: {},
-      },
-      "node-b-input.json": {
-        id: "b-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-in",
-        variables: {},
-      },
-      "node-b-output.json": {
-        id: "b-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-out",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow.subWorkflows:vertical subWorkflow groups 'a' and 'b' cross",
-    );
-  });
-
-  test("rejects root-to-child edges that bypass the sub-workflow manager boundary", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "root-worker",
-          kind: "task",
-          nodeFile: "node-root-worker.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-input",
-          kind: "input",
-          nodeFile: "node-sw-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-output",
-          kind: "output",
-          nodeFile: "node-sw-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [{ from: "root-worker", to: "sw-input", when: "always" }],
-      subWorkflows: [
-        {
-          id: "sw",
-          description: "sw",
-          managerNodeId: "sw-manager",
-          inputNodeId: "sw-input",
-          outputNodeId: "sw-output",
-          nodeIds: ["sw-manager", "sw-input", "sw-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-root-worker.json": {
-        id: "root-worker",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "root-worker",
-        variables: {},
-      },
-      "node-sw-manager.json": {
-        id: "sw-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-manager",
-        variables: {},
-      },
-      "node-sw-input.json": {
-        id: "sw-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-input",
-        variables: {},
-      },
-      "node-sw-output.json": {
-        id: "sw-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow.edges[0].to:cross-scope edge from root scope must target recipient sub-workflow manager 'sw-manager', not child node 'sw-input'",
-    );
-  });
-
-  test("rejects child-to-root-worker edges that bypass the root manager boundary", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "root-worker",
-          kind: "task",
-          nodeFile: "node-root-worker.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-input",
-          kind: "input",
-          nodeFile: "node-sw-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw-output",
-          kind: "output",
-          nodeFile: "node-sw-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [{ from: "sw-output", to: "root-worker", when: "always" }],
-      subWorkflows: [
-        {
-          id: "sw",
-          description: "sw",
-          managerNodeId: "sw-manager",
-          inputNodeId: "sw-input",
-          outputNodeId: "sw-output",
-          nodeIds: ["sw-manager", "sw-input", "sw-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-root-worker.json": {
-        id: "root-worker",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "root-worker",
-        variables: {},
-      },
-      "node-sw-manager.json": {
-        id: "sw-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-manager",
-        variables: {},
-      },
-      "node-sw-input.json": {
-        id: "sw-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-input",
-        variables: {},
-      },
-      "node-sw-output.json": {
-        id: "sw-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow.edges[0].to:cross-scope edge from sub-workflow 'sw' to root scope must target workflow manager 'divedra-manager', not root node 'root-worker'",
-    );
-  });
-
-  test("rejects cross-sub-workflow edges that bypass the recipient manager boundary", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-a-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-input",
-          kind: "input",
-          nodeFile: "node-a-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "a-output",
-          kind: "output",
-          nodeFile: "node-a-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-b-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-input",
-          kind: "input",
-          nodeFile: "node-b-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "b-output",
-          kind: "output",
-          nodeFile: "node-b-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [{ from: "a-output", to: "b-input", when: "always" }],
-      subWorkflows: [
-        {
-          id: "a",
-          description: "a",
-          managerNodeId: "a-manager",
-          inputNodeId: "a-input",
-          outputNodeId: "a-output",
-          nodeIds: ["a-manager", "a-input", "a-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-        {
-          id: "b",
-          description: "b",
-          managerNodeId: "b-manager",
-          inputNodeId: "b-input",
-          outputNodeId: "b-output",
-          nodeIds: ["b-manager", "b-input", "b-output"],
-          inputSources: [{ type: "sub-workflow-output", subWorkflowId: "a" }],
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-a-manager.json": {
-        id: "a-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-manager",
-        variables: {},
-      },
-      "node-a-input.json": {
-        id: "a-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-input",
-        variables: {},
-      },
-      "node-a-output.json": {
-        id: "a-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "a-output",
-        variables: {},
-      },
-      "node-b-manager.json": {
-        id: "b-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-manager",
-        variables: {},
-      },
-      "node-b-input.json": {
-        id: "b-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-input",
-        variables: {},
-      },
-      "node-b-output.json": {
-        id: "b-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "b-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow.edges[0].to:cross-scope edge from sub-workflow 'a' to sub-workflow 'b' must target recipient manager 'b-manager', not child node 'b-input'",
-    );
   });
 
   test("rejects loop continue target placed after the loop judge", () => {
@@ -8303,389 +6766,5 @@ describe("validateWorkflowBundle", () => {
     expect(messages).toContain(
       "workflow.loops:vertical loop scopes 'loop-a' and 'loop-b' cross",
     );
-  });
-
-  test("rejects crossing group and loop scopes that cannot be represented vertically", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "group-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-group-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "group-input",
-          kind: "input",
-          nodeFile: "node-group-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-start",
-          kind: "task",
-          nodeFile: "node-loop-start.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "group-output",
-          kind: "output",
-          nodeFile: "node-group-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "loop-judge",
-          kind: "loop-judge",
-          nodeFile: "node-loop-judge.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [
-        { from: "loop-judge", to: "loop-start", when: "retry" },
-        { from: "loop-judge", to: "divedra-manager", when: "exit" },
-      ],
-      subWorkflows: [
-        {
-          id: "main-group",
-          description: "main-group",
-          managerNodeId: "group-manager",
-          inputNodeId: "group-input",
-          outputNodeId: "group-output",
-          nodeIds: [
-            "group-manager",
-            "group-input",
-            "loop-start",
-            "group-output",
-          ],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-      loops: [
-        {
-          id: "main-loop",
-          judgeNodeId: "loop-judge",
-          continueWhen: "retry",
-          exitWhen: "exit",
-        },
-      ],
-    };
-    raw.nodePayloads["node-group-manager.json"] = {
-      id: "group-manager",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "group-manager",
-      variables: {},
-    };
-    raw.nodePayloads["node-group-input.json"] = {
-      id: "group-input",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "group-input",
-      variables: {},
-    };
-    raw.nodePayloads["node-loop-start.json"] = {
-      id: "loop-start",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "loop-start",
-      variables: {},
-    };
-    raw.nodePayloads["node-group-output.json"] = {
-      id: "group-output",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "group-output",
-      variables: {},
-    };
-    raw.nodePayloads["node-loop-judge.json"] = {
-      id: "loop-judge",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "loop-judge",
-      variables: {},
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow:vertical group and loop scopes 'main-group' and 'main-loop' cross",
-    );
-  });
-
-  test("rejects unsupported inert sub-workflow conversation policy and selection policy", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw1-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-input",
-          kind: "input",
-          nodeFile: "node-sw1-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-output",
-          kind: "output",
-          nodeFile: "node-sw1-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      subWorkflows: [
-        {
-          id: "sw1",
-          description: "first",
-          managerNodeId: "sw1-manager",
-          inputNodeId: "sw1-input",
-          outputNodeId: "sw1-output",
-          nodeIds: ["sw1-manager", "sw1-input", "sw1-output"],
-          inputSources: [
-            {
-              type: "human-input",
-              selectionPolicy: { mode: "latest-any" },
-            },
-          ],
-        },
-      ],
-      subWorkflowConversations: [
-        {
-          id: "conv-1",
-          participants: ["sw1", "sw1"],
-          maxTurns: 1,
-          stopWhen: "done",
-          conversationPolicy: { turnPolicy: "round-robin" },
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sw1-manager.json": {
-        id: "sw1-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw1-manager",
-        variables: {},
-      },
-      "node-sw1-input.json": {
-        id: "sw1-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw1-input",
-        variables: {},
-      },
-      "node-sw1-output.json": {
-        id: "sw1-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "sw1-output",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    const messages = result.error
-      .map((entry) => `${entry.path}:${entry.message}`)
-      .join("\n");
-    expect(messages).toContain(
-      "workflow.subWorkflows[0].inputSources[0].selectionPolicy:is currently unsupported",
-    );
-    expect(messages).toContain(
-      "workflow.subWorkflowConversations:authored subWorkflowConversations are legacy compatibility only and are no longer supported",
-    );
-    expect(messages).not.toContain(
-      "workflow.subWorkflowConversations[0].conversationPolicy",
-    );
-  });
-
-  test("rejects legacy sub-workflow aliases inputs without traversing removed conversation entry aliases", () => {
-    const raw = makeValidRaw();
-    raw.workflow = {
-      ...(raw.workflow as Record<string, unknown>),
-      nodes: [
-        {
-          id: "divedra-manager",
-          kind: "root-manager",
-          nodeFile: "node-divedra-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw1-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-input",
-          kind: "input",
-          nodeFile: "node-sw1-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw1-output",
-          kind: "output",
-          nodeFile: "node-sw1-output.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-manager",
-          kind: "subworkflow-manager",
-          nodeFile: "node-sw2-manager.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-input",
-          kind: "input",
-          nodeFile: "node-sw2-input.json",
-          completion: { type: "none" },
-        },
-        {
-          id: "sw2-output",
-          kind: "output",
-          nodeFile: "node-sw2-output.json",
-          completion: { type: "none" },
-        },
-      ],
-      edges: [],
-      subWorkflows: [
-        {
-          id: "sw1",
-          description: "first",
-          managerNodeId: "sw1-manager",
-          inputNodeId: "sw1-input",
-          outputNodeId: "sw1-output",
-          nodeIds: ["sw1-manager", "sw1-input", "sw1-output"],
-          inputs: [{ type: "human-input" }],
-        },
-        {
-          id: "sw2",
-          description: "second",
-          managerNodeId: "sw2-manager",
-          inputNodeId: "sw2-input",
-          outputNodeId: "sw2-output",
-          nodeIds: ["sw2-manager", "sw2-input", "sw2-output"],
-          inputSources: [{ type: "sub-workflow-output", subWorkflowId: "sw1" }],
-        },
-      ],
-      subWorkflowConversations: [
-        {
-          id: "conv-legacy",
-          participantsIds: ["sw1", "sw2"],
-          maxTurns: 2,
-          stopWhen: "done",
-        },
-      ],
-    };
-    raw.nodePayloads = {
-      "node-divedra-manager.json": {
-        id: "divedra-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      "node-sw1-manager.json": {
-        id: "sw1-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "m1",
-        variables: {},
-      },
-      "node-sw1-input.json": {
-        id: "sw1-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "in1",
-        variables: {},
-      },
-      "node-sw1-output.json": {
-        id: "sw1-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "out1",
-        variables: {},
-      },
-      "node-sw2-manager.json": {
-        id: "sw2-manager",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "m2",
-        variables: {},
-      },
-      "node-sw2-input.json": {
-        id: "sw2-input",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "in2",
-        variables: {},
-      },
-      "node-sw2-output.json": {
-        id: "sw2-output",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "out2",
-        variables: {},
-      },
-    };
-
-    const result = validateWorkflowBundle(raw, legacyWorkflowAuthorshipOk);
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflows[0].inputs" &&
-          issue.message.includes("not supported"),
-      ),
-    ).toBe(true);
-    expect(
-      result.error.some(
-        (issue) =>
-          issue.path === "workflow.subWorkflowConversations" &&
-          issue.message ===
-            "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
-      ),
-    ).toBe(true);
-    expect(
-      result.error.some((issue) =>
-        issue.path.startsWith("workflow.subWorkflowConversations[0]."),
-      ),
-    ).toBe(false);
   });
 });

@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { AdapterExecutionInput } from "./adapter";
 import {
-  findOwningSubWorkflowByRuntimeNodeId,
   type StepIdentityFields,
   toStepIdentityFields,
 } from "./runtime-addressing";
@@ -69,8 +68,6 @@ export interface NodeRestartEvent {
 export interface ConversationTurnRecord {
   readonly conversationId: string;
   readonly turnIndex: number;
-  readonly fromSubWorkflowId: string;
-  readonly toSubWorkflowId: string;
   readonly fromManagerNodeId: string;
   readonly toManagerNodeId: string;
   readonly communicationId: string;
@@ -82,7 +79,6 @@ export interface NodeOutputRef {
   readonly kind?: "node-output";
   readonly workflowExecutionId: string;
   readonly workflowId: string;
-  readonly subWorkflowId?: string;
   readonly outputNodeId: string;
   readonly outputStepId?: string;
   readonly nodeRegistryId?: string;
@@ -97,7 +93,6 @@ export interface ManagerMessagePayloadRef {
   readonly kind: "manager-message";
   readonly workflowExecutionId: string;
   readonly workflowId: string;
-  readonly subWorkflowId?: string;
   readonly outputNodeId: string;
   readonly nodeExecId: string;
   readonly artifactDir: string;
@@ -109,19 +104,30 @@ export interface ManagerMessagePayloadRef {
 
 export type CommunicationPayloadRef = OutputRef | ManagerMessagePayloadRef;
 
+/** Discriminates in-execution graph delivery vs external mailbox boundary I/O. */
+export type CommunicationRoutingScope = "intra-workflow" | "external-mailbox";
+
+/**
+ * Maps persisted `routingScope` values to the current enum. Only
+ * `external-mailbox` is preserved; every other string (including labels from
+ * removed structural routing models or typos) is coerced to `intra-workflow`.
+ */
+export function normalizeCommunicationRoutingScope(
+  value: unknown,
+): CommunicationRoutingScope {
+  if (value === "external-mailbox") {
+    return "external-mailbox";
+  }
+  return "intra-workflow";
+}
+
 export interface CommunicationRecord {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly communicationId: string;
   readonly fromNodeId: string;
   readonly toNodeId: string;
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
-  readonly routingScope:
-    | "parent-to-sub-workflow"
-    | "cross-sub-workflow"
-    | "intra-sub-workflow"
-    | "external-mailbox";
+  readonly routingScope: CommunicationRoutingScope;
   readonly sourceNodeExecId: string;
   readonly payloadRef: CommunicationPayloadRef;
   readonly deliveryKind:
@@ -167,7 +173,6 @@ export interface NodeBackendSessionRecord extends StepIdentityFields {
 export interface PendingOptionalNodeDecision {
   readonly nodeId: string;
   readonly owningManagerNodeId: string;
-  readonly subWorkflowId?: string;
   readonly requestedAt: string;
   readonly status: "pending" | "execute" | "skip";
   readonly reason?: string;
@@ -235,17 +240,10 @@ export function buildOutputRefForExecution(input: {
   readonly runtimeNodeId?: string;
 }): OutputRef {
   const runtimeNodeId = input.runtimeNodeId ?? input.execution.nodeId;
-  const owningSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
-    input.workflow,
-    runtimeNodeId,
-  );
   return {
     kind: "node-output",
     workflowExecutionId: input.session.sessionId,
     workflowId: input.session.workflowId,
-    ...(owningSubWorkflow === undefined
-      ? {}
-      : { subWorkflowId: owningSubWorkflow.id }),
     outputNodeId: runtimeNodeId,
     ...toOutputRefIdentityFields(input.execution),
     nodeExecId: input.execution.nodeExecId,
@@ -308,13 +306,20 @@ export function normalizeSessionState(
     loopIterationCounts: { ...(session.loopIterationCounts ?? {}) },
     restartCounts: { ...(session.restartCounts ?? {}) },
     restartEvents: [...(session.restartEvents ?? [])],
-    conversationTurns: [...(session.conversationTurns ?? [])],
+    conversationTurns: (session.conversationTurns ?? []).map((turn) => ({
+      ...turn,
+    })),
     communicationCounter,
-    communications: [...communications],
+    communications: communications.map((communication) => ({
+      ...communication,
+      routingScope: normalizeCommunicationRoutingScope(
+        communication.routingScope,
+      ),
+    })),
     nodeBackendSessions: { ...(session.nodeBackendSessions ?? {}) },
-    pendingOptionalNodeDecisions: [
-      ...(session.pendingOptionalNodeDecisions ?? []),
-    ],
+    pendingOptionalNodeDecisions: (
+      session.pendingOptionalNodeDecisions ?? []
+    ).map((decision) => ({ ...decision })),
     activeUserActions: [...(session.activeUserActions ?? [])],
     ...(session.supervision === undefined
       ? {}

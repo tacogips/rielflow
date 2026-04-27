@@ -39,31 +39,6 @@ function makeDefaultTemplateScenario(): MockNodeScenario {
   };
 }
 
-function makeGroupedWorkflowScenario(): MockNodeScenario {
-  return {
-    "divedra-manager": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "design" },
-    },
-    "main-divedra": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "dispatch" },
-    },
-    "workflow-input": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "implement" },
-    },
-    "workflow-output": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "review" },
-    },
-  };
-}
-
 afterEach(async () => {
   await Promise.all(
     tempDirs
@@ -97,130 +72,6 @@ async function createCompletedWorkflowFixture(root: string) {
       },
     },
     mockScenario: makeDefaultTemplateScenario(),
-  });
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
-  return { options, session: result.value.session };
-}
-
-async function createCompletedGroupedWorkflowFixture(root: string) {
-  const workflowDir = path.join(root, "demo");
-  await mkdir(workflowDir, { recursive: true });
-  await writeFile(
-    path.join(workflowDir, "workflow.json"),
-    `${JSON.stringify(
-      {
-        workflowId: "demo",
-        description: "grouped manager-message fixture",
-        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        prompts: {
-          divedraPromptTemplate: "Coordinate {{workflowId}}",
-          workerSystemPromptTemplate:
-            "Work only on the current node responsibility.",
-        },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [
-          {
-            id: "main",
-            description: "Main sub-workflow",
-            managerNodeId: "main-divedra",
-            inputNodeId: "workflow-input",
-            outputNodeId: "workflow-output",
-            nodeIds: ["main-divedra", "workflow-input", "workflow-output"],
-            inputSources: [{ type: "human-input" }],
-            block: { type: "plain" },
-          },
-        ],
-        nodes: [
-          {
-            id: "divedra-manager",
-            kind: "root-manager",
-            nodeFile: "node-divedra-manager.json",
-          },
-          {
-            id: "main-divedra",
-            kind: "subworkflow-manager",
-            nodeFile: "node-main-divedra.json",
-          },
-          {
-            id: "workflow-input",
-            kind: "input",
-            nodeFile: "node-workflow-input.json",
-          },
-          {
-            id: "workflow-output",
-            kind: "output",
-            nodeFile: "node-workflow-output.json",
-          },
-        ],
-        edges: [
-          { from: "workflow-input", to: "workflow-output", when: "always" },
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-
-  const nodePayloads = {
-    "node-divedra-manager.json": {
-      id: "divedra-manager",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "manager",
-      variables: {},
-    },
-    "node-main-divedra.json": {
-      id: "main-divedra",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "main manager",
-      variables: {},
-    },
-    "node-workflow-input.json": {
-      id: "workflow-input",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "input",
-      variables: {},
-    },
-    "node-workflow-output.json": {
-      id: "workflow-output",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "output",
-      variables: {},
-    },
-  } as const;
-
-  await Promise.all(
-    Object.entries(nodePayloads).map(([fileName, payload]) =>
-      writeFile(
-        path.join(workflowDir, fileName),
-        `${JSON.stringify(payload, null, 2)}\n`,
-        "utf8",
-      ),
-    ),
-  );
-
-  const options = {
-    workflowRoot: root,
-    artifactRoot: path.join(root, "artifacts"),
-    rootDataDir: path.join(root, "data"),
-    cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
-  };
-  const result = await runWorkflow("demo", {
-    ...options,
-    runtimeVariables: {
-      humanInput: {
-        request: "start demo workflow",
-      },
-    },
-    mockScenario: makeGroupedWorkflowScenario(),
   });
   expect(result.ok).toBe(true);
   if (!result.ok) {
@@ -268,20 +119,16 @@ async function createOptionalDecisionWorkflowFixture(
         workflowId: workflowName,
         description: "optional manager-message fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [],
         nodes: [
           {
             id: "divedra-manager",
             kind: "root-manager",
             nodeFile: "node-divedra-manager.json",
-            completion: { type: "none" },
           },
           {
             id: "step-1",
-            kind: "task",
             nodeFile: "node-step-1.json",
-            completion: { type: "none" },
+            kind: "task",
             execution: {
               mode: "optional",
               decisionBy: "owning-manager",
@@ -289,9 +136,8 @@ async function createOptionalDecisionWorkflowFixture(
           },
           {
             id: "step-2",
-            kind: "task",
             nodeFile: "node-step-2.json",
-            completion: { type: "none" },
+            kind: "task",
             execution: {
               mode: "optional",
               decisionBy: "owning-manager",
@@ -300,7 +146,6 @@ async function createOptionalDecisionWorkflowFixture(
         ],
         edges: [],
         loops: [],
-        branching: { mode: "fan-out" },
       },
       null,
       2,
@@ -569,13 +414,8 @@ describe("manager-message-service", () => {
 
   test("replays a communication from a manager message with canonicalized action idempotency", async () => {
     const root = await makeTempDir();
-    const { options, session } =
-      await createCompletedGroupedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "main-divedra",
-    );
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
     const service = createManagerMessageService({
       now: () => "2026-03-15T02:00:00.000Z",
       managerSessionStore: managerStore,
@@ -645,84 +485,6 @@ describe("manager-message-service", () => {
     );
 
     expect(replayed).toEqual(result);
-  });
-
-  test("rejects replay actions outside the subworkflow-manager owned communication scope", async () => {
-    const root = await makeTempDir();
-    const { options, session } =
-      await createCompletedGroupedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "main-divedra",
-    );
-    const service = createManagerMessageService({
-      now: () => "2026-03-15T02:15:00.000Z",
-      managerSessionStore: managerStore,
-      communicationService: createCommunicationService({
-        now: () => "2026-03-15T02:15:00.000Z",
-        idempotencyStore: managerStore,
-      }),
-    });
-
-    const rootScopedCommunication = session.communications.find(
-      (entry) => entry.communicationId === "comm-000001",
-    );
-    expect(rootScopedCommunication).toBeDefined();
-    if (rootScopedCommunication === undefined) {
-      return;
-    }
-
-    const rejected = await service.sendManagerMessage(
-      {
-        workflowId: "demo",
-        workflowExecutionId: session.sessionId,
-        managerSessionId: "mgrsess-000001",
-        message: "Replay the root-scoped delivery.",
-        actions: [
-          {
-            type: "replay-communication",
-            communicationId: rootScopedCommunication.communicationId,
-          },
-        ],
-      },
-      options,
-    );
-
-    expect(rejected.accepted).toBe(false);
-    expect(rejected.createdCommunicationIds).toEqual([]);
-    expect(rejected.rejectionReason).toContain(
-      "must stay within sub-workflow 'main'",
-    );
-  });
-
-  test("rejects removed start-sub-workflow action type in manager messages", async () => {
-    const root = await makeTempDir();
-    const { options, session } =
-      await createCompletedGroupedWorkflowFixture(root);
-    const managerStore = await createManagerSession(root, session.sessionId);
-    const service = createManagerMessageService({
-      now: () => "2026-03-15T02:30:00.000Z",
-      managerSessionStore: managerStore,
-    });
-
-    await expect(
-      service.sendManagerMessage(
-        {
-          workflowId: "demo",
-          workflowExecutionId: session.sessionId,
-          managerSessionId: "mgrsess-000001",
-          message: "Re-run the main sub-workflow.",
-          actions: [
-            {
-              type: "start-sub-workflow",
-              subWorkflowId: "main",
-            },
-          ] as unknown as import("./manager-control").ManagerControlAction[],
-        },
-        options,
-      ),
-    ).rejects.toThrow("is not supported");
   });
 
   test("applies optional-node execute/skip actions through manager messages", async () => {

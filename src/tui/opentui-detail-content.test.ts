@@ -51,7 +51,6 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "manager",
         nodes: [
           {
             id: "manager",
@@ -203,7 +202,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "summary",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "subworkflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -221,39 +219,11 @@ describe("buildHistoryDetailPaneState", () => {
     });
 
     expect(state.summaryHeaderVisible).toBe(true);
-    expect(state.summaryHeaderText).toBe("Select a workflow node.");
+    expect(state.summaryHeaderText).toBe("Select a node execution.");
     expect(state.summaryVisible).toBe(true);
     expect(state.textVisible).toBe(false);
     expect(state.summaryOptions[0]?.name).toBe("(no node)");
     expect(state.summaryOptions[0]?.value).toBe(OPEN_TUI_EMPTY_SELECT_VALUE);
-  });
-
-  test("step-addressed empty summary placeholder uses step wording in subworkflow mode", async () => {
-    const artifactDir = await createNodeExecutionArtifactDir();
-    const base = makeLoadedWorkflow({
-      id: "worker",
-      executionBackend: "codex-agent",
-      model: "gpt-5",
-      promptTemplate: "Do work",
-      variables: {},
-    });
-    const state = await buildHistoryDetailPaneState({
-      detailMode: "summary",
-      detailViewerBody: "",
-      detailViewerTitle: "",
-      historyViewMode: "subworkflow",
-      inputDetection: {
-        mode: "json",
-        reason: "structured input",
-      },
-      loadedWorkflow: asStepAddressedLoadedWorkflow(base),
-      managerMessages: [],
-      runtimeSessionView: makeRuntimeSessionView(artifactDir),
-      selectedNodeExecution: undefined,
-    });
-
-    expect(state.summaryHeaderText).toBe("Select a workflow step.");
-    expect(state.summaryOptions[0]?.name).toBe("(no step)");
   });
 
   test("step-addressed empty summary placeholder uses step wording in workflow mode", async () => {
@@ -269,7 +239,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "summary",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -292,7 +261,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "summary",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -341,7 +309,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "outbox",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -376,7 +343,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "session-logs",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -417,7 +383,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "manager",
       detailViewerBody: "",
       detailViewerTitle: "",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",
@@ -466,7 +431,6 @@ describe("buildHistoryDetailPaneState", () => {
       detailMode: "viewer",
       detailViewerBody: '{\n  "ok": true\n}',
       detailViewerTitle: "demo / worker / Execution output",
-      historyViewMode: "workflow",
       inputDetection: {
         mode: "json",
         reason: "structured input",

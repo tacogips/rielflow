@@ -55,11 +55,7 @@ import {
   parseManagerControlPayload,
   type ParsedManagerControl,
 } from "./manager-control";
-import {
-  describeWorkflowNodeKind,
-  isManagerNodeRef,
-  isSubworkflowManagerNodeRef,
-} from "./node-role";
+import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import { err, ok, type Result } from "./result";
 import {
   saveCommunicationEventToRuntimeDb,
@@ -67,7 +63,6 @@ import {
   saveProcessLogsToRuntimeDb,
 } from "./runtime-db";
 import {
-  findOwningSubWorkflowByRuntimeNodeId,
   isRootScopeOutputNode,
   resolveBackendSessionSelection,
   resolveStepExecutionAddress,
@@ -85,10 +80,6 @@ import {
   evaluateCompletion,
   resolveLoopTransition,
 } from "./semantics";
-import {
-  planRootManagerSubWorkflowStarts,
-  planSubWorkflowChildInputs,
-} from "./sub-workflow";
 import {
   buildOutputRefForExecution,
   createSessionId,
@@ -130,7 +121,6 @@ import type {
   LoadOptions,
   LoopRule,
   NodePayload,
-  SubWorkflowRef,
   SupervisionIncident,
   SupervisionRemediationRecord,
   SupervisionRunState,
@@ -142,7 +132,6 @@ import {
   asAgentNodePayload,
   getStructuralEdges,
   getStructuralLoops,
-  getStructuralSubWorkflows,
   resolveWorkflowManagerRuntimeId,
 } from "./types";
 
@@ -246,8 +235,6 @@ function addMillisecondsToIso(timestamp: string, milliseconds: number): string {
 
 interface UpstreamOutputRef extends OutputRef {
   readonly fromNodeId: string;
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
   readonly transitionWhen: string;
   readonly status:
     | NodeExecutionRecord["status"]
@@ -257,11 +244,6 @@ interface UpstreamOutputRef extends OutputRef {
 
 interface UpstreamInput extends UpstreamOutputRef {
   readonly output: Readonly<Record<string, unknown>>;
-  readonly outputRaw: string;
-}
-
-interface ForwardedManagerPayload {
-  readonly payloadRef: OutputRef;
   readonly outputRaw: string;
 }
 
@@ -624,15 +606,6 @@ async function readOutputPayloadArtifact(
   }
 }
 
-function findOwningSubWorkflowByInputNodeId(
-  workflow: WorkflowJson,
-  nodeId: string,
-): SubWorkflowRef | undefined {
-  return getStructuralSubWorkflows(workflow).find(
-    (entry) => entry.inputNodeId === nodeId,
-  );
-}
-
 function findNodeRef(workflow: WorkflowJson, nodeId: string) {
   return workflow.nodes.find((entry) => entry.id === nodeId);
 }
@@ -643,12 +616,9 @@ function isOptionalNode(workflow: WorkflowJson, nodeId: string): boolean {
 
 function findOwningManagerNodeId(
   workflow: WorkflowJson,
-  nodeId: string,
+  _nodeId: string,
 ): string {
-  return (
-    findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId)?.managerNodeId ??
-    resolveWorkflowManagerRuntimeId(workflow)
-  );
+  return resolveWorkflowManagerRuntimeId(workflow);
 }
 
 function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
@@ -795,103 +765,9 @@ function applyOptionalManagerDecisions(input: {
 
 function mailboxDeliveryManagerNodeId(
   workflow: WorkflowJson,
-  toNodeId: string,
+  _toNodeId: string,
 ): string {
-  const rootManagerId = resolveWorkflowManagerRuntimeId(workflow);
-  if (toNodeId === rootManagerId) {
-    return rootManagerId;
-  }
-
-  if (
-    getStructuralSubWorkflows(workflow).some(
-      (entry) => entry.managerNodeId === toNodeId,
-    )
-  ) {
-    return rootManagerId;
-  }
-
-  return (
-    findOwningSubWorkflowByRuntimeNodeId(workflow, toNodeId)?.managerNodeId ??
-    rootManagerId
-  );
-}
-
-function resolveCommunicationBoundary(input: {
-  readonly workflow: WorkflowJson;
-  readonly fromNodeId: string;
-  readonly toNodeId: string;
-}): {
-  readonly routingScope: CommunicationRecord["routingScope"];
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
-} {
-  const fromSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
-    input.workflow,
-    input.fromNodeId,
-  );
-  const toSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
-    input.workflow,
-    input.toNodeId,
-  );
-  const recipientManagerSubWorkflow = getStructuralSubWorkflows(
-    input.workflow,
-  ).find(
-    (entry) => entry.managerNodeId === input.toNodeId,
-  );
-
-  if (recipientManagerSubWorkflow !== undefined) {
-    if (fromSubWorkflow === undefined) {
-      return {
-        routingScope: "parent-to-sub-workflow",
-        toSubWorkflowId: recipientManagerSubWorkflow.id,
-      };
-    }
-    if (fromSubWorkflow.id === recipientManagerSubWorkflow.id) {
-      return {
-        routingScope: "intra-sub-workflow",
-        fromSubWorkflowId: fromSubWorkflow.id,
-        toSubWorkflowId: recipientManagerSubWorkflow.id,
-      };
-    }
-    return {
-      routingScope: "cross-sub-workflow",
-      fromSubWorkflowId: fromSubWorkflow.id,
-      toSubWorkflowId: recipientManagerSubWorkflow.id,
-    };
-  }
-
-  if (fromSubWorkflow !== undefined && toSubWorkflow !== undefined) {
-    if (fromSubWorkflow.id === toSubWorkflow.id) {
-      return {
-        routingScope: "intra-sub-workflow",
-        fromSubWorkflowId: fromSubWorkflow.id,
-        toSubWorkflowId: toSubWorkflow.id,
-      };
-    }
-    return {
-      routingScope: "cross-sub-workflow",
-      fromSubWorkflowId: fromSubWorkflow.id,
-      toSubWorkflowId: toSubWorkflow.id,
-    };
-  }
-
-  if (fromSubWorkflow !== undefined) {
-    return {
-      routingScope: "cross-sub-workflow",
-      fromSubWorkflowId: fromSubWorkflow.id,
-    };
-  }
-
-  if (toSubWorkflow !== undefined) {
-    return {
-      routingScope: "intra-sub-workflow",
-      toSubWorkflowId: toSubWorkflow.id,
-    };
-  }
-
-  return {
-    routingScope: "intra-sub-workflow",
-  };
+  return resolveWorkflowManagerRuntimeId(workflow);
 }
 
 function findLatestPublishedWorkflowResult(
@@ -1263,11 +1139,6 @@ async function executeWorkflowCallsForNode(input: {
       );
     }
 
-    const boundary = resolveCommunicationBoundary({
-      workflow: input.workflow,
-      fromNodeId: input.callerNodeId,
-      toNodeId: dispatch.resultNodeId,
-    });
     const communication = await persistCommunicationArtifact({
       artifactWorkflowRoot: input.artifactWorkflowRoot,
       runtimeLogOptions: input.options,
@@ -1276,13 +1147,7 @@ async function executeWorkflowCallsForNode(input: {
       communicationCounter: currentCommunicationCounter,
       fromNodeId: input.callerNodeId,
       toNodeId: dispatch.resultNodeId,
-      ...(boundary.fromSubWorkflowId === undefined
-        ? {}
-        : { fromSubWorkflowId: boundary.fromSubWorkflowId }),
-      ...(boundary.toSubWorkflowId === undefined
-        ? {}
-        : { toSubWorkflowId: boundary.toSubWorkflowId }),
-      routingScope: boundary.routingScope,
+      routingScope: "intra-workflow",
       deliveryKind: "edge-transition",
       transitionWhen: `workflow-call:${dispatch.id}`,
       sourceNodeExecId: input.callerNodeExecId,
@@ -1313,30 +1178,12 @@ async function executeWorkflowCallsForNode(input: {
 }
 
 function buildUpstreamOutputRefs(
-  workflow: WorkflowJson,
   session: WorkflowSessionState,
   nodeId: string,
 ): readonly UpstreamOutputRef[] {
-  const owningSubWorkflow = findOwningSubWorkflowByInputNodeId(
-    workflow,
-    nodeId,
-  );
   const matchingCommunications = session.communications.filter(
-    (communication) => {
-      if (communication.status !== "delivered") {
-        return false;
-      }
-      if (communication.toNodeId === nodeId) {
-        return true;
-      }
-      if (owningSubWorkflow === undefined) {
-        return false;
-      }
-      return (
-        communication.toSubWorkflowId === owningSubWorkflow.id &&
-        communication.toNodeId === owningSubWorkflow.managerNodeId
-      );
-    },
+    (communication) =>
+      communication.status === "delivered" && communication.toNodeId === nodeId,
   );
   if (matchingCommunications.length === 0) {
     return [];
@@ -1349,12 +1196,6 @@ function buildUpstreamOutputRefs(
       );
       return {
         fromNodeId: communication.fromNodeId,
-        ...(communication.fromSubWorkflowId === undefined
-          ? {}
-          : { fromSubWorkflowId: communication.fromSubWorkflowId }),
-        ...(communication.toSubWorkflowId === undefined
-          ? {}
-          : { toSubWorkflowId: communication.toSubWorkflowId }),
         transitionWhen: communication.transitionWhen,
         status: execution?.status ?? communication.status,
         communicationId: communication.communicationId,
@@ -1370,7 +1211,7 @@ async function buildUpstreamInputs(
   nodeId: string,
 ): Promise<Result<readonly UpstreamInput[], string>> {
   const upstreamTargetNoun = workflow.steps !== undefined ? "step" : "node";
-  const refs = buildUpstreamOutputRefs(workflow, session, nodeId);
+  const refs = buildUpstreamOutputRefs(session, nodeId);
   if (refs.length === 0) {
     return ok([]);
   }
@@ -1393,24 +1234,6 @@ async function buildUpstreamInputs(
   return ok(loaded);
 }
 
-function toForwardedManagerPayload(
-  input: UpstreamInput,
-): ForwardedManagerPayload {
-  return {
-    payloadRef: {
-      workflowExecutionId: input.workflowExecutionId,
-      workflowId: input.workflowId,
-      ...(input.subWorkflowId === undefined
-        ? {}
-        : { subWorkflowId: input.subWorkflowId }),
-      outputNodeId: input.outputNodeId,
-      nodeExecId: input.nodeExecId,
-      artifactDir: input.artifactDir,
-    },
-    outputRaw: input.outputRaw,
-  };
-}
-
 function buildCommitMessageTemplate(
   inputHash: string,
   outputHash: string,
@@ -1426,7 +1249,6 @@ function buildCommitMessageTemplate(
     "Node execution checkpoint for deterministic output-to-input handoff.",
     "",
     `Node-ID: ${ref.outputNodeId}`,
-    `Subworkflow-ID: ${ref.subWorkflowId ?? "(unset)"}`,
     `Run-ID: ${ref.workflowExecutionId}`,
     `Workflow-ID: ${ref.workflowId}`,
     `Node-Exec-ID: ${ref.nodeExecId}`,
@@ -1445,8 +1267,6 @@ interface CreateCommunicationInput {
   readonly communicationCounter: number;
   readonly fromNodeId: string;
   readonly toNodeId: string;
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
   readonly routingScope: CommunicationRecord["routingScope"];
   readonly deliveryKind: CommunicationRecord["deliveryKind"];
   readonly transitionWhen: string;
@@ -1475,12 +1295,6 @@ async function persistCommunicationArtifact(
     communicationId,
     fromNodeId: input.fromNodeId,
     toNodeId: input.toNodeId,
-    ...(input.fromSubWorkflowId === undefined
-      ? {}
-      : { fromSubWorkflowId: input.fromSubWorkflowId }),
-    ...(input.toSubWorkflowId === undefined
-      ? {}
-      : { toSubWorkflowId: input.toSubWorkflowId }),
     routingScope: input.routingScope,
     sourceNodeExecId: input.sourceNodeExecId,
     deliveryKind: input.deliveryKind,
@@ -1498,12 +1312,6 @@ async function persistCommunicationArtifact(
     fromNodeId: input.fromNodeId,
     toNodeId: input.toNodeId,
     sourceNodeExecId: input.sourceNodeExecId,
-    ...(input.fromSubWorkflowId === undefined
-      ? {}
-      : { fromSubWorkflowId: input.fromSubWorkflowId }),
-    ...(input.toSubWorkflowId === undefined
-      ? {}
-      : { toSubWorkflowId: input.toSubWorkflowId }),
     routingScope: input.routingScope,
     deliveryKind: input.deliveryKind,
     activeDeliveryAttemptId: deliveryAttemptId,
@@ -1567,12 +1375,6 @@ async function persistCommunicationArtifact(
     communicationId,
     fromNodeId: input.fromNodeId,
     toNodeId: input.toNodeId,
-    ...(input.fromSubWorkflowId === undefined
-      ? {}
-      : { fromSubWorkflowId: input.fromSubWorkflowId }),
-    ...(input.toSubWorkflowId === undefined
-      ? {}
-      : { toSubWorkflowId: input.toSubWorkflowId }),
     routingScope: input.routingScope,
     sourceNodeExecId: input.sourceNodeExecId,
     payloadRef: input.payloadRef,
@@ -2401,10 +2203,6 @@ async function runWorkflowInternal(
     ) {
       const requestedAt = nowIso();
       const owningManagerNodeId = findOwningManagerNodeId(workflow, nodeId);
-      const owningSubWorkflow = findOwningSubWorkflowByRuntimeNodeId(
-        workflow,
-        nodeId,
-      );
       session = {
         ...session,
         status: "running",
@@ -2415,9 +2213,6 @@ async function runWorkflowInternal(
           {
             nodeId,
             owningManagerNodeId,
-            ...(owningSubWorkflow === undefined
-              ? {}
-              : { subWorkflowId: owningSubWorkflow.id }),
             requestedAt,
             status: "pending",
           },
@@ -2508,11 +2303,7 @@ async function runWorkflowInternal(
         executionNodePayload.variables,
         session.runtimeVariables,
       );
-      const upstreamOutputRefs = buildUpstreamOutputRefs(
-        workflow,
-        session,
-        nodeId,
-      );
+      const upstreamOutputRefs = buildUpstreamOutputRefs(session, nodeId);
       const upstreamInputsResult = await buildUpstreamInputs(
         workflow,
         session,
@@ -2550,8 +2341,6 @@ async function runWorkflowInternal(
       const transcriptInput = (session.conversationTurns ?? []).map((turn) => ({
         conversationId: turn.conversationId,
         turnIndex: turn.turnIndex,
-        fromSubWorkflowId: turn.fromSubWorkflowId,
-        toSubWorkflowId: turn.toSubWorkflowId,
         fromManagerNodeId: turn.fromManagerNodeId,
         toManagerNodeId: turn.toManagerNodeId,
         communicationId: turn.communicationId,
@@ -2908,11 +2697,6 @@ async function runWorkflowInternal(
         let currentCommunications = consumedCommunicationsResult.value;
         const transitionCommunications = await Promise.all(
           selected.map((edge, index) => {
-            const boundary = resolveCommunicationBoundary({
-              workflow,
-              fromNodeId: edge.from,
-              toNodeId: edge.to,
-            });
             return persistCommunicationArtifact({
               artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
               runtimeLogOptions: options,
@@ -2921,13 +2705,7 @@ async function runWorkflowInternal(
               communicationCounter: session.communicationCounter + index,
               fromNodeId: edge.from,
               toNodeId: edge.to,
-              ...(boundary.fromSubWorkflowId === undefined
-                ? {}
-                : { fromSubWorkflowId: boundary.fromSubWorkflowId }),
-              ...(boundary.toSubWorkflowId === undefined
-                ? {}
-                : { toSubWorkflowId: boundary.toSubWorkflowId }),
-              routingScope: boundary.routingScope,
+              routingScope: "intra-workflow",
               deliveryKind:
                 edge.to === edge.from ? "loop-back" : "edge-transition",
               transitionWhen: edge.when,
@@ -4376,11 +4154,6 @@ async function runWorkflowInternal(
       currentCommunications = consumedCommunicationsResult.value;
       const transitionCommunications = await Promise.all(
         selected.map((edge, index) => {
-          const boundary = resolveCommunicationBoundary({
-            workflow,
-            fromNodeId: edge.from,
-            toNodeId: edge.to,
-          });
           return persistCommunicationArtifact({
             artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
             runtimeLogOptions: options,
@@ -4389,13 +4162,7 @@ async function runWorkflowInternal(
             communicationCounter: currentCommunicationCounter + index,
             fromNodeId: edge.from,
             toNodeId: edge.to,
-            ...(boundary.fromSubWorkflowId === undefined
-              ? {}
-              : { fromSubWorkflowId: boundary.fromSubWorkflowId }),
-            ...(boundary.toSubWorkflowId === undefined
-              ? {}
-              : { toSubWorkflowId: boundary.toSubWorkflowId }),
-            routingScope: boundary.routingScope,
+            routingScope: "intra-workflow",
             deliveryKind:
               edge.to === edge.from ? "loop-back" : "edge-transition",
             transitionWhen: edge.when,
@@ -4479,152 +4246,11 @@ async function runWorkflowInternal(
         ...workflowCallResult.value.transitions,
       ];
       const transitionNextNodes = selected.map((edge) => edge.to);
-      const pendingSessionState: WorkflowSessionState = {
-        ...session,
-        queue: [
-          ...queue,
-          ...transitionNextNodes,
-          ...workflowCallResult.value.queuedNodeIds,
-        ].filter((value, index, all) => all.indexOf(value) === index),
-        nodeExecutions,
-        communicationCounter: currentCommunicationCounter,
-        communications: currentCommunications,
-        runtimeVariables: currentRuntimeVariables,
-      };
-      let managerPlannedInputs: string[] = isManagerNodeRef(nodeRef)
-        ? isSubworkflowManagerNodeRef(nodeRef)
-          ? [
-              ...planSubWorkflowChildInputs({
-                workflow,
-                session: pendingSessionState,
-                managerNodeId: nodeId,
-              }),
-            ]
-          : []
-        : [];
-
-      const rootManagerRuntimeId = resolveWorkflowManagerRuntimeId(workflow);
-      let managerPlannedCommunications: readonly CommunicationRecord[] = [];
-      if (nodeId === rootManagerRuntimeId) {
-        const plannedSubWorkflowStarts = planRootManagerSubWorkflowStarts({
-          workflow,
-          session: pendingSessionState,
-        });
-        const persistedStarts: CommunicationRecord[] = [];
-        for (const subWorkflow of plannedSubWorkflowStarts) {
-          if (subWorkflow.managerNodeId === rootManagerRuntimeId) {
-            managerPlannedInputs.push(subWorkflow.inputNodeId);
-            continue;
-          }
-          const communication = await persistCommunicationArtifact({
-            artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
-            runtimeLogOptions: options,
-            workflowId: workflow.workflowId,
-            workflowExecutionId: session.sessionId,
-            communicationCounter: currentCommunicationCounter,
-            fromNodeId: nodeId,
-            toNodeId: subWorkflow.managerNodeId,
-            toSubWorkflowId: subWorkflow.id,
-            routingScope: "parent-to-sub-workflow",
-            deliveryKind: "edge-transition",
-            transitionWhen: `sub-workflow-start:${subWorkflow.id}`,
-            sourceNodeExecId: nodeExecId,
-            payloadRef: outputRef,
-            outputRaw,
-            deliveredByNodeId: mailboxDeliveryManagerNodeId(
-              workflow,
-              subWorkflow.managerNodeId,
-            ),
-            createdAt: endedAt,
-          });
-          currentCommunicationCounter += 1;
-          persistedStarts.push(communication);
-          managerPlannedInputs.push(subWorkflow.managerNodeId);
-        }
-        const persistedChildInputs: CommunicationRecord[] = [];
-        const rootManagedSubWorkflows = getStructuralSubWorkflows(
-          workflow,
-        ).filter((entry) => entry.managerNodeId === nodeId);
-        for (const subWorkflow of rootManagedSubWorkflows) {
-          const forwardedPayloads = upstreamInputs
-            .filter((entry) => entry.toSubWorkflowId === subWorkflow.id)
-            .map((entry) => toForwardedManagerPayload(entry));
-          if (forwardedPayloads.length === 0) {
-            continue;
-          }
-          managerPlannedInputs.push(subWorkflow.inputNodeId);
-          for (const forwarded of forwardedPayloads) {
-            const communication = await persistCommunicationArtifact({
-              artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
-              runtimeLogOptions: options,
-              workflowId: workflow.workflowId,
-              workflowExecutionId: session.sessionId,
-              communicationCounter: currentCommunicationCounter,
-              fromNodeId: nodeId,
-              toNodeId: subWorkflow.inputNodeId,
-              toSubWorkflowId: subWorkflow.id,
-              routingScope: "intra-sub-workflow",
-              deliveryKind: "edge-transition",
-              transitionWhen: `root-manager-input:${subWorkflow.inputNodeId}`,
-              sourceNodeExecId: forwarded.payloadRef.nodeExecId,
-              payloadRef: forwarded.payloadRef,
-              outputRaw: forwarded.outputRaw,
-              deliveredByNodeId: mailboxDeliveryManagerNodeId(
-                workflow,
-                subWorkflow.inputNodeId,
-              ),
-              createdAt: endedAt,
-            });
-            currentCommunicationCounter += 1;
-            persistedChildInputs.push(communication);
-          }
-        }
-        managerPlannedCommunications = [
-          ...persistedStarts,
-          ...persistedChildInputs,
-        ];
-      } else if (isSubworkflowManagerNodeRef(nodeRef)) {
-        const forwardedPayloads = [{ payloadRef: outputRef, outputRaw }];
-        const persistedChildInputs: CommunicationRecord[] = [];
-        for (const inputNodeId of managerPlannedInputs) {
-          for (const forwarded of forwardedPayloads) {
-            const communication = await persistCommunicationArtifact({
-              artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
-              runtimeLogOptions: options,
-              workflowId: workflow.workflowId,
-              workflowExecutionId: session.sessionId,
-              communicationCounter: currentCommunicationCounter,
-              fromNodeId: nodeId,
-              toNodeId: inputNodeId,
-              routingScope: "intra-sub-workflow",
-              deliveryKind: "edge-transition",
-              transitionWhen: `subworkflow-manager-input:${inputNodeId}`,
-              sourceNodeExecId: forwarded.payloadRef.nodeExecId,
-              payloadRef: forwarded.payloadRef,
-              outputRaw: forwarded.outputRaw,
-              deliveredByNodeId: mailboxDeliveryManagerNodeId(
-                workflow,
-                inputNodeId,
-              ),
-              createdAt: endedAt,
-            });
-            currentCommunicationCounter += 1;
-            persistedChildInputs.push(communication);
-          }
-        }
-        managerPlannedCommunications = persistedChildInputs;
-      }
-      currentCommunications = [
-        ...currentCommunications,
-        ...managerPlannedCommunications,
-      ];
-
       const retryStepIds = managerControl?.retryStepIds ?? [];
       const nextQueue = [
         ...queue,
         ...transitionNextNodes,
         ...workflowCallResult.value.queuedNodeIds,
-        ...managerPlannedInputs,
         ...queuedOptionalDecisionNodeIds,
       ].filter((value, index, all) => all.indexOf(value) === index);
       const nextQueueWithRetries = [...nextQueue, ...retryStepIds].filter(

@@ -52,7 +52,6 @@ describe("crossWorkflowCallsFromSteps", () => {
         callerStepId: "draft-write",
         resultNodeId: "apply-review",
         when: "need_review",
-        source: "step-transition",
       },
     ]);
   });
@@ -85,7 +84,6 @@ describe("effectiveWorkflowCalls", () => {
     expect(effective).toHaveLength(1);
     expect(effective[0]?.id).toBe("__cw:s1");
     expect(effective[0]?.workflowId).toBe("callee");
-    expect(effective[0]?.source).toBe("step-transition");
   });
 
   test("labels only step-derived workflowCalls", () => {
@@ -113,7 +111,6 @@ describe("effectiveWorkflowCalls", () => {
         callerNodeId: "writer",
         callerStepId: "writer",
         resultNodeId: "resume",
-        source: "step-transition",
       },
     ]);
   });
@@ -155,7 +152,6 @@ describe("crossWorkflowDispatchesForExecutionMatch", () => {
     expect(dispatches.map((dispatch) => dispatch.workflowId)).toEqual([
       "derived-wf",
     ]);
-    expect(dispatches[0]?.source).toBe("step-transition");
   });
 
   test("does not dispatch legacy authored workflowCalls", () => {

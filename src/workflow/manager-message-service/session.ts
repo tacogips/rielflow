@@ -1,4 +1,4 @@
-import { getStructuralSubWorkflows, type WorkflowJson } from "../types";
+import type { WorkflowJson } from "../types";
 import type {
   PendingOptionalNodeDecision,
   WorkflowSessionState,
@@ -56,15 +56,6 @@ export function normalizeActionsForIdempotency(
 
 export function dedupe(values: readonly string[]): readonly string[] {
   return values.filter((value, index, all) => all.indexOf(value) === index);
-}
-
-export function findOwnedSubWorkflow(
-  workflow: WorkflowJson,
-  managerNodeId: string,
-) {
-  return getStructuralSubWorkflows(workflow).find(
-    (entry) => entry.managerNodeId === managerNodeId,
-  );
 }
 
 function findPendingOptionalNodeDecision(

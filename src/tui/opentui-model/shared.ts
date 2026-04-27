@@ -1,20 +1,16 @@
 import { StyledText, bold, dim, fg, t } from "@opentui/core";
 import { normalizeCliAgentBackend } from "../../workflow/backend";
 import type { LoadedWorkflow } from "../../workflow/load";
-import { findOwningSubWorkflowByRuntimeNodeId } from "../../workflow/runtime-addressing";
 import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../../workflow/session";
 import type { RuntimeNodeLogEntry } from "../../workflow/runtime-db";
-import type {
-  ArgumentBinding,
-  CliAgentBackend,
-  NodePayload,
-  SubWorkflowRef,
-} from "../../workflow/types";
-import { getStructuralSubWorkflows } from "../../workflow/types";
-import { describeWorkflowNodeKind } from "../../workflow/node-role";
+import type { ArgumentBinding, CliAgentBackend, NodePayload } from "../../workflow/types";
+import {
+  describeWorkflowNodeKind,
+  isManagerNodeRef,
+} from "../../workflow/node-role";
 import { deriveWorkflowVisualization } from "../../workflow/visualization";
 import type { OpenTuiRichSelectOption } from "../opentui-view-shared";
 import {
@@ -113,26 +109,16 @@ export function summarizePromptHelp(
   return normalized === undefined ? undefined : truncate(normalized, 120);
 }
 
-export function resolveOwningSubWorkflow(
-  workflow: LoadedWorkflow["bundle"]["workflow"],
-  nodeId: string,
-): SubWorkflowRef | undefined {
-  return findOwningSubWorkflowByRuntimeNodeId(workflow, nodeId);
-}
-
 export function resolveNodePurpose(input: {
   readonly nodeId: string;
   readonly payload: NodePayload | undefined;
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
 }): string | undefined {
-  const owningSubWorkflow = resolveOwningSubWorkflow(
-    input.workflow,
-    input.nodeId,
-  );
+  void input.nodeId;
+  void input.workflow;
   return (
     input.payload?.description ??
     input.payload?.output?.description ??
-    owningSubWorkflow?.description ??
     summarizePromptHelp(input.payload?.promptTemplate)
   );
 }
@@ -161,8 +147,8 @@ export function formatNodeKindLabel(kind: string): string {
   if (kind === "root-manager") {
     return "ROOT MANAGER";
   }
-  if (kind === "subworkflow-manager") {
-    return "SUBFLOW MANAGER";
+  if (kind === "manager") {
+    return "MANAGER";
   }
   if (kind === "input") {
     return "INPUT";
@@ -270,14 +256,10 @@ export interface WorkflowNodeVisualMetadata {
 
 export function resolveWorkflowPreviewIndent(input: {
   readonly derivedIndent: number;
-  readonly inSubworkflowScope: boolean;
   readonly kind: string;
 }): number {
   if (input.kind === "root-manager") {
     return 0;
-  }
-  if (input.inSubworkflowScope) {
-    return input.derivedIndent + 1;
   }
   return input.derivedIndent;
 }
@@ -293,21 +275,11 @@ export function buildWorkflowNodeVisualMetadata(
       (node) => [node.id, describeWorkflowNodeKind(node)] as const,
     ),
   );
-  const subworkflowScopeNodeIds = new Set<string>();
-  getStructuralSubWorkflows(loaded.bundle.workflow).forEach((subworkflow) => {
-    subworkflowScopeNodeIds.add(subworkflow.managerNodeId);
-    subworkflowScopeNodeIds.add(subworkflow.inputNodeId);
-    subworkflowScopeNodeIds.add(subworkflow.outputNodeId);
-    subworkflow.nodeIds.forEach((nodeId) => {
-      subworkflowScopeNodeIds.add(nodeId);
-    });
-  });
   return new Map(
     derivedNodes.map((entry) => {
       const kind = nodeKindById.get(entry.id) ?? "task";
       const indentLevel = resolveWorkflowPreviewIndent({
         derivedIndent: entry.indent,
-        inSubworkflowScope: subworkflowScopeNodeIds.has(entry.id),
         kind,
       });
       return [
@@ -517,8 +489,8 @@ export function resolveManagerSessionId(
   workflow: LoadedWorkflow["bundle"]["workflow"],
   execution: NodeExecutionRecord,
 ): string | undefined {
-  const kind = resolveNodeKind(workflow, execution.nodeId);
-  if (kind !== "root-manager" && kind !== "subworkflow-manager") {
+  const node = workflow.nodes.find((entry) => entry.id === execution.nodeId);
+  if (node === undefined || !isManagerNodeRef(node)) {
     return undefined;
   }
   return `mgrsess-${execution.nodeExecId}`;

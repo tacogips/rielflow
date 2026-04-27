@@ -102,7 +102,6 @@ export async function prepareManagerMessageArtifacts(args: {
   readonly managerMessageId: string;
   readonly managerNodeId: string;
   readonly managerNodeExecId: string;
-  readonly subWorkflowId: string | undefined;
   readonly message: string | undefined;
   readonly attachments: readonly DataDirFileRef[];
   readonly actions: readonly ManagerControlAction[];
@@ -120,9 +119,6 @@ export async function prepareManagerMessageArtifacts(args: {
     kind: "manager-message",
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
-    ...(args.subWorkflowId === undefined
-      ? {}
-      : { subWorkflowId: args.subWorkflowId }),
     outputNodeId: args.managerNodeId,
     nodeExecId: args.managerNodeExecId,
     artifactDir,
@@ -201,7 +197,6 @@ export async function persistManagerMessageCommunication(args: {
   readonly managerNodeId: string;
   readonly managerNodeExecId: string;
   readonly targetNodeId: string;
-  readonly subWorkflowId: string | undefined;
   readonly payloadRef: ManagerMessagePayloadRef;
   readonly outputRaw: string;
   readonly createdAt: string;
@@ -221,13 +216,7 @@ export async function persistManagerMessageCommunication(args: {
     communicationId,
     fromNodeId: args.managerNodeId,
     toNodeId: args.targetNodeId,
-    ...(args.subWorkflowId === undefined
-      ? {}
-      : {
-          fromSubWorkflowId: args.subWorkflowId,
-          toSubWorkflowId: args.subWorkflowId,
-        }),
-    routingScope: "intra-sub-workflow",
+    routingScope: "intra-workflow",
     sourceNodeExecId: args.managerNodeExecId,
     deliveryKind: "edge-transition",
     payloadRef: {
@@ -245,13 +234,7 @@ export async function persistManagerMessageCommunication(args: {
     fromNodeId: args.managerNodeId,
     toNodeId: args.targetNodeId,
     sourceNodeExecId: args.managerNodeExecId,
-    ...(args.subWorkflowId === undefined
-      ? {}
-      : {
-          fromSubWorkflowId: args.subWorkflowId,
-          toSubWorkflowId: args.subWorkflowId,
-        }),
-    routingScope: "intra-sub-workflow",
+    routingScope: "intra-workflow",
     deliveryKind: "edge-transition",
     activeDeliveryAttemptId: deliveryAttemptId,
     deliveryAttemptIds: [deliveryAttemptId],
@@ -305,13 +288,7 @@ export async function persistManagerMessageCommunication(args: {
     communicationId,
     fromNodeId: args.managerNodeId,
     toNodeId: args.targetNodeId,
-    ...(args.subWorkflowId === undefined
-      ? {}
-      : {
-          fromSubWorkflowId: args.subWorkflowId,
-          toSubWorkflowId: args.subWorkflowId,
-        }),
-    routingScope: "intra-sub-workflow",
+    routingScope: "intra-workflow",
     sourceNodeExecId: args.managerNodeExecId,
     payloadRef: args.payloadRef,
     deliveryKind: "edge-transition",

@@ -35,7 +35,7 @@ Current runtime behavior:
 - ordered `workflow.json.nodes[]`, authored `edges`, and related node-addressed control fields remain available only as compatibility paths while the cutover is still incomplete
 - workflows persist session state, node execution artifacts, communications, and runtime indexes
 - manager nodes run inside the queue-based engine rather than replacing it with a pure external orchestrator
-- authored workflows may use role-based nodes (`manager` / `worker`) and may omit a manager when the authored entry is explicit (`entryStepId` for step-addressed bundles, `entryNodeId` for legacy compatibility bundles)
+- authored workflows may use role-based nodes (`manager` / `worker`) and may omit a manager when the authored entry is explicit (`entryStepId` for step-addressed bundles); legacy node-graph bundles must not use top-level `entryNodeId` (validation rejects it) and the runtime infers entry from `kind` / `role` and structural `edges`
 - manager-less workflows execute today, but the normalized runtime still derives an internal effective manager/entry identity for compatibility
 - `call-step` is the supported direct-call surface for local debugging and step-addressed execution control
 - cross-workflow execution uses the same engine primitive whether routing comes from a step transition (`toWorkflowId` / `resumeStepId`) or from an explicit call record: step-addressed bundles **must** use step transitions, because validation **rejects** top-level `workflow.workflowCalls` on `entryStepId`+`steps` workflows; legacy node-graph bundles may still author `workflowCalls` until the non-step validation path is removed
@@ -301,33 +301,29 @@ Primary top-level authored fields in step-addressed bundles include:
 - `nodes`
 - `steps`
 
-Legacy/compatibility node-addressed bundles may still include:
+Validation **rejects** top-level compatibility keys (do not author them), including:
 
-- `managerNodeId`
-- `entryNodeId`
-- `workflowCalls`
-- `subWorkflows`
-- `subWorkflowConversations`
-- `nodes`
-- `edges`
-- `loops`
-- `branching`
+- `managerNodeId`, `entryNodeId`
+- `workflowCalls`, `branching`
+- `subWorkflows`, `subWorkflowConversations`
+- on step-addressed bundles, also `edges` and `loops` at the workflow level
+
+Cross-workflow execution is expressed only through **step-addressed** `steps[].transitions` with `toWorkflowId` and `resumeStepId` (runtime projects these as synthetic call rows; they are not authored as `workflowCalls`).
+
+Legacy **node-graph** bundles (no `steps` / `entryStepId`) use `nodes` and may use `edges` / `loops` when not combined with authored role/control nodes; if `edges` is omitted, sequential edges are synthesized from node order.
 
 Relevant current behavior:
 
 - if `steps[]` is authored, `nodes[]` is a reusable registry rather than execution order
-- if a legacy compatibility bundle omits `edges`, sequential edges are synthesized from node order
-- if exactly one manager-role node exists, `managerNodeId` may be inferred (legacy compatibility bundles)
 - if exactly one manager-role step exists, `managerStepId` may be inferred (step-addressed bundles)
-- if no manager exists, compatibility node-addressed bundles require `entryNodeId`, while step-addressed bundles require `entryStepId`
-- non-empty authored `subWorkflows` are reserved for legacy structural compatibility and should not be combined with authored role/control nodes
-- non-empty authored `subWorkflowConversations` are also reserved for legacy structural compatibility and should not be combined with authored role/control nodes
-- authored `subWorkflowConversations` remain legacy structural compatibility metadata and are not part of the active role-authored `workflowCalls` path
-- structural boundary `kind` values `subworkflow-manager`, `input`, and `output` are reserved for legacy compatibility and should not be combined with authored role/control nodes
+- manager and entry runtime identity for legacy node graphs is inferred from node `kind` / `role` and structural edges (not from top-level `managerNodeId` / `entryNodeId`)
+- if no manager exists, step-addressed bundles require `entryStepId`; manager-less legacy graphs require a resolvable graph entry via inference
+- structural sub-workflow authoring (`subWorkflows` / `subWorkflowConversations`) is **removed**; use step graphs and step transitions for cross-workflow calls
+- structural boundary `kind` values such as `input` and `output` are **rejected** when combined with authored role/control nodes; the string `subworkflow-manager` is also rejected as an invalid `kind`
 - inline node payload authoring is supported through `workflow.nodes[].node` when `nodeFile` is omitted
 - `workflowId` is the runtime namespace key for artifacts and session storage, so it must be filesystem-safe
 
-Step-addressed authored bundles use `entryStepId`, optional `managerStepId`, reusable `workflow.json.nodes[]`, and executable `workflow.json.steps[]`. The repository is still in a mixed transitional state, so inspection/load/save already understand both shapes while the runtime and a small set of shipped compatibility examples still retain older projections.
+Step-addressed authored bundles use `entryStepId`, optional `managerStepId`, reusable `workflow.json.nodes[]`, and executable `workflow.json.steps[]`. Load and save still accept legacy node-graph shapes for existing trees, but new authoring should prefer the step-addressed model.
 
 Important node-level fields in `workflow.json.nodes[]`:
 
@@ -347,15 +343,14 @@ Current `kind` values:
 - `branch-judge`
 - `loop-judge`
 - `root-manager`
-- `subworkflow-manager`
-- `input`
-- `output`
+- `input` (rejected for role-based bundles; do not use)
+- `output` (rejected for role-based bundles; do not use)
 
 Role-based authoring note:
 
 - `role` is the authored direction of travel: `manager` or `worker`
 - role/control-authored workflows should omit structural boundary `kind` values
-- `kind` still appears in normalized runtime structures while the engine retains structural sub-workflow compatibility paths
+- `kind` still appears in normalized runtime structures for legacy node-graph bundles; role-based authoring should omit structural boundary kinds
 
 ## Node Payloads
 
@@ -402,11 +397,6 @@ The workflow engine in `src/workflow/engine.ts` currently does the following:
 8. Persists node execution artifacts and indexes runtime data in SQLite on a best-effort basis.
 9. Publishes downstream communications, advances step-addressed execution targets, still honors compatibility-authored `workflowCalls` when present, and rebuilds the queue.
 10. Marks the workflow completed when the queue drains, or paused/failed/cancelled as needed.
-
-Legacy structural conversation support:
-
-- `subWorkflowConversations[]` can relay outputs between participant sub-workflow managers for explicitly legacy structural bundles
-- turn emission is gated by newer successful outputs and conversation stop conditions
 
 ## Runtime Storage
 

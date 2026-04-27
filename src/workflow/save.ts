@@ -36,12 +36,7 @@ import type {
   WorkflowNodeRef,
   WorkflowStepRef,
 } from "./types";
-import {
-  getLegacyManagerNodeId,
-  getLegacyEntryNodeId,
-  getLegacyAuthoredEdges,
-  getLegacyAuthoredLoops,
-} from "./types";
+import { getLegacyAuthoredEdges, getLegacyAuthoredLoops } from "./types";
 
 type AuthoredWorkflowRecord = AuthoredWorkflowJson &
   Readonly<Record<string, unknown>>;
@@ -354,9 +349,7 @@ function hasManagerRoleNode(nodes: readonly unknown[]): boolean {
   return nodes.some(
     (node) =>
       isRecord(node) &&
-      (node["role"] === "manager" ||
-        node["kind"] === "root-manager" ||
-        node["kind"] === "subworkflow-manager"),
+      (node["role"] === "manager" || node["kind"] === "root-manager"),
   );
 }
 
@@ -600,11 +593,7 @@ function prepareAuthoredWorkflowForSave(input: {
     ) {
       delete preparedWorkflow["edges"];
     }
-    for (const key of [
-      "workflowCalls",
-      "subWorkflows",
-      "loops",
-    ] as const) {
+    for (const key of ["workflowCalls", "loops"] as const) {
       if (
         Array.isArray(preparedWorkflow[key]) &&
         preparedWorkflow[key].length === 0
@@ -627,11 +616,7 @@ function prepareAuthoredWorkflowForSave(input: {
     delete preparedWorkflow["edges"];
   }
 
-  for (const key of [
-    "workflowCalls",
-    "subWorkflows",
-    "loops",
-  ] as const) {
+  for (const key of ["workflowCalls", "loops"] as const) {
     const keepField = shouldPersistTopLevelField({
       existingAuthoredWorkflow,
       incomingWorkflow: preparedWorkflow,
@@ -742,8 +727,6 @@ function createPersistedWorkflowJson(input: {
 
   const authoredWorkflow = input.authoredWorkflow;
   const authoredNodesById = buildAuthoredWorkflowNodesById(authoredWorkflow);
-  const legacyManagerNodeId = getLegacyManagerNodeId(input.workflow);
-  const legacyEntryNodeId = getLegacyEntryNodeId(input.workflow);
   const legacyAuthoredEdges = getLegacyAuthoredEdges(input.workflow);
   const legacyAuthoredLoops = getLegacyAuthoredLoops(input.workflow);
 
@@ -759,15 +742,6 @@ function createPersistedWorkflowJson(input: {
     ...(hasOwnKey(authoredWorkflow, "prompts") &&
     input.workflow.prompts !== undefined
       ? { prompts: input.workflow.prompts }
-      : {}),
-    ...(hasOwnKey(authoredWorkflow, "managerNodeId") &&
-    input.workflow.hasManagerNode !== false &&
-    legacyManagerNodeId !== undefined
-      ? { managerNodeId: legacyManagerNodeId }
-      : {}),
-    ...(hasOwnKey(authoredWorkflow, "entryNodeId") &&
-    legacyEntryNodeId !== undefined
-      ? { entryNodeId: legacyEntryNodeId }
       : {}),
     nodes: input.workflow.nodes.map((node) =>
       createPersistedWorkflowNode(node, authoredNodesById.get(node.id)),

@@ -515,7 +515,6 @@ function buildCommitMessageTemplate(
     ...(ref.nodeRegistryId === undefined
       ? []
       : [`Node-Registry-ID: ${ref.nodeRegistryId}`]),
-    `Subworkflow-ID: ${ref.subWorkflowId ?? "(unset)"}`,
     `Run-ID: ${ref.workflowExecutionId}`,
     `Workflow-ID: ${ref.workflowId}`,
     `Node-Exec-ID: ${ref.nodeExecId}`,
@@ -939,8 +938,6 @@ class ExecutionDispatcher {
       transcript: (session.conversationTurns ?? []).map((turn) => ({
         conversationId: turn.conversationId,
         turnIndex: turn.turnIndex,
-        fromSubWorkflowId: turn.fromSubWorkflowId,
-        toSubWorkflowId: turn.toSubWorkflowId,
         fromManagerNodeId: turn.fromManagerNodeId,
         toManagerNodeId: turn.toManagerNodeId,
         communicationId: turn.communicationId,

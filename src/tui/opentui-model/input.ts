@@ -1,6 +1,5 @@
 import type { LoadedWorkflow } from "../../workflow/load";
 import {
-  getStructuralSubWorkflows,
   getNormalizedNodePayload,
   type NodePayload,
 } from "../../workflow/types";
@@ -81,13 +80,8 @@ export function detectWorkflowInputMode(
   loaded: Pick<LoadedWorkflow, "bundle" | "workflowName">,
 ): TuiWorkflowInputDetection {
   const workflow = loaded.bundle.workflow;
-  const inputNodeIds = new Set(
-    getStructuralSubWorkflows(workflow).map(
-      (subWorkflow) => subWorkflow.inputNodeId,
-    ),
-  );
   const inputPayloads = workflow.nodes
-    .filter((node) => node.kind === "input" || inputNodeIds.has(node.id))
+    .filter((node) => node.kind === "input")
     .map((node) => getNormalizedNodePayload(loaded.bundle, node.id))
     .filter((payload): payload is NodePayload => payload !== undefined);
 

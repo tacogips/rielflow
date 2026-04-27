@@ -1,23 +1,20 @@
 import { describe, expect, test } from "vitest";
 import { deriveWorkflowVisualization } from "./visualization";
-import type { LoopRule, SubWorkflowRef, WorkflowJson } from "./types";
+import type { LoopRule, WorkflowJson } from "./types";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly edges?: readonly { from: string; to: string; when: string }[];
+type NodeGraphWorkflow = WorkflowJson & {
+  readonly edges: readonly { from: string; to: string; when: string }[];
   readonly loops?: readonly LoopRule[];
 };
 
 function makeBaseWorkflow(
   nodes: readonly string[],
   edges: readonly { from: string; to: string; when: string }[],
-): LegacyStructuralWorkflow {
+): NodeGraphWorkflow {
   return {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: nodes.map((id) => ({
       id,
       nodeFile: `node-${id}.json`,
@@ -95,7 +92,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -109,7 +106,7 @@ describe("deriveWorkflowVisualization", () => {
     ]);
   });
 
-  test("derives sub-workflow group indent and color", () => {
+  test("derives flat visualization for grouped node ids without sub-workflow metadata", () => {
     const workflow = makeBaseWorkflow(
       [
         "divedra-manager",
@@ -136,7 +133,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "group-manager",
           nodeFile: "node-group-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -158,18 +155,7 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "main-group",
-          description: "main",
-          managerNodeId: "group-manager",
-          inputNodeId: "group-input",
-          outputNodeId: "group-output",
-          nodeIds: ["group-manager", "group-input", "group-output"],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow: grouped,
@@ -178,13 +164,13 @@ describe("deriveWorkflowVisualization", () => {
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "group-manager", order: 1, indent: 0, color: "default" },
-      { id: "group-input", order: 2, indent: 1, color: "group:main-group" },
-      { id: "group-output", order: 3, indent: 1, color: "group:main-group" },
+      { id: "group-input", order: 2, indent: 0, color: "default" },
+      { id: "group-output", order: 3, indent: 0, color: "default" },
       { id: "done", order: 4, indent: 0, color: "default" },
     ]);
   });
 
-  test("colors branch-block sub-workflow scopes as branch blocks", () => {
+  test("derives flat visualization for branch input/output paths", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
@@ -214,7 +200,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "branch-manager",
           nodeFile: "node-branch-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -236,19 +222,7 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "review-branch",
-          description: "review branch",
-          managerNodeId: "branch-manager",
-          inputNodeId: "branch-input",
-          outputNodeId: "branch-output",
-          nodeIds: ["branch-manager", "branch-input", "branch-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "branch-block" },
-        },
-      ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -257,23 +231,13 @@ describe("deriveWorkflowVisualization", () => {
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "branch-manager", order: 1, indent: 0, color: "default" },
-      {
-        id: "branch-input",
-        order: 2,
-        indent: 1,
-        color: "branch:review-branch",
-      },
-      {
-        id: "branch-output",
-        order: 3,
-        indent: 1,
-        color: "branch:review-branch",
-      },
+      { id: "branch-input", order: 2, indent: 0, color: "default" },
+      { id: "branch-output", order: 3, indent: 0, color: "default" },
       { id: "done", order: 4, indent: 0, color: "default" },
     ]);
   });
 
-  test("nests loop scope inside a sub-workflow group", () => {
+  test("keeps only loop scope for interleaved group and loop body nodes", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
@@ -304,7 +268,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "group-manager",
           nodeFile: "node-group-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -338,23 +302,6 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "main-group",
-          description: "main",
-          managerNodeId: "group-manager",
-          inputNodeId: "group-input",
-          outputNodeId: "group-output",
-          nodeIds: [
-            "group-manager",
-            "group-input",
-            "implement",
-            "test-review",
-            "group-output",
-          ],
-          inputSources: [{ type: "human-input" }],
-        },
-      ],
       loops: [
         {
           id: "main-loop",
@@ -363,7 +310,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -372,15 +319,15 @@ describe("deriveWorkflowVisualization", () => {
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "group-manager", order: 1, indent: 0, color: "default" },
-      { id: "group-input", order: 2, indent: 1, color: "group:main-group" },
-      { id: "implement", order: 3, indent: 2, color: "loop:main-loop" },
-      { id: "test-review", order: 4, indent: 2, color: "loop:main-loop" },
-      { id: "group-output", order: 5, indent: 1, color: "group:main-group" },
+      { id: "group-input", order: 2, indent: 0, color: "default" },
+      { id: "implement", order: 3, indent: 1, color: "loop:main-loop" },
+      { id: "test-review", order: 4, indent: 1, color: "loop:main-loop" },
+      { id: "group-output", order: 5, indent: 0, color: "default" },
       { id: "done", order: 6, indent: 0, color: "default" },
     ]);
   });
 
-  test("prefers loop-body sub-workflow scopes over inferred loop intervals", () => {
+  test("uses the inferred loop interval for a loop body graph", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
@@ -411,7 +358,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "loop-manager",
           nodeFile: "node-loop-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -445,18 +392,6 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "implementation-loop",
-          description: "implementation loop body",
-          managerNodeId: "loop-manager",
-          inputNodeId: "loop-input",
-          outputNodeId: "loop-output",
-          nodeIds: ["loop-manager", "loop-input", "implement", "loop-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "main-loop" },
-        },
-      ],
       loops: [
         {
           id: "main-loop",
@@ -465,7 +400,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -473,16 +408,16 @@ describe("deriveWorkflowVisualization", () => {
 
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
-      { id: "loop-manager", order: 1, indent: 0, color: "default" },
+      { id: "loop-manager", order: 1, indent: 1, color: "loop:main-loop" },
       { id: "loop-input", order: 2, indent: 1, color: "loop:main-loop" },
       { id: "implement", order: 3, indent: 1, color: "loop:main-loop" },
       { id: "loop-output", order: 4, indent: 1, color: "loop:main-loop" },
-      { id: "loop-judge", order: 5, indent: 0, color: "default" },
+      { id: "loop-judge", order: 5, indent: 1, color: "loop:main-loop" },
       { id: "done", order: 6, indent: 0, color: "default" },
     ]);
   });
 
-  test("keeps loop-body color precedence inside nested plain groups", () => {
+  test("drops nested plain-group indentation while keeping the inferred loop color", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
@@ -518,7 +453,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "loop-manager",
           nodeFile: "node-loop-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -530,7 +465,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "inner-manager",
           nodeFile: "node-inner-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -570,41 +505,6 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "implementation-loop",
-          description: "implementation loop body",
-          managerNodeId: "loop-manager",
-          inputNodeId: "loop-input",
-          outputNodeId: "loop-output",
-          nodeIds: [
-            "loop-manager",
-            "loop-input",
-            "inner-manager",
-            "inner-input",
-            "implement",
-            "inner-output",
-            "loop-output",
-          ],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "loop-body", loopId: "main-loop" },
-        },
-        {
-          id: "inner-group",
-          description: "inner plain group",
-          managerNodeId: "inner-manager",
-          inputNodeId: "inner-input",
-          outputNodeId: "inner-output",
-          nodeIds: [
-            "inner-manager",
-            "inner-input",
-            "implement",
-            "inner-output",
-          ],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "plain" },
-        },
-      ],
       loops: [
         {
           id: "main-loop",
@@ -613,7 +513,7 @@ describe("deriveWorkflowVisualization", () => {
           exitWhen: "loop_exit",
         },
       ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -621,19 +521,19 @@ describe("deriveWorkflowVisualization", () => {
 
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
-      { id: "loop-manager", order: 1, indent: 0, color: "default" },
+      { id: "loop-manager", order: 1, indent: 1, color: "loop:main-loop" },
       { id: "loop-input", order: 2, indent: 1, color: "loop:main-loop" },
       { id: "inner-manager", order: 3, indent: 1, color: "loop:main-loop" },
-      { id: "inner-input", order: 4, indent: 2, color: "loop:main-loop" },
-      { id: "implement", order: 5, indent: 2, color: "loop:main-loop" },
-      { id: "inner-output", order: 6, indent: 2, color: "loop:main-loop" },
+      { id: "inner-input", order: 4, indent: 1, color: "loop:main-loop" },
+      { id: "implement", order: 5, indent: 1, color: "loop:main-loop" },
+      { id: "inner-output", order: 6, indent: 1, color: "loop:main-loop" },
       { id: "loop-output", order: 7, indent: 1, color: "loop:main-loop" },
-      { id: "loop-judge", order: 8, indent: 0, color: "default" },
+      { id: "loop-judge", order: 8, indent: 1, color: "loop:main-loop" },
       { id: "done", order: 9, indent: 0, color: "default" },
     ]);
   });
 
-  test("keeps branch-block color precedence inside nested plain groups", () => {
+  test("derives a flat path for deep branch topologies (no sub-workflow grouping)", () => {
     const workflow = {
       ...makeBaseWorkflow(
         [
@@ -670,7 +570,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "branch-manager",
           nodeFile: "node-branch-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -682,7 +582,7 @@ describe("deriveWorkflowVisualization", () => {
         {
           id: "inner-manager",
           nodeFile: "node-inner-manager.json",
-          kind: "subworkflow-manager",
+          kind: "task",
           completion: { type: "none" },
         },
         {
@@ -716,37 +616,7 @@ describe("deriveWorkflowVisualization", () => {
           completion: { type: "none" },
         },
       ],
-      subWorkflows: [
-        {
-          id: "review-branch",
-          description: "review branch",
-          managerNodeId: "branch-manager",
-          inputNodeId: "branch-input",
-          outputNodeId: "branch-output",
-          nodeIds: [
-            "branch-manager",
-            "branch-input",
-            "inner-manager",
-            "inner-input",
-            "review",
-            "inner-output",
-            "branch-output",
-          ],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "branch-block" },
-        },
-        {
-          id: "inner-group",
-          description: "inner plain group",
-          managerNodeId: "inner-manager",
-          inputNodeId: "inner-input",
-          outputNodeId: "inner-output",
-          nodeIds: ["inner-manager", "inner-input", "review", "inner-output"],
-          inputSources: [{ type: "human-input" }],
-          block: { type: "plain" },
-        },
-      ],
-    } satisfies LegacyStructuralWorkflow;
+    } satisfies NodeGraphWorkflow;
 
     const derived = deriveWorkflowVisualization({
       workflow,
@@ -755,32 +625,12 @@ describe("deriveWorkflowVisualization", () => {
     expect(derived).toEqual([
       { id: "divedra-manager", order: 0, indent: 0, color: "default" },
       { id: "branch-manager", order: 1, indent: 0, color: "default" },
-      {
-        id: "branch-input",
-        order: 2,
-        indent: 1,
-        color: "branch:review-branch",
-      },
-      {
-        id: "inner-manager",
-        order: 3,
-        indent: 1,
-        color: "branch:review-branch",
-      },
-      { id: "inner-input", order: 4, indent: 2, color: "branch:review-branch" },
-      { id: "review", order: 5, indent: 2, color: "branch:review-branch" },
-      {
-        id: "inner-output",
-        order: 6,
-        indent: 2,
-        color: "branch:review-branch",
-      },
-      {
-        id: "branch-output",
-        order: 7,
-        indent: 1,
-        color: "branch:review-branch",
-      },
+      { id: "branch-input", order: 2, indent: 0, color: "default" },
+      { id: "inner-manager", order: 3, indent: 0, color: "default" },
+      { id: "inner-input", order: 4, indent: 0, color: "default" },
+      { id: "review", order: 5, indent: 0, color: "default" },
+      { id: "inner-output", order: 6, indent: 0, color: "default" },
+      { id: "branch-output", order: 7, indent: 0, color: "default" },
       { id: "done", order: 8, indent: 0, color: "default" },
     ]);
   });

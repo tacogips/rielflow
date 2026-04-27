@@ -112,7 +112,6 @@ async function writeLegacyWorkflowBundle(input: {
         workflowId: input.workflowId,
         description: "legacy target workflow",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        entryNodeId: "manager-node",
         nodes: [
           {
             id: "manager-node",

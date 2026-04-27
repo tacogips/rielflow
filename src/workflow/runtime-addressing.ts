@@ -1,7 +1,5 @@
 import {
-  getStructuralSubWorkflows,
   type AgentNodePayload,
-  type SubWorkflowRef,
   type WorkflowJson,
 } from "./types";
 
@@ -71,29 +69,10 @@ export function resolveBackendSessionSelection(
   };
 }
 
-export function findOwningSubWorkflowByRuntimeNodeId(
-  workflow: WorkflowJson,
-  runtimeNodeId: string,
-): SubWorkflowRef | undefined {
-  return getStructuralSubWorkflows(workflow).find((entry) => {
-    if (entry.nodeIds?.includes(runtimeNodeId) ?? false) {
-      return true;
-    }
-    return (
-      entry.managerNodeId === runtimeNodeId ||
-      entry.inputNodeId === runtimeNodeId ||
-      entry.outputNodeId === runtimeNodeId
-    );
-  });
-}
-
 export function isRootScopeOutputNode(
   workflow: WorkflowJson,
   runtimeNodeId: string,
 ): boolean {
   const node = workflow.nodes.find((entry) => entry.id === runtimeNodeId);
-  return (
-    node?.kind === "output" &&
-    findOwningSubWorkflowByRuntimeNodeId(workflow, runtimeNodeId) === undefined
-  );
+  return node?.kind === "output";
 }

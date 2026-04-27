@@ -96,55 +96,36 @@ async function createThirdPartyAddonWorkflowFixture(input: {
   const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
   await mkdir(workflowDirectory, { recursive: true });
 
-  const nodes =
-    input.includeSetupNode === true
-      ? [
-          {
-            id: "setup",
-            role: "worker",
-            nodeFile: "nodes/node-setup.json",
-            completion: { type: "none" },
-          },
-          {
-            id: "addon-worker",
-            role: "worker",
-            addon: {
-              name: "acme/echo-worker",
-              version: "1",
-              inputs: { message: "from addon" },
-            },
-            completion: { type: "none" },
-          },
-        ]
-      : [
-          {
-            id: "addon-worker",
-            role: "worker",
-            addon: {
-              name: "acme/echo-worker",
-              version: "1",
-              inputs: { message: "from addon" },
-            },
-            completion: { type: "none" },
-          },
-        ];
-
-  await writeJson(path.join(workflowDirectory, "workflow.json"), {
-    workflowId: input.workflowName,
-    description: "third-party add-on library fixture",
-    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: input.includeSetupNode === true ? "setup" : "addon-worker",
-    nodes,
-    edges:
-      input.includeSetupNode === true
-        ? [{ from: "setup", to: "addon-worker", when: "always" }]
-        : [],
-    loops: [],
-    branching: { mode: "fan-out" },
-  });
-
   if (input.includeSetupNode === true) {
     await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: input.workflowName,
+      description: "third-party add-on library fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "setup",
+      nodes: [
+        {
+          id: "setup",
+          nodeFile: "nodes/node-setup.json",
+        },
+        {
+          id: "addon-worker",
+          addon: {
+            name: "acme/echo-worker",
+            version: "1",
+            inputs: { message: "from addon" },
+          },
+        },
+      ],
+      steps: [
+        {
+          id: "setup",
+          nodeId: "setup",
+          transitions: [{ toStepId: "addon-worker" }],
+        },
+        { id: "addon-worker", nodeId: "addon-worker" },
+      ],
+    });
     await writeJson(path.join(workflowDirectory, "nodes/node-setup.json"), {
       id: "setup",
       executionBackend: "codex-agent",
@@ -152,7 +133,26 @@ async function createThirdPartyAddonWorkflowFixture(input: {
       promptTemplate: "setup",
       variables: {},
     });
+    return;
   }
+
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: input.workflowName,
+    description: "third-party add-on library fixture",
+    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryStepId: "addon-worker",
+    nodes: [
+      {
+        id: "addon-worker",
+        addon: {
+          name: "acme/echo-worker",
+          version: "1",
+          inputs: { message: "from addon" },
+        },
+      },
+    ],
+    steps: [{ id: "addon-worker", nodeId: "addon-worker" }],
+  });
 }
 
 async function writeLocalAddonManifest(input: {
@@ -614,15 +614,15 @@ describe("library api", () => {
     workflowJson["nodes"] = [
       {
         id: "addon-worker",
-        role: "worker",
         addon: {
           name: addonName,
           version: "1",
           inputs: { message: "from local library" },
         },
-        completion: { type: "none" },
       },
     ];
+    workflowJson["entryStepId"] = "addon-worker";
+    workflowJson["steps"] = [{ id: "addon-worker", nodeId: "addon-worker" }];
     await writeJson(workflowPath, workflowJson);
 
     const summary = await inspectWorkflow(workflowName, {

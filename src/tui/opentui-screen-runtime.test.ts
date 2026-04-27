@@ -1,15 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type {
-  NodePayload,
-  SubWorkflowRef,
-  WorkflowJson,
-} from "../workflow/types";
+import type { NodePayload, WorkflowJson } from "../workflow/types";
 import {
   buildNodeSelectOptions,
   buildNodeDefinitionPopupContent,
   buildSessionSelectOptions,
-  buildSubworkflowNodeSelectOptions,
   buildWorkflowRunStatusContent,
   formatTimestampForDisplay,
   isAllowedNodeDetailKey,
@@ -17,10 +12,6 @@ import {
   resolveWorkflowPreviewIndent,
 } from "./opentui-model";
 import { focusOpenTuiTarget } from "./opentui-screen";
-
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-};
 
 function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   return {
@@ -35,19 +26,6 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [
-          {
-            id: "delivery",
-            description: "delivery",
-            managerNodeId: "divedra-manager",
-            inputNodeId: "workflow-input",
-            outputNodeId: "workflow-output",
-            nodeIds: ["workflow-input", "workflow-output"],
-            inputSources: [{ type: "human-input" }],
-            block: { type: "plain" },
-          },
-        ],
         nodes: [
           {
             id: "divedra-manager",
@@ -70,7 +48,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as LegacyStructuralWorkflow,
+      } as WorkflowJson,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",
@@ -239,56 +217,6 @@ describe("buildSessionSelectOptions", () => {
     expect(
       (options[0] as { statusLabel?: string } | undefined)?.statusLabel,
     ).toBe("COMPLETED");
-  });
-});
-
-describe("buildSubworkflowNodeSelectOptions", () => {
-  test("uses workflow-node rows in the subworkflow view", () => {
-    const loaded = makeLoadedWorkflow({
-      id: "workflow-input",
-      description: "Normalize the received request",
-      model: "input-model",
-      promptTemplate: "Normalize the request",
-      variables: {},
-    });
-
-    const options = buildSubworkflowNodeSelectOptions(
-      loaded,
-      {
-        sessionId: "sess-1",
-        workflowName: "demo",
-        workflowId: "demo",
-        status: "completed",
-        startedAt: "2026-03-24T00:00:00.000Z",
-        endedAt: "2026-03-24T00:01:00.000Z",
-        queue: [],
-        currentNodeId: "workflow-output",
-        nodeExecutionCounter: 2,
-        nodeExecutionCounts: { "workflow-input": 1, "workflow-output": 1 },
-        transitions: [],
-        nodeExecutions: [
-          {
-            nodeId: "workflow-input",
-            nodeExecId: "nodeexec-42",
-            status: "succeeded",
-            artifactDir: "/tmp/demo",
-            startedAt: "2026-03-24T00:00:10.000Z",
-            endedAt: "2026-03-24T00:00:20.000Z",
-          },
-        ],
-        communicationCounter: 0,
-        communications: [],
-        runtimeVariables: {},
-      },
-      "delivery",
-    );
-
-    expect(options[0]?.name).toContain("workflow-input");
-    expect(options[0]?.description).toContain("AGENT");
-    expect(
-      (options[0] as { detailLines?: readonly string[] } | undefined)
-        ?.detailLines?.[1],
-    ).toContain("purpose: Normalize the received request");
   });
 });
 
@@ -535,31 +463,28 @@ describe("focusOpenTuiTarget", () => {
 });
 
 describe("resolveWorkflowPreviewIndent", () => {
-  test("keeps the root manager at indent zero", () => {
+  test("keeps the root manager at indent zero regardless of derived indent", () => {
     expect(
       resolveWorkflowPreviewIndent({
         derivedIndent: 3,
-        inSubworkflowScope: true,
         kind: "root-manager",
       }),
     ).toBe(0);
   });
 
-  test("adds one indent level for nodes inside a subworkflow scope", () => {
+  test("uses the visualization-derived indent for non-manager nodes", () => {
     expect(
       resolveWorkflowPreviewIndent({
         derivedIndent: 1,
-        inSubworkflowScope: true,
-        kind: "subworkflow-manager",
+        kind: "task",
       }),
-    ).toBe(2);
+    ).toBe(1);
   });
 
-  test("keeps root-level non-subworkflow nodes at their derived indent", () => {
+  test("uses zero derived indent for shallow task nodes", () => {
     expect(
       resolveWorkflowPreviewIndent({
         derivedIndent: 0,
-        inSubworkflowScope: false,
         kind: "task",
       }),
     ).toBe(0);

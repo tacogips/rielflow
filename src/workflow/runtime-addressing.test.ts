@@ -1,22 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
-  findOwningSubWorkflowByRuntimeNodeId,
   isRootScopeOutputNode,
   resolveBackendSessionSelection,
   resolveStepExecutionAddress,
   type StepExecutionAddress,
   toStepIdentityFields,
 } from "./runtime-addressing";
-import type { AgentNodePayload, SubWorkflowRef, WorkflowJson } from "./types";
+import type { AgentNodePayload, WorkflowJson } from "./types";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
-  readonly entryNodeId?: string;
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly edges?: readonly { from: string; to: string; when: string }[];
-};
-
-function makeWorkflow(): LegacyStructuralWorkflow {
+function makeWorkflow(): WorkflowJson {
   return {
     workflowId: "demo",
     description: "runtime addressing test fixture",
@@ -24,26 +16,8 @@ function makeWorkflow(): LegacyStructuralWorkflow {
       nodeTimeoutMs: 120_000,
       maxLoopIterations: 3,
     },
-    managerNodeId: "manager-step",
-    entryNodeId: "manager-step",
     managerStepId: "manager-step",
     entryStepId: "manager-step",
-    subWorkflows: [
-      {
-        id: "child-flow",
-        description: "child flow",
-        managerNodeId: "child-manager-step",
-        inputNodeId: "child-input-step",
-        outputNodeId: "child-output-step",
-        nodeIds: [
-          "child-manager-step",
-          "child-input-step",
-          "child-worker-step",
-          "child-output-step",
-        ],
-        inputSources: [],
-      },
-    ],
     nodes: [
       {
         id: "manager-step",
@@ -63,7 +37,7 @@ function makeWorkflow(): LegacyStructuralWorkflow {
       {
         id: "child-manager-step",
         nodeFile: "nodes/node-child-manager.json",
-        kind: "subworkflow-manager",
+        kind: "task",
       },
       {
         id: "child-input-step",
@@ -119,7 +93,6 @@ function makeWorkflow(): LegacyStructuralWorkflow {
         nodeId: "child-output-node",
       },
     ],
-    edges: [],
   };
 }
 
@@ -207,24 +180,11 @@ describe("toStepIdentityFields", () => {
   });
 });
 
-describe("sub-workflow ownership helpers", () => {
-  test("finds the owning structural sub-workflow for runtime node ids", () => {
-    const workflow = makeWorkflow();
-    expect(
-      findOwningSubWorkflowByRuntimeNodeId(workflow, "child-worker-step")?.id,
-    ).toBe("child-flow");
-    expect(
-      findOwningSubWorkflowByRuntimeNodeId(workflow, "child-manager-step")?.id,
-    ).toBe("child-flow");
-    expect(
-      findOwningSubWorkflowByRuntimeNodeId(workflow, "manager-step"),
-    ).toBeUndefined();
-  });
-
-  test("detects only root-scope output steps as publishable root outputs", () => {
+describe("output scope helpers", () => {
+  test("treats every output node as a publishable workflow output after legacy structural scope removal", () => {
     const workflow = makeWorkflow();
     expect(isRootScopeOutputNode(workflow, "root-output-step")).toBe(true);
-    expect(isRootScopeOutputNode(workflow, "child-output-step")).toBe(false);
+    expect(isRootScopeOutputNode(workflow, "child-output-step")).toBe(true);
     expect(isRootScopeOutputNode(workflow, "writer-step")).toBe(false);
   });
 });

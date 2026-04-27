@@ -5,30 +5,25 @@ import {
   composeExecutionPrompts,
 } from "./prompt-composition";
 import {
-  getStructuralSubWorkflows,
   type LoopRule,
   type NodePayload,
   type WorkflowCallRef,
-  type SubWorkflowRef,
   type WorkflowJson,
   type WorkflowNodeRef,
 } from "./types";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly edges?: readonly { from: string; to: string; when: string }[];
-  readonly loops?: readonly LoopRule[];
+type LegacyNodeGraphFixture = WorkflowJson & {
+  readonly edges: readonly { from: string; to: string; when: string }[];
+  readonly loops: readonly LoopRule[];
 };
 
 type LegacyWorkflowCallWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly edges?: readonly { from: string; to: string; when: string }[];
   readonly loops?: readonly LoopRule[];
 };
 
-function makeWorkflow(): LegacyStructuralWorkflow {
+function makeWorkflow(): LegacyNodeGraphFixture {
   return {
     workflowId: "wf",
     description: "Ship a release safely.",
@@ -37,23 +32,6 @@ function makeWorkflow(): LegacyStructuralWorkflow {
       divedraPromptTemplate: "Plan {{topic}} carefully.",
       workerSystemPromptTemplate: "Execute {{topic}} precisely.",
     },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [
-      {
-        id: "main",
-        description: "Main delivery path",
-        managerNodeId: "main-divedra",
-        inputNodeId: "workflow-input",
-        outputNodeId: "workflow-output",
-        nodeIds: [
-          "main-divedra",
-          "workflow-input",
-          "implement",
-          "workflow-output",
-        ],
-        inputSources: [{ type: "human-input" }],
-      },
-    ],
     nodes: [
       {
         id: "divedra-manager",
@@ -64,7 +42,7 @@ function makeWorkflow(): LegacyStructuralWorkflow {
       {
         id: "main-divedra",
         nodeFile: "node-main-divedra.json",
-        kind: "subworkflow-manager",
+        kind: "task",
         completion: { type: "none" },
       },
       {
@@ -100,7 +78,6 @@ function makeRoleWorkflow(): LegacyWorkflowCallWorkflow {
       divedraPromptTemplate: "Plan {{topic}} carefully.",
       workerSystemPromptTemplate: "Execute {{topic}} precisely.",
     },
-    managerNodeId: "divedra-manager",
     workflowCalls: [
       {
         id: "review-call",
@@ -243,7 +220,7 @@ describe("composeExecutionPrompt", () => {
     expect(prompt).toContain('"constraints":["run tests","update changelog"]');
   });
 
-  test("recognizes sub-workflow scope for internal nodes declared in nodeIds", () => {
+  test("does not emit structural sub-workflow scope for internal legacy nodeIds", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef(),
@@ -255,38 +232,12 @@ describe("composeExecutionPrompt", () => {
       upstreamInputs: [],
     });
 
-    expect(prompt).toContain("Current sub-workflow scope:");
-    expect(prompt).toContain("- Sub-workflow: main");
-    expect(prompt).toContain(
-      "- Owned nodes: main-divedra, workflow-input, workflow-output, implement",
-    );
+    expect(prompt).not.toContain("Current sub-workflow scope:");
+    expect(prompt).not.toContain("- Sub-workflow:");
+    expect(prompt).not.toContain("- Owned nodes:");
   });
 
-  test("includes sub-workflow boundary nodes even when nodeIds omits them", () => {
-    const workflow = makeWorkflow();
-    const prompt = composeExecutionPrompt({
-      workflow: {
-        ...workflow,
-        subWorkflows: getStructuralSubWorkflows(workflow).map((entry) => ({
-          ...entry,
-          nodeIds: ["implement"],
-        })),
-      } as LegacyStructuralWorkflow,
-      nodeRef: makeNodeRef(),
-      node: makeNode(),
-      nodePayloads: makeNodePayloads(),
-      runtimeVariables: { topic: "release" },
-      basePromptText: "Implement the release step.",
-      assembledArguments: null,
-      upstreamInputs: [],
-    });
-
-    expect(prompt).toContain(
-      "- Owned nodes: main-divedra, workflow-input, workflow-output, implement",
-    );
-  });
-
-  test("includes managed child catalog for the root manager", () => {
+  test("includes direct child node catalog for the root manager", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef({
@@ -303,18 +254,12 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompt).toContain("Managed children in current scope:");
-    expect(prompt).toContain("- Child sub-workflow: main");
-    expect(prompt).toContain(
-      "handoff=Parent manager output is delivered by mailbox",
-    );
+    expect(prompt).toContain("- Child node: main-divedra (task)");
     expect(prompt).toContain(
       "expectedReturn=Return the completed release package summary.",
     );
-    expect(prompt).not.toContain(
-      "- Child node: main-divedra (subworkflow-manager)",
-    );
-    expect(prompt).not.toContain("- Child node: workflow-input (input)");
-    expect(prompt).not.toContain("- Child node: workflow-output (output)");
+    expect(prompt).toContain("- Child node: workflow-input (input)");
+    expect(prompt).toContain("- Child node: workflow-output (output)");
   });
 
   test("treats role-authored managers as manager prompts instead of worker prompts", () => {
@@ -412,7 +357,7 @@ describe("composeExecutionPrompt", () => {
     expect(prompt).not.toContain("Sub-workflows: none declared");
   });
 
-  test("keeps structural manager system guidance for explicit subworkflow compatibility bundles", () => {
+  test("uses the role-oriented manager system guidance for root-manager execution prompts", () => {
     const prompts = composeExecutionPrompts({
       promptComposition: {
         workflow: makeWorkflow(),
@@ -432,20 +377,20 @@ describe("composeExecutionPrompt", () => {
     });
 
     expect(prompts.systemPromptText).toContain(
-      "current workflow or sub-workflow scope",
+      "Manage only the current workflow execution.",
     );
-    expect(prompts.systemPromptText).toContain(
-      "Treat a sub-workflow as one node from the parent perspective",
+    expect(prompts.systemPromptText).not.toContain(
+      "current workflow or sub-workflow scope",
     );
   });
 
-  test("includes managed child node catalog for a subworkflow-manager", () => {
+  test("does not emit structural child catalogs for a non-root coordinator task node", () => {
     const prompt = composeExecutionPrompt({
       workflow: makeWorkflow(),
       nodeRef: makeNodeRef({
         id: "main-divedra",
         nodeFile: "node-main-divedra.json",
-        kind: "subworkflow-manager",
+        kind: "task",
       }),
       node: makeNodePayloads()["main-divedra"] as NodePayload,
       nodePayloads: makeNodePayloads(),
@@ -456,13 +401,9 @@ describe("composeExecutionPrompt", () => {
       upstreamInputs: [],
     });
 
-    expect(prompt).toContain("Managed children in current scope:");
-    expect(prompt).toContain("- Child node: workflow-input (input)");
-    expect(prompt).toContain("- Child node: implement (task)");
-    expect(prompt).toContain(
-      "promptSeed=Normalize the received instruction into workflow input.",
-    );
-    expect(prompt).toContain("promptSeed=Implement the release step.");
+    expect(prompt).not.toContain("Managed children in current scope:");
+    expect(prompt).not.toContain("Manager control payload:");
+    expect(prompt).toContain("Node kind: task");
   });
 
   test("renders workflow metadata inside worker system prompts", () => {
@@ -591,15 +532,14 @@ describe("composeExecutionPrompt", () => {
           },
         },
         nodeRef: makeNodeRef({
-          id: "main-divedra",
-          nodeFile: "node-main-divedra.json",
-          kind: "subworkflow-manager",
+          id: "divedra-manager",
+          nodeFile: "node-divedra-manager.json",
+          kind: "root-manager",
         }),
-        node: makeNodePayloads()["main-divedra"] as NodePayload,
+        node: makeNodePayloads()["divedra-manager"] as NodePayload,
         nodePayloads: makeNodePayloads(),
-        runtimeVariables: {},
-        basePromptText:
-          "Translate the parent instruction into child workflow work.",
+        runtimeVariables: { topic: "release" },
+        basePromptText: "Plan the overall workflow.",
         assembledArguments: null,
         upstreamInputs: [
           {

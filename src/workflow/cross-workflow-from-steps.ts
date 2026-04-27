@@ -15,7 +15,6 @@ export interface EffectiveWorkflowCall {
   readonly callerStepId?: string;
   readonly resultNodeId?: string;
   readonly when?: string;
-  readonly source: "legacy-workflow-call" | "step-transition";
 }
 
 export type CrossWorkflowExecutionDispatch = EffectiveWorkflowCall;
@@ -51,7 +50,6 @@ export function crossWorkflowCallsFromSteps(
       callerStepId: step.id,
       resultNodeId: cross.resumeStepId,
       ...(when === undefined ? {} : { when }),
-      source: "step-transition",
     });
   }
   return out;

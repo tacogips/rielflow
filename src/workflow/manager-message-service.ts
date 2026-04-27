@@ -26,7 +26,6 @@ import {
 import {
   applyOptionalNodeDecision,
   dedupe,
-  findOwnedSubWorkflow,
   isTerminalStatus,
   normalizeActionsForIdempotency,
   normalizeManagerMessageText,
@@ -175,10 +174,6 @@ export function createManagerMessageService(
               : ([
                   { kind: "planner-note" },
                 ] satisfies readonly ManagerIntentSummary[]);
-          const ownedSubWorkflow = findOwnedSubWorkflow(
-            workflow,
-            managerSession.managerNodeId,
-          );
           const artifacts = await prepareManagerMessageArtifacts({
             artifactWorkflowRoot: loadedWorkflow.value.artifactWorkflowRoot,
             workflowId: input.workflowId,
@@ -187,7 +182,6 @@ export function createManagerMessageService(
             managerMessageId,
             managerNodeId: managerSession.managerNodeId,
             managerNodeExecId: managerSession.managerNodeExecId,
-            subWorkflowId: ownedSubWorkflow?.id,
             message: trimmedMessage,
             attachments,
             actions: parsedActions.actions,

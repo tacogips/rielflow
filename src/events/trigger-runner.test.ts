@@ -45,8 +45,6 @@ async function writeManagerOnlyWorkflow(input: {
     workflowId: input.workflowName,
     description: "sticky manager workflow",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -56,8 +54,6 @@ async function writeManagerOnlyWorkflow(input: {
       },
     ],
     edges: [],
-    loops: [],
-    branching: { mode: "fan-out" },
   });
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",

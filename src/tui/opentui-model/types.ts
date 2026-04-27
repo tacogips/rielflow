@@ -56,14 +56,11 @@ export type ScreenMode = "definition" | "history" | "run" | "workspace";
 
 export type HistoryPaneNavigationMode = "list" | "scroll" | "typing";
 
-export type HistoryViewMode = "subworkflow" | "workflow";
-
 export interface OpenTuiNavigationState {
   readonly detailMode: DetailMode;
   readonly detailReturnPane: DetailReturnPane;
   readonly editingInput: boolean;
   readonly focusPane: FocusPane;
-  readonly historyViewMode: HistoryViewMode;
   readonly screenMode: ScreenMode;
 }
 
@@ -77,9 +74,6 @@ export interface OpenTuiShortcutSection {
 }
 
 export type OpenTuiDirectionalAction =
-  | {
-      readonly kind: "close-subworkflow";
-    }
   | {
       readonly kind: "focus";
       readonly focusPane: FocusPane;
@@ -97,9 +91,6 @@ export type OpenTuiDirectionalAction =
     }
   | {
       readonly kind: "open-workspace";
-    }
-  | {
-      readonly kind: "open-subworkflow";
     };
 
 export type OpenTuiHistoryAdvanceAction =
@@ -193,7 +184,6 @@ export interface OpenTuiCopyTargetInput {
   readonly screenMode: ScreenMode;
   readonly selectedNodeExecutionId?: string;
   readonly selectedSessionId?: string;
-  readonly selectedSubworkflowId?: string;
   readonly selectedWorkflowName?: string;
   readonly selectedWorkflowNodeId?: string;
 }

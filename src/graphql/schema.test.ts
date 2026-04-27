@@ -21,10 +21,6 @@ import type {
   NodeAddonPayloadResolver,
   NormalizedWorkflowBundle,
 } from "../workflow/types";
-import {
-  getLegacyEntryNodeId,
-  getLegacyManagerNodeId,
-} from "../workflow/types";
 import { createGraphqlSchema } from "./schema";
 import type { GraphqlRequestContext } from "./types";
 
@@ -369,156 +365,6 @@ async function createWorkflowCallWorkflowFixture(root: string) {
       rejectLegacyWorkflowAuthoring: false as const,
     },
   };
-}
-
-function makeGroupedWorkflowScenario(): MockNodeScenario {
-  return {
-    "divedra-manager": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "design" },
-    },
-    "main-divedra": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "dispatch" },
-    },
-    "workflow-input": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "implement" },
-    },
-    "workflow-output": {
-      provider: "scenario-mock",
-      when: { always: true },
-      payload: { stage: "review" },
-    },
-  };
-}
-
-async function createCompletedGroupedWorkflowFixture(root: string) {
-  const workflowDir = path.join(root, "demo");
-  await mkdir(workflowDir, { recursive: true });
-  await writeFile(
-    path.join(workflowDir, "workflow.json"),
-    `${JSON.stringify(
-      {
-        workflowId: "demo",
-        description: "grouped graphql schema fixture",
-        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        prompts: {
-          divedraPromptTemplate: "Coordinate {{workflowId}}",
-          workerSystemPromptTemplate:
-            "Work only on the current node responsibility.",
-        },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [
-          {
-            id: "main",
-            description: "Main sub-workflow",
-            managerNodeId: "main-divedra",
-            inputNodeId: "workflow-input",
-            outputNodeId: "workflow-output",
-            nodeIds: ["main-divedra", "workflow-input", "workflow-output"],
-            inputSources: [{ type: "human-input" }],
-            block: { type: "plain" },
-          },
-        ],
-        nodes: [
-          {
-            id: "divedra-manager",
-            kind: "root-manager",
-            nodeFile: "node-divedra-manager.json",
-          },
-          {
-            id: "main-divedra",
-            kind: "subworkflow-manager",
-            nodeFile: "node-main-divedra.json",
-          },
-          {
-            id: "workflow-input",
-            kind: "input",
-            nodeFile: "node-workflow-input.json",
-          },
-          {
-            id: "workflow-output",
-            kind: "output",
-            nodeFile: "node-workflow-output.json",
-          },
-        ],
-        edges: [
-          { from: "workflow-input", to: "workflow-output", when: "always" },
-        ],
-        loops: [],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-
-  const nodePayloads = {
-    "node-divedra-manager.json": {
-      id: "divedra-manager",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "manager",
-      variables: {},
-    },
-    "node-main-divedra.json": {
-      id: "main-divedra",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "sub manager",
-      variables: {},
-    },
-    "node-workflow-input.json": {
-      id: "workflow-input",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "input",
-      variables: {},
-    },
-    "node-workflow-output.json": {
-      id: "workflow-output",
-      executionBackend: "claude-code-agent",
-      model: "claude-opus-4-1",
-      promptTemplate: "output",
-      variables: {},
-    },
-  } as const;
-
-  await Promise.all(
-    Object.entries(nodePayloads).map(([fileName, payload]) =>
-      writeFile(
-        path.join(workflowDir, fileName),
-        `${JSON.stringify(payload, null, 2)}\n`,
-        "utf8",
-      ),
-    ),
-  );
-
-  const options = {
-    workflowRoot: root,
-    artifactRoot: path.join(root, "artifacts"),
-    rootDataDir: path.join(root, "data"),
-    cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
-  };
-  const result = await runWorkflow("demo", {
-    ...options,
-    runtimeVariables: {
-      humanInput: {
-        request: "start demo workflow",
-      },
-    },
-    mockScenario: makeGroupedWorkflowScenario(),
-  });
-  expect(result.ok).toBe(true);
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
-  return { options, session: result.value.session };
 }
 
 async function createManagerSession(
@@ -1986,8 +1832,8 @@ describe("createGraphqlSchema", () => {
     expect(created.bundle.workflow.hasManagerNode).toBe(false);
     expect(created.bundle.workflow.entryStepId).toBe("main-worker");
     expect(created.bundle.workflow.managerStepId).toBeUndefined();
-    expect(getLegacyEntryNodeId(created.bundle.workflow)).toBeUndefined();
-    expect(getLegacyManagerNodeId(created.bundle.workflow)).toBeUndefined();
+    expect("entryNodeId" in created.bundle.workflow).toBe(false);
+    expect("managerNodeId" in created.bundle.workflow).toBe(false);
 
     const workflowJsonText = await readFile(
       path.join(root, "solo", "workflow.json"),
@@ -2123,14 +1969,12 @@ describe("createGraphqlSchema", () => {
     expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
     expect(
       reloaded == null
-        ? undefined
-        : getLegacyManagerNodeId(reloaded.bundle.workflow),
-    ).toBeUndefined();
+        ? true
+        : "managerNodeId" in reloaded.bundle.workflow,
+    ).toBe(false);
     expect(
-      reloaded == null
-        ? undefined
-        : getLegacyEntryNodeId(reloaded.bundle.workflow),
-    ).toBeUndefined();
+      reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,
+    ).toBe(false);
     expect(reloaded?.bundle.workflow.nodes).toHaveLength(1);
 
     const workflowJsonText = await readFile(
@@ -2233,14 +2077,12 @@ describe("createGraphqlSchema", () => {
     expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
     expect(
       reloaded == null
-        ? undefined
-        : getLegacyManagerNodeId(reloaded.bundle.workflow),
-    ).toBeUndefined();
+        ? true
+        : "managerNodeId" in reloaded.bundle.workflow,
+    ).toBe(false);
     expect(
-      reloaded == null
-        ? undefined
-        : getLegacyEntryNodeId(reloaded.bundle.workflow),
-    ).toBeUndefined();
+      reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,
+    ).toBe(false);
     expect(reloaded?.bundle.workflow.nodes).toHaveLength(1);
   });
 
@@ -2299,56 +2141,5 @@ describe("createGraphqlSchema", () => {
         },
       ),
     ).rejects.toThrow("invalid manager auth");
-  });
-
-  test("rejects replay and retry mutations that violate root-manager communication scope", async () => {
-    const root = await makeTempDir();
-    const { options, session } =
-      await createCompletedGroupedWorkflowFixture(root);
-    const managerStore = await createManagerSession(
-      root,
-      session.sessionId,
-      "divedra-manager",
-    );
-    const schema = createGraphqlSchema({
-      now: () => "2026-03-15T01:30:00.000Z",
-      managerSessionStore: managerStore,
-    });
-    const context = {
-      ...options,
-      managerSessionId: "mgrsess-000001",
-      authToken: "secret",
-    };
-    const subworkflowScopedCommunication = session.communications.find(
-      (entry) =>
-        entry.routingScope === "intra-sub-workflow" ||
-        entry.routingScope === "parent-to-sub-workflow",
-    );
-    expect(subworkflowScopedCommunication).toBeDefined();
-    if (subworkflowScopedCommunication === undefined) {
-      return;
-    }
-
-    await expect(
-      schema.mutation.replayCommunication(
-        {
-          workflowId: "demo",
-          workflowExecutionId: session.sessionId,
-          communicationId: subworkflowScopedCommunication.communicationId,
-        },
-        context,
-      ),
-    ).rejects.toThrow("outside root-manager scope");
-
-    await expect(
-      schema.mutation.retryCommunicationDelivery(
-        {
-          workflowId: "demo",
-          workflowExecutionId: session.sessionId,
-          communicationId: subworkflowScopedCommunication.communicationId,
-        },
-        context,
-      ),
-    ).rejects.toThrow("outside root-manager scope");
   });
 });

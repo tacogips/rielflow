@@ -64,7 +64,6 @@ async function createWorkflowFixture(
     workflowId: workflowName,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -80,8 +79,6 @@ async function createWorkflowFixture(
       },
     ],
     edges: [{ from: "divedra-manager", to: "step-1", when: "always" }],
-    loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -111,7 +108,6 @@ async function createNodeSessionReuseFixture(
     workflowId: workflowName,
     description: "node session reuse fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -144,8 +140,6 @@ async function createNodeSessionReuseFixture(
       { from: "step-b", to: "step-c", when: "go_c" },
       { from: "step-c", to: "step-b", when: "always" },
     ],
-    loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -618,7 +612,7 @@ describe("runtime-db", () => {
       communicationId: "comm-000001",
       fromNodeId: "manager",
       toNodeId: "worker",
-      routingScope: "intra-sub-workflow",
+      routingScope: "intra-workflow",
       sourceNodeExecId: "exec-000001",
       payloadRef: {
         kind: "node-output",
@@ -672,7 +666,7 @@ describe("runtime-db", () => {
       communicationId: "comm-000001",
       fromNodeId: "manager",
       toNodeId: "worker",
-      routingScope: "intra-sub-workflow",
+      routingScope: "intra-workflow",
       sourceNodeExecId: "exec-000001",
       payloadRef: {
         kind: "node-output",

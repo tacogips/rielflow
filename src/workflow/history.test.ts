@@ -35,7 +35,6 @@ async function createWorkflowFixture(
     workflowId,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
@@ -51,8 +50,6 @@ async function createWorkflowFixture(
       },
     ],
     edges: [{ from: "divedra-manager", to: "step-1", when: "always" }],
-    loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {

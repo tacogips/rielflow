@@ -9,7 +9,6 @@ import {
   type PromptCompositionUpstreamInput,
 } from "./node-execution-mailbox";
 import {
-  getStructuralSubWorkflows,
   type NodePayload,
   type WorkflowJson,
   type WorkflowNodeRef,
@@ -33,33 +32,16 @@ export interface ComposedExecutionPrompts {
   readonly promptText: string;
 }
 
-const DEFAULT_DIVEDRA_STRUCTURAL_SYSTEM_PROMPT = readFileSync(
-  new URL("./prompts/divedra-system-prompt.md", import.meta.url),
-  "utf8",
-).trim();
-
 const DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT = readFileSync(
   new URL("./prompts/divedra-role-system-prompt.md", import.meta.url),
   "utf8",
 ).trim();
 
-function usesStructuralManagerCompatibility(
-  workflow: WorkflowJson,
-  nodeRef: WorkflowNodeRef,
-): boolean {
-  return (
-    nodeRef.kind === "subworkflow-manager" ||
-    getStructuralSubWorkflows(workflow).length > 0
-  );
-}
-
 function resolveDefaultManagerSystemPrompt(
-  workflow: WorkflowJson,
-  nodeRef: WorkflowNodeRef,
+  _workflow: WorkflowJson,
+  _nodeRef: WorkflowNodeRef,
 ): string {
-  return usesStructuralManagerCompatibility(workflow, nodeRef)
-    ? DEFAULT_DIVEDRA_STRUCTURAL_SYSTEM_PROMPT
-    : DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT;
+  return DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT;
 }
 
 function buildPromptVariables(
@@ -77,12 +59,6 @@ function buildPromptVariables(
     args: input.assembledArguments,
     upstream: input.upstreamInputs.map((entry) => ({
       fromNodeId: entry.fromNodeId,
-      ...(entry.fromSubWorkflowId === undefined
-        ? {}
-        : { fromSubWorkflowId: entry.fromSubWorkflowId }),
-      ...(entry.toSubWorkflowId === undefined
-        ? {}
-        : { toSubWorkflowId: entry.toSubWorkflowId }),
       transitionWhen: entry.transitionWhen,
       communicationId: entry.communicationId,
       output: entry.output,

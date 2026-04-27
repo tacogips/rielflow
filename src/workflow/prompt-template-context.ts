@@ -1,7 +1,5 @@
 export interface PromptTemplateUpstreamEntry {
   readonly fromNodeId: string;
-  readonly fromSubWorkflowId?: string;
-  readonly toSubWorkflowId?: string;
   readonly transitionWhen?: string;
   readonly communicationId?: string;
   readonly status?: string;

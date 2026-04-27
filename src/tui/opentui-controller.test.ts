@@ -12,7 +12,6 @@ import {
 } from "./opentui-controller";
 import type {
   FocusPane,
-  HistoryViewMode,
   RuntimeSessionView,
   ScreenMode,
   TuiWorkflowInputDetection,
@@ -35,7 +34,6 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
@@ -100,7 +98,6 @@ function makeRuntimeSessionView(
 
 interface ControllerHarnessState {
   focusPane: FocusPane;
-  historyViewMode: HistoryViewMode;
   inputText: string;
   lastStatus: string;
   loadedWorkflow: LoadedWorkflow | undefined;
@@ -152,7 +149,6 @@ interface ControllerHarnessOverrides {
 function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
   const state: ControllerHarnessState = {
     focusPane: "input",
-    historyViewMode: "workflow",
     inputText: "",
     lastStatus: "",
     loadedWorkflow: makeLoadedWorkflow({
@@ -234,19 +230,16 @@ function createControllerHarness(overrides: ControllerHarnessOverrides = {}) {
     copyToClipboard: () => true,
     executeWorkflow,
     getFocusPane: () => state.focusPane,
-    getHistoryViewMode: () => state.historyViewMode,
     getInputText: () => state.inputText,
     getLoadedWorkflow: () => state.loadedWorkflow,
     getPendingRunRuntimeVariables: () => state.pendingRunRuntimeVariables,
     getRuntimeSessionView: () => state.runtimeSessionView,
     getScreenMode: () => state.screenMode,
-    getSelectedChildSubworkflowId: () => undefined,
     getSelectedDefinitionNodeId: () => undefined,
     getSelectedHistoryExecution: () => state.selectedHistoryExecution,
     getSelectedManagerSessionId: () => undefined,
     getSelectedNodeExecution: () => undefined,
     getSelectedSessionSummary: () => state.selectedSessionSummary,
-    getSelectedSubworkflowNodeId: () => undefined,
     getSelectedWorkflowName: () => state.selectedWorkflowName,
     getSelectedWorkspaceWorkflowId: () => undefined,
     getWorkflowInputDetection: () => state.workflowInputDetection,

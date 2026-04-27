@@ -12,7 +12,6 @@ import type {
   DetailMode,
   DetailAgentSessionSelection,
   DetailJsonViewerSelection,
-  HistoryViewMode,
   NodeDetailArtifactBundle,
   RuntimeSessionView,
   TuiWorkflowInputDetection,
@@ -262,7 +261,6 @@ export async function buildHistoryDetailPaneState(input: {
   readonly detailMode: DetailMode;
   readonly detailViewerBody: string;
   readonly detailViewerTitle: string;
-  readonly historyViewMode: HistoryViewMode;
   readonly inputDetection: TuiWorkflowInputDetection;
   readonly loadedWorkflow: LoadedWorkflow | undefined;
   readonly managerMessages: readonly ManagerMessageRecord[];
@@ -307,14 +305,9 @@ export async function buildHistoryDetailPaneState(input: {
   ) {
     const stepAddr = input.loadedWorkflow?.bundle.workflow.steps !== undefined;
     return {
-      summaryHeaderText:
-        input.historyViewMode === "workflow"
-          ? stepAddr
-            ? "Select a step execution."
-            : "Select a node execution."
-          : stepAddr
-            ? "Select a workflow step."
-            : "Select a workflow node.",
+      summaryHeaderText: stepAddr
+        ? "Select a step execution."
+        : "Select a node execution.",
       summaryHeaderVisible: true,
       summaryOptions: [
         {

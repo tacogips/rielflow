@@ -1167,12 +1167,6 @@ export async function saveCommunicationEventToRuntimeDb(
           communicationId: communication.communicationId,
           fromNodeId: communication.fromNodeId,
           toNodeId: communication.toNodeId,
-          ...(communication.fromSubWorkflowId === undefined
-            ? {}
-            : { fromSubWorkflowId: communication.fromSubWorkflowId }),
-          ...(communication.toSubWorkflowId === undefined
-            ? {}
-            : { toSubWorkflowId: communication.toSubWorkflowId }),
           routingScope: communication.routingScope,
           deliveryKind: communication.deliveryKind,
           transitionWhen: communication.transitionWhen,

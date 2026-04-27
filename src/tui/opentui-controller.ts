@@ -6,7 +6,6 @@ import type {
 import type { RuntimeSessionSummary } from "../workflow/runtime-db";
 import type {
   FocusPane,
-  HistoryViewMode,
   OpenTuiNavigationState,
   OpenTuiCopyTargetInput,
   RuntimeSessionView,
@@ -39,7 +38,6 @@ export interface OpenTuiScreenState {
   readonly lastStatus: string;
   readonly popups: OpenTuiPopupState;
   readonly screenMode: ScreenMode;
-  readonly subworkflowPath: readonly string[];
   readonly workflowFilterText: string;
   readonly workflowFilterTextBeforePopup: string;
 }
@@ -59,7 +57,6 @@ export interface OpenTuiControllerContext {
     readonly sessionId: string;
   }>;
   readonly getFocusPane: () => FocusPane;
-  readonly getHistoryViewMode: () => HistoryViewMode;
   readonly getInputText: () => string;
   readonly getLoadedWorkflow: () => LoadedWorkflow | undefined;
   readonly getPendingRunRuntimeVariables: () =>
@@ -67,13 +64,11 @@ export interface OpenTuiControllerContext {
     | undefined;
   readonly getRuntimeSessionView: () => RuntimeSessionView | undefined;
   readonly getScreenMode: () => ScreenMode;
-  readonly getSelectedChildSubworkflowId: () => string | undefined;
   readonly getSelectedDefinitionNodeId: () => string | undefined;
   readonly getSelectedHistoryExecution: () => NodeExecutionRecord | undefined;
   readonly getSelectedManagerSessionId: () => string | undefined;
   readonly getSelectedNodeExecution: () => NodeExecutionRecord | undefined;
   readonly getSelectedSessionSummary: () => RuntimeSessionSummary | undefined;
-  readonly getSelectedSubworkflowNodeId: () => string | undefined;
   readonly getSelectedWorkflowName: () => string | undefined;
   readonly getSelectedWorkspaceWorkflowId: () => string | undefined;
   readonly getWorkflowInputDetection: () => TuiWorkflowInputDetection;
@@ -142,25 +137,17 @@ function buildCopyTargetInput(
   context: OpenTuiControllerContext,
 ): OpenTuiCopyTargetInput {
   const screenMode = context.getScreenMode();
-  const historyViewMode = context.getHistoryViewMode();
   const loadedWorkflowId =
     screenMode === "workspace" || screenMode === "definition"
       ? context.getSelectedWorkspaceWorkflowId()
       : context.getLoadedWorkflow()?.bundle.workflow.workflowId;
-  const selectedNodeExecutionId =
-    historyViewMode === "workflow"
-      ? context.getSelectedNodeExecution()?.nodeExecId
-      : undefined;
-  const selectedSessionId =
-    historyViewMode === "workflow"
-      ? context.getSelectedSessionSummary()?.sessionId
-      : undefined;
+  const selectedNodeExecutionId = context.getSelectedNodeExecution()?.nodeExecId;
+  const selectedSessionId = context.getSelectedSessionSummary()?.sessionId;
   const selectedWorkflowName = context.getSelectedWorkflowName();
-  const selectedSubworkflowId = context.getSelectedChildSubworkflowId();
   const selectedWorkflowNodeId =
     screenMode === "definition"
       ? context.getSelectedDefinitionNodeId()
-      : context.getSelectedSubworkflowNodeId();
+      : undefined;
   const wf = context.getLoadedWorkflow()?.bundle.workflow;
   const stepAddressedAuthoring = wf?.steps !== undefined;
   return {
@@ -174,9 +161,10 @@ function buildCopyTargetInput(
       ? {}
       : { selectedNodeExecutionId }),
     ...(selectedSessionId === undefined ? {} : { selectedSessionId }),
-    ...(selectedSubworkflowId === undefined ? {} : { selectedSubworkflowId }),
     ...(selectedWorkflowName === undefined ? {} : { selectedWorkflowName }),
-    ...(selectedWorkflowNodeId === undefined ? {} : { selectedWorkflowNodeId }),
+    ...(selectedWorkflowNodeId === undefined
+      ? {}
+      : { selectedWorkflowNodeId }),
   };
 }
 

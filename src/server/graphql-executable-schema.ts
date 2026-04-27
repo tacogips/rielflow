@@ -315,8 +315,6 @@ const GRAPHQL_SCHEMA_TEXT = `
     communicationId: String!
     fromNodeId: String!
     toNodeId: String!
-    fromSubWorkflowId: String
-    toSubWorkflowId: String
     routingScope: String!
     sourceNodeExecId: String!
     payloadRef: JSON!

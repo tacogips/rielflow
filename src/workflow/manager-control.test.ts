@@ -1,47 +1,26 @@
 import { describe, expect, test } from "vitest";
 import {
-  assertCommunicationInManagerScope,
   parseManagerControlActions,
   parseManagerControlPayload,
 } from "./manager-control";
-import type {
-  LoopRule,
-  SubWorkflowRef,
-  WorkflowCallRef,
-  WorkflowJson,
-} from "./types";
+import type { LoopRule, WorkflowCallRef, WorkflowJson } from "./types";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-  readonly edges?: readonly { from: string; to: string; when: string }[];
-  readonly loops?: readonly LoopRule[];
+type LegacyNodeGraphFixture = WorkflowJson & {
+  readonly edges: readonly { from: string; to: string; when: string }[];
+  readonly loops: readonly LoopRule[];
 };
 
 type LegacyWorkflowCallWorkflow = WorkflowJson & {
-  readonly managerNodeId?: string;
   readonly workflowCalls?: readonly WorkflowCallRef[];
   readonly edges?: readonly { from: string; to: string; when: string }[];
   readonly loops?: readonly LoopRule[];
 };
 
-function makeWorkflow(): LegacyStructuralWorkflow {
+function makeWorkflow(): LegacyNodeGraphFixture {
   return {
     workflowId: "wf",
     description: "wf",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [
-      {
-        id: "sw-a",
-        description: "A",
-        managerNodeId: "a-manager",
-        inputNodeId: "a-input",
-        outputNodeId: "a-output",
-        nodeIds: ["a-manager", "a-input", "a-output"],
-        inputSources: [],
-      },
-    ],
     nodes: [
       {
         id: "divedra-manager",
@@ -52,7 +31,7 @@ function makeWorkflow(): LegacyStructuralWorkflow {
       {
         id: "a-manager",
         nodeFile: "node-a-manager.json",
-        kind: "subworkflow-manager",
+        kind: "task",
         completion: { type: "none" },
       },
       {
@@ -92,7 +71,6 @@ function makeRoleWorkflow(): LegacyWorkflowCallWorkflow {
     workflowId: "wf-role",
     description: "role workflow",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
     workflowCalls: [
       {
         id: "call-review",
@@ -192,43 +170,37 @@ describe("parseManagerControlPayload", () => {
     expect(parsed?.actions).toEqual([{ type: "planner-note" }]);
   });
 
-  test("rejects removed structural action types in payloads", () => {
+  test("rejects removed structural manager control action types", () => {
+    const context = {
+      managerRuntimeId: "divedra-manager",
+      managerKind: undefined,
+      managerRole: "manager" as const,
+    };
+    for (const action of [
+      { type: "start-sub-workflow" as const, subWorkflowId: "call-review" },
+      { type: "deliver-to-child-input" as const, inputNodeId: "a-input" },
+    ]) {
+      expect(() =>
+        parseManagerControlActions([action], makeRoleWorkflow(), context),
+      ).toThrow("is not supported");
+    }
+  });
+
+  test("rejects retry actions from non-root manager runtime ids after structural scope removal", () => {
     expect(() =>
       parseManagerControlPayload(
         {
           managerControl: {
-            actions: [
-              { type: "start-sub-workflow", subWorkflowId: "call-review" },
-            ],
+            actions: [{ type: "retry-step", stepId: "a-input" }],
           },
         },
-        makeRoleWorkflow(),
+        makeWorkflow(),
         {
-          managerRuntimeId: "divedra-manager",
+          managerRuntimeId: "a-manager",
           managerKind: undefined,
-          managerRole: "manager",
         },
       ),
-    ).toThrow("is not supported");
-  });
-
-  test("parses subworkflow-manager retry actions", () => {
-    const parsed = parseManagerControlPayload(
-      {
-        managerControl: {
-          actions: [{ type: "retry-step", stepId: "a-input" }],
-        },
-      },
-      makeWorkflow(),
-      {
-        managerRuntimeId: "a-manager",
-        managerKind: "subworkflow-manager",
-      },
-    );
-
-    expect(parsed).not.toBeNull();
-    expect(parsed?.retryStepIds).toEqual(["a-input"]);
-    expect(parsed?.replayCommunicationIds).toEqual([]);
+    ).toThrow("does not have a recognized control scope");
   });
 
   test("parses planner-note and replay-communication action variants", () => {
@@ -334,23 +306,6 @@ describe("parseManagerControlPayload", () => {
     ).toThrow("is not supported");
   });
 
-  test("rejects start-sub-workflow as an unsupported action type", () => {
-    expect(() =>
-      parseManagerControlPayload(
-        {
-          managerControl: {
-            actions: [{ type: "start-sub-workflow", subWorkflowId: "sw-a" }],
-          },
-        },
-        makeWorkflow(),
-        {
-          managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
-        },
-      ),
-    ).toThrow("is not supported");
-  });
-
   test("rejects unknown referenced ids", () => {
     expect(() =>
       parseManagerControlPayload(
@@ -362,7 +317,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
+          managerKind: undefined,
         },
       ),
     ).toThrow("does not exist");
@@ -411,26 +366,7 @@ describe("parseManagerControlPayload", () => {
     ).toThrow("communicationId must be a non-empty string");
   });
 
-  test("rejects deliver-to-child-input as an unsupported action type", () => {
-    expect(() =>
-      parseManagerControlPayload(
-        {
-          managerControl: {
-            actions: [
-              { type: "deliver-to-child-input", inputNodeId: "a-input" },
-            ],
-          },
-        },
-        makeWorkflow(),
-        {
-          managerRuntimeId: "divedra-manager",
-          managerKind: "root-manager",
-        },
-      ),
-    ).toThrow("is not supported");
-  });
-
-  test("rejects subworkflow-manager retries outside the owned sub-workflow scope", () => {
+  test("rejects retry-step from non-root legacy nested manager runtime contexts", () => {
     expect(() =>
       parseManagerControlPayload(
         {
@@ -441,13 +377,13 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
+          managerKind: undefined,
         },
       ),
-    ).toThrow("must belong to sub-workflow 'sw-a'");
+    ).toThrow("does not have a recognized control scope");
   });
 
-  test("accepts root-manager retry-step for nodes inside a structural sub-workflow", () => {
+  test("accepts root-manager retry-step for a task step id", () => {
     const parsed = parseManagerControlPayload(
       {
         managerControl: {
@@ -474,13 +410,13 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
+          managerKind: undefined,
         },
       ),
     ).toThrow("cannot target the manager itself");
   });
 
-  test("rejects optional-node decisions for non-optional or out-of-scope nodes", () => {
+  test("rejects optional-node decisions for non-optional nodes and allows root-manager decisions across the workflow", () => {
     expect(() =>
       parseManagerControlPayload(
         {
@@ -491,7 +427,7 @@ describe("parseManagerControlPayload", () => {
         makeWorkflow(),
         {
           managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
+          managerKind: undefined,
         },
       ),
     ).toThrow("workflow execution.mode 'optional'");
@@ -509,154 +445,6 @@ describe("parseManagerControlPayload", () => {
           managerKind: "root-manager",
         },
       ),
-    ).toThrow("use the owning subworkflow-manager instead");
-  });
-
-  test("enforces communication replay scope from explicit sub-workflow ids only", () => {
-    const workflow = makeWorkflow();
-
-    expect(() =>
-      assertCommunicationInManagerScope(
-        {
-          workflowId: "wf",
-          workflowExecutionId: "sess-1",
-          communicationId: "comm-legacy-sub",
-          fromNodeId: "a-manager",
-          toNodeId: "a-input",
-          routingScope: "intra-sub-workflow",
-          sourceNodeExecId: "exec-1",
-          payloadRef: {
-            workflowId: "wf",
-            workflowExecutionId: "sess-1",
-            outputNodeId: "a-manager",
-            nodeExecId: "exec-1",
-            artifactDir: "/tmp/out",
-          },
-          deliveryKind: "edge-transition",
-          transitionWhen: "legacy",
-          fromSubWorkflowId: "sw-a",
-          toSubWorkflowId: "sw-a",
-          status: "delivered",
-          deliveryAttemptIds: ["attempt-000001"],
-          activeDeliveryAttemptId: "attempt-000001",
-          createdAt: "2026-03-15T00:00:00.000Z",
-          artifactDir: "/tmp/comm",
-        },
-        workflow,
-        {
-          managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
-        },
-        "test replay",
-      ),
     ).not.toThrow();
-
-    expect(() =>
-      assertCommunicationInManagerScope(
-        {
-          workflowId: "wf",
-          workflowExecutionId: "sess-1",
-          communicationId: "comm-missing-scope",
-          fromNodeId: "a-manager",
-          toNodeId: "a-input",
-          routingScope: "intra-sub-workflow",
-          sourceNodeExecId: "exec-1b",
-          payloadRef: {
-            workflowId: "wf",
-            workflowExecutionId: "sess-1",
-            outputNodeId: "a-manager",
-            nodeExecId: "exec-1b",
-            artifactDir: "/tmp/out",
-          },
-          deliveryKind: "edge-transition",
-          transitionWhen: "legacy-missing-scope",
-          status: "delivered",
-          deliveryAttemptIds: ["attempt-000001"],
-          activeDeliveryAttemptId: "attempt-000001",
-          createdAt: "2026-03-15T00:00:30.000Z",
-          artifactDir: "/tmp/comm",
-        },
-        workflow,
-        {
-          managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
-        },
-        "test replay",
-      ),
-    ).toThrow("must stay within sub-workflow 'sw-a'");
-
-    expect(() =>
-      assertCommunicationInManagerScope(
-        {
-          workflowId: "wf",
-          workflowExecutionId: "sess-1",
-          communicationId: "comm-root",
-          fromNodeId: "divedra-manager",
-          toNodeId: "step-1",
-          routingScope: "intra-sub-workflow",
-          sourceNodeExecId: "exec-2",
-          payloadRef: {
-            workflowId: "wf",
-            workflowExecutionId: "sess-1",
-            outputNodeId: "divedra-manager",
-            nodeExecId: "exec-2",
-            artifactDir: "/tmp/out",
-          },
-          deliveryKind: "edge-transition",
-          transitionWhen: "root",
-          fromSubWorkflowId: "sw-a",
-          toSubWorkflowId: "sw-a",
-          status: "delivered",
-          deliveryAttemptIds: ["attempt-000001"],
-          activeDeliveryAttemptId: "attempt-000001",
-          createdAt: "2026-03-15T00:01:00.000Z",
-          artifactDir: "/tmp/comm",
-        },
-        workflow,
-        {
-          managerRuntimeId: "a-manager",
-          managerKind: "subworkflow-manager",
-        },
-        "test replay",
-      ),
-    ).toThrow(
-      "fromSubWorkflowId 'sw-a' does not match node 'divedra-manager' ownership",
-    );
-
-    expect(() =>
-      assertCommunicationInManagerScope(
-        {
-          workflowId: "wf",
-          workflowExecutionId: "sess-1",
-          communicationId: "comm-sub",
-          fromNodeId: "a-manager",
-          toNodeId: "a-input",
-          routingScope: "intra-sub-workflow",
-          sourceNodeExecId: "exec-3",
-          payloadRef: {
-            workflowId: "wf",
-            workflowExecutionId: "sess-1",
-            outputNodeId: "a-manager",
-            nodeExecId: "exec-3",
-            artifactDir: "/tmp/out",
-          },
-          deliveryKind: "edge-transition",
-          transitionWhen: "sub",
-          fromSubWorkflowId: "sw-a",
-          toSubWorkflowId: "sw-a",
-          status: "delivered",
-          deliveryAttemptIds: ["attempt-000001"],
-          activeDeliveryAttemptId: "attempt-000001",
-          createdAt: "2026-03-15T00:02:00.000Z",
-          artifactDir: "/tmp/comm",
-        },
-        workflow,
-        {
-          managerRuntimeId: "divedra-manager",
-          managerKind: "root-manager",
-        },
-        "test replay",
-      ),
-    ).toThrow("outside root-manager scope");
   });
 });

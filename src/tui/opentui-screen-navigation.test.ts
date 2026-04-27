@@ -1,10 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { LoadedWorkflow } from "../workflow/load";
-import type {
-  NodePayload,
-  SubWorkflowRef,
-  WorkflowJson,
-} from "../workflow/types";
+import type { NodePayload, WorkflowJson } from "../workflow/types";
 import {
   buildDetailEscapeStatusMessage,
   buildNodeSelectOptions,
@@ -19,10 +15,6 @@ import {
   resolveTabFocusTarget,
 } from "./opentui-model";
 
-type LegacyStructuralWorkflow = WorkflowJson & {
-  readonly subWorkflows?: readonly SubWorkflowRef[];
-};
-
 function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
   return {
     workflowName: "demo",
@@ -36,19 +28,6 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
           maxLoopIterations: 3,
           nodeTimeoutMs: 120_000,
         },
-        managerNodeId: "divedra-manager",
-        subWorkflows: [
-          {
-            id: "delivery",
-            description: "delivery",
-            managerNodeId: "divedra-manager",
-            inputNodeId: "workflow-input",
-            outputNodeId: "workflow-output",
-            nodeIds: ["workflow-input", "workflow-output"],
-            inputSources: [{ type: "human-input" }],
-            block: { type: "plain" },
-          },
-        ],
         nodes: [
           {
             id: "divedra-manager",
@@ -71,7 +50,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as LegacyStructuralWorkflow,
+      } as WorkflowJson,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",
@@ -200,25 +179,14 @@ describe("buildDetailEscapeStatusMessage", () => {
     expect(
       buildDetailEscapeStatusMessage({
         detailReturnPane: "sessions",
-        historyViewMode: "workflow",
       }),
     ).toBe("Focused workflow runs");
-  });
-
-  test("returns to workflow nodes when detail came from a subworkflow session pane", () => {
-    expect(
-      buildDetailEscapeStatusMessage({
-        detailReturnPane: "sessions",
-        historyViewMode: "subworkflow",
-      }),
-    ).toBe("Focused workflow nodes");
   });
 
   test("returns to nodes when detail came from the node pane", () => {
     expect(
       buildDetailEscapeStatusMessage({
         detailReturnPane: "nodes",
-        historyViewMode: "workflow",
       }),
     ).toBe("Focused nodes");
   });
@@ -230,7 +198,6 @@ describe("resolveNodeDetailEscape", () => {
       resolveNodeDetailEscape({
         detailMode: "viewer",
         detailReturnPane: "nodes",
-        historyViewMode: "workflow",
       }),
     ).toEqual({
       nextDetailMode: "summary",
@@ -244,7 +211,6 @@ describe("resolveNodeDetailEscape", () => {
       resolveNodeDetailEscape({
         detailMode: "summary",
         detailReturnPane: "nodes",
-        historyViewMode: "workflow",
       }),
     ).toEqual({
       nextDetailMode: "summary",
@@ -308,7 +274,6 @@ describe("resolveDirectionalNavigationAction", () => {
         historyRootReturnScreen: "definition",
         navigation: {
           focusPane: "sessions",
-          historyViewMode: "workflow",
           screenMode: "history",
         },
       }),
@@ -325,7 +290,6 @@ describe("resolveHistoryRevertAction", () => {
           detailReturnPane: "nodes",
           editingInput: false,
           focusPane: "detail",
-          historyViewMode: "workflow",
         },
       }),
     ).toEqual({
@@ -344,7 +308,6 @@ describe("resolveHistoryRevertAction", () => {
           detailReturnPane: "nodes",
           editingInput: true,
           focusPane: "input",
-          historyViewMode: "workflow",
         },
       }),
     ).toEqual({
@@ -506,18 +469,6 @@ describe("resolveOpenTuiCopyTarget", () => {
     });
   });
 
-  test("copies the selected workflow node id from the subworkflow node pane", () => {
-    expect(
-      resolveOpenTuiCopyTarget({
-        focusPane: "sessions",
-        screenMode: "history",
-        selectedWorkflowNodeId: "workflow-input",
-      }),
-    ).toEqual({
-      label: "workflow node id",
-      value: "workflow-input",
-    });
-  });
 });
 
 describe("buildOpenTuiBreadcrumb", () => {
@@ -531,12 +482,11 @@ describe("buildOpenTuiBreadcrumb", () => {
           variables: {},
         }),
         screenMode: "definition",
-        subworkflowPath: [],
       }),
     ).toBe("workspace > demo > definition");
   });
 
-  test("renders a nested history breadcrumb for subworkflow navigation", () => {
+  test("renders a flat workflow history breadcrumb", () => {
     expect(
       buildOpenTuiBreadcrumb({
         loadedWorkflow: makeLoadedWorkflow({
@@ -546,9 +496,8 @@ describe("buildOpenTuiBreadcrumb", () => {
           variables: {},
         }),
         screenMode: "history",
-        subworkflowPath: ["delivery", "child-delivery"],
       }),
-    ).toBe("workspace > demo > history > delivery > child-delivery");
+    ).toBe("workspace > demo > history");
   });
 });
 
@@ -597,7 +546,7 @@ describe("buildNodeSelectOptions", () => {
     expect(
       (options[0] as { detailLines?: readonly string[] } | undefined)
         ?.detailLines?.[1],
-    ).toContain("scope: delivery");
+    ).toContain("scope: root");
     expect(
       (options[0] as { detailLines?: readonly string[] } | undefined)
         ?.detailLines?.[1],

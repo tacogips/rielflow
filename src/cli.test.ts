@@ -234,26 +234,27 @@ async function createManagerlessWorkflowFixture(
 
   await writeJson(path.join(workflowDirectory, "workflow.json"), {
     workflowId: workflowName,
-    description: "worker-only cli fixture",
+    description: "worker-only cli fixture (step-addressed linear)",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "worker-1",
+    entryStepId: "step-1",
     nodes: [
       {
         id: "worker-1",
-        role: "worker",
         nodeFile: "node-worker-1.json",
-        completion: { type: "none" },
       },
       {
         id: "worker-2",
-        role: "worker",
         nodeFile: "node-worker-2.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [{ from: "worker-1", to: "worker-2", when: "always" }],
-    loops: [],
-    branching: { mode: "fan-out" },
+    steps: [
+      {
+        id: "step-1",
+        nodeId: "worker-1",
+        transitions: [{ toStepId: "step-2" }],
+      },
+      { id: "step-2", nodeId: "worker-2" },
+    ],
   });
   await writeJson(path.join(workflowDirectory, "node-worker-1.json"), {
     id: "worker-1",
@@ -280,26 +281,47 @@ async function createWorkflowCallInspectFixture(
 
   await writeJson(path.join(workflowDirectory, "workflow.json"), {
     workflowId: workflowName,
-    description: "workflow-call cli fixture",
+    description: "workflow-call cli fixture (step-addressed cross-workflow)",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    workflowCalls: [
-      {
-        id: "review-call",
-        workflowId: "review",
-        callerNodeId: "main-worker",
-      },
-    ],
+    managerStepId: "divedra-manager",
+    entryStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
         nodeFile: "nodes/node-divedra-manager.json",
       },
       {
         id: "main-worker",
-        role: "worker",
         nodeFile: "nodes/node-main-worker.json",
+      },
+      {
+        id: "post-review",
+        nodeFile: "nodes/node-post-review.json",
+      },
+    ],
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+        transitions: [{ toStepId: "main-worker" }],
+      },
+      {
+        id: "main-worker",
+        nodeId: "main-worker",
+        role: "worker",
+        transitions: [
+          {
+            toWorkflowId: "review",
+            toStepId: "reviewer",
+            resumeStepId: "post-review",
+          },
+        ],
+      },
+      {
+        id: "post-review",
+        nodeId: "post-review",
+        role: "worker",
       },
     ],
   });
@@ -323,6 +345,16 @@ async function createWorkflowCallInspectFixture(
       variables: {},
     },
   );
+  await writeJson(
+    path.join(workflowDirectory, "nodes", "node-post-review.json"),
+    {
+      id: "post-review",
+      executionBackend: "codex-agent",
+      model: "gpt-5",
+      promptTemplate: "after review",
+      variables: {},
+    },
+  );
 
   const reviewDirectory = path.join(workflowRoot, "review");
   await mkdir(path.join(reviewDirectory, "nodes"), { recursive: true });
@@ -330,14 +362,14 @@ async function createWorkflowCallInspectFixture(
     workflowId: "review",
     description: "workflow-call cli callee fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "reviewer",
+    entryStepId: "reviewer",
     nodes: [
       {
         id: "reviewer",
-        role: "worker",
         nodeFile: "nodes/node-reviewer.json",
       },
     ],
+    steps: [{ id: "reviewer", nodeId: "reviewer", role: "worker" }],
   });
   await writeJson(path.join(reviewDirectory, "nodes", "node-reviewer.json"), {
     id: "reviewer",
@@ -1027,22 +1059,18 @@ describe("runCli", () => {
         workflowId: workflowName,
         description: "local add-on cli fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        entryNodeId: "addon-worker",
+        entryStepId: "addon-worker",
         nodes: [
           {
             id: "addon-worker",
-            role: "worker",
             addon: {
               name: addonName,
               version: "1",
               inputs: { message: "from cli" },
             },
-            completion: { type: "none" },
           },
         ],
-        edges: [],
-        loops: [],
-        branching: { mode: "fan-out" },
+        steps: [{ id: "addon-worker", nodeId: "addon-worker" }],
       });
       await writeLocalAddonManifest({
         addonRoot: path.join(userRoot, "addons"),
@@ -1259,16 +1287,26 @@ describe("runCli", () => {
 
       const parsed = JSON.parse(capture.stdout.join("\n")) as {
         hasManagerNode: boolean;
+        entryStepId?: string;
         nodeRegistryIds: readonly string[];
-        counts: { nodes: number };
+        counts: {
+          nodes?: number;
+          nodeRegistry: number;
+          steps: number;
+          structuralProjection?: { nodes: number };
+        };
       };
       expect(parsed.hasManagerNode).toBe(false);
+      expect(parsed.entryStepId).toBe("step-1");
       expect(parsed.nodeRegistryIds).toEqual(["worker-1", "worker-2"]);
-      expect(parsed.counts.nodes).toBe(2);
+      expect(parsed.counts.nodes).toBeUndefined();
+      expect(parsed.counts.nodeRegistry).toBe(2);
+      expect(parsed.counts.steps).toBe(2);
+      expect(parsed.counts.structuralProjection?.nodes).toBe(2);
     });
   });
 
-  test("inspect reports authored workflowCalls in json and text output", async () => {
+  test("inspect reports step-derived cross-workflow calls in json and text output", async () => {
     await withLegacyWorkflowAuthorshipForCli(async () => {
       const root = await makeTempDir();
       await createWorkflowCallInspectFixture(root, "workflow-calls");
@@ -1293,7 +1331,7 @@ describe("runCli", () => {
         counts: { workflowCalls: number };
         runtime: { ready: boolean };
       };
-      expect(parsed.workflowCallIds).toEqual(["review-call"]);
+      expect(parsed.workflowCallIds).toEqual(["__cw:main-worker"]);
       expect(parsed.counts.workflowCalls).toBe(1);
       expect(parsed.runtime.ready).toBe(true);
 
@@ -1305,7 +1343,7 @@ describe("runCli", () => {
       expect(textCode).toBe(0);
       expect(textCapture.stdout.join("\n")).toContain("workflowCalls: 1");
       expect(textCapture.stdout.join("\n")).toContain(
-        "workflowCallIds: review-call",
+        "workflowCallIds: __cw:main-worker",
       );
       expect(textCapture.stdout.join("\n")).not.toContain("compatibility:");
       expect(textCapture.stdout.join("\n")).not.toContain("subWorkflows:");

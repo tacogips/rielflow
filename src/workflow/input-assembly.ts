@@ -122,11 +122,7 @@ function resolveBindingSource(
   if (source === "human-input") {
     return ctx.runtimeVariables["humanInput"];
   }
-  if (
-    source === "node-output" ||
-    source === "sub-workflow-output" ||
-    source === "workflow-output"
-  ) {
+  if (source === "node-output" || source === "workflow-output") {
     return pickUpstreamEntry(ctx.upstream, sourceRef);
   }
   return undefined;
@@ -147,12 +143,6 @@ export function assembleNodeInput(
     upstream: ctx.upstream.map((entry) => ({
       fromNodeId:
         typeof entry["fromNodeId"] === "string" ? entry["fromNodeId"] : "",
-      ...(typeof entry["fromSubWorkflowId"] === "string"
-        ? { fromSubWorkflowId: entry["fromSubWorkflowId"] }
-        : {}),
-      ...(typeof entry["toSubWorkflowId"] === "string"
-        ? { toSubWorkflowId: entry["toSubWorkflowId"] }
-        : {}),
       ...(typeof entry["transitionWhen"] === "string"
         ? { transitionWhen: entry["transitionWhen"] }
         : {}),

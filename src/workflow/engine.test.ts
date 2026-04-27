@@ -47,9 +47,7 @@ class OptionalDecisionAdapter implements NodeAdapter {
           this.managerCalls >= 2
             ? {
                 managerControl: {
-                  actions: [
-                    { type: "skip-optional-step", stepId: "step-1" },
-                  ],
+                  actions: [{ type: "skip-optional-step", stepId: "step-1" }],
                 },
               }
             : {},
@@ -992,8 +990,6 @@ async function createWorkflowFixture(
     workflowId: workflowName,
     description: "fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes,
     edges,
     loops: withLoop
@@ -1006,7 +1002,6 @@ async function createWorkflowFixture(
           },
         ]
       : [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1045,25 +1040,21 @@ async function createManagerlessWorkflowFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "managerless fixture",
+    description: "managerless step-addressed linear fixture (no manager step)",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    entryNodeId: "step-1",
+    entryStepId: "step-1",
     nodes: [
+      { id: "step-1", nodeFile: "node-step-1.json" },
+      { id: "step-2", nodeFile: "node-step-2.json" },
+    ],
+    steps: [
       {
         id: "step-1",
-        role: "worker",
-        nodeFile: "node-step-1.json",
-        completion: { type: "none" },
+        nodeId: "step-1",
+        transitions: [{ toStepId: "step-2" }],
       },
-      {
-        id: "step-2",
-        role: "worker",
-        nodeFile: "node-step-2.json",
-        completion: { type: "none" },
-      },
+      { id: "step-2", nodeId: "step-2" },
     ],
-    edges: [{ from: "step-1", to: "step-2", when: "always" }],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-step-1.json"), {
@@ -1149,19 +1140,18 @@ async function createRoleManagedWorkflowFixture(
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
+        kind: "root-manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
       {
         id: "step-1",
-        role: "worker",
+        kind: "task",
         nodeFile: "node-step-1.json",
         completion: { type: "none" },
       },
     ],
     edges: [{ from: "divedra-manager", to: "step-1", when: "always" }],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1347,7 +1337,8 @@ async function createManagedWorkflowCallCalleeWithoutOutputFixture(
 
   await writeJson(path.join(workflowDir, "workflow.json"), {
     workflowId: workflowName,
-    description: "step-addressed managed workflow call callee without published output",
+    description:
+      "step-addressed managed workflow call callee without published output",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
     managerStepId: "divedra-manager",
     entryStepId: "divedra-manager",
@@ -1506,8 +1497,6 @@ async function createOptionalExecutionFixture(
     workflowId: workflowName,
     description: "optional fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -1537,7 +1526,6 @@ async function createOptionalExecutionFixture(
       { from: "step-1", to: "done", when: "always" },
     ],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1574,8 +1562,6 @@ async function createUserActionFixture(
     workflowId: workflowName,
     description: "user action fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -1592,7 +1578,6 @@ async function createUserActionFixture(
     ],
     edges: [{ from: "divedra-manager", to: "approval", when: "always" }],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1626,8 +1611,6 @@ async function createNodeSessionReuseFixture(
     workflowId: workflowName,
     description: "node session reuse fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -1661,7 +1644,6 @@ async function createNodeSessionReuseFixture(
       { from: "step-c", to: "step-b", when: "always" },
     ],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1816,143 +1798,6 @@ async function createRotatingInheritedSessionReuseFixture(
   });
 }
 
-async function createSubWorkflowRuntimeFixture(
-  root: string,
-  workflowName: string,
-): Promise<void> {
-  const workflowDir = path.join(root, workflowName);
-  await mkdir(workflowDir, { recursive: true });
-
-  await writeJson(path.join(workflowDir, "workflow.json"), {
-    workflowId: workflowName,
-    description: "sub-workflow fixture",
-    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [
-      {
-        id: "sw-a",
-        description: "A",
-        managerNodeId: "a-manager",
-        inputNodeId: "a-input",
-        outputNodeId: "a-output",
-        nodeIds: ["a-manager", "a-input", "a-output"],
-        inputSources: [{ type: "human-input" }],
-      },
-      {
-        id: "sw-b",
-        description: "B",
-        managerNodeId: "b-manager",
-        inputNodeId: "b-input",
-        outputNodeId: "b-output",
-        nodeIds: ["b-manager", "b-input", "b-output"],
-        inputSources: [{ type: "sub-workflow-output", subWorkflowId: "sw-a" }],
-      },
-    ],
-    nodes: [
-      {
-        id: "divedra-manager",
-        kind: "root-manager",
-        nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "a-manager",
-        kind: "subworkflow-manager",
-        nodeFile: "node-a-manager.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "a-input",
-        kind: "input",
-        nodeFile: "node-a-input.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "a-output",
-        kind: "output",
-        nodeFile: "node-a-output.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "b-manager",
-        kind: "subworkflow-manager",
-        nodeFile: "node-b-manager.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "b-input",
-        kind: "input",
-        nodeFile: "node-b-input.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "b-output",
-        kind: "output",
-        nodeFile: "node-b-output.json",
-        completion: { type: "none" },
-      },
-    ],
-    edges: [
-      { from: "a-input", to: "a-output", when: "always" },
-      { from: "a-output", to: "divedra-manager", when: "always" },
-      { from: "b-input", to: "b-output", when: "always" },
-      { from: "b-output", to: "divedra-manager", when: "always" },
-    ],
-    loops: [],
-    branching: { mode: "fan-out" },
-  });
-
-  await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
-    id: "divedra-manager",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "manager",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-a-manager.json"), {
-    id: "a-manager",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "a-manager",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-a-input.json"), {
-    id: "a-input",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "a-input",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-a-output.json"), {
-    id: "a-output",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "a-output",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-b-manager.json"), {
-    id: "b-manager",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "b-manager",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-b-input.json"), {
-    id: "b-input",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "b-input",
-    variables: {},
-  });
-  await writeJson(path.join(workflowDir, "node-b-output.json"), {
-    id: "b-output",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "b-output",
-    variables: {},
-  });
-}
-
 async function createManagerAfterOutputFixture(
   root: string,
   workflowName: string,
@@ -1964,8 +1809,6 @@ async function createManagerAfterOutputFixture(
     workflowId: workflowName,
     description: "manager-after-output fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -1985,7 +1828,6 @@ async function createManagerAfterOutputFixture(
       { from: "workflow-output", to: "divedra-manager", when: "always" },
     ],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -2015,8 +1857,6 @@ async function createSingleRootOutputFixture(
     workflowId: workflowName,
     description: "single-root-output fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -2033,7 +1873,6 @@ async function createSingleRootOutputFixture(
     ],
     edges: [{ from: "divedra-manager", to: "workflow-output", when: "always" }],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   for (const nodeId of ["divedra-manager", "workflow-output"]) {
@@ -2058,8 +1897,6 @@ async function createMultipleRootOutputsFixture(
     workflowId: workflowName,
     description: "multiple-root-outputs fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -2085,7 +1922,6 @@ async function createMultipleRootOutputsFixture(
       { from: "first-output", to: "second-output", when: "always" },
     ],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   for (const nodeId of ["divedra-manager", "first-output", "second-output"]) {
@@ -2110,8 +1946,6 @@ async function createRootOutputThenTaskFixture(
     workflowId: workflowName,
     description: "root-output-then-task fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [],
     nodes: [
       {
         id: "divedra-manager",
@@ -2137,7 +1971,6 @@ async function createRootOutputThenTaskFixture(
       { from: "workflow-output", to: "final-task", when: "always" },
     ],
     loops: [],
-    branching: { mode: "fan-out" },
   });
 
   for (const nodeId of ["divedra-manager", "workflow-output", "final-task"]) {
@@ -2151,89 +1984,8 @@ async function createRootOutputThenTaskFixture(
   }
 }
 
-async function createWorkflowOutputDrivenSubWorkflowFixture(
-  root: string,
-  workflowName: string,
-): Promise<void> {
-  const workflowDir = path.join(root, workflowName);
-  await mkdir(workflowDir, { recursive: true });
-
-  await writeJson(path.join(workflowDir, "workflow.json"), {
-    workflowId: workflowName,
-    description: "workflow-output source fixture",
-    defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-    managerNodeId: "divedra-manager",
-    subWorkflows: [
-      {
-        id: "review-sw",
-        description: "Review after root output",
-        managerNodeId: "review-manager",
-        inputNodeId: "review-input",
-        outputNodeId: "review-output",
-        nodeIds: ["review-manager", "review-input", "review-output"],
-        inputSources: [{ type: "workflow-output", workflowId: workflowName }],
-      },
-    ],
-    nodes: [
-      {
-        id: "divedra-manager",
-        kind: "root-manager",
-        nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "workflow-output",
-        kind: "output",
-        nodeFile: "node-workflow-output.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "review-manager",
-        kind: "subworkflow-manager",
-        nodeFile: "node-review-manager.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "review-input",
-        kind: "input",
-        nodeFile: "node-review-input.json",
-        completion: { type: "none" },
-      },
-      {
-        id: "review-output",
-        kind: "output",
-        nodeFile: "node-review-output.json",
-        completion: { type: "none" },
-      },
-    ],
-    edges: [
-      { from: "divedra-manager", to: "workflow-output", when: "needs_output" },
-      { from: "workflow-output", to: "divedra-manager", when: "always" },
-      { from: "review-input", to: "review-output", when: "always" },
-    ],
-    loops: [],
-    branching: { mode: "fan-out" },
-  });
-
-  for (const nodeId of [
-    "divedra-manager",
-    "workflow-output",
-    "review-manager",
-    "review-input",
-    "review-output",
-  ]) {
-    await writeJson(path.join(workflowDir, `node-${nodeId}.json`), {
-      id: nodeId,
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: nodeId,
-      variables: {},
-    });
-  }
-}
-
 describe("runWorkflow", () => {
-  test("executes manager-less workflows from entryNodeId", async () => {
+  test("executes manager-less workflows from entryStepId", async () => {
     const root = await makeTempDir();
     await createManagerlessWorkflowFixture(root, "managerless");
 
@@ -2447,7 +2199,8 @@ describe("runWorkflow", () => {
       return;
     }
     expect(first.value.session.status).toBe("paused");
-    const nestedId0 = first.value.session.supervision?.nestedSuperviserSessionId;
+    const nestedId0 =
+      first.value.session.supervision?.nestedSuperviserSessionId;
     expect(nestedId0).toBeDefined();
 
     const second = await runWorkflow(
@@ -2469,7 +2222,8 @@ describe("runWorkflow", () => {
       return;
     }
     expect(second.value.session.status).toBe("completed");
-    const nestedId1 = second.value.session.supervision?.nestedSuperviserSessionId;
+    const nestedId1 =
+      second.value.session.supervision?.nestedSuperviserSessionId;
     expect(nestedId1).toBeDefined();
     expect(nestedId1).not.toBe(nestedId0);
   });
@@ -3161,9 +2915,9 @@ describe("runWorkflow", () => {
     expect(resumed.value.session.supervision?.policy?.monitorIntervalMs).toBe(
       9999,
     );
-    expect(resumed.value.session.supervision?.policy?.superviserWorkflowId).toBe(
-      "divedra/custom-superviser",
-    );
+    expect(
+      resumed.value.session.supervision?.policy?.superviserWorkflowId,
+    ).toBe("divedra/custom-superviser");
     expect(resumed.value.session.supervision?.superviserWorkflowId).toBe(
       "divedra/custom-superviser",
     );
@@ -3695,9 +3449,7 @@ describe("runWorkflow", () => {
           {
             payload: {
               managerControl: {
-                actions: [
-                  { type: "execute-optional-step", stepId: "step-1" },
-                ],
+                actions: [{ type: "execute-optional-step", stepId: "step-1" }],
               },
             },
           },
@@ -4188,7 +3940,8 @@ describe("runWorkflow", () => {
       ]),
     );
 
-    const [stepAExecution, stepBExecution] = result.value.session.nodeExecutions;
+    const [stepAExecution, stepBExecution] =
+      result.value.session.nodeExecutions;
     expect(stepAExecution).toBeDefined();
     expect(stepBExecution).toBeDefined();
     if (stepAExecution === undefined || stepBExecution === undefined) {
@@ -4461,7 +4214,7 @@ describe("runWorkflow", () => {
     ).toBeNull();
   });
 
-  test("treats role-authored managers as manager-node executions for ambient GraphQL context", async () => {
+  test("treats root-manager kind as manager-node executions for ambient GraphQL context", async () => {
     const root = await makeTempDir();
     const workflowName = "role-manager-session-runtime";
     await createRoleManagedWorkflowFixture(root, workflowName);
@@ -4486,7 +4239,7 @@ describe("runWorkflow", () => {
 
     expect(adapter.calls).toHaveLength(2);
     expect(adapter.calls[0]?.nodeId).toBe("divedra-manager");
-    expect(adapter.calls[0]?.promptText).toContain("Node kind: manager");
+    expect(adapter.calls[0]?.promptText).toContain("Node kind: root-manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
       DIVEDRA_WORKFLOW_ID: workflowName,
@@ -5009,78 +4762,6 @@ describe("runWorkflow", () => {
     expect(
       result.value.session.runtimeVariables["workflowOutput"],
     ).toBeUndefined();
-  });
-
-  test("enables workflow-output input sources after a root output node succeeds", async () => {
-    const root = await makeTempDir();
-    await createWorkflowOutputDrivenSubWorkflowFixture(
-      root,
-      "workflow-output-source",
-    );
-
-    const result = await runWorkflow(
-      "workflow-output-source",
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-      },
-      new ScenarioNodeAdapter({
-        "divedra-manager": [
-          {
-            provider: "scenario-mock",
-            when: { needs_output: true },
-            payload: { phase: "plan" },
-          },
-          { provider: "scenario-mock", when: {}, payload: { phase: "assess" } },
-        ],
-        "workflow-output": {
-          provider: "scenario-mock",
-          when: { always: true },
-          payload: { final: "root-output" },
-        },
-        "review-manager": {
-          provider: "scenario-mock",
-          when: { always: true },
-          payload: { stage: "review-dispatch" },
-        },
-        "review-input": {
-          provider: "scenario-mock",
-          when: { always: true },
-          payload: { stage: "review-input" },
-        },
-        "review-output": {
-          provider: "scenario-mock",
-          when: { always: true },
-          payload: { stage: "review-output" },
-        },
-      }),
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    expect(result.value.session.runtimeVariables["workflowOutput"]).toEqual({
-      final: "root-output",
-    });
-    expect(
-      result.value.session.nodeExecutions.some(
-        (entry) => entry.nodeId === "review-manager",
-      ),
-    ).toBe(true);
-    expect(
-      result.value.session.nodeExecutions.some(
-        (entry) => entry.nodeId === "review-input",
-      ),
-    ).toBe(true);
-    expect(
-      result.value.session.nodeExecutions.some(
-        (entry) => entry.nodeId === "review-output",
-      ),
-    ).toBe(true);
   });
 
   test("composes manager and worker prompts with workflow-level orchestration context", async () => {
@@ -7973,7 +7654,6 @@ describe("runWorkflow", () => {
       workflowId: workflowName,
       description: "command stdout log fixture",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-      entryNodeId: "command-worker",
       nodes: [
         {
           id: "command-worker",
@@ -7983,7 +7663,6 @@ describe("runWorkflow", () => {
         },
       ],
       edges: [],
-      branching: { mode: "fan-out" },
     });
     await writeJson(path.join(workflowDir, "node-command-worker.json"), {
       id: "command-worker",
@@ -8059,7 +7738,6 @@ describe("runWorkflow", () => {
       workflowId: workflowName,
       description: "command timeout log fixture",
       defaults: { maxLoopIterations: 3, nodeTimeoutMs: 50 },
-      entryNodeId: "command-worker",
       nodes: [
         {
           id: "command-worker",
@@ -8069,7 +7747,6 @@ describe("runWorkflow", () => {
         },
       ],
       edges: [],
-      branching: { mode: "fan-out" },
     });
     await writeJson(path.join(workflowDir, "node-command-worker.json"), {
       id: "command-worker",
@@ -8282,431 +7959,5 @@ describe("runWorkflow", () => {
       first.value.session.sessionId,
     );
     expect(rerun.value.session.nodeExecutions[0]?.nodeId).toBe("step-b");
-  });
-
-  test("manager schedules sub-workflow inputs based on inputSources dependencies", async () => {
-    const root = await makeTempDir();
-    await createSubWorkflowRuntimeFixture(root, "subworkflow-runtime");
-
-    const result = await runWorkflow(
-      "subworkflow-runtime",
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        runtimeVariables: {
-          humanInput: { topic: "demo" },
-        },
-      },
-      deterministicAdapter,
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-    expect(result.value.session.status).toBe("completed");
-
-    const executionOrder = result.value.session.nodeExecutions.map(
-      (entry) => entry.nodeId,
-    );
-    expect(executionOrder.indexOf("a-manager")).toBeGreaterThan(
-      executionOrder.indexOf("divedra-manager"),
-    );
-    expect(executionOrder.indexOf("a-input")).toBeGreaterThan(
-      executionOrder.indexOf("a-manager"),
-    );
-    expect(executionOrder.indexOf("a-output")).toBeGreaterThan(
-      executionOrder.indexOf("a-input"),
-    );
-    expect(executionOrder.indexOf("b-manager")).toBeGreaterThan(
-      executionOrder.indexOf("a-output"),
-    );
-    expect(executionOrder.indexOf("b-input")).toBeGreaterThan(
-      executionOrder.indexOf("a-output"),
-    );
-    expect(executionOrder.indexOf("b-input")).toBeGreaterThan(
-      executionOrder.indexOf("b-manager"),
-    );
-    expect(executionOrder.indexOf("b-output")).toBeGreaterThan(
-      executionOrder.indexOf("b-input"),
-    );
-    expect(result.value.session.conversationTurns ?? []).toEqual([]);
-
-    const bInputExec = result.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "b-input",
-    );
-    expect(bInputExec).toBeDefined();
-    if (bInputExec === undefined) {
-      return;
-    }
-    const bInputRaw = await readFile(
-      path.join(bInputExec.artifactDir, "input.json"),
-      "utf8",
-    );
-    const bInputJson = JSON.parse(bInputRaw) as {
-      upstreamOutputRefs: readonly {
-        subWorkflowId?: string;
-        outputNodeId: string;
-      }[];
-      upstreamCommunications: readonly string[];
-    };
-    expect(
-      bInputJson.upstreamOutputRefs.some(
-        (entry) => entry.subWorkflowId === "sw-b",
-      ),
-    ).toBe(true);
-    expect(
-      bInputJson.upstreamOutputRefs.some(
-        (entry) => entry.outputNodeId === "b-manager",
-      ),
-    ).toBe(true);
-    expect(bInputJson.upstreamCommunications.length).toBeGreaterThan(0);
-
-    const aOutputExec = result.value.session.nodeExecutions.find(
-      (entry) => entry.nodeId === "a-output",
-    );
-    expect(aOutputExec).toBeDefined();
-    if (aOutputExec === undefined) {
-      return;
-    }
-    const aOutputHandoffRaw = await readFile(
-      path.join(aOutputExec.artifactDir, "handoff.json"),
-      "utf8",
-    );
-    const aOutputHandoffJson = JSON.parse(aOutputHandoffRaw) as {
-      outputRef: { subWorkflowId?: string };
-    };
-    expect(aOutputHandoffJson.outputRef.subWorkflowId).toBe("sw-a");
-
-    const aOutputCommitMessage = await readFile(
-      path.join(aOutputExec.artifactDir, "commit-message.txt"),
-      "utf8",
-    );
-    expect(aOutputCommitMessage).toContain("Subworkflow-ID: sw-a");
-
-    const conversationCommunication = result.value.session.communications.find(
-      (entry) => entry.deliveryKind === "conversation-turn",
-    );
-    expect(conversationCommunication).toBeUndefined();
-
-    const parentToSubWorkflowCommunication =
-      result.value.session.communications.find(
-        (entry) =>
-          entry.routingScope === "parent-to-sub-workflow" &&
-          entry.toNodeId === "a-manager",
-      );
-    expect(parentToSubWorkflowCommunication).toBeDefined();
-    if (parentToSubWorkflowCommunication === undefined) {
-      return;
-    }
-
-    const childEdgeCommunication = result.value.session.communications.find(
-      (entry) =>
-        entry.fromNodeId === "a-input" && entry.toNodeId === "a-output",
-    );
-    expect(childEdgeCommunication).toBeDefined();
-    if (childEdgeCommunication === undefined) {
-      return;
-    }
-
-    const childReceiptRaw = await readFile(
-      path.join(
-        childEdgeCommunication.artifactDir,
-        "attempts",
-        childEdgeCommunication.activeDeliveryAttemptId ?? "attempt-000001",
-        "receipt.json",
-      ),
-      "utf8",
-    );
-    const childReceiptJson = JSON.parse(childReceiptRaw) as {
-      deliveredByNodeId: string;
-    };
-    expect(childReceiptJson.deliveredByNodeId).toBe("a-manager");
-
-    const rootReceiptRaw = await readFile(
-      path.join(
-        parentToSubWorkflowCommunication.artifactDir,
-        "attempts",
-        parentToSubWorkflowCommunication.activeDeliveryAttemptId ??
-          "attempt-000001",
-        "receipt.json",
-      ),
-      "utf8",
-    );
-    const rootReceiptJson = JSON.parse(rootReceiptRaw) as {
-      deliveredByNodeId: string;
-    };
-    expect(rootReceiptJson.deliveredByNodeId).toBe("divedra-manager");
-
-    const childToRootCommunication = result.value.session.communications.find(
-      (entry) =>
-        entry.fromNodeId === "a-output" && entry.toNodeId === "divedra-manager",
-    );
-    expect(childToRootCommunication).toBeDefined();
-    expect(childToRootCommunication?.routingScope).toBe("cross-sub-workflow");
-    expect(childToRootCommunication?.fromSubWorkflowId).toBe("sw-a");
-  });
-
-  test("does not duplicate a sub-workflow manager handoff when a normal edge already targets that manager", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-dedup-manager-handoff";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-
-    const workflowPath = path.join(root, workflowName, "workflow.json");
-    const workflowRaw = await readFile(workflowPath, "utf8");
-    const workflowJson = JSON.parse(workflowRaw) as {
-      edges: Array<{ from: string; to: string; when: string }>;
-    };
-    workflowJson.edges.unshift({
-      from: "divedra-manager",
-      to: "a-manager",
-      when: "always",
-    });
-    await writeJson(workflowPath, workflowJson);
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        maxSteps: 1,
-        runtimeVariables: {
-          humanInput: { topic: "demo" },
-        },
-      },
-      deterministicAdapter,
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-    expect(result.value.session.status).toBe("paused");
-
-    const rootToAManagerCommunications =
-      result.value.session.communications.filter(
-        (entry) =>
-          entry.fromNodeId === "divedra-manager" &&
-          entry.toNodeId === "a-manager",
-      );
-
-    expect(rootToAManagerCommunications).toHaveLength(1);
-    expect(rootToAManagerCommunications[0]?.routingScope).toBe(
-      "parent-to-sub-workflow",
-    );
-    expect(rootToAManagerCommunications[0]?.toSubWorkflowId).toBe("sw-a");
-  });
-
-  test("subworkflow-manager forwards its own output to the child input", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-manager-forwarding";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-    await writeJson(path.join(root, workflowName, "node-b-input.json"), {
-      id: "b-input",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "b-input",
-      variables: {},
-      argumentsTemplate: { routed: { marker: "" } },
-      argumentBindings: [
-        {
-          targetPath: "routed.marker",
-          source: "node-output",
-          sourceRef: "b-manager",
-          sourcePath: "output.payload.marker",
-          required: true,
-        },
-      ],
-    });
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        sessionId: "sess-manager-forwarding",
-        runtimeVariables: { humanInput: { topic: "ping-pong" } },
-      },
-      new ScenarioNodeAdapter({
-        "a-output": { payload: { marker: "from-a-output" } },
-        "b-manager": {
-          payload: {
-            marker: "from-b-manager",
-          },
-        },
-      }),
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    const bInputExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "b-input",
-    );
-    expect(bInputExecutions.length).toBeGreaterThan(0);
-    const firstBInputExecution = bInputExecutions[0];
-    expect(firstBInputExecution).toBeDefined();
-    if (firstBInputExecution === undefined) {
-      return;
-    }
-
-    const inputRaw = await readFile(
-      path.join(firstBInputExecution.artifactDir, "input.json"),
-      "utf8",
-    );
-    const inputJson = JSON.parse(inputRaw) as {
-      arguments: { routed: { marker: string } };
-    };
-    expect(inputJson.arguments.routed.marker).toBe("from-b-manager");
-  });
-
-  test("subworkflow-manager empty managerControl still allows engine child-input planning", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-manager-no-forward";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        sessionId: "sess-manager-no-forward",
-        runtimeVariables: { humanInput: { topic: "ping-pong" } },
-      },
-      new ScenarioNodeAdapter({
-        "b-manager": {
-          payload: {
-            managerControl: {
-              actions: [],
-            },
-          },
-        },
-      }),
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    const bInputExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "b-input",
-    );
-    expect(bInputExecutions.length).toBeGreaterThan(0);
-  });
-
-  test("passes an empty transcript binding when legacy sub-workflow conversations are removed", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-transcript-metadata";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-    await writeJson(path.join(root, workflowName, "node-b-manager.json"), {
-      id: "b-manager",
-      executionBackend: "codex-agent",
-      model: "gpt-5-nano",
-      promptTemplate: "b-manager",
-      variables: {},
-      argumentsTemplate: {},
-      argumentBindings: [
-        {
-          targetPath: "transcript",
-          source: "conversation-transcript",
-        },
-      ],
-    });
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        sessionId: "sess-transcript-metadata",
-        runtimeVariables: { humanInput: { topic: "ping-pong" } },
-      },
-      deterministicAdapter,
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-
-    const bManagerExecutions = result.value.session.nodeExecutions.filter(
-      (entry) => entry.nodeId === "b-manager",
-    );
-    expect(bManagerExecutions.length).toBeGreaterThan(0);
-    const bManagerExec = bManagerExecutions[0];
-    expect(bManagerExec).toBeDefined();
-    if (bManagerExec === undefined) {
-      return;
-    }
-
-    const inputRaw = await readFile(
-      path.join(bManagerExec.artifactDir, "input.json"),
-      "utf8",
-    );
-    const inputJson = JSON.parse(inputRaw) as {
-      arguments: {
-        transcript: readonly {
-          fromManagerNodeId: string;
-          toManagerNodeId: string;
-          communicationId: string;
-        }[];
-      };
-    };
-
-    expect(inputJson.arguments.transcript).toEqual([]);
-  });
-
-  test("rejects a sub-workflow that attempts to reuse the root manager", async () => {
-    const root = await makeTempDir();
-    const workflowName = "subworkflow-root-manager-conversation";
-    await createSubWorkflowRuntimeFixture(root, workflowName);
-
-    const workflowPath = path.join(root, workflowName, "workflow.json");
-    const workflowJson = JSON.parse(await readFile(workflowPath, "utf8")) as {
-      subWorkflows: Array<Record<string, unknown>>;
-      nodes: Array<{ id: string }>;
-    };
-    workflowJson.subWorkflows[1] = {
-      ...workflowJson.subWorkflows[1],
-      managerNodeId: undefined,
-      nodeIds: ["b-input", "b-output"],
-    };
-    workflowJson.nodes = workflowJson.nodes.filter(
-      (node) => node.id !== "b-manager",
-    );
-    await writeJson(workflowPath, workflowJson);
-
-    const result = await runWorkflow(
-      workflowName,
-      {
-        ...legacyAuthoredWorkflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        sessionId: "sess-root-manager-conversation",
-        runtimeVariables: { humanInput: { topic: "ping-pong" } },
-      },
-      deterministicAdapter,
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) {
-      return;
-    }
-    expect(result.error.exitCode).toBe(2);
-    expect(result.error.message).toContain("workflow validation failed");
   });
 });
