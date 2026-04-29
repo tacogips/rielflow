@@ -104,7 +104,7 @@ export type ManagerControlActionType =
 
 export interface PendingOptionalNodeDecision {
   readonly nodeId: string;
-  readonly owningManagerNodeId: string;
+  readonly owningManagerRuntimeId: string;
   readonly subWorkflowId?: string;
   readonly requestedAt: string;
   readonly status: "pending" | "execute" | "skip";

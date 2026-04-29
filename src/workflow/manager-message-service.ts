@@ -142,7 +142,7 @@ export function createManagerMessageService(
             normalizedActions as readonly unknown[],
             workflow,
             {
-              managerRuntimeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerRuntimeId,
             },
           );
 
@@ -176,7 +176,7 @@ export function createManagerMessageService(
             workflowExecutionId: input.workflowExecutionId,
             managerSessionId: input.managerSessionId,
             managerMessageId,
-            managerNodeId: managerSession.managerNodeId,
+            managerRuntimeId: managerSession.managerRuntimeId,
             managerNodeExecId: managerSession.managerNodeExecId,
             message: trimmedMessage,
             attachments,
@@ -207,7 +207,7 @@ export function createManagerMessageService(
                     sourceCommunication,
                     workflow,
                     {
-                      managerRuntimeId: managerSession.managerNodeId,
+                      managerRuntimeId: managerSession.managerRuntimeId,
                     },
                     "managerControl replay-communication",
                   );
@@ -234,7 +234,7 @@ export function createManagerMessageService(
                   nextSession = applyOptionalNodeDecision({
                     session: nextSession,
                     workflow,
-                    managerNodeId: managerSession.managerNodeId,
+                    managerRuntimeId: managerSession.managerRuntimeId,
                     managerNodeExecId: managerSession.managerNodeExecId,
                     action,
                     decidedAt: now,
@@ -294,7 +294,7 @@ export function createManagerMessageService(
               workflowExecutionId: input.workflowExecutionId,
               managerSessionId: input.managerSessionId,
               managerMessageId,
-              managerNodeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerRuntimeId,
               managerNodeExecId: managerSession.managerNodeExecId,
               message: trimmedMessage,
               attachments,
@@ -310,7 +310,7 @@ export function createManagerMessageService(
               managerSessionId: input.managerSessionId,
               workflowId: input.workflowId,
               workflowExecutionId: input.workflowExecutionId,
-              managerNodeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerRuntimeId,
               managerNodeExecId: managerSession.managerNodeExecId,
               ...(trimmedMessage === undefined
                 ? {}
@@ -329,7 +329,7 @@ export function createManagerMessageService(
               workflowExecutionId: input.workflowExecutionId,
               managerSessionId: input.managerSessionId,
               managerMessageId,
-              managerNodeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerRuntimeId,
               managerNodeExecId: managerSession.managerNodeExecId,
               message: trimmedMessage,
               attachments,
@@ -346,7 +346,7 @@ export function createManagerMessageService(
               managerSessionId: input.managerSessionId,
               workflowId: input.workflowId,
               workflowExecutionId: input.workflowExecutionId,
-              managerNodeId: managerSession.managerNodeId,
+              managerRuntimeId: managerSession.managerRuntimeId,
               managerNodeExecId: managerSession.managerNodeExecId,
               ...(trimmedMessage === undefined
                 ? {}

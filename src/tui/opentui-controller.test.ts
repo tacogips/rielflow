@@ -37,7 +37,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         nodes: [
           {
             id: "divedra-manager",
-            kind: "root-manager",
+            role: "manager",
             nodeFile: "node-divedra-manager.json",
             completion: { type: "none" },
           },
@@ -50,7 +50,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as LegacyEdgeWorkflow,
+      } as unknown as LegacyEdgeWorkflow,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",

@@ -36,7 +36,7 @@ describe("remapNodePayloadsForValidation", () => {
         nodes: [
           {
             id: "manager",
-            kind: "root-manager",
+            role: "manager",
             completion: { type: "none" },
             node: {
               id: "manager",

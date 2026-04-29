@@ -72,8 +72,7 @@ export type StepAddressedWorkflowForSupervision = Pick<
 /**
  * Builds the step graph {@link planSupervisionRemediation} needs. Authored
  * step-addressed bundles pass through when `entryStepId` is set and `steps` is
- * non-empty. Otherwise returns `null`; supervision rerun planning no longer
- * projects legacy node-graph bundles into synthetic step graphs.
+ * non-empty. Otherwise returns `null`.
  */
 export function toStepAddressedWorkflowForSupervision(
   wf: WorkflowJson,

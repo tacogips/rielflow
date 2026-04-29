@@ -367,7 +367,6 @@ describe("buildSuperviserRuntimeControl", () => {
         base: workflowRunBaseForSuperviserControl({
           workflowRoot,
           sessionStoreRoot,
-          rejectLegacyWorkflowAuthoring: false,
         }),
         runWorkflow: async (
           workflowName: string,

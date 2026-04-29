@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
-import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
+import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import { loadWorkflowByIdFromDisk } from "./load";
 import {
   MAIL_GATEWAY_ADDON_NAME,
@@ -47,6 +47,13 @@ export interface WorkflowRuntimeReadiness {
   readonly blockers: readonly string[];
 }
 
+/**
+ * Stable `WorkflowRuntimeRequirement.id` for cross-workflow dispatch readiness
+ * (targets derived from `steps[].transitions`, not authored `workflow.workflowCalls`).
+ */
+export const WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID =
+  "workflow-feature:crossWorkflowDispatches" as const;
+
 interface RequirementProbeOptions extends LoadOptions {
   readonly onlyNodeIds?: ReadonlySet<string>;
 }
@@ -64,7 +71,7 @@ interface ContainerRunnerRequirementCandidate {
   readonly sourceNodeIds: readonly string[];
 }
 
-interface WorkflowCallRequirementCandidate {
+interface CrossWorkflowDispatchRequirementCandidate {
   readonly rootWorkflowId: string;
   readonly callIds: readonly string[];
   readonly targetWorkflowIds: readonly string[];
@@ -299,25 +306,25 @@ async function probeClaudeBackend(
   };
 }
 
-async function probeWorkflowCallRuntime(
-  candidate: WorkflowCallRequirementCandidate,
+async function probeCrossWorkflowDispatchRuntime(
+  candidate: CrossWorkflowDispatchRequirementCandidate,
   options: LoadOptions,
 ): Promise<WorkflowRuntimeRequirement> {
   const targetFailures = new Set<string>();
-  const loadedWorkflowCalls = new Map<string, readonly string[]>();
+  const loadedCalleeTargetsByWorkflowId = new Map<string, readonly string[]>();
 
-  async function visitWorkflowCallTarget(
+  async function visitCrossWorkflowDispatchTarget(
     workflowId: string,
     chain: readonly string[],
   ): Promise<void> {
     if (chain.includes(workflowId)) {
       targetFailures.add(
-        `recursive workflow-call chains are unsupported: ${[...chain, workflowId].join(" -> ")}`,
+        `recursive cross-workflow dispatch chains are unsupported: ${[...chain, workflowId].join(" -> ")}`,
       );
       return;
     }
 
-    let nextWorkflowIds = loadedWorkflowCalls.get(workflowId);
+    let nextWorkflowIds = loadedCalleeTargetsByWorkflowId.get(workflowId);
     if (nextWorkflowIds === undefined) {
       const loaded = await loadWorkflowByIdFromDisk(workflowId, options);
       if (!loaded.ok) {
@@ -325,31 +332,34 @@ async function probeWorkflowCallRuntime(
         return;
       }
       nextWorkflowIds = toSortedArray(
-        effectiveWorkflowCalls(loaded.value.bundle.workflow).map(
+        effectiveCrossWorkflowDispatches(loaded.value.bundle.workflow).map(
           (call) => call.workflowId,
         ),
       );
-      loadedWorkflowCalls.set(workflowId, nextWorkflowIds);
+      loadedCalleeTargetsByWorkflowId.set(workflowId, nextWorkflowIds);
     }
 
     for (const nextWorkflowId of nextWorkflowIds) {
-      await visitWorkflowCallTarget(nextWorkflowId, [...chain, workflowId]);
+      await visitCrossWorkflowDispatchTarget(nextWorkflowId, [
+        ...chain,
+        workflowId,
+      ]);
     }
   }
 
   for (const workflowId of candidate.targetWorkflowIds) {
-    await visitWorkflowCallTarget(workflowId, [candidate.rootWorkflowId]);
+    await visitCrossWorkflowDispatchTarget(workflowId, [candidate.rootWorkflowId]);
   }
 
   return {
-    id: "workflow-feature:workflowCalls",
+    id: WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
     kind: "workflow-feature",
-    label: "workflow-call execution",
+    label: "cross-workflow dispatch",
     status: targetFailures.size === 0 ? "available" : "unavailable",
     detail:
       targetFailures.size === 0
-        ? `runtime workflow-call execution is available; calls=${candidate.callIds.join(", ")}; targetWorkflows=${candidate.targetWorkflowIds.join(", ")}`
-        : `workflow-call targets must resolve to loadable, non-recursive workflows; failures=${[...targetFailures].join(" | ")}; calls=${candidate.callIds.join(", ")}`,
+        ? `runtime cross-workflow dispatch is available; calls=${candidate.callIds.join(", ")}; targetWorkflows=${candidate.targetWorkflowIds.join(", ")}`
+        : `cross-workflow dispatch targets must resolve to loadable, non-recursive workflows; failures=${[...targetFailures].join(" | ")}; calls=${candidate.callIds.join(", ")}`,
     sourceNodeIds: candidate.sourceNodeIds,
   };
 }
@@ -502,7 +512,7 @@ function collectRequirements(
   readonly containerRunners: readonly ContainerRunnerRequirementCandidate[];
   readonly addonEnvSources: readonly AddonEnvRequirementCandidate[];
   readonly codeManager?: CodeManagerRequirementCandidate;
-  readonly workflowCall?: WorkflowCallRequirementCandidate;
+  readonly crossWorkflowDispatch?: CrossWorkflowDispatchRequirementCandidate;
   readonly commandNodeIds: readonly string[];
   readonly containerNodeIds: readonly string[];
 } {
@@ -530,8 +540,11 @@ function collectRequirements(
   const commandNodeIds = new Set<string>();
   const containerNodeIds = new Set<string>();
   const defaults = bundle.workflow.defaults.containerRuntime;
-  const relevantWorkflowCalls = effectiveWorkflowCalls(bundle.workflow).filter(
-    (call) => onlyNodeIds === undefined || onlyNodeIds.has(call.callerNodeId),
+  const relevantCrossWorkflowDispatches = effectiveCrossWorkflowDispatches(
+    bundle.workflow,
+  ).filter(
+    (dispatch) =>
+      onlyNodeIds === undefined || onlyNodeIds.has(dispatch.callerNodeId),
   );
 
   for (const nodeRef of bundle.workflow.nodes) {
@@ -655,17 +668,17 @@ function collectRequirements(
             sourceNodeIds: toSortedArray(codeManagerNodeIds),
           },
         }),
-    ...(relevantWorkflowCalls.length === 0
+    ...(relevantCrossWorkflowDispatches.length === 0
       ? {}
       : {
-          workflowCall: {
+          crossWorkflowDispatch: {
             rootWorkflowId: bundle.workflow.workflowId,
-            callIds: relevantWorkflowCalls.map((call) => call.id),
+            callIds: relevantCrossWorkflowDispatches.map((d) => d.id),
             targetWorkflowIds: toSortedArray(
-              relevantWorkflowCalls.map((call) => call.workflowId),
+              relevantCrossWorkflowDispatches.map((d) => d.workflowId),
             ),
             sourceNodeIds: toSortedArray(
-              relevantWorkflowCalls.map((call) => call.callerNodeId),
+              relevantCrossWorkflowDispatches.map((d) => d.callerNodeId),
             ),
           },
         }),
@@ -726,9 +739,12 @@ export async function inspectWorkflowRuntimeReadiness(
     requirements.push(probeCodeManagerRuntime(collected.codeManager));
   }
 
-  if (collected.workflowCall !== undefined) {
+  if (collected.crossWorkflowDispatch !== undefined) {
     requirements.push(
-      await probeWorkflowCallRuntime(collected.workflowCall, options),
+      await probeCrossWorkflowDispatchRuntime(
+        collected.crossWorkflowDispatch,
+        options,
+      ),
     );
   }
 

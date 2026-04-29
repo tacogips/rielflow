@@ -51,7 +51,7 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         "s2",
         sess("e1"),
-        { steps: [...stepAddressed.steps] } as unknown as WorkflowJson,
+        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("s2");
@@ -62,7 +62,7 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("s2"),
-        { steps: [...stepAddressed.steps] } as unknown as WorkflowJson,
+        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("s2");
@@ -73,7 +73,7 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("unknown"),
-        { steps: [...stepAddressed.steps] } as unknown as WorkflowJson,
+        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("e1");
@@ -85,7 +85,7 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("unknown"),
-        { steps: [...stepAddressed.steps] } as unknown as WorkflowJson,
+        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         sa,
       ),
     ).toBe("mgr");
@@ -375,20 +375,20 @@ describe("toStepAddressedWorkflowForSupervision", () => {
     const wf = {
       entryStepId: "a",
       steps: [{ id: "a", nodeId: "n1" }],
-    } as unknown as WorkflowJson;
+    } as unknown as unknown as WorkflowJson;
     expect(toStepAddressedWorkflowForSupervision(wf)).toEqual({
       entryStepId: "a",
       steps: [{ id: "a", nodeId: "n1" }],
     });
   });
 
-  test("returns null for legacy node-graph workflows without authored steps", () => {
+  test("returns null when the workflow has no authored steps", () => {
     const wf = {
       nodes: [
         { id: "step-1", nodeFile: "n1.json", kind: "task" as const },
         { id: "step-2", nodeFile: "n2.json", kind: "task" as const },
       ],
-    } as unknown as WorkflowJson;
+    } as unknown as unknown as WorkflowJson;
     expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();
   });
 
@@ -396,16 +396,16 @@ describe("toStepAddressedWorkflowForSupervision", () => {
     expect(
       toStepAddressedWorkflowForSupervision({
         workflowId: "w",
-      } as unknown as WorkflowJson),
+      } as unknown as unknown as WorkflowJson),
     ).toBeNull();
   });
 
-  test("returns null when entryStepId is set but steps are empty (does not fall back to legacy nodes)", () => {
+  test("returns null when entryStepId is set but steps are empty", () => {
     const wf = {
       entryStepId: "a",
       steps: [],
       nodes: [{ id: "legacy", nodeFile: "n.json" }],
-    } as unknown as WorkflowJson;
+    } as unknown as unknown as WorkflowJson;
     expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();
   });
 });

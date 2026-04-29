@@ -1,16 +1,15 @@
 import { describe, expect, test } from "vitest";
 import {
   crossWorkflowDispatchesForExecutionMatch,
-  crossWorkflowCallsFromSteps,
-  effectiveWorkflowCalls,
-  type CrossWorkflowExecutionDispatch,
-  type EffectiveWorkflowCall,
+  crossWorkflowDispatchesFromSteps,
+  effectiveCrossWorkflowDispatches,
+  type CrossWorkflowDispatch,
 } from "./cross-workflow-from-steps";
 import type { WorkflowJson } from "./types";
 
-describe("crossWorkflowCallsFromSteps", () => {
+describe("crossWorkflowDispatchesFromSteps", () => {
   test("returns empty for undefined steps", () => {
-    expect(crossWorkflowCallsFromSteps(undefined)).toEqual([]);
+    expect(crossWorkflowDispatchesFromSteps(undefined)).toEqual([]);
   });
 
   test("ignores cross-workflow transitions missing resumeStepId", () => {
@@ -26,10 +25,10 @@ describe("crossWorkflowCallsFromSteps", () => {
         ],
       },
     ];
-    expect(crossWorkflowCallsFromSteps(steps)).toEqual([]);
+    expect(crossWorkflowDispatchesFromSteps(steps)).toEqual([]);
   });
 
-  test("maps transition label to workflowCall when for evaluateBranch gating", () => {
+  test("maps transition label to dispatch `when` for evaluateBranch gating", () => {
     const steps: WorkflowJson["steps"] = [
       {
         id: "draft-write",
@@ -44,7 +43,7 @@ describe("crossWorkflowCallsFromSteps", () => {
         ],
       },
     ];
-    expect(crossWorkflowCallsFromSteps(steps)).toEqual([
+    expect(crossWorkflowDispatchesFromSteps(steps)).toEqual([
       {
         id: "__cw:draft-write",
         workflowId: "callee",
@@ -57,10 +56,13 @@ describe("crossWorkflowCallsFromSteps", () => {
   });
 });
 
-describe("effectiveWorkflowCalls", () => {
-  test("legacy node-graph bundles expose no authored workflowCalls", () => {
-    const workflow = {};
-    expect(effectiveWorkflowCalls(workflow)).toEqual([]);
+describe("effectiveCrossWorkflowDispatches", () => {
+  test("empty step-addressed bundles expose no cross-workflow dispatches", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
+      entryStepId: "entry",
+      steps: [],
+    };
+    expect(effectiveCrossWorkflowDispatches(workflow)).toEqual([]);
   });
 
   test("step-addressed graph uses only step-derived calls", () => {
@@ -80,13 +82,13 @@ describe("effectiveWorkflowCalls", () => {
         },
       ],
     };
-    const effective = effectiveWorkflowCalls(workflow);
+    const effective = effectiveCrossWorkflowDispatches(workflow);
     expect(effective).toHaveLength(1);
     expect(effective[0]?.id).toBe("__cw:s1");
     expect(effective[0]?.workflowId).toBe("callee");
   });
 
-  test("labels only step-derived workflowCalls", () => {
+  test("labels only step-derived cross-workflow dispatches", () => {
     const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
       entryStepId: "writer",
       steps: [
@@ -103,12 +105,12 @@ describe("effectiveWorkflowCalls", () => {
         },
       ],
     };
-    const effective = effectiveWorkflowCalls(workflow);
-    expect(effective).toEqual<readonly EffectiveWorkflowCall[]>([
+    const effective = effectiveCrossWorkflowDispatches(workflow);
+    expect(effective).toEqual<readonly CrossWorkflowDispatch[]>([
       {
         id: "__cw:writer",
         workflowId: "legacy-target",
-        callerNodeId: "writer",
+        callerNodeId: "writer-node",
         callerStepId: "writer",
         resultNodeId: "resume",
       },
@@ -117,9 +119,12 @@ describe("effectiveWorkflowCalls", () => {
 });
 
 describe("crossWorkflowDispatchesForExecutionMatch", () => {
-  test("legacy node-graph bundles expose no execution dispatches", () => {
-    const workflow = {};
-    const match = (dispatch: CrossWorkflowExecutionDispatch) =>
+  test("empty step-addressed bundles expose no execution dispatches", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
+      entryStepId: "entry",
+      steps: [],
+    };
+    const match = (dispatch: CrossWorkflowDispatch) =>
       dispatch.callerNodeId === "s1";
     expect(crossWorkflowDispatchesForExecutionMatch(workflow, match)).toEqual(
       [],
@@ -143,8 +148,8 @@ describe("crossWorkflowDispatchesForExecutionMatch", () => {
         },
       ],
     };
-    const match = (dispatch: CrossWorkflowExecutionDispatch) =>
-      dispatch.callerNodeId === "s1";
+    const match = (dispatch: CrossWorkflowDispatch) =>
+      dispatch.callerNodeId === "n1";
     const dispatches = crossWorkflowDispatchesForExecutionMatch(
       workflow,
       match,
@@ -154,11 +159,14 @@ describe("crossWorkflowDispatchesForExecutionMatch", () => {
     ]);
   });
 
-  test("does not dispatch legacy authored workflowCalls", () => {
-    const workflow = {};
+  test("does not dispatch when no cross-workflow transitions exist", () => {
+    const workflow: Pick<WorkflowJson, "entryStepId" | "steps"> = {
+      entryStepId: "entry",
+      steps: [],
+    };
     const dispatches = crossWorkflowDispatchesForExecutionMatch(
       workflow,
-      (dispatch) => dispatch.callerNodeId === "writer",
+      (dispatch) => dispatch.callerNodeId === "writer-node",
     );
     expect(dispatches).toEqual([]);
   });

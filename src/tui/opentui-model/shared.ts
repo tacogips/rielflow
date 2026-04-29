@@ -144,9 +144,6 @@ export function buildNodeRowName(input: {
 }
 
 export function formatNodeKindLabel(kind: string): string {
-  if (kind === "root-manager") {
-    return "ROOT MANAGER";
-  }
   if (kind === "manager") {
     return "MANAGER";
   }
@@ -258,7 +255,7 @@ export function resolveWorkflowPreviewIndent(input: {
   readonly derivedIndent: number;
   readonly kind: string;
 }): number {
-  if (input.kind === "root-manager") {
+  if (input.kind === "manager") {
     return 0;
   }
   return input.derivedIndent;

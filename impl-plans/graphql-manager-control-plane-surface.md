@@ -113,7 +113,7 @@ export interface ManagerMessagePayloadRef {
   readonly artifactDir: string;
   readonly managerSessionId: string;
   readonly managerMessageId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
 }
 ```
@@ -272,7 +272,7 @@ export interface GraphqlControlPlaneServices {
 - `src/graphql/client.ts`
 - `src/cli.ts`
 - `src/cli.test.ts`
-- `src/workflow/prompts/divedra-system-prompt.md`
+- `src/workflow/prompts/divedra-role-system-prompt.md` (default manager system guidance; structural `divedra-system-prompt.md` removed as unused)
 
 **Completion Criteria**:
 

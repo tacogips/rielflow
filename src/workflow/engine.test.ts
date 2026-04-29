@@ -24,7 +24,6 @@ const deterministicAdapter = new DeterministicNodeAdapter();
 
 /** Fixture workflows in this file are legacy-authored unless noted; explicit for strict-default harness runs. */
 const legacyAuthoredWorkflowLoadOpts = {
-  rejectLegacyWorkflowAuthoring: false,
 } as const;
 
 class OptionalDecisionAdapter implements NodeAdapter {
@@ -900,7 +899,7 @@ async function loadWorkflowFixture(
     path.join(root, workflowName, "workflow.json"),
     "utf8",
   );
-  return JSON.parse(workflowRaw) as WorkflowJson;
+  return JSON.parse(workflowRaw) as unknown as WorkflowJson;
 }
 
 async function saveWorkflowFixture(
@@ -946,7 +945,7 @@ async function createWorkflowFixture(
     ? [
         {
           id: "divedra-manager",
-          kind: "root-manager",
+          role: "manager",
           nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
@@ -966,7 +965,7 @@ async function createWorkflowFixture(
     : [
         {
           id: "divedra-manager",
-          kind: "root-manager",
+          role: "manager",
           nodeFile: "node-divedra-manager.json",
           completion: { type: "none" },
         },
@@ -1137,21 +1136,31 @@ async function createRoleManagedWorkflowFixture(
     workflowId: workflowName,
     description: "role-managed fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerStepId: "divedra-manager",
+    entryStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
         nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
       },
       {
         id: "step-1",
-        kind: "task",
         nodeFile: "node-step-1.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [{ from: "divedra-manager", to: "step-1", when: "always" }],
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+        transitions: [{ toStepId: "step-1", label: "always" }],
+      },
+      {
+        id: "step-1",
+        nodeId: "step-1",
+        role: "worker",
+      },
+    ],
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -1500,7 +1509,7 @@ async function createOptionalExecutionFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1565,7 +1574,7 @@ async function createUserActionFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1614,7 +1623,7 @@ async function createNodeSessionReuseFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1812,7 +1821,7 @@ async function createManagerAfterOutputFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1860,7 +1869,7 @@ async function createSingleRootOutputFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1900,7 +1909,7 @@ async function createMultipleRootOutputsFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -1949,7 +1958,7 @@ async function createRootOutputThenTaskFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -3042,18 +3051,16 @@ describe("runWorkflow", () => {
       await readFile(crossWfArtifactPath, "utf8"),
     ) as Record<string, unknown>;
     expect(crossWfParsed["calleeWorkflowId"]).toBe("review-flow");
-    expect(crossWfParsed["callerNodeExecId"]).toBe(
-      crossWfParsed["parentNodeExecId"],
-    );
-    expect(crossWfParsed["childWorkflowId"]).toBe(
-      crossWfParsed["calleeWorkflowId"],
-    );
-    expect(crossWfParsed["childSessionId"]).toBe(
-      crossWfParsed["calleeSessionId"],
-    );
+    expect(crossWfParsed["crossWorkflowDispatchId"]).toBe("__cw:writer");
+    expect(crossWfParsed["workflowCallId"]).toBeUndefined();
+    expect(crossWfParsed["callerNodeExecId"]).toBeDefined();
+    expect(crossWfParsed["calleeSessionId"]).toBeDefined();
+    expect(crossWfParsed["parentNodeExecId"]).toBeUndefined();
+    expect(crossWfParsed["childWorkflowId"]).toBeUndefined();
+    expect(crossWfParsed["childSessionId"]).toBeUndefined();
   });
 
-  test("skips a workflow call when `when` does not match caller output (gated by evaluateBranch)", async () => {
+  test("skips a cross-workflow dispatch when `when` does not match caller output (gated by evaluateBranch)", async () => {
     const root = await makeTempDir();
     await createWhenGatedWorkflowCallFixture(root, "workflow-call-when-skip");
     await createWorkflowCallCalleeFixture(root, "review-flow");
@@ -4213,7 +4220,7 @@ describe("runWorkflow", () => {
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
       DIVEDRA_WORKFLOW_ID: workflowName,
       DIVEDRA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
-      DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+      DIVEDRA_MANAGER_RUNTIME_ID: "divedra-manager",
       DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
     expect(adapter.calls[1]?.nodeId).toBe("step-1");
@@ -4246,7 +4253,7 @@ describe("runWorkflow", () => {
     ).toBeNull();
   });
 
-  test("treats root-manager kind as manager-node executions for ambient GraphQL context", async () => {
+  test("treats manager-role steps as manager-node executions for ambient GraphQL context", async () => {
     const root = await makeTempDir();
     const workflowName = "role-manager-session-runtime";
     await createRoleManagedWorkflowFixture(root, workflowName);
@@ -4271,12 +4278,12 @@ describe("runWorkflow", () => {
 
     expect(adapter.calls).toHaveLength(2);
     expect(adapter.calls[0]?.nodeId).toBe("divedra-manager");
-    expect(adapter.calls[0]?.promptText).toContain("Node kind: root-manager");
+    expect(adapter.calls[0]?.promptText).toContain("Node kind: manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
       DIVEDRA_WORKFLOW_ID: workflowName,
       DIVEDRA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
-      DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+      DIVEDRA_MANAGER_RUNTIME_ID: "divedra-manager",
       DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
     expect(adapter.calls[1]?.nodeId).toBe("step-1");
@@ -4305,7 +4312,7 @@ describe("runWorkflow", () => {
       managerSessionId: "mgrsess-exec-000001",
       workflowId: workflowName,
       workflowExecutionId: "sess-manager-mixed-control-mode",
-      managerNodeId: "divedra-manager",
+      managerRuntimeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       status: "active",
       createdAt: "2026-03-15T00:00:00.000Z",

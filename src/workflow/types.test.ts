@@ -34,8 +34,8 @@ test("REJECTED_AUTHORED step-addressed list is legacy rejects plus step-only ext
 });
 
 test("AuthoredWorkflowJson excludes disallowed top-level authored keys", () => {
-  // @ts-expect-error managerNodeId is not part of the authored schema.
-  void ({ ...createStrictAuthoredWorkflow(), managerNodeId: "main-worker" } satisfies AuthoredWorkflowJson);
+  // @ts-expect-error managerRuntimeId is not part of the authored schema.
+  void ({ ...createStrictAuthoredWorkflow(), managerRuntimeId: "main-worker" } satisfies AuthoredWorkflowJson);
 
   // @ts-expect-error entryNodeId is not part of the authored schema (use entryStepId).
   void ({ ...createStrictAuthoredWorkflow(), entryNodeId: "main-worker" } satisfies AuthoredWorkflowJson);

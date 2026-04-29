@@ -13,7 +13,7 @@ tests may still construct legacy fixtures under explicit non-strict validation.
   names the authored entry step and `nodes[]` is a reusable registry
 - `workflow-call-simple` is fully step-addressed; cross-workflow invocation is
   authored as a `steps[].transitions[]` entry with `toWorkflowId` and
-  `resumeStepId` (executed as a derived workflow call at runtime; not stored on `workflow.workflowCalls`)
+  `resumeStepId` (executed as a derived cross-workflow dispatch at runtime; not stored on `workflow.workflowCalls`)
 - shipped workflow bundles omit structural `subWorkflows` and
   `subWorkflowConversations`; multi-round demos use explicit steps (for example a
   judge step with labeled `transitions`, as in `codex-codex-euthanasia-debate`

@@ -20,7 +20,7 @@ Compatibility-removal rule for ongoing refactors:
 - no new public surface may introduce or preserve node-addressed aliases when a
   step-addressed field already exists
 - new/additive control APIs must target `stepId`, `entryStepId`, and
-  `managerStepId` rather than `nodeId`, `entryNodeId`, or `managerNodeId`
+  `managerStepId` rather than `nodeId`, `entryNodeId`, or `managerRuntimeId`
 - compatibility paths that still exist are removal targets only; they are not
   valid precedent for new runtime or API design
 
@@ -47,17 +47,15 @@ Current compatibility-removal sequence (see
 
 - rerun, resume, and direct-control entrypoints should accept authored `stepId`
   targets only
-- workflow validation/load/save should reject legacy **authored** fields by default
-  (`isStrictWorkflowAuthorshipValidation` in `validate.ts`, unless
-  `rejectLegacyWorkflowAuthoring: false` or `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`)
+- workflow validation/load/save reject legacy **authored** fields outright
 - normalized `WorkflowJson` no longer synthesizes step-addressed compatibility
-  companions such as `managerNodeId`, structural `subWorkflows`, `edges`, or
-  repeat-driven `loops`; remaining legacy node-graph compatibility is still
-  removal-only debt tracked by that plan’s module 1
-- step-addressed cross-workflow execution already derives only step-transition
-  `__cw:*` dispatches, while explicit top-level `workflowCalls` remain isolated
-  to the legacy node-graph compatibility path (`cross-workflow-from-steps.ts`);
-  the target end state is step transitions only
+  companions such as `managerRuntimeId`, structural `subWorkflows`, `edges`, or
+  repeat-driven `loops`
+- cross-workflow dispatch is derived only from `steps[].transitions` with
+  `toWorkflowId` / `resumeStepId` (deterministic ids `__cw:*` via
+  `cross-workflow-from-steps.ts`); validation **rejects** authored top-level
+  `workflow.workflowCalls` on every bundle kind, so the runtime does not execute
+  merged explicit call records
 - phase-2 superviser-control add-on identifiers are part of the runtime control
   surface and should stay centralized; duplicating the same `divedra/*`
   catalog across validation, add-on resolution, and native execution is
@@ -196,7 +194,7 @@ Important validation facts:
 - `managerStepId`, when present, must resolve to an authored step
 - every step must resolve `nodeId` through the explicit node registry in `workflow.json.nodes[]`
 - node payloads distinguish `executionBackend` from `model`; model names are not used as backend selectors in newly authored workflow bundles
-- in strict step-addressed mode, dedicated authored fields such as `edges`, `loops`, `branching`, and structural sub-workflow metadata are rejected; the repository default still loads a limited compatibility set while cutover work remains in progress
+- step-addressed bundles reject dedicated legacy graph-control fields such as `edges`, `loops`, `branching`, and structural sub-workflow metadata
 - cross-scope routing must still target the owning manager boundary
 
 ### Node Add-on Catalog
@@ -309,31 +307,28 @@ Responsibilities:
 
 The queue is deduplicated after each scheduling pass. Multiple valid transition deliveries may still target more than one next execution site, but duplicate queue entries for the same pending execution are collapsed in the queue view.
 
-### Workflow Invocation and Legacy Structural Planning
+### Cross-Workflow Dispatch and Legacy Compatibility
 
 Source:
 
-- `src/workflow/sub-workflow.ts`
-- `src/workflow/conversation.ts`
-- `src/workflow/manager-control.ts`
+- `src/workflow/cross-workflow-from-steps.ts` (projection of step transitions to dispatch rows)
+- `src/workflow/engine.ts` (enqueue and run callee workflows; artifacts under `workflow-calls/`)
+- `src/workflow/runtime-readiness.ts` (readiness checks for callee targets and dispatch chains)
+- `src/workflow/manager-control.ts` (validates manager-emitted control actions)
 
 Responsibilities:
 
-- move cross-workflow calls toward the same step-call runtime primitive used for local worker-step invocation
-- treat the target design for a workflow call as a call to the callee workflow's callable entry step, normally its manager step
-- keep older `workflowCalls` and structural sub-workflow planning behavior isolated as compatibility-only behavior while the runtime migrates
-- converge compatibility `workflowCalls` and ordinary step calls behind one shared call abstraction instead of preserving separate long-term dispatch paths
-- allow validated manager override actions
-- run round-robin conversation turns for legacy compatibility bundles when still authored
+- treat cross-workflow handoff as a normal step completion side effect: after a caller registry node succeeds, matching step-derived dispatches run against the configured workflow root
+- expose callee input through runtime `workflowCall` variables (stable template key; name is historical) and deliver optional results through runtime-owned communications (`workflow-call:<dispatch-id>` prefix is historical)
+- keep historical compatibility-era concepts isolated from the primary step-addressed authoring surface; new work should not reintroduce authored `workflow.edges`, `workflow.loops`, or similar node-addressed control fields
+- allow validated manager override actions (`manager-control.ts` scope checks)
+- reject structural manager-control actions such as `start-sub-workflow` / `deliver-to-child-input`
 
-Current planning behavior:
+Current behavior:
 
-- the target design treats cross-workflow invocation as an ordinary call to another workflow's manager step rather than a separate `workflowCalls` channel
-- current runtime compatibility still executes authored `workflowCalls` immediately after their caller node succeeds
-- result delivery should use the same runtime-owned output/publication path as any other step call
-- if current `workflowCalls` plumbing differs too much from local step-call plumbing, the implementation should be refactored so both lower into one normalized dispatch path
-- manager output payloads may include `managerControl.actions`
-- the runtime validates control scope before honoring those actions
+- cross-workflow invocation targets the callee workflow's callable entry step (`managerStepId` when present, otherwise `entryStepId`); there is no supported authored top-level `workflow.workflowCalls` array
+- matching dispatches run after their caller step's node execution succeeds, in deterministic step order
+- manager output payloads may include `managerControl.actions`; the runtime validates control scope before honoring those actions
 
 ### Server and GraphQL Control Plane
 
@@ -557,7 +552,7 @@ Manager nodes may return `payload.managerControl.actions`.
 - `execute-optional-step` / `skip-optional-step` (replacing `execute-optional-node` / `skip-optional-node`)
 - no structural child-workflow actions
 
-**Current** implementation in `src/workflow/manager-control.ts` accepts only `retry-step`, `execute-optional-step`, and `skip-optional-step` (each with `stepId`). Removal-bound aliases `retry-node` / `execute-optional-node` / `skip-optional-node` are **rejected** (no `nodeId` field on these actions). Structural compatibility actions `start-sub-workflow` and `deliver-to-child-input` are **removed**; structural child scheduling uses engine `planRootManagerSubWorkflowStarts` / `planSubWorkflowChildInputs` only. Remaining phase 133 work is primarily authored-schema cutover and runtime union cleanup (for example `workflowCalls` vs step transitions).
+**Current** implementation in `src/workflow/manager-control.ts` accepts `planner-note`, `retry-step`, `replay-communication`, `execute-optional-step`, and `skip-optional-step` (retry/optional actions use `stepId`). Removal-bound aliases `retry-node` / `execute-optional-node` / `skip-optional-node` are **rejected** (no `nodeId` field on these actions). Structural compatibility actions `start-sub-workflow` and `deliver-to-child-input` are **rejected**. Remaining follow-up work in `impl-plans/workflow-legacy-compatibility-removal.md` is now mostly naming/doc cleanup rather than live authored compatibility logic. Cross-workflow dispatch is step-derived only; the engine does not execute authored top-level `workflow.workflowCalls`.
 
 Scope enforcement:
 

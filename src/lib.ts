@@ -554,11 +554,6 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
     ...(input.nestedSuperviserDriver === true
       ? { nestedSuperviserDriver: true as const }
       : {}),
-    ...(input.rejectLegacyWorkflowAuthoring === undefined
-      ? {}
-      : {
-          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
-        }),
   };
   const executionOptions = await resolveWorkflowCatalogOptions(
     input.workflowName,
@@ -621,11 +616,6 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
     ...(input.nestedSuperviserDriver === true
       ? { nestedSuperviserDriver: true as const }
       : {}),
-    ...(input.rejectLegacyWorkflowAuthoring === undefined
-      ? {}
-      : {
-          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
-        }),
     resumeSessionId: existing.value.sessionId,
   });
   if (!result.ok) {
@@ -695,11 +685,6 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
     ...(input.autoImprove === undefined
       ? {}
       : { autoImprove: input.autoImprove }),
-    ...(input.rejectLegacyWorkflowAuthoring === undefined
-      ? {}
-      : {
-          rejectLegacyWorkflowAuthoring: input.rejectLegacyWorkflowAuthoring,
-        }),
   });
   if (!result.ok) {
     throw new Error(result.error.message);
@@ -945,5 +930,4 @@ export type { SuperviserRuntimeControl } from "./workflow/superviser-control";
 export type {
   WorkflowInspectionCounts,
   WorkflowInspectionSummary,
-  WorkflowStructuralProjectionCounts,
 } from "./workflow/inspect";

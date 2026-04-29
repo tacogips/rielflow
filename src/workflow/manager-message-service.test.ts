@@ -50,7 +50,6 @@ afterEach(async () => {
 async function createCompletedWorkflowFixture(root: string) {
   const created = await createWorkflowTemplate("demo", {
     workflowRoot: root,
-    rejectLegacyWorkflowAuthoring: false,
   });
   expect(created.ok).toBe(true);
   if (!created.ok) {
@@ -62,7 +61,6 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -83,7 +81,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "divedra-manager",
+  managerRuntimeId = "divedra-manager",
   workflowId = "demo",
 ) {
   const store = createManagerSessionStore({
@@ -94,7 +92,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId,
     workflowExecutionId,
-    managerNodeId,
+    managerRuntimeId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -119,16 +117,16 @@ async function createOptionalDecisionWorkflowFixture(
         workflowId: workflowName,
         description: "optional manager-message fixture",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        managerStepId: "divedra-manager",
+        entryStepId: "divedra-manager",
         nodes: [
           {
             id: "divedra-manager",
-            kind: "root-manager",
             nodeFile: "node-divedra-manager.json",
           },
           {
             id: "step-1",
             nodeFile: "node-step-1.json",
-            kind: "task",
             execution: {
               mode: "optional",
               decisionBy: "owning-manager",
@@ -137,15 +135,29 @@ async function createOptionalDecisionWorkflowFixture(
           {
             id: "step-2",
             nodeFile: "node-step-2.json",
-            kind: "task",
             execution: {
               mode: "optional",
               decisionBy: "owning-manager",
             },
           },
         ],
-        edges: [],
-        loops: [],
+        steps: [
+          {
+            id: "divedra-manager",
+            nodeId: "divedra-manager",
+            role: "manager",
+          },
+          {
+            id: "step-1",
+            nodeId: "step-1",
+            role: "worker",
+          },
+          {
+            id: "step-2",
+            nodeId: "step-2",
+            role: "worker",
+          },
+        ],
       },
       null,
       2,
@@ -212,13 +224,13 @@ async function createPendingOptionalDecisionSession(input: {
     pendingOptionalNodeDecisions: [
       {
         nodeId: "step-1",
-        owningManagerNodeId: "divedra-manager",
+        owningManagerRuntimeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
       {
         nodeId: "step-2",
-        owningManagerNodeId: "divedra-manager",
+        owningManagerRuntimeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
@@ -229,7 +241,6 @@ async function createPendingOptionalDecisionSession(input: {
     artifactRoot: path.join(input.root, "artifacts"),
     rootDataDir: path.join(input.root, "data"),
     cwd: input.root,
-    rejectLegacyWorkflowAuthoring: false as const,
   });
   expect(saved.ok).toBe(true);
   if (!saved.ok) {
@@ -503,7 +514,6 @@ describe("manager-message-service", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
     const managerStore = await createManagerSession(
       root,
@@ -555,7 +565,7 @@ describe("manager-message-service", () => {
     expect(loaded.value.pendingOptionalNodeDecisions).toEqual([
       {
         nodeId: "step-1",
-        owningManagerNodeId: "divedra-manager",
+        owningManagerRuntimeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "execute",
         decidedAt: "2026-03-15T04:15:00.000Z",
@@ -563,7 +573,7 @@ describe("manager-message-service", () => {
       },
       {
         nodeId: "step-2",
-        owningManagerNodeId: "divedra-manager",
+        owningManagerRuntimeId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "skip",
         reason: "already covered by another branch",

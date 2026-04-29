@@ -147,7 +147,7 @@ export interface ManagerSessionRecord {
   readonly managerSessionId: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly status: "active" | "completed" | "failed" | "cancelled";
   readonly createdAt: string;
@@ -162,7 +162,7 @@ export interface ManagerMessageRecord {
   readonly managerSessionId: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly message?: string;
   readonly parsedIntent: readonly ManagerIntentSummary[];
@@ -187,7 +187,7 @@ export interface ManagerSessionStore {
 export interface AmbientManagerExecutionContext {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly managerSessionId?: string;
   readonly authToken?: string;

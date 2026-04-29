@@ -9,7 +9,7 @@ import {
   fg,
   t,
 } from "@opentui/core";
-import { effectiveWorkflowCalls } from "../../workflow/cross-workflow-from-steps";
+import { effectiveCrossWorkflowDispatches } from "../../workflow/cross-workflow-from-steps";
 import type { LoadedWorkflow } from "../../workflow/load";
 import type {
   NodeExecutionRecord,
@@ -71,22 +71,11 @@ import {
 
 const WORKSPACE_LATEST_RESULT_PREVIEW_LINES = 18;
 
-/**
- * Check if a legacy workflow has an explicitly marked manager node.
- * Returns the node id if found, or undefined if the manager node is not explicitly identified.
- */
+/** Returns the explicit manager runtime id when a synthesized runtime node carries the manager role. */
 function findExplicitLegacyManagerNode(
   workflow: LoadedWorkflow["bundle"]["workflow"],
 ): string | undefined {
-  const rootManager = workflow.nodes.find((n) => n.kind === "root-manager");
-  if (rootManager !== undefined) {
-    return rootManager.id;
-  }
-  const roleManager = workflow.nodes.find((n) => n.role === "manager");
-  if (roleManager !== undefined) {
-    return roleManager.id;
-  }
-  return undefined;
+  return workflow.nodes.find((node) => node.role === "manager")?.id;
 }
 
 /**
@@ -176,7 +165,8 @@ function resolveWorkflowRuntimePreviewId(input: {
 
 /**
  * Compact Entry/Manager labels for summary and run one-liners. Step-addressed
- * bundles use step ids only; legacy node graphs keep the node-id fallbacks.
+ * bundles use step ids only; older runtime/session payloads may still carry the
+ * historical node-id-shaped field names.
  */
 function buildWorkflowExecutionIdentityPreviewSegment(input: {
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
@@ -225,13 +215,13 @@ function appendWorkflowBoundarySections(input: {
   readonly append: (value: StyledText) => void;
   readonly workflow: LoadedWorkflow["bundle"]["workflow"];
 }): void {
-  const workflowCallIds = effectiveWorkflowCalls(input.workflow).map(
-    (entry) => entry.id,
-  );
+  const crossWorkflowDispatchIds = effectiveCrossWorkflowDispatches(
+    input.workflow,
+  ).map((entry) => entry.id);
 
-  if (workflowCallIds.length > 0) {
+  if (crossWorkflowDispatchIds.length > 0) {
     input.append(
-      t`\n\n${brightWhite("Workflow Calls")}\n- ${workflowCallIds.join(", ")}`,
+      t`\n\n${brightWhite("Cross-workflow dispatch")}\n- ${crossWorkflowDispatchIds.join(", ")}`,
     );
   }
 }
@@ -331,7 +321,7 @@ function buildWorkflowNodePreview(loaded: LoadedWorkflow): StyledText {
         }),
       }),
     );
-    if (kind === "root-manager") {
+    if (kind === "manager") {
       append(
         buildPreviewLine({
           color: "#dff0e4",
@@ -362,7 +352,7 @@ export function buildWorkflowSummaryPreview(
       workflow,
       isStepAddressed,
     });
-  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
+  const crossWorkflowDispatchIds = effectiveCrossWorkflowDispatches(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
@@ -380,8 +370,8 @@ export function buildWorkflowSummaryPreview(
               nodeRegistryIds.length,
             )}`
           : `Nodes: ${String(workflow.nodes.length)}`
-      }  Workflow calls: ${String(
-        workflowCallIds.length,
+      }  Cross-workflow dispatches: ${String(
+        crossWorkflowDispatchIds.length,
       )}  Entry: ${entryExecutionId}  Manager: ${managerExecutionLabel}`,
     )}`,
   );
@@ -429,7 +419,7 @@ export function buildWorkflowRunPreview(
       workflow,
       isStepAddressed,
     });
-  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
+  const crossWorkflowDispatchIds = effectiveCrossWorkflowDispatches(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
@@ -447,8 +437,8 @@ export function buildWorkflowRunPreview(
               nodeRegistryIds.length,
             )}`
           : `Nodes: ${String(workflow.nodes.length)}`
-      }  Workflow calls: ${String(
-        workflowCallIds.length,
+      }  Cross-workflow dispatches: ${String(
+        crossWorkflowDispatchIds.length,
       )}`,
     )}`,
   );
@@ -508,7 +498,7 @@ export function buildWorkflowDefinitionContent(
   }
   const workflow = loadedWorkflow.bundle.workflow;
   const inputDetection = detectWorkflowInputMode(loadedWorkflow);
-  const workflowCallIds = effectiveWorkflowCalls(workflow).map(
+  const crossWorkflowDispatchIds = effectiveCrossWorkflowDispatches(workflow).map(
     (entry) => entry.id,
   );
   const stepIds = workflow.steps?.map((entry) => entry.id) ?? [];
@@ -556,10 +546,10 @@ export function buildWorkflowDefinitionContent(
           `Node registry ids: ${nodeRegistryIds.join(", ") || "(none)"}`,
         ]
       : []),
-    `Workflow calls: ${String(workflowCallIds.length)}`,
-    ...(workflowCallIds.length === 0
+    `Cross-workflow dispatches: ${String(crossWorkflowDispatchIds.length)}`,
+    ...(crossWorkflowDispatchIds.length === 0
       ? []
-      : [`Workflow call ids: ${workflowCallIds.join(", ")}`]),
+      : [`Dispatch ids: ${crossWorkflowDispatchIds.join(", ")}`]),
     `Nodes: ${String(workflow.nodes.length)}`,
     `Input mode hint: ${inputDetection.mode}`,
     "",
@@ -818,7 +808,8 @@ export function buildWorkflowHistoryHeader(
     ? loadedWorkflow.bundle.workflow.description
     : undefined;
   const workflow = loadedWorkflow.bundle.workflow;
-  const workflowCallCount = effectiveWorkflowCalls(workflow).length;
+  const crossWorkflowDispatchCount =
+    effectiveCrossWorkflowDispatches(workflow).length;
   const chunks: StyledText["chunks"] = [];
   chunks.push(
     ...t`${brightCyan(bold(loadedWorkflow.bundle.workflow.workflowId))}`.chunks,
@@ -828,7 +819,7 @@ export function buildWorkflowHistoryHeader(
   }
   chunks.push(
     ...t`\n${dim(
-      `nodes=${String(workflow.nodes.length)}  workflowCalls=${String(workflowCallCount)}`,
+      `nodes=${String(workflow.nodes.length)}  crossWorkflowDispatches=${String(crossWorkflowDispatchCount)}`,
     )}`.chunks,
   );
   return new StyledText(chunks);

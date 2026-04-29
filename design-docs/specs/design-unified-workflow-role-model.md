@@ -4,7 +4,7 @@ This document defines the target workflow model where `manager` and `worker` are
 
 ## Overview
 
-Strict authored `workflow.json` follows the step-addressed contract in `design-workflow-json.md` (`entryStepId`, `steps`, optional `managerStepId`); top-level `managerNodeId`, `entryNodeId`, and `subWorkflows` are rejected, and role-authored bundles reject structural boundary kinds such as `subworkflow-manager`, `input`, and `output`. A narrowed legacy **node-graph** load path (non-strict validation) can still run graphs declared only as `nodes[]` with inferred entry/manager via helpers, without persisting or accepting those removed top-level aliases as the active authoring model.
+Strict authored `workflow.json` follows the step-addressed contract in `design-workflow-json.md` (`entryStepId`, `steps`, optional `managerStepId`); top-level `managerNodeId`, `entryNodeId`, and `subWorkflows` are rejected, and role-authored bundles reject structural boundary kinds such as `subworkflow-manager`, `input`, and `output`.
 
 The target execution semantics remain:
 
@@ -108,7 +108,7 @@ Validation semantics:
 
 Authoring uses the step-addressed contract from `design-workflow-json.md`: `entryStepId`, `steps[]`,
 the reusable node registry in `nodes[]`, and optional `managerStepId`. Session and control-plane
-APIs may still expose a field named `managerNodeId`; there it is a **step** id in the same id space
+APIs may still expose a field named `managerRuntimeId`; there it is a **step** id in the same id space
 as `steps[].id`, not a legacy top-level `workflow.json` alias (those names are rejected on disk).
 
 Shape matches `AuthoredWorkflowJson` in `src/workflow/types.ts` (see `design-workflow-json.md` for
@@ -122,21 +122,25 @@ Entry rules:
   otherwise explicit `role: "manager"` on exactly one step (or a single manager-role step) defines it
 - worker-only workflows omit `managerStepId` and still declare a valid `entryStepId`
 
-A separate, non-strict **legacy node-graph** load path (optional `nodes[]` without `steps[]`) may
-still infer a graph entry node id for execution; it does not reintroduce authored top-level
-`managerNodeId` / `entryNodeId` / `subWorkflows` as valid authoring (`validate.ts`
-`REJECTED_AUTHORED_*` keys).
-
 ### Workflow Invocation
 
 Workflow nesting becomes an invocation relationship rather than a structural ownership boundary.
+Authoring expresses cross-workflow links only via step-addressed `steps[].transitions` (`toWorkflowId`,
+`resumeStepId`, optional `label`). Top-level `workflow.workflowCalls` is rejected; the engine derives
+deterministic dispatch rows (`id` `__cw:<callerStepId>`) from those transitions for execution and
+readiness checks (see `CrossWorkflowDispatch` in `src/workflow/cross-workflow-from-steps.ts`).
 
 ```typescript
-interface WorkflowCallRef {
+// Derived runtime row (not an authored workflow.json field)
+interface CrossWorkflowDispatch {
   readonly id: string;
   readonly workflowId: string;
+  /** Node registry id for the caller step (`WorkflowStepRef.nodeId`); distinct from the step id. */
   readonly callerNodeId: string;
+  /** Caller step id when the step name differs from the node registry id. */
+  readonly callerStepId?: string;
   readonly resultNodeId?: string;
+  readonly when?: string;
 }
 ```
 
@@ -149,17 +153,17 @@ Principles:
 
 Current runtime contract for this transition:
 
-- `workflowCall.workflowId` resolves another workflow bundle under the configured workflow root
-- after `callerNodeId` succeeds, matching workflow calls execute in authored order
-- the callee receives a reserved `runtimeVariables.workflowCall` object containing:
-  - the workflow-call id
+- `dispatch.workflowId` resolves another workflow bundle under the configured workflow root
+- after the caller step's node succeeds, matching cross-workflow dispatches for that caller execute in deterministic step order (at most one `toWorkflowId` transition per step). Matching pairs `callerStepId` with the completing step when present and compares `callerNodeId` against the executing node registry id.
+- the callee receives a reserved `runtimeVariables.workflowCall` object (stable template key; name is historical) containing:
+  - the cross-workflow dispatch id (same as `dispatch.id`, e.g. `__cw:draft-write`)
   - the invoking workflow id and execution id (serialized as `parentWorkflowId` and `parentWorkflowExecutionId` for on-disk and template compatibility; they name the caller, not a structural sub-workflow parent)
-  - the caller node id
+  - the caller **node registry** id (not the step id when they differ)
   - the caller business payload as `workflowCall.input`
-- runtime-owned call artifacts are written under the caller execution artifact directory as `workflow-calls/<call-id>.json`; preferred JSON fields use caller/callee naming (`callerNodeExecId`, `calleeWorkflowId`, …). Legacy `parentNodeExecId` / `child*` keys mirror the same values for older tooling and do not denote a structural parent/child workflow
-- when `resultNodeId` is present, the callee result is delivered to that node as an ordinary upstream communication with transition key `workflow-call:<id>`
+- runtime-owned dispatch metadata is written under the caller execution artifact directory as `workflow-calls/<dispatch-id>.json` using caller/callee field names (`crossWorkflowDispatchId`, `callerNodeExecId`, `calleeWorkflowId`, `calleeSessionId`, …). Older artifacts may still contain historical `parentNodeExecId` / `child*` keys or the legacy `workflowCallId` top-level key; new runs no longer write those mirrors or `workflowCallId`
+- when `resultNodeId` is present, the callee result is delivered to that node as an ordinary upstream communication with transition key `workflow-call:<dispatch-id>` (prefix historical; kept for persisted session compatibility)
 - the callee result is selected from the callee's published workflow output when available, and otherwise falls back to the latest succeeded callee node execution for role-authored worker-only workflows
-- recursive or self-referential workflow-call chains are unsupported in this transition runtime and should fail readiness/execution rather than re-enter indefinitely
+- recursive or self-referential cross-workflow dispatch chains are unsupported in this transition runtime and should fail readiness/execution rather than re-enter indefinitely
 
 This transport stays runtime-owned rather than reintroducing structural `input` and `output` nodes into the authored graph.
 
@@ -191,7 +195,7 @@ The replacement direction is:
 
 - manager scope is local to the current workflow execution only
 - manager execution always uses the agent orchestration path
-- workflow invocation is an explicit spawn/join operation
+- workflow invocation is an explicit spawn/join operation expressed as step transitions (`toWorkflowId` / `resumeStepId`), not as structural sub-workflow boundaries
 - called workflow input/output is handled by call contracts and runtime artifacts, not by special boundary nodes
 
 ## Authoring and Template Implications
@@ -203,8 +207,8 @@ Workflow authoring tools and template generators should move to:
 - optional workflow manager selection
 - manager nodes hide non-agent execution-type configuration
 - explicit workflow entry selection for manager-less workflows
-- explicit workflow-call authoring instead of sub-workflow boundary editing
-- role-authored examples and prompts should describe grouped lanes or explicit `workflowCalls`, not structural sub-workflow ownership terms, unless the bundle is intentionally documenting legacy compatibility
+- cross-workflow links authored only as `steps[].transitions` with `toWorkflowId` / `resumeStepId` instead of sub-workflow boundary editing
+- role-authored examples and prompts should describe grouped lanes or step-addressed cross-workflow transitions, not structural sub-workflow ownership terms, unless the bundle is intentionally documenting legacy compatibility
 
 ## Migration Direction
 
@@ -213,7 +217,7 @@ This redesign supersedes the older manager-kind simplification direction.
 Migration should be treated as a schema replacement, not as another alias-normalization pass:
 
 1. introduce the new authored schema and validator
-2. redesign runtime workflow-invocation semantics around explicit calls
+2. redesign runtime workflow-invocation semantics around step-derived cross-workflow dispatch (no authored top-level `workflow.workflowCalls`)
 3. update editor, examples, and templates
 4. remove structural sub-workflow boundary assumptions from runtime and docs
 

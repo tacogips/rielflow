@@ -11,7 +11,7 @@
 
 ### Summary
 
-The repository has already landed the transitional role-unification slice: role-authored `manager` / `worker` bundles, worker-only execution, authored-minimal persistence, and executable `workflowCalls`.
+The repository has already landed the transitional role-unification slice: role-authored `manager` / `worker` bundles, worker-only execution, authored-minimal persistence, and cross-workflow dispatch via step transitions (authored top-level `workflowCalls` are legacy-rejected in current validation).
 
 What remains is structural cleanup. Legacy `subWorkflows`, `subworkflow-manager`, `input`, and `output` execution semantics still exist as compatibility behavior in runtime control, mailbox structure summaries, examples, and regression fixtures. This follow-up plan removes those remaining structural assumptions from the active role-authored path while keeping any intentional legacy compatibility boundary explicit and narrow.
 
@@ -20,9 +20,9 @@ What remains is structural cleanup. Legacy `subWorkflows`, `subworkflow-manager`
 **Included**:
 
 - remove structural child-input forwarding from the role-authored execution path
-- constrain role-authored manager control and mailbox guidance to the current workflow execution plus explicit `workflowCalls`
+- constrain role-authored manager control and mailbox guidance to the current workflow execution plus step-addressed cross-workflow transitions (`toWorkflowId` / `resumeStepId`; authored top-level `workflowCalls` rejected)
 - reduce role-authored prompt, inspection, and example surfaces that still advertise structural sub-workflow boundaries
-- replace structural example/test coverage where the same behavior can now be exercised through role-authored workflows and `workflowCalls`
+- replace structural example/test coverage where the same behavior can now be exercised through role-authored workflows and step-addressed cross-workflow transitions
 - document the exact legacy compatibility boundary that remains after cleanup
 
 **Excluded**:
@@ -64,8 +64,8 @@ export type ManagerControlActionType =
 export interface WorkflowInspectionSummary {
   readonly workflowId: string;
   readonly hasManagerNode: boolean;
-  readonly entryNodeId: string;
-  readonly workflowCallIds: readonly string[];
+  readonly entryStepId?: string;
+  readonly crossWorkflowDispatchIds: readonly string[];
 }
 ```
 
@@ -139,7 +139,7 @@ interface VerificationCommandSet {
 ## Completion Criteria
 
 - [x] Role-authored workflows no longer depend on structural sub-workflow manager/input/output runtime behavior
-- [x] Role-authored manager guidance is scoped to the current workflow execution plus explicit `workflowCalls`
+- [x] Role-authored manager guidance is scoped to the current workflow execution plus step-addressed cross-workflow transitions (`toWorkflowId` / `resumeStepId`; authored top-level `workflowCalls` rejected)
 - [x] Structural sub-workflow examples/tests are no longer the primary coverage path for the active architecture
 - [x] Remaining legacy compatibility behavior is explicit, narrow, and documented
 - [x] `bun run typecheck:server`, `bun test`, and `bun run build` pass after the cleanup

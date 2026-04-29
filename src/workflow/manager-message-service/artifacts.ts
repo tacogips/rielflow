@@ -71,7 +71,7 @@ export async function validateAttachments(
 }
 
 function buildManagerMessageOutputRaw(args: {
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly message: string | undefined;
   readonly attachments: readonly DataDirFileRef[];
   readonly actions: readonly ManagerControlAction[];
@@ -79,7 +79,7 @@ function buildManagerMessageOutputRaw(args: {
   return `${JSON.stringify(
     {
       provider: "manager-message",
-      model: args.managerNodeId,
+      model: args.managerRuntimeId,
       promptText: args.message ?? "",
       completionPassed: true,
       when: { always: true },
@@ -100,7 +100,7 @@ export async function prepareManagerMessageArtifacts(args: {
   readonly workflowExecutionId: string;
   readonly managerSessionId: string;
   readonly managerMessageId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly message: string | undefined;
   readonly attachments: readonly DataDirFileRef[];
@@ -119,16 +119,16 @@ export async function prepareManagerMessageArtifacts(args: {
     kind: "manager-message",
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
-    outputNodeId: args.managerNodeId,
+    outputNodeId: args.managerRuntimeId,
     nodeExecId: args.managerNodeExecId,
     artifactDir,
     managerSessionId: args.managerSessionId,
     managerMessageId: args.managerMessageId,
-    managerNodeId: args.managerNodeId,
+    managerRuntimeId: args.managerRuntimeId,
     managerNodeExecId: args.managerNodeExecId,
   };
   const outputRaw = buildManagerMessageOutputRaw({
-    managerNodeId: args.managerNodeId,
+    managerRuntimeId: args.managerRuntimeId,
     message: args.message,
     attachments: args.attachments,
     actions: args.actions,
@@ -147,7 +147,7 @@ export async function writeManagerMessageEnvelope(args: {
   readonly workflowExecutionId: string;
   readonly managerSessionId: string;
   readonly managerMessageId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly message: string | undefined;
   readonly attachments: readonly DataDirFileRef[];
@@ -166,7 +166,7 @@ export async function writeManagerMessageEnvelope(args: {
       workflowExecutionId: args.workflowExecutionId,
       managerSessionId: args.managerSessionId,
       managerMessageId: args.managerMessageId,
-      managerNodeId: args.managerNodeId,
+      managerRuntimeId: args.managerRuntimeId,
       managerNodeExecId: args.managerNodeExecId,
       ...(args.message === undefined ? {} : { message: args.message }),
       attachments: args.attachments,
@@ -194,7 +194,7 @@ export async function persistManagerMessageCommunication(args: {
   readonly workflowExecutionId: string;
   readonly communicationCounter: number;
   readonly managerMessageId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly targetNodeId: string;
   readonly payloadRef: ManagerMessagePayloadRef;
@@ -214,7 +214,7 @@ export async function persistManagerMessageCommunication(args: {
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
     communicationId,
-    fromNodeId: args.managerNodeId,
+    fromNodeId: args.managerRuntimeId,
     toNodeId: args.targetNodeId,
     routingScope: "intra-workflow",
     sourceNodeExecId: args.managerNodeExecId,
@@ -231,7 +231,7 @@ export async function persistManagerMessageCommunication(args: {
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
     communicationId,
-    fromNodeId: args.managerNodeId,
+    fromNodeId: args.managerRuntimeId,
     toNodeId: args.targetNodeId,
     sourceNodeExecId: args.managerNodeExecId,
     routingScope: "intra-workflow",
@@ -255,18 +255,18 @@ export async function persistManagerMessageCommunication(args: {
   const receipt = {
     communicationId,
     deliveryAttemptId,
-    deliveredByNodeId: args.managerNodeId,
+    deliveredByNodeId: args.managerRuntimeId,
     deliveredAt: args.createdAt,
   };
 
   await atomicWriteJsonFile(path.join(artifactDir, "message.json"), envelope);
   await atomicWriteJsonFile(path.join(artifactDir, "meta.json"), meta);
   await atomicWriteJsonFile(
-    path.join(artifactDir, "outbox", args.managerNodeId, "message.json"),
+    path.join(artifactDir, "outbox", args.managerRuntimeId, "message.json"),
     envelope,
   );
   await atomicWriteTextFile(
-    path.join(artifactDir, "outbox", args.managerNodeId, "output.json"),
+    path.join(artifactDir, "outbox", args.managerRuntimeId, "output.json"),
     args.outputRaw,
   );
   await atomicWriteJsonFile(
@@ -286,7 +286,7 @@ export async function persistManagerMessageCommunication(args: {
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
     communicationId,
-    fromNodeId: args.managerNodeId,
+    fromNodeId: args.managerRuntimeId,
     toNodeId: args.targetNodeId,
     routingScope: "intra-workflow",
     sourceNodeExecId: args.managerNodeExecId,

@@ -68,7 +68,6 @@ afterEach(async () => {
 async function createCompletedWorkflowFixture(root: string) {
   const created = await createWorkflowTemplate("demo", {
     workflowRoot: root,
-    rejectLegacyWorkflowAuthoring: false,
   });
   expect(created.ok).toBe(true);
   if (!created.ok) {
@@ -80,7 +79,6 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -101,7 +99,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "divedra-manager",
+  managerRuntimeId = "divedra-manager",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -111,7 +109,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerNodeId,
+    managerRuntimeId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -354,7 +352,7 @@ describe("communication-service", () => {
       workflowExecutionId: session.sessionId,
       managerSessionId: "mgrsess-000001",
       managerMessageId,
-      managerNodeId: "divedra-manager",
+      managerRuntimeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       message: "Deliver this updated brief.",
       attachments: [],
@@ -366,7 +364,7 @@ describe("communication-service", () => {
       workflowExecutionId: session.sessionId,
       communicationCounter: session.communicationCounter,
       managerMessageId,
-      managerNodeId: "divedra-manager",
+      managerRuntimeId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       targetNodeId: "main-worker",
       payloadRef: artifacts.payloadRef,

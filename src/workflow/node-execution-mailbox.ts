@@ -5,7 +5,7 @@ import {
   normalizeManagerMessageForMailbox,
   normalizePlainTextValue,
 } from "./json-boundary";
-import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
+import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import {
   toStepIdentityFields,
@@ -40,14 +40,13 @@ export interface NodeExecutionMailboxManagedChild {
  * workflow execution. Cross-workflow calls are separate executions.
  */
 export interface NodeExecutionMailboxStructure {
-  /** Historical discriminant; value is always `root-workflow` in persisted mailbox meta. */
-  readonly type: "root-workflow";
+  /** Historical discriminant; value is always `workflow-execution` in persisted mailbox meta. */
+  readonly type: "workflow-execution";
   /**
-   * Manager **execution** id: for step-addressed loads this is the manager step
-   * id (`resolveWorkflowManagerRuntimeId`); for legacy node graphs, the manager
-   * node id. Name is historical; not always a registry `nodeId`.
+   * Manager **execution** id (`resolveWorkflowManagerRuntimeId`). The field name is
+   * historical; it is not always a registry `nodeId`.
    */
-  readonly rootManagerNodeId?: string;
+  readonly managerRuntimeId?: string;
   readonly nodes?: readonly {
     readonly id: string;
     readonly kind: string;
@@ -170,8 +169,8 @@ function buildNodeReason(
   workflow: WorkflowJson,
 ): string {
   if (isManagerNodeRef(nodeRef)) {
-    return effectiveWorkflowCalls(workflow).length > 0
-      ? "Coordinate the current workflow plan, worker execution, workflow-call decisions, output assessment, and retry decisions."
+    return effectiveCrossWorkflowDispatches(workflow).length > 0
+      ? "Coordinate the current workflow plan, worker execution, cross-workflow dispatch decisions, output assessment, and retry decisions."
       : "Coordinate the current workflow plan, worker execution, output assessment, and retry decisions.";
   }
 
@@ -256,8 +255,8 @@ function buildMailboxStructure(input: {
 }): NodeExecutionMailboxStructure | undefined {
   if (isManagerNodeRef(input.nodeRef)) {
     return {
-      type: "root-workflow",
-      rootManagerNodeId: resolveWorkflowManagerRuntimeId(input.workflow),
+      type: "workflow-execution",
+      managerRuntimeId: resolveWorkflowManagerRuntimeId(input.workflow),
       nodes: input.workflow.nodes.map((node) => ({
         id: node.id,
         kind: describeWorkflowNodeKind(node),
@@ -424,7 +423,7 @@ function renderStructureSection(
   }
   const lines = ["Workflow structure:"];
   lines.push(
-    `- Manager execution id: ${structure.rootManagerNodeId ?? ""}`,
+    `- Manager execution id: ${structure.managerRuntimeId ?? ""}`,
   );
   lines.push("- Nodes:");
   for (const node of structure.nodes ?? []) {

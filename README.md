@@ -18,8 +18,7 @@ The current implementation remains the source of truth for shipped behavior, but
 - jump-driven routing via validated `next.stepId` rather than dedicated branch/loop authoring
 - deterministic `code` manager behavior as the default manager mode
 - explicit same-session continuation for different steps that intentionally reuse one node
-- cross-workflow calls using the same execution-address contract as local step calls by targeting the callee workflow manager step
-- migration toward one shared call abstraction for local and cross-workflow dispatch instead of separate long-term paths
+- cross-workflow handoffs authored only as `steps[].transitions` with `toWorkflowId` / `resumeStepId`; validation rejects top-level `workflow.workflowCalls`; the runtime derives deterministic dispatch ids (`__cw:<callerStepId>`) and invokes the callee using the same callable entry contract as direct `call-step` execution (typically the callee manager step, or `entryStepId` for worker-only bundles)
 - supervised `--auto-improve` execution (engine outer loop, persisted incidents/remediations, and patch audit; optional phase-2 nested `superviser` workflow with `--nested-superviser`; see `design-docs/specs/architecture.md` and `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md`)
 
 Those design documents describe the intended next schema and runtime direction; they are not a claim that every item is already implemented in `src/`.
@@ -31,15 +30,14 @@ The source of truth is the implementation under `src/workflow/`, `src/cli.ts`,
 
 Current runtime behavior:
 
-- step-addressed bundles (`workflow.json.steps[]` + reusable `workflow.json.nodes[]`) are the primary authored direction for new workflows, inspection, save/load, and most shipped examples
-- ordered `workflow.json.nodes[]`, authored `edges`, and related node-addressed control fields remain available only as compatibility paths while the cutover is still incomplete
+- step-addressed bundles (`workflow.json.steps[]` + reusable `workflow.json.nodes[]`) are the authored workflow model for create, validate, inspect, load, and save
 - workflows persist session state, node execution artifacts, communications, and runtime indexes
 - manager nodes run inside the queue-based engine rather than replacing it with a pure external orchestrator
-- authored workflows may use role-based nodes (`manager` / `worker`) and may omit a manager when the authored entry is explicit (`entryStepId` for step-addressed bundles); legacy node-graph bundles must not use top-level `entryNodeId` (validation rejects it) and the runtime infers entry from `kind` / `role` and structural `edges`
-- manager-less workflows execute today, but the normalized runtime still derives an internal effective manager/entry identity for compatibility
+- authored workflows may use role-based steps (`manager` / `worker`) and may omit a manager when `entryStepId` is explicit
+- manager-less workflows execute today, and the runtime treats `entryStepId` as the effective manager/entry anchor when `managerStepId` is omitted
 - `call-step` is the supported direct-call surface for local debugging and step-addressed execution control
-- cross-workflow execution uses the same engine primitive whether routing comes from a step transition (`toWorkflowId` / `resumeStepId`) or from an explicit call record: step-addressed bundles **must** use step transitions, because validation **rejects** top-level `workflow.workflowCalls` on `entryStepId`+`steps` workflows; legacy node-graph bundles may still author `workflowCalls` until the non-step validation path is removed
-- node-local `repeat` remains supported only in the simplified compatibility format and still synthesizes loop semantics
+- cross-workflow execution is derived from step transitions only: validation **rejects** top-level `workflow.workflowCalls` on every load/save path, and the engine projects deterministic runtime dispatch rows (`id` `__cw:<callerStepId>`) from `steps[].transitions` with `toWorkflowId` / `resumeStepId`
+- node-local `repeat` remains supported and synthesizes loop semantics from the normalized runtime node list
 - `user-action` nodes are supported and pause execution until an external reply resolves the action
 
 Current execution support by node type:
@@ -51,9 +49,12 @@ Current execution support by node type:
 - `addon`: implemented for built-in runtime-provided worker add-ons and
   host-provided third-party addon definitions or resolvers
 
-Additional authored shapes:
+Cross-workflow runtime (not an authored `workflow.json` field):
 
-- `workflowCalls` (legacy node-graph bundles only; step-addressed workflows reject a top-level `workflowCalls` array and use `steps[].transitions` with `toWorkflowId` / `resumeStepId` instead): executable workflow-to-workflow invocations. The caller's business payload is exposed to the callee as `runtimeVariables.workflowCall.input`, and `resultNodeId` can receive the callee result through a runtime-owned `workflow-call:<id>` communication.
+- Step transitions with `toWorkflowId` / `resumeStepId` drive cross-workflow execution. The runtime exposes the handoff to callees through `runtimeVariables.workflowCall` (stable template key; name is historical): caller payload as `workflowCall.input`, and optional result delivery through a runtime-owned `workflow-call:<dispatch-id>` communication (prefix historical).
+
+Additional node registry features:
+
 - `nodes[].addon`: worker add-on references that resolve to effective node
   payloads while save/edit surfaces preserve the authored add-on reference.
   Current built-ins include `divedra/chat-reply-worker`,
@@ -187,9 +188,9 @@ Useful options:
 - `--output json`
 - `--format text|json|jsonl` for `session logs`
 
-`workflow inspect` surfaces step and node-registry identity fields plus the
-effective cross-workflow call count as `workflowCalls` (derived from authored
-`workflowCalls` and step transitions).
+`workflow inspect` surfaces step and node-registry identity fields plus
+`crossWorkflowDispatchIds` and `counts.crossWorkflowDispatches` (derived from
+`steps[].transitions`, not from authored `workflow.workflowCalls`).
 
 - `--dry-run`
 - `--max-steps <n>`
@@ -310,47 +311,38 @@ Validation **rejects** top-level compatibility keys (do not author them), includ
 
 Cross-workflow execution is expressed only through **step-addressed** `steps[].transitions` with `toWorkflowId` and `resumeStepId` (runtime projects these as synthetic call rows; they are not authored as `workflowCalls`).
 
-Legacy **node-graph** bundles (no `steps` / `entryStepId`) use `nodes` and may use `edges` / `loops` when not combined with authored role/control nodes; if `edges` is omitted, sequential edges are synthesized from node order.
-
 Relevant current behavior:
 
 - if `steps[]` is authored, `nodes[]` is a reusable registry rather than execution order
 - if exactly one manager-role step exists, `managerStepId` may be inferred (step-addressed bundles)
-- manager and entry runtime identity for legacy node graphs is inferred from node `kind` / `role` and structural edges (not from top-level `managerNodeId` / `entryNodeId`)
-- if no manager exists, step-addressed bundles require `entryStepId`; manager-less legacy graphs require a resolvable graph entry via inference
+- if no manager exists, `entryStepId` remains required and also acts as the effective manager/entry runtime id
 - structural sub-workflow authoring (`subWorkflows` / `subWorkflowConversations`) is **removed**; use step graphs and step transitions for cross-workflow calls
-- structural boundary `kind` values such as `input` and `output` are **rejected** when combined with authored role/control nodes; the string `subworkflow-manager` is also rejected as an invalid `kind`
 - inline node payload authoring is supported through `workflow.nodes[].node` when `nodeFile` is omitted
 - `workflowId` is the runtime namespace key for artifacts and session storage, so it must be filesystem-safe
 
-Step-addressed authored bundles use `entryStepId`, optional `managerStepId`, reusable `workflow.json.nodes[]`, and executable `workflow.json.steps[]`. Load and save still accept legacy node-graph shapes for existing trees, but new authoring should prefer the step-addressed model.
+Step-addressed authored bundles use `entryStepId`, optional `managerStepId`, reusable `workflow.json.nodes[]`, and executable `workflow.json.steps[]`.
 
 Important node-level fields in `workflow.json.nodes[]`:
 
 - `id`
 - `nodeFile`
-- `kind`
+- `addon`
+
+Important step-level fields in `workflow.json.steps[]`:
+
+- `id`
+- `nodeId`
 - `role`
 - `control`
-- `completion`
-- `execution`
-- `group`
-- `repeat`
-
-Current `kind` values:
-
-- `task`
-- `branch-judge`
-- `loop-judge`
-- `root-manager`
-- `input` (rejected for role-based bundles; do not use)
-- `output` (rejected for role-based bundles; do not use)
+- `transitions`
+- `promptVariant`
+- `timeoutMs`
+- `sessionPolicy`
 
 Role-based authoring note:
 
-- `role` is the authored direction of travel: `manager` or `worker`
-- role/control-authored workflows should omit structural boundary `kind` values
-- `kind` still appears in normalized runtime structures for legacy node-graph bundles; role-based authoring should omit structural boundary kinds
+- `role` is the authored direction of travel at the step layer: `manager` or `worker`
+- reusable node registry entries remain payload references; execution semantics live on steps
 
 ## Node Payloads
 
@@ -395,7 +387,7 @@ The workflow engine in `src/workflow/engine.ts` currently does the following:
 6. Executes the node with timeout handling and optional backend session reuse.
 7. Validates output contracts before runtime-owned publication.
 8. Persists node execution artifacts and indexes runtime data in SQLite on a best-effort basis.
-9. Publishes downstream communications, advances step-addressed execution targets, still honors compatibility-authored `workflowCalls` when present, and rebuilds the queue.
+9. Publishes downstream communications, advances step-addressed execution targets, runs cross-workflow dispatches derived from step transitions when due, and rebuilds the queue.
 10. Marks the workflow completed when the queue drains, or paused/failed/cancelled as needed.
 
 ## Runtime Storage
@@ -460,7 +452,7 @@ Recommended starting point:
 
 Workflow-call reference:
 
-- `workflow-call-simple` shows a step-addressed managed parent that invokes a worker-only sibling workflow through a cross-workflow step transition (`toWorkflowId` + `resumeStepId`), executed with the same workflow-call primitive as explicit `workflowCalls` (deterministic id `__cw:<callerStepId>`) without merging calls into the normalized bundle
+- `workflow-call-simple` shows a step-addressed managed parent that invokes a worker-only sibling workflow through a cross-workflow step transition (`toWorkflowId` + `resumeStepId`); the engine uses the same cross-workflow dispatch path (deterministic id `__cw:<callerStepId>`) without merging authored call records into the normalized bundle
 - `subworkflow-chained-simple` is kept as a historical-name grouped-lane reference; it now uses explicit step-addressed transitions and does not author structural `subWorkflows`
 
 Examples that exercise the full node surface:

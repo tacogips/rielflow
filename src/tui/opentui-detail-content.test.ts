@@ -54,7 +54,7 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
         nodes: [
           {
             id: "manager",
-            kind: "root-manager",
+            role: "manager",
             nodeFile: "node-manager.json",
             completion: { type: "none" },
           },
@@ -67,7 +67,7 @@ function makeLoadedWorkflow(workerPayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as LegacyEdgeWorkflow,
+      } as unknown as LegacyEdgeWorkflow,
       nodePayloads: {
         manager: {
           id: "manager",
@@ -400,7 +400,7 @@ describe("buildHistoryDetailPaneState", () => {
           createdAt: "2026-03-26T00:00:20.000Z",
           managerMessageId: "mgrmsg-1",
           managerNodeExecId: "nodeexec-1",
-          managerNodeId: "worker",
+          managerRuntimeId: "worker",
           managerSessionId: "mgrsess-nodeexec-1",
           parsedIntent: [{ kind: "planner-note" }],
           workflowExecutionId: "sess-1",

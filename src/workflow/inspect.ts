@@ -3,43 +3,22 @@ import {
   collectWorkflowAddonSourceSummaries,
   type WorkflowAddonSourceSummary,
 } from "./addon-source-summary";
-import { effectiveWorkflowCalls } from "./cross-workflow-from-steps";
+import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import {
   inspectWorkflowRuntimeReadiness,
   type WorkflowRuntimeReadiness,
 } from "./runtime-readiness";
 import { collectWorkflowRevisionNodeFiles } from "./revision";
 import {
-  isStepAddressedWorkflow,
-  getStructuralEdges,
-  getStructuralLoops,
   type SupervisionSummary,
   type LoadOptions,
 } from "./types";
 import type { WorkflowSessionState } from "./session";
-
-export interface WorkflowStructuralProjectionCounts {
-  readonly nodes: number;
-  readonly edges: number;
-  readonly loops: number;
-}
-
-/**
- * For legacy node-ordered bundles, `nodes`, `edges`, and `loops` are the
- * primary structural counts. For step-addressed bundles (authored `steps[]`),
- * the primary contract uses `steps` and `nodeRegistry` instead; the runtime
- * graph sizes are reported only under `structuralProjection`.
- */
 export interface WorkflowInspectionCounts {
   readonly steps: number;
   readonly nodeRegistry: number;
-  readonly workflowCalls: number;
-  /** Legacy (non-step-addressed) bundles only. Omitted for step-addressed. */
-  readonly nodes?: number;
-  readonly edges?: number;
-  readonly loops?: number;
-  /** Step-addressed bundles only: internal runtime graph projection sizes. */
-  readonly structuralProjection?: WorkflowStructuralProjectionCounts;
+  /** Count of step-derived cross-workflow dispatches (not authored `workflowCalls`). */
+  readonly crossWorkflowDispatches: number;
 }
 
 export interface WorkflowInspectionSummary {
@@ -51,7 +30,7 @@ export interface WorkflowInspectionSummary {
   readonly entryStepId?: string;
   readonly stepIds: readonly string[];
   readonly nodeRegistryIds: readonly string[];
-  readonly workflowCallIds: readonly string[];
+  readonly crossWorkflowDispatchIds: readonly string[];
   readonly defaults: {
     readonly maxLoopIterations: number;
     readonly nodeTimeoutMs: number;
@@ -69,25 +48,12 @@ export async function buildInspectionSummary(
   options: LoadOptions = {},
 ): Promise<WorkflowInspectionSummary> {
   const workflow = loaded.bundle.workflow;
-  const isStepAddressed = isStepAddressedWorkflow(workflow);
-  const stepIds = workflow.steps?.map((step) => step.id) ?? [];
-  const nodeRegistryIds =
-    workflow.nodeRegistry?.map((node) => node.id) ??
-    workflow.nodes.map((node) => node.id);
+  const stepIds = workflow.steps.map((step) => step.id);
+  const nodeRegistryIds = workflow.nodeRegistry.map((node) => node.id);
   const hasManagerNode = workflow.hasManagerNode !== false;
-  const nodeRegistryCount =
-    workflow.nodeRegistry === undefined
-      ? workflow.nodes.length
-      : workflow.nodeRegistry.length;
-  const stepCount = workflow.steps?.length ?? workflow.nodes.length;
-  const edgeCount = getStructuralEdges(workflow).length;
-  const loopCount = getStructuralLoops(workflow).length;
-  const structuralGraphCounts: WorkflowStructuralProjectionCounts = {
-    nodes: workflow.nodes.length,
-    edges: edgeCount,
-    loops: loopCount,
-  };
-  const effectiveCalls = effectiveWorkflowCalls(workflow);
+  const nodeRegistryCount = workflow.nodeRegistry.length;
+  const stepCount = workflow.steps.length;
+  const crossWorkflowDispatches = effectiveCrossWorkflowDispatches(workflow);
   return {
     workflowName: loaded.workflowName,
     workflowId: workflow.workflowId,
@@ -101,26 +67,16 @@ export async function buildInspectionSummary(
       : { entryStepId: workflow.entryStepId }),
     stepIds,
     nodeRegistryIds,
-    workflowCallIds: effectiveCalls.map((call) => call.id),
+    crossWorkflowDispatchIds: crossWorkflowDispatches.map((d) => d.id),
     defaults: {
       maxLoopIterations: workflow.defaults.maxLoopIterations,
       nodeTimeoutMs: workflow.defaults.nodeTimeoutMs,
     },
-    counts: isStepAddressed
-      ? {
-          steps: stepCount,
-          nodeRegistry: nodeRegistryCount,
-          workflowCalls: effectiveCalls.length,
-          structuralProjection: structuralGraphCounts,
-        }
-      : {
-          steps: stepCount,
-          nodeRegistry: nodeRegistryCount,
-          nodes: workflow.nodes.length,
-          edges: edgeCount,
-          loops: loopCount,
-          workflowCalls: effectiveCalls.length,
-        },
+    counts: {
+      steps: stepCount,
+      nodeRegistry: nodeRegistryCount,
+      crossWorkflowDispatches: crossWorkflowDispatches.length,
+    },
     nodeFiles: collectWorkflowRevisionNodeFiles(workflow),
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,

@@ -68,8 +68,8 @@ export interface NodeRestartEvent {
 export interface ConversationTurnRecord {
   readonly conversationId: string;
   readonly turnIndex: number;
-  readonly fromManagerNodeId: string;
-  readonly toManagerNodeId: string;
+  readonly fromManagerRuntimeId: string;
+  readonly toManagerRuntimeId: string;
   readonly communicationId: string;
   readonly outputRef: OutputRef;
   readonly sentAt: string;
@@ -98,7 +98,7 @@ export interface ManagerMessagePayloadRef {
   readonly artifactDir: string;
   readonly managerSessionId: string;
   readonly managerMessageId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
 }
 
@@ -172,7 +172,7 @@ export interface NodeBackendSessionRecord extends StepIdentityFields {
 
 export interface PendingOptionalNodeDecision {
   readonly nodeId: string;
-  readonly owningManagerNodeId: string;
+  readonly owningManagerRuntimeId: string;
   readonly requestedAt: string;
   readonly status: "pending" | "execute" | "skip";
   readonly reason?: string;

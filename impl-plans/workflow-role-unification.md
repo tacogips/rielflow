@@ -62,7 +62,7 @@ export interface WorkflowCallRef {
 
 **Checklist**:
 
-- [x] Make `managerNodeId` optional and add `entryNodeId`
+- [x] Make `managerRuntimeId` optional and add `entryNodeId`
 - [x] Enforce that manager-role nodes stay on the agent execution path
 - [x] Add validation/load coverage for zero-manager worker-only workflows
 - [x] Accept authored `workflowCalls` in the authored schema
@@ -85,7 +85,7 @@ interface WorkflowCallRequest {
 interface WorkflowEntryResolution {
   readonly workflowId: string;
   readonly entryNodeId: string;
-  readonly managerNodeId?: string;
+  readonly managerRuntimeId?: string;
 }
 ```
 

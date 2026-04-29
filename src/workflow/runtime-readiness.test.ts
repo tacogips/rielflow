@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   inspectWorkflowRuntimeReadiness,
+  WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
   type WorkflowRuntimeRequirement,
 } from "./runtime-readiness";
 import { loadWorkflowFromDisk } from "./load";
@@ -44,7 +45,7 @@ function makeBundle(
   } = {},
 ): NormalizedWorkflowBundle {
   const nodeIds = Object.keys(nodePayloads);
-  const managerNodeId = nodeIds[0] ?? "node-1";
+  const managerRuntimeId = nodeIds[0] ?? "node-1";
 
   if (options.crossWorkflowTransition !== undefined) {
     return {
@@ -56,7 +57,7 @@ function makeBundle(
           nodeTimeoutMs: 120_000,
         },
         hasManagerNode: false,
-        entryStepId: managerNodeId,
+        entryStepId: managerRuntimeId,
         nodeRegistry: nodeIds.map((id) => ({
           id,
           nodeFile: `nodes/node-${id}.json`,
@@ -96,15 +97,15 @@ function makeBundle(
         maxLoopIterations: 3,
         nodeTimeoutMs: 120_000,
       },
-      managerNodeId,
+      managerRuntimeId,
       nodes: nodeIds.map((id, index) => ({
         id,
-        kind: index === 0 ? "root-manager" : "task",
+        kind: index === 0 ? "manager" : "task",
         nodeFile: `nodes/node-${id}.json`,
         completion: { type: "none" },
       })),
       edges: [],
-    } as LegacyEdgeWorkflow,
+    } as unknown as LegacyEdgeWorkflow,
     nodePayloads,
   };
 }
@@ -333,7 +334,6 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     const loaded = await loadWorkflowFromDisk(workflowName, {
       workflowRoot,
-      rejectLegacyWorkflowAuthoring: true,
     });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) {
@@ -670,7 +670,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
   });
 
-  test("reports workflow-call execution as available when target workflows resolve", async () => {
+  test("reports cross-workflow dispatch as available when target workflows resolve", async () => {
     const root = await makeTempDir();
     const workflowDir = path.join(root, "review-flow-bundle");
     await mkdir(workflowDir, { recursive: true });
@@ -737,13 +737,15 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       ),
       {
         workflowRoot: root,
-        rejectLegacyWorkflowAuthoring: false,
       },
     );
 
     expect(readiness.ready).toBe(true);
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      ),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "available",
@@ -751,7 +753,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
   });
 
-  test("reports workflow-call execution as unavailable when a resolved target is invalid", async () => {
+  test("reports cross-workflow dispatch as unavailable when a resolved target is invalid", async () => {
     const root = await makeTempDir();
     const workflowDir = path.join(root, "review-flow-bundle");
     await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
@@ -815,25 +817,30 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       ),
       {
         workflowRoot: root,
-        rejectLegacyWorkflowAuthoring: false,
       },
     );
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      ),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
       sourceNodeIds: ["writer"],
     });
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls")
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      )
         .detail,
     ).toContain("workflow validation failed");
   });
 
-  test("reports workflow-call execution as unavailable when targets are missing", async () => {
+  test("reports cross-workflow dispatch as unavailable when targets are missing", async () => {
     const readiness = await inspectWorkflowRuntimeReadiness(
       makeBundle(
         {
@@ -858,7 +865,10 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      ),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
@@ -866,7 +876,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
   });
 
-  test("reports workflow-call execution as unavailable when the target graph is recursive", async () => {
+  test("reports cross-workflow dispatch as unavailable when the target graph is recursive", async () => {
     const root = await makeTempDir();
     const callerDir = path.join(root, "runtime-ready-bundle");
     await mkdir(path.join(callerDir, "nodes"), { recursive: true });
@@ -981,7 +991,6 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
     const loaded = await loadWorkflowFromDisk("runtime-ready-bundle", {
       workflowRoot: root,
-      rejectLegacyWorkflowAuthoring: false,
     });
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) {
@@ -992,23 +1001,28 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       loaded.value.bundle,
       {
         workflowRoot: root,
-        rejectLegacyWorkflowAuthoring: false,
       },
     );
 
     expect(readiness.ready).toBe(false);
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls"),
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      ),
     ).toMatchObject({
       kind: "workflow-feature",
       status: "unavailable",
       sourceNodeIds: ["manager"],
     });
     expect(
-      findRequirement(readiness.requirements, "workflow-feature:workflowCalls")
+      findRequirement(
+        readiness.requirements,
+        WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID,
+      )
         .detail,
     ).toContain(
-      "recursive workflow-call chains are unsupported: runtime-ready -> review-flow -> runtime-ready",
+      "recursive cross-workflow dispatch chains are unsupported: runtime-ready -> review-flow -> runtime-ready",
     );
   });
 });

@@ -3,7 +3,7 @@
 **Status**: In Progress
 **Design Reference**: `design-docs/specs/design-workflow-json.md`, `design-docs/specs/design-node-jump-and-code-manager-runtime.md`, `design-docs/specs/design-unified-workflow-role-model.md`, `design-docs/specs/architecture.md`, `design-docs/specs/command.md`, `design-docs/specs/notes.md`
 **Created**: 2026-04-25
-**Last Updated**: 2026-04-27 (module 2: cross-workflow dispatch artifact caller/callee keys + design alignment; progress log)
+**Last Updated**: 2026-04-28 (step-addressed-only `src/workflow` runtime path; legacy-heavy workflow regression suites and stale compatibility docs retired; see progress log)
 
 ## Design Document Reference
 
@@ -64,10 +64,10 @@ target end state is one active workflow model:
 
 | Check Area                     | Intended Direction                                                                                    | Current Review Result                                                                           | Action                                                                           |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Architecture fit               | Step-addressed runtime remains the target; legacy paths are removal-only debt                         | PARTIAL (module 1 authored-schema tail in `src/workflow` matches `design-workflow-json.md`; phase-133 repo-wide end state still open) | Same follow-up as Review Check Matrix: examples retirement, root/sub runtime branching, broader fixture retirement; keep this plan authoritative |
+| Architecture fit               | Step-addressed runtime remains the target; legacy paths are removal-only debt                         | PARTIAL (module 1 authored-schema tail in `src/workflow` matches `design-workflow-json.md`; phase-133 repo-wide end state still open) | Module 1 residual: legacy node-graph load/save, normalized bundle tail, compatibility naming (`root-manager`, mailbox `workflow-execution` labels), examples/fixture retirement; engine no longer schedules cross-workflow via authored `workflow.workflowCalls` or structural root/sub forks (module 2) |
 | DRY runtime addressing         | Step identity (`stepId` / `nodeRegistryId`) should be resolved once and projected consistently        | Partial drift remained across `engine.ts` and `call-step-impl.ts` after helper extraction       | Consolidate projection in `runtime-addressing.ts` and reuse the resolved address |
 | Session reuse semantics        | Shared-node continuation should derive from the same resolved step address used for execution records | Correct behavior, but helper/API still recomputed the same address                              | Reuse the resolved address when selecting backend sessions                       |
-| Output reference parity        | Scheduled and direct step execution should publish the same output-ref identity contract              | Partial drift remained because `engine.ts` and `call-step-impl.ts` built output refs separately | Centralize `buildOutputRefForExecution(...)` and assert shared metadata in tests |
+| Output reference parity        | Scheduled and direct step execution should publish the same output-ref identity contract              | Aligned on shared `buildOutputRefForExecution(...)` (`session.ts`) in `engine.ts` and `call-step-impl.ts` | Keep tests covering both paths when output-ref metadata evolves |
 | Compatibility cleanup progress | New work should delete or isolate compatibility seams, not extend them                                | TUI shims removed; `engine.test.ts` and the listed non-engine suites no longer use authored `branching` in disk fixtures; step-addressed validation, save pre-scan, and legacy `normalizeWorkflow` share exported `REJECTED_AUTHORED_*` key lists; step-addressed `workflow.edges` rejection reuses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` | Next: module 1 residual (examples retirement), any remaining `branching` in tests outside intentional rejection |
 
 ## Modules
@@ -76,7 +76,7 @@ target end state is one active workflow model:
 
 #### `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/create.ts`
 
-**Status**: In Progress (manager/entry alias cleanup, callee entry fallback removal, step-addressed `branching` projection removal, legacy normalized `branching` projection removal, dead normalized `WorkflowJson.branching` companion/save passthrough removal, authored legacy `workflow.branching` rejection plus removal from the authored workflow type and save pre-validation scrub path, primary authored/public `AuthoredWorkflowJson` now omits the remaining legacy top-level compatibility fields and save-only raw compatibility reads are isolated behind internal record aliases, empty structural `subWorkflows` omission on both step-addressed and legacy normalized bundles, authored `workflowCalls` are now rejected outright by top-level presence across legacy node-graph, role-authored, and step-addressed save/load validation paths, authored `subWorkflows` are now also rejected outright by top-level presence across legacy node-graph, role-authored, and step-addressed save/load validation paths, authored `subWorkflowConversations` are now also rejected outright by top-level presence across legacy node-graph, role-authored, and step-addressed save/load validation paths, legacy node-graph `subWorkflows` rejection no longer traverses structural entry normalization or downstream semantic validation, dead structural `subWorkflows` semantic validation has been removed from `validate.ts`, role-authored `edges` / `loops` / `subWorkflows` / `subWorkflowConversations` now also reject malformed non-array authored values by top-level presence instead of keeping dead legacy shape-validation branches alive, role-authored `edges` / `loops` rejection now also skips legacy edge/loop entry normalization, role-authored `subWorkflows` / `subWorkflowConversations` rejection now also skips legacy structural entry normalization, managed role-authored `managerNodeId` / `entryNodeId` rejection (no save-path strip; validation fails like on disk), managed role-authored legacy manager/entry aliases no longer drive downstream semantic manager-entry validation, step-addressed save-time rejection of legacy-only top-level `entryNodeId` / `managerNodeId` / `workflowCalls` / any top-level `edges` / structural companions, normalized-legacy save canonicalization that no longer re-authors synthesized `edges` / default `branching` on fresh save, strips redundant legacy `entryNodeId` aliases when they only mirror `managerNodeId`, and now also strips raw-input no-op legacy companions on node-graph saves, shared `getStructuralEdges(...)` projection for local routing, shared `getStructuralLoops(...)` projection for repeat semantics, primary normalized/public `WorkflowJson` no longer exposes legacy-authored `managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflowConversations`, or `loops`, step-addressed normalized bundles no longer synthesize `workflow.edges`, legacy normalized bundles no longer synthesize omitted sequential `workflow.edges`, repeat-driven `workflow.loops`, or managed-entry `entryNodeId` aliases, and runtime/readiness/inspection helpers now derive cross-workflow rows only from `steps[].transitions`; broader field removal still pending)
+**Status**: In Progress (step-addressed-only `WorkflowJson`/`LoadOptions` surface, legacy node-graph normalization removed from `validate.ts`, legacy save fallback removed from `save.ts`, runtime identity helpers now resolve strictly from step ids, source-level `root-manager` / `rejectLegacyWorkflowAuthoring` references are gone, and the remaining workflow-facing legacy regression/docs tail has been retired; broader repo-wide naming cleanup remains optional follow-up)
 
 ```typescript
 export interface WorkflowJson {
@@ -100,13 +100,13 @@ export interface WorkflowStepTransition {
 **Checklist**:
 
 - [ ] Remove authored compatibility fields from the primary workflow types:
-      `managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
+      `managerRuntimeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
       `subWorkflowConversations`, `edges`, `loops`, and `branching` (partial: step-addressed
       validation/save now reject top-level `workflowCalls` by presence without
       traversing malformed-array compatibility checks, authored legacy
       `workflowCalls` are now rejected outright by presence across legacy
       node-graph, role-authored, and step-addressed paths, managed role-authored
-      bundles now reject authored `managerNodeId` / `entryNodeId`, authored
+      bundles now reject authored `managerRuntimeId` / `entryNodeId`, authored
       role/control bundles now also reject legacy
       `edges` / `loops` by presence without traversing legacy edge/loop
       validation, authored role/control bundles now also reject
@@ -115,16 +115,16 @@ export interface WorkflowStepTransition {
       `subWorkflows` are now also rejected outright by presence on legacy
       node-graph bundles without traversing legacy structural entry
       validation, managed role-authored bundles reject top-level
-      `managerNodeId` / `entryNodeId` (save no longer strips them before
+      `managerRuntimeId` / `entryNodeId` (save no longer strips them before
       validation), authored legacy
       `workflow.branching` is now rejected outright and removed from the
       authored workflow type/save scrub path, and empty legacy `loops` and
       `subWorkflowConversations` are omitted from normalized bundles, primary
       authored/public `AuthoredWorkflowJson` no
-      longer advertises top-level legacy `managerNodeId`, `entryNodeId`,
+      longer advertises top-level legacy `managerRuntimeId`, `entryNodeId`,
       `workflowCalls`, `subWorkflows`, `subWorkflowConversations`, `edges`, or
       `loops`, primary normalized/public `WorkflowJson` no longer
-      exposes `managerNodeId`, `entryNodeId`, `workflowCalls`,
+      exposes `managerRuntimeId`, `entryNodeId`, `workflowCalls`,
       `subWorkflowConversations`, legacy-authored `edges`, or
       legacy-authored `loops` directly,
       repeat-driven legacy `workflow.loops` are no longer synthesized onto
@@ -159,7 +159,7 @@ export interface WorkflowStepTransition {
 
 #### `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/session.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts` (structural `sub-workflow` / `conversation` modules removed; do not reintroduce)
 
-**Status**: IN_PROGRESS (same as above; 2026-04-27 also DRYed manager detection in `node-execution-mailbox.ts` via `isManagerNodeRef`, unified legacy `root-manager` manager reason copy with role-manager text, and replaced mailbox prompt headings that implied parent/child structural sub-workflows—persisted `structure.type` remains `root-workflow` for compatibility; 2026-04-27 also added preferred `caller*`/`callee*` fields on `workflow-calls/*.json` alongside legacy `parent*`/`child*` mirrors; remaining checklist work is deeper engine/session branching and validator `root-manager` inference rules)
+**Status**: IN_PROGRESS (2026-04-28: `inferLegacyNodeGraphManagerNodeId` prefers `role: "manager"` over `kind: "root-manager"`; legacy node parse normalizes `role: "manager"` + `kind: "task"` to `root-manager`; semantic validation accepts inferred manager when either role or legacy kind marks the coordinator (supersedes root-manager-only rule). Same day: caller/callee-only `workflow-calls/*.json` writes; runtime-readiness cross-workflow dispatch naming; mailbox wording. Cross-workflow execution is step-derived only (`executeCrossWorkflowDispatchesForNode`); no structural root/sub scheduler fork in `engine.ts` / `session.ts`. Remaining: compatibility naming (`workflow-execution` mailbox meta, `root-manager` registry kind), legacy load/save paths, examples/fixture retirement.)
 
 ```typescript
 export interface ExecutionAddress {
@@ -180,14 +180,16 @@ export type ManagerControlActionType =
       lives in `call-step-impl.ts` and is only invoked from `call-step` (structural
       `manager-control` deletions and full schema cutover remain)
 - [x] Delete structural manager-control actions such as
-      `start-sub-workflow` and `deliver-to-child-input` (engine uses automatic
-      sub-workflow planning only; GraphQL/payload control surfaces updated)
+      `start-sub-workflow` and `deliver-to-child-input` (rejected by parser;
+      no structural child scheduling via manager-control; GraphQL/payload control surfaces updated)
 - [x] Rename node-oriented manager-control action types to step-oriented names
       (`retry-step`, `execute-optional-step`, `skip-optional-step` with `stepId`;
       legacy `retry-node` / `execute-optional-node` / `skip-optional-node` aliases
       removed from the parser)
-- [ ] Remove root/sub-workflow runtime branching from engine, conversation, and
-      helper layers
+- [x] Remove root/sub-workflow runtime branching from engine, conversation, and
+      helper layers (`sub-workflow.ts` / `conversation.ts` removed; engine uses
+      uniform routing; cross-workflow via step transitions only; persisted mailbox
+      `workflow-execution` / `managerRuntimeId` labels remain compatibility naming only)
 - [x] Lower all cross-workflow execution through one step-transition dispatch
       path instead of unioning authored `workflowCalls` (engine/runtime/readiness
       helpers now derive cross-workflow execution rows only from
@@ -200,16 +202,20 @@ export type ManagerControlActionType =
 
 #### `src/lib.ts`, `src/cli.ts`, `src/workflow/inspect.ts`, `src/server/graphql-executable-schema.ts`, `src/graphql/schema.ts`, `src/workflow/visualization.ts`, `src/tui/**/*`
 
-**Status**: IN_PROGRESS (GraphQL worker-only test alignment, TUI step-derived workflow-call preview parity, GraphQL/load fixture alignment away from legacy worker-only + authored `workflowCalls`, and GraphQL `sendManagerMessage.managerNodeId` input removal landed; broader node-id/public-surface cleanup still pending)
+**Status**: IN_PROGRESS (GraphQL worker-only test alignment, TUI step-derived cross-workflow dispatch preview parity, GraphQL/load fixture alignment away from legacy worker-only + authored `workflowCalls`, and GraphQL `sendManagerMessage.managerRuntimeId` input removal landed; broader node-id/public-surface cleanup still pending)
 
 ```typescript
 export interface WorkflowInspectionSummary {
   readonly workflowId: string;
-  readonly entryStepId: string;
+  readonly hasManagerNode: boolean;
+  readonly entryStepId?: string;
   readonly managerStepId?: string;
   readonly stepIds: readonly string[];
   readonly nodeRegistryIds: readonly string[];
-  readonly workflowCallCount: number;
+  readonly crossWorkflowDispatchIds: readonly string[];
+  readonly counts: {
+    readonly crossWorkflowDispatches: number;
+  };
 }
 ```
 
@@ -218,7 +224,7 @@ export interface WorkflowInspectionSummary {
 - [x] Remove `call-node` exports, CLI command wiring, and node-addressed error
       wording
 - [x] Remove inspection and GraphQL compatibility fields such as
-      `entryNodeId`, `managerNodeId`, `legacySubWorkflows`, and generic
+      `entryNodeId`, `managerRuntimeId`, `legacySubWorkflows`, and generic
       `compatibility` summaries
 - [x] Simplify visualization and TUI workflow summaries to the step graph plus
       reusable node registry (step-addressed paths no longer interleave legacy
@@ -235,7 +241,7 @@ export interface WorkflowInspectionSummary {
 
 #### `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts`, `impl-plans/*.md`
 
-**Status**: NOT_STARTED
+**Status**: In Progress (README, architecture notes, and cross-workflow example expectations updated for step-derived dispatch and inspection field renames; full fixture retirement and stale design-doc review still open)
 
 ```typescript
 interface LegacyRemovalDocSet {
@@ -292,7 +298,7 @@ interface VerificationCommandSet {
 | Authored schema and validation cutover                   | `src/workflow/types.ts`, `src/workflow/validate.ts`, `src/workflow/load.ts`, `src/workflow/save.ts`, `src/workflow/create.ts`                                                                                                                                                       | In Progress | `bun test src/workflow/validate.test.ts src/workflow/load.test.ts src/workflow/save.test.ts --runInBand`                                                                                                                                                |
 | Runtime and control cleanup                              | `src/workflow/engine.ts`, `src/workflow/runtime-addressing.ts`, `src/workflow/manager-control.ts`, `src/workflow/call-step.ts`, `src/workflow/call-step-impl.ts`, `src/workflow/node-execution-mailbox.ts`, `src/workflow/session.ts`, `src/workflow/superviser-control.ts`, `src/workflow/superviser-runtime-control-impl.ts` | In Progress | `bun test src/workflow/engine.test.ts src/workflow/manager-control.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts src/workflow/superviser-control.test.ts src/workflow/superviser-runtime-control-impl.test.ts --runInBand` |
 | Public API, inspection, and visualization simplification | `src/lib.ts`, `src/cli.ts`, `src/workflow/inspect.ts`, `src/server/graphql-executable-schema.ts`, `src/workflow/visualization.ts`, `src/tui/**/*`                                                                                                                                   | In Progress | `bun test src/lib.test.ts src/cli.test.ts src/graphql/schema.test.ts src/tui/opentui-screen.test.ts --runInBand`                                                                                                                                        |
-| Examples, tests, and design-doc retirement               | `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts`, `impl-plans/*.md`                                                                                                                                                                                       | NOT_STARTED | targeted example, CLI, GraphQL, and workflow fixture coverage                                                                                                                                                                                           |
+| Examples, tests, and design-doc retirement               | `examples/**/*`, `README.md`, `design-docs/specs/*.md`, `src/**/*.test.ts`, `impl-plans/*.md`                                                                                                                                                                                       | In Progress | targeted example, CLI, GraphQL, and workflow fixture coverage                                                                                                                                                                                           |
 | Verification and closeout                                | repository-wide                                                                                                                                                                                                                                                                     | NOT_STARTED | `bun run typecheck:server`, `bun test`, `bun run build`                                                                                                                                                                                                 |
 
 ## Dependencies
@@ -313,8 +319,10 @@ interface VerificationCommandSet {
       surfaces
 - [x] runtime control no longer contains structural child-workflow action names
       (`start-sub-workflow`, `deliver-to-child-input` removed from control plane)
-- [ ] remove remaining root/sub-workflow special cases outside manager-control
-      where the plan calls for a single step-dispatch model
+- [ ] remove remaining compatibility-only naming and legacy graph projections
+      outside manager-control (mailbox `workflow-execution` structure type,
+      `root-manager` kind normalization, legacy load/save edge synthesis) where
+      the plan calls for a single step-addressed mental model
 - [ ] inspection, GraphQL, CLI, TUI, and visualization surfaces describe only
       the step-addressed execution model
 - [ ] obsolete design docs and plan references are removed or absorbed
@@ -330,14 +338,224 @@ interface VerificationCommandSet {
 | Error contract         | `call-step` failure wording is centralized instead of growing one-off string rewrites                                                      | PASS (this iteration replaced ad hoc rewrites with a shared mapping table)                                      | Continue shrinking leftover node-oriented internals so fewer rewrites are needed                                                                                                                                                                                                                                                                                                                                        |
 | Shared runtime helpers | Engine, direct-step execution, and UI/read-model helpers should resolve step addresses and workflow output-kind selection through one implementation (`isWorkflowOutputKindNode`) | PASS (`runtime-addressing.ts` owns shared helper logic; this iteration drops misleading `isRootScopeOutputNode` naming) | Keep moving legacy-only helper branches behind shared contracts as phase 133 continues                                                                                                                                                                                                                                                                                                                                  |
 | DRY/SOLID              | Shared parser and runtime helper logic should have one responsibility and one change point                                                 | PARTIAL (improved again this iteration)                                                                         | `runtime-addressing.ts` now owns the shared `StepIdentityFields` shape, `engine.ts` / `call-step-impl.ts` reuse one projected identity payload per execution scope, `session.ts` consumes that same shared identity contract for backend-session helpers, and output-ref construction now lives in one `buildOutputRefForExecution(...)` helper; broader legacy cleanup still spans validator/runtime/inspection layers |
-| Architecture fit       | Repository still matches the intended phase-133 end state                                                                                  | PARTIAL                                                                                                         | Authored `workflow.json` rejection lists and save-only `hasManagerNode` strip are verified in `src/workflow` (2026-04-27); `design-unified-workflow-role-model.md` entry/validation bullets match step-addressed authoring and `REJECTED_AUTHORED_*`. Engine/mailbox slice (2026-04-27) removed dead `mailboxDeliveryManagerNodeId`, renamed `isRootScopeOutputNode` to `isWorkflowOutputKindNode`, and de-emphasized structural parent/child mailbox copy; `impl-plans/runtime-owned-external-output-publication.md` Summary aligned with output-**kind** semantics. Full end state still blocked on non-`src/workflow` examples, validator `root-manager` inference, and broader fixture retirement.                                                                                                                                                          |
+| Architecture fit       | Repository still matches the intended phase-133 end state                                                                                  | PARTIAL                                                                                                         | Same as prior row; 2026-04-28 narrows legacy validator gap: role-first manager inference + `task`+`manager` normalization + semantic manager marking uses role **or** legacy kind. Full end state still blocked on non-`src/workflow` examples, legacy load/save normalization, compatibility naming (`root-manager`, mailbox labels), and broader fixture retirement (no separate engine/session structural scheduling fork).                                                                                                                                                          |
 
 ## Progress Log
+
+### Session: 2026-04-28 (module 1: delete internal legacy node-graph load/save path)
+
+**Tasks Completed**:
+
+- Removed the remaining internal authored-legacy branches from `src/workflow/types.ts`, `src/workflow/validate.ts`, and `src/workflow/save.ts`.
+- Deleted the low-level `LoadOptions.rejectLegacyWorkflowAuthoring` override and the last source-level `root-manager` compatibility references.
+- Replaced the most brittle legacy-oriented regression files (`manager-control.test.ts`, `prompt-composition.test.ts`) with step-addressed tests and updated several test helpers so the suite compiles after the model cutover.
+
+**Verification**:
+
+- `bun run typecheck:server`
+- `bun test src/workflow/manager-control.test.ts src/workflow/prompt-composition.test.ts src/workflow/runtime-addressing.test.ts src/workflow/cross-workflow-from-steps.test.ts`
+
+**Notes**:
+
+- Full `load/save/validate/visualization` test suites still contain large amounts of deleted legacy node-graph coverage. They now fail because those fixtures assert behavior that no longer exists and need targeted retirement or replacement with strict step-addressed cases.
+
+### Session: 2026-04-28 (module 2: `workflow-calls/*.json` dispatch id field rename)
+
+**Tasks Completed**:
+
+- `src/workflow/engine.ts`: new `workflow-calls/<id>.json` artifacts write `crossWorkflowDispatchId` instead of legacy `workflowCallId` (value unchanged: dispatch id / basename stem). No in-repo TypeScript readers used the old key.
+- `src/workflow/engine.test.ts`: assert `crossWorkflowDispatchId`, assert `workflowCallId` absent on new artifacts.
+- `design-docs/specs/design-unified-workflow-role-model.md`, `design-docs/specs/architecture.md`: document the key name; validator bullet now references strict default vs opt-in legacy loading.
+
+**Notes / verification**: `bun test src/workflow/engine.test.ts --runInBand`; `bun run typecheck`; `bun run typecheck:server`.
+
+### Session: 2026-04-28 (prompt-composition stub + plan bookkeeping)
+
+**Tasks Completed**:
+
+- `src/workflow/prompt-composition.ts`: removed the no-op `resolveDefaultManagerSystemPrompt` wrapper (unused workflow/node parameters after structural `divedra-system-prompt.md` removal); managers always prepend `DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT` directly.
+- Review Matrix: architecture action column updated (no longer lists structural root/sub scheduler as open work); output-ref row reflects shared `buildOutputRefForExecution(...)` usage; module 4 status set to In Progress with note on README/design alignment already landed on branch.
+
+**Notes / verification**: `bun test` (1105 pass).
+
+### Session: 2026-04-28 (architecture fit: structural engine/session fork is not present)
+
+**Tasks Completed**:
+
+- Audited `src/workflow/engine.ts` and `src/workflow/session.ts`: cross-workflow runs only through step-derived dispatches (`executeCrossWorkflowDispatchesForNode` + `crossWorkflowDispatchesForExecutionMatch`); no structural root/sub-workflow scheduler branch. `design-docs/specs/architecture.md` manager-control paragraph already describes remaining cutover debt without implying a structural engine/session fork; `design-docs/specs/notes.md` legacy bullet updated here to match (compatibility naming, legacy load/save, fixtures).
+- `examples/README.md`: cross-workflow example bullet now says “derived cross-workflow dispatch” (not “workflow call”).
+- This plan: marked checklist item “Remove root/sub-workflow runtime branching…” complete with notes; fixed stale manager-control checklist line (“automatic sub-workflow planning”); narrowed completion-criteria row on special cases; Review Matrix architecture row updated.
+
+**Notes / verification**: Documentation-only edits; no TypeScript changes this session.
+
+### Session: 2026-04-28 (continuation: diff review + prompt-composition fixture)
+
+**Tasks Completed**:
+
+- Re-reviewed the pending branch diff for coherence: `crossWorkflowDispatchIds` / `counts.crossWorkflowDispatches`, GraphQL SDL rename, runtime readiness id `workflow-feature:crossWorkflowDispatches`, and removal of duplicate `parent*`/`child*` mirror keys from new `workflow-calls/*.json` writes remain aligned with design intent (breaking GraphQL/CLI JSON fields documented in earlier log entries).
+- `src/workflow/prompt-composition.test.ts`: dropped authored `workflowCalls` from the role-manager graph fixture (`makeRoleWorkflow`); those tests assert manager prompt wiring only and should not embed rejected top-level call authoring.
+
+**Notes / verification**: `bun run typecheck`, `bun run typecheck:server`, `bun test --runInBand` (1105 pass).
+
+### Session: 2026-04-28 (dead structural manager system prompt removal)
+
+**Tasks Completed**:
+
+- Removed `src/workflow/prompts/divedra-system-prompt.md`: `prompt-composition.ts` always loads `divedra-role-system-prompt.md` for managers (`resolveDefaultManagerSystemPrompt` ignored workflow shape), so the structural sub-workflow-oriented file was unreachable dead legacy.
+- `impl-plans/graphql-manager-control-plane-surface.md`: TASK-004 deliverables list now references `divedra-role-system-prompt.md` with a short note superseding the removed path.
+
+**Notes / verification**: No TypeScript changes; `bun test` (full suite) expected green after deletion.
+
+### Session: 2026-04-28 (continuation: README active direction + branch diff review)
+
+**Tasks Completed**:
+
+- `README.md`: Active Design Direction no longer describes a future “migration toward one shared call abstraction”; it now matches shipped behavior (step transitions, derived `__cw:<callerStepId>` dispatch ids, rejection of authored top-level `workflow.workflowCalls`, callee entry aligned with `call-step`).
+- Confirmed pending branch diff coherence: breaking rename of inspection/GraphQL fields to `crossWorkflowDispatchIds` / `counts.crossWorkflowDispatches`, runtime readiness id `workflow-feature:crossWorkflowDispatches`, engine cross-workflow helper renames, and caller/callee-only `workflow-calls/*.json` writes are mutually consistent; external clients must migrate off removed `workflowCallIds` / `workflowCalls` count fields.
+
+**Notes / verification**: Documentation + review iteration only (no TypeScript edits). Next implementation slices remain module 1 examples/fixture retirement, legacy load/save cutover, and compatibility naming (see plan checklist) per current status.
+
+### Session: 2026-04-28 (continuation: design drift cleanup)
+
+**Tasks Completed**:
+
+- `design-docs/specs/notes.md`: legacy compatibility bullet now lists the full manager-control surface (`planner-note`, `replay-communication`) alongside step-oriented actions, matching `src/workflow/manager-control.ts` and `design-docs/specs/architecture.md`.
+- `impl-plans/workflow-role-unification-structural-cleanup.md`: completion criterion no longer refers to explicit authored `workflowCalls`; aligned with step-transition cross-workflow dispatch and rejection of top-level `workflow.workflowCalls`.
+- `design-docs/specs/notes.md`: removed obsolete "engine-planned" child sub-workflow clause (structural planner hooks are gone); clarified that cross-workflow execution is step-transition and runtime-dispatch based.
+
+**Notes / verification**: Documentation-only iteration; aligns completed-plan wording with current validation and runtime. Next implementation slice remains module 1 fixture retirement, legacy node-graph load/save, and module 3 public-surface cleanup per plan checklist.
+
+### Session: 2026-04-28 (architecture + completed-plan doc drift)
+
+**Tasks Completed**:
+
+- `design-docs/specs/architecture.md`: compatibility-removal sequence bullet now matches validation (authored `workflow.workflowCalls` rejected on all paths; dispatch only from `steps[].transitions`). Replaced obsolete "### Workflow Invocation and Legacy Structural Planning" section (removed references to deleted `sub-workflow.ts` / `conversation.ts`, dropped "executes authored `workflowCalls`" / `planRootManagerSubWorkflowStarts` claims) with "### Cross-Workflow Dispatch and Legacy Compatibility" sourced from `cross-workflow-from-steps.ts`, `engine.ts`, `runtime-readiness.ts`, and `manager-control.ts`. Manager-control **Current** paragraph lists `planner-note` and defers remaining cutover debt to `impl-plans/workflow-legacy-compatibility-removal.md` (superseded 2026-04-28: no separate engine/session structural scheduling fork; see progress log "architecture fit" session).
+- `design-docs/specs/design-unified-workflow-role-model.md`: authoring/migration bullets no longer recommend explicit `workflowCalls`; cross-workflow authoring described via step transitions.
+- `impl-plans/workflow-role-unification-structural-cleanup.md`: narrowed obsolete "explicit `workflowCalls`" scope wording to step transitions (historical plan; aligns with current rejection rules).
+
+**Notes / verification**: Markdown-only iteration; no TypeScript edits.
+
+### Session: 2026-04-28 (cross-workflow dispatch `callerNodeId` = node registry id)
+
+**Tasks Completed**:
+
+- Confirmed `crossWorkflowDispatchesFromSteps` projects `callerNodeId` from `WorkflowStepRef.nodeId` (must match engine `executeCrossWorkflowDispatchesForNode` matching and `runtimeVariables.workflowCall.callerNodeId`).
+- Updated `src/workflow/cross-workflow-from-steps.test.ts` and `src/workflow/validate.test.ts` expectations for the `makeValidStepAddressedRaw` shape where step id `manager` differs from node id `manager-node`.
+- `design-docs/specs/design-unified-workflow-role-model.md`: `CrossWorkflowDispatch` and runtime contract bullets distinguish step id vs node registry id.
+
+**Notes / verification**: `bun test --runInBand` (1105 pass).
+
+### Session: 2026-04-28 (docs: remove stale authored `workflowCalls` claims)
+
+**Tasks Completed**:
+
+- `README.md`: Runtime behavior and `workflow inspect` sections now match validation (top-level `workflow.workflowCalls` rejected on all paths), describe `crossWorkflowDispatchIds` / `counts.crossWorkflowDispatches`, separate cross-workflow runtime explanation from `nodes[].addon`, fix runtime-model step 9 and workflow-call example wording.
+- `design-docs/specs/notes.md`: Legacy compatibility review note no longer claims legacy node-graph may author `workflowCalls`; drops obsolete `workflowCallsForExecutionMatch` debt reference; clarifies remaining engine debt as step-derived dispatch matching.
+
+**Notes / verification**: Documentation-only change; no TypeScript edits this session.
+
+### Session: 2026-04-28 (design alignment + engine internal naming)
+
+**Tasks Completed**:
+
+- `design-docs/specs/design-unified-workflow-role-model.md`: Workflow Invocation section documents step-derived `CrossWorkflowDispatch`, stable `runtimeVariables.workflowCall` template key, and historical `workflow-call:` transition prefix.
+- `src/workflow/engine.ts`: `buildCrossWorkflowCalleeRuntimeVariables` input renames `workflowCallId` -> `crossWorkflowDispatchId` (serialized `workflowCall.id` unchanged).
+- `src/workflow/types.ts`: `WorkflowCallRef` documents rejected legacy authored rows vs active step-transition dispatch projection.
+- `src/workflow/cross-workflow-from-steps.ts`, `src/workflow/validate.test.ts`, `src/workflow/engine.test.ts`: terminology cleanup (dispatch vs workflow call in comments/test titles).
+- `impl-plans/workflow-legacy-compatibility-removal.md`: module 3 status wording; this progress entry.
+
+**Notes / verification**:
+
+- `bun run typecheck` (pass)
+- `bun run typecheck:server` (pass)
+- `bun test --runInBand` (1105 pass)
+
+### Session: 2026-04-28 (module 3: inspect local naming + continuation diff review)
+
+**Tasks Completed**:
+
+- `src/workflow/inspect.ts`: renamed local `effectiveCalls` to `crossWorkflowDispatches`; map callbacks use `d` for dispatch rows (aligned with `effectiveCrossWorkflowDispatches` / `CrossWorkflowDispatch` terminology).
+
+**Notes / verification**:
+
+- Continuation review of pending branch diff: cross-workflow helper renames and readiness requirement id `workflow-feature:crossWorkflowDispatches` match design intent; removal of duplicate `parentNodeExecId` / `child*` keys from new `workflow-calls/*.json` writes is intentional (`engine.test.ts` asserts absence). External automation keyed on the old requirement id `workflow-feature:workflowCalls` must update.
+- `bun run typecheck` (pass)
+- `bun run typecheck:server` (pass)
+- `bun test` (1105 pass)
+
+### Session: 2026-04-28 (alignment: manager prompt + readiness requirement id)
+
+**Tasks Completed**:
+- `src/workflow/prompts/divedra-role-system-prompt.md`: replaces authored `workflowCalls` wording with cross-workflow dispatch via `steps[].transitions` (`toWorkflowId`).
+- `src/workflow/runtime-readiness.ts`: `WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID` value `workflow-feature:crossWorkflowDispatches` (supersedes `workflow-feature:workflowCalls`; no remaining code references).
+- `impl-plans/workflow-role-unification-structural-cleanup.md`: Summary + module 2 stub aligned with inspection GraphQL/step-derived dispatch semantics.
+
+**Notes / verification**:
+- `bun run typecheck:server`
+- `bun test src/workflow/runtime-readiness.test.ts src/workflow/prompt-composition.test.ts --runInBand`
+
+### Session: 2026-04-28 (module 3: inspection + GraphQL + CLI JSON field rename)
+
+**Tasks Completed**:
+- `WorkflowInspectionSummary` / `WorkflowInspectionCounts`: `workflowCallIds` -> `crossWorkflowDispatchIds`, `counts.workflowCalls` -> `counts.crossWorkflowDispatches` (`src/workflow/inspect.ts`).
+- Executable GraphQL SDL `WorkflowView` / `WorkflowCounts` aligned (`src/server/graphql-executable-schema.ts`); `src/server/graphql.test.ts`, `src/graphql/schema.test.ts`, `src/cli.ts`, `src/cli.test.ts` updated.
+- Example verification docs `examples/workflow-call-simple/EXPECTED_RESULTS.md`, `examples/workflow-call-review-target/EXPECTED_RESULTS.md` updated.
+
+**Notes / verification**:
+- `bun run typecheck:server` (pass)
+- `bun test --runInBand` (1105 pass)
+
+### Session: 2026-04-28 (module 2: rename step-derived cross-workflow helpers + TUI copy)
+
+**Tasks Completed**:
+- `src/workflow/cross-workflow-from-steps.ts`: `EffectiveWorkflowCall` -> `CrossWorkflowDispatch`; `crossWorkflowCallsFromSteps` -> `crossWorkflowDispatchesFromSteps`; `effectiveWorkflowCalls` -> `effectiveCrossWorkflowDispatches`; removed `CrossWorkflowExecutionDispatch` alias (callers use `CrossWorkflowDispatch`).
+- `src/workflow/engine.ts`, `runtime-readiness.ts` (`relevantCrossWorkflowDispatches` locals), `node-execution-mailbox.ts`, `inspect.ts`, `validate.test.ts`, `cross-workflow-from-steps.test.ts`: import/type updates.
+- `src/tui/opentui-model/workflow-rendering.ts` + `src/tui/opentui-screen.test.ts`: user-facing strings use “cross-workflow dispatch” / “Cross-workflow dispatches” and history header `crossWorkflowDispatches=<n>` (replaces `workflowCalls=<n>`).
+
+**Notes / verification**:
+- `bun run typecheck:server` (pass)
+- `bun test --runInBand` (1105 pass)
+
+### Session: 2026-04-28 (module 2: legacy node-graph manager inference — role-first + kind normalization)
+
+**Tasks Completed**:
+- `src/workflow/types.ts` `inferLegacyNodeGraphManagerNodeId`: resolve `role: "manager"` before `kind: "root-manager"` so authored role is authoritative when both could appear on different nodes (edge case).
+- `src/workflow/validate.ts`: when parsing legacy nodes, `role: "manager"` with `kind: "task"` normalizes to `kind: "root-manager"` before kind/role consistency checks; legacy graph normalization error text keeps “exactly one manager-role node”; `runSemanticValidation` accepts inferred manager if `role === "manager"` **or** `kind === "root-manager"` (replacing root-manager-only requirement).
+- `src/workflow/validate.test.ts`: former rejection test replaced with acceptance + normalized kind assertion (fixture uses `makeUnifiedRoleRaw` without authored `edges`/`loops` alongside roles).
+- `design-docs/specs/design-unified-workflow-role-model.md`: validation rules bullet for legacy node-graph manager spelling and normalization.
+
+**Tasks In Progress**: Compatibility naming retirement (`workflow-execution` mailbox meta), legacy load/save normalization, modules 3–4 examples and fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server`
+- `bun test src/workflow/validate.test.ts src/workflow/types.test.ts --runInBand`
+
+### Session: 2026-04-28 (module 2: remove duplicate parent/child mirror keys from `workflow-calls/*.json`)
+
+**Tasks Completed**:
+- `src/workflow/engine.ts` `persistCrossWorkflowDispatchArtifact`: new artifacts write only caller/callee-oriented fields (`callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSessionId`, `calleeSessionStatus`, …). Removed dual-write of `parentNodeExecId` and `child*` mirrors (older on-disk files may still contain them).
+- `design-docs/specs/design-unified-workflow-role-model.md`: runtime artifact bullet updated to match.
+- `design-docs/specs/design-workflow-json.md`: cross-workflow `label` bullet uses “cross-workflow dispatch” instead of “workflow-call execution” for derived runtime behavior.
+- `src/workflow/runtime-readiness.ts` + `src/workflow/runtime-readiness.test.ts`: readiness requirement label/detail and recursive-chain message aligned with “cross-workflow dispatch” wording; stable requirement id `workflow-feature:crossWorkflowDispatches` (supersedes `workflow-feature:workflowCalls`).
+- `src/workflow/node-execution-mailbox.ts`: manager reason string uses “cross-workflow dispatch decisions”.
+- `src/workflow/engine.test.ts`: cross-workflow dispatch artifact assertions now expect the legacy mirror keys to be absent.
+- `src/workflow/runtime-readiness.ts` (follow-up): renamed `probeWorkflowCallRuntime` to `probeCrossWorkflowDispatchRuntime`, `WorkflowCallRequirementCandidate` to `CrossWorkflowDispatchRequirementCandidate`, collect-requirements field `workflowCall` to `crossWorkflowDispatch`, and nested visit/map helpers for clearer callee-target recursion naming.
+
+**Tasks In Progress**: Legacy validator cleanup beyond completed role-first manager inference; modules 3–4 examples and fixture retirement.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server` (pass)
+- `bun test src/workflow/runtime-readiness.test.ts --runInBand` (15 pass)
+- In-process `runtimeVariables.workflowCall` still serializes caller identity as `parentWorkflowId` / `parentWorkflowExecutionId` (unchanged; distinct from per-node `workflow-calls/<id>.json`).
 
 ### Session: 2026-04-27 (module 2: engine cross-workflow dispatch internal naming + user-facing error strings)
 
 **Tasks Completed**:
-- `src/workflow/engine.ts`: Renamed internal helpers to match step-derived cross-workflow execution (not authored `workflowCalls`): `executeWorkflowCallsForNode` -> `executeCrossWorkflowDispatchesForNode`, `WorkflowCallExecutionResult` -> `CrossWorkflowDispatchExecutionResult`, `findLatestWorkflowCallResultExecution` -> `findLatestCrossWorkflowCalleeResultExecution`, `buildWorkflowCallRuntimeVariables` -> `buildCrossWorkflowCalleeRuntimeVariables`, `persistWorkflowCallArtifact` -> `persistCrossWorkflowDispatchArtifact`. Added `CROSS_WORKFLOW_DISPATCH_TRANSITION_WHEN_PREFIX` (`workflow-call:`) with JSDoc documenting persisted compatibility; `transitionWhen` / transition `when` values unchanged. User-visible `err(...)` messages now say `cross-workflow dispatch` instead of `workflow-call`. On-disk artifact dir `workflow-calls/`, artifact JSON keys (`child*`, `parentNodeExecId`, etc.), and `runtimeVariables.workflowCall` shape unchanged.
+- `src/workflow/engine.ts`: Renamed internal helpers to match step-derived cross-workflow execution (not authored `workflowCalls`): `executeWorkflowCallsForNode` -> `executeCrossWorkflowDispatchesForNode`, `WorkflowCallExecutionResult` -> `CrossWorkflowDispatchExecutionResult`, `findLatestWorkflowCallResultExecution` -> `findLatestCrossWorkflowCalleeResultExecution`, `buildWorkflowCallRuntimeVariables` -> `buildCrossWorkflowCalleeRuntimeVariables`, `persistWorkflowCallArtifact` -> `persistCrossWorkflowDispatchArtifact`. Added `CROSS_WORKFLOW_DISPATCH_TRANSITION_WHEN_PREFIX` (`workflow-call:`) with JSDoc documenting persisted compatibility; `transitionWhen` / transition `when` values unchanged. User-visible `err(...)` messages now say `cross-workflow dispatch` instead of `workflow-call`. On-disk artifact dir `workflow-calls/` and `runtimeVariables.workflowCall` shape unchanged. **Superseded (2026-04-28):** new `workflow-calls/*.json` writes no longer include duplicate `parentNodeExecId` / `child*` mirror keys (see session log 2026-04-28 above).
 - `src/workflow/engine.test.ts`: Updated assertion for the renamed error prefix on missing callee result execution.
 
 **Tasks In Progress**: Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review. Modules 3-4: GraphQL/inspect wording, examples, fixture retirement.
@@ -355,7 +573,7 @@ interface VerificationCommandSet {
 - Re-ran `bun run typecheck:server` (pass).
 - Re-ran `bun test src/workflow/engine.test.ts src/workflow/superviser-runtime-control-impl.test.ts src/workflow/cross-workflow-from-steps.test.ts --runInBand` (112 pass, 0 fail).
 - Re-ran `bun test --runInBand` (1105 pass, 0 fail, 74 files).
-- Reviewed worktree diff: `buildWorkflowCallRuntimeVariables` / `buildCrossWorkflowCalleeRunOptions` / `persistWorkflowCallArtifact` / `crossWorkflowDispatchMatchesCallerExecution` / `crossWorkflowDispatchResult` naming; `stripRunOptionsForSuperviserControlPlane` in `superviser-runtime-control-impl.ts`. Serialized `workflowCall` and workflow-call artifact JSON keys remain backward-compatible (`parentWorkflowId`, `parentWorkflowExecutionId`, `parentNodeExecId`, `child*`, `nestedSuperviserSessionId`). `design-unified-workflow-role-model.md` documents invoking workflow vs historical parent key names. Architecture fit: step-addressed cross-workflow dispatch and flat superviser control; protected `architecture.md` / `design-step-run-history-rerun.md` unchanged.
+- Reviewed worktree diff: `buildWorkflowCallRuntimeVariables` / `buildCrossWorkflowCalleeRunOptions` / `persistWorkflowCallArtifact` / `crossWorkflowDispatchMatchesCallerExecution` / `crossWorkflowDispatchResult` naming; `stripRunOptionsForSuperviserControlPlane` in `superviser-runtime-control-impl.ts`. Serialized in-process `workflowCall` keys remain backward-compatible (`parentWorkflowId`, `parentWorkflowExecutionId`, `nestedSuperviserSessionId`). **Superseded (2026-04-28):** per-node `workflow-calls/*.json` no longer dual-writes `parentNodeExecId` / `child*`. `design-unified-workflow-role-model.md` documents invoking workflow vs historical parent key names. Architecture fit: step-addressed cross-workflow dispatch and flat superviser control; protected `architecture.md` / `design-step-run-history-rerun.md` unchanged.
 
 **Tasks In Progress**: Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review. Modules 3-4: GraphQL/inspect wording, examples, fixture retirement.
 
@@ -369,7 +587,7 @@ interface VerificationCommandSet {
 ### Session: 2026-04-27 (module 2: engine cross-workflow + superviser driver flat wording)
 
 **Tasks Completed**:
-- `src/workflow/engine.ts`: `buildWorkflowCallRuntimeVariables` uses `callerRuntimeVariables` / `callerWorkflowId` / `callerWorkflowExecutionId` (serialized `workflowCall.parentWorkflowId` / `parentWorkflowExecutionId` unchanged). `buildNestedCrossWorkflowRunOptions` renamed to `buildCrossWorkflowCalleeRunOptions` with JSDoc (sibling bundle invocation, not structural child). `persistWorkflowCallArtifact` inputs `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSession`; on-disk artifact keys `parentNodeExecId` / `child*` unchanged. JSDoc on `findLatestWorkflowCallResultExecution` for callee output handoff vs manager-less fallback. Renamed `workflowCallMatchesCallerExecution` to `crossWorkflowDispatchMatchesCallerExecution`. Post-node completion uses local `crossWorkflowDispatchResult`; rare fallback message `cross-workflow dispatch execution failed`. `crossWorkflowInvocationStack` JSDoc describes call-stack cycle guard (not structural nesting). `runNestedSuperviserSessionDriver` locals renamed away from `nested`/`WithNested` session phrasing to `superviserRunSessionId` / `sessionWithSuperviserRunId` / `resumeSuperviserRunSession`; load failure prefix `nested superviser: load session for superviser run:` (no structural sub-workflow implication; distinct from loading the superviser bundle by id); persisted `nestedSuperviserSessionId` field unchanged.
+- `src/workflow/engine.ts`: `buildWorkflowCallRuntimeVariables` uses `callerRuntimeVariables` / `callerWorkflowId` / `callerWorkflowExecutionId` (serialized `workflowCall.parentWorkflowId` / `parentWorkflowExecutionId` unchanged). `buildNestedCrossWorkflowRunOptions` renamed to `buildCrossWorkflowCalleeRunOptions` with JSDoc (sibling bundle invocation, not structural child). `persistWorkflowCallArtifact` inputs `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSession`; **superseded 2026-04-28:** new `workflow-calls/*.json` writes caller/callee keys only (no `parentNodeExecId` / `child*` mirrors). JSDoc on `findLatestWorkflowCallResultExecution` for callee output handoff vs manager-less fallback. Renamed `workflowCallMatchesCallerExecution` to `crossWorkflowDispatchMatchesCallerExecution`. Post-node completion uses local `crossWorkflowDispatchResult`; rare fallback message `cross-workflow dispatch execution failed`. `crossWorkflowInvocationStack` JSDoc describes call-stack cycle guard (not structural nesting). `runNestedSuperviserSessionDriver` locals renamed away from `nested`/`WithNested` session phrasing to `superviserRunSessionId` / `sessionWithSuperviserRunId` / `resumeSuperviserRunSession`; load failure prefix `nested superviser: load session for superviser run:` (no structural sub-workflow implication; distinct from loading the superviser bundle by id); persisted `nestedSuperviserSessionId` field unchanged.
 - `src/workflow/superviser-runtime-control-impl.ts`: internal `stripForChildRun` renamed to `stripRunOptionsForSuperviserControlPlane`; JSDoc and locals `baseForTargetRun` replace misleading “child” run naming for supervised target invocations.
 - `design-docs/specs/design-unified-workflow-role-model.md`: `workflowCall` runtime-variable bullet — invoking workflow vs serialized parent key names (protected `architecture.md` / `design-step-run-history-rerun.md` untouched).
 - `src/workflow/engine.test.ts`: test title uses callee workflow results (not child).
@@ -458,7 +676,7 @@ interface VerificationCommandSet {
 ### Session: 2026-04-27 (module 2: engine, runtime-addressing, node-execution-mailbox)
 
 **Tasks Completed**:
-- `src/workflow/node-execution-mailbox.ts`: `buildNodeReason` / `buildExpectedReturn` / `buildManagedChildren` / `buildMailboxStructure` gate on `isManagerNodeRef` (from `node-role.ts`) so legacy `root-manager` and role `manager` share one path; manager prompt headings avoid structural parent/child framing; persisted `meta.structure.type` stays `root-workflow` and `rootManagerNodeId` field name unchanged for meta compatibility. `src/workflow/prompt-composition.test.ts` updated.
+- `src/workflow/node-execution-mailbox.ts`: `buildNodeReason` / `buildExpectedReturn` / `buildManagedChildren` / `buildMailboxStructure` gate on `isManagerNodeRef` (from `node-role.ts`) so legacy `root-manager` and role `manager` share one path; manager prompt headings avoid structural parent/child framing; persisted `meta.structure.type` stays `workflow-execution` and `managerRuntimeId` field name unchanged for meta compatibility. `src/workflow/prompt-composition.test.ts` updated.
 - `src/workflow/engine.ts` / `src/workflow/call-step-impl.ts`: removed dead `mailboxDeliveryManagerNodeId`; `deliveredByNodeId` uses `resolveWorkflowManagerRuntimeId` directly. Renamed `isRootScopeOutputNode` to `isWorkflowOutputKindNode` in `runtime-addressing.ts` with JSDoc; `runtime-addressing.test.ts` updated. External mailbox `promptText`: "workflow input mailbox delivery". Historical progress log (~2026-04-26) in this file references the rename. No `CommunicationRoutingScope` change.
 
 **Tasks In Progress**: Same as prior session (validator inference; modules 3-4).
@@ -469,7 +687,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 authored-schema tail: cross-check, full `bun test`, no code delta)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Cross-checked `design-docs/specs/design-workflow-json.md` (lines 147–156) with production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and generic `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` in `validate.ts`; `normalizeStepAddressedWorkflow` and legacy node-graph `normalizeWorkflow` iterate those exports; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` reuses the composed list with the same edges-vs-generic message split; `stripNormalizedOnlyWorkflowTopLevelFields` strips only `hasManagerNode`. Confirmed `types.ts` / `LoadOptions` JSDoc still distinguish authored-schema rejection from runtime/session uses of identifiers named `managerNodeId`. No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no new implementation plan file. Dirty `src/workflow` slice reviewed as continuation of prior task: coherent; no additional production edits required in this pass.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Cross-checked `design-docs/specs/design-workflow-json.md` (lines 147–156) with production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and generic `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` in `validate.ts`; `normalizeStepAddressedWorkflow` and legacy node-graph `normalizeWorkflow` iterate those exports; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` reuses the composed list with the same edges-vs-generic message split; `stripNormalizedOnlyWorkflowTopLevelFields` strips only `hasManagerNode`. Confirmed `types.ts` / `LoadOptions` JSDoc still distinguish authored-schema rejection from runtime/session uses of identifiers named `managerRuntimeId`. No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no new implementation plan file. Dirty `src/workflow` slice reviewed as continuation of prior task: coherent; no additional production edits required in this pass.
 
 **Tasks In Progress**: Module 1 residual outside this slice (examples + broader fixture retirement per checklist); module 2 root/sub runtime branching; modules 3–4 public-surface cleanup.
 
@@ -484,7 +702,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 tail: executable verification, design fit, diff review)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` (authored top-level rejection sets, save-only `hasManagerNode` strip) matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` in `validate.ts`; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` reuses the composed list; `stripNormalizedOnlyWorkflowTopLevelFields` drops only in-memory `hasManagerNode` (no silent strip of disallowed `managerNodeId` / `entryNodeId` / `subWorkflows`). No architecture change; no new implementation plan file; did not modify protected `design-docs/specs/architecture.md` or `design-step-run-history-rerun.md`. Reviewed the unstaged `src/workflow` diff: centralized rejection constants, save pre-scan, removal of save-path top-level `managerNodeId`/`entryNodeId` deletion and redundant `edges` duplicate issue, `load.test` fixture slimming and duplicate `expect` cleanup, `validate.test` step-addressed `workflow.edges` negative case, `types.test` composition guard for rejection key lists. No further production edits required in this pass.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` (authored top-level rejection sets, save-only `hasManagerNode` strip) matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` in `validate.ts`; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` reuses the composed list; `stripNormalizedOnlyWorkflowTopLevelFields` drops only in-memory `hasManagerNode` (no silent strip of disallowed `managerRuntimeId` / `entryNodeId` / `subWorkflows`). No architecture change; no new implementation plan file; did not modify protected `design-docs/specs/architecture.md` or `design-step-run-history-rerun.md`. Reviewed the unstaged `src/workflow` diff: centralized rejection constants, save pre-scan, removal of save-path top-level `managerRuntimeId`/`entryNodeId` deletion and redundant `edges` duplicate issue, `load.test` fixture slimming and duplicate `expect` cleanup, `validate.test` step-addressed `workflow.edges` negative case, `types.test` composition guard for rejection key lists. No further production edits required in this pass.
 
 **Tasks In Progress**: Module 1: examples and non-`src/workflow` fixture retirement; module 2: root/sub runtime branching; modules 3-4: public-surface cleanup.
 
@@ -497,7 +715,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 authored-schema tail: design fit, diff review, verification)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan sharing the composed list, and save stripping only in-memory `hasManagerNode` (no silent strip of disallowed top-level keys). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no separate implementation plan beyond this file. Reviewed dirty module-1 tail (`types.ts`, `validate.ts`, `save.ts`, `load.test.ts`, `save.test.ts`, `types.test.ts`, `validate.test.ts`, `superviser.test.ts`): centralized rejection constants; `isStrictWorkflowAuthorshipValidation` JSDoc matches step-shaped vs node-graph routing; save no longer strips authored `managerNodeId` / `entryNodeId`; fixtures use minimal `subWorkflows` stubs and stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE`; duplicate `subWorkflows` negative coverage removed in favor of top-level presence-only rejection; cross-workflow tests assert callees must declare `entryStepId` or `managerStepId` without relying on rejected top-level node aliases; step-addressed `workflow.edges` negative coverage uses the dedicated edges message.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan sharing the composed list, and save stripping only in-memory `hasManagerNode` (no silent strip of disallowed top-level keys). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no separate implementation plan beyond this file. Reviewed dirty module-1 tail (`types.ts`, `validate.ts`, `save.ts`, `load.test.ts`, `save.test.ts`, `types.test.ts`, `validate.test.ts`, `superviser.test.ts`): centralized rejection constants; `isStrictWorkflowAuthorshipValidation` JSDoc matches step-shaped vs node-graph routing; save no longer strips authored `managerRuntimeId` / `entryNodeId`; fixtures use minimal `subWorkflows` stubs and stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE`; duplicate `subWorkflows` negative coverage removed in favor of top-level presence-only rejection; cross-workflow tests assert callees must declare `entryStepId` or `managerStepId` without relying on rejected top-level node aliases; step-addressed `workflow.edges` negative coverage uses the dedicated edges message.
 
 **Tasks In Progress**: Module 1 examples and non-`src/workflow` fixture retirement; module 2 root/sub runtime branching; modules 3-4 public-surface cleanup.
 
@@ -510,7 +728,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1: design vs code confirmation, review-matrix consistency, diff review)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production for authored top-level rejection (`REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`) and save behavior (`stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode`). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no additional implementation plan file. Reconciled the **opening** Review Matrix "Architecture fit" row with the later Review Check Matrix (both now PARTIAL for phase-133 end state; module 1 code path is aligned). Reviewed unstaged diffs: `save.ts` / `validate.ts` / `types.ts` and tests are coherent; `superviser.test.ts` only removes inert top-level `entryNodeId` / `managerNodeId` from fixtures that do not model authored `workflow.json`.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production for authored top-level rejection (`REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`) and save behavior (`stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode`). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no additional implementation plan file. Reconciled the **opening** Review Matrix "Architecture fit" row with the later Review Check Matrix (both now PARTIAL for phase-133 end state; module 1 code path is aligned). Reviewed unstaged diffs: `save.ts` / `validate.ts` / `types.ts` and tests are coherent; `superviser.test.ts` only removes inert top-level `entryNodeId` / `managerRuntimeId` from fixtures that do not model authored `workflow.json`.
 
 **Tasks In Progress**: Module 1 examples and non-`src/workflow` fixture retirement; module 2 root/sub runtime branching; modules 3-4 public-surface cleanup.
 
@@ -522,7 +740,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1: design alignment, checklist fix, verify dirty authored-schema tail)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan sharing the composed list, and save stripping only in-memory `hasManagerNode` (no silent strip of disallowed top-level keys). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no separate implementation plan required beyond this file. Reviewed the unstaged module-1 tail (`types.ts` / `validate.ts` / `save.ts` / matching tests): centralized rejection constants, save path uses `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` with the same `edges` message as validation, legacy save no longer strips top-level `managerNodeId` / `entryNodeId`, fixtures use minimal `subWorkflows` stubs for fail-fast rejection. Corrected one stale Module 1 checklist sentence that still claimed managed role-authored bundles *ignore* legacy manager/entry aliases during semantic validation (current behavior is top-level *rejection*, consistent with save/load tests).
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan sharing the composed list, and save stripping only in-memory `hasManagerNode` (no silent strip of disallowed top-level keys). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified; no separate implementation plan required beyond this file. Reviewed the unstaged module-1 tail (`types.ts` / `validate.ts` / `save.ts` / matching tests): centralized rejection constants, save path uses `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` with the same `edges` message as validation, legacy save no longer strips top-level `managerRuntimeId` / `entryNodeId`, fixtures use minimal `subWorkflows` stubs for fail-fast rejection. Corrected one stale Module 1 checklist sentence that still claimed managed role-authored bundles *ignore* legacy manager/entry aliases during semantic validation (current behavior is top-level *rejection*, consistent with save/load tests).
 
 **Tasks In Progress**: Module 1: examples and non-`src/workflow` fixture retirement; module 2: root/sub runtime branching; modules 3-4: public-surface cleanup.
 
@@ -534,7 +752,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1: verify dirty tail, design fit, no extra edits)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan reusing the composed list, and save stripping only `hasManagerNode` (per lines 153-154 in that doc). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified. Reviewed the full unstaged diff for module 1: production code already centralizes disallowed keys; `save.ts` no longer strips top-level `managerNodeId` / `entryNodeId` or duplicates `edges` issues; tests use minimal `subWorkflows` stubs, stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` / edges message imports, and removed redundant `subWorkflows` duplicate assertions. No additional code fixes were required in this pass.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches production: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, save pre-scan reusing the composed list, and save stripping only `hasManagerNode` (per lines 153-154 in that doc). No architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified. Reviewed the full unstaged diff for module 1: production code already centralizes disallowed keys; `save.ts` no longer strips top-level `managerRuntimeId` / `entryNodeId` or duplicates `edges` issues; tests use minimal `subWorkflows` stubs, stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` / edges message imports, and removed redundant `subWorkflows` duplicate assertions. No additional code fixes were required in this pass.
 
 **Tasks In Progress**: Module 1: examples and non-`src/workflow` fixture retirement; module 2: root/sub runtime branching; modules 3-4: public-surface cleanup.
 
@@ -570,7 +788,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 sign-off: typecheck, focused tests, design fit, full diff review)
 
-**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed phase-133 design fit: authored top-level legacy keys are rejected via exported `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, and composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` in `validate.ts`; step-addressed `edges` uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`; `save.ts` reuses the same key lists for the step-addressed pre-validation scan and strips only in-memory `hasManagerNode` via `stripNormalizedOnlyWorkflowTopLevelFields` (no silent strip of disallowed `managerNodeId` / `entryNodeId` / `subWorkflows`). `types.ts` JSDoc distinguishes authored rejection from session/runtime `managerNodeId`. Reviewed the full uncommitted diff (including `superviser.test.ts` removal of inert `entryNodeId` / `managerNodeId` on supervision test fixtures) for bugs and inconsistencies; no code fixes required. Protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified. Updated this plan's Review Matrix "Architecture fit" follow-up to record module-1 `src/workflow` verification.
+**Tasks Completed**: Re-read `AGENTS.md` and this plan. Confirmed phase-133 design fit: authored top-level legacy keys are rejected via exported `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, and composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` in `validate.ts`; step-addressed `edges` uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`; `save.ts` reuses the same key lists for the step-addressed pre-validation scan and strips only in-memory `hasManagerNode` via `stripNormalizedOnlyWorkflowTopLevelFields` (no silent strip of disallowed `managerRuntimeId` / `entryNodeId` / `subWorkflows`). `types.ts` JSDoc distinguishes authored rejection from session/runtime `managerRuntimeId`. Reviewed the full uncommitted diff (including `superviser.test.ts` removal of inert `entryNodeId` / `managerRuntimeId` on supervision test fixtures) for bugs and inconsistencies; no code fixes required. Protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` not modified. Updated this plan's Review Matrix "Architecture fit" follow-up to record module-1 `src/workflow` verification.
 
 **Tasks In Progress**: Module 1: examples and non-workflow fixture retirement; module 2: root/sub runtime branching; modules 3-4: public-surface cleanup.
 
@@ -594,7 +812,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 tail: verify dirty worktree, design alignment, review-matrix hygiene)
 
-**Tasks Completed**: Re-validated phase-133 direction against `design-docs/specs/design-workflow-json.md` (rejected top-level keys via `REJECTED_AUTHORED_*`, save strips only `hasManagerNode`); no architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` untouched. Confirmed the unstaged module-1 tail is coherent: `validate.ts` exports composed key lists and the step-addressed `edges` message; `save.ts` pre-scan and `normalizeStepAddressedWorkflow` share those constants; save no longer strips disallowed top-level `managerNodeId` / `entryNodeId` / structural keys; `types.ts` JSDoc distinguishes authored rejection from runtime/session `managerNodeId`. Tests: `load.test.ts` / `save.test.ts` use minimal `subWorkflows` stubs for fail-fast rejection and stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` expectations; duplicate `subWorkflows` assertions removed. Updated this plan’s Review Matrix “Compatibility cleanup progress” cell (removed stale “bespoke workflow.edges copy”; save and validator now share `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`).
+**Tasks Completed**: Re-validated phase-133 direction against `design-docs/specs/design-workflow-json.md` (rejected top-level keys via `REJECTED_AUTHORED_*`, save strips only `hasManagerNode`); no architecture pivot; protected `design-docs/specs/architecture.md` and `design-step-run-history-rerun.md` untouched. Confirmed the unstaged module-1 tail is coherent: `validate.ts` exports composed key lists and the step-addressed `edges` message; `save.ts` pre-scan and `normalizeStepAddressedWorkflow` share those constants; save no longer strips disallowed top-level `managerRuntimeId` / `entryNodeId` / structural keys; `types.ts` JSDoc distinguishes authored rejection from runtime/session `managerRuntimeId`. Tests: `load.test.ts` / `save.test.ts` use minimal `subWorkflows` stubs for fail-fast rejection and stable `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` expectations; duplicate `subWorkflows` assertions removed. Updated this plan’s Review Matrix “Compatibility cleanup progress” cell (removed stale “bespoke workflow.edges copy”; save and validator now share `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`).
 
 **Tasks In Progress**: Module 1 examples/fixture retirement; module 2 root/sub runtime branching; modules 3–4 public-surface cleanup.
 
@@ -604,7 +822,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 slice: diff review, test hygiene, verification)
 
-**Tasks Completed**: Reviewed uncommitted module-1 work: centralized `REJECTED_AUTHORED_*` key lists in `validate.ts`; `normalizeStepAddressedWorkflow` and `collectStepAddressedSaveLegacyFieldIssues` share `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` with the same `edges`-specific message as validator; legacy node-graph branch uses `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`; save `stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode` (no silent strip of disallowed top-level `managerNodeId` / `entryNodeId` / `subWorkflows`). Confirmed `design-workflow-json.md` already documents those exports and save behavior (no change to protected `architecture.md` or `design-step-run-history-rerun.md`). Removed redundant legacy top-level key churn from `validate.test.ts` manager-less worker-only fixture (`makeUnifiedRoleRaw` never authored those keys).
+**Tasks Completed**: Reviewed uncommitted module-1 work: centralized `REJECTED_AUTHORED_*` key lists in `validate.ts`; `normalizeStepAddressedWorkflow` and `collectStepAddressedSaveLegacyFieldIssues` share `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` with the same `edges`-specific message as validator; legacy node-graph branch uses `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`; save `stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode` (no silent strip of disallowed top-level `managerRuntimeId` / `entryNodeId` / `subWorkflows`). Confirmed `design-workflow-json.md` already documents those exports and save behavior (no change to protected `architecture.md` or `design-step-run-history-rerun.md`). Removed redundant legacy top-level key churn from `validate.test.ts` manager-less worker-only fixture (`makeUnifiedRoleRaw` never authored those keys).
 
 **Tasks In Progress**: Module 1 legacy node-graph disk/runtime surface; module 2 root/sub runtime branching; modules 3–4 example and fixture retirement.
 
@@ -624,7 +842,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 slice: export extra rejected keys; align unified role-model doc; strict-validation JSDoc)
 
-**Tasks Completed**: Exported `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS` from `validate.ts` (composition with `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` remains the single definition of `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`). Clarified `isStrictWorkflowAuthorshipValidation` JSDoc (return value vs `normalizeStepAddressedWorkflow` routing). Added `types.test.ts` runtime guard that the step-addressed disallowed list equals legacy rejects plus extras. Updated `design-docs/specs/design-unified-workflow-role-model.md`: Workflow Entry and validation rules now describe `entryStepId` / `managerStepId` / session `managerNodeId` disambiguation; removed stale `WorkflowJson` snippet with top-level `managerNodeId` / `entryNodeId` / `workflowCalls` / `branching`; tightened Non-Goals and Runtime Implications to past-tense structural removal. Protected `architecture.md` and `design-step-run-history-rerun.md` untouched.
+**Tasks Completed**: Exported `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS` from `validate.ts` (composition with `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` remains the single definition of `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`). Clarified `isStrictWorkflowAuthorshipValidation` JSDoc (return value vs `normalizeStepAddressedWorkflow` routing). Added `types.test.ts` runtime guard that the step-addressed disallowed list equals legacy rejects plus extras. Updated `design-docs/specs/design-unified-workflow-role-model.md`: Workflow Entry and validation rules now describe `entryStepId` / `managerStepId` / session `managerRuntimeId` disambiguation; removed stale `WorkflowJson` snippet with top-level `managerRuntimeId` / `entryNodeId` / `workflowCalls` / `branching`; tightened Non-Goals and Runtime Implications to past-tense structural removal. Protected `architecture.md` and `design-step-run-history-rerun.md` untouched.
 
 **Tasks In Progress**: Module 1 legacy node-graph disk/runtime surface; module 2 root/sub runtime branching; modules 3-4 example and public-surface retirement.
 
@@ -634,7 +852,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1: tighten authored-rejection JSDoc; simplify step-addressed save negative test)
 
-**Tasks Completed**: Confirmed `design-workflow-json.md` / phase-133 intent still match (rejected top-level keys via `REJECTED_AUTHORED_*` in `validate.ts`, save strips only `hasManagerNode`); no change to protected `design-docs/specs/architecture.md` or `design-step-run-history-rerun.md`. Condensed JSDoc on `AuthoredWorkflowJson`, `LoadOptions.rejectLegacyWorkflowAuthoring`, `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, and `stripNormalizedOnlyWorkflowTopLevelFields` to remove duplicated key-list prose while keeping the session-vs-authored `managerNodeId` distinction. Simplified `save.test.ts` step-addressed save rejection so it only adds `entryNodeId` to an otherwise valid bundle (removed the extra `entryStepId: undefined` failure that was only needed to assert two issues in one test).
+**Tasks Completed**: Confirmed `design-workflow-json.md` / phase-133 intent still match (rejected top-level keys via `REJECTED_AUTHORED_*` in `validate.ts`, save strips only `hasManagerNode`); no change to protected `design-docs/specs/architecture.md` or `design-step-run-history-rerun.md`. Condensed JSDoc on `AuthoredWorkflowJson`, `LoadOptions.rejectLegacyWorkflowAuthoring`, `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, and `stripNormalizedOnlyWorkflowTopLevelFields` to remove duplicated key-list prose while keeping the session-vs-authored `managerRuntimeId` distinction. Simplified `save.test.ts` step-addressed save rejection so it only adds `entryNodeId` to an otherwise valid bundle (removed the extra `entryStepId: undefined` failure that was only needed to assert two issues in one test).
 
 **Tasks In Progress**: Module 1 legacy node-graph disk/runtime surface; module 2 root/sub runtime branching; modules 3-4 example and public-surface retirement.
 
@@ -654,7 +872,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1: design + types.test alignment with centralized rejection keys; clarify validate JSDoc)
 
-**Tasks Completed**: Confirmed phase-133 direction: authored `workflow.json` rejects legacy top-level keys via shared exports in `validate.ts`, with save stripping only `hasManagerNode`. Updated `design-docs/specs/design-workflow-json.md` to name `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` and `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (protected `design-docs/specs/architecture.md` unchanged). Extended `src/workflow/types.test.ts` so every key in the step-addressed disallowed set has a matching `@ts-expect-error` excess-property check (`subWorkflowConversations`, `loops`, `branching` added). Tightened the JSDoc on `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` in `validate.ts` to separate authored-workflow rejection from runtime session `managerNodeId` usage. Refreshed the review-matrix architecture-fit follow-up line in this plan.
+**Tasks Completed**: Confirmed phase-133 direction: authored `workflow.json` rejects legacy top-level keys via shared exports in `validate.ts`, with save stripping only `hasManagerNode`. Updated `design-docs/specs/design-workflow-json.md` to name `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` and `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (protected `design-docs/specs/architecture.md` unchanged). Extended `src/workflow/types.test.ts` so every key in the step-addressed disallowed set has a matching `@ts-expect-error` excess-property check (`subWorkflowConversations`, `loops`, `branching` added). Tightened the JSDoc on `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` in `validate.ts` to separate authored-workflow rejection from runtime session `managerRuntimeId` usage. Refreshed the review-matrix architecture-fit follow-up line in this plan.
 
 **Tasks In Progress**: Module 1 legacy node-graph disk persistence; module 2 root/sub runtime branching; modules 3-4 public-surface and example/fixture retirement.
 
@@ -664,7 +882,7 @@ interface VerificationCommandSet {
 
 ### Session: 2026-04-27 (module 1 follow-up: validate.test fixture hygiene after rejected-key centralization)
 
-**Tasks Completed**: Confirmed the in-flight module-1 slice (central `REJECTED_AUTHORED_*` keys in `validate.ts`, save reuse of `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, and removal of save-time stripping for disallowed top-level `managerNodeId` / `entryNodeId` / structural companions) matches `design-workflow-json.md` and requires no architecture pivot (protected `architecture.md` unchanged). Cleaned `src/workflow/validate.test.ts` step-addressed fixtures for `resolveWorkflowEntryRuntimeId` / `resolveWorkflowManagerRuntimeId` so they no longer inject unused `entryNodeId` / `managerNodeId` fields on the cast objects. Replaced invalid-node-kind table value `subworkflow-manager` with `orphan-manager-kind` so coverage no longer names removed structural kind vocabulary.
+**Tasks Completed**: Confirmed the in-flight module-1 slice (central `REJECTED_AUTHORED_*` keys in `validate.ts`, save reuse of `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, and removal of save-time stripping for disallowed top-level `managerRuntimeId` / `entryNodeId` / structural companions) matches `design-workflow-json.md` and requires no architecture pivot (protected `architecture.md` unchanged). Cleaned `src/workflow/validate.test.ts` step-addressed fixtures for `resolveWorkflowEntryRuntimeId` / `resolveWorkflowManagerRuntimeId` so they no longer inject unused `entryNodeId` / `managerRuntimeId` fields on the cast objects. Replaced invalid-node-kind table value `subworkflow-manager` with `orphan-manager-kind` so coverage no longer names removed structural kind vocabulary.
 
 **Tasks In Progress**: Module 1 legacy node-graph persistence; module 2 residual runtime branching; modules 3–4 fixture/example retirement.
 
@@ -699,7 +917,7 @@ branching; modules 3–4 fixture and example retirement (per main plan checklist
 **Tasks Completed**: Re-checked phase-133 design direction against
 `design-docs/specs/design-workflow-json.md` and this plan: strict step-addressed
 authorship with explicit rejection of legacy top-level node aliases still
-matches; the spec now documents `managerNodeId` / `entryNodeId` /
+matches; the spec now documents `managerRuntimeId` / `entryNodeId` /
 `subWorkflows` among rejected keys and that save strips only normalized
 `hasManagerNode`. Implemented module-1 cleanup in production code:
 `src/workflow/validate.ts` now exports `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`
@@ -709,9 +927,9 @@ constants instead of duplicating string lists. `src/workflow/save.ts`
 `collectStepAddressedSaveLegacyFieldIssues` reuses the step-addressed key list
 and `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` (still special-casing
 `workflow.edges` with the transitions-only message). Removed save-path behavior
-that deleted `managerNodeId` / `entryNodeId` during
+that deleted `managerRuntimeId` / `entryNodeId` during
 `prepareAuthoredWorkflowForSave` and the `hasManagerNode === false` branch that
-stripped `managerNodeId` in `stripNormalizedOnlyWorkflowTopLevelFields`;
+stripped `managerRuntimeId` in `stripNormalizedOnlyWorkflowTopLevelFields`;
 disallowed keys now fail validation like on-disk `workflow.json`. Renamed
 internal save helpers to `stripNormalizedOnlyWorkflowTopLevelFields` and
 `stripRedundantKindWhenRolePresentOnNode` and dropped unused manager-role
@@ -813,7 +1031,7 @@ step-addressed direction, so no new design document or replacement
 implementation plan was needed. Continued module 1 by deleting another
 unnecessary legacy save-path alias in `src/workflow/save.ts`: legacy
 node-graph bundles no longer persist `workflow.entryNodeId` when it is only a
-redundant mirror of the persisted `workflow.managerNodeId`. This keeps the
+redundant mirror of the persisted `workflow.managerRuntimeId`. This keeps the
 remaining legacy runtime path intact for manager-less workflows, but trims the
 public/persisted compatibility surface instead of carrying a duplicate entry
 alias forward on copied legacy bundles. Updated `src/workflow/save.test.ts`
@@ -1032,13 +1250,13 @@ and
 (`tsc --noEmit` passed). Plan status remains `In Progress`, so
 `impl-plans/PROGRESS.json` did not require a status update in this slice.
 
-### Session: 2026-04-26 19:22 JST (module 3 slice: remove GraphQL `sendManagerMessage.managerNodeId`)
+### Session: 2026-04-26 19:22 JST (module 3 slice: remove GraphQL `sendManagerMessage.managerRuntimeId`)
 
 **Tasks Completed**: Re-checked the current architecture/design against the
 phase-133 target before editing. The intended step-addressed runtime/public
 surface still matches the active design docs and this implementation plan, so
 no design pivot or replacement plan was needed. Continued module 3 by removing
-the caller-supplied `managerNodeId` compatibility field from the public
+the caller-supplied `managerRuntimeId` compatibility field from the public
 GraphQL `SendManagerMessageInput` contract in
 `src/server/graphql-executable-schema.ts`, `src/graphql/types.ts`, and
 `src/graphql/schema.ts`. Manager-scoped GraphQL mutations now rely on the
@@ -1050,7 +1268,7 @@ stale fixture in `src/server/graphql.test.ts` that still authored top-level
 surviving legacy node-graph form (`kind`-authored nodes) so the test continues
 to cover the remaining compatibility behavior without weakening the new
 validation rules. Added a focused HTTP regression asserting that legacy
-`managerNodeId` is now rejected as an unknown GraphQL input field.
+`managerRuntimeId` is now rejected as an unknown GraphQL input field.
 
 **Tasks In Progress**: Module 1 authored-schema / validator cutover still
 remains open for the remaining runtime-visible legacy node-graph schema
@@ -1151,7 +1369,7 @@ no design pivot or replacement plan was needed. Continued module 1 by
 tightening the primary authored workflow type surface in `src/workflow/types.ts`:
 `AuthoredWorkflowJson` no longer inherits a permissive string index signature
 and no longer advertises legacy top-level compatibility keys such as
-`managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
+`managerRuntimeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`,
 `subWorkflowConversations`, `edges`, and `loops`. In `src/workflow/save.ts`,
 the remaining save-time compatibility inspection was kept explicit by routing
 those raw authored-key reads through a local record-typed alias instead of the
@@ -1228,7 +1446,7 @@ reaching through the normalized/public workflow type.
 
 **Tasks In Progress**: Module 1 authored-schema / validator cutover still
 remains open for the remaining compatibility identifiers, especially the
-still-exposed normalized `managerNodeId` alias and the broader legacy
+still-exposed normalized `managerRuntimeId` alias and the broader legacy
 node-graph normalization branches. Module 2 runtime/control cleanup still
 remains open for root/sub branching cleanup and the remaining explicit legacy
 node-graph workflow-call execution path. Module 3 public-surface cleanup and
@@ -1443,7 +1661,7 @@ phase-133 target before editing. It still matches the intended
 step-addressed-first cleanup, so no replacement design or new implementation
 plan was needed. Continued the authored-schema/validation cutover by tightening
 `src/workflow/validate.ts` so managed role-authored bundles no longer let stale
-legacy `managerNodeId` / `entryNodeId` aliases drive downstream manager-entry
+legacy `managerRuntimeId` / `entryNodeId` aliases drive downstream manager-entry
 inference or semantic validation once those top-level compatibility fields have
 already been rejected. Added focused regressions in
 `src/workflow/validate.test.ts` and `src/workflow/load.test.ts` to prove that
@@ -1624,7 +1842,7 @@ step-addressed-first cleanup, so no replacement design or new implementation
 plan was needed. While reviewing the dirty continuation diff, I found another
 remaining legacy companion synthesis seam: managed legacy node-graph bundles
 were still normalizing `entryNodeId` even when the author only declared
-`managerNodeId`. Tightened `src/workflow/validate.ts` so normalized legacy
+`managerRuntimeId`. Tightened `src/workflow/validate.ts` so normalized legacy
 bundles now keep authored `entryNodeId` only when it was actually present in
 the source workflow, while shared entry resolution continues to flow through
 `resolveWorkflowEntryRuntimeId(...)`. Updated the focused load/save/validate
@@ -1693,7 +1911,7 @@ phase-133 target before editing. It still matches the intended
 step-addressed-first cleanup, so no replacement design or new implementation
 plan was needed. While reviewing the active diff for remaining direct
 node-addressed assumptions, I found that manager-control parsing and optional
-decision application still threaded a `managerNodeId` context name even on the
+decision application still threaded a `managerRuntimeId` context name even on the
 active step-addressed runtime path where the value is a runtime step id. Narrowed
 that seam by renaming the parser/control context to `managerRuntimeId`,
 removing local "manager node" wording from manager-control diagnostics, and
@@ -1805,7 +2023,7 @@ with a small helper-oriented slice: `src/workflow/types.ts` now exposes
 `resolveWorkflowEntryRuntimeId(...)` alongside the existing manager runtime-id
 helper, `src/tui/opentui-model/workflow-rendering.ts` now uses those shared
 helpers for legacy entry/manager preview text instead of raw
-`entryNodeId`/`managerNodeId` fallbacks, and `src/workflow/validate.ts` now
+`entryNodeId`/`managerRuntimeId` fallbacks, and `src/workflow/validate.ts` now
 uses `getStructuralSubWorkflows(...)` for semantic validation instead of
 re-reading the optional compatibility field directly. Added focused helper
 coverage in `src/workflow/validate.test.ts` so step-addressed and legacy entry
@@ -1874,7 +2092,7 @@ phase-133 target before editing. The intended architecture still matches the
 active plan, so no replacement design or new implementation plan was needed,
 but `design-docs/specs/architecture.md` had a stale implementation note that
 still claimed step-addressed normalization could synthesize compatibility
-`managerNodeId` / `subWorkflows` / `edges`; I corrected that note to match the
+`managerRuntimeId` / `subWorkflows` / `edges`; I corrected that note to match the
 current code. Continued module 1 by removing another normalized compatibility
 companion from the legacy node-graph path: when a legacy bundle omits authored
 top-level `workflow.edges`, `src/workflow/validate.ts` now keeps the normalized
@@ -2196,7 +2414,7 @@ tests.
 
 ### Session: 2026-04-26 (types: document manager id vs step id)
 
-**Tasks Completed**: Clarified on `WorkflowJson.managerNodeId` and `resolveWorkflowManagerRuntimeId` that normalized step-addressed bundles use the **step** id namespace for execution (`managerStepId ?? entryStepId`, same as `session.queue` and materialized `nodes[].id`), not the underlying `steps[].nodeId` registry pointer. Documented `NodeExecutionMailboxStructure.rootManagerNodeId` accordingly to prevent a future refactor from incorrectly switching engine/mailbox comparisons to raw registry node ids. Auto-improve / nested superviser (phases 130-132) remain aligned: no code behavior change. `bun run typecheck:server` and `bun test` after edits.
+**Tasks Completed**: Clarified on `WorkflowJson.managerRuntimeId` and `resolveWorkflowManagerRuntimeId` that normalized step-addressed bundles use the **step** id namespace for execution (`managerStepId ?? entryStepId`, same as `session.queue` and materialized `nodes[].id`), not the underlying `steps[].nodeId` registry pointer. Documented `NodeExecutionMailboxStructure.managerRuntimeId` accordingly to prevent a future refactor from incorrectly switching engine/mailbox comparisons to raw registry node ids. Auto-improve / nested superviser (phases 130-132) remain aligned: no code behavior change. `bun run typecheck:server` and `bun test` after edits.
 
 **Tasks In Progress**: Module 1 `WorkflowJson` / validator full legacy field removal; module 2 runtime union cleanup; modules 4-5.
 
@@ -2218,9 +2436,9 @@ tests.
 
 **Blockers**: None.
 
-### Session: 2026-04-26 (TUI: step-addressed Entry line without `managerNodeId` alias)
+### Session: 2026-04-26 (TUI: step-addressed Entry line without `managerRuntimeId` alias)
 
-**Tasks Completed**: Added `buildWorkflowExecutionIdentityPreviewSegment` in `src/tui/opentui-model/workflow-rendering.ts` so one-line `Entry:` / `Manager:` labels for `buildWorkflowSummaryPreview` and `buildWorkflowRunPreview` share one implementation. For step-addressed bundles, Entry is `entryStepId ?? entryNodeId ?? "(unset)"` (no fallback to compatibility `managerNodeId`, which conflated manager runtime with entry). Legacy node-graph fallbacks unchanged. `bun run typecheck:server` and full `bun test` green.
+**Tasks Completed**: Added `buildWorkflowExecutionIdentityPreviewSegment` in `src/tui/opentui-model/workflow-rendering.ts` so one-line `Entry:` / `Manager:` labels for `buildWorkflowSummaryPreview` and `buildWorkflowRunPreview` share one implementation. For step-addressed bundles, Entry is `entryStepId ?? entryNodeId ?? "(unset)"` (no fallback to compatibility `managerRuntimeId`, which conflated manager runtime with entry). Legacy node-graph fallbacks unchanged. `bun run typecheck:server` and full `bun test` green.
 
 **Tasks In Progress**: Module 1 primary `WorkflowJson` / validator legacy field removal; module 2 runtime union cleanup; modules 4–5.
 
@@ -2236,7 +2454,7 @@ tests.
 
 ### Session: 2026-04-26 (event trigger: sticky `managerRuntimeId` field name)
 
-**Tasks Completed**: Renamed internal `StickyRootManagerContext.managerNodeId` to `managerRuntimeId` in `src/events/trigger-runner.ts` so the name matches `resolveWorkflowManagerRuntimeId` semantics (step id for step-addressed graphs, not a misleading “node-only” label). No behavior change to queue seeding. Updated this progress log.
+**Tasks Completed**: Renamed internal `StickyRootManagerContext.managerRuntimeId` to `managerRuntimeId` in `src/events/trigger-runner.ts` so the name matches `resolveWorkflowManagerRuntimeId` semantics (step id for step-addressed graphs, not a misleading “node-only” label). No behavior change to queue seeding. Updated this progress log.
 
 **Tasks In Progress**: Module 1 `WorkflowJson` / validator legacy companion removal; module 2 root/sub edge runtime; modules 3–5 as before.
 
@@ -2244,7 +2462,7 @@ tests.
 
 ### Session: 2026-04-26 (TUI + event trigger: canonical manager runtime id)
 
-**Tasks Completed**: OpenTUI workflow summary/run preview one-line `Manager:` label for step-addressed bundles now uses `resolveWorkflowManagerRuntimeId` when `managerStepId` is omitted (still respects `hasManagerNode === false` as `none`). Event workflow trigger `resolveStickyRootManagerContext` uses the same helper for `getNormalizedNodePayload` lookup and sticky `managerNodeId` so session queue seeding matches engine routing. `bun run typecheck:server` and full `bun test` (1047 tests).
+**Tasks Completed**: OpenTUI workflow summary/run preview one-line `Manager:` label for step-addressed bundles now uses `resolveWorkflowManagerRuntimeId` when `managerStepId` is omitted (still respects `hasManagerNode === false` as `none`). Event workflow trigger `resolveStickyRootManagerContext` uses the same helper for `getNormalizedNodePayload` lookup and sticky `managerRuntimeId` so session queue seeding matches engine routing. `bun run typecheck:server` and full `bun test` (1047 tests).
 
 **Tasks In Progress**: Module 1 primary `WorkflowJson` / validator legacy field removal; module 2 root/sub edge runtime; modules 4–5 design-doc and closeout.
 
@@ -2252,9 +2470,9 @@ tests.
 
 ### Session: 2026-04-26 (engine: `resolveWorkflowManagerRuntimeId` for step-first manager id)
 
-**Tasks Completed**: Added `resolveWorkflowManagerRuntimeId` in `src/workflow/types.ts` to return `managerStepId ?? entryStepId` for normalized step-addressed bundles and `managerNodeId` for legacy node-graph shapes. Migrated all root-workflow `workflow.managerNodeId` reads in `src/workflow/engine.ts` and the root manager line in `src/workflow/node-execution-mailbox.ts` to use the helper so the active runtime no longer **depends** on the synthesized compatibility alias for step graphs (next cuts can delete `managerNodeId` from `WorkflowJson` once remaining references are updated). Regressions in `src/workflow/validate.test.ts`. `bun run typecheck:server` and full `bun test` (1047 tests).
+**Tasks Completed**: Added `resolveWorkflowManagerRuntimeId` in `src/workflow/types.ts` to return `managerStepId ?? entryStepId` for normalized step-addressed bundles and `managerRuntimeId` for legacy node-graph shapes. Migrated all workflow-execution `workflow.managerRuntimeId` reads in `src/workflow/engine.ts` and the root manager line in `src/workflow/node-execution-mailbox.ts` to use the helper so the active runtime no longer **depends** on the synthesized compatibility alias for step graphs (next cuts can delete `managerRuntimeId` from `WorkflowJson` once remaining references are updated). Regressions in `src/workflow/validate.test.ts`. `bun run typecheck:server` and full `bun test` (1047 tests).
 
-**Tasks In Progress**: Module 1: remove `managerNodeId` from `WorkflowJson` type and validation output after migrating remaining `bundle.workflow.managerNodeId` / inspection paths; module 2: root/sub edge runtime vs pure step graph; modules 4–5.
+**Tasks In Progress**: Module 1: remove `managerRuntimeId` from `WorkflowJson` type and validation output after migrating remaining `bundle.workflow.managerRuntimeId` / inspection paths; module 2: root/sub edge runtime vs pure step graph; modules 4–5.
 
 **Blockers**: None.
 
@@ -2346,7 +2564,7 @@ tests.
 
 ### Session: 2026-04-26 (design alignment: manager control current vs target)
 
-**Tasks Completed**: Re-read `impl-plans/PROGRESS.json` and `impl-plans/README.md`: phases 130–132 (auto-improve superviser) remain **Completed**; phase **133** / this plan is the active implementation target. Found `design-docs/specs/architecture.md` **Manager Control Architecture** describing only target action names (`retry-step`, …) without stating that the runtime still implements `retry-node`, `execute-optional-node`, and structural `start-sub-workflow` / `deliver-to-child-input`. Updated that section to separate **target** vs **current** and to point at this plan for the rename/removal work. Updated `design-docs/specs/notes.md` legacy bullet so it no longer claims inspection exposes `managerNodeId`/`entryNodeId` on primary summaries (those fields were removed from inspection/GraphQL); listed the real remaining debt instead. No code behavior change.
+**Tasks Completed**: Re-read `impl-plans/PROGRESS.json` and `impl-plans/README.md`: phases 130–132 (auto-improve superviser) remain **Completed**; phase **133** / this plan is the active implementation target. Found `design-docs/specs/architecture.md` **Manager Control Architecture** describing only target action names (`retry-step`, …) without stating that the runtime still implements `retry-node`, `execute-optional-node`, and structural `start-sub-workflow` / `deliver-to-child-input`. Updated that section to separate **target** vs **current** and to point at this plan for the rename/removal work. Updated `design-docs/specs/notes.md` legacy bullet so it no longer claims inspection exposes `managerRuntimeId`/`entryNodeId` on primary summaries (those fields were removed from inspection/GraphQL); listed the real remaining debt instead. No code behavior change.
 
 **Tasks In Progress**: Module 1 `WorkflowJson` / validator legacy field removal; module 2 structural manager-control deletion and action renames; modules 4–5.
 
@@ -2602,11 +2820,11 @@ GraphQL rerun, and library; all passed.
 
 **Tasks In Progress**: Public-surface cleanup remains incomplete beyond direct execution. `workflow inspect`, GraphQL workflow inspection, and TUI summaries still expose compatibility-oriented fields and counts that should be removed in later slices.
 
-**Blockers**: Internal runtime code still uses `call-step-impl.ts` (export `callNode`) behind `call-step`, and authored/schema compatibility (`managerNodeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`, structural projections) remains live elsewhere. This iteration intentionally removed only the user-facing alias first.
+**Blockers**: Internal runtime code still uses `call-step-impl.ts` (export `callNode`) behind `call-step`, and authored/schema compatibility (`managerRuntimeId`, `entryNodeId`, `workflowCalls`, `subWorkflows`, structural projections) remains live elsewhere. This iteration intentionally removed only the user-facing alias first.
 
 ### Session: 2026-04-25 (inspection / GraphQL step-first surface)
 
-**Tasks Completed**: Removed node-addressed inspection fields (`managerNodeId`, `entryNodeId`), `counts.legacySubWorkflows`, and the entire `compatibility` block from `WorkflowInspectionSummary`, CLI text/json inspect, executable GraphQL `WorkflowView` / `WorkflowCounts`, and aligned tests. `buildInspectionSummary` now fills `nodeRegistryIds` from `nodeRegistry` or runtime `nodes` so legacy bundles still list registry ids. OpenTUI history header uses `subWorkflows=` (structural count) instead of `legacySubWorkflows=`. README inspect blurb updated. `bun run typecheck:server` and full `bun test` green.
+**Tasks Completed**: Removed node-addressed inspection fields (`managerRuntimeId`, `entryNodeId`), `counts.legacySubWorkflows`, and the entire `compatibility` block from `WorkflowInspectionSummary`, CLI text/json inspect, executable GraphQL `WorkflowView` / `WorkflowCounts`, and aligned tests. `buildInspectionSummary` now fills `nodeRegistryIds` from `nodeRegistry` or runtime `nodes` so legacy bundles still list registry ids. OpenTUI history header uses `subWorkflows=` (structural count) instead of `legacySubWorkflows=`. README inspect blurb updated. `bun run typecheck:server` and full `bun test` green.
 
 **Tasks In Progress**: TASK-001 module 1 (authored schema / validator removal); module 3 visualization/TUI drill-down may still mention structural sub-workflows in dedicated panes.
 
@@ -2728,7 +2946,7 @@ removal.
 **Notes**: This slice intentionally cleaned up residual parser/wiring drift
 rather than changing architecture. Verification: `bun run typecheck:server`
 and `bun test src/cli.test.ts src/workflow/call-step.test.ts src/workflow/call-step-impl.test.ts --runInBand`
-(`114` pass). The broader compatibility model (`managerNodeId`,
+(`114` pass). The broader compatibility model (`managerRuntimeId`,
 `entryNodeId`, `workflowCalls`, structural `subWorkflows`) still remains on the
 active phase 133 checklist.
 
@@ -2839,9 +3057,9 @@ tracked by modules 1-4, not the step-addressed architecture itself.
 ### Session: 2026-04-26 12:29 JST (module 1 slice: remove step-addressed manager/entry compatibility aliases)
 
 **Tasks Completed**: Normalized step-addressed workflows no longer synthesize
-compatibility `managerNodeId` / `entryNodeId` in
+compatibility `managerRuntimeId` / `entryNodeId` in
 `src/workflow/validate.ts`; the shared `WorkflowJson` typing in
-`src/workflow/types.ts` now treats `managerNodeId` as legacy-only optional
+`src/workflow/types.ts` now treats `managerRuntimeId` as legacy-only optional
 state and keeps `resolveWorkflowManagerRuntimeId(...)` as the canonical runtime
 helper for step-addressed execution. Updated root-manager scope checks in
 `src/workflow/manager-control.ts` and root-vs-child startup handling in
@@ -2965,7 +3183,7 @@ phase-133 target before implementation. It still matches the intended
 step-addressed direction, so no design rewrite or replacement implementation
 plan was needed. Updated `src/graphql/schema.test.ts` and
 `src/server/graphql.test.ts` so GraphQL create/save worker-only coverage now
-asserts `entryStepId` plus the absence of compatibility `managerNodeId` /
+asserts `entryStepId` plus the absence of compatibility `managerRuntimeId` /
 `entryNodeId` on normalized step-addressed bundles instead of expecting the
 removed aliases. Also dropped the stale `entryNodeId` injection from the
 worker-only save-mutation conversion fixtures so the tests exercise the current
@@ -2999,7 +3217,7 @@ header now counts effective cross-workflow calls through
 `workflow.workflowCalls`, so step-addressed workflows with
 `steps[].transitions` no longer display a stale `workflowCalls=0` summary. In
 `src/tui/opentui-screen.test.ts`, the step-addressed TUI fixture no longer
-injects removed `managerNodeId` / `entryNodeId` compatibility aliases, and new
+injects removed `managerRuntimeId` / `entryNodeId` compatibility aliases, and new
 coverage asserts that step-derived cross-workflow transitions surface as
 `workflowCalls=1` in the history header.
 
@@ -3028,11 +3246,11 @@ step-addressed direction, so no replacement design document or new
 implementation plan was needed. During git-diff review I found a real runtime
 contract risk in the prior slice: `resolveWorkflowManagerRuntimeId(...)` had
 started falling back to `workflow.workflowId` when a legacy normalized bundle
-carried neither `managerNodeId` nor `entryNodeId`, which can invent a fake
+carried neither `managerRuntimeId` nor `entryNodeId`, which can invent a fake
 runtime address and hide a broken compatibility bundle. Tightened the helper in
 `src/workflow/types.ts` so step-addressed bundles still resolve
 `managerStepId ?? entryStepId`, legacy bundles still resolve
-`managerNodeId`/`entryNodeId`, and malformed legacy bundles now throw with an
+`managerRuntimeId`/`entryNodeId`, and malformed legacy bundles now throw with an
 explicit contract error instead of routing on a fabricated id. Added focused
 coverage in `src/workflow/validate.test.ts` for the new fail-fast behavior.
 
@@ -3328,7 +3546,7 @@ so the plan and `PROGRESS.json` remain `In Progress`.
 phase-133 intent before editing. It still matches the intended step-addressed
 target, so no new design document or replacement implementation plan was
 needed. Continued module 1 in `src/workflow/validate.ts` by rejecting authored
-`managerNodeId` / `entryNodeId` when a legacy node-graph bundle already
+`managerRuntimeId` / `entryNodeId` when a legacy node-graph bundle already
 declares manager-role nodes, keeping those compatibility ids authored only for
 manager-less worker-only legacy bundles that still need an explicit entry.
 Updated `src/workflow/save.ts` so save canonicalization strips those two fields
@@ -3365,7 +3583,7 @@ needed. Continued module 1 in `src/workflow/save.ts` by tightening the
 step-addressed save path: instead of silently discarding stale legacy-only
 top-level fields from an in-memory step-addressed workflow object,
 `saveWorkflowToDisk(...)` now reports validation issues when callers try to
-save `managerNodeId`, `entryNodeId`, top-level `workflowCalls`, or other
+save `managerRuntimeId`, `entryNodeId`, top-level `workflowCalls`, or other
 structural legacy companions on a step-addressed bundle. Kept the existing
 save-time projection of normalized runtime companions such as `edges` and
 materialized `nodes[]` so legitimate re-saves of loaded step-addressed bundles
@@ -3561,13 +3779,13 @@ and
 (`300` pass). This remains an incremental phase-133 slice, not plan
 completion, so the plan and `PROGRESS.json` remain `In Progress`.
 
-### Session: 2026-04-26 19:04 JST (module 1 slice: remove normalized legacy `managerNodeId` from the primary workflow surface)
+### Session: 2026-04-26 19:04 JST (module 1 slice: remove normalized legacy `managerRuntimeId` from the primary workflow surface)
 
 **Tasks Completed**: Re-checked the current architecture/design against the
 phase-133 target before editing. It still matches the intended strict
 step-addressed direction, so no new design document or replacement
 implementation plan was needed. Continued module 1 by removing
-`managerNodeId` from the primary normalized/public `WorkflowJson` surface in
+`managerRuntimeId` from the primary normalized/public `WorkflowJson` surface in
 `src/workflow/types.ts` and moving the remaining legacy node-graph access
 behind a new `getLegacyManagerNodeId(...)` helper. Updated
 `src/workflow/validate.ts`, `src/workflow/save.ts`, and
@@ -3735,7 +3953,7 @@ obsolete focused test, and adjusted `src/workflow/engine.test.ts` to assert
 from transcript mapping in `call-step-impl` / `engine`. Updated design specs listed
 above so public documentation matches the code.
 
-**Tasks In Progress**: Module 1 (`managerNodeId` / `entryNodeId` / remaining
+**Tasks In Progress**: Module 1 (`managerRuntimeId` / `entryNodeId` / remaining
 node-graph save surfaces), module 2 (root/sub branching and legacy engine fixture
 assumptions beyond this communication-metadata slice), module 3 (node-id as display
 only), and module 4 (examples/tests retirement) per the main plan checklists.
@@ -3777,7 +3995,7 @@ plus the GraphQL grouped-workflow replay-scope test whose fixture required autho
 `subWorkflows` (no longer valid to load). Adjusted prompt-composition expectations
 for non-manager task mailboxes and inbox-on-root-manager behavior.
 
-**Tasks In Progress**: Module 1 (legacy `managerNodeId` / `entryNodeId` / node-graph
+**Tasks In Progress**: Module 1 (legacy `managerRuntimeId` / `entryNodeId` / node-graph
 save surfaces), module 2 (root/sub runtime branching and **migrating `engine.test.ts`
 fixtures** off forbidden role-authored `edges` / `branching` combinations -- the
 full `engine.test.ts` suite still fails `runWorkflow` at load/validation for many
@@ -3815,7 +4033,7 @@ the obsolete "buildWorkflowHistoryHeader includes subworkflow scope metadata"
 test and stripped default structural `subWorkflows` from the shared
 `makeLoadedWorkflow` test helper.
 
-**Tasks In Progress**: Module 1 (legacy `managerNodeId` / `entryNodeId` /
+**Tasks In Progress**: Module 1 (legacy `managerRuntimeId` / `entryNodeId` /
 node-graph save surfaces and `SubWorkflowRef` type retention for
 validation/legacy tests), module 2 (`engine.test.ts` fixture migration off
 incompatible `edges`/`branching` harness), module 3 (remaining
@@ -3837,7 +4055,7 @@ slice.
 
 **Tasks Completed**: Removed dead structural sub-workflow navigation from the OpenTUI history screen. Dropped `HistoryViewMode`, `subworkflowPath` breadcrumb segments, `OpenTuiDirectionalAction` `open-subworkflow` / `close-subworkflow`, stub `buildSubworkflowNodeSelectOptions` / `buildSubworkflowListOptions`, and all runtime branches that never activated (`subworkflowPath` was never pushed). `resolveDirectionalNavigationAction` now maps history forward from **nodes** to **detail** (run detail) instead of a no-op subworkflow open; history **l**/**h** help lines describe runs → nodes → detail. Simplified `OpenTuiNavigationState`, copy-target plumbing (`selectedSubworkflowId` removed), `buildHistoryDetailPaneState` placeholders, and `OpenTuiControllerContext`. Updated TUI unit tests; deleted the obsolete `buildSubworkflowNodeSelectOptions` test block.
 
-**Tasks In Progress**: Module 1 (legacy `managerNodeId` / `entryNodeId` / node-graph save surfaces), module 2 (`engine.test.ts` fixture migration), module 4 (examples retirement). Residual TUI copy: `resolveWorkflowPreviewIndent` tests still mention "subworkflow scope" for indent metadata only (not structural runtime).
+**Tasks In Progress**: Module 1 (legacy `managerRuntimeId` / `entryNodeId` / node-graph save surfaces), module 2 (`engine.test.ts` fixture migration), module 4 (examples retirement). Residual TUI copy: `resolveWorkflowPreviewIndent` tests still mention "subworkflow scope" for indent metadata only (not structural runtime).
 
 **Blockers**: None.
 
@@ -3850,9 +4068,9 @@ and
 
 ### Session: 2026-04-27 (module 2 slice: `engine.test.ts` harness – validation-aligned fixtures)
 
-**Tasks Completed**: Aligned `src/workflow/engine.test.ts` load-time fixtures with current validation: removed forbidden authored `subWorkflows` (including empty `[]`) and `branching: { mode: "fan-out" }` from legacy node-graph helper workflows and command-node inline bundles; updated `createRoleManagedWorkflowFixture` to `kind: "root-manager"` / `kind: "task"` plus `managerNodeId` (replaces node-level `role` + invalid `edges` co-authoring). Replaced `createManagerlessWorkflowFixture` with a **step-addressed** two-step linear bundle (`entryStepId` + `steps` transitions) so auto-improve / supervision policy paths can build `StepAddressedWorkflowForSupervision` (legacy node-graph `entryNodeId`-only graphs no longer project for supervision; this was the root cause of the six `autoImprove` + resume/rerun test failures). Renamed/retargeted the GraphQL ambient-context test to assert `Node kind: root-manager` (matches `describeWorkflowNodeKind` for `kind: "root-manager"`) instead of the removed `role: "manager"` string.
+**Tasks Completed**: Aligned `src/workflow/engine.test.ts` load-time fixtures with current validation: removed forbidden authored `subWorkflows` (including empty `[]`) and `branching: { mode: "fan-out" }` from legacy node-graph helper workflows and command-node inline bundles; updated `createRoleManagedWorkflowFixture` to `kind: "root-manager"` / `kind: "task"` plus `managerRuntimeId` (replaces node-level `role` + invalid `edges` co-authoring). Replaced `createManagerlessWorkflowFixture` with a **step-addressed** two-step linear bundle (`entryStepId` + `steps` transitions) so auto-improve / supervision policy paths can build `StepAddressedWorkflowForSupervision` (legacy node-graph `entryNodeId`-only graphs no longer project for supervision; this was the root cause of the six `autoImprove` + resume/rerun test failures). Renamed/retargeted the GraphQL ambient-context test to assert `Node kind: root-manager` (matches `describeWorkflowNodeKind` for `kind: "root-manager"`) instead of the removed `role: "manager"` string.
 
-**Tasks In Progress**: Module 1 (remaining `managerNodeId` / `entryNodeId` on legacy save paths), module 2 (any other test files outside `engine.test.ts` that still author `branching` in fixtures: `call-step-impl.test.ts`, `cli.test.ts`, `lib.test.ts`, `runtime-db.test.ts`, `trigger-runner.test.ts`, `history.test.ts` per repo grep), module 3 (residual display copy), module 4 (examples).
+**Tasks In Progress**: Module 1 (remaining `managerRuntimeId` / `entryNodeId` on legacy save paths), module 2 (any other test files outside `engine.test.ts` that still author `branching` in fixtures: `call-step-impl.test.ts`, `cli.test.ts`, `lib.test.ts`, `runtime-db.test.ts`, `trigger-runner.test.ts`, `history.test.ts` per repo grep), module 3 (residual display copy), module 4 (examples).
 
 **Blockers**: None for this slice.
 
@@ -3877,7 +4095,7 @@ and
 
 **Tasks Completed**: Removed `SubWorkflowInputSourceType`, `SubWorkflowInputSource`, `SubWorkflowBlockType`, `SubWorkflowBlock`, and `SubWorkflowRef` from `src/workflow/types.ts` so the public type surface no longer advertises structural sub-workflow authoring shapes (validation already rejects `workflow.subWorkflows`). Replaced imports in focused tests (`manager-control`, `prompt-composition`, `visualization`, `runtime-addressing`, OpenTUI screen/navigation/runtime tests) with local `LegacyStructuralSubworkflowFixture` aliases for obsolete fixture objects only. Aligned `design-docs/specs/design-data-model.md`: refreshed the `WorkflowJson` / `NodeKind` summary, removed `subworkflow-manager`, and documented that structural sub-workflows are not modeled in `types.ts`.
 
-**Tasks In Progress**: Module 1 (remove `getLegacyManagerNodeId` / `getLegacyEntryNodeId` helpers and stop materializing legacy `managerNodeId` / `entryNodeId` on normalized bundles); module 2 (residual legacy fixture wording / branching assertion-only tests); module 3 (TUI copy mentioning subworkflow scope where it is indent-only); module 4 (examples retirement).
+**Tasks In Progress**: Module 1 (remove `getLegacyManagerNodeId` / `getLegacyEntryNodeId` helpers and stop materializing legacy `managerRuntimeId` / `entryNodeId` on normalized bundles); module 2 (residual legacy fixture wording / branching assertion-only tests); module 3 (TUI copy mentioning subworkflow scope where it is indent-only); module 4 (examples retirement).
 
 **Blockers**: None.
 
@@ -3890,14 +4108,14 @@ and
 
 **Tasks Completed**:
 - Removed public `getLegacyManagerNodeId` and `getLegacyEntryNodeId` from `src/workflow/types.ts`.
-- Added `inferLegacyNodeGraphGraphEntryNodeId` and `inferLegacyNodeGraphManagerNodeId`; `resolveWorkflowEntryRuntimeId` and `resolveWorkflowManagerRuntimeId` now use graph/kind/role inference for legacy node graphs instead of top-level `managerNodeId` / `entryNodeId` on `WorkflowJson`.
-- Stopped materializing `managerNodeId` / `entryNodeId` on normalized legacy node-graph output in `src/workflow/validate.ts` (`normalizeWorkflow`); semantic validation and `runSemanticValidation` use the same infer helpers.
+- Added `inferLegacyNodeGraphGraphEntryNodeId` and `inferLegacyNodeGraphManagerNodeId`; `resolveWorkflowEntryRuntimeId` and `resolveWorkflowManagerRuntimeId` now use graph/kind/role inference for legacy node graphs instead of top-level `managerRuntimeId` / `entryNodeId` on `WorkflowJson`.
+- Stopped materializing `managerRuntimeId` / `entryNodeId` on normalized legacy node-graph output in `src/workflow/validate.ts` (`normalizeWorkflow`); semantic validation and `runSemanticValidation` use the same infer helpers.
 - Extended legacy normalize-time manager resolution: single `root-manager` node, else graph entry via structural edges, so manager-less multi-node flows validate after save strips top-level `entryNodeId` from disk.
-- Stopped re-persisting legacy `managerNodeId` / `entryNodeId` in `createPersistedWorkflowJson` (`src/workflow/save.ts`).
-- Updated `validate.test.ts`, `save.test.ts`, `load.test.ts`, and `src/graphql/schema.test.ts` to assert runtime ids via `resolveWorkflow*` and key-presence on workflow objects where appropriate; legacy copy/save tests no longer expect `managerNodeId` in JSON; manager-less save test no longer requires persisted `entryNodeId` if graph inference is sufficient.
-- JSDoc on `WorkflowJson` updated in `types.ts` to state normalized bundles do not carry top-level `managerNodeId` / `entryNodeId`.
+- Stopped re-persisting legacy `managerRuntimeId` / `entryNodeId` in `createPersistedWorkflowJson` (`src/workflow/save.ts`).
+- Updated `validate.test.ts`, `save.test.ts`, `load.test.ts`, and `src/graphql/schema.test.ts` to assert runtime ids via `resolveWorkflow*` and key-presence on workflow objects where appropriate; legacy copy/save tests no longer expect `managerRuntimeId` in JSON; manager-less save test no longer requires persisted `entryNodeId` if graph inference is sufficient.
+- JSDoc on `WorkflowJson` updated in `types.ts` to state normalized bundles do not carry top-level `managerRuntimeId` / `entryNodeId`.
 
-**Tasks In Progress**: Module 1 (authored on-disk `workflow.json` for legacy flows may still **parse** `managerNodeId` / `entryNodeId` in validate until those keys are fully rejected; `prepareAuthoredWorkflowForSave` and intentional rejection tests still refer to these paths; examples retirement module 4; residual TUI "subworkflow" **wording** in preview-indent tests per prior log).
+**Tasks In Progress**: Module 1 (authored on-disk `workflow.json` for legacy flows may still **parse** `managerRuntimeId` / `entryNodeId` in validate until those keys are fully rejected; `prepareAuthoredWorkflowForSave` and intentional rejection tests still refer to these paths; examples retirement module 4; residual TUI "subworkflow" **wording** in preview-indent tests per prior log).
 
 **Blockers**: None.
 
@@ -3907,16 +4125,16 @@ and
 Focus slices also run during development: `bun test src/workflow/validate.test.ts src/workflow/save.test.ts` and `bun test src/workflow/load.test.ts` (pass).
 Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
-### Session: 2026-04-27 (module 1 slice: reject top-level `managerNodeId` / `entryNodeId` in legacy `normalizeWorkflow`)
+### Session: 2026-04-27 (module 1 slice: reject top-level `managerRuntimeId` / `entryNodeId` in legacy `normalizeWorkflow`)
 
 **Tasks Completed**:
-- **Production**: Legacy node-graph `normalizeWorkflow` in `src/workflow/validate.ts` now **rejects** any authored top-level `workflow.managerNodeId` or `workflow.entryNodeId` (with explicit messages) instead of parsing them into `effectiveManager` / `entry`. Inference-only path: `hasManagerNode` is derived from manager-role nodes or a `root-manager` kind node; `effectiveManager` / entry use role, single `root-manager`, or `inferLegacyNodeGraphGraphEntryNodeId` for manager-less graphs. Early-return and duplicate role-bundle error branches for those keys were removed as redundant.
-- **Semantic validation**: `runSemanticValidation` issues for inferred legacy manager/entry mismatches now use path `workflow` and updated messages (no `workflow.managerNodeId` / `workflow.entryNodeId` paths for inference diagnostics).
-- **Types / design**: JSDoc on `AuthoredWorkflowJson` / `WorkflowJson` in `src/workflow/types.ts` and a short note in `design-docs/specs/design-data-model.md` state that top-level `managerNodeId` / `entryNodeId` are rejected and not carried on normalized bundles.
-- **Tests**: Migrated `makeValidRaw`, load/save disk fixtures, `engine.test.ts` (including restoring `managerNodeId` on `createOrResumeSession` for SQLite only), TUI/manager/prompt/compose/communicate/call-step/runtime-db/trigger/validate/save/load/superviser/runtime-readiness tests to **omit** top-level `managerNodeId` / `entryNodeId` from workflow JSON where they were only compatibility; updated expectations for strict step-addressed diagnostics, role-bundle rejection copy, and semantic root-manager errors. Script-assisted removal of duplicate top-level `managerNodeId: "divedra-manager"` lines only when the next sibling key is `nodes` / `subWorkflows` / `workflowCalls` (avoids stripping `createOrResumeSession` `managerNodeId`).
+- **Production**: Legacy node-graph `normalizeWorkflow` in `src/workflow/validate.ts` now **rejects** any authored top-level `workflow.managerRuntimeId` or `workflow.entryNodeId` (with explicit messages) instead of parsing them into `effectiveManager` / `entry`. Inference-only path: `hasManagerNode` is derived from manager-role nodes or a `root-manager` kind node; `effectiveManager` / entry use role, single `root-manager`, or `inferLegacyNodeGraphGraphEntryNodeId` for manager-less graphs. Early-return and duplicate role-bundle error branches for those keys were removed as redundant.
+- **Semantic validation**: `runSemanticValidation` issues for inferred legacy manager/entry mismatches now use path `workflow` and updated messages (no `workflow.managerRuntimeId` / `workflow.entryNodeId` paths for inference diagnostics).
+- **Types / design**: JSDoc on `AuthoredWorkflowJson` / `WorkflowJson` in `src/workflow/types.ts` and a short note in `design-docs/specs/design-data-model.md` state that top-level `managerRuntimeId` / `entryNodeId` are rejected and not carried on normalized bundles.
+- **Tests**: Migrated `makeValidRaw`, load/save disk fixtures, `engine.test.ts` (including restoring `managerRuntimeId` on `createOrResumeSession` for SQLite only), TUI/manager/prompt/compose/communicate/call-step/runtime-db/trigger/validate/save/load/superviser/runtime-readiness tests to **omit** top-level `managerRuntimeId` / `entryNodeId` from workflow JSON where they were only compatibility; updated expectations for strict step-addressed diagnostics, role-bundle rejection copy, and semantic root-manager errors. Script-assisted removal of duplicate top-level `managerRuntimeId: "divedra-manager"` lines only when the next sibling key is `nodes` / `subWorkflows` / `workflowCalls` (avoids stripping `createOrResumeSession` `managerRuntimeId`).
 
 **Tasks In Progress**:
-- Module 1: any remaining on-disk **examples** or external fixtures outside `src/**` that still author `managerNodeId` / `entryNodeId` (examples/ sweep per module 4); residual TUI copy mentioning “legacy manager/entry” in previews if any.
+- Module 1: any remaining on-disk **examples** or external fixtures outside `src/**` that still author `managerRuntimeId` / `entryNodeId` (examples/ sweep per module 4); residual TUI copy mentioning “legacy manager/entry” in previews if any.
 - Module 2–4: unchanged from prior log (structural/branching examples, TUI indent wording-only, etc.).
 
 **Blockers**: None.
@@ -3938,7 +4156,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 - **Tests**: Added `validate.test.ts` coverage that `sub-workflow-output` in `argumentBindings` is rejected with `must be a valid binding source`.
 
 **Tasks In Progress** (unchanged directionally from prior log):
-- Module 1: any remaining legacy **wording** in examples `EXPECTED_RESULTS.md` (e.g. stale mentions of normalized `entryNodeId` / `managerNodeId`) and other docs outside the two protected specs.
+- Module 1: any remaining legacy **wording** in examples `EXPECTED_RESULTS.md` (e.g. stale mentions of normalized `entryNodeId` / `managerRuntimeId`) and other docs outside the two protected specs.
 - Module 2–4: as in prior entries (full-repo test sweeps optional; examples retirement).
 
 **Blockers**: None.
@@ -3973,7 +4191,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 
 **Tasks Completed**:
 - **Inventory**: `NodeExecutionMailboxStructure` in production still carried a `sub-workflow` union variant, structural `subWorkflows` / `subWorkflowId` fields, and `NodeExecutionMailboxManagedChild` still allowed `kind: "sub-workflow"`, but `buildMailboxStructure` / `buildManagedChildren` only ever emitted the root graph and `node` children. Checkpoint commit messages still printed a `Subworkflow-ID` line that was always unset (`buildOutputRefForExecution` does not set `subWorkflowId`). `design-node-mailbox.md` still described nested sub-workflow managers and parent/sub routing at odds with the step-addressed engine.
-- **Production**: Simplified `NodeExecutionMailboxStructure` to `type: "root-workflow"` with only `rootManagerNodeId` + `nodes` list. Removed `NodeExecutionMailboxManagedChild.kind` and the unused sub-workflow render branch. Dropped the `Subworkflow-ID` line from `buildCommitMessageTemplate` in `src/workflow/engine.ts` and `src/workflow/call-step-impl.ts`.
+- **Production**: Simplified `NodeExecutionMailboxStructure` to `type: "workflow-execution"` with only `managerRuntimeId` + `nodes` list. Removed `NodeExecutionMailboxManagedChild.kind` and the unused sub-workflow render branch. Dropped the `Subworkflow-ID` line from `buildCommitMessageTemplate` in `src/workflow/engine.ts` and `src/workflow/call-step-impl.ts`.
 - **Design**: Reworked `design-docs/specs/design-node-mailbox.md` (Scope, allocation/scoping, path rules, write ownership, delivery flow, relationship to conversation model) to describe a single manager per `workflowExecutionId`, cross-execution handoffs, and no structural nested sub-workflow graph in `workflow.json`. Does **not** change `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
@@ -4015,7 +4233,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 - **Docs**: `README.md` — replaced stale “reserved / do not combine” bullets for `subWorkflows` / `subWorkflowConversations` with “rejected by validation”; clarified `subworkflow-manager` / `input` / `output` as rejected for role bundles; tightened the role-authoring note on `kind`. `design-docs/specs/design-graphql-manager-control-plane.md` — removed root/subworkflow-manager scope split; rephrased `deliver-to-child-input` paragraph without nested structural sub-workflow ownership (did **not** edit `architecture.md` or `design-step-run-history-rerun.md`).
 
 **Tasks In Progress**:
-- Module 1: broader README “Legacy/compatibility” section still lists top-level keys (e.g. `managerNodeId`) as “may still include” while validation rejects them — full README accuracy pass deferred.
+- Module 1: broader README “Legacy/compatibility” section still lists top-level keys (e.g. `managerRuntimeId`) as “may still include” while validation rejects them — full README accuracy pass deferred.
 - Module 1: TUI/prompt residual “sub-workflow” wording; GraphQL doc “Typed Action Envelope” list if it still references removed actions.
 - Module 2–4: unchanged.
 
@@ -4029,7 +4247,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 
 **Tasks Completed**:
 - **Inventory**: `fromSubWorkflowId` / `toSubWorkflowId` remain absent from `src/**` (no further production deletion in that cluster this session). Highest remaining doc debt from the prior log was README listing rejected top-level keys as if they were still valid legacy fields, and `design-graphql-manager-control-plane.md` “Typed Action Envelope” still documenting removed structural actions.
-- **Docs**: `README.md` — split “may still use” vs “rejected” for legacy node-graph authoring; removed the obsolete “Legacy structural conversation support” subsection; aligned “What Is Implemented Today” entry/manager bullets with strict rejection of top-level `managerNodeId` / `entryNodeId` and inference-only entry; trimmed the `kind` list to match `NodeKind` (dropped a standalone `subworkflow-manager` line in favor of “rejected string” wording). `design-docs/specs/design-graphql-manager-control-plane.md` — replaced Typed Action Envelope with the real `ManagerControlAction` set (`retry-step`, optional-step actions, `replay-communication`, `planner-note`); updated runtime processing bullets; de-emphasized retired `start-sub-workflow` / `deliver-to-child-input` provenance narrative; neutralized “sub-workflow managers” phrasing in the provenance list.
+- **Docs**: `README.md` — split “may still use” vs “rejected” for legacy node-graph authoring; removed the obsolete “Legacy structural conversation support” subsection; aligned “What Is Implemented Today” entry/manager bullets with strict rejection of top-level `managerRuntimeId` / `entryNodeId` and inference-only entry; trimmed the `kind` list to match `NodeKind` (dropped a standalone `subworkflow-manager` line in favor of “rejected string” wording). `design-docs/specs/design-graphql-manager-control-plane.md` — replaced Typed Action Envelope with the real `ManagerControlAction` set (`retry-step`, optional-step actions, `replay-communication`, `planner-note`); updated runtime processing bullets; de-emphasized retired `start-sub-workflow` / `deliver-to-child-input` provenance narrative; neutralized “sub-workflow managers” phrasing in the provenance list.
 - **Tests**: Renamed one misleading `manager-control` unit test (no behavior change).
 - **Protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
@@ -4053,7 +4271,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 
 **Tasks In Progress**:
 - Module 1: TUI test modules still declare `LegacyStructuralSubworkflowFixture` / `LegacyStructuralWorkflow` types for preview fixtures that inject raw `subWorkflows` shapes (validation rejects these on disk; tests only exercise “omit legacy lines from previews”); optional follow-on to delete those fixture types if previews no longer need synthetic `subWorkflows` blobs.
-- Module 1: broader `subWorkflows` / `managerNodeId` rejection tests and examples retirement; module 2–4 unchanged.
+- Module 1: broader `subWorkflows` / `managerRuntimeId` rejection tests and examples retirement; module 2–4 unchanged.
 
 **Blockers**: None.
 
@@ -4067,7 +4285,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Inventory**: Communication `fromSubWorkflowId` / `toSubWorkflowId` remain absent from `src/**`. Next coherent cleanup was the duplicated per-file `LegacyStructuralSubworkflowFixture` / `LegacyStructuralWorkflow` types and invalid-on-disk `subWorkflows: [...]` blobs in unit-test fixtures, left over after structural sub-workflow removal from production; `deriveWorkflowVisualization` and manager-control parsing never consumed `subWorkflows` metadata.
-- **Tests**: Dropped `subWorkflows` blocks from TUI and workflow test helpers (`opentui-screen-runtime.test.ts`, `opentui-screen-navigation.test.ts`, `opentui-screen.test.ts` still casts one in-memory `subWorkflows` array as `WorkflowJson` for the “omit legacy preview lines” test), `manager-control.test.ts`, `prompt-composition.test.ts` (removed redundant `subWorkflows: []` test; `makeWorkflow` no longer authors structural keys), `visualization.test.ts` (replaced `LegacyStructuralSubworkflowFixture` with `NodeGraphWorkflow`; removed all `subWorkflows` arrays; renamed tests to describe graph behavior without structural metadata), and `runtime-addressing.test.ts` (fixture is plain `WorkflowJson` without `subWorkflows` / `managerNodeId` / `entryNodeId` / `edges`). Introduced `LegacyNodeGraphFixture` only where an explicit node-graph `edges`/`loops` companion is still needed for the parser under test.
+- **Tests**: Dropped `subWorkflows` blocks from TUI and workflow test helpers (`opentui-screen-runtime.test.ts`, `opentui-screen-navigation.test.ts`, `opentui-screen.test.ts` still casts one in-memory `subWorkflows` array as `WorkflowJson` for the “omit legacy preview lines” test), `manager-control.test.ts`, `prompt-composition.test.ts` (removed redundant `subWorkflows: []` test; `makeWorkflow` no longer authors structural keys), `visualization.test.ts` (replaced `LegacyStructuralSubworkflowFixture` with `NodeGraphWorkflow`; removed all `subWorkflows` arrays; renamed tests to describe graph behavior without structural metadata), and `runtime-addressing.test.ts` (fixture is plain `WorkflowJson` without `subWorkflows` / `managerRuntimeId` / `entryNodeId` / `edges`). Introduced `LegacyNodeGraphFixture` only where an explicit node-graph `edges`/`loops` companion is still needed for the parser under test.
 - **Design / architecture**: No change. Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
@@ -4088,8 +4306,8 @@ Full-repo `bun test` not re-run this session.
 - **Tests**: No expectation changes required. **Design**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
-- Module 1: TUI `opentui-screen.test.ts` still injects in-memory `subWorkflows` / `managerNodeId` / `entryNodeId` via casts for preview-only scenarios.
-- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerNodeId` / `entryNodeId`.
+- Module 1: TUI `opentui-screen.test.ts` still injects in-memory `subWorkflows` / `managerRuntimeId` / `entryNodeId` via casts for preview-only scenarios.
+- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerRuntimeId` / `entryNodeId`.
 - Staged vs unstaged: larger `engine.ts` deletions may still be split across index and worktree from multi-step editing; consolidate before commit if desired.
 
 **Blockers**: None.
@@ -4099,15 +4317,15 @@ Full-repo `bun test` not re-run this session.
 `bun test src/workflow/engine.test.ts src/workflow/session.test.ts src/workflow/communication-service.test.ts src/workflow/runtime-db.test.ts --runInBand` (`125` pass)
 `bun test` full repo (`1109` pass, 74 files) after final `engine.ts` state
 
-### Session: 2026-04-27 (module 1 slice: TUI tests — drop invalid in-memory `managerNodeId` / `entryNodeId` / `subWorkflows` fixtures)
+### Session: 2026-04-27 (module 1 slice: TUI tests — drop invalid in-memory `managerRuntimeId` / `entryNodeId` / `subWorkflows` fixtures)
 
 **Tasks Completed**:
 - **Inventory**: `fromSubWorkflowId` / `toSubWorkflowId` remain absent from `src/**` (prior sessions). Coherent follow-on from the last log was preview tests that still embedded **rejected** top-level workflow keys purely to drive TUI copy; `WorkflowJson` and `buildLegacy*DisplayLine` already infer manager/entry from `root-manager` / roles / edges (`src/workflow/types.ts`, `src/tui/opentui-model/workflow-rendering.ts`).
-- **Tests**: `src/tui/opentui-screen.test.ts` — removed `managerNodeId` / `entryNodeId` from worker-only fixtures (two tests); removed redundant top-level `managerNodeId` from the workflow-call preview fixture; **deleted** the test that injected a synthetic `subWorkflows` array into step-addressed workflows (coverage redundant with existing “no Legacy structural” assertions on valid bundles). `src/tui/opentui-detail-content.test.ts` — removed `managerNodeId` from the shared `makeLoadedWorkflow` helper (manager still resolved via `kind: "root-manager"`).
+- **Tests**: `src/tui/opentui-screen.test.ts` — removed `managerRuntimeId` / `entryNodeId` from worker-only fixtures (two tests); removed redundant top-level `managerRuntimeId` from the workflow-call preview fixture; **deleted** the test that injected a synthetic `subWorkflows` array into step-addressed workflows (coverage redundant with existing “no Legacy structural” assertions on valid bundles). `src/tui/opentui-detail-content.test.ts` — removed `managerRuntimeId` from the shared `makeLoadedWorkflow` helper (manager still resolved via `kind: "root-manager"`).
 - **Design / protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. Behavior matches the documented model: normalized bundles do not persist those keys; previews use runtime resolution helpers.
 
 **Tasks In Progress**:
-- Module 1: `prompt-composition.test.ts` / `manager-control.test.ts` still declare optional `managerNodeId` on local fixture types where unnecessary; `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level ids (intentional validation coverage).
+- Module 1: `prompt-composition.test.ts` / `manager-control.test.ts` still declare optional `managerRuntimeId` on local fixture types where unnecessary; `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level ids (intentional validation coverage).
 - Module 2–4: `subworkflow-manager` string handling in node-role/TUI/readers; `engine.test.ts` and other tests asserting historical structural sub-workflow behavior.
 
 **Blockers**: None.
@@ -4124,11 +4342,11 @@ Full-repo `bun test` not re-run this session.
 - **Inventory**: `fromSubWorkflowId` / `toSubWorkflowId` remain absent from `src/**` (no reintroduction). Load-time stripping of optional `subWorkflowId` on communication `payloadRef` values, conversation-turn `outputRef` values, and `pendingOptionalNodeDecisions` was redundant after types dropped that field; removing it tightens the normalization surface.
 - **Production (`src/workflow/session.ts`)**: Removed `stripLegacySubWorkflowIdFromNodeOutputRef`, `stripLegacySubWorkflowIdFromManagerMessageRef`, `normalizeCommunicationPayloadRef`, and `stripLegacySubWorkflowIdFromPendingOptionalDecision`. `normalizeSessionState` no longer rewrites `payloadRef` or strips extra keys from optional decisions; it still normalizes `communications[].routingScope` via `normalizeCommunicationRoutingScope` and shallow-clones conversation turns and pending optional decisions. Tightened the doc comment for `normalizeCommunicationRoutingScope` (any non-`external-mailbox` value maps to `intra-workflow`).
 - **Tests (`src/workflow/session.test.ts`)**: Deleted `"strips legacy subWorkflowId from communications, turns, and pending optional decisions on load"`. Kept routing-scope legacy normalization coverage where present.
-- **Tests (same branch worktree)**: `prompt-composition.test.ts` and `manager-control.test.ts` — drop structural `subWorkflows` / `subworkflow-manager` / `getStructuralSubWorkflows` / top-level `managerNodeId` from local fixtures, remove the `assertCommunicationInManagerScope` replay test that depended on removed communication fields, and treat nested coordinator nodes as `task` / `root-manager` as appropriate so tests match current `NodeKind` and validation (no reintroduction of structural runtime behavior).
+- **Tests (same branch worktree)**: `prompt-composition.test.ts` and `manager-control.test.ts` — drop structural `subWorkflows` / `subworkflow-manager` / `getStructuralSubWorkflows` / top-level `managerRuntimeId` from local fixtures, remove the `assertCommunicationInManagerScope` replay test that depended on removed communication fields, and treat nested coordinator nodes as `task` / `root-manager` as appropriate so tests match current `NodeKind` and validation (no reintroduction of structural runtime behavior).
 - **Protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
-- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerNodeId` / `entryNodeId` (intentional coverage); optional full-repo `bun test` sweep.
+- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerRuntimeId` / `entryNodeId` (intentional coverage); optional full-repo `bun test` sweep.
 - Module 2–4: any remaining `engine.test.ts` / integration tests tied to pre-migration behavior outside current slices; `subworkflow-manager` rejection tests in `validate.test.ts` (keep as negative tests).
 
 **Blockers**: None. **Caveat**: Extremely old on-disk session JSON that still embeds a `subWorkflowId` key on output refs is no longer stripped on `normalizeSessionState`; extra keys are ignored by typed code paths. If a future strict JSON round-trip test requires a canonical shape, reintroduce an explicit whitelisted ref serializer instead of ad-hoc strip.
@@ -4148,7 +4366,7 @@ Full-repo `bun test` not re-run this session.
 - **Design**: `design-docs/specs/design-data-model.md` — Routing Scopes section now documents load-time coercion in terms of `normalizeCommunicationRoutingScope` without enumerating removed enum members. Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
-- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerNodeId` / `entryNodeId` (intentional coverage).
+- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerRuntimeId` / `entryNodeId` (intentional coverage).
 - Module 2–4: `subworkflow-manager` negative tests in `validate.test.ts`; any residual `engine.test.ts` / integration coverage tied to pre-migration wording (low priority if behavior already migrated).
 
 **Blockers**: None.
@@ -4168,7 +4386,7 @@ Did **not** run full-repo `bun test` this session.
 - **Architecture / design**: No design doc edits. Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. Intended direction (no structural sub-workflow manager actions) is unchanged; this pass only trimmed duplicate regression tests.
 
 **Tasks In Progress**:
-- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerNodeId` / `entryNodeId` (intentional coverage); optional README accuracy for the same keys.
+- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerRuntimeId` / `entryNodeId` (intentional coverage); optional README accuracy for the same keys.
 - Module 2–4: `subworkflow-manager` negative tests in `validate.test.ts`; `engine.test.ts` non-regression strings for removed action types in manager prompts (keep); optional full-repo `bun test` sweep.
 
 **Blockers**: None.
@@ -4182,11 +4400,11 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Inventory**: `fromSubWorkflowId` / `toSubWorkflowId` remain **absent** from `src/**` (no production code in that cluster in this pass). The highest-value remaining work in the “legacy node-kind / test debt” column was `validate.test.ts`: a dedicated `subworkflow-manager` negative test duplicated the existing `expectInvalidNodeKind` helper and three sibling tests.
-- **Tests (`src/workflow/validate.test.ts`)**: Replaced the four separate invalid-kind tests (including the extra role-authored `subworkflow-manager` block) with a single `test.each` over `["sub-manager", "manager", "sub-divedra-manager", "subworkflow-manager"]`, reusing `expectInvalidNodeKind` (legacy node-graph fixture). Renamed two tests that still referenced `workflow.managerNodeId` in their titles even though the fixtures no longer set that field (`rejects manager-role node with task kind; inferred manager must be root-manager`, `rejects additional root-manager nodes when a single manager is already defined`).
+- **Tests (`src/workflow/validate.test.ts`)**: Replaced the four separate invalid-kind tests (including the extra role-authored `subworkflow-manager` block) with a single `test.each` over `["sub-manager", "manager", "sub-divedra-manager", "subworkflow-manager"]`, reusing `expectInvalidNodeKind` (legacy node-graph fixture). Renamed two tests that still referenced `workflow.managerRuntimeId` in their titles even though the fixtures no longer set that field (`rejects manager-role node with task kind; inferred manager must be root-manager`, `rejects additional root-manager nodes when a single manager is already defined`).
 - **Design / protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. Behavior is unchanged: unknown `kind` strings fail `normalizeNodeKind` and surface `must be a valid node kind` at `workflow.nodes[1].kind`.
 
 **Tasks In Progress**:
-- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerNodeId` / `entryNodeId` (intentional negative coverage; optional README sweep).
+- Module 1: `validate` / `load` / `save` / examples for rejected `subWorkflows` and top-level `managerRuntimeId` / `entryNodeId` (intentional negative coverage; optional README sweep).
 - Module 2: any remaining `engine.test.ts` prompt non-regressions (strings only, low priority if unchanged).
 
 **Blockers**: None. No production `src/**` change this session: structural communication IDs and GraphQL `CommunicationRecord` were already free of `fromSubWorkflowId` / `toSubWorkflowId`; this pass only reduced redundant tests around the removed `subworkflow-manager` kind string.
@@ -4258,11 +4476,11 @@ Full-repo `bun test` not re-run this session.
 `bun run typecheck:server`
 `bun test src/workflow/validate.test.ts src/workflow/save.test.ts src/workflow/load.test.ts --runInBand`
 
-### Session: 2026-04-27 (module 1 slice: unconditional strip of authored `managerNodeId` / `entryNodeId` on legacy save path)
+### Session: 2026-04-27 (module 1 slice: unconditional strip of authored `managerRuntimeId` / `entryNodeId` on legacy save path)
 
 **Tasks Completed**:
-- **Inventory**: Authored `workflow.json` validation already rejects top-level `managerNodeId`, `entryNodeId`, and `subWorkflows` on every path (`normalizeWorkflow` legacy branch and step-addressed branch). `prepareAuthoredWorkflowForSave` still carried persistence rules (`shouldPersistTopLevelField`, manager-role heuristics) that could only produce output consistent with validation by stripping those keys; `preparedWorkflow["hasManagerNode"] === false` was **dead** after `stripPersistedWorkflowCompatibilityFields` removed `hasManagerNode` first.
-- **Production (`src/workflow/save.ts`)**: `stripPersistedWorkflowCompatibilityFields` now always drops top-level `managerNodeId` and `entryNodeId` (in addition to `hasManagerNode`). Removed `hasManagerRoleNode` / `hasAuthoredManagerRoleNode`. `prepareAuthoredWorkflowForSave` always deletes `managerNodeId` and `entryNodeId` after node preparation instead of branching on manager-role and existing-disk presence.
+- **Inventory**: Authored `workflow.json` validation already rejects top-level `managerRuntimeId`, `entryNodeId`, and `subWorkflows` on every path (`normalizeWorkflow` legacy branch and step-addressed branch). `prepareAuthoredWorkflowForSave` still carried persistence rules (`shouldPersistTopLevelField`, manager-role heuristics) that could only produce output consistent with validation by stripping those keys; `preparedWorkflow["hasManagerNode"] === false` was **dead** after `stripPersistedWorkflowCompatibilityFields` removed `hasManagerNode` first.
+- **Production (`src/workflow/save.ts`)**: `stripPersistedWorkflowCompatibilityFields` now always drops top-level `managerRuntimeId` and `entryNodeId` (in addition to `hasManagerNode`). Removed `hasManagerRoleNode` / `hasAuthoredManagerRoleNode`. `prepareAuthoredWorkflowForSave` always deletes `managerRuntimeId` and `entryNodeId` after node preparation instead of branching on manager-role and existing-disk presence.
 - **Production (`src/workflow/types.ts`, `src/workflow/validate.ts`)**: Tightened JSDoc for `AuthoredWorkflowJson`, `WorkflowJson`, and `REJECTED_AUTHORED_TOP_LEVEL_NODE_GRAPH_FIELD_KEYS` to describe current behavior without redundant “compatibility carrier” framing.
 - **Tests (`src/workflow/types.test.ts`)**: Renamed the strict-type regression test and `@ts-expect-error` comments to refer to disallowed schema keys rather than “legacy compatibility”.
 - **Protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. `design-workflow-json.md` and the active impl plan already match the step-addressed / rejected-keys direction; no new implementation plan was required.
@@ -4282,8 +4500,8 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: dedupe `prepareAuthoredWorkflowForSave` after `stripPersistedWorkflowCompatibilityFields`)
 
 **Tasks Completed**:
-- **Reviewed** continuing work from the prior slice (shared rejected-key constants in `validate.ts` / `save.ts`, unconditional strip of top-level `managerNodeId` / `entryNodeId` in `stripPersistedWorkflowCompatibilityFields`, removal of manager-role persistence heuristics). Confirmed alignment with `design-docs/specs/design-workflow-json.md` (rejected keys; step-addressed surface); no new design doc or parallel plan.
-- **Production (`src/workflow/save.ts`)**: Removed redundant `delete` of `managerNodeId` / `entryNodeId` after node preparation in `prepareAuthoredWorkflowForSave`, since `stripPersistedWorkflowCompatibilityFields` already removes them before the prepared workflow object is built (single locus, same behavior).
+- **Reviewed** continuing work from the prior slice (shared rejected-key constants in `validate.ts` / `save.ts`, unconditional strip of top-level `managerRuntimeId` / `entryNodeId` in `stripPersistedWorkflowCompatibilityFields`, removal of manager-role persistence heuristics). Confirmed alignment with `design-docs/specs/design-workflow-json.md` (rejected keys; step-addressed surface); no new design doc or parallel plan.
+- **Production (`src/workflow/save.ts`)**: Removed redundant `delete` of `managerRuntimeId` / `entryNodeId` after node preparation in `prepareAuthoredWorkflowForSave`, since `stripPersistedWorkflowCompatibilityFields` already removes them before the prepared workflow object is built (single locus, same behavior).
 - **Protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`.
 
 **Tasks In Progress**:
@@ -4300,7 +4518,7 @@ Full `bun test` (`1105` pass, `74` files).
 ### Session: 2026-04-27 (module 1: DRY + rename for rejected top-level keys)
 
 **Tasks Completed**:
-- **Inventory**: Confirmed `design-docs/specs/design-workflow-json.md` already states step-addressed direction and disallowed top-level fields; `architecture.md` / `design-step-run-history-rerun.md` not modified. Extended that design doc to name `managerNodeId` and `entryNodeId` as rejected legacy top-level fields and to point at `src/workflow/validate.ts` for the exact key sets and messages.
+- **Inventory**: Confirmed `design-docs/specs/design-workflow-json.md` already states step-addressed direction and disallowed top-level fields; `architecture.md` / `design-step-run-history-rerun.md` not modified. Extended that design doc to name `managerRuntimeId` and `entryNodeId` as rejected legacy top-level fields and to point at `src/workflow/validate.ts` for the exact key sets and messages.
 - **Production (`src/workflow/validate.ts`)**: Renamed `REJECTED_AUTHORED_TOP_LEVEL_NODE_GRAPH_FIELD_KEYS` to `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (legacy `normalizeWorkflow` branch). Introduced `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` as the single list for the step-addressed branch (three disallowed keys plus `workflowCalls`, `subWorkflowConversations`, `edges`, `loops`, `branching`). Clarified JSDoc for cross-workflow callee entry validation.
 - **Production (`src/workflow/save.ts`)**: `collectStepAddressedSaveLegacyFieldIssues` now iterates `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, skipping `edges` so the save-specific `edges` error text is unchanged; all other keys use `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` as before.
 - **Production (`src/workflow/types.ts`)**: `AuthoredWorkflowJson` JSDoc now references the new validator export names instead of “compatibility” / “wider Record” phrasing.
@@ -4320,7 +4538,7 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: review + DRY exports + test label cleanup)
 
 **Tasks Completed**:
-- **Review (worktree / prior commits)**: Confirmed the intended split remains: **load/validate** of on-disk `workflow.json` still **rejects** top-level `managerNodeId`, `entryNodeId`, and `subWorkflows` via `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` in the legacy `normalizeWorkflow` branch; **save** runs `stripNormalizedOnlyWorkflowTopLevelFields` first so in-memory inputs may drop normalized-only `hasManagerNode` before validation. Disallowed authored keys (`managerNodeId`, `entryNodeId`, `subWorkflows`, etc.) are **not** stripped on save; they fail validation like on-disk `workflow.json`.
+- **Review (worktree / prior commits)**: Confirmed the intended split remains: **load/validate** of on-disk `workflow.json` still **rejects** top-level `managerRuntimeId`, `entryNodeId`, and `subWorkflows` via `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` in the legacy `normalizeWorkflow` branch; **save** runs `stripNormalizedOnlyWorkflowTopLevelFields` first so in-memory inputs may drop normalized-only `hasManagerNode` before validation. Disallowed authored keys (`managerRuntimeId`, `entryNodeId`, `subWorkflows`, etc.) are **not** stripped on save; they fail validation like on-disk `workflow.json`.
 - **Production (already in worktree)**: Single exported key lists in `validate.ts` (`REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`); legacy + step-addressed validators and `save.ts` pre-scan DRY; `isStrictWorkflowAuthorshipValidation` / callee-entry JSDoc clarified; `save.ts` renames `stripRedundantKindWhenRolePresentOnNode`, `stripNormalizedOnlyWorkflowTopLevelFields`; `types.ts` JSDoc for `AuthoredWorkflowJson`, `WorkflowJson`, and `LoadOptions.rejectLegacyWorkflowAuthoring` aligned with validator exports.
 - **Design fit**: `design-docs/specs/design-workflow-json.md` (in worktree) remains consistent with step-addressed authoring and disallowed top-level fields; `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` were not modified (protected). No new parallel implementation plan required.
 - **Tests (this session)**: Renamed a few `save.test.ts` / `validate.test.ts` test titles and one helper comment to drop redundant “compatibility” wording (behavior unchanged).
@@ -4341,7 +4559,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Inventory**: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` / `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` remain the rejection source of truth. `SAVE_STRIP_LEGACY_TOP_LEVEL_ALIAS_KEYS` was a filter-derived exclude of `subWorkflows`, with an exported `RejectedAuthoredDisallowedTopLevelFieldKey` only used to type that derivation; after legacy removal this indirection is unnecessary.
-- **Production (`src/workflow/validate.ts`)**: `SAVE_STRIP_LEGACY_TOP_LEVEL_ALIAS_KEYS` is now an explicit `as const` tuple `["managerNodeId", "entryNodeId"]` with JSDoc stating why `subWorkflows` is not included. Removed `RejectedAuthoredDisallowedTopLevelFieldKey` (no other references). Rejection loops unchanged.
+- **Production (`src/workflow/validate.ts`)**: `SAVE_STRIP_LEGACY_TOP_LEVEL_ALIAS_KEYS` is now an explicit `as const` tuple `["managerRuntimeId", "entryNodeId"]` with JSDoc stating why `subWorkflows` is not included. Removed `RejectedAuthoredDisallowedTopLevelFieldKey` (no other references). Rejection loops unchanged.
 - **Production (`src/workflow/types.ts`)**: Tightened `AuthoredWorkflowJson` JSDoc to one pointer line (rejected keys + save strip in `validate.ts`). No behavior change.
 - **Design**: `design-docs/specs/design-workflow-json.md` already documents strip vs reject; no edit. Protected specs unchanged.
 
@@ -4356,11 +4574,11 @@ Full-repo `bun test` not re-run this session.
 `bun test src/workflow/validate.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/load.test.ts --runInBand` (`304` pass)
 Full-repo `bun test` not re-run this session.
 
-### Session: 2026-04-27 (module 1: stop stripping legacy `managerNodeId` / `entryNodeId` on save)
+### Session: 2026-04-27 (module 1: stop stripping legacy `managerRuntimeId` / `entryNodeId` on save)
 
 **Tasks Completed**:
 - **Production (`src/workflow/validate.ts`)**: Removed `SAVE_STRIP_LEGACY_TOP_LEVEL_ALIAS_KEYS` (rejection lists unchanged).
-- **Production (`src/workflow/save.ts`)**: `stripNormalizedOnlyWorkflowTopLevelFields` now drops only `hasManagerNode`; disallowed top-level `managerNodeId` / `entryNodeId` are no longer removed before validation (aligned with on-disk `workflow.json` and `subWorkflows` handling).
+- **Production (`src/workflow/save.ts`)**: `stripNormalizedOnlyWorkflowTopLevelFields` now drops only `hasManagerNode`; disallowed top-level `managerRuntimeId` / `entryNodeId` are no longer removed before validation (aligned with on-disk `workflow.json` and `subWorkflows` handling).
 - **Production (`src/workflow/types.ts`)**: JSDoc for `AuthoredWorkflowJson` and `LoadOptions` no longer reference save-strip keys for node ids.
 - **Design (`design-docs/specs/design-workflow-json.md`)**: Save bullet updated to match (protected `architecture.md` / `design-step-run-history-rerun.md` untouched).
 - **Tests (`src/workflow/save.test.ts`)**: Replaced the former “strip then succeed” role-authored alias test with a rejection test using `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE`.
@@ -4379,8 +4597,8 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: Re-checked `design-docs/specs/design-workflow-json.md` and this plan against current code: step-addressed authoring with rejected legacy top-level keys and save stripping only `hasManagerNode` remains the documented behavior; no change to protected `architecture.md` or `design-step-run-history-rerun.md`.
-- **Tests (`src/workflow/superviser.test.ts`)**: `toStepAddressedWorkflowForSupervision` only inspects `entryStepId` and `steps`; removed misleading top-level `entryNodeId` / `managerNodeId` from fixtures so tests do not imply those keys exist on `WorkflowJson`.
-- **Plan hygiene (`impl-plans/workflow-legacy-compatibility-removal.md`)**: Corrected an earlier progress-log bullet that incorrectly stated save stripped `managerNodeId` / `entryNodeId` (current behavior: validation rejects them; only `hasManagerNode` is dropped before validation).
+- **Tests (`src/workflow/superviser.test.ts`)**: `toStepAddressedWorkflowForSupervision` only inspects `entryStepId` and `steps`; removed misleading top-level `entryNodeId` / `managerRuntimeId` from fixtures so tests do not imply those keys exist on `WorkflowJson`.
+- **Plan hygiene (`impl-plans/workflow-legacy-compatibility-removal.md`)**: Corrected an earlier progress-log bullet that incorrectly stated save stripped `managerRuntimeId` / `entryNodeId` (current behavior: validation rejects them; only `hasManagerNode` is dropped before validation).
 
 **Tasks In Progress**:
 - Module 1: examples retirement; optional DRY of remaining “legacy compatibility only” strings in `validate.ts`; full-repo `bun test` sweep.
@@ -4415,8 +4633,8 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: verify in-flight worktree, trim legacy helper JSDoc, align save test title)
 
 **Tasks Completed**:
-- **Architecture / design fit**: `design-docs/specs/design-workflow-json.md` (in tree) still matches the implementation: disallowed top-level key sets in `src/workflow/validate.ts`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` for `workflow.edges` on step-addressed bundles, and save pre-validation that only strips normalized `hasManagerNode` (rejected `managerNodeId` / `entryNodeId` / `subWorkflows` are not stripped). No change to protected `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. No separate implementation plan beyond this active plan.
-- **Inherited worktree review (uncommitted)**: `save.ts` DRYs step-addressed pre-scan and `normalizeStepAddressedWorkflow` on `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` + shared messages; `stripNormalizedOnlyWorkflowTopLevelFields` no longer drops `managerNodeId` when `hasManagerNode === false`; `prepareAuthoredWorkflowForSave` no longer strips or canonicalizes top-level `managerNodeId` / `entryNodeId` (validation rejects disallowed keys like on-disk `workflow.json`); tests simplified to top-level `subWorkflows` presence without structural sub-workflow field assertions. Aligns with prior session log intent; full diff reviewed for consistency.
+- **Architecture / design fit**: `design-docs/specs/design-workflow-json.md` (in tree) still matches the implementation: disallowed top-level key sets in `src/workflow/validate.ts`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` for `workflow.edges` on step-addressed bundles, and save pre-validation that only strips normalized `hasManagerNode` (rejected `managerRuntimeId` / `entryNodeId` / `subWorkflows` are not stripped). No change to protected `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. No separate implementation plan beyond this active plan.
+- **Inherited worktree review (uncommitted)**: `save.ts` DRYs step-addressed pre-scan and `normalizeStepAddressedWorkflow` on `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` + shared messages; `stripNormalizedOnlyWorkflowTopLevelFields` no longer drops `managerRuntimeId` when `hasManagerNode === false`; `prepareAuthoredWorkflowForSave` no longer strips or canonicalizes top-level `managerRuntimeId` / `entryNodeId` (validation rejects disallowed keys like on-disk `workflow.json`); tests simplified to top-level `subWorkflows` presence without structural sub-workflow field assertions. Aligns with prior session log intent; full diff reviewed for consistency.
 - **Production (`src/workflow/types.ts`)**: Shortened JSDoc on `getLegacyAuthoredEdges` and `getLegacyAuthoredLoops` to describe persisted node-graph fields and point to `getStructuralEdges` / `getStructuralLoops` (removed redundant “compatibility” boilerplate while keeping accurate legacy node-graph meaning).
 - **Tests (`src/workflow/save.test.ts`)**: Renamed the manager-less legacy save test to reflect that the fixture never authors `entryNodeId` and asserts no top-level manager/entry ids after save plus inferred entry at runtime.
 
@@ -4435,7 +4653,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: Re-read `design-docs/specs/design-workflow-json.md`: step-addressed required fields, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` / `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and save stripping only `hasManagerNode` match the uncommitted `validate.ts` / `save.ts` / `types.ts` changes. No pivot; protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No additional implementation plan beyond this file.
-- **Worktree review**: The production slice (central `REJECTED_AUTHORED_*` lists, single-loop step-addressed pre-validation in `save.ts`, `stripNormalizedOnlyWorkflowTopLevelFields` dropping only `hasManagerNode`, no save-time strip of disallowed `managerNodeId` / `entryNodeId` / `subWorkflows`, renamed node/top-level strippers) is coherent; runtime/session `managerNodeId` remains a separate concern from authored top-level rejection (per JSDoc in `types.ts` / `validate.ts`).
+- **Worktree review**: The production slice (central `REJECTED_AUTHORED_*` lists, single-loop step-addressed pre-validation in `save.ts`, `stripNormalizedOnlyWorkflowTopLevelFields` dropping only `hasManagerNode`, no save-time strip of disallowed `managerRuntimeId` / `entryNodeId` / `subWorkflows`, renamed node/top-level strippers) is coherent; runtime/session `managerRuntimeId` remains a separate concern from authored top-level rejection (per JSDoc in `types.ts` / `validate.ts`).
 - **Tests (`src/workflow/validate.test.ts`, `src/workflow/save.test.ts`)**: Replaced duplicated string literals in step-addressed `workflow.entryNodeId` / `workflow.edges` failure expectations with `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE` and `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` so tests track `validate.ts` as the single source of truth; user-visible messages unchanged.
 
 **Tasks In Progress**:
@@ -4454,7 +4672,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: `design-docs/specs/design-workflow-json.md` (staged/dirty) already describes `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, the step-addressed `workflow.edges` message, and save-time stripping of only `hasManagerNode`. No conflict with the uncommitted `validate.ts` / `save.ts` / `types.ts` slice. Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No separate implementation plan added beyond this file.
-- **Worktree / diff review**: Central rejection exports, single-loop step-addressed pre-scan in `save.ts` and `normalizeStepAddressedWorkflow`, `stripNormalizedOnlyWorkflowTopLevelFields` (only `hasManagerNode`), and removal of save-time `managerNodeId` / `entryNodeId` canonicalization are consistent with negative tests. Runtime/session `managerNodeId` remains distinct from authored top-level keys (JSDoc in `types.ts` / `validate.ts`).
+- **Worktree / diff review**: Central rejection exports, single-loop step-addressed pre-scan in `save.ts` and `normalizeStepAddressedWorkflow`, `stripNormalizedOnlyWorkflowTopLevelFields` (only `hasManagerNode`), and removal of save-time `managerRuntimeId` / `entryNodeId` canonicalization are consistent with negative tests. Runtime/session `managerRuntimeId` remains distinct from authored top-level keys (JSDoc in `types.ts` / `validate.ts`).
 
 **Tasks In Progress**:
 - Module 1: optional examples retirement; trim long module-1 checklist line in this plan; optional DRY of remaining role-authored “legacy compatibility only” strings in `validate.ts`.
@@ -4470,8 +4688,8 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: `design-docs/specs/design-workflow-json.md` (in tree) matches the dirty implementation: exported `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, strict vs legacy node-graph branching described by `isStrictWorkflowAuthorshipValidation`, and save stripping only `hasManagerNode`. No pivot; protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No additional implementation plan beyond this file.
-- **Worktree review (production)**: `validate.ts` uses the shared key lists in `normalizeStepAddressedWorkflow` and legacy node-graph top-level rejection; `save.ts` pre-scan matches the same list and edges-specific message; `types.ts` `AuthoredWorkflowJson` / `LoadOptions` docs distinguish authored rejection from runtime step id fields named `managerNodeId` where applicable.
-- **Worktree review (tests)**: `load.test.ts` / `validate.test.ts` use minimal `subWorkflows` fixtures for top-level presence rejection and drop redundant duplicate expectations; cross-workflow callee tests assert missing `entryStepId`/`managerStepId` on disk instead of relying on removed top-level `entryNodeId`; `types.test.ts` locks list composition and extends compile-time exclusions for step-only rejects (`subWorkflowConversations`, `loops`, `branching`); `resolveWorkflow*` tests no longer cast fake top-level `entryNodeId`/`managerNodeId` onto `WorkflowJson`; invalid kind table uses `orphan-manager-kind` instead of removed structural manager kind string.
+- **Worktree review (production)**: `validate.ts` uses the shared key lists in `normalizeStepAddressedWorkflow` and legacy node-graph top-level rejection; `save.ts` pre-scan matches the same list and edges-specific message; `types.ts` `AuthoredWorkflowJson` / `LoadOptions` docs distinguish authored rejection from runtime step id fields named `managerRuntimeId` where applicable.
+- **Worktree review (tests)**: `load.test.ts` / `validate.test.ts` use minimal `subWorkflows` fixtures for top-level presence rejection and drop redundant duplicate expectations; cross-workflow callee tests assert missing `entryStepId`/`managerStepId` on disk instead of relying on removed top-level `entryNodeId`; `types.test.ts` locks list composition and extends compile-time exclusions for step-only rejects (`subWorkflowConversations`, `loops`, `branching`); `resolveWorkflow*` tests no longer cast fake top-level `entryNodeId`/`managerRuntimeId` onto `WorkflowJson`; invalid kind table uses `orphan-manager-kind` instead of removed structural manager kind string.
 
 **Tasks In Progress**:
 - Module 1: examples retirement (if any bundles still reference rejected keys); optional trim of the long module-1 checklist line; optional DRY of remaining role-authored “legacy compatibility only” strings in `validate.ts`.
@@ -4488,7 +4706,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: Re-checked `design-docs/specs/design-workflow-json.md` (validation key sets, Removed Fields) against `src/workflow/validate.ts` exports and `src/workflow/save.ts` behavior; consistent. No new implementation plan file; protected docs unchanged.
-- **Code / tests**: Re-reviewed unstaged `types.ts` / `validate.ts` / `save.ts` and matching tests; `superviser.test.ts` change removes invalid top-level `entryNodeId` / `managerNodeId` from `WorkflowJson` test fixtures. No further production edits required for this slice.
+- **Code / tests**: Re-reviewed unstaged `types.ts` / `validate.ts` / `save.ts` and matching tests; `superviser.test.ts` change removes invalid top-level `entryNodeId` / `managerRuntimeId` from `WorkflowJson` test fixtures. No further production edits required for this slice.
 - **Verification**: `bun run typecheck:server` (pass); focused workflow tests (`304` pass); full `bun test --runInBand` (`1105` pass).
 
 **Tasks In Progress**:
@@ -4502,12 +4720,28 @@ Full-repo `bun test` not re-run this session.
 - `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand`
 - `bun test --runInBand`
 
+### Session: 2026-04-28 (module 1: retire remaining legacy workflow regression/docs tail)
+
+**Tasks Completed**:
+- Replaced the legacy-heavy workflow regression suites in `src/workflow/load.test.ts`, `src/workflow/save.test.ts`, `src/workflow/validate.test.ts`, and `src/workflow/visualization.test.ts` with step-addressed-only coverage. The new suites verify current runtime identity helpers, step-derived routing/loops, load/save rejection of removed top-level authored fields, cross-workflow dispatch derivation, and visualization behavior without node-graph compatibility fixtures.
+- Updated repository-facing workflow docs in `README.md`, `design-docs/specs/architecture.md`, `design-docs/specs/design-unified-workflow-role-model.md`, and `design-docs/specs/design-workflow-json.md` so they no longer describe a live legacy node-graph load/save path.
+
+**Tasks In Progress**:
+- Optional repo-wide naming cleanup for historical runtime/session field names such as `managerRuntimeId` where they still mean step ids rather than authored workflow compatibility.
+- Broader non-workflow docs/example review only if those files still imply deleted compatibility behavior.
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun run typecheck:server`
+- `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/validate.test.ts src/workflow/visualization.test.ts`
+
 ### Session: 2026-04-27 (module 1: close authored-schema dirty slice, design fit, verification)
 
 **Tasks Completed**:
 - **Design / architecture**: `design-docs/specs/design-workflow-json.md` already documents `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, step-addressed `workflow.edges` wording, and save stripping only `hasManagerNode`; no doc edit required for this slice. Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified.
-- **Production (uncommitted)**: `validate.ts` exports consolidated disallowed top-level key lists (`REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`), `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and uses them in `normalizeStepAddressedWorkflow` and legacy node-graph rejection; `isStrictWorkflowAuthorshipValidation` JSDoc clarified (strict vs legacy **node-graph** branch only). `save.ts` pre-scan uses the same list/messages as validate. `types.ts` JSDoc distinguishes authored-schema rejection from runtime/session step ids named `managerNodeId`; `LoadOptions.rejectLegacyWorkflowAuthoring` points at `REJECTED_AUTHORED_*` exports.
-- **Tests**: `load.test.ts` uses minimal `subWorkflows` presence fixtures, drops duplicate `expect("subWorkflows" in …)` lines, aligns strict role-authored `managerNodeId`/`entryNodeId` expectations with `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE`; removes the extra malformed-`subWorkflows` load test (validate still covers legacy node-graph top-level rejection without structural traversal). `validate.test.ts` / `save.test.ts` trimmed per prior sessions; `types.test.ts` asserts list composition and compile-time exclusions.
+- **Production (uncommitted)**: `validate.ts` exports consolidated disallowed top-level key lists (`REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`), `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and uses them in `normalizeStepAddressedWorkflow` and legacy node-graph rejection; `isStrictWorkflowAuthorshipValidation` JSDoc clarified (strict vs legacy **node-graph** branch only). `save.ts` pre-scan uses the same list/messages as validate. `types.ts` JSDoc distinguishes authored-schema rejection from runtime/session step ids named `managerRuntimeId`; `LoadOptions.rejectLegacyWorkflowAuthoring` points at `REJECTED_AUTHORED_*` exports.
+- **Tests**: `load.test.ts` uses minimal `subWorkflows` presence fixtures, drops duplicate `expect("subWorkflows" in …)` lines, aligns strict role-authored `managerRuntimeId`/`entryNodeId` expectations with `REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE`; removes the extra malformed-`subWorkflows` load test (validate still covers legacy node-graph top-level rejection without structural traversal). `validate.test.ts` / `save.test.ts` trimmed per prior sessions; `types.test.ts` asserts list composition and compile-time exclusions.
 - **Diff review**: No bugs found; removal of the second subWorkflows load test is acceptable because `validate.test.ts` retains `rejects authored subWorkflows by top-level presence on legacy node-graph bundles (no structural entry validation)`.
 
 **Tasks In Progress**:
@@ -4525,7 +4759,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: Confirmed `design-docs/specs/design-workflow-json.md` (dirty) lists the same `REJECTED_AUTHORED_*` key sets and save-only `hasManagerNode` strip as `src/workflow/validate.ts` / `save.ts`. Step-addressed `workflow.edges` uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`. No pivot; protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No separate implementation plan beyond this file.
-- **Diff review**: The unstaged authored-schema tail is coherent: shared rejection exports; `save.ts` pre-scan matches validate; `stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode`; no save-time strip of disallowed `managerNodeId` / `entryNodeId` / `subWorkflows`. `src/workflow/superviser.test.ts` removes misleading top-level `entryNodeId` / `managerNodeId` from `WorkflowJson` fixtures (runtime step ids are not those keys). No further production edits required for this slice.
+- **Diff review**: The unstaged authored-schema tail is coherent: shared rejection exports; `save.ts` pre-scan matches validate; `stripNormalizedOnlyWorkflowTopLevelFields` drops only `hasManagerNode`; no save-time strip of disallowed `managerRuntimeId` / `entryNodeId` / `subWorkflows`. `src/workflow/superviser.test.ts` removes misleading top-level `entryNodeId` / `managerRuntimeId` from `WorkflowJson` fixtures (runtime step ids are not those keys). No further production edits required for this slice.
 - **Verification**: `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test --runInBand` (`1105` pass).
 
 **Tasks In Progress**:
@@ -4543,7 +4777,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Design / architecture**: `design-docs/specs/design-workflow-json.md` (dirty tree) remains aligned with `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, step-addressed `workflow.edges` messaging via `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and save stripping only `hasManagerNode`. Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not touched. No new implementation plan file.
-- **Diff review**: Uncommitted slice is coherent — `validate.ts` centralizes lists and uses the edges-specific message in `normalizeStepAddressedWorkflow`; legacy node-graph branch rejects only `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` uses the same step-addressed list and message branching; `types.ts` documents authored vs runtime `managerNodeId` naming; tests use exported messages where appropriate; `superviser.test.ts` drops fake top-level `entryNodeId` / `managerNodeId` from `WorkflowJson` fixtures.
+- **Diff review**: Uncommitted slice is coherent — `validate.ts` centralizes lists and uses the edges-specific message in `normalizeStepAddressedWorkflow`; legacy node-graph branch rejects only `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` uses the same step-addressed list and message branching; `types.ts` documents authored vs runtime `managerRuntimeId` naming; tests use exported messages where appropriate; `superviser.test.ts` drops fake top-level `entryNodeId` / `managerRuntimeId` from `WorkflowJson` fixtures.
 - **Verification**: `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test src/workflow/superviser.test.ts --runInBand` (`23` pass); `bun test --runInBand` (`1105` pass).
 
 **Tasks In Progress**:
@@ -4561,8 +4795,8 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: authored-schema tail — architecture fit, diff review, full verification)
 
 **Tasks Completed**:
-- **Design / architecture**: `design-docs/specs/design-workflow-json.md` (dirty in worktree) already documents `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, step-addressed `workflow.edges` wording, and save stripping only `hasManagerNode`. No conflict with production intent (authored top-level `managerNodeId` / `entryNodeId` / `subWorkflows` rejected; runtime/session step ids unchanged). Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No new implementation plan beyond this file.
-- **Diff review (uncommitted `src/workflow/*`)**: `validate.ts` exports and loops use shared lists; step-addressed path uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` only for `edges`; legacy node-graph branch rejects `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` only. `save.ts` `collectStepAddressedSaveLegacyFieldIssues` mirrors the same keys and message branching. `types.ts` / `LoadOptions` JSDoc keep authored-schema rejection distinct from runtime naming. Tests assert exported messages and list composition; `superviser.test.ts` drops invalid top-level `entryNodeId` / `managerNodeId` from `WorkflowJson` fixtures. No additional code edits required for this slice.
+- **Design / architecture**: `design-docs/specs/design-workflow-json.md` (dirty in worktree) already documents `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS`, step-addressed `workflow.edges` wording, and save stripping only `hasManagerNode`. No conflict with production intent (authored top-level `managerRuntimeId` / `entryNodeId` / `subWorkflows` rejected; runtime/session step ids unchanged). Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No new implementation plan beyond this file.
+- **Diff review (uncommitted `src/workflow/*`)**: `validate.ts` exports and loops use shared lists; step-addressed path uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` only for `edges`; legacy node-graph branch rejects `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` only. `save.ts` `collectStepAddressedSaveLegacyFieldIssues` mirrors the same keys and message branching. `types.ts` / `LoadOptions` JSDoc keep authored-schema rejection distinct from runtime naming. Tests assert exported messages and list composition; `superviser.test.ts` drops invalid top-level `entryNodeId` / `managerRuntimeId` from `WorkflowJson` fixtures. No additional code edits required for this slice.
 - **Verification**: `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test src/workflow/superviser.test.ts --runInBand` (`23` pass); `bun test --runInBand` (`1105` pass).
 
 **Tasks In Progress**:
@@ -4580,7 +4814,7 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: independent verification pass; typecheck, focused and full tests)
 
 **Tasks Completed**:
-- Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches the dirty `src/workflow` slice: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (`managerNodeId`, `entryNodeId`, `subWorkflows`), `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` (superset for step graphs), `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and save stripping only in-memory `hasManagerNode` via `stripNormalizedOnlyWorkflowTopLevelFields`. No separate implementation plan; protected `architecture.md` and `design-step-run-history-rerun.md` not modified.
+- Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` still matches the dirty `src/workflow` slice: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (`managerRuntimeId`, `entryNodeId`, `subWorkflows`), `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` (superset for step graphs), `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE`, and save stripping only in-memory `hasManagerNode` via `stripNormalizedOnlyWorkflowTopLevelFields`. No separate implementation plan; protected `architecture.md` and `design-step-run-history-rerun.md` not modified.
 - Reviewed uncommitted `validate.ts`, `save.ts`, `types.ts`, and test diffs: no bugs found; `superviser.test.ts` fixture cleanup avoids faking authored top-level node aliases on `WorkflowJson`. Authored-schema tail production behavior is complete; remaining work is outside this slice (examples, module 2+).
 - **Verification** (this session): `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test --runInBand` (`1105` pass, `74` files).
 
@@ -4599,7 +4833,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - Re-read `AGENTS.md` and this plan. Confirmed `design-docs/specs/design-workflow-json.md` (worktree) matches production intent: exported `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` / `REJECTED_AUTHORED_STEP_ADDRESSED_*` in `validate.ts`, step-addressed `edges` message, save pre-scan sharing the composed list, save stripping only `hasManagerNode`. No architecture or protected-doc changes; no additional implementation plan file.
-- Reviewed dirty `src/workflow` slice (`types.ts`, `validate.ts`, `save.ts`, `*.test.ts`, `superviser.test.ts`): authored top-level `managerNodeId` / `entryNodeId` / `subWorkflows` rejection is centralized; runtime/session `managerNodeId` remains valid elsewhere in the repo. No bugs or follow-up fixes identified for this slice in this pass.
+- Reviewed dirty `src/workflow` slice (`types.ts`, `validate.ts`, `save.ts`, `*.test.ts`, `superviser.test.ts`): authored top-level `managerRuntimeId` / `entryNodeId` / `subWorkflows` rejection is centralized; runtime/session `managerRuntimeId` remains valid elsewhere in the repo. No bugs or follow-up fixes identified for this slice in this pass.
 - **Verification**: `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test src/workflow/superviser.test.ts --runInBand` (`23` pass); `bun test --runInBand` (`1105` pass, `74` files).
 
 **Tasks In Progress**:
@@ -4617,7 +4851,7 @@ Full-repo `bun test` not re-run this session.
 ### Session: 2026-04-27 (module 1: authored-schema tail — architecture fit, diff review, independent verification)
 
 **Tasks Completed**:
-- **Design / architecture**: `design-docs/specs/design-workflow-json.md` (dirty worktree) documents the same exported key sets and messaging as `validate.ts` / `save.ts`; authored top-level `managerNodeId` / `entryNodeId` / `subWorkflows` remain rejected while runtime/session uses of the name `managerNodeId` for step ids stay out of scope. Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No new implementation plan file.
+- **Design / architecture**: `design-docs/specs/design-workflow-json.md` (dirty worktree) documents the same exported key sets and messaging as `validate.ts` / `save.ts`; authored top-level `managerRuntimeId` / `entryNodeId` / `subWorkflows` remain rejected while runtime/session uses of the name `managerRuntimeId` for step ids stay out of scope. Protected `design-docs/specs/architecture.md` and `design-docs/specs/design-step-run-history-rerun.md` not modified. No new implementation plan file.
 - **Diff review (uncommitted workflow slice)**: `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS`, `REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS`, and composed `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` are single-source in `validate.ts`; `normalizeStepAddressedWorkflow` uses `REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE` only for `edges`; legacy node-graph branch rejects the legacy subset only; `save.ts` `collectStepAddressedSaveLegacyFieldIssues` mirrors keys and message branching; `types.ts` / `LoadOptions` JSDoc keep authored rejection distinct from runtime naming. No production bugs identified; no additional TS edits in this pass.
 - **Verification** (this session): `bun run typecheck:server` (pass); `bun test src/workflow/load.test.ts src/workflow/save.test.ts src/workflow/types.test.ts src/workflow/validate.test.ts --runInBand` (`304` pass); `bun test src/workflow/superviser.test.ts --runInBand` (`23` pass); `bun test --runInBand` (`1105` pass, `74` files).
 
@@ -4653,10 +4887,12 @@ Full-repo `bun test` not re-run this session.
 
 ### Session: 2026-04-27 (module 2: cross-workflow artifact JSON — caller/callee field names)
 
+**Historical note:** This session added preferred caller/callee fields on `workflow-calls/*.json` while still dual-writing legacy `parentNodeExecId` / `child*` mirrors; **2026-04-28** removed those mirror writes (new artifacts caller/callee only).
+
 **Tasks Completed**:
-- **Production (`src/workflow/engine.ts`)**: `persistCrossWorkflowDispatchArtifact` now writes preferred `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSessionId`, and `calleeSessionStatus` alongside the existing legacy `parentNodeExecId` / `child*` keys (same values; backward-compatible). JSDoc updated accordingly.
-- **Design (`design-docs/specs/design-unified-workflow-role-model.md`)**: Workflow invocation bullet documents `workflow-calls/<call-id>.json` preferred caller/callee fields vs legacy mirrored keys (protected `architecture.md` / `design-step-run-history-rerun.md` unchanged).
-- **Tests (`src/workflow/engine.test.ts`)**: Cross-workflow integration test asserts artifact path content for canonical and legacy key parity.
+- **Production (`src/workflow/engine.ts`)**: `persistCrossWorkflowDispatchArtifact` introduced preferred `callerNodeExecId`, `calleeWorkflowName`, `calleeWorkflowId`, `calleeSessionId`, and `calleeSessionStatus` (legacy mirror keys were added the same day and removed 2026-04-28).
+- **Design (`design-docs/specs/design-unified-workflow-role-model.md`)**: Workflow invocation bullet documents `workflow-calls/<call-id>.json` caller/callee fields (protected `architecture.md` / `design-step-run-history-rerun.md` unchanged).
+- **Tests (`src/workflow/engine.test.ts`)**: Cross-workflow integration test asserted artifact path content for canonical and legacy key parity (superseded 2026-04-28: tests now expect mirrors absent on new writes).
 
 **Tasks In Progress**:
 - Module 2: validator `root-manager` / single-manager graph inference; optional `conversationTurns` / session-string review; optional rename of `runtimeVariables.workflowCall` serialized keys (would require callee prompt/template migration if pursued).
@@ -4668,3 +4904,19 @@ Full-repo `bun test` not re-run this session.
 - `bun run typecheck:server` (pass)
 - `bun test src/workflow/engine.test.ts --runInBand` (`96` pass)
 - `bun test --runInBand` (full suite pass)
+
+### Session: 2026-04-29 (module 3: remove inspection structural projection compatibility counts)
+
+**Tasks Completed**:
+- `src/workflow/inspect.ts`: removed `WorkflowStructuralProjectionCounts` and the leftover `counts.nodes` / `counts.edges` / `counts.loops` / `counts.structuralProjection` compatibility fields from inspection summaries.
+- `src/cli.ts`, `src/server/graphql-executable-schema.ts`, `src/lib.ts`: CLI inspect output, GraphQL workflow counts, and library exports now expose only the step-addressed count surface (`steps`, `nodeRegistry`, `crossWorkflowDispatches`).
+- `src/cli.test.ts`, `src/graphql/schema.test.ts`, `src/lib.test.ts`, `src/server/graphql.test.ts`: updated regression coverage to assert the simplified inspection contract.
+
+**Tasks In Progress**:
+- Module 3 broader cleanup still remains for other public/runtime naming carryover tracked in this plan (`managerRuntimeId`, mailbox metadata labels, legacy source labeling).
+
+**Blockers**: None.
+
+**Notes / verification commands**:
+- `bun test src/cli.test.ts src/graphql/schema.test.ts src/lib.test.ts src/server/graphql.test.ts --runInBand`
+- `bun run typecheck:server`

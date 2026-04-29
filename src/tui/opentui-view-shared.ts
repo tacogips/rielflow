@@ -68,7 +68,6 @@ export const OPEN_TUI_NODE_KIND_COLORS = {
   input: "#78d381",
   output: "#f7d774",
   manager: "#d697ff",
-  "root-manager": "#d697ff",
   task: "#dff0e4",
   unknown: "#c7d3de",
 } as const;

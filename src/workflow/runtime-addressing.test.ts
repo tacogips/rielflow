@@ -18,11 +18,20 @@ function makeWorkflow(): WorkflowJson {
     },
     managerStepId: "manager-step",
     entryStepId: "manager-step",
+    nodeRegistry: [
+      { id: "manager-step", nodeFile: "nodes/node-manager.json" },
+      { id: "writer-step", nodeFile: "nodes/node-writer.json" },
+      { id: "root-output-step", nodeFile: "nodes/node-root-output.json" },
+      { id: "child-manager-step", nodeFile: "nodes/node-child-manager.json" },
+      { id: "child-input-step", nodeFile: "nodes/node-child-input.json" },
+      { id: "child-worker-step", nodeFile: "nodes/node-child-worker.json" },
+      { id: "child-output-step", nodeFile: "nodes/node-child-output.json" },
+    ],
     nodes: [
       {
         id: "manager-step",
         nodeFile: "nodes/node-manager.json",
-        kind: "root-manager",
+        role: "manager",
       },
       {
         id: "writer-step",

@@ -71,7 +71,6 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -105,7 +104,6 @@ async function createWorkerOnlyWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -264,7 +262,6 @@ async function createWorkflowCallWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -278,7 +275,7 @@ async function createManagerSession(root: string, workflowExecutionId: string) {
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerNodeId: "divedra-manager",
+    managerRuntimeId: "divedra-manager",
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -307,13 +304,10 @@ describe("GraphQL HTTP transport", () => {
                 hasManagerNode
                 managerStepId
                 entryStepId
-                workflowCallIds
+                crossWorkflowDispatchIds
                 counts {
                   steps
-                  workflowCalls
-                  structuralProjection {
-                    nodes
-                  }
+                  crossWorkflowDispatches
                 }
               }
             }
@@ -334,20 +328,17 @@ describe("GraphQL HTTP transport", () => {
           hasManagerNode: true,
           managerStepId: "divedra-manager",
           entryStepId: "divedra-manager",
-          workflowCallIds: [],
+          crossWorkflowDispatchIds: [],
           counts: {
             steps: 2,
-            workflowCalls: 0,
-            structuralProjection: {
-              nodes: 2,
-            },
+            crossWorkflowDispatches: 0,
           },
         },
       },
     });
   });
 
-  test("returns nullable managerNodeId for worker-only workflows over /graphql", async () => {
+  test("returns nullable managerRuntimeId for worker-only workflows over /graphql", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkerOnlyWorkflowFixture(root);
 
@@ -365,13 +356,10 @@ describe("GraphQL HTTP transport", () => {
                 hasManagerNode
                 entryStepId
                 nodeRegistryIds
-                workflowCallIds
+                crossWorkflowDispatchIds
                 counts {
                   steps
-                  workflowCalls
-                  structuralProjection {
-                    nodes
-                  }
+                  crossWorkflowDispatches
                 }
               }
             }
@@ -391,13 +379,10 @@ describe("GraphQL HTTP transport", () => {
       hasManagerNode: false,
       entryStepId: "main-worker",
       nodeRegistryIds: ["main-worker"],
-      workflowCallIds: [],
+      crossWorkflowDispatchIds: [],
       counts: {
         steps: 1,
-        workflowCalls: 0,
-        structuralProjection: {
-          nodes: 1,
-        },
+        crossWorkflowDispatches: 0,
       },
     });
   });
@@ -492,9 +477,9 @@ describe("GraphQL HTTP transport", () => {
             query WorkflowByName($workflowName: String!) {
               workflow(workflowName: $workflowName) {
                 workflowId
-                workflowCallIds
+                crossWorkflowDispatchIds
                 counts {
-                  workflowCalls
+                  crossWorkflowDispatches
                 }
               }
             }
@@ -512,9 +497,9 @@ describe("GraphQL HTTP transport", () => {
       data: {
         workflow: {
           workflowId: "workflow-calls",
-          workflowCallIds: ["__cw:main-worker"],
+          crossWorkflowDispatchIds: ["__cw:main-worker"],
           counts: {
-            workflowCalls: 1,
+            crossWorkflowDispatches: 1,
           },
         },
       },
@@ -1669,7 +1654,7 @@ describe("GraphQL HTTP transport", () => {
           readonly bundle: {
             readonly workflow: {
               readonly hasManagerNode: boolean;
-              readonly managerNodeId?: string;
+              readonly managerRuntimeId?: string;
               readonly entryNodeId?: string;
               readonly managerStepId?: string;
               readonly entryStepId?: string;
@@ -1689,7 +1674,7 @@ describe("GraphQL HTTP transport", () => {
       createJson.data.createWorkflowDefinition.bundle.workflow.managerStepId,
     ).toBeUndefined();
     expect(
-      createJson.data.createWorkflowDefinition.bundle.workflow.managerNodeId,
+      createJson.data.createWorkflowDefinition.bundle.workflow.managerRuntimeId,
     ).toBeUndefined();
     expect(
       createJson.data.createWorkflowDefinition.bundle.workflow.entryNodeId,
@@ -1699,7 +1684,7 @@ describe("GraphQL HTTP transport", () => {
       path.join(root, "solo", "workflow.json"),
       "utf8",
     );
-    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).not.toContain('"managerRuntimeId"');
     expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
   });
 
@@ -1848,7 +1833,7 @@ describe("GraphQL HTTP transport", () => {
           DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
           DIVEDRA_WORKFLOW_ID: "demo",
           DIVEDRA_WORKFLOW_EXECUTION_ID: session.sessionId,
-          DIVEDRA_MANAGER_NODE_ID: "divedra-manager",
+          DIVEDRA_MANAGER_RUNTIME_ID: "divedra-manager",
           DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
         },
       },
@@ -1957,7 +1942,7 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
-  test("rejects legacy managerNodeId on sendManagerMessage GraphQL input", async () => {
+  test("rejects legacy managerRuntimeId on sendManagerMessage GraphQL input", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
     await createManagerSession(root, session.sessionId);
@@ -1982,7 +1967,7 @@ describe("GraphQL HTTP transport", () => {
               workflowId: "demo",
               workflowExecutionId: session.sessionId,
               managerSessionId: "mgrsess-000001",
-              managerNodeId: "divedra-manager",
+              managerRuntimeId: "divedra-manager",
               message: "Retry the main worker node.",
               actions: [{ type: "retry-step", stepId: "main-worker" }],
             },
@@ -1998,7 +1983,7 @@ describe("GraphQL HTTP transport", () => {
     expect(payload.errors).toEqual([
       expect.objectContaining({
         message: expect.stringContaining(
-          'Field "managerNodeId" is not defined by type "SendManagerMessageInput"',
+          'Field "managerRuntimeId" is not defined by type "SendManagerMessageInput"',
         ),
       }),
     ]);

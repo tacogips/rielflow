@@ -8,8 +8,6 @@ import {
   isSafeWorkflowRelativePath,
 } from "./prompt-template-file";
 import {
-  INLINE_NODE_FIELD,
-  isSupportedNodeFilePath,
   normalizeWorkflowRelativeJsonPath,
   remapAuthoredNodePayloadsByNodeFile,
   synthesizeInlineNodeFile,
@@ -40,14 +38,10 @@ import {
   type ContainerRunnerKind,
   type JsonObject,
   type LoadOptions,
-  type CompletionRule,
-  type NodeControlKind,
   type NodeAddonPayloadResolver,
   type NodeOutputContract,
   type NodeDurability,
-  type LoopRule,
   type NodeExecutionBackend,
-  type NodeKind,
   type NodePayload,
   type NodePromptVariant,
   type NodeRole,
@@ -55,13 +49,11 @@ import {
   type NodeSessionPolicy,
   type NormalizedWorkflowBundle,
   type ValidationIssue,
-  type WorkflowEdge,
   type WorkflowJson,
-  type WorkflowNodeExecutionPolicy,
   type WorkflowNodeAddonEnvBinding,
   type WorkflowNodeAddonRef,
+  type WorkflowNodeExecutionPolicy,
   type WorkflowNodeRegistryRef,
-  type WorkflowNodeRepeatPolicy,
   type WorkflowNodeRef,
   type WorkflowPrompts,
   type WorkflowStepRef,
@@ -71,11 +63,8 @@ import {
   type UserActionNodeConfig,
 } from "./types";
 import {
-  inferLegacyNodeGraphGraphEntryNodeId,
-  inferLegacyNodeGraphManagerNodeId,
   getStructuralEdges,
   getStructuralLoops,
-  isStepAddressedWorkflow,
 } from "./types";
 
 /** Rejection text for any authored top-level `workflow.json` field outside the step-addressed schema. */
@@ -90,10 +79,9 @@ export const REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE =
   "is not part of the step-addressed workflow schema; local step-to-step routing must be authored on workflow.steps[].transitions";
 
 /**
- * Authored `workflow.json` only: legacy top-level node/structural aliases rejected in the
- * legacy node-graph normalizer. Step graphs use
- * {@link REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS} (superset). Unrelated to
- * session/API fields that reuse the name `managerNodeId` for a **step** id.
+ * Authored `workflow.json` only: removed top-level compatibility aliases rejected by the strict
+ * step-addressed schema. Unrelated to session/API fields that reuse the name `managerRuntimeId` for a
+ * **step** id.
  */
 export const REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS = [
   "managerNodeId",
@@ -101,7 +89,7 @@ export const REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS = [
   "subWorkflows",
 ] as const;
 
-/** Step-addressed-only rejects: present on step graphs but not in the legacy node-graph top-level rejection set. */
+/** Additional removed top-level fields outside the active step-addressed workflow schema. */
 export const REJECTED_AUTHORED_STEP_ADDRESSED_EXTRA_TOP_LEVEL_KEYS = [
   "workflowCalls",
   "subWorkflowConversations",
@@ -146,31 +134,12 @@ export interface WorkflowValidationOptions
     | "nodeAddonResolvers"
   > {
   readonly allowResolvedStepFileFields?: boolean;
-  readonly rejectLegacyWorkflowAuthoring?: boolean;
 }
 
-/**
- * Controls whether `normalizeWorkflow` may take the legacy **node-graph** branch (no `steps` and
- * no `entryStepId` / `managerStepId`).
- *
- * When this returns `true`, only {@link normalizeStepAddressedWorkflow} runs. When it returns
- * `false`, step-shaped bundles (any of `steps`, `entryStepId`, `managerStepId`) still use
- * {@link normalizeStepAddressedWorkflow}; only pure node-graph inputs use the legacy normalizer.
- *
- * Explicit `rejectLegacyWorkflowAuthoring: false` / `true` always wins; when omitted, production
- * defaults to strict unless `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`. Callers loading legacy
- * **node-graph** disk fixtures should pass `rejectLegacyWorkflowAuthoring: false`.
- */
 export function isStrictWorkflowAuthorshipValidation(
-  options: Pick<WorkflowValidationOptions, "rejectLegacyWorkflowAuthoring">,
+  _options: WorkflowValidationOptions,
 ): boolean {
-  if (options.rejectLegacyWorkflowAuthoring === false) {
-    return false;
-  }
-  if (options.rejectLegacyWorkflowAuthoring === true) {
-    return true;
-  }
-  return process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] !== "true";
+  return true;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -255,24 +224,6 @@ function normalizeWorkingDirectoryField(
   return undefined;
 }
 
-function normalizeNodeKind(value: unknown): NodeKind | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  switch (value) {
-    case "task":
-    case "branch-judge":
-    case "loop-judge":
-    case "root-manager":
-    case "input":
-    case "output":
-      return value;
-    default:
-      return undefined;
-  }
-}
-
 function normalizeNodeRole(value: unknown): NodeRole | undefined {
   if (value === undefined) {
     return undefined;
@@ -281,55 +232,6 @@ function normalizeNodeRole(value: unknown): NodeRole | undefined {
     return value;
   }
   return undefined;
-}
-
-function normalizeNodeControlKind(value: unknown): NodeControlKind | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === "none" || value === "branch-judge" || value === "loop-judge") {
-    return value;
-  }
-  return undefined;
-}
-
-function deriveRoleAndControlFromKind(kind: NodeKind): {
-  readonly role: NodeRole;
-  readonly control?: NodeControlKind;
-} {
-  switch (kind) {
-    case "root-manager":
-      return { role: "manager" };
-    case "branch-judge":
-      return { role: "worker", control: "branch-judge" };
-    case "loop-judge":
-      return { role: "worker", control: "loop-judge" };
-    case "task":
-    case "input":
-    case "output":
-      return { role: "worker" };
-  }
-}
-
-function deriveLegacyKindFromRoleAndControl(
-  role: NodeRole | undefined,
-  control: NodeControlKind | undefined,
-): NodeKind | undefined {
-  if (role === undefined) {
-    return undefined;
-  }
-  if (role === "manager") {
-    return "root-manager";
-  }
-  switch (control) {
-    case "branch-judge":
-      return "branch-judge";
-    case "loop-judge":
-      return "loop-judge";
-    case "none":
-    case undefined:
-      return "task";
-  }
 }
 
 function readStringField(
@@ -975,46 +877,6 @@ function normalizeNodeDurability(
   };
 }
 
-function normalizeCompletion(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-): CompletionRule | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return undefined;
-  }
-
-  const typeValue = value["type"];
-  if (
-    typeValue !== "checklist" &&
-    typeValue !== "score-threshold" &&
-    typeValue !== "validator-result" &&
-    typeValue !== "none"
-  ) {
-    issues.push(
-      makeIssue("error", `${path}.type`, "must be a valid completion type"),
-    );
-    return undefined;
-  }
-
-  const configValue = value["config"];
-  if (configValue !== undefined && !isRecord(configValue)) {
-    issues.push(
-      makeIssue("error", `${path}.config`, "must be an object when provided"),
-    );
-    return { type: typeValue };
-  }
-
-  if (isRecord(configValue)) {
-    return { type: typeValue, config: configValue };
-  }
-  return { type: typeValue };
-}
-
 const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function isValidEnvVarName(value: string): boolean {
@@ -1177,461 +1039,6 @@ function normalizeWorkflowNodeAddonRef(
   };
 }
 
-function normalizeNodeRef(
-  value: unknown,
-  index: number,
-  issues: ValidationIssue[],
-): WorkflowNodeRef | null {
-  const path = `workflow.nodes[${index}]`;
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return null;
-  }
-
-  const id = readStringField(value, "id", path, issues);
-  const nodeFileRaw = value["nodeFile"];
-  const inlineNodeRaw = value[INLINE_NODE_FIELD];
-  const addonRaw = value["addon"];
-  const addon = normalizeWorkflowNodeAddonRef(
-    addonRaw,
-    `${path}.addon`,
-    issues,
-  );
-  let nodeFile: string | null = null;
-  if (nodeFileRaw === undefined) {
-    if (inlineNodeRaw === undefined && addonRaw === undefined) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.nodeFile`,
-          "is required unless node or addon is provided",
-        ),
-      );
-    } else if (id !== null) {
-      nodeFile = synthesizeInlineNodeFile(id);
-    }
-  } else if (typeof nodeFileRaw !== "string" || nodeFileRaw.length === 0) {
-    issues.push(
-      makeIssue("error", `${path}.nodeFile`, "must be a non-empty string"),
-    );
-  } else {
-    nodeFile = normalizeWorkflowRelativeJsonPath(nodeFileRaw);
-  }
-  if (nodeFileRaw !== undefined && inlineNodeRaw !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.${INLINE_NODE_FIELD}`,
-        "must be omitted when nodeFile is provided",
-      ),
-    );
-  }
-  if (addonRaw !== undefined && nodeFileRaw !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.addon`,
-        "must be omitted when nodeFile is provided",
-      ),
-    );
-  }
-  if (addonRaw !== undefined && inlineNodeRaw !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.addon`,
-        `must be omitted when ${INLINE_NODE_FIELD} is provided`,
-      ),
-    );
-  }
-  const completion = normalizeCompletion(
-    value["completion"],
-    `${path}.completion`,
-    issues,
-  );
-  const repeat = normalizeWorkflowNodeRepeatPolicy(
-    value["repeat"],
-    `${path}.repeat`,
-    issues,
-  );
-  const execution = normalizeWorkflowNodeExecutionPolicy(
-    value["execution"],
-    `${path}.execution`,
-    issues,
-  );
-  const groupRaw = value["group"];
-  let group: string | undefined;
-  if (groupRaw !== undefined) {
-    if (typeof groupRaw !== "string" || groupRaw.length === 0) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.group`,
-          "must be a non-empty string when provided",
-        ),
-      );
-    } else {
-      group = groupRaw;
-    }
-  }
-
-  const roleRaw = value["role"];
-  const normalizedRole = normalizeNodeRole(roleRaw);
-  let role: WorkflowNodeRef["role"];
-  if (roleRaw !== undefined) {
-    if (normalizedRole === undefined) {
-      issues.push(
-        makeIssue("error", `${path}.role`, "must be 'manager' or 'worker'"),
-      );
-    } else {
-      role = normalizedRole;
-    }
-  }
-
-  const controlRaw = value["control"];
-  const normalizedControl = normalizeNodeControlKind(controlRaw);
-  let control: WorkflowNodeRef["control"];
-  if (controlRaw !== undefined) {
-    if (normalizedControl === undefined) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.control`,
-          "must be 'none', 'branch-judge', or 'loop-judge'",
-        ),
-      );
-    } else if (normalizedControl !== "none") {
-      control = normalizedControl;
-    }
-  }
-
-  const kindRaw = value["kind"];
-  let kind: WorkflowNodeRef["kind"];
-  if (kindRaw !== undefined) {
-    const normalizedKind = normalizeNodeKind(kindRaw);
-    if (normalizedKind === undefined) {
-      issues.push(
-        makeIssue("error", `${path}.kind`, "must be a valid node kind"),
-      );
-    } else {
-      kind = normalizedKind;
-      const usesAuthoredRoleFields =
-        Object.hasOwn(value, "role") || Object.hasOwn(value, "control");
-      if (
-        usesAuthoredRoleFields &&
-        (normalizedKind === "input" || normalizedKind === "output")
-      ) {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.kind`,
-            `kind '${normalizedKind}' is legacy structural compatibility only and cannot be combined with authored role/control nodes`,
-          ),
-        );
-      }
-      const derived = deriveRoleAndControlFromKind(normalizedKind);
-      if (role !== undefined && role !== derived.role) {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.role`,
-            `must match kind '${normalizedKind}'`,
-          ),
-        );
-      }
-
-      const derivedControl = derived.control;
-      if (
-        control !== undefined &&
-        control !== "none" &&
-        derivedControl !== undefined &&
-        control !== derivedControl
-      ) {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.control`,
-            `must match kind '${normalizedKind}'`,
-          ),
-        );
-      } else if (
-        control !== undefined &&
-        control !== "none" &&
-        derivedControl === undefined
-      ) {
-        issues.push(
-          makeIssue(
-            "error",
-            `${path}.control`,
-            `kind '${normalizedKind}' does not support control '${control}'`,
-          ),
-        );
-      }
-    }
-  }
-
-  if (role === undefined && control !== undefined) {
-    role = "worker";
-  }
-  if (repeat !== undefined) {
-    if (role === "manager") {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.repeat`,
-          "manager-role nodes cannot declare repeat",
-        ),
-      );
-    }
-    role ??= "worker";
-    if (control !== undefined && control !== "loop-judge") {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.control`,
-          "repeat nodes must use loop-judge control",
-        ),
-      );
-    }
-    control = "loop-judge";
-    if (kind !== undefined && kind !== "loop-judge") {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.kind`,
-          "repeat nodes must use kind 'loop-judge'",
-        ),
-      );
-    }
-    kind = "loop-judge";
-  }
-  if (kind === undefined) {
-    kind = deriveLegacyKindFromRoleAndControl(role, control);
-  }
-  if (role === "manager" && control !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.control`,
-        "manager-role nodes cannot declare branch or loop control",
-      ),
-    );
-  }
-  if (addon !== undefined && roleRaw === undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.addon`,
-        "add-on nodes must declare role 'worker'",
-      ),
-    );
-  }
-  if (role === "manager" && addon !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.addon`,
-        "manager-role nodes cannot reference add-ons",
-      ),
-    );
-  }
-
-  if (id === null || nodeFile === null) {
-    return null;
-  }
-
-  if (!NODE_ID_PATTERN.test(id)) {
-    issues.push(
-      makeIssue("error", `${path}.id`, "must match ^[a-z0-9][a-z0-9-]{1,63}$"),
-    );
-  }
-  if (!isSupportedNodeFilePath(id, nodeFile)) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.nodeFile`,
-        `must be a workflow-relative path whose basename equals node-${id}.json`,
-      ),
-    );
-  }
-
-  return {
-    id,
-    nodeFile,
-    ...(addon === undefined ? {} : { addon }),
-    ...(kind === undefined ? {} : { kind }),
-    ...(role === undefined ? {} : { role }),
-    ...(control === undefined ? {} : { control }),
-    ...(completion === undefined ? {} : { completion }),
-    ...(execution === undefined ? {} : { execution }),
-    ...(group === undefined ? {} : { group }),
-    ...(repeat === undefined ? {} : { repeat }),
-  };
-}
-
-function normalizeWorkflowNodeExecutionPolicy(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-): WorkflowNodeExecutionPolicy | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return undefined;
-  }
-
-  const allowedKeys = new Set(["mode", "decisionBy"]);
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.${key}`,
-          "uses an unsupported workflow node execution policy field",
-        ),
-      );
-    }
-  }
-
-  const modeRaw = value["mode"];
-  let mode: WorkflowNodeExecutionPolicy["mode"];
-  if (modeRaw !== undefined) {
-    if (modeRaw === "required" || modeRaw === "optional") {
-      mode = modeRaw;
-    } else {
-      issues.push(
-        makeIssue("error", `${path}.mode`, "must be 'required' or 'optional'"),
-      );
-    }
-  }
-
-  const decisionByRaw = value["decisionBy"];
-  let decisionBy: WorkflowNodeExecutionPolicy["decisionBy"];
-  if (decisionByRaw !== undefined) {
-    if (decisionByRaw === "owning-manager") {
-      decisionBy = decisionByRaw;
-    } else {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.decisionBy`,
-          "must be 'owning-manager' when provided",
-        ),
-      );
-    }
-  }
-
-  if (mode === undefined && decisionBy === undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        path,
-        "must define execution.mode when execution is provided",
-      ),
-    );
-    return undefined;
-  }
-  if (mode === "optional" && decisionBy === undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.decisionBy`,
-        "is required when execution.mode is 'optional'",
-      ),
-    );
-  }
-  if (mode !== "optional" && decisionBy !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.decisionBy`,
-        "is currently valid only when execution.mode is 'optional'",
-      ),
-    );
-  }
-
-  return {
-    ...(mode === undefined ? {} : { mode }),
-    ...(decisionBy === undefined ? {} : { decisionBy }),
-  };
-}
-
-function normalizeWorkflowNodeRepeatPolicy(
-  value: unknown,
-  path: string,
-  issues: ValidationIssue[],
-): WorkflowNodeRepeatPolicy | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return undefined;
-  }
-
-  const allowedKeys = new Set(["while", "restartAt", "maxIterations"]);
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.${key}`,
-          "uses an unsupported workflow node repeat field",
-        ),
-      );
-    }
-  }
-
-  const whileExpression = readStringField(value, "while", path, issues);
-  const restartAtRaw = value["restartAt"];
-  let restartAt: string | undefined;
-  if (restartAtRaw !== undefined) {
-    if (typeof restartAtRaw !== "string" || restartAtRaw.length === 0) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.restartAt`,
-          "must be a non-empty string when provided",
-        ),
-      );
-    } else {
-      restartAt = restartAtRaw;
-    }
-  }
-
-  const maxIterationsRaw = value["maxIterations"];
-  let maxIterations: number | undefined;
-  if (maxIterationsRaw !== undefined) {
-    if (
-      typeof maxIterationsRaw !== "number" ||
-      !Number.isFinite(maxIterationsRaw) ||
-      maxIterationsRaw <= 0
-    ) {
-      issues.push(
-        makeIssue(
-          "error",
-          `${path}.maxIterations`,
-          "must be a finite number > 0 when provided",
-        ),
-      );
-    } else {
-      maxIterations = maxIterationsRaw;
-    }
-  }
-
-  if (whileExpression === null) {
-    return undefined;
-  }
-
-  return {
-    while: whileExpression,
-    ...(restartAt === undefined ? {} : { restartAt }),
-    ...(maxIterations === undefined ? {} : { maxIterations }),
-  };
-}
-
 function normalizeWorkflowTimeoutPolicy(
   value: unknown,
   path: string,
@@ -1765,7 +1172,7 @@ function normalizeWorkflowNodeRegistryRef(
     return null;
   }
 
-  const allowedKeys = new Set(["id", "nodeFile", "addon"]);
+  const allowedKeys = new Set(["id", "nodeFile", "addon", "execution"]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(
@@ -1802,6 +1209,11 @@ function normalizeWorkflowNodeRegistryRef(
     `${path}.addon`,
     issues,
   );
+  const execution = normalizeWorkflowNodeExecutionPolicy(
+    value["execution"],
+    `${path}.execution`,
+    issues,
+  );
 
   if ((nodeFile === undefined) === (addon === undefined)) {
     issues.push(
@@ -1817,6 +1229,7 @@ function normalizeWorkflowNodeRegistryRef(
     id,
     ...(nodeFile === undefined ? {} : { nodeFile }),
     ...(addon === undefined ? {} : { addon }),
+    ...(execution === undefined ? {} : { execution }),
   };
 }
 
@@ -1983,6 +1396,70 @@ function normalizeWorkflowStepSessionPolicy(
   return {
     ...(mode === undefined ? {} : { mode }),
     ...(inheritFromStepId === undefined ? {} : { inheritFromStepId }),
+  };
+}
+
+function normalizeWorkflowNodeExecutionPolicy(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowNodeExecutionPolicy | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["mode", "decisionBy"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported workflow node execution field",
+        ),
+      );
+    }
+  }
+
+  const modeRaw = value["mode"];
+  let mode: WorkflowNodeExecutionPolicy["mode"] | undefined;
+  if (modeRaw !== undefined) {
+    if (modeRaw === "required" || modeRaw === "optional") {
+      mode = modeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.mode`,
+          "must be 'required' or 'optional' when provided",
+        ),
+      );
+    }
+  }
+
+  const decisionByRaw = value["decisionBy"];
+  let decisionBy: WorkflowNodeExecutionPolicy["decisionBy"] | undefined;
+  if (decisionByRaw !== undefined) {
+    if (decisionByRaw === "owning-manager") {
+      decisionBy = decisionByRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.decisionBy`,
+          "must be 'owning-manager' when provided",
+        ),
+      );
+    }
+  }
+
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(decisionBy === undefined ? {} : { decisionBy }),
   };
 }
 
@@ -2546,8 +2023,10 @@ function normalizeStepAddressedWorkflow(
       ...(registryNode?.addon === undefined
         ? {}
         : { addon: registryNode.addon }),
+      ...(registryNode?.execution === undefined
+        ? {}
+        : { execution: registryNode.execution }),
       role,
-      kind: role === "manager" ? "root-manager" : "task",
     };
   });
   return {
@@ -2569,165 +2048,6 @@ function normalizeStepAddressedWorkflow(
   };
 }
 
-function normalizeEdge(
-  value: unknown,
-  index: number,
-  issues: ValidationIssue[],
-): WorkflowEdge | null {
-  const path = `workflow.edges[${index}]`;
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return null;
-  }
-
-  const from = readStringField(value, "from", path, issues);
-  const to = readStringField(value, "to", path, issues);
-  const when = readStringField(value, "when", path, issues);
-  const priorityRaw = value["priority"];
-
-  let priority: number | undefined;
-  if (priorityRaw !== undefined) {
-    const parsed = readNumberField(value, "priority", path, issues);
-    if (parsed !== null) {
-      priority = parsed;
-    }
-  }
-
-  if (from === null || to === null || when === null) {
-    return null;
-  }
-
-  return {
-    from,
-    to,
-    when,
-    ...(priority === undefined ? {} : { priority }),
-  };
-}
-
-function normalizeLoop(
-  value: unknown,
-  index: number,
-  issues: ValidationIssue[],
-): LoopRule | null {
-  const path = `workflow.loops[${index}]`;
-  if (!isRecord(value)) {
-    issues.push(makeIssue("error", path, "must be an object"));
-    return null;
-  }
-
-  const id = readStringField(value, "id", path, issues);
-  const judgeNodeId = readStringField(value, "judgeNodeId", path, issues);
-  const continueWhen = readStringField(value, "continueWhen", path, issues);
-  const exitWhen = readStringField(value, "exitWhen", path, issues);
-
-  let maxIterations: number | undefined;
-  const maxIterationsRaw = value["maxIterations"];
-  if (maxIterationsRaw !== undefined) {
-    const parsed = readNumberField(value, "maxIterations", path, issues);
-    if (parsed !== null && parsed > 0) {
-      maxIterations = parsed;
-    } else if (parsed !== null) {
-      issues.push(makeIssue("error", `${path}.maxIterations`, "must be > 0"));
-    }
-  }
-
-  let backoffMs: number | undefined;
-  const backoffRaw = value["backoffMs"];
-  if (backoffRaw !== undefined) {
-    const parsed = readNumberField(value, "backoffMs", path, issues);
-    if (parsed !== null && parsed >= 0) {
-      backoffMs = parsed;
-    } else if (parsed !== null) {
-      issues.push(makeIssue("error", `${path}.backoffMs`, "must be >= 0"));
-    }
-  }
-
-  if (
-    id === null ||
-    judgeNodeId === null ||
-    continueWhen === null ||
-    exitWhen === null
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    judgeNodeId,
-    continueWhen,
-    exitWhen,
-    ...(maxIterations === undefined ? {} : { maxIterations }),
-    ...(backoffMs === undefined ? {} : { backoffMs }),
-  };
-}
-
-function buildRepeatExitExpression(whileExpression: string): string {
-  return `!(${whileExpression})`;
-}
-
-function synthesizeSequentialEdges(input: {
-  readonly nodes: readonly WorkflowNodeRef[];
-  readonly issues: ValidationIssue[];
-}): readonly WorkflowEdge[] {
-  const edges: WorkflowEdge[] = [];
-
-  input.nodes.forEach((node, index) => {
-    const nextNode = input.nodes[index + 1];
-    if (nextNode === undefined) {
-      if (node.repeat !== undefined) {
-        input.issues.push(
-          makeIssue(
-            "error",
-            `workflow.nodes[${index}].repeat`,
-            "repeat nodes cannot be the terminal node in simplified sequential mode",
-          ),
-        );
-      }
-      return;
-    }
-
-    if (node.repeat === undefined) {
-      edges.push({ from: node.id, to: nextNode.id, when: "always" });
-      return;
-    }
-
-    const restartAt = node.repeat.restartAt ?? node.id;
-    const restartIndex = input.nodes.findIndex(
-      (candidate) => candidate.id === restartAt,
-    );
-    if (restartIndex < 0) {
-      input.issues.push(
-        makeIssue(
-          "error",
-          `workflow.nodes[${index}].repeat.restartAt`,
-          `must reference an existing node id (${restartAt})`,
-        ),
-      );
-      return;
-    }
-    if (restartIndex > index) {
-      input.issues.push(
-        makeIssue(
-          "error",
-          `workflow.nodes[${index}].repeat.restartAt`,
-          "must reference the same node or an earlier node in simplified sequential mode",
-        ),
-      );
-      return;
-    }
-
-    edges.push({ from: node.id, to: restartAt, when: node.repeat.while });
-    edges.push({
-      from: node.id,
-      to: nextNode.id,
-      when: buildRepeatExitExpression(node.repeat.while),
-    });
-  });
-
-  return edges;
-}
-
 function normalizeWorkflow(
   workflow: unknown,
   issues: ValidationIssue[],
@@ -2737,345 +2057,7 @@ function normalizeWorkflow(
     issues.push(makeIssue("error", "workflow", "must be an object"));
     return null;
   }
-
-  if (isStrictWorkflowAuthorshipValidation(options)) {
-    return normalizeStepAddressedWorkflow(workflow, issues, options);
-  }
-
-  if (
-    Object.hasOwn(workflow, "steps") ||
-    workflow["entryStepId"] !== undefined ||
-    workflow["managerStepId"] !== undefined
-  ) {
-    return normalizeStepAddressedWorkflow(workflow, issues, options);
-  }
-
-  const workflowId = readStringField(
-    workflow,
-    "workflowId",
-    "workflow",
-    issues,
-  );
-  if (workflowId !== null && !isSafeWorkflowId(workflowId)) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.workflowId",
-        "must start with an alphanumeric character and contain only letters, digits, hyphens, or underscores",
-      ),
-    );
-  }
-  const descriptionRaw = workflow["description"];
-  let description: string | null;
-  if (descriptionRaw === undefined) {
-    description = "";
-  } else if (typeof descriptionRaw === "string" && descriptionRaw.length > 0) {
-    description = descriptionRaw;
-  } else {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.description",
-        "must be a non-empty string when provided",
-      ),
-    );
-    description = null;
-  }
-  for (const key of REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS) {
-    if (workflow[key] !== undefined) {
-      issues.push(
-        makeIssue(
-          "error",
-          `workflow.${key}`,
-          REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
-        ),
-      );
-    }
-  }
-
-  const defaultsValue = workflow["defaults"];
-  if (!isRecord(defaultsValue)) {
-    issues.push(makeIssue("error", "workflow.defaults", "must be an object"));
-  }
-
-  const maxLoopIterations =
-    isRecord(defaultsValue) &&
-    readNumberField(
-      defaultsValue,
-      "maxLoopIterations",
-      "workflow.defaults",
-      issues,
-    );
-  const nodeTimeoutMs =
-    isRecord(defaultsValue) &&
-    readNumberField(
-      defaultsValue,
-      "nodeTimeoutMs",
-      "workflow.defaults",
-      issues,
-    );
-  const containerRuntime = normalizeContainerRuntimeDefaults(
-    isRecord(defaultsValue) ? defaultsValue["containerRuntime"] : undefined,
-    "workflow.defaults.containerRuntime",
-    issues,
-  );
-
-  let prompts: WorkflowPrompts | undefined;
-  const promptsRaw = workflow["prompts"];
-  if (promptsRaw !== undefined) {
-    if (!isRecord(promptsRaw)) {
-      issues.push(
-        makeIssue(
-          "error",
-          "workflow.prompts",
-          "must be an object when provided",
-        ),
-      );
-    } else {
-      const divedraPromptTemplateRaw = promptsRaw["divedraPromptTemplate"];
-      const workerSystemPromptTemplateRaw =
-        promptsRaw["workerSystemPromptTemplate"];
-
-      if (
-        divedraPromptTemplateRaw !== undefined &&
-        typeof divedraPromptTemplateRaw !== "string"
-      ) {
-        issues.push(
-          makeIssue(
-            "error",
-            "workflow.prompts.divedraPromptTemplate",
-            "must be a string when provided",
-          ),
-        );
-      }
-      if (
-        workerSystemPromptTemplateRaw !== undefined &&
-        typeof workerSystemPromptTemplateRaw !== "string"
-      ) {
-        issues.push(
-          makeIssue(
-            "error",
-            "workflow.prompts.workerSystemPromptTemplate",
-            "must be a string when provided",
-          ),
-        );
-      }
-
-      prompts = {
-        ...(typeof divedraPromptTemplateRaw === "string"
-          ? { divedraPromptTemplate: divedraPromptTemplateRaw }
-          : {}),
-        ...(typeof workerSystemPromptTemplateRaw === "string"
-          ? { workerSystemPromptTemplate: workerSystemPromptTemplateRaw }
-          : {}),
-      };
-    }
-  }
-
-  const nodesRaw = workflow["nodes"];
-  if (!Array.isArray(nodesRaw)) {
-    issues.push(makeIssue("error", "workflow.nodes", "must be an array"));
-  }
-  const usesAuthoredRoleModel =
-    Array.isArray(nodesRaw) &&
-    nodesRaw.some(
-      (entry) =>
-        isRecord(entry) &&
-        (Object.hasOwn(entry, "role") || Object.hasOwn(entry, "control")),
-    );
-  const nodes = Array.isArray(nodesRaw)
-    ? nodesRaw
-        .map((entry, index) => normalizeNodeRef(entry, index, issues))
-        .filter((entry): entry is WorkflowNodeRef => entry !== null)
-    : [];
-  const edgesRaw = workflow["edges"];
-  const rejectsLegacyEdgesByPresence =
-    usesAuthoredRoleModel && edgesRaw !== undefined;
-  if (edgesRaw !== undefined && !Array.isArray(edgesRaw)) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.edges",
-        rejectsLegacyEdgesByPresence
-          ? "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes"
-          : "must be an array when provided",
-      ),
-    );
-  }
-  if (Array.isArray(edgesRaw) && rejectsLegacyEdgesByPresence) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.edges",
-        "authored edges are legacy compatibility only and cannot be combined with authored role/control nodes",
-      ),
-    );
-  }
-  const authoredEdges =
-    usesAuthoredRoleModel || !Array.isArray(edgesRaw)
-      ? undefined
-      : edgesRaw
-          .map((entry, index) => normalizeEdge(entry, index, issues))
-          .filter((entry): entry is WorkflowEdge => entry !== null);
-
-  if (workflow["workflowCalls"] !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.workflowCalls",
-        "authored workflowCalls are legacy compatibility only and are no longer supported",
-      ),
-    );
-  }
-
-  const loopsRaw = workflow["loops"];
-  const rejectsLegacyLoopsByPresence =
-    usesAuthoredRoleModel && loopsRaw !== undefined;
-  if (loopsRaw !== undefined && !Array.isArray(loopsRaw)) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.loops",
-        rejectsLegacyLoopsByPresence
-          ? "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes"
-          : "must be an array when provided",
-      ),
-    );
-  }
-  if (Array.isArray(loopsRaw) && rejectsLegacyLoopsByPresence) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.loops",
-        "authored loops are legacy compatibility only and cannot be combined with authored role/control nodes",
-      ),
-    );
-  }
-  const authoredLoops =
-    usesAuthoredRoleModel || !Array.isArray(loopsRaw)
-      ? undefined
-      : loopsRaw
-          .map((entry, index) => normalizeLoop(entry, index, issues))
-          .filter((entry): entry is LoopRule => entry !== null);
-
-  const hasRepeatNodes = nodes.some((node) => node.repeat !== undefined);
-  if (hasRepeatNodes && authoredEdges !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.edges",
-        "repeat is supported only when workflow.edges is omitted in the simplified transition format",
-      ),
-    );
-  }
-
-  if (authoredEdges === undefined) {
-    synthesizeSequentialEdges({ nodes, issues });
-  }
-  const loops =
-    authoredLoops === undefined || authoredLoops.length === 0
-      ? undefined
-      : authoredLoops;
-
-  if (workflow["branching"] !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.branching",
-        "authored branching is legacy compatibility only and is no longer supported",
-      ),
-    );
-  }
-
-  const subWorkflowConversationsRaw = workflow["subWorkflowConversations"];
-  if (subWorkflowConversationsRaw !== undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow.subWorkflowConversations",
-        "authored subWorkflowConversations are legacy compatibility only and are no longer supported",
-      ),
-    );
-  }
-
-  const authoredManagerNodeIds = nodes
-    .filter((node) => node.role === "manager")
-    .map((node) => node.id);
-  const hasManagerNode =
-    authoredManagerNodeIds.length > 0 ||
-    nodes.some((node) => node.kind === "root-manager");
-  let effectiveManagerNodeId: string | undefined;
-  if (authoredManagerNodeIds.length === 1) {
-    effectiveManagerNodeId = authoredManagerNodeIds[0];
-  } else if (authoredManagerNodeIds.length === 0) {
-    const rootManagers = nodes.filter((n) => n.kind === "root-manager");
-    if (rootManagers.length === 1) {
-      effectiveManagerNodeId = rootManagers[0]!.id;
-    } else {
-      const prelim: WorkflowJson = {
-        workflowId: workflowId ?? "legacy-infer",
-        description: description ?? "",
-        defaults: { maxLoopIterations: 1, nodeTimeoutMs: 1, containerRuntime },
-        nodes,
-        hasManagerNode: false,
-        ...(authoredEdges === undefined ? {} : { edges: authoredEdges }),
-        ...(prompts === undefined ? {} : { prompts }),
-      };
-      const inferred = inferLegacyNodeGraphGraphEntryNodeId(prelim);
-      if (inferred !== undefined) {
-        effectiveManagerNodeId = inferred;
-      }
-    }
-  }
-  const effectiveEntryNodeId = effectiveManagerNodeId;
-
-  if (effectiveManagerNodeId === undefined) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        "must allow inferring a manager/entry from exactly one manager-role node, a single kind 'root-manager' node, or graph structure for manager-less runs",
-      ),
-    );
-  }
-
-  if (
-    workflowId === null ||
-    description === null ||
-    typeof maxLoopIterations !== "number" ||
-    typeof nodeTimeoutMs !== "number" ||
-    effectiveManagerNodeId === undefined ||
-    effectiveEntryNodeId === undefined
-  ) {
-    return null;
-  }
-
-  if (maxLoopIterations <= 0) {
-    issues.push(
-      makeIssue("error", "workflow.defaults.maxLoopIterations", "must be > 0"),
-    );
-  }
-  if (nodeTimeoutMs <= 0) {
-    issues.push(
-      makeIssue("error", "workflow.defaults.nodeTimeoutMs", "must be > 0"),
-    );
-  }
-
-  const normalizedWorkflow: WorkflowJson & {
-    readonly edges?: readonly WorkflowEdge[];
-    readonly loops?: readonly LoopRule[];
-  } = {
-    workflowId: workflowId!,
-    description: description!,
-    defaults: { maxLoopIterations, nodeTimeoutMs, containerRuntime },
-    ...(prompts === undefined ? {} : { prompts }),
-    hasManagerNode,
-    nodes,
-    ...(authoredEdges === undefined ? {} : { edges: authoredEdges }),
-    ...(loops === undefined ? {} : { loops }),
-  };
-
-  return normalizedWorkflow;
+  return normalizeStepAddressedWorkflow(workflow, issues, options);
 }
 
 function normalizeNodeTemplateFields(args: {
@@ -4847,145 +3829,29 @@ function runSemanticValidation(
   bundle: NormalizedWorkflowBundle,
   issues: ValidationIssue[],
 ): void {
-  const stepAddressedWorkflow = isStepAddressedWorkflow(bundle.workflow);
   const structuralEdges = getStructuralEdges(bundle.workflow);
   const structuralLoops = getStructuralLoops(bundle.workflow);
   const nodeIdSet = new Set(bundle.workflow.nodes.map((node) => node.id));
   const nodeOrderByNodeId = new Map(
     bundle.workflow.nodes.map((node, order) => [node.id, order]),
   );
-  const rootManagerNodeIds = bundle.workflow.nodes
-    .filter((node) => node.kind === "root-manager")
-    .map((node) => node.id);
-  const managerRoleNodeIds = bundle.workflow.nodes
-    .filter((node) => node.role === "manager")
-    .map((node) => node.id);
-  const legacyManagerNodeId = !stepAddressedWorkflow
-    ? inferLegacyNodeGraphManagerNodeId(bundle.workflow)
-    : undefined;
-  const legacyEntryNodeId = !stepAddressedWorkflow
-    ? inferLegacyNodeGraphGraphEntryNodeId(bundle.workflow)
-    : undefined;
-
-  if (
-    !stepAddressedWorkflow &&
-    legacyManagerNodeId !== undefined &&
-    !nodeIdSet.has(legacyManagerNodeId)
-  ) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        `inferred legacy manager node id '${legacyManagerNodeId}' must exist on the workflow node list`,
-      ),
-    );
-  }
-
-  if (
-    !stepAddressedWorkflow &&
-    legacyEntryNodeId !== undefined &&
-    !nodeIdSet.has(legacyEntryNodeId)
-  ) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        `inferred legacy graph entry node id '${legacyEntryNodeId}' must exist on the workflow node list`,
-      ),
-    );
-  }
-
-  if (!stepAddressedWorkflow && managerRoleNodeIds.length > 1) {
-    managerRoleNodeIds.forEach((nodeId) => {
-      issues.push(
-        makeIssue(
-          "error",
-          "workflow.nodes",
-          `node '${nodeId}' cannot use role 'manager' because workflows may define at most one manager node`,
-        ),
-      );
-    });
-  }
-
-  const managerNode = bundle.workflow.nodes.find(
-    (node) => node.id === legacyManagerNodeId,
-  );
-  if (
-    !stepAddressedWorkflow &&
-    managerRoleNodeIds.length === 1 &&
-    managerRoleNodeIds[0] !== legacyManagerNodeId
-  ) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        `inferred legacy manager must be the manager-role node '${managerRoleNodeIds[0]}'`,
-      ),
-    );
-  }
-  if (
-    !stepAddressedWorkflow &&
-    bundle.workflow.hasManagerNode !== false &&
-    managerNode?.kind !== "root-manager"
-  ) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        "inferred manager node must use kind 'root-manager'",
-      ),
-    );
-  }
-  if (
-    !stepAddressedWorkflow &&
-    bundle.workflow.hasManagerNode === false &&
-    legacyEntryNodeId !== undefined &&
-    legacyManagerNodeId !== legacyEntryNodeId
-  ) {
-    issues.push(
-      makeIssue(
-        "error",
-        "workflow",
-        "manager-less workflows must have the same inferred manager id and graph entry id",
-      ),
-    );
-  }
-  if (!stepAddressedWorkflow) {
-    rootManagerNodeIds.forEach((nodeId) => {
-      if (nodeId === legacyManagerNodeId) {
-        return;
-      }
-      issues.push(
-        makeIssue(
-          "error",
-          "workflow.nodes",
-          `node '${nodeId}' cannot use kind 'root-manager' unless it is the inferred legacy manager node id`,
-        ),
-      );
-    });
-  }
 
   const seenNodeIds = new Set<string>();
   bundle.workflow.nodes.forEach((node, index) => {
     if (seenNodeIds.has(node.id)) {
-      if (!stepAddressedWorkflow) {
-        issues.push(
-          makeIssue(
-            "error",
-            `workflow.nodes[${index}].id`,
-            `duplicate node id '${node.id}'`,
-          ),
-        );
-      }
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.nodes[${index}].id`,
+          `duplicate node id '${node.id}'`,
+        ),
+      );
       return;
     }
     seenNodeIds.add(node.id);
 
     const payload = bundle.nodePayloads[node.id];
     if (!payload) {
-      if (stepAddressedWorkflow) {
-        return;
-      }
       issues.push(
         makeIssue(
           "error",
@@ -5035,28 +3901,26 @@ function runSemanticValidation(
     }
   });
 
-  if (!stepAddressedWorkflow) {
-    structuralEdges.forEach((edge, index) => {
-      if (!nodeIdSet.has(edge.from)) {
-        issues.push(
-          makeIssue(
-            "error",
-            `workflow.edges[${index}].from`,
-            "must reference an existing node id",
-          ),
-        );
-      }
-      if (!nodeIdSet.has(edge.to)) {
-        issues.push(
-          makeIssue(
-            "error",
-            `workflow.edges[${index}].to`,
-            "must reference an existing node id",
-          ),
-        );
-      }
-    });
-  }
+  structuralEdges.forEach((edge, index) => {
+    if (!nodeIdSet.has(edge.from)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}].transitions`,
+          "must reference an existing step id",
+        ),
+      );
+    }
+    if (!nodeIdSet.has(edge.to)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `workflow.steps[${index}].transitions`,
+          "must reference an existing step id",
+        ),
+      );
+    }
+  });
 
   structuralLoops.forEach((loop, index) => {
     if (!nodeIdSet.has(loop.judgeNodeId)) {

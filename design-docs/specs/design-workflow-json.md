@@ -150,7 +150,7 @@ Validation rules:
 - `managerStepId`, when present, must resolve to an authored step
 - every step must reference a node registry entry through `nodeId`
 - `steps[]` must be non-empty
-- dedicated legacy top-level fields are rejected by key set: all step-addressed bundles use `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` in `src/workflow/validate.ts` (includes `managerNodeId`, `entryNodeId`, `subWorkflows`, `workflowCalls`, `subWorkflowConversations`, `edges`, `loops`, and `branching`); the legacy **node-graph** load branch additionally rejects the subset `REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS` (`managerNodeId`, `entryNodeId`, `subWorkflows`). The exact rejection strings are defined alongside those exports
+- dedicated legacy top-level fields are rejected by key set: step-addressed bundles use `REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS` in `src/workflow/validate.ts` (includes `managerNodeId`, `entryNodeId`, `subWorkflows`, `workflowCalls`, `subWorkflowConversations`, `edges`, `loops`, and `branching`). The exact rejection strings are defined alongside those exports
 - the save path may strip only normalized in-memory `hasManagerNode` from workflow input before writing; it does not strip `managerNodeId`, `entryNodeId`, `subWorkflows`, or other disallowed keys (validation rejects them, same as for on-disk `workflow.json`)
 - the validator rejects top-level `workflow.workflowCalls` whenever the bundle is treated as step-addressed (`entryStepId` with `steps[]`); use step transitions instead
 - cross-workflow invocation uses the same execution-address model as ordinary step calls rather than a dedicated top-level `workflowCalls` section
@@ -340,7 +340,7 @@ Rules:
 - `resumeStepId` must be omitted for local in-workflow transitions (`toWorkflowId` absent)
 - cross-workflow transitions must target the callee workflow's callable entry step, which is normally its `managerStepId`, or `entryStepId` for a worker-only workflow
 - transitions always target steps, never raw node ids
-- optional `label` uses the same expression grammar as legacy edge `when` strings: omitted means unconditional (`always` when the runtime projects local transitions onto compatibility `edges[]`). For cross-workflow transitions, omitted `label` means the derived runtime workflow-call execution is unconditional (same as legacy `workflowCalls[].when` omitted). When set, `label` gates both that edge projection and the derived cross-workflow call (the engine matches it like a `workflowCalls[].when` predicate). Step-authored cross-workflow transitions are **not** copied onto `workflow.workflowCalls` during normalization; the engine and inspection surfaces derive the effective call list (deterministic ids `__cw:<callerStepId>`) from `steps[]`
+- optional `label` uses the same expression grammar as legacy edge `when` strings: omitted means unconditional (`always` when the runtime projects local transitions onto compatibility `edges[]`). For cross-workflow transitions, omitted `label` means the derived cross-workflow dispatch is unconditional (same as legacy `workflowCalls[].when` omitted). When set, `label` gates both that edge projection and the derived dispatch (the engine matches it like a `workflowCalls[].when` predicate). Step-authored cross-workflow transitions are **not** copied onto `workflow.workflowCalls` during normalization; the engine and inspection surfaces derive the effective call list (deterministic ids `__cw:<callerStepId>`) from `steps[]`
 
 ## Removed Fields
 

@@ -9,7 +9,6 @@ export type NodeKind =
   | "task"
   | "branch-judge"
   | "loop-judge"
-  | "root-manager"
   | "input"
   | "output";
 
@@ -107,6 +106,7 @@ export interface WorkflowNodeRegistryRef {
   readonly id: string;
   readonly nodeFile?: string;
   readonly addon?: WorkflowNodeAddonRef;
+  readonly execution?: WorkflowNodeExecutionPolicy;
 }
 
 export interface WorkflowStepTransition {
@@ -173,18 +173,6 @@ export interface AuthoredWorkflowNodeRef {
   readonly repeat?: WorkflowNodeRepeatPolicy;
 }
 
-export interface WorkflowCallRef {
-  readonly id: string;
-  readonly workflowId: string;
-  readonly callerNodeId: string;
-  readonly resultNodeId?: string;
-  /**
-   * When set, the call runs only if this branch predicate matches the caller output
-   * (same expression grammar as workflow edge `when`). Omitted means unconditional.
-   */
-  readonly when?: string;
-}
-
 export interface WorkflowEdge {
   readonly from: string;
   readonly to: string;
@@ -216,7 +204,7 @@ export interface OutputSelectionPolicy {
 /**
  * Authored `workflow.json` step-addressed surface (`design-workflow-json.md`). Legacy
  * top-level node/structural aliases are compile-time and validation-time errors; see
- * `REJECTED_AUTHORED_*` exports in `validate.ts` (not session/runtime `managerNodeId`).
+ * `REJECTED_AUTHORED_*` exports in `validate.ts` (not session/runtime `managerRuntimeId`).
  */
 export interface AuthoredWorkflowJson {
   readonly workflowId: string;
@@ -233,10 +221,8 @@ export interface AuthoredWorkflowJson {
 }
 
 /**
- * Normalized workflow from validation/load: step fields (`entryStepId`, `steps`, optional
- * `managerStepId`) and node registry or node-graph `nodes`. Entry and manager runtime ids come from
- * {@link resolveWorkflowEntryRuntimeId} and {@link resolveWorkflowManagerRuntimeId}; local routing
- * and repeat loops from {@link getStructuralEdges} and {@link getStructuralLoops}.
+ * Normalized workflow from validation/load: step-addressed workflow definition plus the runtime
+ * node list synthesized from those steps for execution, inspection, and prompt composition.
  */
 export interface WorkflowJson {
   readonly workflowId: string;
@@ -245,9 +231,9 @@ export interface WorkflowJson {
   readonly prompts?: WorkflowPrompts;
   readonly hasManagerNode?: boolean;
   readonly managerStepId?: string;
-  readonly entryStepId?: string;
-  readonly nodeRegistry?: readonly WorkflowNodeRegistryRef[];
-  readonly steps?: readonly WorkflowStepRef[];
+  readonly entryStepId: string;
+  readonly nodeRegistry: readonly WorkflowNodeRegistryRef[];
+  readonly steps: readonly WorkflowStepRef[];
   readonly nodes: readonly WorkflowNodeRef[];
 }
 
@@ -257,35 +243,8 @@ export function isStepAddressedWorkflow(
   readonly entryStepId: string;
   readonly steps: readonly WorkflowStepRef[];
 } {
-  return workflow.entryStepId !== undefined && workflow.steps !== undefined;
-}
-
-type WorkflowWithLegacyEdges = WorkflowJson & {
-  readonly edges?: readonly WorkflowEdge[];
-};
-
-/**
- * Optional persisted `workflow.edges` on legacy node-graph bundles. Local routing is projected via
- * {@link getStructuralEdges} (step graphs use `steps[].transitions` instead).
- */
-export function getLegacyAuthoredEdges(
-  workflow: WorkflowWithLegacyEdges,
-): readonly WorkflowEdge[] | undefined {
-  return workflow.edges;
-}
-
-type WorkflowWithLegacyLoops = WorkflowJson & {
-  readonly loops?: readonly LoopRule[];
-};
-
-/**
- * Optional persisted `workflow.loops` on legacy node-graph bundles. Effective loop rules are
- * projected via {@link getStructuralLoops}.
- */
-export function getLegacyAuthoredLoops(
-  workflow: WorkflowWithLegacyLoops,
-): readonly LoopRule[] | undefined {
-  return workflow.loops;
+  void workflow;
+  return true;
 }
 
 function buildRepeatExitExpression(whileExpression: string): string {
@@ -313,181 +272,47 @@ function buildRepeatLoops(
 }
 
 /**
- * Loop rules stay authored on legacy `workflow.loops` when present. When a
- * legacy workflow instead uses node-local `repeat`, readers should derive the
- * effective loop projection rather than depending on a synthesized normalized
- * `workflow.loops` companion. Explicit loop ids win over derived repeat ids.
+ * Loop rules are derived from node-local `repeat` policies on the synthesized runtime node list.
  */
 export function getStructuralLoops(
-  workflow: Pick<WorkflowJson, "nodes"> & WorkflowWithLegacyLoops,
+  workflow: Pick<WorkflowJson, "nodes">,
 ): readonly LoopRule[] {
-  const explicitLoops = getLegacyAuthoredLoops(workflow) ?? [];
   const derivedRepeatLoops = buildRepeatLoops(workflow.nodes);
-  if (explicitLoops.length === 0) {
-    return derivedRepeatLoops;
-  }
-  if (derivedRepeatLoops.length === 0) {
-    return explicitLoops;
-  }
-
-  const loopsById = new Map<string, LoopRule>(
-    explicitLoops.map((loop) => [loop.id, loop]),
-  );
-  for (const derivedLoop of derivedRepeatLoops) {
-    if (!loopsById.has(derivedLoop.id)) {
-      loopsById.set(derivedLoop.id, derivedLoop);
-    }
-  }
-  return [...loopsById.values()];
+  return derivedRepeatLoops;
 }
 
 /**
- * Step-addressed workflows should derive local routing edges from
- * `steps[].transitions` instead of depending on the legacy `workflow.edges`
- * companion. Legacy node-graph bundles use authored `workflow.edges` when
- * present; otherwise, sequential routing is derived from node order plus repeat
- * metadata.
+ * Step-addressed workflows derive local routing edges from `steps[].transitions`.
  */
 export function getStructuralEdges(
-  workflow: Pick<WorkflowJson, "entryStepId" | "steps" | "nodes"> &
-    WorkflowWithLegacyEdges,
+  workflow: Pick<WorkflowJson, "steps">,
 ): readonly WorkflowEdge[] {
-  if (isStepAddressedWorkflow(workflow)) {
-    return workflow.steps.flatMap((step) =>
-      (step.transitions ?? [])
-        .filter((transition) => transition.toWorkflowId === undefined)
-        .map((transition) => ({
-          from: step.id,
-          to: transition.toStepId,
-          when: transition.label ?? "always",
-        })),
-    );
-  }
-  const authoredLegacyEdges = getLegacyAuthoredEdges(workflow);
-  if (authoredLegacyEdges !== undefined) {
-    return authoredLegacyEdges;
-  }
-
-  const edges: WorkflowEdge[] = [];
-  workflow.nodes.forEach((node, index) => {
-    const nextNode = workflow.nodes[index + 1];
-    if (nextNode === undefined) {
-      return;
-    }
-    if (node.repeat === undefined) {
-      edges.push({ from: node.id, to: nextNode.id, when: "always" });
-      return;
-    }
-
-    const restartAt = node.repeat.restartAt ?? node.id;
-    edges.push({ from: node.id, to: restartAt, when: node.repeat.while });
-    edges.push({
-      from: node.id,
-      to: nextNode.id,
-      when: buildRepeatExitExpression(node.repeat.while),
-    });
-  });
-  return edges;
-}
-
-/**
- * Infers the legacy node-graph "graph entry" node id from {@link getStructuralEdges}
- * (no node id that appears as a `to` value). Ties are broken by workflow
- * `nodes` document order. Step-addressed bundles use `entryStepId` instead of this inference.
- */
-export function inferLegacyNodeGraphGraphEntryNodeId(
-  workflow: WorkflowJson,
-): string | undefined {
-  if (workflow.nodes.length === 0) {
-    return undefined;
-  }
-  const edges = getStructuralEdges(workflow);
-  const toTargets = new Set(edges.map((e) => e.to));
-  const candidateIds = workflow.nodes
-    .map((n) => n.id)
-    .filter((id) => !toTargets.has(id));
-  if (candidateIds.length === 1) {
-    return candidateIds[0];
-  }
-  if (candidateIds.length > 1) {
-    const order = new Map(
-      workflow.nodes.map((n, i) => [n.id, i] as const),
-    );
-    return [...candidateIds].sort(
-      (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0),
-    )[0];
-  }
-  if (workflow.nodes.length === 1) {
-    return workflow.nodes[0]!.id;
-  }
-  return workflow.nodes[0]!.id;
-}
-
-/**
- * Infers the legacy node-graph manager runtime node id from node kinds/roles
- * and {@link inferLegacyNodeGraphGraphEntryNodeId} for manager-less bundles.
- */
-export function inferLegacyNodeGraphManagerNodeId(
-  workflow: WorkflowJson,
-): string | undefined {
-  if (workflow.hasManagerNode === false) {
-    return inferLegacyNodeGraphGraphEntryNodeId(workflow);
-  }
-  const rootManager = workflow.nodes.find((n) => n.kind === "root-manager");
-  if (rootManager !== undefined) {
-    return rootManager.id;
-  }
-  const roleManager = workflow.nodes.find((n) => n.role === "manager");
-  if (roleManager !== undefined) {
-    return roleManager.id;
-  }
-  return undefined;
-}
-
-/**
- * Primary entry **runtime** id for new-session bootstrap and UI/runtime
- * previews. For step-addressed normalized bundles (`entryStepId` and `steps`
- * present), returns `entryStepId` (a **step** id). For legacy node-graph
- * bundles, returns the inferred graph entry id (node id). Throws if inference
- * fails.
- */
-export function resolveWorkflowEntryRuntimeId(workflow: WorkflowJson): string {
-  if (isStepAddressedWorkflow(workflow)) {
-    return workflow.entryStepId;
-  }
-  const legacyEntry = inferLegacyNodeGraphGraphEntryNodeId(workflow);
-  if (legacyEntry !== undefined) {
-    return legacyEntry;
-  }
-  throw new Error(
-    `workflow '${workflow.workflowId}' has no resolvable graph entry node id for legacy node-graph bundles`,
+  return workflow.steps.flatMap((step) =>
+    (step.transitions ?? [])
+      .filter((transition) => transition.toWorkflowId === undefined)
+      .map((transition) => ({
+        from: step.id,
+        to: transition.toStepId,
+        when: transition.label ?? "always",
+      })),
   );
 }
 
 /**
- * Primary manager/entry **runtime** id for engine routing, mailbox handoff, and
- * new-session bootstrap. For step-addressed normalized bundles (`entryStepId`
- * and `steps` present), returns `managerStepId ?? entryStepId` (a **step** id
- * in the same id space as `session.queue` items and the manager step's
- * materialized `nodes[].id`), not `steps[].nodeId` from the registry. For
- * legacy node-graph bundles, returns the inferred manager id, falling back to
- * the graph entry when needed. Throws if inference fails.
+ * Primary entry **runtime** id for new-session bootstrap and UI/runtime previews.
+ */
+export function resolveWorkflowEntryRuntimeId(workflow: WorkflowJson): string {
+  return workflow.entryStepId;
+}
+
+/**
+ * Primary manager/entry **runtime** id for engine routing, mailbox handoff, and new-session
+ * bootstrap. Returns `managerStepId ?? entryStepId` in the same step-id space as `session.queue`.
  */
 export function resolveWorkflowManagerRuntimeId(
   workflow: WorkflowJson,
 ): string {
-  if (isStepAddressedWorkflow(workflow)) {
-    return workflow.managerStepId ?? workflow.entryStepId;
-  }
-  const legacyManager =
-    inferLegacyNodeGraphManagerNodeId(workflow) ??
-    inferLegacyNodeGraphGraphEntryNodeId(workflow);
-  if (legacyManager !== undefined) {
-    return legacyManager;
-  }
-  throw new Error(
-    `workflow '${workflow.workflowId}' has no resolvable manager runtime id for legacy node-graph bundles`,
-  );
+  return workflow.managerStepId ?? workflow.entryStepId;
 }
 
 export interface ArgumentBinding {
@@ -933,13 +758,6 @@ export interface LoadOptions {
   readonly nodeAddons?: readonly NodeAddonDefinition[];
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
-  /**
-   * Strict (default) step-addressed normalization vs legacy node-graph when the bundle is not
-   * step-addressed (`false`). Disallowed top-level keys: `REJECTED_AUTHORED_*` in `validate.ts`.
-   * Save drops only in-memory `hasManagerNode` before validation. Omitted: strict unless
-   * `DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT=true`.
-   */
-  readonly rejectLegacyWorkflowAuthoring?: boolean;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";

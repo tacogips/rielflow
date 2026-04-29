@@ -86,7 +86,7 @@ export function isTerminalStatus(status: string): boolean {
 export function applyOptionalNodeDecision(input: {
   readonly session: WorkflowSessionState;
   readonly workflow: WorkflowJson;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly action: Extract<
     ManagerControlAction,
@@ -102,12 +102,12 @@ export function applyOptionalNodeDecision(input: {
   );
   if (currentDecision === undefined || currentDecision.status !== "pending") {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${input.action.stepId}' is not currently pending`,
+      `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${input.action.stepId}' is not currently pending`,
     );
   }
-  if (currentDecision.owningManagerNodeId !== input.managerNodeId) {
+  if (currentDecision.owningManagerRuntimeId !== input.managerRuntimeId) {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': optional ${optionalTargetNoun} '${input.action.stepId}' is owned by '${currentDecision.owningManagerNodeId}'`,
+      `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${input.action.stepId}' is owned by '${currentDecision.owningManagerRuntimeId}'`,
     );
   }
 
@@ -116,7 +116,7 @@ export function applyOptionalNodeDecision(input: {
   );
   if (nodeRef?.execution?.mode !== "optional") {
     throw new Error(
-      `invalid manager control at '${input.managerNodeId}': ${optionalTargetNoun} '${input.action.stepId}' is not optional`,
+      `invalid manager control at '${input.managerRuntimeId}': ${optionalTargetNoun} '${input.action.stepId}' is not optional`,
     );
   }
 

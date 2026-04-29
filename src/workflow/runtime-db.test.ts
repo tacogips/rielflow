@@ -41,14 +41,12 @@ function makeRuntimeDbOptions(
   readonly rootDataDir: string;
   readonly sessionId?: string;
   readonly workflowRoot: string;
-  readonly rejectLegacyWorkflowAuthoring: false;
 } {
   return {
     workflowRoot: root,
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "runtime-data"),
     cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
     ...(sessionId === undefined ? {} : { sessionId }),
   };
 }
@@ -67,7 +65,7 @@ async function createWorkflowFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -111,7 +109,7 @@ async function createNodeSessionReuseFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },

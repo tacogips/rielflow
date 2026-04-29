@@ -3140,8 +3140,6 @@ export async function runCli(
         loaded.value,
         loadedWorkflowOptions,
       );
-      const isStepAddressedInspect =
-        loaded.value.bundle.workflow.steps !== undefined;
       if (parsed.options.output === "json") {
         emitJson(io, {
           ...summary,
@@ -3165,23 +3163,13 @@ export async function runCli(
         );
         io.stdout(`stepIds: ${summary.stepIds.join(", ")}`);
         io.stdout(`nodeRegistryIds: ${summary.nodeRegistryIds.join(", ")}`);
-        if (isStepAddressedInspect) {
-          const projection = summary.counts.structuralProjection;
-          if (projection === undefined) {
-            throw new Error(
-              "inspect invariant violated: authored steps require structuralProjection counts",
-            );
-          }
+        io.stdout(
+          `steps: ${summary.counts.steps}, nodeRegistry: ${summary.counts.nodeRegistry}, crossWorkflowDispatches: ${summary.counts.crossWorkflowDispatches}`,
+        );
+        if (summary.crossWorkflowDispatchIds.length > 0) {
           io.stdout(
-            `steps: ${summary.counts.steps}, nodeRegistry: ${summary.counts.nodeRegistry}, workflowCalls: ${summary.counts.workflowCalls}, structuralProjection: nodes=${projection.nodes} edges=${projection.edges} loops=${projection.loops}`,
+            `crossWorkflowDispatchIds: ${summary.crossWorkflowDispatchIds.join(", ")}`,
           );
-        } else {
-          io.stdout(
-            `nodes: ${summary.counts.nodes}, nodeRegistry: ${summary.counts.nodeRegistry}, steps: ${summary.counts.steps}, edges: ${summary.counts.edges}, loops: ${summary.counts.loops}, workflowCalls: ${summary.counts.workflowCalls}`,
-          );
-        }
-        if (summary.workflowCallIds.length > 0) {
-          io.stdout(`workflowCallIds: ${summary.workflowCallIds.join(", ")}`);
         }
         io.stdout(
           `defaults: maxLoopIterations=${summary.defaults.maxLoopIterations}, nodeTimeoutMs=${summary.defaults.nodeTimeoutMs}`,

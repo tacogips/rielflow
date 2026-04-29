@@ -25,7 +25,7 @@ Expected stable inspection facts:
 
 - `hasManagerNode` is `false`
 - authored `entryStepId` is `main-worker`
-- the step-first inspection summary does not emit top-level `entryNodeId` or `managerNodeId`; `managerStepId` is absent for this worker-only bundle
+- the step-first inspection summary does not emit top-level `entryNodeId` or `managerRuntimeId`; `managerStepId` is absent for this worker-only bundle
 
 ## Run
 

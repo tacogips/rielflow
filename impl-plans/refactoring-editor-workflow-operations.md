@@ -45,7 +45,7 @@ Not included:
 ```ts
 export function availableSubWorkflowBoundaryNodes(
   bundle: EditorWorkflowBundle | null | undefined,
-  kind: "managerNodeId" | "inputNodeId" | "outputNodeId",
+  kind: "managerRuntimeId" | "inputNodeId" | "outputNodeId",
   currentSubWorkflowId: string,
 ): EditorWorkflowNode[];
 ```

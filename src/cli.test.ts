@@ -898,7 +898,7 @@ describe("runCli", () => {
     const parsed = JSON.parse(outputJson) as {
       workflowName: string;
       entryNodeId?: string;
-      managerNodeId?: string;
+      managerRuntimeId?: string;
       entryStepId?: string;
       managerStepId?: string;
       stepIds: readonly string[];
@@ -906,26 +906,20 @@ describe("runCli", () => {
       counts: {
         nodeRegistry: number;
         steps: number;
-        structuralProjection?: { nodes: number; edges: number; loops: number };
-        nodes?: number;
+        crossWorkflowDispatches: number;
       };
       runtime: { ready: boolean; blockers: readonly string[] };
     };
     expect(parsed.workflowName).toBe("demo");
     expect(parsed.entryNodeId).toBeUndefined();
-    expect(parsed.managerNodeId).toBeUndefined();
+    expect(parsed.managerRuntimeId).toBeUndefined();
     expect(parsed.entryStepId).toBe("divedra-manager");
     expect(parsed.managerStepId).toBe("divedra-manager");
     expect(parsed.stepIds).toEqual(["divedra-manager", "main-worker"]);
     expect(parsed.nodeRegistryIds).toEqual(["divedra-manager", "main-worker"]);
-    expect(parsed.counts.nodes).toBeUndefined();
-    expect(parsed.counts.structuralProjection).toEqual({
-      nodes: 2,
-      edges: 1,
-      loops: 0,
-    });
     expect(parsed.counts.nodeRegistry).toBe(2);
     expect(parsed.counts.steps).toBe(2);
+    expect(parsed.counts.crossWorkflowDispatches).toBe(0);
     expect(parsed.runtime.ready).toBe(false);
     expect(parsed.runtime.blockers).toEqual(
       expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
@@ -950,7 +944,7 @@ describe("runCli", () => {
       "nodeRegistryIds: divedra-manager, main-worker",
     );
     expect(inspectTextCapture.stdout.join("\n")).toMatch(
-      /nodeRegistry: 2, workflowCalls: 0, structuralProjection: nodes=2 edges=1 loops=0/,
+      /steps: 2, nodeRegistry: 2, crossWorkflowDispatches: 0/,
     );
   });
 
@@ -1246,13 +1240,18 @@ describe("runCli", () => {
       entryStepId?: string;
       hasManagerNode: boolean;
       nodeRegistryIds: readonly string[];
-      counts: { structuralProjection?: { nodes: number }; nodes?: number };
+      counts: {
+        nodeRegistry: number;
+        steps: number;
+        crossWorkflowDispatches: number;
+      };
     };
     expect(parsed.hasManagerNode).toBe(false);
     expect(parsed.entryStepId).toBe("main-worker");
     expect(parsed.nodeRegistryIds).toEqual(["main-worker"]);
-    expect(parsed.counts.nodes).toBeUndefined();
-    expect(parsed.counts.structuralProjection?.nodes).toBe(1);
+    expect(parsed.counts.nodeRegistry).toBe(1);
+    expect(parsed.counts.steps).toBe(1);
+    expect(parsed.counts.crossWorkflowDispatches).toBe(0);
 
     const inspectTextCapture = createIoCapture();
     const inspectTextCode = await runCli(
@@ -1290,19 +1289,17 @@ describe("runCli", () => {
         entryStepId?: string;
         nodeRegistryIds: readonly string[];
         counts: {
-          nodes?: number;
           nodeRegistry: number;
           steps: number;
-          structuralProjection?: { nodes: number };
+          crossWorkflowDispatches: number;
         };
       };
       expect(parsed.hasManagerNode).toBe(false);
       expect(parsed.entryStepId).toBe("step-1");
       expect(parsed.nodeRegistryIds).toEqual(["worker-1", "worker-2"]);
-      expect(parsed.counts.nodes).toBeUndefined();
       expect(parsed.counts.nodeRegistry).toBe(2);
       expect(parsed.counts.steps).toBe(2);
-      expect(parsed.counts.structuralProjection?.nodes).toBe(2);
+      expect(parsed.counts.crossWorkflowDispatches).toBe(0);
     });
   });
 
@@ -1327,12 +1324,12 @@ describe("runCli", () => {
       expect(jsonCode).toBe(0);
 
       const parsed = JSON.parse(jsonCapture.stdout.join("\n")) as {
-        workflowCallIds: readonly string[];
-        counts: { workflowCalls: number };
+        crossWorkflowDispatchIds: readonly string[];
+        counts: { crossWorkflowDispatches: number };
         runtime: { ready: boolean };
       };
-      expect(parsed.workflowCallIds).toEqual(["__cw:main-worker"]);
-      expect(parsed.counts.workflowCalls).toBe(1);
+      expect(parsed.crossWorkflowDispatchIds).toEqual(["__cw:main-worker"]);
+      expect(parsed.counts.crossWorkflowDispatches).toBe(1);
       expect(parsed.runtime.ready).toBe(true);
 
       const textCapture = createIoCapture();
@@ -1341,9 +1338,9 @@ describe("runCli", () => {
         textCapture.io,
       );
       expect(textCode).toBe(0);
-      expect(textCapture.stdout.join("\n")).toContain("workflowCalls: 1");
+      expect(textCapture.stdout.join("\n")).toContain("crossWorkflowDispatches: 1");
       expect(textCapture.stdout.join("\n")).toContain(
-        "workflowCallIds: __cw:main-worker",
+        "crossWorkflowDispatchIds: __cw:main-worker",
       );
       expect(textCapture.stdout.join("\n")).not.toContain("compatibility:");
       expect(textCapture.stdout.join("\n")).not.toContain("subWorkflows:");

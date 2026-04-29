@@ -58,7 +58,7 @@ export interface AmbientManagerControlPlaneEnvironment {
   readonly DIVEDRA_MANAGER_SESSION_ID: string;
   readonly DIVEDRA_WORKFLOW_ID: string;
   readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-  readonly DIVEDRA_MANAGER_NODE_ID: string;
+  readonly DIVEDRA_MANAGER_RUNTIME_ID: string;
   readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
 }
 
@@ -66,7 +66,7 @@ export function mintManagerAuthToken(): string;
 export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly managerSessionId: string;
   readonly authToken: string;

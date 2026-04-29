@@ -1053,7 +1053,7 @@ async function loadScopedCommunicationForManagerMutation(
     communication,
     loadedWorkflow.bundle.workflow,
     {
-      managerRuntimeId: scope.session.managerNodeId,
+      managerRuntimeId: scope.session.managerRuntimeId,
     },
     "GraphQL manager mutation",
   );

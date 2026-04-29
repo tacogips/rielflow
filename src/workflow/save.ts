@@ -17,7 +17,6 @@ import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
 import {
-  isStrictWorkflowAuthorshipValidation,
   REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS,
   REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
   REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
@@ -31,15 +30,10 @@ import {
 } from "./revision";
 import type {
   AuthoredWorkflowJson,
-  AuthoredWorkflowNodeRef,
   LoadOptions,
-  WorkflowDefaults,
-  WorkflowEdge,
   WorkflowJson,
-  WorkflowNodeRef,
   WorkflowStepRef,
 } from "./types";
-import { getLegacyAuthoredEdges, getLegacyAuthoredLoops } from "./types";
 
 type AuthoredWorkflowRecord = AuthoredWorkflowJson &
   Readonly<Record<string, unknown>>;
@@ -169,95 +163,6 @@ function stripNormalizedOnlyWorkflowTopLevelFields(
   return workflowRecord;
 }
 
-function createPersistedWorkflowNode(
-  node: WorkflowNodeRef,
-  authoredNode: Record<string, unknown> | undefined,
-): AuthoredWorkflowNodeRef {
-  const nodeSource =
-    node.addon === undefined
-      ? { nodeFile: node.nodeFile }
-      : { addon: node.addon };
-  if (authoredNode === undefined) {
-    return {
-      id: node.id,
-      ...nodeSource,
-      ...(node.role === undefined && node.kind !== undefined
-        ? { kind: node.kind }
-        : {}),
-      ...(node.role === undefined ? {} : { role: node.role }),
-      ...(node.control === undefined ? {} : { control: node.control }),
-      ...(node.completion === undefined ? {} : { completion: node.completion }),
-      ...(node.execution === undefined ? {} : { execution: node.execution }),
-      ...(node.group === undefined ? {} : { group: node.group }),
-      ...(node.repeat === undefined ? {} : { repeat: node.repeat }),
-    };
-  }
-
-  return {
-    id: node.id,
-    ...nodeSource,
-    ...(hasOwnKey(authoredNode, "kind") && node.kind !== undefined
-      ? { kind: node.kind }
-      : {}),
-    ...(hasOwnKey(authoredNode, "role") && node.role !== undefined
-      ? { role: node.role }
-      : {}),
-    ...(hasOwnKey(authoredNode, "control") && node.control !== undefined
-      ? { control: node.control }
-      : {}),
-    ...(hasOwnKey(authoredNode, "completion") && node.completion !== undefined
-      ? { completion: node.completion }
-      : {}),
-    ...(hasOwnKey(authoredNode, "execution") && node.execution !== undefined
-      ? { execution: node.execution }
-      : {}),
-    ...(hasOwnKey(authoredNode, "group") && node.group !== undefined
-      ? { group: node.group }
-      : {}),
-    ...(hasOwnKey(authoredNode, "repeat") && node.repeat !== undefined
-      ? { repeat: node.repeat }
-      : {}),
-  };
-}
-
-function createPersistedWorkflowDefaults(input: {
-  readonly workflow: WorkflowJson;
-  readonly authoredWorkflow: Record<string, unknown> | undefined;
-}): WorkflowDefaults {
-  const authoredDefaults = isRecord(input.authoredWorkflow?.["defaults"])
-    ? input.authoredWorkflow["defaults"]
-    : undefined;
-  return {
-    maxLoopIterations: input.workflow.defaults.maxLoopIterations,
-    nodeTimeoutMs: input.workflow.defaults.nodeTimeoutMs,
-    ...(hasOwnKey(authoredDefaults, "timeoutPolicy") &&
-    input.workflow.defaults.timeoutPolicy !== undefined
-      ? { timeoutPolicy: input.workflow.defaults.timeoutPolicy }
-      : {}),
-    ...(hasOwnKey(authoredDefaults, "containerRuntime")
-      ? { containerRuntime: input.workflow.defaults.containerRuntime }
-      : {}),
-  };
-}
-
-function buildAuthoredNodesById(
-  authoredWorkflow: Record<string, unknown> | undefined,
-): ReadonlyMap<string, Record<string, unknown>> {
-  const authoredNodes = authoredWorkflow?.["nodes"];
-  if (!Array.isArray(authoredNodes)) {
-    return new Map();
-  }
-
-  return new Map(
-    authoredNodes.flatMap((node) => {
-      if (!isRecord(node) || typeof node["id"] !== "string") {
-        return [];
-      }
-      return [[node["id"], node] as const];
-    }),
-  );
-}
-
 function collectAuthoredNodeFiles(
   authoredWorkflow: Record<string, unknown> | undefined,
 ): readonly string[] {
@@ -302,32 +207,6 @@ function collectAuthoredStepFiles(
   ];
 }
 
-function buildAuthoredWorkflowNodesById(
-  authoredWorkflow: AuthoredWorkflowRecord | undefined,
-): ReadonlyMap<string, Record<string, unknown>> {
-  return buildAuthoredNodesById(authoredWorkflow);
-}
-
-function buildIncomingNodesById(
-  workflow: unknown,
-): ReadonlyMap<string, Record<string, unknown>> {
-  if (!isRecord(workflow) || !Array.isArray(workflow["nodes"])) {
-    return new Map();
-  }
-  return buildAuthoredNodesById(workflow);
-}
-
-function hasNonEmptyStringRecordValue(
-  value: Record<string, unknown> | undefined,
-): boolean {
-  if (value === undefined) {
-    return false;
-  }
-  return Object.values(value).some(
-    (entry) => typeof entry === "string" && entry.length > 0,
-  );
-}
-
 function isDefaultContainerRuntime(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -336,261 +215,10 @@ function isDefaultContainerRuntime(value: unknown): boolean {
   );
 }
 
-function hasAuthoredRoleOrControlNode(nodes: readonly unknown[]): boolean {
-  return nodes.some(
-    (node) =>
-      isRecord(node) &&
-      (node["role"] !== undefined || node["control"] !== undefined),
-  );
-}
-
-function createSequentialEdgesFromNodes(
-  nodes: readonly unknown[],
-): readonly WorkflowEdge[] {
-  const nodeIds = nodes.flatMap((node) =>
-    isRecord(node) && typeof node["id"] === "string" ? [node["id"]] : [],
-  );
-  return nodeIds.slice(0, -1).map((from, index) => ({
-    from,
-    to: nodeIds[index + 1] as string,
-    when: "always",
-  }));
-}
-
-function edgesMatch(
-  left: readonly unknown[] | undefined,
-  right: readonly WorkflowEdge[],
-): boolean {
-  if (!Array.isArray(left) || left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((edge, index) => {
-    if (!isRecord(edge)) {
-      return false;
-    }
-    const expected = right[index];
-    return (
-      edge["from"] === expected?.from &&
-      edge["to"] === expected?.to &&
-      edge["when"] === expected?.when &&
-      edge["priority"] === expected?.priority
-    );
-  });
-}
-
-function shouldPersistTopLevelField(input: {
-  readonly existingAuthoredWorkflow: Record<string, unknown> | undefined;
-  readonly incomingWorkflow: Record<string, unknown>;
-  readonly key: string;
-  readonly keepWhenMeaningful?: boolean;
-  readonly normalizedLegacyInputWithoutExistingAuthoredWorkflow?: boolean;
-}): boolean {
-  if (hasOwnKey(input.existingAuthoredWorkflow, input.key)) {
-    return (
-      hasOwnKey(input.incomingWorkflow, input.key) ||
-      input.keepWhenMeaningful === true
-    );
-  }
-  if (input.normalizedLegacyInputWithoutExistingAuthoredWorkflow === true) {
-    return input.keepWhenMeaningful === true;
-  }
-  if (input.existingAuthoredWorkflow === undefined) {
-    return hasOwnKey(input.incomingWorkflow, input.key);
-  }
-  return input.keepWhenMeaningful === true;
-}
-
-function prepareAuthoredWorkflowNodeForSave(input: {
-  readonly node: unknown;
-  readonly existingNode: Record<string, unknown> | undefined;
-  readonly incomingNode: Record<string, unknown> | undefined;
-}): unknown {
-  if (!isRecord(input.node)) {
-    return input.node;
-  }
-
-  const node = { ...input.node };
-  if (node["addon"] !== undefined) {
-    delete node["nodeFile"];
-  }
-  const isExplicitKindMigration =
-    hasOwnKey(input.existingNode, "kind") &&
-    input.incomingNode !== undefined &&
-    !hasOwnKey(input.incomingNode, "kind") &&
-    (hasOwnKey(input.incomingNode, "role") ||
-      hasOwnKey(input.incomingNode, "control"));
-
-  if (
-    (!hasOwnKey(input.existingNode, "kind") || isExplicitKindMigration) &&
-    !(input.existingNode === undefined && hasOwnKey(node, "kind"))
-  ) {
-    delete node["kind"];
-  }
-
-  if (
-    !hasOwnKey(input.existingNode, "role") &&
-    !(
-      (input.existingNode === undefined && hasOwnKey(node, "role")) ||
-      (isExplicitKindMigration &&
-        input.incomingNode !== undefined &&
-        hasOwnKey(input.incomingNode, "role"))
-    )
-  ) {
-    delete node["role"];
-  }
-
-  if (
-    !hasOwnKey(input.existingNode, "control") &&
-    (node["control"] === undefined ||
-      node["control"] === "none" ||
-      hasOwnKey(node, "kind"))
-  ) {
-    delete node["control"];
-  }
-
-  for (const key of ["completion", "execution", "group", "repeat"] as const) {
-    if (!hasOwnKey(node, key) || node[key] === undefined) {
-      delete node[key];
-    }
-  }
-
-  return node;
-}
-
-function prepareAuthoredWorkflowForSave(input: {
-  readonly workflow: unknown;
-  readonly existingAuthoredWorkflow: unknown;
-}): unknown {
-  const normalizedLegacyInputWithoutExistingAuthoredWorkflow =
-    isRecord(input.workflow) &&
-    hasOwnKey(input.workflow, "hasManagerNode") &&
-    !isStepAddressedNormalizedWorkflow(input.workflow) &&
-    !isRecord(input.existingAuthoredWorkflow);
-  const incomingWorkflow = stripNormalizedOnlyWorkflowTopLevelFields(
-    input.workflow,
-  );
-  if (!isRecord(incomingWorkflow)) {
-    return incomingWorkflow;
-  }
-
-  const existingAuthoredWorkflow = isRecord(input.existingAuthoredWorkflow)
-    ? input.existingAuthoredWorkflow
-    : undefined;
-  const preparedWorkflow: Record<string, unknown> = { ...incomingWorkflow };
-  const incomingNodesById = buildIncomingNodesById(input.workflow);
-  const incomingDefaults = isRecord(preparedWorkflow["defaults"])
-    ? { ...preparedWorkflow["defaults"] }
-    : undefined;
-
-  if (incomingDefaults !== undefined) {
-    if (
-      incomingDefaults["containerRuntime"] === undefined ||
-      isDefaultContainerRuntime(incomingDefaults["containerRuntime"])
-    ) {
-      delete incomingDefaults["containerRuntime"];
-    }
-    preparedWorkflow["defaults"] = incomingDefaults;
-  }
-
-  if (
-    !hasOwnKey(preparedWorkflow, "description") ||
-    typeof preparedWorkflow["description"] !== "string" ||
-    preparedWorkflow["description"].length === 0
-  ) {
-    delete preparedWorkflow["description"];
-  }
-
-  if (
-    !hasOwnKey(preparedWorkflow, "prompts") ||
-    !hasNonEmptyStringRecordValue(
-      isRecord(preparedWorkflow["prompts"])
-        ? preparedWorkflow["prompts"]
-        : undefined,
-    )
-  ) {
-    delete preparedWorkflow["prompts"];
-  }
-
-  const incomingNodes = Array.isArray(preparedWorkflow["nodes"])
-    ? preparedWorkflow["nodes"]
-    : [];
-  const shouldCanonicalizeRedundantLegacyGraphCompanions =
-    !Array.isArray(preparedWorkflow["steps"]) &&
-    !hasAuthoredRoleOrControlNode(incomingNodes);
-  const existingNodesById = buildAuthoredNodesById(existingAuthoredWorkflow);
-  preparedWorkflow["nodes"] = incomingNodes.map((node) =>
-    prepareAuthoredWorkflowNodeForSave({
-      node,
-      existingNode:
-        isRecord(node) && typeof node["id"] === "string"
-          ? existingNodesById.get(node["id"])
-          : undefined,
-      incomingNode:
-        isRecord(node) && typeof node["id"] === "string"
-          ? incomingNodesById.get(node["id"])
-          : undefined,
-    }),
-  );
-
-  const synthesizedEdges = createSequentialEdgesFromNodes(incomingNodes);
-  if (shouldCanonicalizeRedundantLegacyGraphCompanions) {
-    if (
-      Array.isArray(preparedWorkflow["edges"]) &&
-      edgesMatch(preparedWorkflow["edges"], synthesizedEdges)
-    ) {
-      delete preparedWorkflow["edges"];
-    }
-    for (const key of ["workflowCalls", "loops"] as const) {
-      if (
-        Array.isArray(preparedWorkflow[key]) &&
-        preparedWorkflow[key].length === 0
-      ) {
-        delete preparedWorkflow[key];
-      }
-    }
-  }
-
-  const keepEdges = shouldPersistTopLevelField({
-    existingAuthoredWorkflow,
-    incomingWorkflow: preparedWorkflow,
-    key: "edges",
-    keepWhenMeaningful:
-      Array.isArray(preparedWorkflow["edges"]) &&
-      !edgesMatch(preparedWorkflow["edges"], synthesizedEdges),
-    normalizedLegacyInputWithoutExistingAuthoredWorkflow,
-  });
-  if (!keepEdges) {
-    delete preparedWorkflow["edges"];
-  }
-
-  for (const key of ["workflowCalls", "loops"] as const) {
-    const keepField = shouldPersistTopLevelField({
-      existingAuthoredWorkflow,
-      incomingWorkflow: preparedWorkflow,
-      key,
-      keepWhenMeaningful:
-        Array.isArray(preparedWorkflow[key]) &&
-        preparedWorkflow[key].length > 0,
-      normalizedLegacyInputWithoutExistingAuthoredWorkflow,
-    });
-    if (!keepField) {
-      delete preparedWorkflow[key];
-    }
-  }
-
-  return preparedWorkflow;
-}
-
 function createPersistedWorkflowJson(input: {
   readonly workflow: WorkflowJson;
   readonly authoredWorkflow: AuthoredWorkflowRecord | undefined;
 }): AuthoredWorkflowJson {
-  const stepAddressedEntryStepId =
-    input.workflow.nodeRegistry !== undefined &&
-    input.workflow.steps !== undefined
-      ? input.workflow.entryStepId
-      : undefined;
   const shouldPersistManagerStepId = (() => {
     if (
       input.workflow.hasManagerNode === false ||
@@ -609,99 +237,62 @@ function createPersistedWorkflowJson(input: {
     );
   })();
 
-  if (
-    input.workflow.nodeRegistry !== undefined &&
-    input.workflow.steps !== undefined
-  ) {
-    return {
-      workflowId: input.workflow.workflowId,
-      ...(input.workflow.description.length === 0
-        ? {}
-        : { description: input.workflow.description }),
-      defaults: {
-        nodeTimeoutMs: input.workflow.defaults.nodeTimeoutMs,
-        maxLoopIterations: input.workflow.defaults.maxLoopIterations,
-        ...(input.workflow.defaults.timeoutPolicy === undefined
-          ? {}
-          : { timeoutPolicy: input.workflow.defaults.timeoutPolicy }),
-        ...(input.workflow.defaults.containerRuntime === undefined ||
-        isDefaultContainerRuntime(input.workflow.defaults.containerRuntime)
-          ? {}
-          : { containerRuntime: input.workflow.defaults.containerRuntime }),
-      },
-      ...(input.workflow.prompts === undefined
-        ? {}
-        : { prompts: input.workflow.prompts }),
-      ...(shouldPersistManagerStepId
-        ? { managerStepId: input.workflow.managerStepId }
-        : {}),
-      ...(stepAddressedEntryStepId === undefined
-        ? {}
-        : { entryStepId: stepAddressedEntryStepId }),
-      nodes: input.workflow.nodeRegistry.map((node) => ({
-        id: node.id,
-        ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
-        ...(node.addon === undefined ? {} : { addon: node.addon }),
-      })),
-      steps: input.workflow.steps.map((step) =>
-        step.stepFile === undefined
-          ? {
-              id: step.id,
-              nodeId: step.nodeId,
-              ...(step.description === undefined
-                ? {}
-                : { description: step.description }),
-              ...(step.role === undefined ? {} : { role: step.role }),
-              ...(step.promptVariant === undefined
-                ? {}
-                : { promptVariant: step.promptVariant }),
-              ...(step.timeoutMs === undefined
-                ? {}
-                : { timeoutMs: step.timeoutMs }),
-              ...(step.sessionPolicy === undefined
-                ? {}
-                : { sessionPolicy: step.sessionPolicy }),
-              ...(step.transitions === undefined
-                ? {}
-                : { transitions: step.transitions }),
-            }
-          : {
-              id: step.id,
-              stepFile: step.stepFile,
-            },
-      ),
-    };
-  }
-
-  const authoredWorkflow = input.authoredWorkflow;
-  const authoredNodesById = buildAuthoredWorkflowNodesById(authoredWorkflow);
-  const legacyAuthoredEdges = getLegacyAuthoredEdges(input.workflow);
-  const legacyAuthoredLoops = getLegacyAuthoredLoops(input.workflow);
-
   return {
     workflowId: input.workflow.workflowId,
-    ...(hasOwnKey(authoredWorkflow, "description")
-      ? { description: input.workflow.description }
+    ...(input.workflow.description.length === 0
+      ? {}
+      : { description: input.workflow.description }),
+    defaults: {
+      nodeTimeoutMs: input.workflow.defaults.nodeTimeoutMs,
+      maxLoopIterations: input.workflow.defaults.maxLoopIterations,
+      ...(input.workflow.defaults.timeoutPolicy === undefined
+        ? {}
+        : { timeoutPolicy: input.workflow.defaults.timeoutPolicy }),
+      ...(input.workflow.defaults.containerRuntime === undefined ||
+      isDefaultContainerRuntime(input.workflow.defaults.containerRuntime)
+        ? {}
+        : { containerRuntime: input.workflow.defaults.containerRuntime }),
+    },
+    ...(shouldPersistManagerStepId
+      ? { managerStepId: input.workflow.managerStepId }
       : {}),
-    defaults: createPersistedWorkflowDefaults({
-      workflow: input.workflow,
-      authoredWorkflow,
-    }),
-    ...(hasOwnKey(authoredWorkflow, "prompts") &&
-    input.workflow.prompts !== undefined
-      ? { prompts: input.workflow.prompts }
-      : {}),
-    nodes: input.workflow.nodes.map((node) =>
-      createPersistedWorkflowNode(node, authoredNodesById.get(node.id)),
+    entryStepId: input.workflow.entryStepId,
+    nodes: input.workflow.nodeRegistry.map((node) => ({
+      id: node.id,
+      ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
+      ...(node.addon === undefined ? {} : { addon: node.addon }),
+      ...(node.execution === undefined ? {} : { execution: node.execution }),
+    })),
+    steps: input.workflow.steps.map((step) =>
+      step.stepFile === undefined
+        ? {
+            id: step.id,
+            nodeId: step.nodeId,
+            ...(step.description === undefined
+              ? {}
+              : { description: step.description }),
+            ...(step.role === undefined ? {} : { role: step.role }),
+            ...(step.promptVariant === undefined
+              ? {}
+              : { promptVariant: step.promptVariant }),
+            ...(step.timeoutMs === undefined
+              ? {}
+              : { timeoutMs: step.timeoutMs }),
+            ...(step.sessionPolicy === undefined
+              ? {}
+              : { sessionPolicy: step.sessionPolicy }),
+            ...(step.transitions === undefined
+              ? {}
+              : { transitions: step.transitions }),
+          }
+        : {
+            id: step.id,
+            stepFile: step.stepFile,
+          },
     ),
-    ...(hasOwnKey(authoredWorkflow, "edges") &&
-    legacyAuthoredEdges !== undefined
-      ? { edges: legacyAuthoredEdges }
-      : {}),
-    ...(hasOwnKey(authoredWorkflow, "loops") &&
-    legacyAuthoredLoops !== undefined
-      ? { loops: legacyAuthoredLoops }
-      : {}),
+    ...(input.workflow.prompts === undefined
+      ? {}
+      : { prompts: input.workflow.prompts }),
   };
 }
 
@@ -736,6 +327,7 @@ function createStepAddressedWorkflowForValidation(
       id: node.id,
       ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
       ...(node.addon === undefined ? {} : { addon: node.addon }),
+      ...(node.execution === undefined ? {} : { execution: node.execution }),
     })),
     steps: (workflow.steps ?? []).map((step) => ({
       id: step.id,
@@ -1374,25 +966,18 @@ export async function saveWorkflowToDisk(
     return err(existingAuthoredWorkflow.error);
   }
 
-  const shouldRejectLegacyWorkflowAuthoring =
-    isStrictWorkflowAuthorshipValidation(options) ||
-    isStepAddressedNormalizedWorkflow(input.workflow);
-  const stepAddressedLegacyIssues = isStepAddressedNormalizedWorkflow(
+  const normalizedInputWorkflow = isStepAddressedNormalizedWorkflow(
     input.workflow,
   )
+    ? input.workflow
+    : undefined;
+  const stepAddressedLegacyIssues = normalizedInputWorkflow !== undefined
     ? collectStepAddressedSaveLegacyFieldIssues(input.workflow)
     : [];
-  const authoredWorkflow = isStepAddressedNormalizedWorkflow(input.workflow)
-    ? createPersistedWorkflowJson({
-        workflow: input.workflow,
-        authoredWorkflow: isRecord(existingAuthoredWorkflow.value)
-          ? (existingAuthoredWorkflow.value as AuthoredWorkflowRecord)
-          : undefined,
-      })
-    : prepareAuthoredWorkflowForSave({
-        workflow: input.workflow,
-        existingAuthoredWorkflow: existingAuthoredWorkflow.value,
-      });
+  const authoredWorkflow =
+    normalizedInputWorkflow === undefined
+      ? stripNormalizedOnlyWorkflowTopLevelFields(input.workflow)
+      : createStepAddressedWorkflowForValidation(normalizedInputWorkflow);
   const normalizedNodePayloads = preferStepAddressedRegistryIdPayloads(
     authoredWorkflow,
     remapAuthoredNodePayloadsByNodeFile(authoredWorkflow, input.nodePayloads),
@@ -1411,17 +996,12 @@ export async function saveWorkflowToDisk(
 
   const validation = await validateWorkflowBundleAsync(
     {
-      workflow: isStepAddressedNormalizedWorkflow(input.workflow)
-        ? createStepAddressedWorkflowForValidation(input.workflow)
-        : authoredWorkflow,
+      workflow: authoredWorkflow,
       nodePayloads: validationNodePayloads.value,
     },
     {
       ...options,
       allowResolvedStepFileFields: true,
-      ...(shouldRejectLegacyWorkflowAuthoring
-        ? { rejectLegacyWorkflowAuthoring: true }
-        : {}),
     },
   );
 

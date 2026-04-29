@@ -29,7 +29,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         nodes: [
           {
             id: "divedra-manager",
-            kind: "root-manager",
+            role: "manager",
             nodeFile: "node-divedra-manager.json",
             completion: { type: "none" },
           },
@@ -48,7 +48,7 @@ function makeLoadedWorkflow(inputNodePayload: NodePayload): LoadedWorkflow {
         ],
         edges: [],
         loops: [],
-      } as WorkflowJson,
+      } as unknown as WorkflowJson,
       nodePayloads: {
         "node-divedra-manager.json": {
           id: "divedra-manager",
@@ -467,7 +467,7 @@ describe("resolveWorkflowPreviewIndent", () => {
     expect(
       resolveWorkflowPreviewIndent({
         derivedIndent: 3,
-        kind: "root-manager",
+        kind: "manager",
       }),
     ).toBe(0);
   });

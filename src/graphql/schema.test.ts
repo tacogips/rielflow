@@ -193,7 +193,6 @@ async function createCompletedWorkflowFixture(root: string) {
     artifactRoot: path.join(root, "artifacts"),
     rootDataDir: path.join(root, "data"),
     cwd: root,
-    rejectLegacyWorkflowAuthoring: false as const,
   };
   const result = await runWorkflow("demo", {
     ...options,
@@ -227,7 +226,6 @@ async function createWorkerOnlyWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -362,7 +360,6 @@ async function createWorkflowCallWorkflowFixture(root: string) {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     },
   };
 }
@@ -370,7 +367,7 @@ async function createWorkflowCallWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerNodeId = "divedra-manager",
+  managerRuntimeId = "divedra-manager",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -380,7 +377,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerNodeId,
+    managerRuntimeId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -443,7 +440,6 @@ describe("createGraphqlSchema", () => {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
-      rejectLegacyWorkflowAuthoring: false,
     };
 
     const execution = await schema.query.workflowExecution(
@@ -562,7 +558,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
     const sessionId = "sess-schema-step-summary";
     const saved = await saveSession(
@@ -631,7 +626,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
     const sessionId = "sess-schema-step-session-view";
     const saved = await saveSession(
@@ -694,7 +688,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
     const created = await createWorkflowTemplate("demo", {
       workflowRoot: root,
@@ -1271,8 +1264,9 @@ describe("createGraphqlSchema", () => {
     expect(workflow?.hasManagerNode).toBe(false);
     expect(workflow?.entryStepId).toBe("main-worker");
     expect(workflow?.nodeRegistryIds).toEqual(["main-worker"]);
-    expect(workflow?.counts.nodes).toBeUndefined();
-    expect(workflow?.counts.structuralProjection?.nodes).toBe(1);
+    expect(workflow?.counts.nodeRegistry).toBe(1);
+    expect(workflow?.counts.steps).toBe(1);
+    expect(workflow?.counts.crossWorkflowDispatches).toBe(0);
   });
 
   test("reports scaffolded managed starters as not runtime-ready until code-manager runtime lands", async () => {
@@ -1293,7 +1287,6 @@ describe("createGraphqlSchema", () => {
         artifactRoot: path.join(root, "artifacts"),
         rootDataDir: path.join(root, "data"),
         cwd: root,
-        rejectLegacyWorkflowAuthoring: false as const,
       },
     );
 
@@ -1306,11 +1299,7 @@ describe("createGraphqlSchema", () => {
     ]);
     expect(workflow?.counts.nodeRegistry).toBe(2);
     expect(workflow?.counts.steps).toBe(2);
-    expect(workflow?.counts.structuralProjection).toEqual({
-      nodes: 2,
-      edges: 1,
-      loops: 0,
-    });
+    expect(workflow?.counts.crossWorkflowDispatches).toBe(0);
     expect(workflow?.runtime.ready).toBe(false);
     expect(workflow?.runtime.blockers).toEqual(
       expect.arrayContaining([expect.stringContaining("code-manager runtime")]),
@@ -1327,8 +1316,8 @@ describe("createGraphqlSchema", () => {
       options,
     );
 
-    expect(workflow?.workflowCallIds).toEqual(["__cw:main-worker"]);
-    expect(workflow?.counts.workflowCalls).toBe(1);
+    expect(workflow?.crossWorkflowDispatchIds).toEqual(["__cw:main-worker"]);
+    expect(workflow?.counts.crossWorkflowDispatches).toBe(1);
     expect(workflow?.runtime.ready).toBe(true);
   });
 
@@ -1432,7 +1421,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
     const schema = createGraphqlSchema();
 
@@ -1464,7 +1452,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const created = await schema.mutation.createWorkflowDefinition(
@@ -1574,7 +1561,6 @@ describe("createGraphqlSchema", () => {
       workflowScope: "user",
       userRoot,
       env: {},
-      rejectLegacyWorkflowAuthoring: false,
     };
 
     const workflows = await schema.query.workflows({}, options);
@@ -1655,7 +1641,6 @@ describe("createGraphqlSchema", () => {
       rootDataDir: path.join(root, "data"),
       cwd: root,
       nodeAddonResolvers: [createThirdPartyAddonResolver()],
-      rejectLegacyWorkflowAuthoring: false,
     };
 
     const validation = await schema.mutation.validateWorkflowDefinition(
@@ -1681,7 +1666,6 @@ describe("createGraphqlSchema", () => {
       rootDataDir: path.join(root, "data"),
       cwd: root,
       nodeAddons: [createAsyncThirdPartyAddonDefinition()],
-      rejectLegacyWorkflowAuthoring: false,
     };
 
     const validation = await schema.mutation.validateWorkflowDefinition(
@@ -1747,7 +1731,6 @@ describe("createGraphqlSchema", () => {
       workflowScope: "user",
       userRoot,
       env: {},
-      rejectLegacyWorkflowAuthoring: false,
     };
     const validation = await schema.mutation.validateWorkflowDefinition(
       { workflowName },
@@ -1793,7 +1776,6 @@ describe("createGraphqlSchema", () => {
       rootDataDir: path.join(root, "data"),
       cwd: root,
       nodeAddonResolvers: [createThirdPartyAddonResolver()],
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const definition = await schema.query.workflowDefinition(
@@ -1818,7 +1800,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const created = await schema.mutation.createWorkflowDefinition(
@@ -1833,13 +1814,13 @@ describe("createGraphqlSchema", () => {
     expect(created.bundle.workflow.entryStepId).toBe("main-worker");
     expect(created.bundle.workflow.managerStepId).toBeUndefined();
     expect("entryNodeId" in created.bundle.workflow).toBe(false);
-    expect("managerNodeId" in created.bundle.workflow).toBe(false);
+    expect("managerRuntimeId" in created.bundle.workflow).toBe(false);
 
     const workflowJsonText = await readFile(
       path.join(root, "solo", "workflow.json"),
       "utf8",
     );
-    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).not.toContain('"managerRuntimeId"');
     expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
   });
 
@@ -1851,7 +1832,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const created = await schema.mutation.createWorkflowDefinition(
@@ -1879,7 +1859,7 @@ describe("createGraphqlSchema", () => {
       "utf8",
     );
     expect(workflowJsonText).not.toContain('"hasManagerNode"');
-    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).not.toContain('"managerRuntimeId"');
     expect(workflowJsonText).not.toContain('"kind"');
     expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
     expect(workflowJsonText).toContain('"role": "worker"');
@@ -1893,7 +1873,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const created = await schema.mutation.createWorkflowDefinition(
@@ -1970,7 +1949,7 @@ describe("createGraphqlSchema", () => {
     expect(
       reloaded == null
         ? true
-        : "managerNodeId" in reloaded.bundle.workflow,
+        : "managerRuntimeId" in reloaded.bundle.workflow,
     ).toBe(false);
     expect(
       reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,
@@ -1981,7 +1960,7 @@ describe("createGraphqlSchema", () => {
       path.join(root, "demo", "workflow.json"),
       "utf8",
     );
-    expect(workflowJsonText).not.toContain('"managerNodeId"');
+    expect(workflowJsonText).not.toContain('"managerRuntimeId"');
     expect(workflowJsonText).toContain('"entryStepId": "main-worker"');
     expect(workflowJsonText).not.toContain('"role": "manager"');
   });
@@ -1994,7 +1973,6 @@ describe("createGraphqlSchema", () => {
       artifactRoot: path.join(root, "artifacts"),
       rootDataDir: path.join(root, "data"),
       cwd: root,
-      rejectLegacyWorkflowAuthoring: false as const,
     };
 
     const created = await schema.mutation.createWorkflowDefinition(
@@ -2078,7 +2056,7 @@ describe("createGraphqlSchema", () => {
     expect(
       reloaded == null
         ? true
-        : "managerNodeId" in reloaded.bundle.workflow,
+        : "managerRuntimeId" in reloaded.bundle.workflow,
     ).toBe(false);
     expect(
       reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,

@@ -38,7 +38,7 @@ async function createWorkflowFixture(
     nodes: [
       {
         id: "divedra-manager",
-        kind: "root-manager",
+        role: "manager",
         nodeFile: "node-divedra-manager.json",
         completion: { type: "none" },
       },
@@ -75,7 +75,6 @@ function makeWorkflowOptions(root: string) {
     rootDataDir: path.join(root, "runtime-data"),
     sessionStoreRoot: path.join(root, "sessions"),
     workflowRoot: root,
-    rejectLegacyWorkflowAuthoring: false as const,
   };
 }
 
@@ -197,7 +196,7 @@ describe("deleteWorkflowHistory", () => {
       managerSessionId: "mgrsess-alpha-orphan",
       workflowId: "alpha-id",
       workflowExecutionId: "sess-alpha-orphan",
-      managerNodeId: "divedra-manager",
+      managerRuntimeId: "divedra-manager",
       managerNodeExecId: "exec-alpha-orphan",
       status: "completed",
       createdAt: "2026-03-30T00:00:00.000Z",

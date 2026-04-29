@@ -32,17 +32,11 @@ export interface ComposedExecutionPrompts {
   readonly promptText: string;
 }
 
+/** Default manager system guidance (single path; structural alternate prompt removed). */
 const DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT = readFileSync(
   new URL("./prompts/divedra-role-system-prompt.md", import.meta.url),
   "utf8",
 ).trim();
-
-function resolveDefaultManagerSystemPrompt(
-  _workflow: WorkflowJson,
-  _nodeRef: WorkflowNodeRef,
-): string {
-  return DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT;
-}
 
 function buildPromptVariables(
   input: PromptCompositionInput,
@@ -133,14 +127,7 @@ export function composeExecutionPrompts(input: {
         ).trim();
 
   const systemSections = isManagerNodeRef(input.promptComposition.nodeRef)
-    ? [
-        resolveDefaultManagerSystemPrompt(
-          input.promptComposition.workflow,
-          input.promptComposition.nodeRef,
-        ),
-        workflowPrompt,
-        nodeSystemPrompt,
-      ]
+    ? [DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT, workflowPrompt, nodeSystemPrompt]
     : [workerSystemPrompt, nodeSystemPrompt];
 
   const promptSections = [sessionStartPrompt];

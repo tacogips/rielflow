@@ -27,7 +27,7 @@ export interface ManagerSessionRecord {
   readonly managerSessionId: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly status: "active" | "completed" | "failed" | "cancelled";
   readonly createdAt: string;
@@ -43,7 +43,7 @@ export interface ManagerMessageRecord {
   readonly managerSessionId: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly message?: string;
   readonly parsedIntent: readonly ManagerIntentSummary[];
@@ -70,7 +70,7 @@ export interface IdempotentMutationLookup {
 export interface AmbientManagerExecutionContext {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly managerSessionId?: string;
   readonly authToken?: string;
@@ -82,7 +82,7 @@ export interface AmbientManagerControlPlaneEnvironment {
   readonly DIVEDRA_MANAGER_SESSION_ID: string;
   readonly DIVEDRA_WORKFLOW_ID: string;
   readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-  readonly DIVEDRA_MANAGER_NODE_ID: string;
+  readonly DIVEDRA_MANAGER_RUNTIME_ID: string;
   readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
 }
 
@@ -91,7 +91,7 @@ const AMBIENT_MANAGER_ENV_KEYS = [
   "DIVEDRA_MANAGER_SESSION_ID",
   "DIVEDRA_WORKFLOW_ID",
   "DIVEDRA_WORKFLOW_EXECUTION_ID",
-  "DIVEDRA_MANAGER_NODE_ID",
+  "DIVEDRA_MANAGER_RUNTIME_ID",
   "DIVEDRA_MANAGER_NODE_EXEC_ID",
 ] as const;
 
@@ -128,7 +128,7 @@ interface ManagerSessionRow {
   readonly manager_session_id: string;
   readonly workflow_id: string;
   readonly workflow_execution_id: string;
-  readonly manager_node_id: string;
+  readonly manager_runtime_id: string;
   readonly manager_node_exec_id: string;
   readonly status: ManagerSessionRecord["status"];
   readonly created_at: string;
@@ -144,7 +144,7 @@ interface ManagerMessageRow {
   readonly manager_session_id: string;
   readonly workflow_id: string;
   readonly workflow_execution_id: string;
-  readonly manager_node_id: string;
+  readonly manager_runtime_id: string;
   readonly manager_node_exec_id: string;
   readonly message: string | null;
   readonly parsed_intent_json: string;
@@ -175,7 +175,7 @@ function toManagerSessionRecord(row: ManagerSessionRow): ManagerSessionRecord {
     managerSessionId: row.manager_session_id,
     workflowId: row.workflow_id,
     workflowExecutionId: row.workflow_execution_id,
-    managerNodeId: row.manager_node_id,
+    managerRuntimeId: row.manager_runtime_id,
     managerNodeExecId: row.manager_node_exec_id,
     status: row.status,
     createdAt: row.created_at,
@@ -195,7 +195,7 @@ function toManagerMessageRecord(row: ManagerMessageRow): ManagerMessageRecord {
     managerSessionId: row.manager_session_id,
     workflowId: row.workflow_id,
     workflowExecutionId: row.workflow_execution_id,
-    managerNodeId: row.manager_node_id,
+    managerRuntimeId: row.manager_runtime_id,
     managerNodeExecId: row.manager_node_exec_id,
     ...(row.message === null ? {} : { message: row.message }),
     parsedIntent: JSON.parse(
@@ -252,13 +252,13 @@ export function resolveAmbientManagerExecutionContext(
     env,
     "DIVEDRA_WORKFLOW_EXECUTION_ID",
   );
-  const managerNodeId = readEnvValue(env, "DIVEDRA_MANAGER_NODE_ID");
+  const managerRuntimeId = readEnvValue(env, "DIVEDRA_MANAGER_RUNTIME_ID");
   const managerNodeExecId = readEnvValue(env, "DIVEDRA_MANAGER_NODE_EXEC_ID");
 
   if (
     workflowId === undefined ||
     workflowExecutionId === undefined ||
-    managerNodeId === undefined ||
+    managerRuntimeId === undefined ||
     managerNodeExecId === undefined
   ) {
     return null;
@@ -269,7 +269,7 @@ export function resolveAmbientManagerExecutionContext(
   return {
     workflowId,
     workflowExecutionId,
-    managerNodeId,
+    managerRuntimeId,
     managerNodeExecId,
     ...(managerSessionId === undefined ? {} : { managerSessionId }),
     ...(authToken === undefined ? {} : { authToken }),
@@ -287,7 +287,7 @@ export function resolveManagerGraphqlEndpoint(
 export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly managerSessionId: string;
   readonly authToken: string;
@@ -299,7 +299,7 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
     DIVEDRA_MANAGER_SESSION_ID: input.managerSessionId,
     DIVEDRA_WORKFLOW_ID: input.workflowId,
     DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
-    DIVEDRA_MANAGER_NODE_ID: input.managerNodeId,
+    DIVEDRA_MANAGER_RUNTIME_ID: input.managerRuntimeId,
     DIVEDRA_MANAGER_NODE_EXEC_ID: input.managerNodeExecId,
   };
 }
@@ -322,7 +322,7 @@ function ensureSchema(db: Database): void {
       manager_session_id TEXT PRIMARY KEY,
       workflow_id TEXT NOT NULL,
       workflow_execution_id TEXT NOT NULL,
-      manager_node_id TEXT NOT NULL,
+      manager_runtime_id TEXT NOT NULL,
       manager_node_exec_id TEXT NOT NULL,
       status TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -337,7 +337,7 @@ function ensureSchema(db: Database): void {
       manager_session_id TEXT NOT NULL,
       workflow_id TEXT NOT NULL,
       workflow_execution_id TEXT NOT NULL,
-      manager_node_id TEXT NOT NULL,
+      manager_runtime_id TEXT NOT NULL,
       manager_node_exec_id TEXT NOT NULL,
       message TEXT,
       parsed_intent_json TEXT NOT NULL,
@@ -418,14 +418,14 @@ export function createManagerSessionStore(
         db.prepare(
           `
           INSERT INTO manager_sessions (
-            manager_session_id, workflow_id, workflow_execution_id, manager_node_id,
+            manager_session_id, workflow_id, workflow_execution_id, manager_runtime_id,
             manager_node_exec_id, status, created_at, updated_at, last_message_id,
             control_mode, auth_token_hash, auth_token_expires_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(manager_session_id) DO UPDATE SET
             workflow_id=excluded.workflow_id,
             workflow_execution_id=excluded.workflow_execution_id,
-            manager_node_id=excluded.manager_node_id,
+            manager_runtime_id=excluded.manager_runtime_id,
             manager_node_exec_id=excluded.manager_node_exec_id,
             status=excluded.status,
             created_at=excluded.created_at,
@@ -445,7 +445,7 @@ export function createManagerSessionStore(
           input.managerSessionId,
           input.workflowId,
           input.workflowExecutionId,
-          input.managerNodeId,
+          input.managerRuntimeId,
           input.managerNodeExecId,
           input.status,
           input.createdAt,
@@ -536,7 +536,7 @@ export function createManagerSessionStore(
           `
           INSERT INTO manager_messages (
             manager_message_id, manager_session_id, workflow_id, workflow_execution_id,
-            manager_node_id, manager_node_exec_id, message, parsed_intent_json,
+            manager_runtime_id, manager_node_exec_id, message, parsed_intent_json,
             accepted, rejection_reason, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
@@ -545,7 +545,7 @@ export function createManagerSessionStore(
           input.managerSessionId,
           input.workflowId,
           input.workflowExecutionId,
-          input.managerNodeId,
+          input.managerRuntimeId,
           input.managerNodeExecId,
           input.message ?? null,
           JSON.stringify(input.parsedIntent),
@@ -572,7 +572,7 @@ export function createManagerSessionStore(
               manager_session_id,
               workflow_id,
               workflow_execution_id,
-              manager_node_id,
+              manager_runtime_id,
               manager_node_exec_id,
               status,
               created_at,
@@ -599,7 +599,7 @@ export function createManagerSessionStore(
               manager_session_id,
               workflow_id,
               workflow_execution_id,
-              manager_node_id,
+              manager_runtime_id,
               manager_node_exec_id,
               message,
               parsed_intent_json,

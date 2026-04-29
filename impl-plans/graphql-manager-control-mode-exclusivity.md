@@ -58,7 +58,7 @@ export interface ManagerSessionRecord {
   readonly managerSessionId: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly managerNodeExecId: string;
   readonly status: "active" | "completed" | "failed" | "cancelled";
   readonly createdAt: string;

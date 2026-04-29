@@ -26,20 +26,10 @@ const GRAPHQL_SCHEMA_TEXT = `
     nodeTimeoutMs: Int!
   }
 
-  type WorkflowStructuralProjectionCounts {
-    nodes: Int!
-    edges: Int!
-    loops: Int!
-  }
-
   type WorkflowCounts {
     steps: Int!
     nodeRegistry: Int!
-    workflowCalls: Int!
-    nodes: Int
-    edges: Int
-    loops: Int
-    structuralProjection: WorkflowStructuralProjectionCounts
+    crossWorkflowDispatches: Int!
   }
 
   type WorkflowAddonSource {
@@ -78,7 +68,7 @@ const GRAPHQL_SCHEMA_TEXT = `
     entryStepId: String
     stepIds: [String!]!
     nodeRegistryIds: [String!]!
-    workflowCallIds: [String!]!
+    crossWorkflowDispatchIds: [String!]!
     defaults: WorkflowDefaults!
     counts: WorkflowCounts!
     nodeFiles: [String!]!

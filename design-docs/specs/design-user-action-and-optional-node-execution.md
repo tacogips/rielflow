@@ -161,7 +161,7 @@ interface UserActionRecord {
   readonly nodeId: string;
   readonly nodeExecId: string;
   readonly artifactDir: string;
-  readonly managerNodeId: string;
+  readonly managerRuntimeId: string;
   readonly status:
     | "dispatching"
     | "waiting-for-reply"
@@ -197,7 +197,7 @@ Recommended additive session fields:
 ```typescript
 interface PendingOptionalNodeDecision {
   readonly nodeId: string;
-  readonly owningManagerNodeId: string;
+  readonly owningManagerRuntimeId: string;
   readonly requestedAt: string;
   readonly status: "pending" | "execute" | "skip";
   readonly decidedAt?: string;

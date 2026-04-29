@@ -187,7 +187,7 @@ bun run build:ui
 **Tasks Completed**: Continuation review follow-up, Svelte sub-workflow manager-boundary authoring fix
 **Tasks In Progress**: None
 **Blockers**: `bun run build:ui` still does not return promptly in this sandbox after emitting its build banner, so production-build verification remains environment-limited
-**Notes**: Found a remaining architecture mismatch in the Svelte editor path: `Add Sub-Workflow` could fall back to a non-`sub-manager` node for `managerNodeId`, creating an invalid structural scope even though the design and validator require a dedicated sub-manager boundary. Tightened authoring to require a real `sub-manager` candidate, matching the inline fallback editor and the documented sub-workflow boundary rule.
+**Notes**: Found a remaining architecture mismatch in the Svelte editor path: `Add Sub-Workflow` could fall back to a non-`sub-manager` node for `managerRuntimeId`, creating an invalid structural scope even though the design and validator require a dedicated sub-manager boundary. Tightened authoring to require a real `sub-manager` candidate, matching the inline fallback editor and the documented sub-workflow boundary rule.
 
 ## Related Plans
 
