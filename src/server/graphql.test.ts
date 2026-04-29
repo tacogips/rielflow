@@ -275,7 +275,7 @@ async function createManagerSession(root: string, workflowExecutionId: string) {
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerRuntimeId: "divedra-manager",
+    managerStepId: "divedra-manager",
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -338,7 +338,7 @@ describe("GraphQL HTTP transport", () => {
     });
   });
 
-  test("returns nullable managerRuntimeId for worker-only workflows over /graphql", async () => {
+  test("does not expose managerRuntimeId for worker-only workflows over /graphql", async () => {
     const root = await makeTempDir();
     const { options } = await createWorkerOnlyWorkflowFixture(root);
 
@@ -1654,7 +1654,6 @@ describe("GraphQL HTTP transport", () => {
           readonly bundle: {
             readonly workflow: {
               readonly hasManagerNode: boolean;
-              readonly managerRuntimeId?: string;
               readonly entryNodeId?: string;
               readonly managerStepId?: string;
               readonly entryStepId?: string;
@@ -1674,8 +1673,8 @@ describe("GraphQL HTTP transport", () => {
       createJson.data.createWorkflowDefinition.bundle.workflow.managerStepId,
     ).toBeUndefined();
     expect(
-      createJson.data.createWorkflowDefinition.bundle.workflow.managerRuntimeId,
-    ).toBeUndefined();
+      "managerRuntimeId" in createJson.data.createWorkflowDefinition.bundle.workflow,
+    ).toBe(false);
     expect(
       createJson.data.createWorkflowDefinition.bundle.workflow.entryNodeId,
     ).toBeUndefined();
@@ -1833,7 +1832,7 @@ describe("GraphQL HTTP transport", () => {
           DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
           DIVEDRA_WORKFLOW_ID: "demo",
           DIVEDRA_WORKFLOW_EXECUTION_ID: session.sessionId,
-          DIVEDRA_MANAGER_RUNTIME_ID: "divedra-manager",
+          DIVEDRA_MANAGER_STEP_ID: "divedra-manager",
           DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
         },
       },

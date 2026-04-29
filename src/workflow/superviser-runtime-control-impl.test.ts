@@ -98,49 +98,6 @@ async function writeStepAddressedWorkflowBundle(input: {
   );
 }
 
-async function writeLegacyWorkflowBundle(input: {
-  readonly workflowRoot: string;
-  readonly workflowName: string;
-  readonly workflowId: string;
-}): Promise<void> {
-  const workflowDir = path.join(input.workflowRoot, input.workflowName);
-  await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
-  await writeFile(
-    path.join(workflowDir, "workflow.json"),
-    `${JSON.stringify(
-      {
-        workflowId: input.workflowId,
-        description: "legacy target workflow",
-        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
-        nodes: [
-          {
-            id: "manager-node",
-            role: "worker",
-            nodeFile: "nodes/node-manager-node.json",
-            completion: { type: "none" },
-          },
-        ],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await writeFile(
-    path.join(workflowDir, "nodes/node-manager-node.json"),
-    `${JSON.stringify(
-      {
-        id: "manager-node",
-        executionBackend: "codex-agent",
-        model: "gpt-5-nano",
-        promptTemplate: "manager",
-        variables: {},
-      },
-      null,
-      2,
-    )}\n`,
-  );
-}
-
 async function saveTargetSessionFixture(input: {
   readonly sessionStoreRoot: string;
   readonly sessionId: string;
@@ -327,80 +284,6 @@ describe("buildSuperviserRuntimeControl", () => {
       expect(recordedCalls[0]?.rerunFromSessionId).toBe(auth.targetSessionId);
       expect(recordedCalls[0]?.rerunFromStepId).toBe("worker-step");
       expect(recordedCalls[0]?.autoImprove).toEqual(defaultPolicy);
-    } finally {
-      await rm(workflowRoot, { recursive: true, force: true });
-    }
-  });
-
-  test("rerunTargetWorkflow rejects node-addressed target workflows", async () => {
-    const workflowRoot = await mkdtemp(
-      path.join(tmpdir(), "divedra-superviser-control-legacy-"),
-    );
-    const sessionStoreRoot = path.join(workflowRoot, "sessions");
-    const auth = {
-      supervisionRunId: "sup-legacy",
-      targetSessionId: "target-session-legacy",
-    };
-    const recordedCalls: WorkflowRunOptions[] = [];
-
-    try {
-      await writeLegacyWorkflowBundle({
-        workflowRoot,
-        workflowName: "target-workflow-name",
-        workflowId: "target-workflow-id",
-      });
-
-      const persisted = {
-        ...createSessionState({
-          sessionId: auth.targetSessionId,
-          workflowName: "target-workflow-name",
-          workflowId: "target-workflow-id",
-          initialNodeId: "manager-node",
-          runtimeVariables: {},
-        }),
-        currentNodeId: "manager-node",
-      };
-      const saved = await saveSession(persisted, { sessionStoreRoot });
-      expect(saved.ok).toBe(true);
-
-      const control = buildSuperviserRuntimeControl({
-        base: workflowRunBaseForSuperviserControl({
-          workflowRoot,
-          sessionStoreRoot,
-        }),
-        runWorkflow: async (
-          workflowName: string,
-          options: WorkflowRunOptions,
-        ): Promise<Result<WorkflowRunResult, WorkflowRunFailure>> => {
-          recordedCalls.push(options);
-          return ok({
-            session: createSessionState({
-              sessionId: "rerun-session-legacy",
-              workflowName,
-              workflowId: "target-workflow-id",
-              initialNodeId: "manager-node",
-              runtimeVariables: {},
-            }),
-            exitCode: 0,
-          });
-        },
-        auth,
-        targetWorkflowName: "target-workflow-name",
-        targetExpectedWorkflowId: "target-workflow-id",
-        defaultPolicy,
-      });
-
-      const result = await control.rerunTargetWorkflow({
-        sessionId: auth.targetSessionId,
-      });
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe(
-          "rerun-workflow: target workflow must have entryStepId with non-empty steps",
-        );
-      }
-      expect(recordedCalls).toHaveLength(0);
     } finally {
       await rm(workflowRoot, { recursive: true, force: true });
     }

@@ -295,7 +295,7 @@ describe("CodexAgentAdapter", () => {
             DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
             DIVEDRA_WORKFLOW_ID: "wf",
             DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_MANAGER_RUNTIME_ID: "node-1",
+            DIVEDRA_MANAGER_STEP_ID: "node-1",
             DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
           },
         },

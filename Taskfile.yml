@@ -29,16 +29,6 @@ tasks:
     cmds:
       - bun run start
 
-  tui:
-    desc: Run the terminal UI (pass extra CLI flags after `--`)
-    cmds:
-      - bun run src/main.ts tui {{.CLI_ARGS}}
-
-  tui-examples:
-    desc: Run the terminal UI against workflows in ./examples
-    cmds:
-      - bun run src/main.ts tui --workflow-root ./examples {{.CLI_ARGS}}
-
   test:
     desc: Run tests with Vitest
     cmds:

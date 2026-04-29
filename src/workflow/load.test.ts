@@ -6,7 +6,7 @@ import { loadWorkflowByIdFromDisk, loadWorkflowFromDisk } from "./load";
 import {
   getStructuralEdges,
   resolveWorkflowEntryRuntimeId,
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
 } from "./types";
 import {
   REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
@@ -88,7 +88,7 @@ describe("loadWorkflowFromDisk", () => {
     expect(resolveWorkflowEntryRuntimeId(result.value.bundle.workflow)).toBe(
       "manager",
     );
-    expect(resolveWorkflowManagerRuntimeId(result.value.bundle.workflow)).toBe(
+    expect(resolveWorkflowManagerStepId(result.value.bundle.workflow)).toBe(
       "manager",
     );
     expect(getStructuralEdges(result.value.bundle.workflow)).toEqual([

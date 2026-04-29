@@ -14,7 +14,7 @@ import {
   getStructuralEdges,
   getStructuralLoops,
   resolveWorkflowEntryRuntimeId,
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
   type WorkflowJson,
 } from "./types";
 
@@ -126,9 +126,9 @@ describe("workflow runtime identity helpers", () => {
     ).toBe("entry-step");
   });
 
-  test("resolveWorkflowManagerRuntimeId uses managerStepId and falls back to entryStepId", () => {
+  test("resolveWorkflowManagerStepId uses managerStepId and falls back to entryStepId", () => {
     expect(
-      resolveWorkflowManagerRuntimeId({
+      resolveWorkflowManagerStepId({
         workflowId: "demo",
         description: "demo",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
@@ -141,7 +141,7 @@ describe("workflow runtime identity helpers", () => {
     ).toBe("manager-step");
 
     expect(
-      resolveWorkflowManagerRuntimeId({
+      resolveWorkflowManagerStepId({
         workflowId: "demo",
         description: "demo",
         defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },

@@ -8,7 +8,6 @@ The current codebase provides:
 - a queue-driven workflow engine with persisted sessions and runtime artifacts
 - agent backends for `codex-agent`, `claude-code-agent`, `official/openai-sdk`, and `official/anthropic-sdk`
 - a local GraphQL control plane served by Bun
-- an OpenTUI-based terminal UI for browsing workflows, runs, and artifacts
 
 ## Active Design Direction
 
@@ -26,7 +25,7 @@ Those design documents describe the intended next schema and runtime direction; 
 ## What Is Implemented Today
 
 The source of truth is the implementation under `src/workflow/`, `src/cli.ts`,
-`src/graphql/`, `src/server/`, and `src/tui/`.
+`src/graphql/`, and `src/server/`.
 
 Current runtime behavior:
 
@@ -105,12 +104,6 @@ Start the local GraphQL control plane:
 bun run src/main.ts serve
 ```
 
-Launch the terminal UI:
-
-```bash
-bun run src/main.ts tui
-```
-
 Run `divedra` directly from the flake on Linux or Darwin:
 
 ```bash
@@ -147,9 +140,7 @@ Primary commands implemented in `src/cli.ts`:
 - `session export <session-id>`
 - `session logs <session-id>`
 - `serve [workflow-name]`
-- `web serve [workflow-name]`
 - `gql <graphql-document>`
-- `tui [workflow-name]`
 - `call-step <workflow-id> <workflow-run-id> <step-id>`
 - `hook [--vendor claude-code|codex]`
 - `events validate`
@@ -162,7 +153,7 @@ Primary commands implemented in `src/cli.ts`:
 
 `call-step` is the direct-call surface during the step-addressed cutover. It accepts targeted continuation controls such as `--prompt-variant <name>`, `--continue-session`, `--timeout-ms <ms>`, and `--resume-step-exec <id>` so a reusable node can be revisited through a specific step with invocation-local overrides.
 
-`serve` and `web serve` start the local Bun HTTP server. The root page serves a read-only Solid workflow viewer with the workflow node graph, execution run list, and selected run logs.
+`serve` starts the local Bun HTTP server. The current server surface exposes GraphQL and health checks only.
 
 `events` commands load external event source configuration from
 `.divedra-events` next to the workflow root, or from `--event-root`. `events
@@ -244,19 +235,6 @@ bun run src/main.ts gql '
   }
 '
 ```
-
-## Terminal UI
-
-`divedra tui` is implemented through the OpenTUI stack under `src/tui/`.
-
-Current UI structure is centered on:
-
-- `src/tui/opentui-screen.ts`
-- `src/tui/opentui-controller.ts`
-- `src/tui/opentui-solid-app.tsx`
-- `src/tui/components/*.tsx`
-
-The TUI can browse workflow definitions, workflow runs, node details, and runtime history. When OpenTUI dependencies are unavailable or the process is not running in a suitable interactive terminal mode, the CLI uses its fallback behavior instead of the full screen app.
 
 ## Workflow Bundle Layout
 
@@ -541,8 +519,6 @@ bun run build
 bun run test
 bun run typecheck
 bun run format:check
-task tui
-task tui-examples
 ```
 
 Environment notes:

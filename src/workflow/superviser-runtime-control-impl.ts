@@ -28,7 +28,6 @@ import type {
 import type { SuperviserRuntimeControl } from "./superviser-control";
 import {
   resolveNestedSuperviserAddonRerunFromStepId,
-  toStepAddressedWorkflowForSupervision,
 } from "./superviser";
 
 function stripRunOptionsForSuperviserControlPlane(o: WorkflowRunOptions): WorkflowRunOptions {
@@ -284,19 +283,11 @@ export function buildSuperviserRuntimeControl(input: {
       if (!wf.ok) {
         return err(wf.error.message);
       }
-      const stepAddressed = toStepAddressedWorkflowForSupervision(
-        wf.value.bundle.workflow,
-      );
-      if (stepAddressed === null) {
-        return err(
-          "rerun-workflow: target workflow must have entryStepId with non-empty steps",
-        );
-      }
+      const stepAddressed = wf.value.bundle.workflow;
       const baseForTargetRun = stripRunOptionsForSuperviserControlPlane(base);
       const rerunFromStepId = resolveNestedSuperviserAddonRerunFromStepId(
         rerunInput.rerunFromStepId,
         targetSession,
-        wf.value.bundle.workflow,
         stepAddressed,
       );
       const res = await runWorkflow(targetWorkflowName, {

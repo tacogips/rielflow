@@ -35,7 +35,6 @@ interface WorkflowRootCandidate {
   readonly scope: WorkflowSourceScope;
   readonly workflowRoot: string;
   readonly scopeRoot?: string;
-  readonly legacyProjectRoot?: boolean;
 }
 
 interface AddonRootCandidate {
@@ -227,9 +226,6 @@ function createResolvedWorkflowSource(
     ...(candidate.scopeRoot === undefined
       ? {}
       : { scopeRoot: candidate.scopeRoot }),
-    ...(candidate.legacyProjectRoot === undefined
-      ? {}
-      : { legacyProjectRoot: candidate.legacyProjectRoot }),
   };
 }
 
@@ -436,7 +432,6 @@ async function createWorkflowRootCandidates(
         scope: "project",
         scopeRoot: projectScopeRoot,
         workflowRoot: projectScopeRoot,
-        legacyProjectRoot: true,
       });
     }
   }

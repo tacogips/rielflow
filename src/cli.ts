@@ -1,6 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
-import readline from "node:readline/promises";
-import os from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   DEFAULT_GRAPHQL_ENDPOINT,
@@ -26,12 +24,10 @@ import { callStep, type CallStepInput } from "./workflow/call-step";
 import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
 import { loadWorkflowFromCatalog, type LoadedWorkflow } from "./workflow/load";
 import {
-  listWorkflowCatalogSources,
   withResolvedWorkflowSourceOptions,
 } from "./workflow/catalog";
 import { inferRootDataDirFromExplicitStorageRoots } from "./workflow/paths";
 import {
-  createSessionId,
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
   type WorkflowSessionState,
@@ -40,24 +36,13 @@ import { buildInspectionSummary } from "./workflow/inspect";
 import { collectWorkflowAddonSourceSummaries } from "./workflow/addon-source-summary";
 import { loadSession } from "./workflow/session-store";
 import { createCommunicationService } from "./workflow/communication-service";
-import { selectTuiRuntimeMode } from "./tui/runtime";
-import type {
-  OpenTuiWorkflowActionResult,
-  OpenTuiWorkflowAppOptions,
-  OpenTuiWorkflowExecutionHandle,
-} from "./tui/opentui-screen";
-import { loadAgentSessionTranscript } from "./tui/agent-session-history";
 import {
   listEventReplyDispatchesFromRuntimeDb,
   listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
-  listRuntimeSessions,
   type RuntimeEventReplyDispatchStatus,
 } from "./workflow/runtime-db";
-import { createManagerSessionStore } from "./workflow/manager-session-store";
-import { deleteWorkflowSessionHistory } from "./workflow/session-history";
-import { deleteWorkflowHistory as deleteWorkflowHistoryForWorkflow } from "./workflow/history";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 import type {
   AutoImprovePolicy,
@@ -112,9 +97,6 @@ export interface CliDependencies {
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly readStdin?: () => Promise<string>;
-  readonly runOpenTuiWorkflowApp?: (
-    options: OpenTuiWorkflowAppOptions,
-  ) => Promise<number>;
 }
 
 interface CliStorageOptions {
@@ -134,7 +116,6 @@ interface WorkflowSourceOutput {
   readonly workflowRoot: string;
   readonly workflowDirectory: string;
   readonly scopeRoot?: string;
-  readonly legacyProjectRoot?: boolean;
 }
 
 interface ParsedOptions {
@@ -164,8 +145,6 @@ interface ParsedOptions {
   readonly filePath?: string;
   readonly readOnly: boolean;
   readonly noExec: boolean;
-  readonly resumeSessionId?: string;
-  readonly workflowName?: string;
   readonly messageJson?: string;
   readonly messageFile?: string;
   readonly promptVariant?: string;
@@ -384,24 +363,6 @@ function buildStepProgressSummaries(session: WorkflowSessionState): readonly {
     }));
 }
 
-function formatProgressExecutionCounts(
-  entries: readonly {
-    readonly id: string;
-    readonly executions: number;
-    readonly restarts: number;
-  }[],
-): string {
-  return (
-    entries
-      .map((entry) =>
-        entry.restarts === 0
-          ? `${entry.id}:${String(entry.executions)}`
-          : `${entry.id}:${String(entry.executions)}(restarts=${String(entry.restarts)})`,
-      )
-      .join(", ") || "-"
-  );
-}
-
 async function resolveSessionCurrentStepId(
   session: WorkflowSessionState,
   options: CliStorageOptions,
@@ -456,8 +417,6 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   let filePath: string | undefined;
   let readOnly = false;
   let noExec = false;
-  let resumeSessionId: string | undefined;
-  let workflowName: string | undefined;
   let messageJson: string | undefined;
   let messageFile: string | undefined;
   let promptVariant: string | undefined;
@@ -741,24 +700,6 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--no-exec":
         noExec = true;
         break;
-      case "--resume-session": {
-        const parsedString = parseRequiredStringOption(token, readNext());
-        if (parsedString.error !== undefined) {
-          parseError = parsedString.error;
-          break;
-        }
-        resumeSessionId = parsedString.value;
-        break;
-      }
-      case "--workflow": {
-        const parsedString = parseRequiredStringOption(token, readNext());
-        if (parsedString.error !== undefined) {
-          parseError = parsedString.error;
-          break;
-        }
-        workflowName = parsedString.value;
-        break;
-      }
       case "--message-json": {
         const parsedString = parseRequiredStringOption(token, readNext());
         if (parsedString.error !== undefined) {
@@ -1012,8 +953,6 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(filePath === undefined ? {} : { filePath }),
       readOnly,
       noExec,
-      ...(resumeSessionId === undefined ? {} : { resumeSessionId }),
-      ...(workflowName === undefined ? {} : { workflowName }),
       ...(messageJson === undefined ? {} : { messageJson }),
       ...(messageFile === undefined ? {} : { messageFile }),
       ...(promptVariant === undefined ? {} : { promptVariant }),
@@ -1045,13 +984,7 @@ function printHelp(io: CliIo): void {
   );
   io.stdout("  divedra session rerun <session-id> <step-id> [options]");
   io.stdout(
-    "  divedra tui [workflow-name] [--workflow <name>] [--resume-session <id>] [--variables <path>] [--mock-scenario <path>] [--max-steps <n>]",
-  );
-  io.stdout(
     "  divedra serve [workflow-name] [--host <host>] [--port <port>] [--read-only] [--no-exec]",
-  );
-  io.stdout(
-    "  divedra web serve [workflow-name] [--host <host>] [--port <port>] [--read-only] [--no-exec]",
   );
   io.stdout(
     "  divedra gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
@@ -1194,7 +1127,7 @@ async function readMockScenario(pathToJson: string): Promise<MockNodeScenario> {
   const parsed = JSON.parse(content) as unknown;
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(
-      "mock scenario file must contain a JSON object keyed by step id for step-addressed workflows (legacy bundles: keyed by node id)",
+      "mock scenario file must contain a JSON object keyed by step id",
     );
   }
   return parsed as MockNodeScenario;
@@ -1208,54 +1141,6 @@ async function readMockScenarioOption(
   }
   return {
     mockScenario: await readMockScenario(pathToJson),
-  };
-}
-
-export function shouldFallbackFromOpenTuiError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  return /cannot find (?:package|module) ['"](?:@opentui\/(?:core|solid)(?:-[^'"]+)?|solid-js(?:\/[^'"]+)?)['"]/i.test(
-    error.message,
-  );
-}
-
-export function resolveTuiStartupSelection(input: {
-  readonly requestedWorkflowName?: string;
-  readonly resumeSession?: Pick<
-    WorkflowSessionState,
-    "sessionId" | "workflowName"
-  >;
-}):
-  | {
-      readonly ok: true;
-      readonly initialSessionId?: string;
-      readonly initialWorkflowName?: string;
-    }
-  | { readonly ok: false; readonly message: string } {
-  if (input.resumeSession === undefined) {
-    return {
-      ok: true,
-      ...(input.requestedWorkflowName === undefined
-        ? {}
-        : { initialWorkflowName: input.requestedWorkflowName }),
-    };
-  }
-  if (
-    input.requestedWorkflowName !== undefined &&
-    input.requestedWorkflowName !== input.resumeSession.workflowName
-  ) {
-    return {
-      ok: false,
-      message:
-        `resume session '${input.resumeSession.sessionId}' belongs to workflow ` +
-        `'${input.resumeSession.workflowName}', not '${input.requestedWorkflowName}'`,
-    };
-  }
-  return {
-    ok: true,
-    initialSessionId: input.resumeSession.sessionId,
-    initialWorkflowName: input.resumeSession.workflowName,
   };
 }
 
@@ -1561,12 +1446,6 @@ function rejectUnsupportedRemoteMockScenario(
   return true;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 function buildLocalWorkflowRunOverrides(
   parsedOptions: ParsedOptions,
 ): Pick<
@@ -1644,25 +1523,6 @@ function buildLocalCallStepOverrides(
   };
 }
 
-async function listWorkflowNames(options: {
-  workflowRoot?: string;
-  workflowScope?: WorkflowScopeSelector;
-  userRoot?: string;
-  projectRoot?: string;
-  addonRoot?: string;
-  artifactRoot?: string;
-  sessionStoreRoot?: string;
-  env?: Readonly<Record<string, string | undefined>>;
-}): Promise<readonly string[]> {
-  const catalogSources = await listWorkflowCatalogSources(options);
-  if (!catalogSources.ok) {
-    return [];
-  }
-  return [
-    ...new Set(catalogSources.value.map((source) => source.workflowName)),
-  ].sort((a, b) => a.localeCompare(b));
-}
-
 function optionsForLoadedWorkflow<T extends CliStorageOptions>(
   loadedWorkflow: LoadedWorkflow,
   options: T,
@@ -1678,8 +1538,7 @@ function formatWorkflowSource(
   if (source === undefined) {
     return undefined;
   }
-  const legacySuffix = source.legacyProjectRoot === true ? " legacy-root" : "";
-  return `${source.scope}${legacySuffix} ${source.workflowDirectory}`;
+  return `${source.scope} ${source.workflowDirectory}`;
 }
 
 function workflowSourceJson(
@@ -1693,9 +1552,6 @@ function workflowSourceJson(
     workflowRoot: source.workflowRoot,
     workflowDirectory: source.workflowDirectory,
     ...(source.scopeRoot === undefined ? {} : { scopeRoot: source.scopeRoot }),
-    ...(source.legacyProjectRoot === undefined
-      ? {}
-      : { legacyProjectRoot: source.legacyProjectRoot }),
   };
 }
 
@@ -1707,664 +1563,6 @@ function formatAddonSource(source: {
   readonly manifestPath: string;
 }): string {
   return `${source.nodeId}: ${source.name}@${source.version} ${source.scope} ${source.manifestPath}`;
-}
-
-export async function loadOpenTuiScreenImplementations(
-  deps: CliDependencies,
-): Promise<{
-  readonly runOpenTuiWorkflowApp: NonNullable<
-    CliDependencies["runOpenTuiWorkflowApp"]
-  >;
-}> {
-  if (deps.runOpenTuiWorkflowApp !== undefined) {
-    return {
-      runOpenTuiWorkflowApp: deps.runOpenTuiWorkflowApp,
-    };
-  }
-  const module = await import("./tui/opentui-screen");
-  return {
-    runOpenTuiWorkflowApp: module.runOpenTuiWorkflowApp,
-  };
-}
-
-interface LocalTuiWorkflowActionInput {
-  readonly workflowName: string;
-  readonly runtimeVariables: Readonly<Record<string, unknown>>;
-  readonly rerunFromStepId?: string;
-  readonly rerunFromSessionId?: string;
-  readonly resumeSessionId?: string;
-  readonly sessionId?: string;
-}
-
-interface CreateOpenTuiWorkflowAppOptionsInput {
-  readonly deps: Pick<CliDependencies, "env">;
-  readonly initialSessionId?: string;
-  readonly initialWorkflowName?: string;
-  readonly io: CliIo;
-  readonly optionRuntimeVariables: Readonly<Record<string, unknown>>;
-  readonly runLocalTuiWorkflow: (
-    input: LocalTuiWorkflowActionInput,
-  ) => Promise<OpenTuiWorkflowActionResult>;
-  readonly sharedOptions: CliStorageOptions;
-  readonly startLocalTuiWorkflow: (input: {
-    readonly workflowName: string;
-    readonly runtimeVariables: Readonly<Record<string, unknown>>;
-    readonly sessionId: string;
-  }) => Promise<OpenTuiWorkflowExecutionHandle>;
-  readonly workflowNames: readonly string[];
-}
-
-export function resolveCliHomeDir(
-  env?: Readonly<Record<string, string | undefined>>,
-): string | undefined {
-  const candidates = [
-    env?.["HOME"],
-    env?.["USERPROFILE"],
-    process.env["HOME"],
-    process.env["USERPROFILE"],
-  ];
-  const explicitHome = candidates.find(
-    (candidate): candidate is string =>
-      candidate !== undefined && candidate.length > 0,
-  );
-  if (explicitHome !== undefined) {
-    return explicitHome;
-  }
-  try {
-    const resolvedHome = os.homedir();
-    return resolvedHome.length > 0 ? resolvedHome : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export function createOpenTuiWorkflowAppOptions(
-  input: CreateOpenTuiWorkflowAppOptionsInput,
-): OpenTuiWorkflowAppOptions {
-  const loadWorkflowDefinitionOrThrow = async (
-    workflowName: string,
-  ): Promise<LoadedWorkflow> => {
-    const loaded = await loadWorkflowFromCatalog(
-      workflowName,
-      input.sharedOptions,
-    );
-    if (!loaded.ok) {
-      throw new Error(loaded.error.message);
-    }
-    return loaded.value;
-  };
-
-  const loadSessionOrThrow = async (
-    sessionId: string,
-  ): Promise<WorkflowSessionState> => {
-    const loaded = await loadSession(sessionId, input.sharedOptions);
-    if (!loaded.ok) {
-      throw new Error(loaded.error.message);
-    }
-    return loaded.value;
-  };
-
-  return {
-    ...(input.initialWorkflowName === undefined
-      ? {}
-      : { initialWorkflowName: input.initialWorkflowName }),
-    ...(input.initialSessionId === undefined
-      ? {}
-      : { initialSessionId: input.initialSessionId }),
-    io: input.io,
-    workflowNames: input.workflowNames,
-    refreshWorkflowNames: async () => listWorkflowNames(input.sharedOptions),
-    loadWorkflowDefinition: loadWorkflowDefinitionOrThrow,
-    listWorkflowSessions: async (workflowName) =>
-      (await listRuntimeSessions(input.sharedOptions)).filter(
-        (session) => session.workflowName === workflowName,
-      ),
-    loadRuntimeSessionView: async (sessionId) => {
-      const session = await loadSessionOrThrow(sessionId);
-      const [nodeExecutions, nodeLogs] = await Promise.all([
-        listRuntimeNodeExecutions(sessionId, input.sharedOptions),
-        listRuntimeNodeLogs(sessionId, input.sharedOptions),
-      ]);
-      return {
-        session,
-        nodeExecutions,
-        nodeLogs,
-      };
-    },
-    deleteWorkflowSession: async ({ sessionId, workflowId, workflowName }) =>
-      deleteWorkflowSessionHistory(
-        {
-          sessionId,
-          workflowId,
-          workflowName,
-        },
-        input.sharedOptions,
-      ),
-    deleteWorkflowHistory: async ({ workflowId, workflowName }) =>
-      deleteWorkflowHistoryForWorkflow({
-        workflowId,
-        workflowName,
-        ...input.sharedOptions,
-      }),
-    loadManagerSessionMessages: async (managerSessionId) =>
-      createManagerSessionStore(input.sharedOptions).listMessages(
-        managerSessionId,
-      ),
-    loadAgentSessionTranscript: async ({ backend, sessionId }) => {
-      const homeDir = resolveCliHomeDir(input.deps.env);
-      if (homeDir === undefined) {
-        throw new Error(
-          "cannot load local AI agent session history because HOME is not set",
-        );
-      }
-      return loadAgentSessionTranscript({
-        backend,
-        homeDir,
-        sessionId,
-      });
-    },
-    executeWorkflow: async ({ workflowName, runtimeVariables }) => {
-      const loadedWorkflow = await loadWorkflowDefinitionOrThrow(workflowName);
-      return input.startLocalTuiWorkflow({
-        workflowName,
-        sessionId: createSessionId({
-          workflowId: loadedWorkflow.bundle.workflow.workflowId,
-        }),
-        runtimeVariables: {
-          ...input.optionRuntimeVariables,
-          ...runtimeVariables,
-        },
-      });
-    },
-    rerunWorkflow: async ({
-      sourceSessionId,
-      fromStepId,
-      runtimeVariables,
-    }) => {
-      const source = await loadSessionOrThrow(sourceSessionId);
-      return input.runLocalTuiWorkflow({
-        workflowName: source.workflowName,
-        rerunFromSessionId: source.sessionId,
-        rerunFromStepId: fromStepId,
-        runtimeVariables: {
-          ...input.optionRuntimeVariables,
-          ...runtimeVariables,
-        },
-      });
-    },
-    resumeWorkflow: async (sessionId) => {
-      const session = await loadSessionOrThrow(sessionId);
-      return input.runLocalTuiWorkflow({
-        workflowName: session.workflowName,
-        resumeSessionId: session.sessionId,
-        runtimeVariables: input.optionRuntimeVariables,
-      });
-    },
-  };
-}
-
-async function runTui(
-  workflowNameOrUndefined: string | undefined,
-  parsedOptions: ParsedOptions,
-  sharedOptions: CliStorageOptions,
-  io: CliIo,
-  deps: CliDependencies,
-): Promise<number> {
-  let optionRuntimeVariables: Readonly<Record<string, unknown>> = {};
-  if (parsedOptions.variablesPath !== undefined) {
-    try {
-      optionRuntimeVariables = await readRuntimeVariables(
-        parsedOptions.variablesPath,
-      );
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      io.stderr(`failed to read --variables file: ${message}`);
-      return 1;
-    }
-  }
-
-  const runAndReportProgress = async (
-    workflowName: string,
-    runtimeVariables: Readonly<Record<string, unknown>>,
-    mockScenario: MockNodeScenario | undefined,
-    resumeSessionId: string | undefined,
-  ): Promise<number> => {
-    let sessionId = resumeSessionId;
-    let workflowOptions = sharedOptions;
-    const loadedWorkflow = await loadWorkflowFromCatalog(
-      workflowName,
-      sharedOptions,
-    );
-    if (!loadedWorkflow.ok) {
-      if (resumeSessionId === undefined) {
-        io.stderr(loadedWorkflow.error.message);
-        return 1;
-      }
-    } else {
-      workflowOptions = optionsForLoadedWorkflow(
-        loadedWorkflow.value,
-        sharedOptions,
-      );
-    }
-    if (sessionId === undefined && loadedWorkflow.ok) {
-      sessionId = createSessionId({
-        workflowId: loadedWorkflow.value.bundle.workflow.workflowId,
-      });
-    }
-    if (sessionId === undefined) {
-      io.stderr("cannot start workflow without a session id");
-      return 1;
-    }
-    io.stdout(
-      `${resumeSessionId === undefined ? "Starting" : "Resuming"} session ${sessionId}`,
-    );
-    const runPromise = runWorkflow(workflowName, {
-      ...workflowOptions,
-      sessionId,
-      runtimeVariables,
-      ...(mockScenario === undefined ? {} : { mockScenario }),
-      ...(resumeSessionId === undefined ? {} : { resumeSessionId }),
-      ...buildLocalWorkflowRunOverrides(parsedOptions),
-    });
-
-    let terminal = false;
-    while (!terminal) {
-      await sleep(500);
-      const loaded = await loadSession(sessionId, sharedOptions);
-      if (!loaded.ok) {
-        continue;
-      }
-      const session = loaded.value;
-      const currentStepId = resolveCurrentStepIdFromWorkflow(
-        session,
-        loadedWorkflow.ok ? loadedWorkflow.value.bundle.workflow : undefined,
-      );
-      const nodeCounts = Object.keys(session.nodeExecutionCounts)
-        .sort((a, b) => a.localeCompare(b))
-        .map(
-          (nodeId) =>
-            ({
-              id: nodeId,
-              executions: session.nodeExecutionCounts[nodeId] ?? 0,
-              restarts: session.restartCounts?.[nodeId] ?? 0,
-            }) as const,
-        );
-      const stepCounts = buildStepProgressSummaries(session).map((summary) => ({
-        id: summary.stepId,
-        executions: summary.executions,
-        restarts: summary.restarts,
-      }));
-      const currentTargetText =
-        currentStepId === null
-          ? `current=${session.currentNodeId ?? "-"}`
-          : currentStepId === session.currentNodeId ||
-              session.currentNodeId === undefined
-            ? `currentStep=${currentStepId}`
-            : `currentStep=${currentStepId} currentNode=${session.currentNodeId}`;
-      io.stdout(
-        `[progress] status=${session.status} ${currentTargetText} totalExec=${String(
-          session.nodeExecutionCounter,
-        )} queue=${session.queue.join(",") || "-"}${
-          stepCounts.length === 0
-            ? ""
-            : ` steps=${formatProgressExecutionCounts(stepCounts)}`
-        } nodes=${formatProgressExecutionCounts(nodeCounts)}`,
-      );
-      terminal =
-        session.status === "completed" ||
-        session.status === "failed" ||
-        session.status === "cancelled" ||
-        session.status === "paused";
-    }
-
-    const result = await runPromise;
-    if (!result.ok) {
-      io.stderr(`run failed: ${result.error.message}`);
-      return result.error.exitCode;
-    }
-    io.stdout(`sessionId: ${result.value.session.sessionId}`);
-    io.stdout(`status: ${result.value.session.status}`);
-    return result.value.exitCode;
-  };
-
-  const resolveTuiMockScenario = async (
-    workflowName: string,
-  ): Promise<MockNodeScenario | undefined> => {
-    if (parsedOptions.mockScenarioPath !== undefined) {
-      return readMockScenario(parsedOptions.mockScenarioPath);
-    }
-    const loaded = await loadWorkflowFromCatalog(workflowName, sharedOptions);
-    if (!loaded.ok) {
-      throw new Error(loaded.error.message);
-    }
-    const defaultScenarioPath = path.join(
-      loaded.value.workflowDirectory,
-      "mock-scenario.json",
-    );
-    try {
-      await stat(defaultScenarioPath);
-      return readMockScenario(defaultScenarioPath);
-    } catch {
-      return undefined;
-    }
-  };
-  const runLocalTuiWorkflow = async (input: {
-    readonly workflowName: string;
-    readonly runtimeVariables: Readonly<Record<string, unknown>>;
-    readonly rerunFromStepId?: string;
-    readonly rerunFromSessionId?: string;
-    readonly resumeSessionId?: string;
-    readonly sessionId?: string;
-  }): Promise<OpenTuiWorkflowActionResult> => {
-    const mockScenario = await resolveTuiMockScenario(input.workflowName);
-    const result = await runWorkflow(input.workflowName, {
-      ...sharedOptions,
-      ...buildLocalWorkflowRunOverrides(parsedOptions),
-      ...(mockScenario === undefined ? {} : { mockScenario }),
-      ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
-      ...(input.resumeSessionId === undefined
-        ? {}
-        : { resumeSessionId: input.resumeSessionId }),
-      ...(input.rerunFromSessionId === undefined
-        ? {}
-        : { rerunFromSessionId: input.rerunFromSessionId }),
-      ...(input.rerunFromStepId !== undefined
-        ? { rerunFromStepId: input.rerunFromStepId }
-        : {}),
-      runtimeVariables: input.runtimeVariables,
-    });
-    if (!result.ok) {
-      throw new Error(result.error.message);
-    }
-    return {
-      sessionId: result.value.session.sessionId,
-      status: result.value.session.status,
-      exitCode: result.value.exitCode,
-    };
-  };
-  const startLocalTuiWorkflow = async (input: {
-    readonly workflowName: string;
-    readonly runtimeVariables: Readonly<Record<string, unknown>>;
-    readonly sessionId: string;
-  }): Promise<OpenTuiWorkflowExecutionHandle> => {
-    return {
-      sessionId: input.sessionId,
-      completion: runLocalTuiWorkflow(input),
-    };
-  };
-
-  try {
-    const runtimeSelection = selectTuiRuntimeMode({
-      isInteractiveTerminal: deps.isInteractiveTerminal(),
-      ...(parsedOptions.resumeSessionId === undefined
-        ? {}
-        : {
-            resumeSessionId: parsedOptions.resumeSessionId,
-          }),
-    });
-
-    let resumeSession: WorkflowSessionState | undefined;
-    if (parsedOptions.resumeSessionId !== undefined) {
-      const loadedResumeSession = await loadSession(
-        parsedOptions.resumeSessionId,
-        sharedOptions,
-      );
-      if (!loadedResumeSession.ok) {
-        io.stderr(
-          `failed to load resume session: ${loadedResumeSession.error.message}`,
-        );
-        return 1;
-      }
-      resumeSession = loadedResumeSession.value;
-    }
-
-    const startupSelection = resolveTuiStartupSelection({
-      ...(workflowNameOrUndefined === undefined
-        ? {}
-        : { requestedWorkflowName: workflowNameOrUndefined }),
-      ...(resumeSession === undefined ? {} : { resumeSession }),
-    });
-    if (!startupSelection.ok) {
-      io.stderr(startupSelection.message);
-      return 2;
-    }
-
-    const runResumeSessionFallback = async (): Promise<number> => {
-      if (resumeSession === undefined) {
-        throw new Error("resume session fallback requested without a session");
-      }
-      try {
-        return runAndReportProgress(
-          resumeSession.workflowName,
-          {
-            ...resumeSession.runtimeVariables,
-            ...optionRuntimeVariables,
-            resumedFromSessionId: resumeSession.sessionId,
-          },
-          await resolveTuiMockScenario(resumeSession.workflowName),
-          resumeSession.sessionId,
-        );
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(`failed to resolve mock scenario: ${message}`);
-        return 1;
-      }
-    };
-
-    if (resumeSession !== undefined && runtimeSelection.mode === "fallback") {
-      return runResumeSessionFallback();
-    }
-
-    const workflowNames = await listWorkflowNames(sharedOptions);
-    if (
-      resumeSession !== undefined &&
-      !workflowNames.includes(resumeSession.workflowName)
-    ) {
-      io.stderr(
-        `workflow '${resumeSession.workflowName}' for resume session is unavailable in workflow root; falling back to direct resume flow`,
-      );
-      return runResumeSessionFallback();
-    }
-    if (workflowNames.length === 0) {
-      io.stderr("no workflows found");
-      return 1;
-    }
-
-    if (runtimeSelection.mode === "fallback") {
-      if (
-        workflowNameOrUndefined === undefined &&
-        runtimeSelection.requiresWorkflowArgument
-      ) {
-        io.stderr("workflow name is required in non-interactive terminal");
-        return 2;
-      }
-      if (workflowNameOrUndefined === undefined) {
-        io.stderr("workflow name is required");
-        return 2;
-      }
-      if (!workflowNames.includes(workflowNameOrUndefined)) {
-        io.stderr(`workflow not found: ${workflowNameOrUndefined}`);
-        return 1;
-      }
-      let mockScenario: MockNodeScenario | undefined;
-      try {
-        mockScenario = await resolveTuiMockScenario(workflowNameOrUndefined);
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(`failed to resolve mock scenario: ${message}`);
-        return 1;
-      }
-      io.stdout("using promptless fallback mode");
-      return runAndReportProgress(
-        workflowNameOrUndefined,
-        optionRuntimeVariables,
-        mockScenario,
-        undefined,
-      );
-    }
-
-    let openTuiImplementations:
-      | Awaited<ReturnType<typeof loadOpenTuiScreenImplementations>>
-      | undefined;
-    try {
-      openTuiImplementations = await loadOpenTuiScreenImplementations(deps);
-    } catch (error: unknown) {
-      if (!shouldFallbackFromOpenTuiError(error)) {
-        throw error;
-      }
-      const message = error instanceof Error ? error.message : "unknown error";
-      io.stderr(
-        `OpenTUI unavailable (${message}); falling back to readline workflow selection`,
-      );
-      if (resumeSession !== undefined) {
-        io.stderr(
-          `resume session '${resumeSession.sessionId}' will use direct resume fallback`,
-        );
-        return runResumeSessionFallback();
-      }
-    }
-
-    if (openTuiImplementations !== undefined) {
-      try {
-        return await openTuiImplementations.runOpenTuiWorkflowApp(
-          createOpenTuiWorkflowAppOptions({
-            deps,
-            ...(startupSelection.initialWorkflowName === undefined
-              ? {}
-              : { initialWorkflowName: startupSelection.initialWorkflowName }),
-            ...(startupSelection.initialSessionId === undefined
-              ? {}
-              : { initialSessionId: startupSelection.initialSessionId }),
-            io,
-            optionRuntimeVariables,
-            runLocalTuiWorkflow,
-            sharedOptions,
-            startLocalTuiWorkflow,
-            workflowNames,
-          }),
-        );
-      } catch (error: unknown) {
-        if (!shouldFallbackFromOpenTuiError(error)) {
-          throw error;
-        }
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(
-          `OpenTUI unavailable (${message}); falling back to readline workflow selection`,
-        );
-        if (resumeSession !== undefined) {
-          io.stderr(
-            `resume session '${resumeSession.sessionId}' will use direct resume fallback`,
-          );
-          return runResumeSessionFallback();
-        }
-      }
-    }
-
-    let workflowName = startupSelection.initialWorkflowName;
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    try {
-      if (workflowName === undefined) {
-        io.stdout("Select workflow:");
-        workflowNames.forEach((name, index) => {
-          io.stdout(`  ${String(index + 1)}. ${name}`);
-        });
-        const selectedRaw = await rl.question("Workflow number: ");
-        const selectedIndex = Number(selectedRaw);
-        if (
-          !Number.isFinite(selectedIndex) ||
-          selectedIndex < 1 ||
-          selectedIndex > workflowNames.length
-        ) {
-          io.stderr("invalid workflow selection");
-          return 2;
-        }
-        workflowName = workflowNames[selectedIndex - 1];
-      }
-
-      if (workflowName === undefined || !workflowNames.includes(workflowName)) {
-        io.stderr(`workflow not found: ${workflowName ?? "(empty)"}`);
-        return 1;
-      }
-
-      const userPrompt = await rl.question("Prompt: ");
-      const customVariablesRaw = await rl.question(
-        "Additional runtime variables JSON (optional): ",
-      );
-      let runtimeVariables: Readonly<Record<string, unknown>> = {
-        ...optionRuntimeVariables,
-        humanInput: userPrompt,
-        userPrompt,
-        prompt: userPrompt,
-      };
-      if (customVariablesRaw.trim().length > 0) {
-        const parsed = JSON.parse(customVariablesRaw) as unknown;
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          io.stderr("additional runtime variables must be a JSON object");
-          return 2;
-        }
-        runtimeVariables = {
-          ...runtimeVariables,
-          ...(parsed as Record<string, unknown>),
-        };
-      }
-
-      let mockScenario: MockNodeScenario | undefined;
-      if (parsedOptions.mockScenarioPath !== undefined) {
-        mockScenario = await readMockScenario(parsedOptions.mockScenarioPath);
-      } else {
-        const loaded = await loadWorkflowFromCatalog(
-          workflowName,
-          sharedOptions,
-        );
-        if (!loaded.ok) {
-          io.stderr(loaded.error.message);
-          return loaded.error.code === "VALIDATION" ||
-            loaded.error.code === "INVALID_WORKFLOW_NAME" ||
-            loaded.error.code === "INVALID_SCOPE"
-            ? 2
-            : 1;
-        }
-        const defaultScenarioPath = path.join(
-          loaded.value.workflowDirectory,
-          "mock-scenario.json",
-        );
-        try {
-          await stat(defaultScenarioPath);
-          const useScenarioAnswer = await rl.question(
-            `Use mock scenario file at ${defaultScenarioPath}? [Y/n]: `,
-          );
-          if (useScenarioAnswer.trim().toLowerCase() !== "n") {
-            mockScenario = await readMockScenario(defaultScenarioPath);
-          }
-        } catch {
-          // default scenario does not exist
-        }
-      }
-
-      return runAndReportProgress(
-        workflowName,
-        runtimeVariables,
-        mockScenario,
-        undefined,
-      );
-    } finally {
-      rl.close();
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown error";
-    io.stderr(`tui failed: ${message}`);
-    return 1;
-  }
 }
 
 export async function runCli(
@@ -2874,8 +2072,8 @@ export async function runCli(
     return 2;
   }
 
-  if (scope === "serve" || (scope === "web" && command === "serve")) {
-    const serveWorkflowName = scope === "web" ? target : command;
+  if (scope === "serve") {
+    const serveWorkflowName = command;
     try {
       const started = await deps.startServe({
         ...sharedOptions,
@@ -2920,28 +2118,6 @@ export async function runCli(
       io.stderr(`serve failed: ${message}`);
       return 7;
     }
-  }
-
-  if (scope === "tui") {
-    const resolvedWorkflowName = parsed.options.workflowName;
-    if (
-      command !== undefined &&
-      resolvedWorkflowName !== undefined &&
-      command.length > 0 &&
-      command !== resolvedWorkflowName
-    ) {
-      io.stderr(
-        `conflicting workflow names: positional='${command}' and --workflow='${resolvedWorkflowName}'`,
-      );
-      return 2;
-    }
-    return runTui(
-      resolvedWorkflowName ?? command,
-      parsed.options,
-      sharedOptions,
-      io,
-      deps,
-    );
   }
 
   if (scope === "call-node") {

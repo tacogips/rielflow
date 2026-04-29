@@ -80,8 +80,7 @@ export const REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE =
 
 /**
  * Authored `workflow.json` only: removed top-level compatibility aliases rejected by the strict
- * step-addressed schema. Unrelated to session/API fields that reuse the name `managerRuntimeId` for a
- * **step** id.
+ * step-addressed schema.
  */
 export const REJECTED_AUTHORED_DISALLOWED_TOP_LEVEL_FIELD_KEYS = [
   "managerNodeId",

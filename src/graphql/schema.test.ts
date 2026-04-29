@@ -367,7 +367,7 @@ async function createWorkflowCallWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerRuntimeId = "divedra-manager",
+  managerStepId = "divedra-manager",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -377,7 +377,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerRuntimeId,
+    managerStepId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",

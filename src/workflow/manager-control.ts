@@ -1,6 +1,6 @@
 import type { CommunicationRecord } from "./session";
 import {
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
   type NodeRole,
   type WorkflowJson,
 } from "./types";
@@ -54,7 +54,7 @@ export interface ParsedManagerControl {
 }
 
 export interface ManagerControlParseContext {
-  readonly managerRuntimeId: string;
+  readonly managerStepId: string;
   readonly managerRole?: NodeRole;
 }
 
@@ -173,7 +173,7 @@ function isWorkflowManagerControlContext(
   context: ManagerControlParseContext,
 ): boolean {
   return (
-    context.managerRuntimeId === resolveWorkflowManagerRuntimeId(workflow) &&
+    context.managerStepId === resolveWorkflowManagerStepId(workflow) &&
     context.managerRole !== "worker"
   );
 }
@@ -190,7 +190,7 @@ function assertOptionalStepDecisionScope(
       `managerControl ${actionType} step '${stepId}' does not exist`,
     );
   }
-  if (node.id === context.managerRuntimeId) {
+  if (node.id === context.managerStepId) {
     throw new Error(
       `managerControl ${actionType} step '${stepId}' cannot target the manager itself`,
     );
@@ -206,7 +206,7 @@ function assertOptionalStepDecisionScope(
   }
 
   throw new Error(
-    `manager '${context.managerRuntimeId}' does not have a recognized control scope`,
+    `manager '${context.managerStepId}' does not have a recognized control scope`,
   );
 }
 
@@ -221,7 +221,7 @@ export function assertCommunicationInManagerScope(
   }
 
   throw new Error(
-    `manager '${context.managerRuntimeId}' does not have a recognized control scope`,
+    `manager '${context.managerStepId}' does not have a recognized control scope`,
   );
 }
 
@@ -261,14 +261,14 @@ export function parseManagerControlActions(
         `managerControl retry step '${action.stepId}' does not exist`,
       );
     }
-    if (action.stepId === context.managerRuntimeId) {
+    if (action.stepId === context.managerStepId) {
       throw new Error(
         `managerControl retry step '${action.stepId}' cannot target the manager itself`,
       );
     }
     if (!isWorkflowManagerControlContext(workflow, context)) {
       throw new Error(
-        `manager '${context.managerRuntimeId}' does not have a recognized control scope`,
+        `manager '${context.managerStepId}' does not have a recognized control scope`,
       );
     }
   }

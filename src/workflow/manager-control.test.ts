@@ -50,7 +50,7 @@ describe("parseManagerControlPayload", () => {
   test("returns null when managerControl is absent", () => {
     expect(
       parseManagerControlPayload({ marker: "plain" }, makeWorkflow(), {
-        managerRuntimeId: "manager-step",
+        managerStepId: "manager-step",
       }),
     ).toBeNull();
   });
@@ -60,7 +60,7 @@ describe("parseManagerControlPayload", () => {
       parseManagerControlPayload(
         { managerControl: {} },
         makeWorkflow(),
-        { managerRuntimeId: "manager-step" },
+        { managerStepId: "manager-step" },
       ),
     ).toEqual({
       actions: [],
@@ -88,7 +88,7 @@ describe("parseManagerControlActions", () => {
         },
       ],
       makeWorkflow(),
-      { managerRuntimeId: "manager-step" },
+      { managerStepId: "manager-step" },
     );
 
     expect(parsed.retryStepIds).toEqual(["worker-step"]);
@@ -102,7 +102,7 @@ describe("parseManagerControlActions", () => {
       parseManagerControlActions(
         [{ type: "retry-step", stepId: "manager-step" }],
         makeWorkflow(),
-        { managerRuntimeId: "manager-step" },
+        { managerStepId: "manager-step" },
       ),
     ).toThrow("cannot target the manager itself");
   });
@@ -112,7 +112,7 @@ describe("parseManagerControlActions", () => {
       parseManagerControlActions(
         [{ type: "execute-optional-step", stepId: "optional-step" }],
         makeWorkflow(),
-        { managerRuntimeId: "other-manager" },
+        { managerStepId: "other-manager" },
       ),
     ).toThrow("does not have a recognized control scope");
   });

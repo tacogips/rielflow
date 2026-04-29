@@ -18,7 +18,7 @@ const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
 
 /** Shared workflow-load options for call-step test fixtures. */
-const legacyAuthoredWorkflowLoadOpts = {
+const workflowLoadOpts = {
 } as const;
 
 async function makeTempDir(): Promise<string> {
@@ -44,21 +44,31 @@ async function createCallStepFixture(
     workflowId: workflowName,
     description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerStepId: "divedra-manager",
+    entryStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
         nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
       },
       {
         id: "writer",
-        kind: "task",
         nodeFile: "node-writer.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [{ from: "divedra-manager", to: "writer", when: "always" }],
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+        transitions: [{ toStepId: "writer", label: "always" }],
+      },
+      {
+        id: "writer",
+        nodeId: "writer",
+        role: "worker",
+      },
+    ],
   });
 
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
@@ -154,25 +164,35 @@ async function createOptionalCallStepFixture(
     workflowId: workflowName,
     description: "call-step fixture",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    managerStepId: "divedra-manager",
+    entryStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
         nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
       },
       {
         id: "writer",
-        kind: "task",
         nodeFile: "node-writer.json",
-        completion: { type: "none" },
         execution: {
           mode: "optional",
           decisionBy: "owning-manager",
         },
       },
     ],
-    edges: [{ from: "divedra-manager", to: "writer", when: "always" }],
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+        transitions: [{ toStepId: "writer", label: "always" }],
+      },
+      {
+        id: "writer",
+        nodeId: "writer",
+        role: "worker",
+      },
+    ],
   });
 }
 
@@ -260,7 +280,7 @@ describe("callStepExecution", () => {
     const adapter = new PromptAndAmbientCaptureAdapter();
     const result = await callStepExecution(
       {
-        ...legacyAuthoredWorkflowLoadOpts,
+        ...workflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         rootDataDir: path.join(root, "data"),
@@ -284,7 +304,7 @@ describe("callStepExecution", () => {
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
       DIVEDRA_WORKFLOW_ID: workflowName,
       DIVEDRA_WORKFLOW_EXECUTION_ID: sessionId,
-      DIVEDRA_MANAGER_RUNTIME_ID: "divedra-manager",
+      DIVEDRA_MANAGER_STEP_ID: "divedra-manager",
       DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
   });
@@ -311,7 +331,7 @@ describe("callStepExecution", () => {
     });
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       rootDataDir: path.join(root, "data"),
@@ -369,7 +389,7 @@ describe("callStepExecution", () => {
     const adapter = new RepairingAdapter();
     const result = await callStepExecution(
       {
-        ...legacyAuthoredWorkflowLoadOpts,
+        ...workflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -539,7 +559,7 @@ describe("callStepExecution", () => {
     const adapter = new InvalidThenFixedAdapter();
     const result = await callStepExecution(
       {
-        ...legacyAuthoredWorkflowLoadOpts,
+        ...workflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -605,7 +625,7 @@ describe("callStepExecution", () => {
     expect(saved.ok).toBe(true);
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -637,7 +657,7 @@ describe("callStepExecution", () => {
     });
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -669,7 +689,7 @@ describe("callStepExecution", () => {
     });
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -725,7 +745,7 @@ describe("callStepExecution", () => {
     });
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       rootDataDir,
@@ -783,7 +803,7 @@ describe("callStepExecution", () => {
 
     const result = await callStepExecution(
       {
-        ...legacyAuthoredWorkflowLoadOpts,
+        ...workflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,
@@ -853,7 +873,7 @@ describe("callStepExecution", () => {
     });
 
     const result = await callStepExecution({
-      ...legacyAuthoredWorkflowLoadOpts,
+      ...workflowLoadOpts,
       workflowRoot: root,
       artifactRoot: artifactsRoot,
       sessionStoreRoot,
@@ -898,7 +918,7 @@ describe("callStepExecution", () => {
 
     const result = await callStepExecution(
       {
-        ...legacyAuthoredWorkflowLoadOpts,
+        ...workflowLoadOpts,
         workflowRoot: root,
         artifactRoot: artifactsRoot,
         sessionStoreRoot,

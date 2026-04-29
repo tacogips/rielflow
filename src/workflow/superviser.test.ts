@@ -7,9 +7,8 @@ import {
   resolveNestedSuperviserAddonRerunFromStepId,
   resolveSupervisionRerunAnchor,
   resolveSupervisionRerunTarget,
-  toStepAddressedWorkflowForSupervision,
 } from "./superviser";
-import type { AutoImprovePolicy, LoadOptions, WorkflowJson } from "./types";
+import type { AutoImprovePolicy, LoadOptions } from "./types";
 import type { WorkflowSessionState } from "./session";
 
 describe("resolveSupervisionRerunAnchor", () => {
@@ -51,7 +50,6 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         "s2",
         sess("e1"),
-        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("s2");
@@ -62,7 +60,6 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("s2"),
-        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("s2");
@@ -73,7 +70,6 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("unknown"),
-        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         stepAddressed,
       ),
     ).toBe("e1");
@@ -85,12 +81,10 @@ describe("resolveNestedSuperviserAddonRerunFromStepId", () => {
       resolveNestedSuperviserAddonRerunFromStepId(
         undefined,
         sess("unknown"),
-        { steps: [...stepAddressed.steps] } as unknown as unknown as WorkflowJson,
         sa,
       ),
     ).toBe("mgr");
   });
-
 });
 
 function policy(over: Partial<AutoImprovePolicy> = {}): AutoImprovePolicy {
@@ -367,46 +361,6 @@ describe("planSupervisionRemediation", () => {
       },
     });
     expect(p.kind).toBe("patch-then-rerun");
-  });
-});
-
-describe("toStepAddressedWorkflowForSupervision", () => {
-  test("passes through authored entryStepId and steps", () => {
-    const wf = {
-      entryStepId: "a",
-      steps: [{ id: "a", nodeId: "n1" }],
-    } as unknown as unknown as WorkflowJson;
-    expect(toStepAddressedWorkflowForSupervision(wf)).toEqual({
-      entryStepId: "a",
-      steps: [{ id: "a", nodeId: "n1" }],
-    });
-  });
-
-  test("returns null when the workflow has no authored steps", () => {
-    const wf = {
-      nodes: [
-        { id: "step-1", nodeFile: "n1.json", kind: "task" as const },
-        { id: "step-2", nodeFile: "n2.json", kind: "task" as const },
-      ],
-    } as unknown as unknown as WorkflowJson;
-    expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();
-  });
-
-  test("returns null when steps cannot be derived", () => {
-    expect(
-      toStepAddressedWorkflowForSupervision({
-        workflowId: "w",
-      } as unknown as unknown as WorkflowJson),
-    ).toBeNull();
-  });
-
-  test("returns null when entryStepId is set but steps are empty", () => {
-    const wf = {
-      entryStepId: "a",
-      steps: [],
-      nodes: [{ id: "legacy", nodeFile: "n.json" }],
-    } as unknown as unknown as WorkflowJson;
-    expect(toStepAddressedWorkflowForSupervision(wf)).toBeNull();
   });
 });
 

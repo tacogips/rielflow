@@ -64,34 +64,7 @@ export function buildSupervisionStallWatch(
 export type StepAddressedWorkflowForSupervision = Pick<
   WorkflowJson,
   "managerStepId" | "entryStepId" | "steps"
-> & {
-  readonly entryStepId: string;
-  readonly steps: NonNullable<WorkflowJson["steps"]>;
-};
-
-/**
- * Builds the step graph {@link planSupervisionRemediation} needs. Authored
- * step-addressed bundles pass through when `entryStepId` is set and `steps` is
- * non-empty. Otherwise returns `null`.
- */
-export function toStepAddressedWorkflowForSupervision(
-  wf: WorkflowJson,
-): StepAddressedWorkflowForSupervision | null {
-  if (wf.entryStepId === undefined) {
-    return null;
-  }
-  const steps = wf.steps;
-  if (steps === undefined || steps.length === 0) {
-    return null;
-  }
-  return {
-    entryStepId: wf.entryStepId,
-    steps,
-    ...(wf.managerStepId === undefined
-      ? {}
-      : { managerStepId: wf.managerStepId }),
-  };
-}
+>;
 
 /**
  * Execution anchor id for a full supervised rerun from the manager/entry point.
@@ -116,22 +89,16 @@ export function resolveSupervisionRerunAnchor(
 export function resolveNestedSuperviserAddonRerunFromStepId(
   requested: string | undefined,
   session: Pick<WorkflowSessionState, "currentNodeId" | "nodeExecutions">,
-  workflow: Pick<WorkflowJson, "steps">,
-  stepAddressed: StepAddressedWorkflowForSupervision,
+  workflow: StepAddressedWorkflowForSupervision,
 ): string {
   if (requested !== undefined) {
     return requested;
   }
-  const workflowForCurrentStep =
-    workflow.steps === undefined ? stepAddressed : workflow;
-  const fromSession = resolveCurrentStepIdFromWorkflow(
-    session,
-    workflowForCurrentStep,
-  );
+  const fromSession = resolveCurrentStepIdFromWorkflow(session, workflow);
   if (fromSession !== null) {
     return fromSession;
   }
-  return resolveSupervisionRerunAnchor(stepAddressed);
+  return resolveSupervisionRerunAnchor(workflow);
 }
 
 /**

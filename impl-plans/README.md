@@ -27,6 +27,7 @@ impl-plans/
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
 | `workflow-legacy-compatibility-removal` | In Progress | `design-workflow-json`, `design-node-jump-and-code-manager-runtime`, `design-unified-workflow-role-model`, `architecture`, `command`, `notes` |
+| `workflow-legacy-compatibility-removal-tail-cleanup` | Ready | `design-workflow-json`, `design-unified-workflow-role-model`, `architecture`, `command`, `notes` |
 
 ## Completed Plans
 
@@ -432,7 +433,7 @@ PHASE_TO_PLANS = {
   130: ["impl-plans/completed/auto-improve-superviser-mode.md"],
   131: ["impl-plans/completed/auto-improve-supervision-review-follow-up.md"],
   132: ["impl-plans/completed/auto-improve-superviser-workflow-phase-2.md"],
-  133: ["impl-plans/workflow-legacy-compatibility-removal.md"],
+  133: ["impl-plans/workflow-legacy-compatibility-removal.md", "impl-plans/workflow-legacy-compatibility-removal-tail-cleanup.md"],
   134: ["impl-plans/graphql-supervision-execution-parity.md"],
 }
 ```

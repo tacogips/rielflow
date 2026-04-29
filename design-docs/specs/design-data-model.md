@@ -28,7 +28,7 @@ A workflow bundle contains:
 
 ### `WorkflowJson`
 
-Authoring and normalized shapes are defined in `src/workflow/types.ts` (`AuthoredWorkflowJson`, `WorkflowJson`). Step-addressed bundles use `entryStepId`, `steps`, and a parallel `nodeRegistry` (plus optional `managerStepId`). Legacy node-graph `workflow.json` may list companion fields such as `edges` / optional `loops`; top-level `managerRuntimeId` / `entryNodeId` are **rejected** by validation (use node `kind` / `role` and structural edges; the normalized `WorkflowJson` never carries those keys). Runners and UI use `resolveWorkflowManagerRuntimeId` / `resolveWorkflowEntryRuntimeId` and structural edge projection instead. Authored `subWorkflows`, `branching`, `workflowCalls`, and related structural conversation metadata are rejected by validation.
+Authoring and normalized shapes are defined in `src/workflow/types.ts` (`AuthoredWorkflowJson`, `WorkflowJson`). Step-addressed bundles use `entryStepId`, `steps`, and a parallel `nodeRegistry` (plus optional `managerStepId`). Legacy node-graph `workflow.json` may list companion fields such as `edges` / optional `loops`; removed top-level node-addressed entry/manager aliases are **rejected** by validation (use node `kind` / `role` and structural edges; the normalized `WorkflowJson` never carries those keys). Runners and UI use `resolveWorkflowManagerStepId` / `resolveWorkflowEntryRuntimeId` and structural edge projection instead. Authored `subWorkflows`, `branching`, `workflowCalls`, and related structural conversation metadata are rejected by validation.
 
 ### `WorkflowDefaults`
 
@@ -53,7 +53,6 @@ Current `NodeKind`:
 - `task`
 - `branch-judge`
 - `loop-judge`
-- `root-manager`
 - `input`
 - `output`
 
@@ -443,10 +442,10 @@ This DB is intentionally secondary to the filesystem artifact contract.
 Important current rules:
 
 - node ids must match the repository's slug-like id pattern
-- for legacy node-graph bundles, exactly one `kind: "root-manager"` node (or a single `role: "manager"` node) is required unless the flow is manager-less, with manager/entry **runtime** ids derived from the graph; normalized bundles do not carry `workflow.managerRuntimeId` as stored convenience fields
+- for legacy node-graph bundles, exactly one manager-role node is required unless the flow is manager-less, with manager/entry **runtime** ids derived from the graph; normalized bundles do not carry removed top-level manager convenience fields
 - branch/loop block semantics are validated against edges and loops
 - `output` contracts reject unsupported fields
-- `kind: "root-manager"` is the canonical **kind** for the workflow manager node; structural `subworkflow-manager` kind strings are rejected
+- structural `subworkflow-manager` kind strings are rejected
 
 Important current absences:
 

@@ -403,9 +403,6 @@ Hidden implementation hotspots already present in the current codebase:
 - `src/graphql/schema.ts`
   - node-execution view assembly currently scans `session.nodeExecutions`
   - workflow-execution overview currently maps only local `session.nodeExecutions`
-- `src/tui/opentui-detail-content.ts`
-  - default selected execution and inbound/outbound communication views are
-    currently local-only
 - `src/cli.ts`
   - progress summaries currently count only local `session.nodeExecutions`
 
@@ -466,8 +463,6 @@ Primary modules expected to change:
 - `src/graphql/schema.ts`
 - `src/server/graphql-executable-schema.ts`
 - `src/cli.ts`
-- `src/tui/opentui-detail-content.ts`
-- TUI/browser workflow-history readers
 
 Suggested implementation phases:
 

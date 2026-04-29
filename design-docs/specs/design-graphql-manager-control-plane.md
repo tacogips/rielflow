@@ -259,7 +259,7 @@ Required ambient identity for LLM-triggered CLI use:
 - `DIVEDRA_MANAGER_SESSION_ID`
 - `DIVEDRA_WORKFLOW_ID`
 - `DIVEDRA_WORKFLOW_EXECUTION_ID`
-- `DIVEDRA_MANAGER_RUNTIME_ID`
+- `DIVEDRA_MANAGER_STEP_ID`
 - `DIVEDRA_MANAGER_NODE_EXEC_ID`
 
 The explicit command form requested by the user is supported:
@@ -281,7 +281,7 @@ Resolution rules:
 - the token is scoped to one tuple:
   - `workflowExecutionId`
   - `managerSessionId`
-  - `managerRuntimeId`
+  - `managerStepId`
   - `managerNodeExecId`
 - normal GraphQL HTTP transport uses `Authorization: Bearer <token>`
 - normal GraphQL HTTP transport forwards `managerSessionId` in `X-Divedra-Manager-Session-Id`
@@ -501,7 +501,7 @@ actions?
 attachments?
 idempotencyKey?
 managerSessionId?
-managerRuntimeId?
+managerStepId?
 managerNodeExecId?
 ```
 
@@ -631,7 +631,7 @@ Concrete direction for the next implementation slice:
   - `payload.actions`
 - widen `payloadRef` to a discriminated union with a shared artifact locator:
   - `NodeOutputRef { kind: "node-output", workflowId, workflowExecutionId, outputNodeId, nodeExecId, artifactDir }`
-  - `ManagerMessagePayloadRef { kind: "manager-message", workflowId, workflowExecutionId, outputNodeId, nodeExecId, artifactDir, managerSessionId, managerMessageId, managerRuntimeId, managerNodeExecId }`
+  - `ManagerMessagePayloadRef { kind: "manager-message", workflowId, workflowExecutionId, outputNodeId, nodeExecId, artifactDir, managerSessionId, managerMessageId, managerStepId, managerNodeExecId }`
 - preserve `sourceNodeExecId` on the communication record:
   - for node-output-backed deliveries it remains the producing node execution id
   - for manager-message-backed deliveries it is the active `managerNodeExecId`
@@ -745,7 +745,7 @@ New persisted concept:
 - `managerSessionId`
 - `workflowId`
 - `workflowExecutionId`
-- `managerRuntimeId`
+- `managerStepId`
 - `managerNodeExecId`
 - `status`
 - `createdAt`

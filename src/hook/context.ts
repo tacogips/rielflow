@@ -86,7 +86,7 @@ export function resolveDivedraHookContext(input: {
   );
   const nodeId =
     readEnvValue(env, "DIVEDRA_NODE_ID") ??
-    readEnvValue(env, "DIVEDRA_MANAGER_RUNTIME_ID");
+    readEnvValue(env, "DIVEDRA_MANAGER_STEP_ID");
   const nodeExecId =
     readEnvValue(env, "DIVEDRA_NODE_EXEC_ID") ??
     readEnvValue(env, "DIVEDRA_MANAGER_NODE_EXEC_ID");

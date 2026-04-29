@@ -1,8 +1,6 @@
 # Bun configuration
 # https://bun.sh/docs/runtime/bunfig
 
-preload = ["@opentui/solid/preload"]
-
 [install]
 # Save exact versions (no ^ or ~ prefixes)
 exact = true

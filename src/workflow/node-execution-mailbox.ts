@@ -12,7 +12,7 @@ import {
   type StepIdentityFields,
 } from "./runtime-addressing";
 import {
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
   type JsonObject,
   type NodePayload,
   type WorkflowJson,
@@ -40,13 +40,13 @@ export interface NodeExecutionMailboxManagedChild {
  * workflow execution. Cross-workflow calls are separate executions.
  */
 export interface NodeExecutionMailboxStructure {
-  /** Historical discriminant; value is always `workflow-execution` in persisted mailbox meta. */
-  readonly type: "workflow-execution";
+  /** Step-addressed mailbox structure discriminant for the current workflow run. */
+  readonly type: "workflow-run";
   /**
-   * Manager **execution** id (`resolveWorkflowManagerRuntimeId`). The field name is
-   * historical; it is not always a registry `nodeId`.
+   * Manager step id (`resolveWorkflowManagerStepId`) in the same step-id space
+   * as the workflow queue.
    */
-  readonly managerRuntimeId?: string;
+  readonly managerStepId?: string;
   readonly nodes?: readonly {
     readonly id: string;
     readonly kind: string;
@@ -255,8 +255,8 @@ function buildMailboxStructure(input: {
 }): NodeExecutionMailboxStructure | undefined {
   if (isManagerNodeRef(input.nodeRef)) {
     return {
-      type: "workflow-execution",
-      managerRuntimeId: resolveWorkflowManagerRuntimeId(input.workflow),
+      type: "workflow-run",
+      managerStepId: resolveWorkflowManagerStepId(input.workflow),
       nodes: input.workflow.nodes.map((node) => ({
         id: node.id,
         kind: describeWorkflowNodeKind(node),
@@ -423,7 +423,7 @@ function renderStructureSection(
   }
   const lines = ["Workflow structure:"];
   lines.push(
-    `- Manager execution id: ${structure.managerRuntimeId ?? ""}`,
+    `- Manager execution id: ${structure.managerStepId ?? ""}`,
   );
   lines.push("- Nodes:");
   for (const node of structure.nodes ?? []) {

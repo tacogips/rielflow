@@ -161,7 +161,7 @@ interface UserActionRecord {
   readonly nodeId: string;
   readonly nodeExecId: string;
   readonly artifactDir: string;
-  readonly managerRuntimeId: string;
+  readonly managerStepId: string;
   readonly status:
     | "dispatching"
     | "waiting-for-reply"

@@ -73,7 +73,7 @@ Divedra-launched Claude Code, Codex, and Gemini processes must receive a generic
 | `DIVEDRA_NODE_EXEC_ID` | Yes | Runtime node execution id for this backend invocation. |
 | `DIVEDRA_AGENT_BACKEND` | No | Backend name such as `codex-agent` or `claude-code-agent`; useful for diagnostics. |
 | `DIVEDRA_MANAGER_SESSION_ID` | No | Manager control-plane session id when the hook runs inside a manager node. |
-| `DIVEDRA_MANAGER_RUNTIME_ID` | No | Backward-compatible manager-specific node id. Used only when `DIVEDRA_NODE_ID` is absent. |
+| `DIVEDRA_MANAGER_STEP_ID` | No | Manager-specific step id. Used only when `DIVEDRA_NODE_ID` is absent. |
 | `DIVEDRA_MANAGER_NODE_EXEC_ID` | No | Backward-compatible manager-specific node execution id. Used only when `DIVEDRA_NODE_EXEC_ID` is absent. |
 
 The backend hook payload supplies `session_id`; divedra records that value as `agentSessionId`. The core association is:

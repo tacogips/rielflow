@@ -204,7 +204,7 @@ export interface OutputSelectionPolicy {
 /**
  * Authored `workflow.json` step-addressed surface (`design-workflow-json.md`). Legacy
  * top-level node/structural aliases are compile-time and validation-time errors; see
- * `REJECTED_AUTHORED_*` exports in `validate.ts` (not session/runtime `managerRuntimeId`).
+ * `REJECTED_AUTHORED_*` exports in `validate.ts`.
  */
 export interface AuthoredWorkflowJson {
   readonly workflowId: string;
@@ -309,7 +309,7 @@ export function resolveWorkflowEntryRuntimeId(workflow: WorkflowJson): string {
  * Primary manager/entry **runtime** id for engine routing, mailbox handoff, and new-session
  * bootstrap. Returns `managerStepId ?? entryStepId` in the same step-id space as `session.queue`.
  */
-export function resolveWorkflowManagerRuntimeId(
+export function resolveWorkflowManagerStepId(
   workflow: WorkflowJson,
 ): string {
   return workflow.managerStepId ?? workflow.entryStepId;
@@ -770,7 +770,6 @@ export interface ResolvedWorkflowSource {
   readonly workflowName: string;
   readonly workflowDirectory: string;
   readonly scopeRoot?: string;
-  readonly legacyProjectRoot?: boolean;
 }
 
 export interface ResolvedAddonSource {

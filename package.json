@@ -19,9 +19,8 @@
   },
   "scripts": {
     "dev": "bun run --watch src/main.ts",
-    "build": "bun run build:server && bun run build:web",
+    "build": "bun run build:server",
     "build:server": "bun build src/main.ts src/lib.ts --outdir dist --target bun && tsc -p tsconfig.build.json --emitDeclarationOnly && rm -rf dist/prompts && cp -R src/workflow/prompts dist/prompts",
-    "build:web": "bun scripts/build-web.mjs",
     "typecheck:server": "tsc --noEmit",
     "start": "bun run src/main.ts",
     "test": "bash ./scripts/run-bun-tests.sh",
@@ -42,20 +41,14 @@
   "trustedDependencies": [],
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
-    "@opentui/core": "0.1.90",
-    "@opentui/solid": "0.1.90",
     "claude-code-agent": "github:tacogips/claude-code-agent#17090d0ff4aff1ab17102aa680c70da90ace9a0e",
     "codex-agent": "github:tacogips/codex-agent#2781229d65e261ab0d40fb1e33d1301e0fc69014",
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",
-    "openai": "6.27.0",
-    "solid-js": "1.9.11"
+    "openai": "6.27.0"
   },
   "devDependencies": {
-    "@babel/core": "7.28.0",
-    "@babel/preset-typescript": "7.27.1",
     "@types/bun": "1.1.14",
-    "babel-preset-solid": "1.9.10",
     "prettier": "3.4.2",
     "typescript": "5.7.2",
     "vitest": "2.1.8"

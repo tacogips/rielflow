@@ -12,7 +12,7 @@ import type { MockNodeScenario } from "../workflow/adapter";
 import type { ChatReplyDispatcher } from "../workflow/types";
 import {
   getNormalizedNodePayload,
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
 } from "../workflow/types";
 import { isEventBindingEnabled, isEventSourceEnabled } from "./config";
 import {
@@ -68,7 +68,7 @@ interface StickyRootManagerContext {
   readonly workflowId: string;
   readonly workflowName: string;
   /** Manager/entry runtime id: step id for step-addressed bundles, else legacy node id. */
-  readonly managerRuntimeId: string;
+  readonly managerStepId: string;
   readonly sourceId: string;
   readonly bindingId: string;
   readonly conversationId: string;
@@ -144,12 +144,12 @@ async function resolveStickyRootManagerContext(input: {
     throw new Error(loaded.error.message);
   }
 
-  const managerRuntimeId = resolveWorkflowManagerRuntimeId(
+  const managerStepId = resolveWorkflowManagerStepId(
     loaded.value.bundle.workflow,
   );
   const managerNode = getNormalizedNodePayload(
     loaded.value.bundle,
-    managerRuntimeId,
+    managerStepId,
   );
   if (managerNode?.sessionPolicy?.mode !== "reuse") {
     return null;
@@ -162,7 +162,7 @@ async function resolveStickyRootManagerContext(input: {
   return {
     workflowId: loaded.value.bundle.workflow.workflowId,
     workflowName: input.binding.workflowName,
-    managerRuntimeId,
+    managerStepId,
     sourceId: input.event.sourceId,
     bindingId: input.binding.id,
     conversationId,
@@ -226,10 +226,10 @@ async function resolveStickyDispatchResolution(input: {
     ...resumable,
     status: "running",
     queue: dedupeNodeIds([
-      stickyContext.managerRuntimeId,
+      stickyContext.managerStepId,
       ...existing.value.queue,
     ]),
-    currentNodeId: stickyContext.managerRuntimeId,
+    currentNodeId: stickyContext.managerStepId,
     runtimeVariables: {
       ...existing.value.runtimeVariables,
       ...input.runtimeVariables,

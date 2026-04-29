@@ -45,15 +45,21 @@ async function writeManagerOnlyWorkflow(input: {
     workflowId: input.workflowName,
     description: "sticky manager workflow",
     defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+    entryStepId: "divedra-manager",
+    managerStepId: "divedra-manager",
     nodes: [
       {
         id: "divedra-manager",
-        role: "manager",
         nodeFile: "node-divedra-manager.json",
-        completion: { type: "none" },
       },
     ],
-    edges: [],
+    steps: [
+      {
+        id: "divedra-manager",
+        nodeId: "divedra-manager",
+        role: "manager",
+      },
+    ],
   });
   await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
     id: "divedra-manager",
@@ -110,7 +116,7 @@ function buildSource(): EventSourceConfig {
 }
 
 describe("workflow trigger runner manager session stickiness", () => {
-  test("reuses the same workflow session for repeated chat events when the root manager is sticky", async () => {
+  test("reuses the same workflow session for repeated chat events when the manager is sticky", async () => {
     const root = await makeTempDir();
     const workflowName = "sticky-chat-manager";
     await writeManagerOnlyWorkflow({
@@ -206,7 +212,7 @@ describe("workflow trigger runner manager session stickiness", () => {
     });
   });
 
-  test("starts a fresh workflow session when root-manager stickiness is disabled", async () => {
+  test("starts a fresh workflow session when manager stickiness is disabled", async () => {
     const root = await makeTempDir();
     const workflowName = "nonsticky-chat-manager";
     await writeManagerOnlyWorkflow({
@@ -316,7 +322,7 @@ describe("workflow trigger runner manager session stickiness", () => {
     expect(third.workflowExecutionId).toBe(first.workflowExecutionId);
   });
 
-  test("reopens the prior workflow when a sticky root-manager session was previously completed", async () => {
+  test("reopens the prior workflow when a sticky manager session was previously completed", async () => {
     const root = await makeTempDir();
     const sessionRoot = path.join(root, "sessions");
     const workflowName = "sticky-then-completed";

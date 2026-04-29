@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { createWorkflowTemplate } from "./create";
 import { loadWorkflowFromDisk } from "./load";
 import { saveWorkflowToDisk } from "./save";
-import { resolveWorkflowManagerRuntimeId } from "./types";
+import { resolveWorkflowManagerStepId } from "./types";
 import {
   REJECTED_AUTHORED_STEP_ADDRESSED_EDGES_FIELD_MESSAGE,
   REJECTED_AUTHORED_TOP_LEVEL_SCHEMA_FIELD_MESSAGE,
@@ -88,7 +88,7 @@ describe("saveWorkflowToDisk", () => {
       return;
     }
 
-    expect(resolveWorkflowManagerRuntimeId(loaded.value.bundle.workflow)).toBe(
+    expect(resolveWorkflowManagerStepId(loaded.value.bundle.workflow)).toBe(
       "main-worker",
     );
 

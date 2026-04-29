@@ -632,7 +632,7 @@ Recommended policies:
 - `queue`: persist pending event and dispatch later
 - `allow`: no per-key concurrency limit
 
-Sticky root-manager session reuse rules:
+Sticky manager-session reuse rules:
 
 - sticky-session lookup must stay binding-local, even when multiple bindings
   target the same workflow and chat conversation

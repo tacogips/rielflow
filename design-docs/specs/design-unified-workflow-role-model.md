@@ -108,7 +108,7 @@ Validation semantics:
 
 Authoring uses the step-addressed contract from `design-workflow-json.md`: `entryStepId`, `steps[]`,
 the reusable node registry in `nodes[]`, and optional `managerStepId`. Session and control-plane
-APIs may still expose a field named `managerRuntimeId`; there it is a **step** id in the same id space
+APIs expose `managerStepId`; there it is a **step** id in the same id space
 as `steps[].id`, not a legacy top-level `workflow.json` alias (those names are rejected on disk).
 
 Shape matches `AuthoredWorkflowJson` in `src/workflow/types.ts` (see `design-workflow-json.md` for

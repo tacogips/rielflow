@@ -1,6 +1,6 @@
 # Architecture Design
 
-This document describes the current runtime architecture implemented in `src/workflow/`, `src/server/`, and `src/tui/`.
+This document describes the current runtime architecture implemented in `src/workflow/` and `src/server/`.
 
 ## Overview
 
@@ -20,7 +20,8 @@ Compatibility-removal rule for ongoing refactors:
 - no new public surface may introduce or preserve node-addressed aliases when a
   step-addressed field already exists
 - new/additive control APIs must target `stepId`, `entryStepId`, and
-  `managerStepId` rather than `nodeId`, `entryNodeId`, or `managerRuntimeId`
+  `managerStepId` rather than node-addressed aliases such as `nodeId` or
+  removed top-level manager fields
 - compatibility paths that still exist are removal targets only; they are not
   valid precedent for new runtime or API design
 
@@ -48,8 +49,8 @@ Current compatibility-removal sequence (see
 - rerun, resume, and direct-control entrypoints should accept authored `stepId`
   targets only
 - workflow validation/load/save reject legacy **authored** fields outright
-- normalized `WorkflowJson` no longer synthesizes step-addressed compatibility
-  companions such as `managerRuntimeId`, structural `subWorkflows`, `edges`, or
+- normalized `WorkflowJson` no longer synthesizes compatibility companions such
+  as removed top-level manager aliases, structural `subWorkflows`, `edges`, or
   repeat-driven `loops`
 - cross-workflow dispatch is derived only from `steps[].transitions` with
   `toWorkflowId` / `resumeStepId` (deterministic ids `__cw:*` via
@@ -104,7 +105,7 @@ The runtime persists three distinct forms of state:
 In scoped catalog mode, `{rootDataDir}` defaults to the owning workflow scope's
 `<scope-root>/artifacts`.
 
-File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI, TUI, and GraphQL inspection queries.
+File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI and GraphQL inspection queries.
 
 When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
 artifact and/or session-store roots, they infer `rootDataDir` from those
@@ -345,51 +346,16 @@ Responsibilities:
 
 Serve-mode behavior:
 
-- `divedra serve` and `divedra web serve` run the same local HTTP control plane
-- `/`, `/web`, and `/ui` serve a read-only Solid workflow viewer shell
-- `/assets/workflow-viewer.js` serves the bundled browser viewer asset, falling back to a source build in development
+- `divedra serve` runs the local HTTP control plane
 - an optional fixed workflow name constrains GraphQL workflow-definition access to that authored bundle
 - `readOnly` is enforced for write mutations
-- legacy workflow/session REST routes remain removed; browser data access goes through `/graphql`
+- legacy workflow/session REST routes remain removed
 
 Manager scope rules:
 
 - manager auth is established from request transport metadata
 - HTTP server ambient environment is not trusted as manager scope
 - manager sessions are minted per real manager-step execution
-
-### TUI Runtime Boundary
-
-Source:
-
-- `src/cli.ts`
-- `src/tui/runtime.ts`
-- `src/tui/opentui-screen.ts`
-- `src/tui/opentui-model.ts`
-- `src/tui/opentui-controller.ts`
-- `src/tui/opentui-detail-content.ts`
-- `src/tui/opentui-host-view.ts`
-- `src/tui/opentui-solid-app.tsx`
-- `src/tui/components/*.tsx`
-
-Responsibilities:
-
-- choose interactive versus fallback TUI runtime mode
-- lazy-load the OpenTUI screen boundary only when interactive rendering is needed
-- preserve direct resume behavior when `--resume-session` cannot use the full-screen TUI
-- keep the checked-in screen host compatible with the `@opentui/solid` view layer
-
-Current implementation status:
-
-- `src/tui/opentui-screen.ts` now creates the renderer and orchestrates focus, key routing, popup wiring, and async workflow actions, while the rendered screen tree lives in `src/tui/opentui-solid-app.tsx` and `src/tui/components/*.tsx`
-- `src/tui/opentui-model.ts` now owns the reusable workflow-preview/header and summary-selection helpers instead of duplicating that presentation logic in the host
-- `src/tui/opentui-controller.ts` owns run/rerun/resume/copy/refresh/input-format orchestration so the host no longer embeds those async action bodies inline
-- `src/tui/opentui-detail-content.ts` now owns mailbox/artifact-backed node-detail content loading plus history-detail pane state assembly so the host no longer embeds that file-IO and summary/viewer/detail decision tree directly
-- `src/tui/opentui-host-view.ts` now owns mounted-ref validation and pane-chrome application so the host does not repeat view-wiring checks and border/title updates across render paths
-- the remaining host-local helpers are renderer-specific concerns such as clipboard integration and bounded-select coordination; workflow/sub-workflow lookup helpers now live on the model seam
-- CLI fallback detection now treats missing `@opentui/core`, `@opentui/solid`, and required `solid-js` runtime modules as reasons to use the non-OpenTUI path
-- interactive `divedra tui` now enters the unified Solid workspace/history/run app directly instead of passing through a separate selector-only OpenTUI surface
-- Bun and TypeScript are configured for the checked-in `.tsx` OpenTUI modules; JSX compilation uses the standard `solid-js` runtime while `@opentui/solid` provides the renderer and terminal component catalogue
 
 ## Event Listener Workflow Triggers
 
@@ -576,4 +542,3 @@ Manager sessions are minted per manager-step execution and expire when that exec
 - `src/events/`
 - `src/graphql/`
 - `src/server/`
-- `src/tui/`

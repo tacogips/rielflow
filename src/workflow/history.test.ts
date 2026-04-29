@@ -196,7 +196,7 @@ describe("deleteWorkflowHistory", () => {
       managerSessionId: "mgrsess-alpha-orphan",
       workflowId: "alpha-id",
       workflowExecutionId: "sess-alpha-orphan",
-      managerRuntimeId: "divedra-manager",
+      managerStepId: "divedra-manager",
       managerNodeExecId: "exec-alpha-orphan",
       status: "completed",
       createdAt: "2026-03-30T00:00:00.000Z",

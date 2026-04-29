@@ -81,7 +81,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerRuntimeId = "divedra-manager",
+  managerStepId = "divedra-manager",
   workflowId = "demo",
 ) {
   const store = createManagerSessionStore({
@@ -92,7 +92,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId,
     workflowExecutionId,
-    managerRuntimeId,
+    managerStepId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -224,13 +224,13 @@ async function createPendingOptionalDecisionSession(input: {
     pendingOptionalNodeDecisions: [
       {
         nodeId: "step-1",
-        owningManagerRuntimeId: "divedra-manager",
+        owningManagerStepId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
       {
         nodeId: "step-2",
-        owningManagerRuntimeId: "divedra-manager",
+        owningManagerStepId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "pending",
       },
@@ -565,7 +565,7 @@ describe("manager-message-service", () => {
     expect(loaded.value.pendingOptionalNodeDecisions).toEqual([
       {
         nodeId: "step-1",
-        owningManagerRuntimeId: "divedra-manager",
+        owningManagerStepId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "execute",
         decidedAt: "2026-03-15T04:15:00.000Z",
@@ -573,7 +573,7 @@ describe("manager-message-service", () => {
       },
       {
         nodeId: "step-2",
-        owningManagerRuntimeId: "divedra-manager",
+        owningManagerStepId: "divedra-manager",
         requestedAt: "2026-03-15T04:00:00.000Z",
         status: "skip",
         reason: "already covered by another branch",

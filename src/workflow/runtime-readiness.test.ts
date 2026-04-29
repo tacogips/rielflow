@@ -45,7 +45,7 @@ function makeBundle(
   } = {},
 ): NormalizedWorkflowBundle {
   const nodeIds = Object.keys(nodePayloads);
-  const managerRuntimeId = nodeIds[0] ?? "node-1";
+  const managerStepId = nodeIds[0] ?? "node-1";
 
   if (options.crossWorkflowTransition !== undefined) {
     return {
@@ -57,7 +57,7 @@ function makeBundle(
           nodeTimeoutMs: 120_000,
         },
         hasManagerNode: false,
-        entryStepId: managerRuntimeId,
+        entryStepId: managerStepId,
         nodeRegistry: nodeIds.map((id) => ({
           id,
           nodeFile: `nodes/node-${id}.json`,
@@ -97,7 +97,7 @@ function makeBundle(
         maxLoopIterations: 3,
         nodeTimeoutMs: 120_000,
       },
-      managerRuntimeId,
+      managerStepId,
       nodes: nodeIds.map((id, index) => ({
         id,
         kind: index === 0 ? "manager" : "task",

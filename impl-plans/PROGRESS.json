@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-04-26T07:16:23Z",
+  "lastUpdated": "2026-04-29T03:53:37Z",
   "phases": {
     "1": { "status": "COMPLETED" },
     "2": { "status": "COMPLETED" },
@@ -3250,6 +3250,32 @@
           "status": "Not Started",
           "parallelizable": false,
           "deps": ["TASK-002", "TASK-003", "TASK-004"]
+        }
+      }
+    },
+    "workflow-legacy-compatibility-removal-tail-cleanup": {
+      "phase": 133,
+      "status": "Ready",
+      "tasks": {
+        "TASK-001": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Not Started",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Not Started",
+          "parallelizable": true,
+          "deps": ["TASK-001"]
+        },
+        "TASK-004": {
+          "status": "Not Started",
+          "parallelizable": false,
+          "deps": ["TASK-002", "TASK-003"]
         }
       }
     }

@@ -99,7 +99,7 @@ async function createCompletedWorkflowFixture(root: string) {
 async function createManagerSession(
   root: string,
   workflowExecutionId: string,
-  managerRuntimeId = "divedra-manager",
+  managerStepId = "divedra-manager",
 ) {
   const store = createManagerSessionStore({
     cwd: root,
@@ -109,7 +109,7 @@ async function createManagerSession(
     managerSessionId: "mgrsess-000001",
     workflowId: "demo",
     workflowExecutionId,
-    managerRuntimeId,
+    managerStepId,
     managerNodeExecId: "exec-000001",
     status: "active",
     createdAt: "2026-03-15T00:00:00.000Z",
@@ -352,7 +352,7 @@ describe("communication-service", () => {
       workflowExecutionId: session.sessionId,
       managerSessionId: "mgrsess-000001",
       managerMessageId,
-      managerRuntimeId: "divedra-manager",
+      managerStepId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       message: "Deliver this updated brief.",
       attachments: [],
@@ -364,7 +364,7 @@ describe("communication-service", () => {
       workflowExecutionId: session.sessionId,
       communicationCounter: session.communicationCounter,
       managerMessageId,
-      managerRuntimeId: "divedra-manager",
+      managerStepId: "divedra-manager",
       managerNodeExecId: "exec-000001",
       targetNodeId: "main-worker",
       payloadRef: artifacts.payloadRef,

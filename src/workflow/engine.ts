@@ -102,7 +102,6 @@ import {
   getEngineSupervisionPatcherId,
   isSupervisionStallLastError,
   planSupervisionRemediation,
-  toStepAddressedWorkflowForSupervision,
 } from "./superviser";
 import {
   buildSuperviserRuntimeControl,
@@ -132,7 +131,7 @@ import {
   asAgentNodePayload,
   getStructuralEdges,
   getStructuralLoops,
-  resolveWorkflowManagerRuntimeId,
+  resolveWorkflowManagerStepId,
 } from "./types";
 
 export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
@@ -167,8 +166,7 @@ export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly resumeSessionId?: string;
   readonly rerunFromSessionId?: string;
   /**
-   * Rerun entry id: step id (and, for legacy node-registry-only bundles without `steps[]`,
-   * the same value may be a node id that identifies the node registry entry to restart from).
+   * Rerun entry step id.
    * Required with {@link rerunFromSessionId} for rerun entry.
    */
   readonly rerunFromStepId?: string;
@@ -618,7 +616,7 @@ function findOwningManagerNodeId(
   workflow: WorkflowJson,
   _nodeId: string,
 ): string {
-  return resolveWorkflowManagerRuntimeId(workflow);
+  return resolveWorkflowManagerStepId(workflow);
 }
 
 function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
@@ -672,7 +670,7 @@ function applyOptionalManagerDecisions(input: {
   readonly managerControl: ParsedManagerControl | null;
   readonly session: WorkflowSessionState;
   readonly workflow: WorkflowJson;
-  readonly managerRuntimeId: string;
+  readonly managerStepId: string;
   readonly managerNodeExecId: string;
   readonly decidedAt: string;
 }): Result<
@@ -709,7 +707,7 @@ function applyOptionalManagerDecisions(input: {
     const existingAction = actionsByNodeId.get(action.stepId);
     if (existingAction !== undefined && existingAction.status !== nextStatus) {
       return err(
-        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${action.stepId}' cannot be both executed and skipped in one manager turn`,
+        `invalid manager control at '${input.managerStepId}': optional ${optionalTargetNoun} '${action.stepId}' cannot be both executed and skipped in one manager turn`,
       );
     }
     actionsByNodeId.set(action.stepId, {
@@ -729,17 +727,17 @@ function applyOptionalManagerDecisions(input: {
     );
     if (currentDecision === undefined || currentDecision.status !== "pending") {
       return err(
-        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${nodeId}' is not currently pending`,
+        `invalid manager control at '${input.managerStepId}': optional ${optionalTargetNoun} '${nodeId}' is not currently pending`,
       );
     }
-    if (currentDecision.owningManagerRuntimeId !== input.managerRuntimeId) {
+    if (currentDecision.owningManagerStepId !== input.managerStepId) {
       return err(
-        `invalid manager control at '${input.managerRuntimeId}': optional ${optionalTargetNoun} '${nodeId}' is owned by '${currentDecision.owningManagerRuntimeId}'`,
+        `invalid manager control at '${input.managerStepId}': optional ${optionalTargetNoun} '${nodeId}' is owned by '${currentDecision.owningManagerStepId}'`,
       );
     }
     if (!isOptionalNode(input.workflow, nodeId)) {
       return err(
-        `invalid manager control at '${input.managerRuntimeId}': ${optionalTargetNoun} '${nodeId}' is not optional`,
+        `invalid manager control at '${input.managerStepId}': ${optionalTargetNoun} '${nodeId}' is not optional`,
       );
     }
     pendingOptionalNodeDecisions = upsertPendingOptionalNodeDecision(
@@ -1182,7 +1180,7 @@ async function executeCrossWorkflowDispatchesForNode(input: {
       sourceNodeExecId: input.callerNodeExecId,
       payloadRef: calleeOutputRef,
       outputRaw: calleeOutput.value.raw,
-      deliveredByNodeId: resolveWorkflowManagerRuntimeId(input.workflow),
+      deliveredByNodeId: resolveWorkflowManagerStepId(input.workflow),
       createdAt: input.createdAt,
     });
     currentCommunicationCounter += 1;
@@ -1520,7 +1518,7 @@ async function persistExternalMailboxOutputCommunication(input: {
       execution: input.execution,
     }),
     outputRaw: input.outputRaw,
-    deliveredByNodeId: resolveWorkflowManagerRuntimeId(input.workflow),
+    deliveredByNodeId: resolveWorkflowManagerStepId(input.workflow),
     createdAt: input.createdAt,
   });
 }
@@ -1866,9 +1864,9 @@ async function runWorkflowInternal(
 
   const runtimeVariables = options.runtimeVariables ?? {};
   const workflow = loaded.value.bundle.workflow;
-  const stepAddressedExecution = workflow.steps !== undefined;
-  /** Noun for the execution key (`nodeId` queue item): step id or legacy node id. */
-  const executionTargetNoun = stepAddressedExecution ? "step" : "node";
+  const stepAddressedExecution = true;
+  /** Noun for the execution key (`nodeId` queue item): step id. */
+  const executionTargetNoun = "step";
   const nodeMap = loaded.value.bundle.nodePayloads;
   const workflowNodes = new Map(
     workflow.nodes.map((entry) => [entry.id, entry]),
@@ -2008,7 +2006,7 @@ async function runWorkflowInternal(
         createSessionId({ workflowId: workflow.workflowId }),
       workflowName,
       workflowId: workflow.workflowId,
-      initialNodeId: resolveWorkflowManagerRuntimeId(workflow),
+      initialNodeId: resolveWorkflowManagerStepId(workflow),
       runtimeVariables,
     });
   }
@@ -2055,8 +2053,8 @@ async function runWorkflowInternal(
           workflowId: workflow.workflowId,
           workflowExecutionId: session.sessionId,
           communicationCounter: session.communicationCounter,
-          deliveredByNodeId: resolveWorkflowManagerRuntimeId(workflow),
-          toNodeId: resolveWorkflowManagerRuntimeId(workflow),
+          deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
+          toNodeId: resolveWorkflowManagerStepId(workflow),
           humanInput,
           createdAt: session.startedAt,
         });
@@ -2229,17 +2227,17 @@ async function runWorkflowInternal(
         pendingOptionalDecision.status === "pending")
     ) {
       const requestedAt = nowIso();
-      const owningManagerRuntimeId = findOwningManagerNodeId(workflow, nodeId);
+      const owningManagerStepId = findOwningManagerNodeId(workflow, nodeId);
       session = {
         ...session,
         status: "running",
-        queue: dedupeNodeIds([...queue, owningManagerRuntimeId]),
-        currentNodeId: owningManagerRuntimeId,
+        queue: dedupeNodeIds([...queue, owningManagerStepId]),
+        currentNodeId: owningManagerStepId,
         pendingOptionalNodeDecisions: upsertPendingOptionalNodeDecision(
           session.pendingOptionalNodeDecisions ?? [],
           {
             nodeId,
-            owningManagerRuntimeId,
+            owningManagerStepId,
             requestedAt,
             status: "pending",
           },
@@ -2368,8 +2366,8 @@ async function runWorkflowInternal(
       const transcriptInput = (session.conversationTurns ?? []).map((turn) => ({
         conversationId: turn.conversationId,
         turnIndex: turn.turnIndex,
-        fromManagerRuntimeId: turn.fromManagerRuntimeId,
-        toManagerRuntimeId: turn.toManagerRuntimeId,
+        fromManagerStepId: turn.fromManagerStepId,
+        toManagerStepId: turn.toManagerStepId,
         communicationId: turn.communicationId,
         outputRef: turn.outputRef,
         sentAt: turn.sentAt,
@@ -2739,7 +2737,7 @@ async function runWorkflowInternal(
               sourceNodeExecId: nodeExecId,
               payloadRef: outputRef,
               outputRaw,
-              deliveredByNodeId: resolveWorkflowManagerRuntimeId(workflow),
+              deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
               createdAt: endedAt,
             });
           }),
@@ -2929,7 +2927,7 @@ async function runWorkflowInternal(
           environment: buildAmbientManagerControlPlaneEnvironment({
             workflowId: workflow.workflowId,
             workflowExecutionId: session.sessionId,
-            managerRuntimeId: nodeId,
+            managerStepId: nodeId,
             managerNodeExecId: nodeExecId,
             managerSessionId,
             authToken: managerAuthToken,
@@ -2941,7 +2939,7 @@ async function runWorkflowInternal(
             managerSessionId,
             workflowId: workflow.workflowId,
             workflowExecutionId: session.sessionId,
-            managerRuntimeId: nodeId,
+            managerStepId: nodeId,
             managerNodeExecId: nodeExecId,
             status: "active",
             createdAt: startedAt,
@@ -3473,7 +3471,7 @@ async function runWorkflowInternal(
           managerSessionId,
           workflowId: workflow.workflowId,
           workflowExecutionId: session.sessionId,
-          managerRuntimeId: nodeId,
+          managerStepId: nodeId,
           managerNodeExecId: nodeExecId,
           status: finalStatus,
           createdAt: startedAt,
@@ -3492,7 +3490,7 @@ async function runWorkflowInternal(
             businessPayload === null
               ? null
               : parseManagerControlPayload(businessPayload, workflow, {
-                  managerRuntimeId: nodeId,
+                  managerStepId: nodeId,
                   ...(nodeRef.role === undefined
                     ? {}
                     : { managerRole: nodeRef.role }),
@@ -3670,7 +3668,7 @@ async function runWorkflowInternal(
         managerControl,
         session,
         workflow,
-        managerRuntimeId: nodeId,
+        managerStepId: nodeId,
         managerNodeExecId: nodeExecId,
         decidedAt: endedAt,
       });
@@ -4192,7 +4190,7 @@ async function runWorkflowInternal(
             sourceNodeExecId: nodeExecId,
             payloadRef: outputRef,
             outputRaw,
-            deliveredByNodeId: resolveWorkflowManagerRuntimeId(workflow),
+            deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
             createdAt: endedAt,
           });
         }),
@@ -4550,17 +4548,7 @@ async function runAutoImproveLoop(
       );
     }
     const targetWorkflow = wfForTarget.value.bundle.workflow;
-    const workflowForSupervision =
-      toStepAddressedWorkflowForSupervision(targetWorkflow);
-    if (workflowForSupervision === null) {
-      return err(
-        workflowRunFailure(
-          2,
-          "supervision rerun requires entryStepId with non-empty steps on the target workflow",
-          failedSession,
-        ),
-      );
-    }
+    const workflowForSupervision = targetWorkflow;
     const remediationPlan = planSupervisionRemediation({
       policy,
       sup,

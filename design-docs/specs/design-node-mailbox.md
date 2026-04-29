@@ -71,7 +71,7 @@ Allocator durability contract (when allocator logs are in use for a deployment):
 
 Manager scoping rules:
 - the workflow manager for a run routes deliveries among nodes in **that** `workflowExecutionId`
-- a callable child workflow is a **new** `workflowExecutionId` under the callee's `workflowId`; parent-to-child work crosses executions at the child root-manager boundary, not as inline nested sub-graph routing inside the parent bundle
+- a callable child workflow is a **new** `workflowExecutionId` under the callee's `workflowId`; parent-to-child work crosses executions at the child manager/entry-step boundary, not as inline nested sub-graph routing inside the parent bundle
 - child-internal mailbox traffic after the child run starts stays under the child execution artifact root
 
 ## Mailbox Directory Layout
@@ -98,8 +98,8 @@ Mailbox artifacts are stored under the execution artifact root:
 
 Path rules:
 - one `communicationId` targets exactly one sender node and one recipient node
-- for a cross-execution handoff, `toNodeId` names the **recipient** node at the handoff boundary (for example the callee's root manager step id) as resolved by the runtime for that call
-- for parent-to-child-workflow invocation, the parent-side recipient is the child workflow entry/root-manager boundary; the child run materializes its own execution-local state from that handoff
+- for a cross-execution handoff, `toNodeId` names the **recipient** node at the handoff boundary (for example the callee's manager or entry step id) as resolved by the runtime for that call
+- for parent-to-child-workflow invocation, the parent-side recipient is the child workflow entry/manager-step boundary; the child run materializes its own execution-local state from that handoff
 - fan-out to multiple downstream nodes creates one `communicationId` per recipient
 - `inbox/{toNodeId}` and `outbox/{fromNodeId}` are both required, even though the sender/recipient are also present in metadata; this keeps filesystem inspection simple
 - `outbox/{fromNodeId}/output.json` is a manager-written immutable snapshot copy of the sender payload at send time
