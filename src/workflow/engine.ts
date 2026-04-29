@@ -807,8 +807,9 @@ function findLatestCrossWorkflowCalleeResultExecution(
 
 /**
  * Merges caller state into `runtimeVariables.workflowCall` for a cross-workflow callee run.
- * The top-level key remains `workflowCall` for template compatibility; `workflowCall.id` is the
- * step-derived dispatch id (`__cw:<callerStepId>`). Serialized `parentWorkflowId` /
+ * The top-level key remains `workflowCall` (stable runtime-variables name; not authored
+ * `workflow.workflowCalls`, which validation rejects). `workflowCall.id` is the step-derived
+ * dispatch id (`__cw:<callerStepId>`). Serialized `parentWorkflowId` /
  * `parentWorkflowExecutionId` keep historical field names; they refer to the invoking (caller)
  * workflow, not a structural sub-workflow relationship.
  */

@@ -205,9 +205,9 @@ export interface OutputSelectionPolicy {
 }
 
 /**
- * Authored `workflow.json` step-addressed surface (`design-workflow-json.md`). Legacy
- * top-level node/structural aliases are compile-time and validation-time errors; see
- * `REJECTED_AUTHORED_*` exports in `validate.ts`.
+ * Authored `workflow.json` step-addressed surface (`design-workflow-json.md`). Former
+ * top-level node or structural authoring aliases are compile-time and validation-time
+ * errors; see `REJECTED_AUTHORED_*` exports in `validate.ts`.
  */
 export interface AuthoredWorkflowJson {
   readonly workflowId: string;

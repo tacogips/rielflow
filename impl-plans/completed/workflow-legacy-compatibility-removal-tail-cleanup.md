@@ -488,6 +488,16 @@ Expected output after each recursion:
 **Blockers**: None
 **Notes**: Architecture remains aligned with strict step-addressed authoring and step-derived cross-workflow dispatch per `design-workflow-json.md` and `design-unified-workflow-role-model.md`.
 
+### Session: 2026-04-29 (post-merge review: tests + plan matrix)
+
+**Tasks Completed**: Full `scripts/run-bun-tests.sh` re-run (**616** pass); grep audit confirmed no legacy-key JSON samples under `design-docs/` or `examples/`; fixed `workflow-legacy-compatibility-removal.md` review-matrix **Error contract** row (it still described `rewriteCallStepFailureMessage` after removal) and clarified handoff stub vs `completed/` archive paths; added iteration note to root tail-cleanup stub.
+
+**Tasks In Progress**: None
+
+**Blockers**: None
+
+**Notes**: `divedra call-node ...` now reaches generic `unknown scope: call-node` (removed dedicated branch per scope); acceptable per removal-only posture. JSDoc on `buildCrossWorkflowCalleeRuntimeVariables` in `src/workflow/engine.ts` was updated to spell out `runtimeVariables.workflowCall` versus rejected authored `workflow.workflowCalls` (mirrors `architecture.md` / `design-unified-workflow-role-model.md`).
+
 ## Related Plans
 
 - **Previous**: `impl-plans/workflow-legacy-compatibility-removal.md`
