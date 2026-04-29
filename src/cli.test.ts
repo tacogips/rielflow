@@ -447,7 +447,9 @@ describe("runCli", () => {
     expect(help).toContain("Usage:");
     expect(help).toContain("call-step <workflow-id> <workflow-run-id> <step-id>");
     expect(help).toContain("--superviser-workflow");
+    expect(help).toContain("--supervisor-workflow");
     expect(help).toContain("--nested-superviser");
+    expect(help).toContain("--nested-supervisor");
     expect(help).toContain("--no-allow-targeted-rerun");
     expect(help).toContain("--disable-targeted-rerun");
   });
@@ -1211,6 +1213,26 @@ describe("runCli", () => {
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
       "--monitor-interval-ms requires --auto-improve",
+    );
+  });
+
+  test("workflow run rejects --nested-supervisor without --auto-improve", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "supervised-mock-retry",
+        "--workflow-root",
+        path.join(process.cwd(), "examples"),
+        "--nested-supervisor",
+      ],
+      capture.io,
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--nested-superviser / --nested-supervisor require --auto-improve",
     );
   });
 
@@ -2507,6 +2529,82 @@ describe("runCli", () => {
     });
   });
 
+  test("workflow run forwards canonical supervisor CLI aliases through GraphQL transport", async () => {
+    const capture = createIoCapture();
+    const requests: Readonly<Record<string, unknown>>[] = [];
+
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "demo",
+        "--endpoint",
+        "http://example.test/graphql",
+        "--auto-improve",
+        "--nested-supervisor",
+        "--supervisor-workflow",
+        "custom-superviser",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+        fetchImpl: async (_input, init) => {
+          const body = JSON.parse(String(init?.body)) as Readonly<
+            Record<string, unknown>
+          >;
+          requests.push(body);
+          const query = typeof body["query"] === "string" ? body["query"] : "";
+          if (query.includes("mutation ExecuteWorkflow")) {
+            return createJsonResponse({
+              data: {
+                executeWorkflow: {
+                  workflowExecutionId: "sess-remote-supervised",
+                  sessionId: "sess-remote-supervised",
+                  status: "running",
+                  exitCode: 0,
+                },
+              },
+            });
+          }
+          return createJsonResponse({
+            data: {
+              workflowExecution: {
+                session: {
+                  sessionId: "sess-remote-supervised",
+                  workflowName: "demo",
+                  workflowId: "demo",
+                  transitions: [],
+                },
+                nodeExecutions: [],
+              },
+            },
+          });
+        },
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(requests[0]).toMatchObject({
+      variables: {
+        input: {
+          workflowName: "demo",
+          nestedSuperviser: true,
+          autoImprove: {
+            enabled: true,
+            superviserWorkflowId: "custom-superviser",
+          },
+        },
+      },
+    });
+  });
+
   test("session resume forwards auto-improve and nested-superviser through GraphQL transport", async () => {
     const capture = createIoCapture();
     let requestedBody: Readonly<Record<string, unknown>> | undefined;
@@ -2580,7 +2678,7 @@ describe("runCli", () => {
 
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
-      "--nested-superviser is not supported for session rerun",
+      "not supported for session rerun",
     );
   });
 

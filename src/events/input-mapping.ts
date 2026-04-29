@@ -98,7 +98,7 @@ function renderTemplateValue(
   return value;
 }
 
-function buildEventRuntimeMetadata(
+export function buildEventRuntimeMetadata(
   event: ExternalEventEnvelope,
 ): EventRuntimeMetadata {
   return {

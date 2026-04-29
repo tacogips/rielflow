@@ -1,0 +1,15 @@
+{
+  "eventId": "chat-supervised-1",
+  "eventType": "chat.supervised.demo",
+  "actor": {
+    "id": "user-1",
+    "displayName": "Example User"
+  },
+  "conversation": {
+    "id": "example-channel",
+    "threadId": "thread-supervised-demo"
+  },
+  "input": {
+    "text": "start"
+  }
+}

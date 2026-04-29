@@ -15,10 +15,9 @@ Store questions, pending decisions, and items awaiting user approval.
 
 ## Current Items
 
-There are no active user-confirmation documents tracked in this directory.
-Historical examples and stale pre-implementation question files were removed
-after the corresponding behavior landed in `src/` or was consolidated into the
-main design docs.
+- `qa-event-supervisor-control.md`: public naming, default restart limit,
+  chat command structure, multi-run correlation, and cancellation propagation
+  decisions for event-driven workflow supervisor control.
 
 ## Adding New Items
 

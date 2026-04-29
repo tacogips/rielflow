@@ -303,4 +303,55 @@ describe("event configuration", () => {
       ]),
     );
   });
+
+  test("rejects malformed supervised command-map configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat-webhook.json"), {
+      id: "chat-webhook",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "supervised-demo.json"), {
+      id: "supervised-demo",
+      sourceId: "chat-webhook",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+      execution: {
+        mode: "supervised",
+        control: {
+          intentMapping: {
+            mode: "command-map",
+            inputPath: "event.input.text",
+            commands: {
+              start: 1,
+              invalidAction: "status",
+            },
+            defaultAction: "launch",
+          },
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "bindings.supervised-demo.execution.control.intentMapping.defaultAction",
+        "bindings.supervised-demo.execution.control.intentMapping.commands.start",
+        "bindings.supervised-demo.execution.control.intentMapping.commands.invalidAction",
+      ]),
+    );
+  });
 });

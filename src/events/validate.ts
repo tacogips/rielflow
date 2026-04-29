@@ -88,7 +88,9 @@ function validateTemplateValue(
       const ref = match[1];
       if (
         ref === undefined ||
-        (!ref.startsWith("event.") && !ref.startsWith("source."))
+        (!ref.startsWith("event.") &&
+          !ref.startsWith("source.") &&
+          !ref.startsWith("binding."))
       ) {
         issues.push(
           error(pathName, `unsupported template reference '${ref ?? ""}'`),
@@ -291,6 +293,259 @@ async function listWorkflowNames(
   return new Set(sources.value.map((source) => source.workflowName));
 }
 
+const SUPERVISOR_ACTION_SET = new Set<string>([
+  "start",
+  "stop",
+  "restart",
+  "status",
+  "input",
+]);
+
+function isSupervisorActionName(value: unknown): value is string {
+  return typeof value === "string" && SUPERVISOR_ACTION_SET.has(value);
+}
+
+export function assertSupervisedBindingGraphqlPolicy(
+  binding: EventBinding,
+): void {
+  const issues: EventConfigValidationIssue[] = [];
+  validateSupervisedBinding(binding, issues);
+  const firstError = issues.find((issue) => issue.severity === "error");
+  if (firstError !== undefined) {
+    throw new Error(`${firstError.path}: ${firstError.message}`);
+  }
+}
+
+function validateSupervisedBinding(
+  binding: EventBinding,
+  issues: EventConfigValidationIssue[],
+): void {
+  const execution = binding.execution;
+  if (execution?.mode !== "supervised") {
+    return;
+  }
+  const pathPrefix = `bindings.${binding.id}.execution`;
+  if (
+    execution.supervisorWorkflowName !== undefined &&
+    execution.supervisorWorkflowName !== null &&
+    (typeof execution.supervisorWorkflowName !== "string" ||
+      execution.supervisorWorkflowName.length === 0)
+  ) {
+    issues.push(
+      error(
+        `${pathPrefix}.supervisorWorkflowName`,
+        "supervisorWorkflowName must be a non-empty string when set",
+      ),
+    );
+  }
+  const maxRestarts = execution.maxRestartsOnFailure;
+  if (
+    maxRestarts !== undefined &&
+    (!Number.isInteger(maxRestarts) || maxRestarts < 0)
+  ) {
+    issues.push(
+      error(
+        `${pathPrefix}.maxRestartsOnFailure`,
+        "maxRestartsOnFailure must be a non-negative integer",
+      ),
+    );
+  }
+  const control = execution.control;
+  if (control?.correlationKey !== undefined) {
+    if (typeof control.correlationKey !== "string") {
+      issues.push(
+        error(
+          `${pathPrefix}.control.correlationKey`,
+          "correlationKey must be a string template",
+        ),
+      );
+    } else {
+      validateTemplateValue(
+        control.correlationKey,
+        `${pathPrefix}.control.correlationKey`,
+        issues,
+      );
+    }
+  }
+  if (
+    control?.startOnFirstInput !== undefined &&
+    typeof control.startOnFirstInput !== "boolean"
+  ) {
+    issues.push(
+      error(
+        `${pathPrefix}.control.startOnFirstInput`,
+        "startOnFirstInput must be a boolean when set",
+      ),
+    );
+  }
+  const allow = control?.allowActions;
+  if (allow !== undefined) {
+    if (!Array.isArray(allow) || allow.length === 0) {
+      issues.push(
+        error(
+          `${pathPrefix}.control.allowActions`,
+          "allowActions must be a non-empty array when set",
+        ),
+      );
+    } else {
+      for (const [index, entry] of allow.entries()) {
+        if (typeof entry !== "string" || !SUPERVISOR_ACTION_SET.has(entry)) {
+          issues.push(
+            error(
+              `${pathPrefix}.control.allowActions[${String(index)}]`,
+              `unknown supervisor action '${String(entry)}'`,
+            ),
+          );
+        }
+      }
+    }
+  }
+  const intent = control?.intentMapping;
+  if (intent !== undefined && !isJsonObject(intent)) {
+    issues.push(
+      error(
+        `${pathPrefix}.control.intentMapping`,
+        "intentMapping must be an object",
+      ),
+    );
+  } else if (isJsonObject(intent)) {
+    const mode = intent["mode"];
+    if (
+      mode !== "structured-or-command" &&
+      mode !== "command-map" &&
+      mode !== "structured-only" &&
+      mode !== "llm-command"
+    ) {
+      issues.push(
+        error(
+          `${pathPrefix}.control.intentMapping.mode`,
+          "intentMapping.mode must be structured-or-command, command-map, structured-only, or llm-command",
+        ),
+      );
+    }
+    const defaultAction = intent["defaultAction"];
+    if (mode !== "llm-command") {
+      if (
+        defaultAction !== undefined &&
+        !isSupervisorActionName(defaultAction)
+      ) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.defaultAction`,
+            "defaultAction must be one of start, stop, restart, status, or input when set",
+          ),
+        );
+      }
+    }
+    if (mode === "llm-command") {
+      const resolverWorkflowName = intent["resolverWorkflowName"];
+      if (
+        typeof resolverWorkflowName !== "string" ||
+        resolverWorkflowName.length === 0
+      ) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.resolverWorkflowName`,
+            "llm-command intentMapping.resolverWorkflowName must be a non-empty string",
+          ),
+        );
+      }
+      const resolverNodeId = intent["resolverNodeId"];
+      if (typeof resolverNodeId !== "string" || resolverNodeId.length === 0) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.resolverNodeId`,
+            "llm-command intentMapping.resolverNodeId must be a non-empty string",
+          ),
+        );
+      }
+      const minConfidence = intent["minConfidence"];
+      if (minConfidence !== undefined) {
+        if (
+          typeof minConfidence !== "number" ||
+          minConfidence < 0 ||
+          minConfidence > 1
+        ) {
+          issues.push(
+            error(
+              `${pathPrefix}.control.intentMapping.minConfidence`,
+              "minConfidence must be a number in [0, 1] when set",
+            ),
+          );
+        }
+      }
+      const llmDefaultAction = intent["defaultAction"];
+      if (
+        llmDefaultAction !== undefined &&
+        llmDefaultAction !== "input" &&
+        llmDefaultAction !== "ignore"
+      ) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.defaultAction`,
+            "llm-command defaultAction must be 'input' or 'ignore' when set",
+          ),
+        );
+      }
+      const inputPath = intent["inputPath"];
+      if (
+        inputPath !== undefined &&
+        (typeof inputPath !== "string" || inputPath.length === 0)
+      ) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.inputPath`,
+            "inputPath must be a non-empty dotted path when set",
+          ),
+        );
+      }
+    }
+    if (mode === "command-map") {
+      const commands = intent["commands"];
+      if (!isJsonObject(commands)) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.commands`,
+            "command-map intentMapping.commands must be an object",
+          ),
+        );
+      } else {
+        for (const [actionName, token] of Object.entries(commands)) {
+          if (!isSupervisorActionName(actionName)) {
+            issues.push(
+              error(
+                `${pathPrefix}.control.intentMapping.commands.${actionName}`,
+                `unknown supervisor action '${actionName}'`,
+              ),
+            );
+            continue;
+          }
+          if (typeof token !== "string" || token.length === 0) {
+            issues.push(
+              error(
+                `${pathPrefix}.control.intentMapping.commands.${actionName}`,
+                "command token must be a non-empty string",
+              ),
+            );
+          }
+        }
+      }
+      const inputPath = intent["inputPath"];
+      if (
+        inputPath !== undefined &&
+        (typeof inputPath !== "string" || inputPath.length === 0)
+      ) {
+        issues.push(
+          error(
+            `${pathPrefix}.control.intentMapping.inputPath`,
+            "inputPath must be a non-empty dotted path when set",
+          ),
+        );
+      }
+    }
+  }
+}
+
 function validateBinding(
   binding: EventBinding,
   sourcesById: ReadonlyMap<string, EventSourceConfig>,
@@ -346,6 +601,7 @@ function validateBinding(
   if (binding.enabled === false) {
     issues.push(warning(`bindings.${binding.id}`, "binding is disabled"));
   }
+  validateSupervisedBinding(binding, issues);
 }
 
 export async function validateEventConfiguration(

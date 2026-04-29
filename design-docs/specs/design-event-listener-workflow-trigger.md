@@ -97,8 +97,8 @@ Provider SDK / Cron Timer / HTTP Webhook
   -> EventBindingMatcher
   -> InputMapper
   -> EventLedger
-  -> WorkflowTriggerRunner
-  -> divedra workflow run, createWorkflowExecutionClient(), or GraphQL executeWorkflow
+  -> WorkflowTriggerRunner or EventSupervisorRouter
+  -> direct divedra workflow execution or workflow supervisor control
 ```
 
 ### `EventSourceAdapter`
@@ -194,7 +194,10 @@ Rules:
 - omitted `enabled` means enabled
 - omitted `execution.async` means true
 - one event may match multiple bindings
-- one binding always starts at most one workflow run per accepted event
+- one direct binding starts at most one workflow run per accepted event
+- one supervised binding dispatches at most one supervisor command per accepted
+  event; that command may start, stop, restart, inspect, or deliver input to a
+  supervised run
 
 ### `EventInputMapping`
 
@@ -234,7 +237,9 @@ Responsibilities:
 - convert mapped input into `runtimeVariables`
 - choose command, local library, or remote GraphQL execution
 - set `async: true` by default
-- persist workflow execution id against the event ledger record
+- persist workflow execution id against the event ledger record in direct mode
+- persist supervisor command/run ids and target workflow execution ids against
+  the event ledger record in supervised mode
 - avoid provider-specific imports
 
 Recommended in-process or remote call path:
@@ -254,6 +259,13 @@ createWorkflowExecutionClient({
 
 When `endpoint` is configured, the event process can run as a lightweight
 listener that does not load or execute workflows locally.
+
+For bindings that need long-lived lifecycle control, the trigger runner should
+delegate to the supervised event control path instead of starting the target
+workflow directly. In that mode, the listener maps the event into a structured
+supervisor command and sends it to the workflow supervisor, which owns target
+workflow start, stop, restart, status, and failure restart policy. See
+`design-docs/specs/design-event-supervisor-control.md`.
 
 Command dispatch is also a valid boundary for listener processes that should
 only depend on the installed CLI:
@@ -558,6 +570,47 @@ source adapter:
 }
 ```
 
+Supervised bindings extend the existing `execution` block with
+`mode: "supervised"`. Omitted mode remains `"direct"`:
+
+```json
+{
+  "id": "chat-controlled-review",
+  "sourceId": "web-chat",
+  "workflowName": "release-review",
+  "inputMapping": {
+    "mode": "event-input",
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "mode": "supervised",
+    "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+    "maxRestartsOnFailure": 3,
+    "autoImprove": false,
+    "control": {
+      "correlationKey": "{{event.sourceId}}:{{binding.id}}:{{event.conversation.id}}:{{event.conversation.threadId}}",
+      "startOnFirstInput": true,
+      "allowActions": ["start", "stop", "restart", "status", "input"]
+    }
+  }
+}
+```
+
+In supervised mode, `workflowName` is still the target workflow. The event
+listener maps each accepted event to a supervisor command and routes it through
+the runtime supervisor control service (local library or remote GraphQL), which
+owns supervised-run records and target lifecycle for the correlation key. Phase
+1 implements that control plane directly over existing workflow execution APIs;
+an authored `supervisorWorkflowName` workflow execution is not started yet, but
+the name is recorded on supervised-run rows for forward-compatible Phase 2
+routing. `supervisorWorkflowName` is the proposed event-layer field name;
+implementation may translate it to existing `superviserWorkflowId` runtime
+fields until naming is migrated deliberately.
+Control-field templates may reference normalized `event.*`, `source.*`, and
+`binding.*` values. `startOnFirstInput` lets chat/web-chat bindings treat the
+first ordinary message in a conversation as a target workflow start instead of
+requiring a separate `start` command.
+
 ## Runtime Persistence
 
 Add an event ledger that records every accepted, skipped, duplicate, failed, and
@@ -733,6 +786,11 @@ Recommended CLI additions:
   executes workflows in-process
 - remote mode: uses GraphQL `executeWorkflow` against `--endpoint`
 
+When a binding uses `execution.mode = "supervised"`, both local and remote modes
+must route through the supervisor control contract rather than direct target
+execution. The same event source should then be able to start a target workflow
+and later stop, restart, or inspect it by correlation key.
+
 Recommended environment variables:
 
 - `DIVEDRA_EVENT_ROOT`
@@ -762,6 +820,11 @@ Event config validation should fail when:
 - `inputMapping` references paths not present in the normalized event schema
   when the schema is statically known
 - `execution.maxConcurrentPerKey` is less than 1
+- `execution.mode` is neither `"direct"` nor `"supervised"`
+- `execution.mode = "supervised"` has no finite restart limit after defaults
+  are applied
+- `execution.mode = "supervised"` allows multiple active runs for the same
+  correlation key without requiring an explicit target alias or supervised run id
 - `execution.async: false` is used for webhook-backed sources unless explicitly
   allowed by an unsafe/local option
 
@@ -779,6 +842,7 @@ Event config validation should fail when:
 10. Optional reply publisher after workflow completion.
 11. Signal adapter if operational requirements and dependency choice are
     accepted.
+12. Supervised event control path for chat and web app lifecycle commands.
 
 ## References
 

@@ -28,6 +28,7 @@ import {
 import {
   loadSession,
   listSessions as listStoredSessions,
+  saveSession,
   type SessionStoreOptions,
 } from "./workflow/session-store";
 import {
@@ -66,6 +67,8 @@ export interface ExecuteWorkflowInput extends DivedraOptions {
   /**
    * Phase-2: run the configured superviser workflow as a nested session (requires
    * `autoImprove`; see engine `runWorkflow` option `nestedSuperviserDriver`).
+   * CLI: prefer `--supervisor-workflow` / `--nested-supervisor` (aliases for legacy
+   * `--superviser-workflow` / `--nested-superviser`).
    */
   readonly nestedSuperviserDriver?: boolean;
 }
@@ -697,6 +700,48 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   };
 }
 
+export async function cancelWorkflowExecution(input: {
+  readonly workflowExecutionId: string;
+} & DivedraOptions): Promise<{
+  readonly accepted: boolean;
+  readonly workflowExecutionId: string;
+  readonly sessionId: string;
+  readonly status: WorkflowSessionState["status"];
+}> {
+  const loaded = await loadSession(input.workflowExecutionId, input);
+  if (!loaded.ok) {
+    throw new Error(loaded.error.message);
+  }
+  if (
+    loaded.value.status === "completed" ||
+    loaded.value.status === "failed" ||
+    loaded.value.status === "cancelled"
+  ) {
+    return {
+      accepted: false,
+      workflowExecutionId: loaded.value.sessionId,
+      sessionId: loaded.value.sessionId,
+      status: loaded.value.status,
+    };
+  }
+  const cancelled: WorkflowSessionState = {
+    ...loaded.value,
+    status: "cancelled",
+    endedAt: new Date().toISOString(),
+    lastError: "cancelled via cancelWorkflowExecution",
+  };
+  const saved = await saveSession(cancelled, input);
+  if (!saved.ok) {
+    throw new Error(saved.error.message);
+  }
+  return {
+    accepted: true,
+    workflowExecutionId: cancelled.sessionId,
+    sessionId: cancelled.sessionId,
+    status: cancelled.status,
+  };
+}
+
 export async function getSession(
   sessionId: string,
   options: DivedraOptions = {},
@@ -893,6 +938,26 @@ export {
   resolveWorkflowSource,
 } from "./workflow/catalog";
 export { runWorkflow } from "./workflow/engine";
+export {
+  createWorkflowSupervisorGraphqlClient,
+  type WorkflowSupervisorGraphqlClientOptions,
+} from "./workflow/supervisor-graphql-client";
+export {
+  createWorkflowSupervisorClient,
+  type SupervisedWorkflowView,
+  type SupervisorEngineOverrides,
+  type WorkflowSupervisorClient,
+  type StartSupervisedWorkflowInput,
+  type StopSupervisedWorkflowInput,
+  type RestartSupervisedWorkflowInput,
+  type SupervisedWorkflowLookup,
+  type SubmitSupervisedWorkflowInput,
+} from "./workflow/supervisor-client";
+export {
+  buildSupervisorChatConversation,
+  dispatchSupervisorChat,
+  type DispatchSupervisorChatInput,
+} from "./events/dispatch-supervisor-chat";
 /**
  * Direct single-step execution for step-addressed workflow bundles. Failures
  * are rewritten to step-oriented messages at this boundary. For a

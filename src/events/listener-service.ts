@@ -240,6 +240,8 @@ export async function handleEventHttpRequest(
           status: result.receipt.status,
           duplicate: result.duplicate,
           workflowExecutionId: result.workflowExecutionId ?? null,
+          supervisedRunId: result.supervisedRunId ?? null,
+          supervisorExecutionId: result.supervisorExecutionId ?? null,
         })),
       },
       202,

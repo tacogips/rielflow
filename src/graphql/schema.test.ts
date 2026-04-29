@@ -1955,9 +1955,7 @@ describe("createGraphqlSchema", () => {
     expect(reloaded?.bundle.workflow.entryStepId).toBe("main-worker");
     expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
     expect(
-      reloaded == null
-        ? true
-        : "managerRuntimeId" in reloaded.bundle.workflow,
+      reloaded == null ? true : "managerRuntimeId" in reloaded.bundle.workflow,
     ).toBe(false);
     expect(
       reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,
@@ -2062,9 +2060,7 @@ describe("createGraphqlSchema", () => {
     expect(reloaded?.bundle.workflow.entryStepId).toBe("main-worker");
     expect(reloaded?.bundle.workflow.managerStepId).toBeUndefined();
     expect(
-      reloaded == null
-        ? true
-        : "managerRuntimeId" in reloaded.bundle.workflow,
+      reloaded == null ? true : "managerRuntimeId" in reloaded.bundle.workflow,
     ).toBe(false);
     expect(
       reloaded == null ? true : "entryNodeId" in reloaded.bundle.workflow,
@@ -2127,5 +2123,361 @@ describe("createGraphqlSchema", () => {
         },
       ),
     ).rejects.toThrow("invalid manager auth");
+  });
+
+  test("dispatchSupervisedWorkflowCommand starts target and supervisedWorkflowRun reads it back", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const sessionId = "sess-supervised-gql-start";
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId,
+              workflowName: "demo",
+              workflowId: "demo",
+              initialNodeId: "divedra-manager",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const schema = createGraphqlSchema();
+    const binding = {
+      id: "bind-sup-1",
+      sourceId: "src-1",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" as const },
+      execution: {
+        mode: "supervised" as const,
+        async: true,
+        control: { intentMapping: { mode: "structured-only" as const } },
+      },
+    };
+
+    const dispatchPayload =
+      await schema.mutation.dispatchSupervisedWorkflowCommand(
+        {
+          command: {
+            commandId: "cmd-sup-1",
+            sourceId: "src-1",
+            bindingId: "bind-sup-1",
+            correlationKey: "corr-1",
+            action: "start",
+            targetWorkflowName: "demo",
+            receivedEventReceiptId: "rcpt-1",
+          },
+          binding,
+        },
+        options,
+      );
+
+    expect(runWorkflowSpy).toHaveBeenCalled();
+    expect(dispatchPayload.supervisedRun.activeTargetExecutionId).toBe(
+      sessionId,
+    );
+
+    const savedAfter = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "divedra-manager",
+          runtimeVariables: {},
+        }),
+        status: "running" as const,
+      },
+      options,
+    );
+    expect(savedAfter.ok).toBe(true);
+
+    const snapshot = await schema.query.supervisedWorkflowRun(
+      {
+        sourceId: "src-1",
+        bindingId: "bind-sup-1",
+        correlationKey: "corr-1",
+      },
+      options,
+    );
+
+    expect(snapshot.supervisedRun.supervisedRunId).toBe(
+      dispatchPayload.supervisedRun.supervisedRunId,
+    );
+    expect(snapshot.activeTargetStatus).toBe("running");
+  });
+
+  test("dispatchSupervisedWorkflowCommand rejects non-object runtimeVariables", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const schema = createGraphqlSchema();
+
+    await expect(
+      schema.mutation.dispatchSupervisedWorkflowCommand(
+        {
+          command: {
+            commandId: "cmd-sup-bad-runtime",
+            sourceId: "src-1",
+            bindingId: "bind-sup-1",
+            correlationKey: "corr-1",
+            action: "start",
+            targetWorkflowName: "demo",
+            receivedEventReceiptId: "rcpt-1",
+          },
+          binding: {
+            id: "bind-sup-1",
+            sourceId: "src-1",
+            workflowName: "demo",
+            inputMapping: { mode: "event-input" },
+            execution: {
+              mode: "supervised",
+              control: { intentMapping: { mode: "structured-only" } },
+            },
+          },
+          runtimeVariables: ["bad"] as unknown as Readonly<
+            Record<string, unknown>
+          >,
+        },
+        options,
+      ),
+    ).rejects.toThrow("runtimeVariables must be a JSON object");
+  });
+
+  test("dispatchSupervisedWorkflowCommand rejects direct-mode bindings", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisedWorkflowCommand(
+        {
+          command: {
+            commandId: "cmd-direct",
+            sourceId: "src-1",
+            bindingId: "bind-direct",
+            correlationKey: "corr-d",
+            action: "start",
+            targetWorkflowName: "demo",
+            receivedEventReceiptId: "rcpt-1",
+          },
+          binding: {
+            id: "bind-direct",
+            sourceId: "src-1",
+            workflowName: "demo",
+            inputMapping: { mode: "event-input" },
+            execution: { mode: "direct", async: true },
+          },
+        },
+        options,
+      ),
+    ).rejects.toThrow(/requires binding\.execution\.mode to be "supervised"/i);
+  });
+
+  test("dispatchSupervisedWorkflowCommand rejects command and binding mismatches", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisedWorkflowCommand(
+        {
+          command: {
+            commandId: "cmd-mismatch",
+            sourceId: "src-1",
+            bindingId: "bind-sup-1",
+            correlationKey: "corr-1",
+            action: "start",
+            targetWorkflowName: "different-workflow",
+            receivedEventReceiptId: "rcpt-1",
+          },
+          binding: {
+            id: "bind-sup-1",
+            sourceId: "src-1",
+            workflowName: "demo",
+            inputMapping: { mode: "event-input" },
+            execution: {
+              mode: "supervised",
+              control: { intentMapping: { mode: "structured-only" } },
+            },
+          },
+        },
+        options,
+      ),
+    ).rejects.toThrow(/targetWorkflowName does not match binding\.workflowName/i);
+  });
+
+  test("supervisedWorkflowRun rejects empty correlation lookup fields", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+
+    await expect(
+      schema.query.supervisedWorkflowRun(
+        {
+          sourceId: "src-1",
+          bindingId: "",
+          correlationKey: "c1",
+        },
+        options,
+      ),
+    ).rejects.toThrow(/input\.bindingId/i);
+  });
+
+  test("dispatchSupervisedWorkflowCommand rejects invalid supervised restart policy", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      return;
+    }
+
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisedWorkflowCommand(
+        {
+          command: {
+            commandId: "cmd-bad-restart",
+            sourceId: "src-1",
+            bindingId: "bind-bad-restart",
+            correlationKey: "corr-bad",
+            action: "start",
+            targetWorkflowName: "demo",
+            receivedEventReceiptId: "rcpt-1",
+          },
+          binding: {
+            id: "bind-bad-restart",
+            sourceId: "src-1",
+            workflowName: "demo",
+            inputMapping: { mode: "event-input" },
+            execution: {
+              mode: "supervised",
+              async: true,
+              maxRestartsOnFailure: -1,
+              control: { intentMapping: { mode: "structured-only" } },
+            },
+          },
+        },
+        options,
+      ),
+    ).rejects.toThrow(/maxRestartsOnFailure/i);
+  });
+
+  test("dispatchSupervisorChat rejects blank eventRoot", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisorChat(
+        {
+          eventRoot: "   ",
+          sourceId: "src-1",
+          text: "hi",
+        },
+        options,
+      ),
+    ).rejects.toThrow(/non-empty eventRoot/i);
+  });
+
+  test("dispatchSupervisorChat rejects blank text", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisorChat(
+        {
+          eventRoot: root,
+          sourceId: "src-1",
+          text: "   ",
+        },
+        options,
+      ),
+    ).rejects.toThrow(/non-empty text/i);
   });
 });

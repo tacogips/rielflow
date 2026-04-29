@@ -19,6 +19,16 @@ export interface ExplicitRuntimeStorageRoots {
   readonly cwd?: string;
 }
 
+function expandLeadingHome(root: string): string {
+  if (root === "~") {
+    return os.homedir();
+  }
+  if (root.startsWith("~/") || root.startsWith("~\\")) {
+    return path.join(os.homedir(), root.slice(2));
+  }
+  return root;
+}
+
 function resolveNearestWorkflowProjectRoot(cwd: string): string {
   let current = path.resolve(cwd);
   while (true) {
@@ -41,11 +51,10 @@ function resolveNearestWorkflowProjectRoot(cwd: string): string {
 export function resolveRootDataDir(options: LoadOptions = {}): string {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
-  const scopedProjectRoot = resolveNearestWorkflowProjectRoot(cwd);
   const rootDataDir =
     options.rootDataDir ??
     env["DIVEDRA_ARTIFACT_DIR"] ??
-    computeDefaultRootDataDir(scopedProjectRoot);
+    computeDefaultRootDataDir(options.userRoot ?? env["DIVEDRA_USER_ROOT"]);
   return resolveRootPath(rootDataDir, cwd);
 }
 
@@ -149,35 +158,12 @@ export function inferRootDataDirFromExplicitStorageRoots(
   return undefined;
 }
 /**
- * Encodes an absolute filesystem path for use under `~/.divedra/project/<encoded>/divedra-artifact`.
- * Path segments (split on `/` and `\\`) are joined with `__`, and characters
- * that are problematic in portable directory names are normalized to `_`.
- */
-export function encodeProjectPathForDivedraScope(absolutePath: string): string {
-  const normalized = path.resolve(absolutePath);
-  const segments = normalized
-    .split(/[/\\]+/)
-    .filter((segment) => segment.length > 0)
-    .map((segment) => segment.replace(/[^A-Za-z0-9._-]/g, "_"));
-  if (segments.length === 0) {
-    return "root";
-  }
-  return segments.join("__");
-}
-
-/**
  * Default root data directory when no env override is set:
- * `~/.divedra/project/<encode(cwd)>/divedra-artifact`
+ * `<user-root>/artifacts`, where user root defaults to `~/.divedra`.
  */
-export function computeDefaultRootDataDir(cwd: string): string {
-  const encoded = encodeProjectPathForDivedraScope(cwd);
-  return path.join(
-    os.homedir(),
-    ".divedra",
-    "project",
-    encoded,
-    "divedra-artifact",
-  );
+export function computeDefaultRootDataDir(userRoot?: string): string {
+  const resolvedUserRoot = expandLeadingHome(userRoot ?? "~/.divedra");
+  return path.join(resolvedUserRoot, "artifacts");
 }
 
 const SAFE_WORKFLOW_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-_]{0,63}$/;

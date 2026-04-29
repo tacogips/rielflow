@@ -123,6 +123,8 @@ The runtime persists three distinct forms of state:
 
 In scoped catalog mode, `{rootDataDir}` defaults to the owning workflow scope's
 `<scope-root>/artifacts`.
+For direct workflow-root and other non-scoped runtime entrypoints, the default
+`{rootDataDir}` is `<user-root>/artifacts`.
 
 File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI and GraphQL inspection queries.
 
@@ -383,12 +385,24 @@ External events are modeled as a separate trigger layer that invokes the
 existing workflow execution boundary. Provider-specific cron, webhook, chat, and
 UI adapters normalize incoming events into a canonical envelope, map that
 envelope into workflow runtime input, persist an event receipt for idempotency,
-and then call `createWorkflowExecutionClient()` or GraphQL `executeWorkflow`.
+and then dispatch through the event trigger runner (direct execution via
+`createWorkflowExecutionClient()` / GraphQL `executeWorkflow`, or supervised
+routing when the binding opts into lifecycle control; same pipeline powers library
+`dispatchSupervisorChat` and webhook ingestion).
 
 The workflow engine should not import provider SDKs or provider-specific event
 types. Event bindings live outside workflow bundles so adding or changing an
 event source does not mutate `workflow.json`. The current implementation lives
 under `src/events/`.
+
+Event bindings that need ongoing lifecycle control should use the supervised
+event control path rather than direct target execution. In that path, the event
+listener maps an event to a structured supervisor command and routes it to the
+runtime supervisor control service (library or remote GraphQL), which owns
+supervised-run records and target workflow start, stop, restart, status, and
+restart-budget policy for that correlation key. A packaged authored supervisor
+workflow is optional and layers on the same public contract in a later phase.
+The detailed design is `design-docs/specs/design-event-supervisor-control.md`.
 
 ## Runtime Node Roles
 

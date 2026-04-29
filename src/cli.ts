@@ -811,7 +811,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--auto-improve":
         autoImprove = true;
         break;
-      case "--superviser-workflow": {
+      case "--superviser-workflow":
+      case "--supervisor-workflow": {
         markAutoImprovePolicyFlag();
         const parsedString = parseRequiredStringOption(token, readNext());
         if (parsedString.error !== undefined) {
@@ -888,6 +889,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
         noAllowTargetedRerun = true;
         break;
       case "--nested-superviser":
+      case "--nested-supervisor":
         markAutoImprovePolicyFlag();
         nestedSuperviser = true;
         break;
@@ -913,12 +915,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   const autoImprovePolicy =
     parseAutoImprovePolicyFromCliFlags(autoImproveInputs);
   if (parseError === undefined) {
-    if (!autoImprove && firstAutoImprovePolicyFlag !== undefined) {
+    if (nestedSuperviser && !autoImprove) {
+      parseError =
+        "--nested-superviser / --nested-supervisor require --auto-improve";
+    } else if (!autoImprove && firstAutoImprovePolicyFlag !== undefined) {
       parseError = `${firstAutoImprovePolicyFlag} requires --auto-improve`;
     }
-  }
-  if (parseError === undefined && nestedSuperviser && !autoImprove) {
-    parseError = "--nested-superviser requires --auto-improve";
   }
   if (parseError === undefined && autoImprovePolicy.error !== undefined) {
     parseError = `invalid --auto-improve policy: ${autoImprovePolicy.error}`;
@@ -1029,16 +1031,16 @@ function printHelp(io: CliIo): void {
     "Auto-improve (supervision policy; engine retries on terminal failure until success or budgets;",
   );
   io.stdout(
-    "  persisted stall watch is active; use --nested-superviser to run the superviser bundle as a workflow):",
+    "  persisted stall watch is active; use --nested-supervisor (alias: --nested-superviser) to run the superviser bundle as a workflow):",
   );
   io.stdout(
     "  --auto-improve               Enable supervised runs with durable supervision state",
   );
   io.stdout(
-    "  --superviser-workflow <id>   Superviser bundle id (persisted; divedra/* control + optional --nested-superviser)",
+    "  --supervisor-workflow <id> Superviser bundle id (alias: --superviser-workflow; persisted; divedra/* control + optional nested driver)",
   );
   io.stdout(
-    "  --nested-superviser         Run the superviser workflow as a nested session (requires --auto-improve)",
+    "  --nested-supervisor         Run the superviser workflow as a nested session (alias: --nested-superviser; requires --auto-improve)",
   );
   io.stdout(
     "  --monitor-interval-ms <n>    Observation cadence (default 5000)",
@@ -2733,7 +2735,7 @@ export async function runCli(
       }
       if (parsed.options.nestedSuperviser) {
         io.stderr(
-          "--nested-superviser is not supported for session rerun; use workflow run or session resume with --auto-improve instead",
+          "--nested-supervisor / --nested-superviser is not supported for session rerun; use workflow run or session resume with --auto-improve instead",
         );
         return 2;
       }

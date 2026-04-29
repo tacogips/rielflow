@@ -8,6 +8,13 @@ This document intentionally uses the spelling `superviser` to match the requeste
 
 The core runtime can run, resume, rerun, and inspect workflows. **Auto improve mode** adds a first-class supervised execution path. **Phase 1** (see [Implementation phasing](#implementation-phasing)) ships this as an engine-orchestrated loop with `--auto-improve`, persisted policy and incidents, stall detection from runtime timestamps, and execution-copy patch audit records. **Phase 2** runs an authored `superviserWorkflowId` as a nested step-addressed workflow when the nested driver is enabled (for example `--nested-superviser` with `--auto-improve`); the bullet list below still describes the full product shape operators expect, with Phase 1 covering the engine-driven subset when the nested path is not used.
 
+Lifecycle supervision without workflow improvement is a separate product mode.
+Event sources and web applications may need a workflow supervisor only to start,
+stop, restart, and inspect a target workflow. That default mode uses the same
+system-workflow direction but sets automatic improvement off and restarts failed
+targets only up to a finite limit. See
+`design-docs/specs/design-event-supervisor-control.md`.
+
 In this mode:
 
 - a target workflow execution is launched

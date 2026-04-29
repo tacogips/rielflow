@@ -102,3 +102,37 @@ It can be emitted with `events emit incoming-docs --event-file
 ./examples/event-sources/payloads/s3-object-created.json` using the same
 `--workflow-root`, `--event-root`, `--artifact-root`, and `--endpoint` pattern
 shown above.
+
+## Supervised lifecycle control (chat-shaped webhook)
+
+The binding `bindings/webhook-supervised-arithmetic.json` sets
+`execution.mode` to `supervised` so the event runner records a supervised-run
+id, maps each event to a control action, and drives the target workflow through
+the supervisor client (local library when no `--endpoint`, or the remote
+GraphQL supervisor mutations when `--endpoint` points at `divedra serve`).
+
+The binding uses `intentMapping` mode `command-map`: the first token of
+`event.input.text` selects `start`, `stop`, `restart`, or `status`; any other
+text is treated as `input` (see `defaultAction`).
+
+Validate including this binding:
+
+```bash
+divedra events validate --workflow-root ./examples --event-root ./examples/event-sources/.divedra-events
+```
+
+Emit a `start` command against the mock scenario (no live agents):
+
+```bash
+divedra events emit example-webhook \
+  --workflow-root ./examples \
+  --event-root ./examples/event-sources/.divedra-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-supervised-start.json \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
+Use the same `artifact-root` and correlation (`conversation` + `threadId` in
+the payload) to emit further events with `"text": "status"` or `"stop"` in
+`event.input` to exercise the same supervised run.

@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createSessionState } from "./session";
-import { encodeProjectPathForDivedraScope } from "./paths";
 import {
   deleteSession,
   getSessionStoreRoot,
@@ -30,36 +29,33 @@ afterEach(async () => {
 });
 
 describe("session-store", () => {
-  test("uses ~/.divedra/project/<encoded>/divedra-artifact/sessions when unset", async () => {
+  test("uses ~/.divedra/artifacts/sessions when unset", async () => {
     const root = await makeTempDir();
     const resolved = getSessionStoreRoot({ cwd: root, env: {} });
     expect(resolved).toBe(
-      path.join(
-        os.homedir(),
-        ".divedra",
-        "project",
-        encodeProjectPathForDivedraScope(root),
-        "divedra-artifact",
-        "sessions",
-      ),
+      path.join(os.homedir(), ".divedra", "artifacts", "sessions"),
     );
   });
 
-  test("uses the nearest .divedra project root for default session-store scoping", async () => {
+  test("uses user-root artifacts for default session-store scoping", async () => {
     const root = await makeTempDir();
     const nestedCwd = path.join(root, "packages", "feature", "src");
     await mkdir(path.join(root, ".divedra"), { recursive: true });
     await mkdir(nestedCwd, { recursive: true });
     const resolved = getSessionStoreRoot({ cwd: nestedCwd, env: {} });
     expect(resolved).toBe(
-      path.join(
-        os.homedir(),
-        ".divedra",
-        "project",
-        encodeProjectPathForDivedraScope(root),
-        "divedra-artifact",
-        "sessions",
-      ),
+      path.join(os.homedir(), ".divedra", "artifacts", "sessions"),
+    );
+  });
+
+  test("uses DIVEDRA_USER_ROOT for default session-store scoping", async () => {
+    const root = await makeTempDir();
+    const resolved = getSessionStoreRoot({
+      cwd: root,
+      env: { DIVEDRA_USER_ROOT: "custom-user-root" },
+    });
+    expect(resolved).toBe(
+      path.join(root, "custom-user-root", "artifacts", "sessions"),
     );
   });
 

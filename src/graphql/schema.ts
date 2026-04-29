@@ -57,8 +57,25 @@ import {
   type RuntimeNodeExecutionSummary,
   type RuntimeNodeLogEntry,
 } from "../workflow/runtime-db";
-import { loadSession, saveSession } from "../workflow/session-store";
-import { listSessions } from "../workflow/session-store";
+import type {
+  EventBinding,
+  EventSupervisedRunRecord,
+  EventSupervisorAction,
+  EventSupervisorCommand,
+} from "../events/types";
+import { assertSupervisedBindingGraphqlPolicy } from "../events/validate";
+import { createEventSupervisedRunRepository } from "../events/supervised-runs";
+import { dispatchSupervisorChat } from "../events/dispatch-supervisor-chat";
+import {
+  createWorkflowSupervisorClient,
+  reconcileTerminalSupervisedRunForCorrelation,
+  reconcileTerminalSupervisedRunRecord,
+} from "../workflow/supervisor-client";
+import {
+  listSessions,
+  loadSession,
+  saveSession,
+} from "../workflow/session-store";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
 import { err, ok, type Result } from "../workflow/result";
 import { validateWorkflowBundleDetailedAsync } from "../workflow/validate";
@@ -108,6 +125,12 @@ import type {
   CommunicationsQueryInput,
   CancelWorkflowExecutionInput,
   CancelWorkflowExecutionPayload,
+  DispatchSupervisedWorkflowCommandInput,
+  DispatchSupervisorChatGraphqlInput,
+  DispatchSupervisorChatPayload,
+  EventSupervisorCommandInput,
+  SupervisedWorkflowGraphqlPayload,
+  SupervisedWorkflowLookupGraphqlInput,
 } from "./types";
 
 function nowIso(): string {
@@ -1196,6 +1219,356 @@ async function rerunWorkflowExecutionMutation(
   };
 }
 
+const SUPERVISOR_ACTION_SET_FOR_GRAPHQL = new Set<EventSupervisorAction>([
+  "start",
+  "stop",
+  "restart",
+  "status",
+  "input",
+]);
+
+function assertJsonObjectForSupervisor(
+  value: unknown,
+  label: string,
+): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function requireNonEmptySupervisorString(
+  value: unknown,
+  label: string,
+): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  return value;
+}
+
+function requireOptionalSupervisorString(
+  value: unknown,
+  label: string,
+): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return requireNonEmptySupervisorString(value, label);
+}
+
+function requireOptionalSupervisorBoolean(
+  value: unknown,
+  label: string,
+): boolean | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} must be a boolean when set`);
+  }
+  return value;
+}
+
+function requireOptionalSupervisorInteger(
+  value: unknown,
+  label: string,
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Number.isInteger(value)) {
+    throw new Error(`${label} must be an integer when set`);
+  }
+  return value as number;
+}
+
+function parseEventBindingFromGraphql(value: unknown): EventBinding {
+  const o = assertJsonObjectForSupervisor(value, "binding");
+  requireNonEmptySupervisorString(o["id"], "binding.id");
+  requireNonEmptySupervisorString(o["sourceId"], "binding.sourceId");
+  requireNonEmptySupervisorString(o["workflowName"], "binding.workflowName");
+  const inputMap = o["inputMapping"];
+  if (
+    typeof inputMap !== "object" ||
+    inputMap === null ||
+    Array.isArray(inputMap)
+  ) {
+    throw new Error("binding.inputMapping must be a JSON object");
+  }
+  const execution = o["execution"];
+  if (
+    execution !== undefined &&
+    execution !== null &&
+    (typeof execution !== "object" || Array.isArray(execution))
+  ) {
+    throw new Error("binding.execution must be a JSON object when set");
+  }
+  return o as unknown as EventBinding;
+}
+
+function parseOptionalSupervisorRuntimeVariables(
+  value: unknown,
+  label: string,
+): Readonly<Record<string, unknown>> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return assertJsonObjectForSupervisor(value, label);
+}
+
+type ParsedSupervisedWorkflowLookup =
+  | { readonly kind: "id"; readonly supervisedRunId: string }
+  | {
+      readonly kind: "correlation";
+      readonly sourceId: string;
+      readonly bindingId: string;
+      readonly correlationKey: string;
+    };
+
+function parseSupervisedWorkflowLookupGraphqlInput(
+  input: SupervisedWorkflowLookupGraphqlInput,
+): ParsedSupervisedWorkflowLookup {
+  const runIdRaw = input.supervisedRunId;
+  const runId =
+    typeof runIdRaw === "string" && runIdRaw.trim().length > 0
+      ? runIdRaw.trim()
+      : undefined;
+  if (runId !== undefined) {
+    return { kind: "id", supervisedRunId: runId };
+  }
+  const sourceId = requireNonEmptySupervisorString(
+    input.sourceId,
+    "input.sourceId",
+  );
+  const bindingId = requireNonEmptySupervisorString(
+    input.bindingId,
+    "input.bindingId",
+  );
+  const correlationKey = requireNonEmptySupervisorString(
+    input.correlationKey,
+    "input.correlationKey",
+  );
+  return { kind: "correlation", sourceId, bindingId, correlationKey };
+}
+
+function parseEventSupervisorCommandFromGraphql(
+  raw: EventSupervisorCommandInput,
+): EventSupervisorCommand {
+  if (
+    !SUPERVISOR_ACTION_SET_FOR_GRAPHQL.has(raw.action as EventSupervisorAction)
+  ) {
+    throw new Error(`invalid supervisor action '${raw.action}'`);
+  }
+  const reason = requireOptionalSupervisorString(raw.reason, "command.reason");
+  const runtimeVariables = parseOptionalSupervisorRuntimeVariables(
+    raw.runtimeVariables,
+    "command.runtimeVariables",
+  );
+  const supervisedRunIdRaw = (raw as { readonly supervisedRunId?: unknown })
+    .supervisedRunId;
+  const supervisedRunId =
+    typeof supervisedRunIdRaw === "string" &&
+    supervisedRunIdRaw.trim().length > 0
+      ? supervisedRunIdRaw.trim()
+      : undefined;
+  return {
+    commandId: requireNonEmptySupervisorString(
+      raw.commandId,
+      "command.commandId",
+    ),
+    sourceId: requireNonEmptySupervisorString(raw.sourceId, "command.sourceId"),
+    bindingId: requireNonEmptySupervisorString(
+      raw.bindingId,
+      "command.bindingId",
+    ),
+    correlationKey: requireNonEmptySupervisorString(
+      raw.correlationKey,
+      "command.correlationKey",
+    ),
+    action: raw.action as EventSupervisorAction,
+    targetWorkflowName: requireNonEmptySupervisorString(
+      raw.targetWorkflowName,
+      "command.targetWorkflowName",
+    ),
+    ...(supervisedRunId === undefined ? {} : { supervisedRunId }),
+    ...(raw.targetWorkflowExecutionId === undefined ||
+    typeof raw.targetWorkflowExecutionId !== "string" ||
+    raw.targetWorkflowExecutionId.length === 0
+      ? {}
+      : {
+          targetWorkflowExecutionId: raw.targetWorkflowExecutionId,
+        }),
+    ...(runtimeVariables === undefined ? {} : { runtimeVariables }),
+    ...(reason === undefined ? {} : { reason }),
+    receivedEventReceiptId: requireNonEmptySupervisorString(
+      raw.receivedEventReceiptId,
+      "command.receivedEventReceiptId",
+    ),
+  };
+}
+
+async function supervisedWorkflowRunQuery(
+  input: SupervisedWorkflowLookupGraphqlInput,
+  context: GraphqlRequestContext,
+): Promise<SupervisedWorkflowGraphqlPayload> {
+  const parsed = parseSupervisedWorkflowLookupGraphqlInput(input);
+  const repo = createEventSupervisedRunRepository(context);
+  let record: EventSupervisedRunRecord | null = null;
+  if (parsed.kind === "id") {
+    record = await repo.loadById(parsed.supervisedRunId);
+  } else {
+    await reconcileTerminalSupervisedRunForCorrelation(
+      {
+        sourceId: parsed.sourceId,
+        bindingId: parsed.bindingId,
+        correlationKey: parsed.correlationKey,
+      },
+      repo,
+      context,
+    );
+    record = await repo.findLatestByCorrelation({
+      sourceId: parsed.sourceId,
+      bindingId: parsed.bindingId,
+      correlationKey: parsed.correlationKey,
+    });
+  }
+  if (record === null) {
+    throw new Error("no supervised run matches the lookup");
+  }
+  record = await reconcileTerminalSupervisedRunRecord(record, repo, context);
+  let activeTargetStatus: WorkflowSessionState["status"] | undefined;
+  const targetId = record.activeTargetExecutionId;
+  if (targetId !== undefined) {
+    const loaded = await loadSession(targetId, context);
+    if (loaded.ok) {
+      activeTargetStatus = loaded.value.status;
+    }
+  }
+  return {
+    supervisedRun: record,
+    ...(activeTargetStatus === undefined ? {} : { activeTargetStatus }),
+  };
+}
+
+async function dispatchSupervisedWorkflowCommandMutation(
+  input: DispatchSupervisedWorkflowCommandInput,
+  context: GraphqlRequestContext,
+): Promise<SupervisedWorkflowGraphqlPayload> {
+  const binding = parseEventBindingFromGraphql(input.binding);
+  if (binding.execution?.mode !== "supervised") {
+    throw new Error(
+      'dispatchSupervisedWorkflowCommand requires binding.execution.mode to be "supervised"',
+    );
+  }
+  assertSupervisedBindingGraphqlPolicy(binding);
+  const command = parseEventSupervisorCommandFromGraphql(input.command);
+  const runtimeVariables =
+    parseOptionalSupervisorRuntimeVariables(
+      input.runtimeVariables,
+      "runtimeVariables",
+    ) ?? {};
+  const client = createWorkflowSupervisorClient(context);
+  const dryRun = requireOptionalSupervisorBoolean(input.dryRun, "dryRun");
+  const maxSteps = requireOptionalSupervisorInteger(input.maxSteps, "maxSteps");
+  const maxLoopIterations = requireOptionalSupervisorInteger(
+    input.maxLoopIterations,
+    "maxLoopIterations",
+  );
+  const defaultTimeoutMs = requireOptionalSupervisorInteger(
+    input.defaultTimeoutMs,
+    "defaultTimeoutMs",
+  );
+  const engine =
+    input.mockScenario === undefined &&
+    dryRun === undefined &&
+    maxSteps === undefined &&
+    maxLoopIterations === undefined &&
+    defaultTimeoutMs === undefined
+      ? undefined
+      : {
+          ...(input.mockScenario === undefined
+            ? {}
+            : { mockScenario: input.mockScenario }),
+          ...(dryRun === undefined ? {} : { dryRun }),
+          ...(maxSteps === undefined ? {} : { maxSteps }),
+          ...(maxLoopIterations === undefined ? {} : { maxLoopIterations }),
+          ...(defaultTimeoutMs === undefined ? {} : { defaultTimeoutMs }),
+        };
+  const view = await client.dispatchCommand({
+    command,
+    binding,
+    runtimeVariables,
+    ...(engine === undefined ? {} : { engine }),
+  });
+  return {
+    supervisedRun: view.supervisedRun,
+    ...(view.activeTargetStatus === undefined
+      ? {}
+      : { activeTargetStatus: view.activeTargetStatus }),
+  };
+}
+
+async function dispatchSupervisorChatMutation(
+  input: DispatchSupervisorChatGraphqlInput,
+  context: GraphqlRequestContext,
+): Promise<DispatchSupervisorChatPayload> {
+  if (typeof input.eventRoot !== "string" || input.eventRoot.trim().length === 0) {
+    throw new Error("dispatchSupervisorChat requires non-empty eventRoot");
+  }
+  if (typeof input.sourceId !== "string" || input.sourceId.trim().length === 0) {
+    throw new Error("dispatchSupervisorChat requires sourceId");
+  }
+  if (typeof input.text !== "string" || input.text.trim().length === 0) {
+    throw new Error("dispatchSupervisorChat requires non-empty text");
+  }
+  const rows = await dispatchSupervisorChat({
+    ...context,
+    eventRoot: input.eventRoot,
+    sourceId: input.sourceId,
+    text: input.text,
+    ...(input.conversationId === undefined
+      ? {}
+      : { conversationId: input.conversationId }),
+    ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+    ...(input.eventId === undefined ? {} : { eventId: input.eventId }),
+    ...(input.eventType === undefined ? {} : { eventType: input.eventType }),
+    ...(input.provider === undefined ? {} : { provider: input.provider }),
+    ...(input.idempotencyKey === undefined
+      ? {}
+      : { idempotencyKey: input.idempotencyKey }),
+    ...(input.endpoint === undefined ? {} : { endpoint: input.endpoint }),
+    ...(input.authToken === undefined ? {} : { authToken: input.authToken }),
+  });
+  return {
+    results: rows.map((row) => ({
+      receiptId: row.receipt.receiptId,
+      status: row.receipt.status,
+      duplicate: row.duplicate,
+      ...(row.receipt.bindingId === undefined
+        ? {}
+        : { bindingId: row.receipt.bindingId }),
+      ...(row.receipt.workflowName === undefined
+        ? {}
+        : { workflowName: row.receipt.workflowName }),
+      ...(row.receipt.workflowExecutionId === undefined
+        ? {}
+        : { workflowExecutionId: row.receipt.workflowExecutionId }),
+      ...(row.receipt.supervisedRunId === undefined
+        ? {}
+        : { supervisedRunId: row.receipt.supervisedRunId }),
+      ...(row.receipt.supervisorExecutionId === undefined &&
+      row.supervisorExecutionId === undefined
+        ? {}
+        : {
+            supervisorExecutionId:
+              row.receipt.supervisorExecutionId ?? row.supervisorExecutionId,
+          }),
+      ...(row.receipt.error === undefined ? {} : { error: row.receipt.error }),
+    })),
+  };
+}
+
 async function cancelWorkflowExecutionMutation(
   input: CancelWorkflowExecutionInput,
   context: GraphqlRequestContext,
@@ -1335,6 +1708,13 @@ export function createGraphqlSchema(
           session: scope.session,
           messages,
         };
+      },
+
+      async supervisedWorkflowRun(
+        input: SupervisedWorkflowLookupGraphqlInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<SupervisedWorkflowGraphqlPayload> {
+        return supervisedWorkflowRunQuery(input, context);
       },
     },
 
@@ -1491,6 +1871,20 @@ export function createGraphqlSchema(
         context: GraphqlRequestContext = {},
       ): Promise<CancelWorkflowExecutionPayload> {
         return cancelWorkflowExecutionMutation(input, context);
+      },
+
+      async dispatchSupervisedWorkflowCommand(
+        input: DispatchSupervisedWorkflowCommandInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<SupervisedWorkflowGraphqlPayload> {
+        return dispatchSupervisedWorkflowCommandMutation(input, context);
+      },
+
+      async dispatchSupervisorChat(
+        input: DispatchSupervisorChatGraphqlInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<DispatchSupervisorChatPayload> {
+        return dispatchSupervisorChatMutation(input, context);
       },
     },
   };
