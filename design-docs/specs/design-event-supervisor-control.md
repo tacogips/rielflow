@@ -152,6 +152,9 @@ Implemented per `impl-plans/completed/supervisor-natural-language-control.md`:
 
 - Packaged default workflow bundle `divedra-default-workflow-supervisor` and execution path that populates
   `supervisorExecutionId` and delegates policy steps to authored nodes (see "Supervisor As A System Workflow").
+- Multi-workflow chat dispatch, where one supervisor conversation chooses among
+  a profile-defined catalog of manageable workflows, is specified separately in
+  `design-docs/specs/design-workflow-supervisor-dispatcher.md`.
 - Stronger cancel semantics (process abort propagation beyond workflow cancellation marks), as noted under assumptions.
 - Optional: richer chat-reply text for destructive ambiguity (skipped receipts already record reasons).
 

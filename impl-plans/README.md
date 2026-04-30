@@ -24,7 +24,9 @@ impl-plans/
 
 ## Active Plans
 
-None.
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
+| `workflow-supervisor-dispatcher` | Ready | `design-workflow-supervisor-dispatcher` |
 
 ## Completed Plans
 

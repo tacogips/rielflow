@@ -413,6 +413,15 @@ restart-budget policy for that correlation key. A packaged authored supervisor
 workflow is optional and layers on the same public contract in a later phase.
 The detailed design is `design-docs/specs/design-event-supervisor-control.md`.
 
+Chat-facing dispatch where one supervisor must decide among multiple workflows
+uses a supervisor conversation backed by a supervisor profile. The profile
+names the supervisor workflow and the allow-list of workflows it may start,
+stop, switch, inspect, or receive input for. The supervisor's dispatcher step
+may be an LLM manager node, but its output is only a structured proposal;
+runtime profile validation enforces all privileged lifecycle actions. The
+detailed design is
+`design-docs/specs/design-workflow-supervisor-dispatcher.md`.
+
 ## Runtime Node Roles
 
 Current authored direction:
@@ -585,3 +594,4 @@ Manager sessions are minted per manager-step execution and expire when that exec
 - `src/events/`
 - `src/graphql/`
 - `src/server/`
+- `design-docs/specs/design-workflow-supervisor-dispatcher.md`
