@@ -1,5 +1,9 @@
 import { executeGraphqlRequest } from "../graphql/client";
 import type { EventBinding, EventSupervisorCommand } from "../events/types";
+import type {
+  DispatchSupervisorConversationGraphqlInput,
+  DispatchSupervisorConversationPayload,
+} from "../graphql/types";
 import type { WorkflowSessionState } from "../workflow/session";
 import {
   eventBindingStubFromSupervisedRunRecord,
@@ -545,4 +549,74 @@ export function createWorkflowSupervisorGraphqlClient(
   };
 
   return client;
+}
+
+function parseDispatchSupervisorConversationPayload(
+  payload: unknown,
+  label: string,
+): DispatchSupervisorConversationPayload {
+  const o = requireObject(payload, label);
+  requireBoolean(o["applied"], `${label}.applied`);
+  if (!Array.isArray(o["managedRuns"])) {
+    throw new Error(`${label}.managedRuns must be an array`);
+  }
+  if (typeof o["conversation"] !== "object" || o["conversation"] === null) {
+    throw new Error(`${label}.conversation must be an object`);
+  }
+  if (typeof o["decision"] !== "object" || o["decision"] === null) {
+    throw new Error(`${label}.decision must be an object`);
+  }
+  if (typeof o["proposal"] !== "object" || o["proposal"] === null) {
+    throw new Error(`${label}.proposal must be an object`);
+  }
+  return o as unknown as DispatchSupervisorConversationPayload;
+}
+
+/**
+ * Invokes the {@link GraphqlSchema} `dispatchSupervisorConversation` mutation
+ * against a remote GraphQL endpoint using the same input contract as the
+ * library schema implementation.
+ */
+export async function postDispatchSupervisorConversationThroughGraphql(
+  options: WorkflowSupervisorGraphqlClientOptions,
+  input: DispatchSupervisorConversationGraphqlInput,
+): Promise<DispatchSupervisorConversationPayload> {
+  const response = await executeGraphqlRequest({
+    endpoint: options.endpoint,
+    document: `
+      mutation DispatchSupervisorConversation(
+        $input: DispatchSupervisorConversationInput!
+      ) {
+        dispatchSupervisorConversation(input: $input) {
+          conversation
+          managedRuns
+          decision
+          proposal
+          applied
+          validationIssues
+        }
+      }
+    `,
+    variables: { input },
+    ...(options.authToken === undefined
+      ? {}
+      : { authToken: options.authToken }),
+    ...(options.managerSessionId === undefined
+      ? {}
+      : { managerSessionId: options.managerSessionId }),
+    ...(options.fetchImpl === undefined
+      ? {}
+      : { fetchImpl: options.fetchImpl }),
+  });
+  if (response.errors !== undefined && response.errors.length > 0) {
+    throw new Error(response.errors.map((e) => e.message).join("; "));
+  }
+  const data = response.data;
+  if (!isRecord(data)) {
+    throw new Error("GraphQL response.data must be an object");
+  }
+  return parseDispatchSupervisorConversationPayload(
+    data["dispatchSupervisorConversation"],
+    "dispatchSupervisorConversation",
+  );
 }

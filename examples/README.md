@@ -70,6 +70,33 @@ nested superviser run can start the paired target when the engine injects
 `examples/auto-improve/README.md` and `examples/default-superviser/EXPECTED_RESULTS.md`). Not
 a standalone runnable demo without a supervised target and those variables.
 
+### `default-supervisor-dispatcher` (demo index)
+
+Cross-cutting **supervisor-dispatch** demo documented under
+`examples/default-supervisor-dispatcher/`:
+
+- supervisor workflow `divedra-default-workflow-supervisor`
+- resolver stub `dispatcher-llm-resolver-stub`
+- managed catalog entry pointing at `worker-only-single-step`
+- profile and binding under `examples/event-sources/.divedra-events/`
+
+See that directory's `README.md` for `events validate` / `events emit` examples.
+
+### `divedra-default-workflow-supervisor`
+
+Minimal manager workflow bundle matching the design-default supervisor id. Used
+by the dispatcher demo and validated like other reference workflows:
+
+```bash
+bun run src/main.ts workflow validate divedra-default-workflow-supervisor --workflow-root ./examples
+```
+
+### `dispatcher-llm-resolver-stub`
+
+Single-worker bundle referenced as the LLM resolver target for
+`webhook-supervisor-dispatch-demo`. Pair with mock scenarios under
+`default-supervisor-dispatcher/`.
+
 ### `chat-reply-webhook`
 
 Minimal worker-only workflow showing the built-in node add-on catalog:

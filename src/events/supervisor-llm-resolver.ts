@@ -13,6 +13,13 @@ import {
   parseSupervisorChatCommandDecision,
   type SupervisorChatCommandDecision,
 } from "./supervisor-command-contract";
+import {
+  fallbackSupervisorDispatchProposalForLowConfidence,
+  parseSupervisorDispatchProposal,
+  type ManagedWorkflowRunRecordLight,
+  type SupervisorDispatchProposal,
+} from "./supervisor-dispatch-contract";
+import type { WorkflowSupervisorProfile } from "./supervisor-profiles";
 import type { EventSupervisorAction } from "./types";
 
 const ALL_SUPERVISOR_CHAT_ACTIONS: readonly EventSupervisorAction[] = [
@@ -40,6 +47,43 @@ export interface RunSupervisorLlmResolverInput {
 export type RunSupervisorLlmResolverResult =
   | { readonly ok: true; readonly decision: SupervisorChatCommandDecision }
   | { readonly ok: false; readonly error: string };
+
+const DEFAULT_DISPATCH_LLM_MIN_CONFIDENCE = 0.75;
+
+export type DispatchResolverInvalidOutputBehavior =
+  | "clarify"
+  | "no-op"
+  | "error";
+
+export type RunSupervisorDispatchLlmResolverResult =
+  | { readonly ok: true; readonly proposal: SupervisorDispatchProposal }
+  | { readonly ok: false; readonly error: string };
+
+export interface RunSupervisorDispatchLlmResolverInput {
+  readonly binding: EventBinding;
+  readonly event: ExternalEventEnvelope;
+  readonly source?: EventSourceConfig | undefined;
+  readonly resolverWorkflowName: string;
+  readonly resolverNodeId: string;
+  readonly inputPath?: string | undefined;
+  readonly profile: WorkflowSupervisorProfile;
+  readonly supervisorConversationId: string;
+  readonly sourceMessageId: string;
+  readonly conversationRevision: number;
+  readonly managedRuns: readonly ManagedWorkflowRunRecordLight[];
+  /**
+   * Minimum proposal confidence; proposals below this become clarify/no-op per
+   * {@link RunSupervisorDispatchLlmResolverInput.invalidOutputBehavior}.
+   */
+  readonly minConfidence?: number;
+  /**
+   * When resolver `output.json` is not valid JSON, structurally invalid, or
+   * below {@link RunSupervisorDispatchLlmResolverInput.minConfidence}.
+   * Defaults to `"clarify"`.
+   */
+  readonly invalidOutputBehavior?: DispatchResolverInvalidOutputBehavior;
+  readonly options: WorkflowTriggerRunnerOptions;
+}
 
 function readEventPath(
   event: ExternalEventEnvelope,
@@ -82,6 +126,173 @@ function readEventPath(
     return String(current);
   }
   return undefined;
+}
+
+function resultForInvalidDispatchResolverOutput(
+  behavior: DispatchResolverInvalidOutputBehavior,
+  reason: string,
+): RunSupervisorDispatchLlmResolverResult {
+  if (behavior === "error") {
+    return { ok: false, error: reason };
+  }
+  if (behavior === "clarify") {
+    return {
+      ok: true,
+      proposal: fallbackSupervisorDispatchProposalForLowConfidence(reason),
+    };
+  }
+  return {
+    ok: true,
+    proposal: {
+      action: "no-op",
+      reason,
+      confidence: 1,
+    },
+  };
+}
+
+/**
+ * Interprets parsed resolver `output.json` (optionally adapter-wrapped with a
+ * `payload` field) into a dispatch proposal, applying the same confidence floor
+ * and invalid-output behavior as {@link runSupervisorDispatchLlmResolver}.
+ */
+export function interpretSupervisorDispatchResolverRootJson(
+  parsed: unknown,
+  options: {
+    readonly minConfidence: number;
+    readonly invalidOutputBehavior: DispatchResolverInvalidOutputBehavior;
+  },
+): RunSupervisorDispatchLlmResolverResult {
+  let decisionValue: unknown = parsed;
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "payload" in parsed
+  ) {
+    decisionValue = (parsed as Readonly<Record<string, unknown>>)["payload"];
+  }
+
+  const decision = parseSupervisorDispatchProposal(decisionValue);
+  if (!decision.ok) {
+    return resultForInvalidDispatchResolverOutput(
+      options.invalidOutputBehavior,
+      `resolver dispatch output failed validation: ${decision.error}`,
+    );
+  }
+
+  const proposal = decision.value;
+  const min = options.minConfidence;
+  if (
+    proposal.confidence !== undefined &&
+    Number.isFinite(proposal.confidence) &&
+    proposal.confidence < min
+  ) {
+    return resultForInvalidDispatchResolverOutput(
+      options.invalidOutputBehavior,
+      `confidence ${String(proposal.confidence)} is below minimum ${String(min)}`,
+    );
+  }
+
+  return { ok: true, proposal };
+}
+
+/**
+ * Runs the dispatcher LLM resolver workflow and extracts a
+ * {@link SupervisorDispatchProposal} from the named resolver node's
+ * `output.json` artifact.
+ */
+export async function runSupervisorDispatchLlmResolver(
+  input: RunSupervisorDispatchLlmResolverInput,
+): Promise<RunSupervisorDispatchLlmResolverResult> {
+  const text = readEventPath(
+    input.event,
+    input.source,
+    input.binding,
+    input.inputPath,
+  );
+
+  const minConfidence =
+    input.minConfidence ??
+    input.profile.conversationPolicy?.llmDecisionMinConfidence ??
+    DEFAULT_DISPATCH_LLM_MIN_CONFIDENCE;
+
+  const invalidOutputBehavior = input.invalidOutputBehavior ?? "clarify";
+
+  const resolverVariables: Readonly<Record<string, unknown>> = {
+    ...(text !== undefined ? { text } : {}),
+    supervisorWorkflowName: input.profile.supervisorWorkflowName,
+    supervisorProfile: input.profile,
+    managedRuns: [...input.managedRuns],
+    supervisorConversationId: input.supervisorConversationId,
+    sourceMessageId: input.sourceMessageId,
+    conversationRevision: input.conversationRevision,
+  };
+
+  const runResult = await runWorkflow(input.resolverWorkflowName, {
+    ...input.options,
+    runtimeVariables: resolverVariables,
+  });
+
+  if (!runResult.ok) {
+    return {
+      ok: false,
+      error: `resolver workflow failed: ${runResult.error.message}`,
+    };
+  }
+
+  const sessionId = runResult.value.session.sessionId;
+  const sessionResult = await loadSession(sessionId, input.options);
+  if (!sessionResult.ok) {
+    return {
+      ok: false,
+      error: `failed to load resolver session '${sessionId}': ${sessionResult.error.message}`,
+    };
+  }
+
+  const executions = sessionResult.value.nodeExecutions;
+  let lastSucceededExec: (typeof executions)[number] | undefined;
+  for (const exec of executions) {
+    if (exec.nodeId === input.resolverNodeId && exec.status === "succeeded") {
+      lastSucceededExec = exec;
+    }
+  }
+
+  if (lastSucceededExec === undefined) {
+    return {
+      ok: false,
+      error: `no succeeded execution found for resolver node '${input.resolverNodeId}' in session '${sessionId}'`,
+    };
+  }
+
+  const outputJsonPath = path.join(
+    lastSucceededExec.artifactDir,
+    "output.json",
+  );
+  let rawJson: string;
+  try {
+    rawJson = await readFile(outputJsonPath, "utf8");
+  } catch {
+    return {
+      ok: false,
+      error: `resolver node output artifact not found at '${outputJsonPath}'`,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson) as unknown;
+  } catch {
+    return resultForInvalidDispatchResolverOutput(
+      invalidOutputBehavior,
+      `resolver node output.json is not valid JSON at '${outputJsonPath}'`,
+    );
+  }
+
+  return interpretSupervisorDispatchResolverRootJson(parsed, {
+    minConfidence,
+    invalidOutputBehavior,
+  });
 }
 
 /**
@@ -264,5 +475,6 @@ export async function runSupervisorLlmResolver(
 export {
   parseSupervisorDispatchProposal,
   validateSupervisorDispatchProposalAgainstContext,
+  type ManagedWorkflowRunRecordLight,
   type WorkflowSupervisorDispatchContext,
 } from "./supervisor-dispatch-contract";

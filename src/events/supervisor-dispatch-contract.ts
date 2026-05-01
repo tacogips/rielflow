@@ -63,6 +63,148 @@ export interface WorkflowSupervisorDispatchContext {
   readonly sourceMessageId: string;
   readonly conversationRevision: number;
   readonly managedRuns: readonly ManagedWorkflowRunRecordLight[];
+  /**
+   * When set, key-only dispatch targets resolve through the same per-key
+   * selection map as the supervisor dispatch runtime (see conversation record).
+   */
+  readonly selectedManagedRunIdsByWorkflowKey?: Readonly<
+    Record<string, string>
+  >;
+  readonly selectedManagedRunId?: string;
+}
+
+function primaryDispatchTarget(
+  proposal: SupervisorDispatchProposal,
+): SupervisorDispatchTarget | undefined {
+  const targets = proposal.targets;
+  if (targets === undefined || targets.length === 0) {
+    return undefined;
+  }
+  return targets[0];
+}
+
+const RUN_SCOPED_DISAMBIGUATION_ACTIONS: ReadonlySet<SupervisorDispatchAction> =
+  new Set(["submit-input", "stop-workflow", "restart-workflow"]);
+
+function pushUnsupportedMultiTargetIssues(
+  proposal: SupervisorDispatchProposal,
+  issues: DispatchProposalValidationIssue[],
+): void {
+  const targetCount = proposal.targets?.length ?? 0;
+  if (targetCount <= 1) {
+    return;
+  }
+  issues.push({
+    code: "multiple-targets-unsupported",
+    message:
+      "supervisor dispatch currently supports at most one target per proposal",
+  });
+}
+
+function pushAmbiguousManagedTargetIssues(
+  proposal: SupervisorDispatchProposal,
+  context: WorkflowSupervisorDispatchContext,
+  issues: DispatchProposalValidationIssue[],
+): void {
+  if (proposal.action === "switch-workflow") {
+    const t = primaryDispatchTarget(proposal);
+    if (t === undefined) {
+      issues.push({
+        code: "switch-workflow-requires-target",
+        message: "switch-workflow requires at least one target",
+      });
+      return;
+    }
+    const managedDef = context.profile.managedWorkflows.find(
+      (m) => m.key === t.managedWorkflowKey,
+    );
+    const startOnSwitch = managedDef?.lifecycle?.startOnSwitch === true;
+    const explicitRunId =
+      t.managedRunId !== undefined && t.managedRunId.trim().length > 0
+        ? t.managedRunId.trim()
+        : undefined;
+    if (explicitRunId !== undefined) {
+      return;
+    }
+    if (!startOnSwitch) {
+      issues.push({
+        code: "switch-workflow-requires-managed-run-id",
+        message:
+          "switch-workflow requires targets[0].managedRunId unless the managed workflow sets lifecycle.startOnSwitch",
+      });
+      return;
+    }
+    const key = t.managedWorkflowKey;
+    const sameKey = context.managedRuns.filter(
+      (r) => r.managedWorkflowKey === key,
+    );
+    const implicitCandidates = sameKey.filter(
+      (r) => r.status === "running" || r.status === "starting",
+    );
+    if (implicitCandidates.length > 1) {
+      issues.push({
+        code: "ambiguous-managed-target",
+        message: `switch-workflow without managedRunId while multiple running/starting runs exist for '${key}'; set managedRunId or runAlias`,
+      });
+    }
+    return;
+  }
+  if (!RUN_SCOPED_DISAMBIGUATION_ACTIONS.has(proposal.action)) {
+    return;
+  }
+  const target = primaryDispatchTarget(proposal);
+  if (target === undefined) {
+    return;
+  }
+  if (
+    target.managedRunId !== undefined ||
+    (target.runAlias !== undefined && target.runAlias.trim().length > 0)
+  ) {
+    return;
+  }
+  const key = target.managedWorkflowKey;
+  const selectedId = context.selectedManagedRunIdsByWorkflowKey?.[key];
+  if (selectedId !== undefined && selectedId.trim().length > 0) {
+    const selRun = context.managedRuns.find(
+      (r) => r.managedRunId === selectedId,
+    );
+    if (selRun === undefined) {
+      issues.push({
+        code: "unknown-selected-managed-run",
+        message: `selectedManagedRunIdsByWorkflowKey['${key}'] does not match a managed run in this conversation`,
+      });
+      return;
+    }
+    if (selRun.managedWorkflowKey !== key) {
+      issues.push({
+        code: "selected-managed-run-key-mismatch",
+        message: `selectedManagedRunIdsByWorkflowKey['${key}'] points at managedRunId ${selectedId} for a different managedWorkflowKey`,
+      });
+    }
+    return;
+  }
+  const sameKey = context.managedRuns.filter(
+    (r) => r.managedWorkflowKey === key,
+  );
+  const implicitCandidates = sameKey.filter(
+    (r) => r.status === "running" || r.status === "starting",
+  );
+  if (implicitCandidates.length > 1) {
+    issues.push({
+      code: "ambiguous-managed-target",
+      message: `targets[0] names only managedWorkflowKey '${key}' while multiple running/starting runs exist; set managedRunId, runAlias, or a per-key selection`,
+    });
+    return;
+  }
+  if (implicitCandidates.length === 1) {
+    return;
+  }
+  if (sameKey.length > 1) {
+    issues.push({
+      code: "ambiguous-managed-target",
+      message: `targets[0] names only managedWorkflowKey '${key}' while multiple managed runs exist and none are running/starting; set managedRunId or runAlias`,
+    });
+  }
 }
 
 function readNonEmptyString(
@@ -238,7 +380,9 @@ export function validateSupervisorDispatchProposalAgainstContext(
       seenAlias.set(t.runAlias, t.managedWorkflowKey);
     }
     if (t.managedRunId !== undefined) {
-      const run = context.managedRuns.find((r) => r.managedRunId === t.managedRunId);
+      const run = context.managedRuns.find(
+        (r) => r.managedRunId === t.managedRunId,
+      );
       if (run === undefined) {
         issues.push({
           code: "unknown-managed-run",
@@ -267,7 +411,8 @@ export function validateSupervisorDispatchProposalAgainstContext(
     ) {
       issues.push({
         code: "direct-answer-kind-blocked",
-        message: "answer-directly is not listed in directAnswerPolicy.allowedDecisionKinds",
+        message:
+          "answer-directly is not listed in directAnswerPolicy.allowedDecisionKinds",
       });
     }
   }
@@ -281,11 +426,15 @@ export function validateSupervisorDispatchProposalAgainstContext(
       ) {
         issues.push({
           code: "status-kind-blocked",
-          message: "status is not listed in directAnswerPolicy.allowedDecisionKinds",
+          message:
+            "status is not listed in directAnswerPolicy.allowedDecisionKinds",
         });
       }
     }
   }
+
+  pushUnsupportedMultiTargetIssues(proposal, issues);
+  pushAmbiguousManagedTargetIssues(proposal, context, issues);
 
   return issues;
 }

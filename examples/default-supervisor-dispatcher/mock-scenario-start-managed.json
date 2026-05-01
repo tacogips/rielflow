@@ -1,0 +1,32 @@
+{
+  "resolver-worker": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "action": "start-workflow",
+      "reason": "demo start managed echo worker",
+      "confidence": 1,
+      "targets": [
+        {
+          "managedWorkflowKey": "echo"
+        }
+      ]
+    }
+  },
+  "main-worker": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "summary": "Managed echo worker completed under dispatcher.",
+      "status": "ready",
+      "verification": [],
+      "risks": []
+    }
+  }
+}

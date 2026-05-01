@@ -1,9 +1,9 @@
 # Workflow Supervisor Dispatcher Foundation Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Design Reference**: `design-docs/specs/design-workflow-supervisor-dispatcher.md`
 **Created**: 2026-04-30
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## Related Plans
 
@@ -40,7 +40,7 @@ transport, and packaged examples.
 
 #### `src/events/types.ts`, `src/events/validate.ts`, `src/events/supervisor-profiles.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 export type EventExecutionMode = "direct" | "supervised" | "supervisor-dispatch";
@@ -66,16 +66,16 @@ export interface ManagedWorkflowDefinition {
 
 **Checklist**:
 
-- [ ] Add `supervisor-dispatch` as a valid event execution mode
-- [ ] Define profile, managed-workflow, lifecycle, and concurrency types
-- [ ] Validate lifecycle/concurrency combinations and direct-answer policy
-- [ ] Implement profile loading helpers with focused tests
+- [x] Add `supervisor-dispatch` as a valid event execution mode
+- [x] Define profile, managed-workflow, lifecycle, and concurrency types
+- [x] Validate lifecycle/concurrency combinations and direct-answer policy
+- [x] Implement profile loading helpers with focused tests
 
 ### 2. Dispatch Decision Contract And Resolver Context
 
 #### `src/events/supervisor-dispatch-contract.ts`, `src/events/supervisor-llm-resolver.ts`, `src/events/supervisor-command-contract.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 export type SupervisorDispatchAction =
@@ -107,16 +107,16 @@ export interface WorkflowSupervisorDispatchContext {
 
 **Checklist**:
 
-- [ ] Generalize the current supervisor command schema into dispatcher actions
-- [ ] Include pinned profile revision, managed workflow catalog, and run state in the resolver context
-- [ ] Validate `managedWorkflowKey`, `managedRunId`, and `runAlias` targeting rules
-- [ ] Add fallback coverage for malformed JSON, low confidence, and stale decisions
+- [x] Generalize the current supervisor command schema into dispatcher actions
+- [x] Include pinned profile revision, managed workflow catalog, and run state in the resolver context
+- [x] Validate `managedWorkflowKey`, `managedRunId`, and `runAlias` targeting rules
+- [x] Add fallback coverage for malformed JSON, low confidence, and stale decisions
 
 ### 3. Supervisor Conversation Persistence
 
 #### `src/events/supervisor-conversations.ts`, `src/workflow/runtime-db.ts`
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 export interface WorkflowSupervisorConversationRecord {
@@ -147,26 +147,26 @@ export interface WorkflowSupervisorConversationRepository {
 
 **Checklist**:
 
-- [ ] Persist conversations, managed runs, and decision records
-- [ ] Store pinned profile revision, per-key selection state, and source-message dedupe keys
-- [ ] Add compare-and-swap repository primitives instead of caller-managed mutation
-- [ ] Cover stale rows, duplicates, and artifact layout compatibility with tests
+- [x] Persist conversations, managed runs, and decision records
+- [x] Store pinned profile revision, per-key selection state, and source-message dedupe keys
+- [x] Add compare-and-swap repository primitives instead of caller-managed mutation
+- [x] Cover stale rows, duplicates, and artifact layout compatibility with tests
 
 ## Module Status
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| Supervisor profile schema and loader | `src/events/types.ts`, `src/events/validate.ts`, `src/events/supervisor-profiles.ts` | NOT_STARTED | planned |
-| Dispatch decision contract | `src/events/supervisor-dispatch-contract.ts`, `src/events/supervisor-llm-resolver.ts`, `src/events/supervisor-command-contract.ts` | NOT_STARTED | planned |
-| Conversation persistence | `src/events/supervisor-conversations.ts`, `src/workflow/runtime-db.ts` | NOT_STARTED | planned |
+| Supervisor profile schema and loader | `src/events/types.ts`, `src/events/validate.ts`, `src/events/supervisor-profiles.ts` | COMPLETED | `supervisor-profiles.test.ts` |
+| Dispatch decision contract | `src/events/supervisor-dispatch-contract.ts`, `src/events/supervisor-llm-resolver.ts`, `src/events/supervisor-command-contract.ts` | COMPLETED | `supervisor-dispatch-contract.test.ts`, `supervisor-llm-resolver-dispatch.test.ts` |
+| Conversation persistence | `src/events/supervisor-conversations.ts`, `src/workflow/runtime-db.ts` | COMPLETED | `supervisor-conversations.test.ts` |
 
 ## Dependencies
 
 | Feature | Depends On | Status |
 |---------|------------|--------|
 | TASK-001 Profile types and validation | existing event config and supervisor control types | READY |
-| TASK-002 Dispatch decision contract | TASK-001 | BLOCKED |
-| TASK-003 Conversation persistence | TASK-001 | BLOCKED |
+| TASK-002 Dispatch decision contract | TASK-001 | COMPLETED |
+| TASK-003 Conversation persistence | TASK-001 | COMPLETED |
 
 ## Tasks
 
@@ -192,7 +192,7 @@ export interface WorkflowSupervisorConversationRepository {
 
 ### TASK-002: Dispatch Decision Contract And Resolver Context
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 
 **Dependencies**:
@@ -211,11 +211,12 @@ export interface WorkflowSupervisorConversationRepository {
 - [x] Dispatcher actions are represented by a reusable typed contract
 - [x] Resolver context includes pinned profile revision and active managed-run state
 - [x] Parallel-run targeting rules are validated before runtime mutation
-- [x] Malformed and low-confidence proposals have deterministic parse/validation/fallback helpers (`parseSupervisorDispatchProposal`, `validateSupervisorDispatchProposalAgainstContext`, `fallbackSupervisorDispatchProposalForLowConfidence`). Compare-and-swap stale handling remains with TASK-003 / runtime.
+- [x] Malformed and low-confidence proposals have deterministic parse/validation/fallback helpers (`parseSupervisorDispatchProposal`, `validateSupervisorDispatchProposalAgainstContext`, `fallbackSupervisorDispatchProposalForLowConfidence`). Compare-and-swap conversation updates are implemented in TASK-003.
+- [x] Dispatcher resolver entrypoints: `runSupervisorDispatchLlmResolver` and `interpretSupervisorDispatchResolverRootJson` in `supervisor-llm-resolver.ts` (runtime trigger-runner wiring remains in the runtime plan).
 
 ### TASK-003: Supervisor Conversation Persistence
 
-**Status**: Ready
+**Status**: Completed
 **Parallelizable**: Yes
 
 **Dependencies**:
@@ -230,16 +231,16 @@ export interface WorkflowSupervisorConversationRepository {
 
 **Completion Criteria**:
 
-- [ ] Conversation records pin supervisor profile identity and revision
-- [ ] Managed-run records support per-workflow selection and `runAlias`
-- [ ] Decision records support source-message dedupe and replay safety
-- [ ] Compare-and-swap updates are repository primitives with test coverage
+- [x] Conversation records pin supervisor profile identity and revision
+- [x] Managed-run records support per-workflow selection and `runAlias`
+- [x] Decision records support source-message dedupe and replay safety
+- [x] Compare-and-swap updates are repository primitives with test coverage
 
 ## Completion Criteria
 
-- [ ] Foundation modules are specified with concrete deliverables
-- [ ] All foundation TODOs are mapped to executable tasks
-- [ ] Foundation tasks establish the contracts required by the runtime plan
+- [x] Foundation modules are specified with concrete deliverables
+- [x] All foundation TODOs are mapped to executable tasks
+- [x] Foundation tasks establish the contracts required by the runtime plan
 
 ## Progress Log
 
@@ -253,11 +254,32 @@ runtime dispatch integration can begin.
 ### Session: 2026-05-01
 **Tasks Completed**: TASK-001 (profile schema, `supervisors/` loading, binding
 validation for `supervisor-dispatch`, mailbox defaults, trigger-runner guard
-for dispatch mode). TASK-002 partially: `supervisor-dispatch-contract.ts`,
-validation against context, legacy chat-to-dispatch mapper, tests; full
-dispatcher LLM resolver wiring remains for runtime integration.
-**Tasks In Progress**: TASK-002 follow-up (resolver workflow integration),
-TASK-003
+for dispatch mode). TASK-002 contract and validation
+(`supervisor-dispatch-contract.ts`, `supervisor-command-contract.ts`, tests).
+**Tasks In Progress**: TASK-003 persistence; TASK-002 resolver entrypoints
+follow-up.
 **Blockers**: None
 **Notes**: `supervisor-dispatch` bindings fail in `trigger-runner` with an
 explicit not-implemented receipt until runtime dispatch (runtime plan) lands.
+
+### Session: 2026-05-01 (TASK-003 persistence)
+
+**Tasks Completed**: TASK-003 (SQLite tables `supervisor_conversations`,
+`supervisor_conversation_managed_runs`, `supervisor_dispatch_decisions`; runtime
+DB insert/load/find/CAS/upsert/list accessors; typed repository in
+`src/events/supervisor-conversations.ts`; `src/events/supervisor-conversations.test.ts`).
+**Tasks In Progress**: None.
+**Blockers**: None
+**Notes**: Correlation lookup uses `binding_id IS ?` so optional bindings match
+SQLite NULL semantics. Unique index on `(supervisor_conversation_id,
+source_message_id)` enforces decision idempotency.
+
+### Session: 2026-05-01 (TASK-002 dispatch LLM resolver)
+
+**Tasks Completed**: TASK-002 closure: `runSupervisorDispatchLlmResolver`,
+`interpretSupervisorDispatchResolverRootJson`, and
+`supervisor-llm-resolver-dispatch.test.ts`.
+**Tasks In Progress**: None for this plan.
+**Blockers**: None
+**Notes**: Foundation is complete; `trigger-runner` integration is owned by the
+runtime plan (`TASK-004` / `TASK-005`).

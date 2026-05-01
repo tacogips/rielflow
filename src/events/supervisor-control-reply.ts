@@ -3,6 +3,7 @@ import type {
   ChatReplyDispatchTarget,
 } from "../workflow/types";
 import type { SupervisedWorkflowView } from "../workflow/supervisor-client";
+import type { WorkflowSupervisorDispatchView } from "../workflow/supervisor-dispatch-client";
 import type {
   EventSupervisorAction,
   ExternalEventEnvelope,
@@ -15,6 +16,95 @@ import {
 import { resolveChatReplyTargetFromEnvelope } from "./chat-reply-target";
 
 export { resolveChatReplyTargetFromEnvelope } from "./chat-reply-target";
+
+function extractSupervisorDispatchProposalReplyText(
+  reply: Readonly<Record<string, unknown>> | undefined,
+): string | undefined {
+  if (reply === undefined) {
+    return undefined;
+  }
+  for (const key of ["text", "markdown", "body", "message"] as const) {
+    const value = reply[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+export function formatSupervisorDispatchControlReplyText(
+  view: WorkflowSupervisorDispatchView,
+): string {
+  const lines = [
+    `Supervisor dispatch (${view.proposal.action})`,
+    `supervisorConversationId: ${view.conversation.supervisorConversationId}`,
+    `decisionId: ${view.decision.decisionId}`,
+    `applied: ${String(view.applied)}`,
+    `profileRevision: ${view.conversation.profileRevision}`,
+    ...(view.validationIssues === undefined || view.validationIssues.length === 0
+      ? []
+      : [
+          `validationIssues: ${view.validationIssues
+            .map((i) => `${i.code}: ${i.message}`)
+            .join("; ")}`,
+        ]),
+  ];
+  return lines.join("\n");
+}
+
+export function buildDispatchControlExternalOutputMessage(input: {
+  readonly event: ExternalEventEnvelope;
+  readonly receiptId: string;
+  readonly view: WorkflowSupervisorDispatchView;
+  readonly createdAt?: string;
+}): ExternalOutputMessage | null {
+  const target = resolveChatReplyTargetFromEnvelope(input.event);
+  if (target === null) {
+    return null;
+  }
+  const metadata = formatSupervisorDispatchControlReplyText(input.view);
+  const replyLead = extractSupervisorDispatchProposalReplyText(
+    input.view.proposal.reply,
+  );
+  const text =
+    replyLead !== undefined
+      ? `${replyLead}\n\n${metadata}`
+      : metadata;
+  const workflowExecutionId = `supervisor-conversation:${input.view.conversation.supervisorConversationId}`;
+  const createdAt = input.createdAt ?? new Date().toISOString();
+  return {
+    kind: "external-output",
+    outputKind: "control-status",
+    address: {
+      sourceId: input.event.sourceId,
+      workflowName: input.view.conversation.supervisorWorkflowName,
+      workflowExecutionId,
+      ...(input.event.conversation?.id === undefined
+        ? {}
+        : { conversationId: input.event.conversation.id }),
+      ...(input.event.conversation?.threadId === undefined
+        ? {}
+        : { threadId: input.event.conversation.threadId }),
+      eventId: input.event.eventId,
+      providerHint: input.event.provider,
+      ...(input.event.actor?.id === undefined
+        ? {}
+        : { actorId: input.event.actor.id }),
+    },
+    payload: {
+      chatReplyTarget: target,
+      controlStatusText: text,
+      eventId: input.event.eventId,
+      action: "status",
+      dispatchProposalAction: input.view.proposal.action,
+      ...(input.view.proposal.reply === undefined
+        ? {}
+        : { dispatchProposalReply: input.view.proposal.reply }),
+    },
+    idempotencyKey: `supervisor-dispatch:${input.receiptId}:${input.view.decision.decisionId}`,
+    createdAt,
+  };
+}
 
 export function formatSupervisorControlReplyText(
   view: SupervisedWorkflowView,

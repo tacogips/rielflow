@@ -21,6 +21,9 @@ import type {
   NodeAddonPayloadResolver,
   NormalizedWorkflowBundle,
 } from "../workflow/types";
+import * as dispatchResolver from "../events/supervisor-llm-resolver";
+import type { EventBinding } from "../events/types";
+import { atomicWriteJsonFile as writeJson } from "../shared/fs";
 import { createGraphqlSchema } from "./schema";
 import type { GraphqlRequestContext } from "./types";
 
@@ -2483,5 +2486,333 @@ describe("createGraphqlSchema", () => {
         options,
       ),
     ).rejects.toThrow(/non-empty text/i);
+  });
+
+  test("dispatchSupervisorConversation rejects supervised binding mode", async () => {
+    const root = await makeTempDir();
+    const options: GraphqlRequestContext = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.dispatchSupervisorConversation(
+        {
+          binding: {
+            id: "b1",
+            sourceId: "s1",
+            workflowName: "demo",
+            inputMapping: { mode: "event-input" },
+            execution: {
+              mode: "supervised",
+              control: { intentMapping: { mode: "structured-only" } },
+            },
+          },
+          event: {
+            sourceId: "s1",
+            eventId: "e1",
+            provider: "p",
+            eventType: "t",
+            receivedAt: "2026-05-01T00:00:00.000Z",
+            dedupeKey: "d1",
+            input: { text: "x" },
+          },
+          supervisorProfileId: "prof1",
+          correlationKey: "c1",
+          sourceMessageId: "d1",
+        },
+        options,
+      ),
+    ).rejects.toThrow(/supervisor-dispatch/i);
+  });
+
+  test("supervisorDispatchConversation throws when conversation is missing", async () => {
+    const root = await makeTempDir();
+    const options: GraphqlRequestContext = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      cwd: root,
+    };
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.query.supervisorDispatchConversation(
+        { supervisorConversationId: "missing-conversation-id" },
+        options,
+      ),
+    ).rejects.toThrow(/no supervisor dispatch conversation/i);
+  });
+
+  describe("dispatchSupervisorConversation GraphQL integration", () => {
+    async function writeManagerOnlyWorkflow(input: {
+      readonly root: string;
+      readonly workflowName: string;
+      readonly sticky: boolean;
+    }): Promise<void> {
+      const workflowDir = path.join(input.root, input.workflowName);
+      await mkdir(workflowDir, { recursive: true });
+      await writeJson(path.join(workflowDir, "workflow.json"), {
+        workflowId: input.workflowName,
+        description: "manager workflow",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "divedra-manager",
+        managerStepId: "divedra-manager",
+        nodes: [
+          {
+            id: "divedra-manager",
+            nodeFile: "node-divedra-manager.json",
+          },
+        ],
+        steps: [
+          {
+            id: "divedra-manager",
+            nodeId: "divedra-manager",
+            role: "manager",
+          },
+        ],
+      });
+      await writeJson(path.join(workflowDir, "node-divedra-manager.json"), {
+        id: "divedra-manager",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        ...(input.sticky ? { sessionPolicy: { mode: "reuse" } } : {}),
+        promptTemplate: "manager",
+        variables: {},
+      });
+    }
+
+    async function writeSingleNodeWorkflow(input: {
+      readonly root: string;
+      readonly workflowName: string;
+      readonly nodeId: string;
+    }): Promise<void> {
+      const workflowDir = path.join(input.root, input.workflowName);
+      await mkdir(workflowDir, { recursive: true });
+      await writeJson(path.join(workflowDir, "workflow.json"), {
+        workflowId: input.workflowName,
+        description: "single-node workflow",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: input.nodeId,
+        nodes: [
+          {
+            id: input.nodeId,
+            nodeFile: `node-${input.nodeId}.json`,
+          },
+        ],
+        steps: [
+          {
+            id: input.nodeId,
+            nodeId: input.nodeId,
+            role: "worker",
+          },
+        ],
+      });
+      await writeJson(path.join(workflowDir, `node-${input.nodeId}.json`), {
+        id: input.nodeId,
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "worker",
+        variables: {},
+      });
+    }
+
+    async function writeSupervisorDispatchProfile(input: {
+      readonly eventRoot: string;
+      readonly fileBaseName: string;
+      readonly supervisorWorkflowName: string;
+      readonly managedWorkflowName: string;
+      readonly managedKey: string;
+      readonly concurrencyMode: "single-active" | "multiple-active";
+      readonly directAnswerPolicy?: {
+        readonly enabled: boolean;
+        readonly allowedDecisionKinds?: readonly string[];
+      };
+    }): Promise<void> {
+      const supervisorsDir = path.join(input.eventRoot, "supervisors");
+      await mkdir(supervisorsDir, { recursive: true });
+      await writeJson(path.join(supervisorsDir, `${input.fileBaseName}.json`), {
+        supervisorProfileId: input.fileBaseName,
+        profileRevision: "1",
+        supervisorWorkflowName: input.supervisorWorkflowName,
+        managedWorkflows: [
+          {
+            key: input.managedKey,
+            workflowName: input.managedWorkflowName,
+            concurrency:
+              input.concurrencyMode === "multiple-active"
+                ? {
+                    mode: "multiple-active",
+                    requiresAliasForParallelRuns: true,
+                  }
+                : { mode: "single-active" },
+          },
+        ],
+        ...(input.directAnswerPolicy === undefined
+          ? {}
+          : { directAnswerPolicy: input.directAnswerPolicy }),
+      });
+    }
+
+    function buildSupervisorDispatchBinding(input: {
+      readonly profileId: string;
+      readonly resolverWorkflowName: string;
+      readonly resolverNodeId: string;
+      readonly dedupeWindowMs: number;
+    }): EventBinding {
+      return {
+        id: "dispatch-binding-gql",
+        sourceId: "chat-webhook",
+        inputMapping: { mode: "event-input" },
+        execution: {
+          mode: "supervisor-dispatch",
+          supervisorProfileId: input.profileId,
+          async: false,
+          allowUnsafeSyncWebhook: true,
+          dedupeWindowMs: input.dedupeWindowMs,
+          control: {
+            intentMapping: {
+              mode: "llm-command",
+              resolverWorkflowName: input.resolverWorkflowName,
+              resolverNodeId: input.resolverNodeId,
+            },
+          },
+        },
+      };
+    }
+
+    test("replays stored decision for the same sourceMessageId without a second resolver call", async () => {
+      const root = await makeTempDir();
+      const eventRoot = path.join(root, "events-gql-dispatch");
+      const profileId = "gql-dispatch-replay-profile";
+      const supWf = "gql-dispatch-replay-sup";
+      const resolverWf = "gql-dispatch-replay-resolver";
+      const resolverNodeId = "gql-dispatch-replay-res-node";
+      const workerWf = "gql-dispatch-replay-worker";
+
+      await writeSupervisorDispatchProfile({
+        eventRoot,
+        fileBaseName: profileId,
+        supervisorWorkflowName: supWf,
+        managedWorkflowName: workerWf,
+        managedKey: "worker",
+        concurrencyMode: "single-active",
+        directAnswerPolicy: {
+          enabled: true,
+          allowedDecisionKinds: ["answer-directly"],
+        },
+      });
+      await writeManagerOnlyWorkflow({
+        root,
+        workflowName: supWf,
+        sticky: false,
+      });
+      await writeSingleNodeWorkflow({
+        root,
+        workflowName: resolverWf,
+        nodeId: resolverNodeId,
+      });
+      await writeSingleNodeWorkflow({
+        root,
+        workflowName: workerWf,
+        nodeId: "gql-dispatch-replay-worker-node",
+      });
+
+      const resolverSpy = vi.spyOn(
+        dispatchResolver,
+        "runSupervisorDispatchLlmResolver",
+      );
+
+      const binding = buildSupervisorDispatchBinding({
+        profileId,
+        resolverWorkflowName: resolverWf,
+        resolverNodeId,
+        dedupeWindowMs: 60_000,
+      });
+
+      const options: GraphqlRequestContext = {
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        rootDataDir: path.join(root, "data"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        cwd: root,
+        eventRoot,
+      };
+
+      const schema = createGraphqlSchema();
+      const stableSourceMessageId = "gql-replay-source-msg-1";
+      const mockScenario = {
+        [resolverNodeId]: [
+          {
+            payload: {
+              action: "answer-directly",
+              reason: "graphql replay fixture",
+              confidence: 1,
+              reply: { text: "direct" },
+            },
+          },
+        ],
+      };
+
+      const baseEvent = {
+        sourceId: "chat-webhook",
+        provider: "chat-webhook",
+        eventType: "chat.message",
+        dedupeKey: "gql-dedupe-1",
+        input: { text: "hello" },
+        conversation: { id: "conv-gql-replay", threadId: "thread-gql-replay" },
+        actor: { id: "user-1", displayName: "User One" },
+      };
+
+      const first = await schema.mutation.dispatchSupervisorConversation(
+        {
+          binding,
+          supervisorProfileId: profileId,
+          correlationKey: "corr-gql-replay",
+          sourceMessageId: stableSourceMessageId,
+          mockScenario,
+          event: {
+            ...baseEvent,
+            eventId: "evt-gql-replay-1",
+            receivedAt: "2026-05-01T12:00:00.000Z",
+          },
+        },
+        options,
+      );
+
+      expect(first.applied).toBe(true);
+      expect(first.decision.supervisorConversationId).toBe(
+        first.conversation.supervisorConversationId,
+      );
+      expect(resolverSpy).toHaveBeenCalledTimes(1);
+
+      const second = await schema.mutation.dispatchSupervisorConversation(
+        {
+          binding,
+          supervisorProfileId: profileId,
+          correlationKey: "corr-gql-replay",
+          sourceMessageId: stableSourceMessageId,
+          mockScenario,
+          event: {
+            ...baseEvent,
+            eventId: "evt-gql-replay-2",
+            receivedAt: "2026-05-01T12:30:00.000Z",
+          },
+        },
+        options,
+      );
+
+      expect(second.applied).toBe(true);
+      expect(second.conversation.supervisorConversationId).toBe(
+        first.conversation.supervisorConversationId,
+      );
+      expect(second.decision.decisionId).toBe(first.decision.decisionId);
+      expect(resolverSpy).toHaveBeenCalledTimes(1);
+
+      resolverSpy.mockRestore();
+    });
   });
 });

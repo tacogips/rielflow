@@ -1,0 +1,27 @@
+{
+  "workflowId": "divedra-default-workflow-supervisor",
+  "description": "Reference supervisor workflow bundle for chat-facing dispatcher demos. The runtime applies validated lifecycle actions; this graph is a minimal manager shell suitable for mock scenarios and integration tests.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "You coordinate supervised workflows for external chat. Prefer concise routing; privileged lifecycle actions are enforced by the runtime dispatcher.",
+    "workerSystemPromptTemplate": "Return concise structured JSON when asked."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "role": "manager"
+    }
+  ]
+}

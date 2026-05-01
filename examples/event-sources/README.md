@@ -136,3 +136,12 @@ divedra events emit example-webhook \
 Use the same `artifact-root` and correlation (`conversation` + `threadId` in
 the payload) to emit further events with `"text": "status"` or `"stop"` in
 `event.input` to exercise the same supervised run.
+
+## Supervisor dispatch (multi-workflow LLM resolver)
+
+Binding `bindings/webhook-supervisor-dispatch-demo.json` sets
+`execution.mode` to `supervisor-dispatch`, loads profile
+`supervisors/default-chat-dispatcher.json`, and resolves decisions through the
+stub workflow `dispatcher-llm-resolver-stub` (`resolver-worker`). See
+`examples/default-supervisor-dispatcher/README.md` for validate/emit commands,
+fixture payloads, and mock scenarios (`answer-directly` vs `start-workflow`).

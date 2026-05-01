@@ -1,0 +1,17 @@
+{
+  "resolver-worker": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "action": "answer-directly",
+      "reason": "demo fixture",
+      "confidence": 1,
+      "reply": {
+        "text": "Hello from the supervisor dispatcher demo (answer-directly)."
+      }
+    }
+  }
+}

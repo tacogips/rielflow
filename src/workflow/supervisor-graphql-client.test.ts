@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import type { EventBinding } from "../events/types";
-import { createWorkflowSupervisorGraphqlClient } from "./supervisor-graphql-client";
+import {
+  createWorkflowSupervisorGraphqlClient,
+  postDispatchSupervisorConversationThroughGraphql,
+} from "./supervisor-graphql-client";
 
 function buildBinding(): EventBinding {
   return {
@@ -226,5 +229,70 @@ describe("createWorkflowSupervisorGraphqlClient", () => {
     expect(parsed.variables?.input?.binding?.execution?.control).toEqual({
       intentMapping: { mode: "structured-only" },
     });
+  });
+
+  test("postDispatchSupervisorConversationThroughGraphql parses dispatch payload", async () => {
+    const now = "2026-05-01T00:00:00.000Z";
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: {
+            dispatchSupervisorConversation: {
+              conversation: {
+                supervisorConversationId: "conv-1",
+                supervisorProfileId: "profile-1",
+                profileRevision: "rev-1",
+                supervisorWorkflowName: "sup-wf",
+                sourceId: "source-1",
+                bindingId: "binding-1",
+                correlationKey: "corr-1",
+                conversationRevision: 1,
+                status: "active",
+                artifactDir: "/tmp/art",
+                createdAt: now,
+                updatedAt: now,
+              },
+              managedRuns: [],
+              decision: {
+                decisionId: "dec-1",
+                supervisorConversationId: "conv-1",
+                sourceMessageId: "msg-1",
+                profileRevision: "rev-1",
+                conversationRevision: 1,
+                status: "applied",
+                proposalJson: "{}",
+                createdAt: now,
+                updatedAt: now,
+              },
+              proposal: { action: "no-op", reason: "ok", confidence: 1 },
+              applied: true,
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }) as typeof fetch;
+
+    const result = await postDispatchSupervisorConversationThroughGraphql(
+      {
+        endpoint: "http://example.test/graphql",
+        fetchImpl,
+      },
+      {
+        binding: {},
+        event: {},
+        supervisorProfileId: "profile-1",
+        correlationKey: "corr-1",
+        sourceMessageId: "msg-1",
+      },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.applied).toBe(true);
+    expect(result.conversation.supervisorConversationId).toBe("conv-1");
+    expect(result.managedRuns).toEqual([]);
   });
 });

@@ -305,6 +305,8 @@ export interface EventReceiptRecord {
   readonly workflowExecutionId?: string;
   readonly supervisedRunId?: string;
   readonly supervisorExecutionId?: string;
+  readonly supervisorConversationId?: string;
+  readonly supervisorDecisionId?: string;
   readonly rawRef?: EventArtifactRef;
   readonly normalizedRef?: EventArtifactRef;
   readonly inputRef?: EventArtifactRef;

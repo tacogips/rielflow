@@ -939,7 +939,18 @@ export {
 } from "./workflow/catalog";
 export { runWorkflow } from "./workflow/engine";
 export {
+  createWorkflowSupervisorDispatchClient,
+  type DispatchSupervisorConversationInput,
+  type WorkflowSupervisorDispatchClient,
+  type WorkflowSupervisorDispatchView,
+  type StartManagedWorkflowInput,
+  type SubmitManagedWorkflowInput,
+  type StopManagedWorkflowInput,
+  type SupervisorRuntimeCapabilitySet,
+} from "./workflow/supervisor-dispatch-client";
+export {
   createWorkflowSupervisorGraphqlClient,
+  postDispatchSupervisorConversationThroughGraphql,
   type WorkflowSupervisorGraphqlClientOptions,
 } from "./workflow/supervisor-graphql-client";
 export {

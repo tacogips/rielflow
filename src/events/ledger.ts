@@ -114,6 +114,12 @@ async function indexReceipt(
       ...(record.supervisorExecutionId === undefined
         ? {}
         : { supervisorExecutionId: record.supervisorExecutionId }),
+      ...(record.supervisorConversationId === undefined
+        ? {}
+        : { supervisorConversationId: record.supervisorConversationId }),
+      ...(record.supervisorDecisionId === undefined
+        ? {}
+        : { supervisorDecisionId: record.supervisorDecisionId }),
       artifactDir,
       ...(record.error === undefined ? {} : { error: record.error }),
       receivedAt: record.receivedAt,
@@ -204,6 +210,8 @@ export async function updateEventReceipt(
     readonly workflowExecutionId?: string;
     readonly supervisedRunId?: string;
     readonly supervisorExecutionId?: string;
+    readonly supervisorConversationId?: string;
+    readonly supervisorDecisionId?: string;
     readonly inputPayload?: unknown;
     readonly dispatchPayload?: unknown;
     readonly error?: string;
@@ -222,6 +230,12 @@ export async function updateEventReceipt(
     ...(input.supervisorExecutionId === undefined
       ? {}
       : { supervisorExecutionId: input.supervisorExecutionId }),
+    ...(input.supervisorConversationId === undefined
+      ? {}
+      : { supervisorConversationId: input.supervisorConversationId }),
+    ...(input.supervisorDecisionId === undefined
+      ? {}
+      : { supervisorDecisionId: input.supervisorDecisionId }),
     ...(input.error === undefined ? {} : { error: input.error }),
     updatedAt: new Date().toISOString(),
   };

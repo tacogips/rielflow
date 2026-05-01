@@ -121,6 +121,216 @@ describe("validateSupervisorDispatchProposalAgainstContext", () => {
     );
     expect(issues.some((i) => i.code === "direct-answer-disabled")).toBe(true);
   });
+
+  test("rejects key-only submit-input when multiple active runs share a key", () => {
+    const profile = minimalProfile({
+      managedWorkflows: [
+        {
+          key: "code-review",
+          workflowName: "code-review-wf",
+          description: "d",
+          concurrency: { mode: "multiple-active" },
+        },
+      ],
+    });
+    const ctx: WorkflowSupervisorDispatchContext = {
+      ...minimalContext(profile),
+      managedRuns: [
+        {
+          managedRunId: "mr-1",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+        {
+          managedRunId: "mr-2",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+      ],
+    };
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "submit-input",
+        reason: "go",
+        confidence: 1,
+        targets: [{ managedWorkflowKey: "code-review", input: { x: 1 } }],
+      },
+      ctx,
+    );
+    expect(issues.some((i) => i.code === "ambiguous-managed-target")).toBe(
+      true,
+    );
+  });
+
+  test("allows key-only submit-input when per-key selection disambiguates", () => {
+    const profile = minimalProfile({
+      managedWorkflows: [
+        {
+          key: "code-review",
+          workflowName: "code-review-wf",
+          description: "d",
+          concurrency: { mode: "multiple-active" },
+        },
+      ],
+    });
+    const ctx: WorkflowSupervisorDispatchContext = {
+      ...minimalContext(profile),
+      selectedManagedRunIdsByWorkflowKey: { "code-review": "mr-2" },
+      managedRuns: [
+        {
+          managedRunId: "mr-1",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+        {
+          managedRunId: "mr-2",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+      ],
+    };
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "submit-input",
+        reason: "go",
+        confidence: 1,
+        targets: [{ managedWorkflowKey: "code-review", input: { x: 1 } }],
+      },
+      ctx,
+    );
+    expect(issues.some((i) => i.code === "ambiguous-managed-target")).toBe(
+      false,
+    );
+  });
+
+  test("requires managedRunId for switch-workflow when startOnSwitch is off", () => {
+    const profile = minimalProfile();
+    const ctx = minimalContext(profile);
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "switch-workflow",
+        reason: "pick",
+        confidence: 1,
+        targets: [{ managedWorkflowKey: "code-review" }],
+      },
+      ctx,
+    );
+    expect(
+      issues.some((i) => i.code === "switch-workflow-requires-managed-run-id"),
+    ).toBe(true);
+  });
+
+  test("allows switch-workflow without managedRunId when lifecycle.startOnSwitch", () => {
+    const profile = minimalProfile({
+      managedWorkflows: [
+        {
+          key: "code-review",
+          workflowName: "code-review-wf",
+          description: "d",
+          concurrency: { mode: "single-active" },
+          lifecycle: { startOnSwitch: true },
+        },
+      ],
+    });
+    const ctx = minimalContext(profile);
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "switch-workflow",
+        reason: "pick",
+        confidence: 1,
+        targets: [{ managedWorkflowKey: "code-review" }],
+      },
+      ctx,
+    );
+    expect(
+      issues.some((i) => i.code === "switch-workflow-requires-managed-run-id"),
+    ).toBe(false);
+    expect(issues.some((i) => i.code === "ambiguous-managed-target")).toBe(
+      false,
+    );
+  });
+
+  test("rejects ambiguous switch-workflow without managedRunId under startOnSwitch", () => {
+    const profile = minimalProfile({
+      managedWorkflows: [
+        {
+          key: "code-review",
+          workflowName: "code-review-wf",
+          description: "d",
+          concurrency: { mode: "multiple-active" },
+          lifecycle: { startOnSwitch: true },
+        },
+      ],
+    });
+    const ctx: WorkflowSupervisorDispatchContext = {
+      ...minimalContext(profile),
+      managedRuns: [
+        {
+          managedRunId: "mr-1",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+        {
+          managedRunId: "mr-2",
+          supervisorConversationId: "c1",
+          managedWorkflowKey: "code-review",
+          status: "running",
+        },
+      ],
+    };
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "switch-workflow",
+        reason: "pick",
+        confidence: 1,
+        targets: [{ managedWorkflowKey: "code-review" }],
+      },
+      ctx,
+    );
+    expect(issues.some((i) => i.code === "ambiguous-managed-target")).toBe(
+      true,
+    );
+  });
+
+  test("rejects multi-target proposals until fanout semantics are implemented", () => {
+    const profile = minimalProfile({
+      managedWorkflows: [
+        {
+          key: "code-review",
+          workflowName: "code-review-wf",
+          description: "d",
+          concurrency: { mode: "multiple-active" },
+        },
+        {
+          key: "doc-review",
+          workflowName: "doc-review-wf",
+          description: "d2",
+          concurrency: { mode: "multiple-active" },
+        },
+      ],
+    });
+    const ctx = minimalContext(profile);
+    const issues = validateSupervisorDispatchProposalAgainstContext(
+      {
+        action: "start-workflow",
+        reason: "fan out",
+        confidence: 1,
+        targets: [
+          { managedWorkflowKey: "code-review" },
+          { managedWorkflowKey: "doc-review" },
+        ],
+      },
+      ctx,
+    );
+    expect(issues.some((i) => i.code === "multiple-targets-unsupported")).toBe(
+      true,
+    );
+  });
 });
 
 describe("mapSupervisorChatDecisionToDispatchProposal", () => {

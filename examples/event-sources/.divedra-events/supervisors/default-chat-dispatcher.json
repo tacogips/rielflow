@@ -1,0 +1,26 @@
+{
+  "supervisorProfileId": "default-chat-dispatcher",
+  "profileRevision": "2026-05-01",
+  "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+  "description": "Demo dispatcher profile with one single-active managed workflow (worker-only-single-step) and direct-answer routing.",
+  "managedWorkflows": [
+    {
+      "key": "echo",
+      "workflowName": "worker-only-single-step",
+      "displayName": "Echo worker",
+      "description": "Minimal worker bundle for start/submit/status demos.",
+      "aliases": ["worker", "echo-demo"],
+      "concurrency": {
+        "mode": "single-active"
+      }
+    }
+  ],
+  "directAnswerPolicy": {
+    "enabled": true,
+    "allowedDecisionKinds": ["answer-directly", "status", "clarify"]
+  },
+  "conversationPolicy": {
+    "defaultActionWhenUnclear": "clarify",
+    "llmDecisionMinConfidence": 0.5
+  }
+}

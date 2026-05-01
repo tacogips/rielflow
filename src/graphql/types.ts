@@ -42,6 +42,15 @@ import type { ChatReplyDispatcher, LoadOptions } from "../workflow/types";
 import type { ValidationIssue } from "../workflow/types";
 import type { CommunicationService } from "../workflow/communication-service";
 import type { EventSupervisedRunRecord } from "../events/types";
+import type {
+  ManagedWorkflowRunRecord,
+  SupervisorDispatchDecisionRecord,
+  WorkflowSupervisorConversationRecord,
+} from "../events/supervisor-conversations";
+import type {
+  DispatchProposalValidationIssue,
+  SupervisorDispatchProposal,
+} from "../events/supervisor-dispatch-contract";
 
 export interface GraphqlRequestContext
   extends LoadOptions,
@@ -51,6 +60,7 @@ export interface GraphqlRequestContext
   readonly readOnly?: boolean;
   readonly fixedWorkflowName?: string;
   readonly noExec?: boolean;
+  readonly eventRoot?: string;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
 }
 
@@ -351,6 +361,37 @@ export interface DispatchSupervisorChatPayload {
   readonly results: readonly DispatchSupervisorChatResultView[];
 }
 
+export interface DispatchSupervisorConversationGraphqlInput {
+  readonly binding: unknown;
+  readonly event: unknown;
+  readonly supervisorProfileId: string;
+  readonly correlationKey: string;
+  readonly sourceMessageId: string;
+  readonly mockScenario?: MockNodeScenario;
+  readonly dryRun?: boolean;
+  readonly maxSteps?: number;
+  readonly maxLoopIterations?: number;
+  readonly defaultTimeoutMs?: number;
+}
+
+export interface DispatchSupervisorConversationPayload {
+  readonly conversation: WorkflowSupervisorConversationRecord;
+  readonly managedRuns: readonly ManagedWorkflowRunRecord[];
+  readonly decision: SupervisorDispatchDecisionRecord;
+  readonly proposal: SupervisorDispatchProposal;
+  readonly applied: boolean;
+  readonly validationIssues?: readonly DispatchProposalValidationIssue[];
+}
+
+export interface SupervisorDispatchConversationLookupGraphqlInput {
+  readonly supervisorConversationId: string;
+}
+
+export interface SupervisorDispatchConversationGraphqlPayload {
+  readonly conversation: WorkflowSupervisorConversationRecord;
+  readonly managedRuns: readonly ManagedWorkflowRunRecord[];
+}
+
 export interface SendManagerMessageInput {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
@@ -443,6 +484,10 @@ export interface GraphqlQueryRoot {
     input: SupervisedWorkflowLookupGraphqlInput,
     context?: GraphqlRequestContext,
   ): Promise<SupervisedWorkflowGraphqlPayload>;
+  supervisorDispatchConversation(
+    input: SupervisorDispatchConversationLookupGraphqlInput,
+    context?: GraphqlRequestContext,
+  ): Promise<SupervisorDispatchConversationGraphqlPayload>;
 }
 
 export interface GraphqlMutationRoot {
@@ -494,6 +539,10 @@ export interface GraphqlMutationRoot {
     input: DispatchSupervisorChatGraphqlInput,
     context?: GraphqlRequestContext,
   ): Promise<DispatchSupervisorChatPayload>;
+  dispatchSupervisorConversation(
+    input: DispatchSupervisorConversationGraphqlInput,
+    context?: GraphqlRequestContext,
+  ): Promise<DispatchSupervisorConversationPayload>;
 }
 
 export interface GraphqlSchema {

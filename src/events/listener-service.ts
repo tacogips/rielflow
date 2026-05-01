@@ -239,9 +239,18 @@ export async function handleEventHttpRequest(
           receiptId: result.receipt.receiptId,
           status: result.receipt.status,
           duplicate: result.duplicate,
+          workflowName: result.workflowName ?? null,
           workflowExecutionId: result.workflowExecutionId ?? null,
           supervisedRunId: result.supervisedRunId ?? null,
           supervisorExecutionId: result.supervisorExecutionId ?? null,
+          supervisorConversationId:
+            result.supervisorConversationId ??
+            result.receipt.supervisorConversationId ??
+            null,
+          supervisorDecisionId:
+            result.supervisorDecisionId ??
+            result.receipt.supervisorDecisionId ??
+            null,
         })),
       },
       202,

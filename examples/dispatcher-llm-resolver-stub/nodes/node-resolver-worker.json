@@ -1,0 +1,7 @@
+{
+  "id": "resolver-worker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/resolver-worker.md",
+  "variables": {}
+}

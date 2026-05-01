@@ -1,0 +1,29 @@
+{
+  "id": "webhook-supervisor-dispatch-demo",
+  "sourceId": "example-webhook",
+  "match": {
+    "eventType": "chat.supervisor.dispatch.demo"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "source": "webhook"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "mode": "supervisor-dispatch",
+    "supervisorProfileId": "default-chat-dispatcher",
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "control": {
+      "correlationKey": "{{event.sourceId}}:{{binding.id}}:{{event.conversation.id}}:{{event.conversation.threadId}}",
+      "intentMapping": {
+        "mode": "llm-command",
+        "resolverWorkflowName": "dispatcher-llm-resolver-stub",
+        "resolverNodeId": "resolver-worker"
+      }
+    }
+  }
+}

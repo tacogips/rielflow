@@ -8,8 +8,6 @@ import { withResolvedWorkflowSourceOptions } from "../workflow/catalog";
 import { loadWorkflowFromCatalog } from "../workflow/load";
 import { saveSession, loadSession } from "../workflow/session-store";
 import type { WorkflowSessionState } from "../workflow/session";
-import type { MockNodeScenario } from "../workflow/adapter";
-import type { ChatReplyDispatcher } from "../workflow/types";
 import {
   getNormalizedNodePayload,
   resolveWorkflowManagerStepId,
@@ -25,10 +23,14 @@ import {
   mapEventToWorkflowInput,
   selectMatchingBindings,
 } from "./input-mapping";
-import { buildControlStatusExternalOutputMessage } from "./supervisor-control-reply";
+import {
+  buildControlStatusExternalOutputMessage,
+  buildDispatchControlExternalOutputMessage,
+} from "./supervisor-control-reply";
 import { beginEventReceipt, updateEventReceipt } from "./ledger";
 import { publishExternalOutputMessage } from "./external-output";
 import { resolveEventMailboxBridgePolicy } from "./mailbox-bridge-policy";
+import { resolveEventRoot } from "./config";
 import {
   buildStableSupervisorCommandId,
   resolveSupervisedCorrelationKey,
@@ -41,9 +43,10 @@ import { createEventSupervisorRouter } from "./supervisor-router";
 import {
   createWorkflowSupervisorClient,
   type SupervisedWorkflowView,
-  type WorkflowSupervisorClient,
 } from "../workflow/supervisor-client";
 import { createWorkflowSupervisorGraphqlClient } from "../workflow/supervisor-graphql-client";
+import { createWorkflowSupervisorDispatchClient } from "../workflow/supervisor-dispatch-client";
+import type { WorkflowSupervisorDispatchView } from "../workflow/supervisor-dispatch-client";
 import {
   planSupervisedLlmBindingsDispatch,
   type LlmBatchPlan,
@@ -56,6 +59,9 @@ import type {
   EventSupervisorAction,
   ExternalEventEnvelope,
 } from "./types";
+import type { WorkflowTriggerRunnerOptions } from "./workflow-trigger-runner-options";
+
+export type { WorkflowTriggerRunnerOptions } from "./workflow-trigger-runner-options";
 
 export interface WorkflowTriggerDispatchInput {
   readonly binding: EventBinding;
@@ -80,20 +86,8 @@ export interface WorkflowTriggerResult {
   readonly workflowExecutionId?: string;
   readonly supervisedRunId?: string;
   readonly supervisorExecutionId?: string;
-}
-
-export interface WorkflowTriggerRunnerOptions extends DivedraOptions {
-  readonly endpoint?: string;
-  readonly authToken?: string;
-  readonly fetchImpl?: typeof fetch;
-  readonly mockScenario?: MockNodeScenario;
-  readonly dryRun?: boolean;
-  readonly maxSteps?: number;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
-  readonly readOnly?: boolean;
-  readonly eventReplyDispatcher?: ChatReplyDispatcher;
-  readonly supervisorClient?: WorkflowSupervisorClient;
+  readonly supervisorConversationId?: string;
+  readonly supervisorDecisionId?: string;
 }
 
 export interface WorkflowTriggerRunner {
@@ -146,6 +140,86 @@ async function dispatchSupervisorControlReplyIfConfigured(input: {
   } catch {
     // Best-effort: chat reply failures must not change receipt outcome.
   }
+}
+
+async function dispatchSupervisorDispatchReplyIfConfigured(input: {
+  readonly options: WorkflowTriggerRunnerOptions;
+  readonly binding?: EventBinding;
+  readonly event: ExternalEventEnvelope;
+  readonly receiptId: string;
+  readonly view: WorkflowSupervisorDispatchView;
+}): Promise<void> {
+  const dispatcher = input.options.eventReplyDispatcher;
+  if (dispatcher === undefined) {
+    return;
+  }
+  if (input.binding !== undefined) {
+    const policy = resolveEventMailboxBridgePolicy(input.binding);
+    if (policy.output.control.mode === "none") {
+      return;
+    }
+  }
+  const message = buildDispatchControlExternalOutputMessage({
+    event: input.event,
+    receiptId: input.receiptId,
+    view: input.view,
+  });
+  if (message === null) {
+    return;
+  }
+  const workflowId = message.address.workflowName ?? "event-supervisor";
+  const workflowExecutionId =
+    message.address.workflowExecutionId ??
+    `supervisor-dispatch:${input.receiptId}`;
+  try {
+    await publishExternalOutputMessage({
+      dispatcher,
+      message,
+      workflowId,
+      workflowExecutionId,
+      nodeId: "event-supervisor-dispatch",
+      nodeExecId: input.receiptId,
+      runtimeOptions: input.options,
+    });
+  } catch {
+    // Best-effort: chat reply failures must not change receipt outcome.
+  }
+}
+
+function workflowExecutionIdFromDispatchView(
+  view: WorkflowSupervisorDispatchView,
+): string | undefined {
+  const selectedId = view.conversation.selectedManagedRunId;
+  if (selectedId !== undefined) {
+    const selectedRun = view.managedRuns.find(
+      (r) => r.managedRunId === selectedId,
+    );
+    if (selectedRun?.activeTargetExecutionId !== undefined) {
+      return selectedRun.activeTargetExecutionId;
+    }
+  }
+  for (const run of view.managedRuns) {
+    if (
+      (run.status === "running" || run.status === "starting") &&
+      run.activeTargetExecutionId !== undefined
+    ) {
+      return run.activeTargetExecutionId;
+    }
+  }
+  return undefined;
+}
+
+function workflowNameFromDispatchView(
+  view: WorkflowSupervisorDispatchView,
+  workflowExecutionId: string | undefined,
+): string {
+  if (workflowExecutionId === undefined) {
+    return view.conversation.supervisorWorkflowName;
+  }
+  const run = view.managedRuns.find(
+    (r) => r.activeTargetExecutionId === workflowExecutionId,
+  );
+  return run?.targetWorkflowName ?? view.conversation.supervisorWorkflowName;
 }
 
 interface StickyRootManagerContext {
@@ -436,6 +510,8 @@ export function createWorkflowTriggerRunner(
       }
 
       const supervisedMode = input.binding.execution?.mode === "supervised";
+      const supervisorDispatchMode =
+        input.binding.execution?.mode === "supervisor-dispatch";
 
       let supervisorIntent: SupervisorIntentResolution | undefined;
       if (supervisedMode) {
@@ -483,6 +559,7 @@ export function createWorkflowTriggerRunner(
       }
 
       const needsFullInputMapping =
+        supervisorDispatchMode ||
         !supervisedMode ||
         (supervisorIntent !== undefined &&
           supervisorIntent.outcome === "action" &&
@@ -523,7 +600,7 @@ export function createWorkflowTriggerRunner(
           options,
         );
         if (
-          supervisedMode &&
+          (supervisedMode || supervisorDispatchMode) &&
           input.suppressSupervisorChatReply !== true &&
           options.eventReplyDispatcher !== undefined
         ) {
@@ -534,7 +611,7 @@ export function createWorkflowTriggerRunner(
             receiptId: begin.record.receiptId,
             action: "failed",
             skipReason:
-              "Event payload could not be mapped for this supervised binding. Inspect the event receipt for operator diagnostics.",
+              "Event payload could not be mapped for this binding. Inspect the event receipt for operator diagnostics.",
           });
         }
         return {
@@ -689,19 +766,67 @@ export function createWorkflowTriggerRunner(
         }
 
         if (input.binding.execution?.mode === "supervisor-dispatch") {
-          const failed = await updateEventReceipt(
+          const profileId = input.binding.execution.supervisorProfileId?.trim();
+          if (profileId === undefined || profileId.length === 0) {
+            throw new Error(
+              "supervisor-dispatch requires execution.supervisorProfileId",
+            );
+          }
+          const correlationKey = resolveSupervisedCorrelationKey({
+            binding: input.binding,
+            event: input.event,
+            ...(input.source === undefined ? {} : { source: input.source }),
+          });
+          const eventRoot = resolveEventRoot(options);
+          const dispatchClient = createWorkflowSupervisorDispatchClient(options);
+          const view = await dispatchClient.dispatchExternalInput({
+            ...options,
+            eventRoot,
+            binding: input.binding,
+            event: input.event,
+            ...(input.source === undefined ? {} : { source: input.source }),
+            supervisorProfileId: profileId,
+            sourceMessageId: input.event.dedupeKey,
+            correlationKey,
+          });
+          const workflowExecutionIdResolved =
+            workflowExecutionIdFromDispatchView(view);
+          const dispatchWorkflowName = workflowNameFromDispatchView(
+            view,
+            workflowExecutionIdResolved,
+          );
+          receipt = await updateEventReceipt(
             {
               record: receipt,
               artifactDir: begin.artifactDir,
-              status: "failed",
-              error:
-                "supervisor-dispatch is not yet implemented in the event trigger runner",
+              status: "dispatched",
+              ...(workflowExecutionIdResolved === undefined
+                ? {}
+                : { workflowExecutionId: workflowExecutionIdResolved }),
+              supervisorConversationId: view.conversation.supervisorConversationId,
+              supervisorDecisionId: view.decision.decisionId,
+              dispatchPayload: view,
             },
             options,
           );
+          if (input.suppressSupervisorChatReply !== true) {
+            await dispatchSupervisorDispatchReplyIfConfigured({
+              options,
+              binding: input.binding,
+              event: input.event,
+              receiptId: receipt.receiptId,
+              view,
+            });
+          }
           return {
-            receipt: failed,
+            receipt,
             duplicate: false,
+            ...workflowNameResultField(dispatchWorkflowName),
+            ...(workflowExecutionIdResolved === undefined
+              ? {}
+              : { workflowExecutionId: workflowExecutionIdResolved }),
+            supervisorConversationId: view.conversation.supervisorConversationId,
+            supervisorDecisionId: view.decision.decisionId,
           };
         }
 
@@ -814,7 +939,8 @@ export function createWorkflowTriggerRunner(
           options,
         );
         if (
-          input.binding.execution?.mode === "supervised" &&
+          (input.binding.execution?.mode === "supervised" ||
+            input.binding.execution?.mode === "supervisor-dispatch") &&
           input.suppressSupervisorChatReply !== true
         ) {
           await dispatchSupervisorControlReplyIfConfigured({

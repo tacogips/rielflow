@@ -62,7 +62,10 @@ import type {
   EventSupervisedRunRecord,
   EventSupervisorAction,
   EventSupervisorCommand,
+  ExternalEventEnvelope,
 } from "../events/types";
+import { resolveEventRoot } from "../events/config";
+import { createRuntimeSupervisorConversationRepository } from "../events/supervisor-conversations";
 import { assertSupervisedBindingGraphqlPolicy } from "../events/validate";
 import { createEventSupervisedRunRepository } from "../events/supervised-runs";
 import { dispatchSupervisorChat } from "../events/dispatch-supervisor-chat";
@@ -71,6 +74,7 @@ import {
   reconcileTerminalSupervisedRunForCorrelation,
   reconcileTerminalSupervisedRunRecord,
 } from "../workflow/supervisor-client";
+import { createWorkflowSupervisorDispatchClient } from "../workflow/supervisor-dispatch-client";
 import {
   listSessions,
   loadSession,
@@ -128,6 +132,10 @@ import type {
   DispatchSupervisedWorkflowCommandInput,
   DispatchSupervisorChatGraphqlInput,
   DispatchSupervisorChatPayload,
+  DispatchSupervisorConversationGraphqlInput,
+  DispatchSupervisorConversationPayload,
+  SupervisorDispatchConversationGraphqlPayload,
+  SupervisorDispatchConversationLookupGraphqlInput,
   EventSupervisorCommandInput,
   SupervisedWorkflowGraphqlPayload,
   SupervisedWorkflowLookupGraphqlInput,
@@ -1287,7 +1295,6 @@ function parseEventBindingFromGraphql(value: unknown): EventBinding {
   const o = assertJsonObjectForSupervisor(value, "binding");
   requireNonEmptySupervisorString(o["id"], "binding.id");
   requireNonEmptySupervisorString(o["sourceId"], "binding.sourceId");
-  requireNonEmptySupervisorString(o["workflowName"], "binding.workflowName");
   const inputMap = o["inputMapping"];
   if (
     typeof inputMap !== "object" ||
@@ -1304,6 +1311,28 @@ function parseEventBindingFromGraphql(value: unknown): EventBinding {
   ) {
     throw new Error("binding.execution must be a JSON object when set");
   }
+  const mode =
+    execution !== undefined &&
+    execution !== null &&
+    typeof execution === "object" &&
+    !Array.isArray(execution) &&
+    typeof (execution as { readonly mode?: unknown }).mode === "string"
+      ? (execution as { readonly mode: string }).mode
+      : undefined;
+  const wfRaw = o["workflowName"];
+  if (mode === "supervisor-dispatch") {
+    if (
+      wfRaw !== undefined &&
+      wfRaw !== null &&
+      (typeof wfRaw !== "string" || wfRaw.length === 0)
+    ) {
+      throw new Error(
+        "binding.workflowName must be a non-empty string when provided for supervisor-dispatch bindings",
+      );
+    }
+  } else {
+    requireNonEmptySupervisorString(o["workflowName"], "binding.workflowName");
+  }
   return o as unknown as EventBinding;
 }
 
@@ -1315,6 +1344,52 @@ function parseOptionalSupervisorRuntimeVariables(
     return undefined;
   }
   return assertJsonObjectForSupervisor(value, label);
+}
+
+function parseExternalEventEnvelopeFromGraphql(
+  value: unknown,
+): ExternalEventEnvelope {
+  const o = assertJsonObjectForSupervisor(value, "event");
+  const input = assertJsonObjectForSupervisor(o["input"], "event.input");
+  const actorRaw = o["actor"];
+  const conversationRaw = o["conversation"];
+  const rawRefRaw = o["rawRef"];
+  const occurredAt = requireOptionalSupervisorString(
+    o["occurredAt"],
+    "event.occurredAt",
+  );
+
+  return {
+    sourceId: requireNonEmptySupervisorString(o["sourceId"], "event.sourceId"),
+    eventId: requireNonEmptySupervisorString(o["eventId"], "event.eventId"),
+    provider: requireNonEmptySupervisorString(o["provider"], "event.provider"),
+    eventType: requireNonEmptySupervisorString(
+      o["eventType"],
+      "event.eventType",
+    ),
+    receivedAt: requireNonEmptySupervisorString(
+      o["receivedAt"],
+      "event.receivedAt",
+    ),
+    dedupeKey: requireNonEmptySupervisorString(
+      o["dedupeKey"],
+      "event.dedupeKey",
+    ),
+    input,
+    ...(occurredAt !== undefined ? { occurredAt } : {}),
+    ...(actorRaw !== undefined && actorRaw !== null
+      ? { actor: actorRaw as ExternalEventEnvelope["actor"] }
+      : {}),
+    ...(conversationRaw !== undefined && conversationRaw !== null
+      ? {
+          conversation:
+            conversationRaw as ExternalEventEnvelope["conversation"],
+        }
+      : {}),
+    ...(rawRefRaw !== undefined && rawRefRaw !== null
+      ? { rawRef: rawRefRaw as ExternalEventEnvelope["rawRef"] }
+      : {}),
+  } as ExternalEventEnvelope;
 }
 
 type ParsedSupervisedWorkflowLookup =
@@ -1506,6 +1581,100 @@ async function dispatchSupervisedWorkflowCommandMutation(
     ...(view.activeTargetStatus === undefined
       ? {}
       : { activeTargetStatus: view.activeTargetStatus }),
+  };
+}
+
+async function supervisorDispatchConversationQuery(
+  input: SupervisorDispatchConversationLookupGraphqlInput,
+  context: GraphqlRequestContext,
+): Promise<SupervisorDispatchConversationGraphqlPayload> {
+  const id = requireNonEmptySupervisorString(
+    input.supervisorConversationId,
+    "input.supervisorConversationId",
+  );
+  const repo = createRuntimeSupervisorConversationRepository(context);
+  const conversation = await repo.loadConversation(id);
+  if (conversation === null) {
+    throw new Error("no supervisor dispatch conversation matches the lookup");
+  }
+  const managedRuns = await repo.listManagedRuns(id);
+  return { conversation, managedRuns };
+}
+
+async function dispatchSupervisorConversationMutation(
+  input: DispatchSupervisorConversationGraphqlInput,
+  context: GraphqlRequestContext,
+): Promise<DispatchSupervisorConversationPayload> {
+  const binding = parseEventBindingFromGraphql(input.binding);
+  if (binding.execution?.mode !== "supervisor-dispatch") {
+    throw new Error(
+      'dispatchSupervisorConversation requires binding.execution.mode "supervisor-dispatch"',
+    );
+  }
+  const supervisorProfileId = requireNonEmptySupervisorString(
+    input.supervisorProfileId,
+    "input.supervisorProfileId",
+  );
+  const correlationKey = requireNonEmptySupervisorString(
+    input.correlationKey,
+    "input.correlationKey",
+  );
+  const sourceMessageId = requireNonEmptySupervisorString(
+    input.sourceMessageId,
+    "input.sourceMessageId",
+  );
+  const event = parseExternalEventEnvelopeFromGraphql(input.event);
+  const eventRoot = resolveEventRoot(context);
+  const dryRun = requireOptionalSupervisorBoolean(input.dryRun, "dryRun");
+  const maxSteps = requireOptionalSupervisorInteger(input.maxSteps, "maxSteps");
+  const maxLoopIterations = requireOptionalSupervisorInteger(
+    input.maxLoopIterations,
+    "maxLoopIterations",
+  );
+  const defaultTimeoutMs = requireOptionalSupervisorInteger(
+    input.defaultTimeoutMs,
+    "defaultTimeoutMs",
+  );
+  const engine =
+    input.mockScenario === undefined &&
+    dryRun === undefined &&
+    maxSteps === undefined &&
+    maxLoopIterations === undefined &&
+    defaultTimeoutMs === undefined
+      ? undefined
+      : {
+          ...(input.mockScenario === undefined
+            ? {}
+            : { mockScenario: input.mockScenario }),
+          ...(dryRun === undefined ? {} : { dryRun }),
+          ...(maxSteps === undefined ? {} : { maxSteps }),
+          ...(maxLoopIterations === undefined ? {} : { maxLoopIterations }),
+          ...(defaultTimeoutMs === undefined ? {} : { defaultTimeoutMs }),
+        };
+  const client = createWorkflowSupervisorDispatchClient(context);
+  const view = await client.dispatchExternalInput({
+    ...context,
+    eventRoot,
+    binding,
+    event,
+    supervisorProfileId,
+    correlationKey,
+    sourceMessageId,
+    ...(context.eventReplyDispatcher === undefined
+      ? {}
+      : { eventReplyDispatcher: context.eventReplyDispatcher }),
+    ...(engine === undefined ? {} : engine),
+  });
+  return {
+    conversation: view.conversation,
+    managedRuns: view.managedRuns,
+    decision: view.decision,
+    proposal: view.proposal,
+    applied: view.applied,
+    ...(view.validationIssues === undefined ||
+    view.validationIssues.length === 0
+      ? {}
+      : { validationIssues: view.validationIssues }),
   };
 }
 
@@ -1713,6 +1882,13 @@ export function createGraphqlSchema(
       ): Promise<SupervisedWorkflowGraphqlPayload> {
         return supervisedWorkflowRunQuery(input, context);
       },
+
+      async supervisorDispatchConversation(
+        input: SupervisorDispatchConversationLookupGraphqlInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<SupervisorDispatchConversationGraphqlPayload> {
+        return supervisorDispatchConversationQuery(input, context);
+      },
     },
 
     mutation: {
@@ -1882,6 +2058,13 @@ export function createGraphqlSchema(
         context: GraphqlRequestContext = {},
       ): Promise<DispatchSupervisorChatPayload> {
         return dispatchSupervisorChatMutation(input, context);
+      },
+
+      async dispatchSupervisorConversation(
+        input: DispatchSupervisorConversationGraphqlInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<DispatchSupervisorConversationPayload> {
+        return dispatchSupervisorConversationMutation(input, context);
       },
     },
   };

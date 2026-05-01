@@ -24,11 +24,15 @@ impl-plans/
 
 ## Active Plans
 
-| Plan | Status | Design Reference |
-| ---- | ------ | ---------------- |
-| `workflow-supervisor-dispatcher` | Ready | `design-workflow-supervisor-dispatcher` |
-| `workflow-supervisor-dispatcher-foundation` | Ready | `design-workflow-supervisor-dispatcher` |
-| `workflow-supervisor-dispatcher-runtime` | Ready | `design-workflow-supervisor-dispatcher` |
+None.
+
+## Recently Completed
+
+| Plan | Completed | Design Reference |
+| ---- | --------- | ---------------- |
+| `workflow-supervisor-dispatcher` | 2026-05-02 | `design-workflow-supervisor-dispatcher` |
+| `workflow-supervisor-dispatcher-foundation` | 2026-05-01 | `design-workflow-supervisor-dispatcher` |
+| `workflow-supervisor-dispatcher-runtime` | 2026-05-02 | `design-workflow-supervisor-dispatcher` |
 
 ## Completed Plans
 

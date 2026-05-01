@@ -7,6 +7,7 @@ import type {
   CreateWorkflowDefinitionInput,
   DispatchSupervisedWorkflowCommandInput,
   DispatchSupervisorChatGraphqlInput,
+  DispatchSupervisorConversationGraphqlInput,
   ExecuteWorkflowInput,
   GraphqlRequestContext,
   GraphqlSchemaDependencies,
@@ -17,6 +18,7 @@ import type {
   SaveWorkflowDefinitionInput,
   SendManagerMessageInput,
   SupervisedWorkflowLookupGraphqlInput,
+  SupervisorDispatchConversationLookupGraphqlInput,
   ValidateWorkflowDefinitionInput,
   WorkflowExecutionsQueryInput,
 } from "../graphql/types";
@@ -455,6 +457,20 @@ const GRAPHQL_SCHEMA_TEXT = `
     results: [DispatchSupervisorChatResult!]!
   }
 
+  type DispatchSupervisorConversationPayload {
+    conversation: JSON!
+    managedRuns: [JSON!]!
+    decision: JSON!
+    proposal: JSON!
+    applied: Boolean!
+    validationIssues: JSON
+  }
+
+  type SupervisorDispatchConversationPayload {
+    conversation: JSON!
+    managedRuns: [JSON!]!
+  }
+
   type SendManagerMessagePayload {
     accepted: Boolean!
     managerMessageId: String!
@@ -596,6 +612,23 @@ const GRAPHQL_SCHEMA_TEXT = `
     idempotencyKey: String
   }
 
+  input DispatchSupervisorConversationInput {
+    binding: JSON!
+    event: JSON!
+    supervisorProfileId: String!
+    correlationKey: String!
+    sourceMessageId: String!
+    mockScenario: JSON
+    dryRun: Boolean
+    maxSteps: Int
+    maxLoopIterations: Int
+    defaultTimeoutMs: Int
+  }
+
+  input SupervisorDispatchConversationLookupInput {
+    supervisorConversationId: String!
+  }
+
   input SendManagerMessageInput {
     workflowId: String!
     workflowExecutionId: String!
@@ -667,6 +700,9 @@ const GRAPHQL_SCHEMA_TEXT = `
     supervisedWorkflowRun(
       input: SupervisedWorkflowLookupGraphqlInput!
     ): SupervisedWorkflowGraphqlPayload!
+    supervisorDispatchConversation(
+      input: SupervisorDispatchConversationLookupInput!
+    ): SupervisorDispatchConversationPayload!
   }
 
   type Mutation {
@@ -686,6 +722,9 @@ const GRAPHQL_SCHEMA_TEXT = `
     dispatchSupervisorChat(
       input: DispatchSupervisorChatInput!
     ): DispatchSupervisorChatPayload!
+    dispatchSupervisorConversation(
+      input: DispatchSupervisorConversationInput!
+    ): DispatchSupervisorConversationPayload!
   }
 `;
 
@@ -848,6 +887,18 @@ export function createExecutableGraphqlSchema(
         ) {
           return schema.query.supervisedWorkflowRun(args.input, context);
         },
+        supervisorDispatchConversation(
+          _parent: unknown,
+          args: {
+            readonly input: SupervisorDispatchConversationLookupGraphqlInput;
+          },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.query.supervisorDispatchConversation(
+            args.input,
+            context,
+          );
+        },
       },
       Mutation: {
         createWorkflowDefinition(
@@ -942,6 +993,16 @@ export function createExecutableGraphqlSchema(
           context: GraphqlRequestContext,
         ) {
           return schema.mutation.dispatchSupervisorChat(args.input, context);
+        },
+        dispatchSupervisorConversation(
+          _parent: unknown,
+          args: { readonly input: DispatchSupervisorConversationGraphqlInput },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.dispatchSupervisorConversation(
+            args.input,
+            context,
+          );
         },
       },
     },
