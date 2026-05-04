@@ -131,4 +131,44 @@ describe("composeExecutionPrompts", () => {
     expect(promptText).toContain("Manager inbox message:");
     expect(promptText).toContain("Use the hotfix branch.");
   });
+
+  test("summarizes upstream data with the business payload instead of wrapper prompt metadata", () => {
+    const promptText = composeExecutionPrompt({
+      workflow: makeWorkflow(),
+      nodeRef: {
+        id: "worker-step",
+        nodeFile: "node-worker.json",
+        role: "worker",
+      },
+      node: makeNode(),
+      nodePayloads: {
+        "worker-step": makeNode(),
+      },
+      runtimeVariables: { topic: "release" },
+      basePromptText: "Implement the release step.",
+      assembledArguments: null,
+      upstreamInputs: [
+        {
+          fromNodeId: "manager-step",
+          transitionWhen: "always",
+          communicationId: "comm-1",
+          output: {
+            provider: "codex-agent",
+            model: "gpt-5.5",
+            promptText: "very large upstream prompt wrapper",
+            completionPassed: true,
+            payload: {
+              nextStep: "worker-step",
+              topic: "release",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(promptText).toContain('"nextStep":"worker-step"');
+    expect(promptText).toContain('"topic":"release"');
+    expect(promptText).not.toContain("very large upstream prompt wrapper");
+    expect(promptText).not.toContain('"provider":"codex-agent"');
+  });
 });

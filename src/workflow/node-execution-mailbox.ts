@@ -496,9 +496,27 @@ function renderUpstreamSection(
       `communication=${entry.communicationId}`,
     ];
     lines.push(`- ${routeParts.join(", ")}`);
-    lines.push(`  payload=${summarizeJson(entry.output)}`);
+    lines.push(
+      `  payload=${summarizeJson(resolvePromptSummaryPayload(entry.output))}`,
+    );
   }
   return lines.join("\n");
+}
+
+function resolvePromptSummaryPayload(
+  output: Readonly<Record<string, unknown>>,
+): unknown {
+  const payload = output["payload"];
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    typeof output["provider"] === "string" &&
+    typeof output["model"] === "string"
+  ) {
+    return payload;
+  }
+  return output;
 }
 
 function renderManagerControlSection(
