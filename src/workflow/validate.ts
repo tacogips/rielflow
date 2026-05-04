@@ -1765,13 +1765,14 @@ function normalizeStepAddressedWorkflow(
     issues.push(makeIssue("error", "workflow.defaults", "must be an object"));
   }
   const nodeTimeoutMs =
-    isRecord(defaultsValue) &&
-    readNumberField(
-      defaultsValue,
-      "nodeTimeoutMs",
-      "workflow.defaults",
-      issues,
-    );
+    isRecord(defaultsValue) && defaultsValue["nodeTimeoutMs"] !== undefined
+      ? readNumberField(
+          defaultsValue,
+          "nodeTimeoutMs",
+          "workflow.defaults",
+          issues,
+        )
+      : DEFAULT_NODE_TIMEOUT_MS;
   const maxLoopIterationsRaw =
     isRecord(defaultsValue) && defaultsValue["maxLoopIterations"] !== undefined
       ? readNumberField(

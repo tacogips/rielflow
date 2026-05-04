@@ -16,6 +16,7 @@ import {
 import {
   getStructuralEdges,
   getStructuralLoops,
+  DEFAULT_NODE_TIMEOUT_MS,
   resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerStepId,
   type WorkflowJson,
@@ -246,6 +247,23 @@ describe("structural helpers", () => {
         maxIterations: 2,
       },
     ]);
+  });
+});
+
+describe("workflow defaults", () => {
+  test("defaults omitted nodeTimeoutMs to the shared 20 minute timeout", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["defaults"] = { maxLoopIterations: 3 };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected workflow validation to succeed");
+    }
+    expect(result.value.workflow.defaults.nodeTimeoutMs).toBe(
+      DEFAULT_NODE_TIMEOUT_MS,
+    );
   });
 });
 

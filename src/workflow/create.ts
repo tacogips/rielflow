@@ -7,6 +7,7 @@ import {
   withResolvedWorkflowSourceOptions,
 } from "./catalog";
 import type { AuthoredWorkflowJson, LoadOptions } from "./types";
+import { DEFAULT_MAX_LOOP_ITERATIONS, DEFAULT_NODE_TIMEOUT_MS } from "./types";
 
 export interface CreateWorkflowSuccess {
   readonly workflowName: string;
@@ -233,8 +234,8 @@ export async function createWorkflowTemplate(
     workflowId,
     description: "New workflow",
     defaults: {
-      maxLoopIterations: 3,
-      nodeTimeoutMs: 120000,
+      maxLoopIterations: DEFAULT_MAX_LOOP_ITERATIONS,
+      nodeTimeoutMs: DEFAULT_NODE_TIMEOUT_MS,
     },
     prompts: templateDefinition.workflowPrompts,
     ...(templateDefinition.managerStepId === undefined
