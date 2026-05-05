@@ -222,6 +222,96 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(output.backendSession?.sessionId).toBe("backend-claude-1");
   });
 
+  test("nudges and completes from a stalled SDK session", async () => {
+    let releasePrimary: (() => void) | undefined;
+    const primaryReleased = new Promise<void>((resolve) => {
+      releasePrimary = resolve;
+    });
+    const primarySession = {
+      sessionId: "claude-stall-1",
+      async *messages(): AsyncGenerator<object, void, undefined> {
+        await primaryReleased;
+      },
+      waitForCompletion: vi.fn(async () => {
+        await primaryReleased;
+        return {
+          success: false,
+          stats: {
+            startedAt: "2026-03-30T00:00:00.000Z",
+            completedAt: "2026-03-30T00:00:02.000Z",
+            toolCallCount: 0,
+            messageCount: 0,
+          },
+        };
+      }),
+      cancel: vi.fn(async () => {
+        releasePrimary?.();
+      }),
+      getState: vi.fn(() => ({ state: "running", messageCount: 0 })),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const nudgedSession = {
+      sessionId: "claude-stall-1",
+      async *messages(): AsyncGenerator<object, void, undefined> {
+        yield {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "resumed claude reply" }],
+          },
+        };
+      },
+      waitForCompletion: vi.fn(async () => ({
+        success: true,
+        stats: {
+          startedAt: "2026-03-30T00:00:01.000Z",
+          completedAt: "2026-03-30T00:00:02.000Z",
+          toolCallCount: 0,
+          messageCount: 1,
+        },
+      })),
+      cancel: vi.fn(async () => {
+        return;
+      }),
+      getState: vi.fn(() => ({ state: "completed", messageCount: 1 })),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    const startSession = vi.fn(async () => primarySession);
+    const resumeSession = vi.fn(async () => nudgedSession);
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: vi.fn(() => ({
+        startSession,
+        resumeSession,
+      })),
+      stallCheckIntervalMs: 5,
+      stallNudgeMaxAttempts: 1,
+      stallNudgePrompt: "continue now",
+    });
+
+    const output = await adapter.execute(baseInput, {
+      ...baseContext,
+      timeoutMs: 1000,
+    });
+
+    releasePrimary?.();
+    expect(resumeSession).toHaveBeenCalledWith(
+      "claude-stall-1",
+      "continue now",
+      undefined,
+    );
+    expect(output.payload).toEqual({ text: "resumed claude reply" });
+    expect(output.processLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "claude-code-agent-stall-watch",
+          text: expect.stringContaining("sending stall nudge"),
+        }),
+      ]),
+    );
+  });
+
   test("passes ambient manager env into the local runner", async () => {
     const fixture = makeClaudeRunnerFixture();
     const adapter = new ClaudeCodeAgentAdapter({

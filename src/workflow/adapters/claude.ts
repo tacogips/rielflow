@@ -5,8 +5,13 @@ import {
   type AdapterExecutionInput,
   type AdapterExecutionOutput,
   type AdapterLlmSessionMessage,
+  type AdapterProcessLog,
   type NodeAdapter,
 } from "../adapter";
+import {
+  createWatchedLlmSession,
+  type LlmSessionStallWatchConfig,
+} from "./llm-session-stall-watch";
 import {
   bindAbortSignal,
   buildAmbientProcessEnv,
@@ -51,6 +56,7 @@ interface ClaudeRunningSessionLike {
   messages(): AsyncIterable<object>;
   waitForCompletion(): Promise<ClaudeSessionResult>;
   cancel(): Promise<void>;
+  getState?(): unknown;
   on(event: "error", listener: (error: unknown) => void): void;
   removeListener(event: "error", listener: (error: unknown) => void): void;
 }
@@ -68,7 +74,7 @@ type ClaudeRunnerFactory = (
   options: ClaudeSessionRunnerOptions,
 ) => ClaudeSessionRunnerLike | Promise<ClaudeSessionRunnerLike>;
 
-export interface ClaudeAdapterConfig {
+export interface ClaudeAdapterConfig extends LlmSessionStallWatchConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
   readonly cwd?: string;
@@ -268,6 +274,7 @@ async function executeLocalClaudeCodeAgent(
   let responseText = "";
   let lastError: Error | undefined;
   const llmMessages: AdapterLlmSessionMessage[] = [];
+  const processLogs: AdapterProcessLog[] = [];
   const onError = (error: unknown) => {
     lastError =
       error instanceof Error ? error : new Error(String(error ?? "unknown"));
@@ -276,9 +283,34 @@ async function executeLocalClaudeCodeAgent(
   const disposeAbort = bindAbortSignal(context.signal, async () => {
     await session.cancel();
   });
+  const watchedSession = createWatchedLlmSession<
+    ClaudeRunningSessionLike,
+    ClaudeSessionResult
+  >({
+    provider: "claude-code-agent",
+    primarySession: session,
+    signal: context.signal,
+    stallWatch: config,
+    resumeSession: async (targetSessionId, prompt) =>
+      await runner.resumeSession(
+        targetSessionId,
+        prompt,
+        input.systemPromptText,
+      ),
+    isResultSuccess: (result) => result.success,
+    describeResult: (result) =>
+      `success=${result.success} messages=${result.stats.messageCount} tools=${result.stats.toolCallCount}`,
+    onProcessLog: (log) => {
+      processLogs.push(log);
+    },
+  });
 
   try {
-    for await (const message of session.messages()) {
+    for await (const rawMessage of watchedSession.messages) {
+      if (typeof rawMessage !== "object" || rawMessage === null) {
+        continue;
+      }
+      const message = rawMessage;
       const assistantText = extractAssistantText(message);
       if (assistantText !== null) {
         responseText = assistantText;
@@ -296,7 +328,7 @@ async function executeLocalClaudeCodeAgent(
       });
     }
 
-    const result = await session.waitForCompletion();
+    const result = await watchedSession.waitForCompletion();
     if (!result.success) {
       if (context.signal.aborted) {
         throw new AdapterExecutionError(
@@ -312,7 +344,7 @@ async function executeLocalClaudeCodeAgent(
     }
 
     throwIfAborted(context.signal, "claude adapter aborted after completion");
-    return buildLocalAdapterOutput(
+    const output = buildLocalAdapterOutput(
       {
         node: input.node,
         output: input.output,
@@ -325,7 +357,9 @@ async function executeLocalClaudeCodeAgent(
         llmMessages,
       },
     );
+    return processLogs.length === 0 ? output : { ...output, processLogs };
   } finally {
+    watchedSession.stop();
     disposeAbort();
     session.removeListener("error", onError);
   }

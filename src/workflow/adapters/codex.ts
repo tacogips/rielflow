@@ -4,8 +4,13 @@ import {
   type AdapterExecutionInput,
   type AdapterExecutionOutput,
   type AdapterLlmSessionMessage,
+  type AdapterProcessLog,
   type NodeAdapter,
 } from "../adapter";
+import {
+  createWatchedLlmSession,
+  type LlmSessionStallWatchConfig,
+} from "./llm-session-stall-watch";
 import {
   bindAbortSignal,
   buildAmbientProcessEnv,
@@ -90,7 +95,7 @@ type CodexRunnerFactory = (
   options: CodexSessionRunnerOptions,
 ) => CodexSessionRunnerLike | Promise<CodexSessionRunnerLike>;
 
-export interface CodexAdapterConfig {
+export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
   readonly cwd?: string;
@@ -250,12 +255,34 @@ async function executeLocalCodexAgent(
   let sessionId = session.sessionId;
   let lastError: Error | undefined;
   const llmMessages: AdapterLlmSessionMessage[] = [];
+  const processLogs: AdapterProcessLog[] = [];
   const disposeAbort = bindAbortSignal(context.signal, async () => {
     await session.cancel();
   });
+  const watchedSession = createWatchedLlmSession<
+    CodexRunningSessionLike,
+    CodexSessionResult
+  >({
+    provider: "codex-agent",
+    primarySession: session,
+    signal: context.signal,
+    stallWatch: config,
+    resumeSession: async (targetSessionId, prompt) =>
+      await runner.resumeSession(
+        targetSessionId,
+        prompt,
+        buildResumeSessionOptions(sessionConfig),
+      ),
+    isResultSuccess: (result) => result.success,
+    describeResult: (result) =>
+      `success=${result.success} exitCode=${result.exitCode} messages=${result.stats.messageCount}`,
+    onProcessLog: (log) => {
+      processLogs.push(log);
+    },
+  });
 
   try {
-    const events = await toCodexNormalizedEvents(session.messages());
+    const events = await toCodexNormalizedEvents(watchedSession.messages);
     for await (const event of events) {
       if (!isCodexEvent(event)) {
         continue;
@@ -283,7 +310,7 @@ async function executeLocalCodexAgent(
       }
     }
 
-    const result = await session.waitForCompletion();
+    const result = await watchedSession.waitForCompletion();
     if (!result.success) {
       if (context.signal.aborted) {
         throw new AdapterExecutionError(
@@ -299,7 +326,7 @@ async function executeLocalCodexAgent(
     }
 
     throwIfAborted(context.signal, "codex adapter aborted after completion");
-    return buildLocalAdapterOutput(
+    const output = buildLocalAdapterOutput(
       {
         node: input.node,
         output: input.output,
@@ -312,7 +339,9 @@ async function executeLocalCodexAgent(
         llmMessages,
       },
     );
+    return processLogs.length === 0 ? output : { ...output, processLogs };
   } finally {
+    watchedSession.stop();
     disposeAbort();
   }
 }

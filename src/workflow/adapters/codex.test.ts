@@ -238,6 +238,100 @@ describe("CodexAgentAdapter", () => {
     expect(output.backendSession?.sessionId).toBe("backend-codex-1");
   });
 
+  test("nudges and completes from a stalled SDK session", async () => {
+    let releasePrimary: (() => void) | undefined;
+    const primaryReleased = new Promise<void>((resolve) => {
+      releasePrimary = resolve;
+    });
+    const primarySession = {
+      sessionId: "codex-stall-1",
+      async *messages(): AsyncGenerator<unknown, void, undefined> {
+        yield {
+          type: "session_meta",
+          payload: {
+            meta: { id: "codex-stall-1" },
+          },
+        };
+        await primaryReleased;
+      },
+      waitForCompletion: vi.fn(async () => {
+        await primaryReleased;
+        return {
+          success: false,
+          exitCode: 1,
+          stats: {
+            startedAt: "2026-03-30T00:00:00.000Z",
+            completedAt: "2026-03-30T00:00:02.000Z",
+            messageCount: 1,
+          },
+        };
+      }),
+      cancel: vi.fn(async () => {
+        releasePrimary?.();
+      }),
+    };
+    const nudgedSession = {
+      sessionId: "codex-stall-1",
+      async *messages(): AsyncGenerator<unknown, void, undefined> {
+        yield {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "resumed codex reply" }],
+          },
+        };
+      },
+      waitForCompletion: vi.fn(async () => ({
+        success: true,
+        exitCode: 0,
+        stats: {
+          startedAt: "2026-03-30T00:00:01.000Z",
+          completedAt: "2026-03-30T00:00:02.000Z",
+          messageCount: 1,
+        },
+      })),
+      cancel: vi.fn(async () => {
+        return;
+      }),
+    };
+    const startSession = vi.fn(async () => primarySession);
+    const resumeSession = vi.fn(async () => nudgedSession);
+    const adapter = new CodexAgentAdapter({
+      createRunner: vi.fn(() => ({
+        startSession,
+        resumeSession,
+      })),
+      stallCheckIntervalMs: 5,
+      stallNudgeMaxAttempts: 1,
+      stallNudgePrompt: "continue now",
+    });
+
+    const output = await adapter.execute(baseInput, {
+      ...baseContext,
+      timeoutMs: 1000,
+    });
+
+    releasePrimary?.();
+    expect(resumeSession).toHaveBeenCalledWith(
+      "codex-stall-1",
+      "continue now",
+      expect.objectContaining({
+        model: "gpt-5-nano",
+        streamGranularity: "event",
+      }),
+    );
+    expect(output.payload).toEqual({ text: "resumed codex reply" });
+    expect(output.processLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "codex-agent-stall-watch",
+          text: expect.stringContaining("sending stall nudge"),
+        }),
+      ]),
+    );
+  });
+
   test("injects ambient manager env during local session startup", async () => {
     let observedGraphqlEndpoint: string | undefined;
     let observedWorkflowExecutionId: string | undefined;
