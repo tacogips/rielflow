@@ -11,6 +11,10 @@ import {
   type RuntimeNodeLogEntry,
 } from "./runtime-db";
 import {
+  buildFanoutGroupSummaries,
+  type FanoutGroupSummary,
+} from "./inspect";
+import {
   isTerminalWorkflowSessionStatus,
   resolveCurrentStepId,
   type WorkflowSessionState,
@@ -51,6 +55,7 @@ export interface SessionHealthPersistedState {
   readonly restartCount: number;
   readonly lastCompletedStepId: string | null;
   readonly lastError: string | null;
+  readonly fanoutSummaries: readonly FanoutGroupSummary[];
   readonly supervision: {
     readonly autoImprove: boolean;
     readonly nestedSuperviser: boolean;
@@ -253,6 +258,7 @@ function buildPersistedState(
     restartCount: countRestarts(session),
     lastCompletedStepId: lastCompletedStepId(session),
     lastError: session.lastError ?? null,
+    fanoutSummaries: buildFanoutGroupSummaries(session),
     supervision,
   };
 }

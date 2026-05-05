@@ -41,7 +41,10 @@ import {
   type NodeExecutionRecord,
   type WorkflowSessionState,
 } from "./workflow/session";
-import { buildInspectionSummary } from "./workflow/inspect";
+import {
+  buildFanoutGroupSummaries,
+  buildInspectionSummary,
+} from "./workflow/inspect";
 import { collectWorkflowAddonSourceSummaries } from "./workflow/addon-source-summary";
 import { loadSession } from "./workflow/session-store";
 import {
@@ -534,6 +537,31 @@ function buildStepProgressSummaries(session: WorkflowSessionState): readonly {
       executions,
       restarts: session.restartCounts?.[stepId] ?? 0,
     }));
+}
+
+function formatFanoutSummaryLines(session: WorkflowSessionState): readonly string[] {
+  const summaries = buildFanoutGroupSummaries(session);
+  if (summaries.length === 0) {
+    return [];
+  }
+  return [
+    "fanoutGroups:",
+    ...summaries.map((summary) => {
+      const counts = Object.entries(summary.branchCounts)
+        .filter(([, count]) => count > 0)
+        .map(([status, count]) => `${status}=${count}`)
+        .join(",");
+      const target =
+        summary.targetWorkflowId === undefined
+          ? summary.targetStepId
+          : `${summary.targetWorkflowId}:${summary.targetStepId}`;
+      const failure =
+        summary.firstFailure === undefined
+          ? ""
+          : ` firstFailure=${summary.firstFailure}`;
+      return `  - ${summary.groupId}: target=${target} join=${summary.joinStepId} concurrency=${summary.concurrency} branches=${counts || "none"}${failure}`;
+    }),
+  ];
 }
 
 async function resolveSessionCurrentStepId(
@@ -1720,6 +1748,7 @@ function formatSessionHealthText(
     `latestArtifactAt: ${nullableDisplay(report.artifacts.latestArtifactAt)}`,
     `latestCandidateAt: ${nullableDisplay(report.artifacts.latestCandidateAt)}`,
     `recommendation: ${report.health.recommendation}`,
+    `fanoutGroups: ${String(report.persistedState.fanoutSummaries.length)}`,
     `recentLogs: ${String(report.recentLogs.length)}`,
     `recentLlmMessages: ${String(report.recentLlmMessages.length)}`,
     `evidence: sessionStore=${report.evidenceCompleteness.sessionStore} runtimeDb=${report.evidenceCompleteness.runtimeDb} artifacts=${report.evidenceCompleteness.artifacts} processLogs=${report.evidenceCompleteness.processLogs} llmMessages=${report.evidenceCompleteness.llmMessages}`,
@@ -3917,6 +3946,7 @@ export async function runCli(
         sessionOptions,
       );
       const stepSummaries = buildStepProgressSummaries(session.value);
+      const fanoutSummaries = buildFanoutGroupSummaries(session.value);
       const nodeSummaries = Object.keys(countsByNode)
         .sort((a, b) => a.localeCompare(b))
         .map((nodeId) => ({
@@ -3936,6 +3966,7 @@ export async function runCli(
           totalExecutions: session.value.nodeExecutionCounter,
           nodeSummaries,
           stepSummaries,
+          fanoutSummaries,
           lastError: session.value.lastError ?? null,
         });
       } else {
@@ -3961,6 +3992,9 @@ export async function runCli(
               `  - ${summary.stepId}: executions=${summary.executions}, restarts=${summary.restarts}`,
             );
           });
+        }
+        for (const line of formatFanoutSummaryLines(session.value)) {
+          io.stdout(line);
         }
       }
       return 0;
@@ -4021,6 +4055,8 @@ export async function runCli(
       if (parsed.options.output === "json") {
         emitJson(io, {
           ...session.value,
+          fanoutGroups: session.value.fanoutGroups ?? [],
+          fanoutSummaries: buildFanoutGroupSummaries(session.value),
           currentStepId,
         });
       } else {
@@ -4032,6 +4068,9 @@ export async function runCli(
           io.stdout(`currentStepId: ${currentStepId}`);
         }
         io.stdout(`queueLength: ${session.value.queue.length}`);
+        for (const line of formatFanoutSummaryLines(session.value)) {
+          io.stdout(line);
+        }
       }
       return 0;
     }
