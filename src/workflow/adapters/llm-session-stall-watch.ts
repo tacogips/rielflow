@@ -4,6 +4,9 @@ const DEFAULT_STALL_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const DEFAULT_STALL_NUDGE_MAX_ATTEMPTS = 3;
 const DEFAULT_STALL_NUDGE_PROMPT =
   "Your divedra workflow session appears stalled because the raw SDK session has not changed during the stall-check interval. Continue the assigned workflow step now and return the required output when ready.";
+const STALL_CHECK_INTERVAL_ENV = "DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS";
+const STALL_NUDGE_MAX_ATTEMPTS_ENV = "DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS";
+const STALL_NUDGE_PROMPT_ENV = "DIVEDRA_LLM_STALL_NUDGE_PROMPT";
 
 type WatchedSessionSource = "primary" | "nudge";
 
@@ -103,15 +106,19 @@ export function createWatchedLlmSession<
 ): WatchedLlmSession<TResult> {
   const queue = new AsyncMessageQueue();
   const checkIntervalMs = resolvePositiveInteger(
-    input.stallWatch.stallCheckIntervalMs,
+    input.stallWatch.stallCheckIntervalMs ??
+      readNumberEnvironmentVariable(STALL_CHECK_INTERVAL_ENV),
     DEFAULT_STALL_CHECK_INTERVAL_MS,
   );
   const nudgeMaxAttempts = resolveNonNegativeInteger(
-    input.stallWatch.stallNudgeMaxAttempts,
+    input.stallWatch.stallNudgeMaxAttempts ??
+      readNumberEnvironmentVariable(STALL_NUDGE_MAX_ATTEMPTS_ENV),
     DEFAULT_STALL_NUDGE_MAX_ATTEMPTS,
   );
   const nudgePrompt =
-    input.stallWatch.stallNudgePrompt ?? DEFAULT_STALL_NUDGE_PROMPT;
+    input.stallWatch.stallNudgePrompt ??
+    readStringEnvironmentVariable(STALL_NUDGE_PROMPT_ENV) ??
+    DEFAULT_STALL_NUDGE_PROMPT;
   const sessionStates = new Map<string, string>();
   let messageCount = 0;
   let rawSignature = "none";
@@ -336,6 +343,24 @@ function resolveNonNegativeInteger(
     return fallback;
   }
   return Math.max(0, Math.trunc(value));
+}
+
+function readNumberEnvironmentVariable(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim().length === 0) {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readStringEnvironmentVariable(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 function stringifyUnknown(value: unknown): string | undefined {

@@ -68,8 +68,25 @@ const baseContext: AdapterExecutionContext = {
   signal: new AbortController().signal,
 };
 
+const stallWatchEnvKeys = [
+  "DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS",
+  "DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS",
+  "DIVEDRA_LLM_STALL_NUDGE_PROMPT",
+] as const;
+const originalStallWatchEnv = new Map<string, string | undefined>(
+  stallWatchEnvKeys.map((key) => [key, process.env[key]]),
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const key of stallWatchEnvKeys) {
+    const original = originalStallWatchEnv.get(key);
+    if (original === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = original;
+    }
+  }
 });
 
 function makeCodexRunnerFixture(
@@ -327,6 +344,90 @@ describe("CodexAgentAdapter", () => {
         expect.objectContaining({
           label: "codex-agent-stall-watch",
           text: expect.stringContaining("sending stall nudge"),
+        }),
+      ]),
+    );
+  });
+
+  test("uses environment-configured stall watch settings", async () => {
+    process.env["DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS"] = "5";
+    process.env["DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS"] = "1";
+    process.env["DIVEDRA_LLM_STALL_NUDGE_PROMPT"] = "continue from env";
+    let releasePrimary: (() => void) | undefined;
+    const primaryReleased = new Promise<void>((resolve) => {
+      releasePrimary = resolve;
+    });
+    const primarySession = {
+      sessionId: "codex-env-stall-1",
+      async *messages(): AsyncGenerator<unknown, void, undefined> {
+        await primaryReleased;
+      },
+      waitForCompletion: vi.fn(async () => {
+        await primaryReleased;
+        return {
+          success: false,
+          exitCode: 1,
+          stats: {
+            startedAt: "2026-03-30T00:00:00.000Z",
+            completedAt: "2026-03-30T00:00:02.000Z",
+            messageCount: 0,
+          },
+        };
+      }),
+      cancel: vi.fn(async () => {
+        releasePrimary?.();
+      }),
+    };
+    const nudgedSession = {
+      sessionId: "codex-env-stall-1",
+      async *messages(): AsyncGenerator<unknown, void, undefined> {
+        yield {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "env resumed reply" }],
+          },
+        };
+      },
+      waitForCompletion: vi.fn(async () => ({
+        success: true,
+        exitCode: 0,
+        stats: {
+          startedAt: "2026-03-30T00:00:01.000Z",
+          completedAt: "2026-03-30T00:00:02.000Z",
+          messageCount: 1,
+        },
+      })),
+      cancel: vi.fn(async () => {
+        return;
+      }),
+    };
+    const resumeSession = vi.fn(async () => nudgedSession);
+    const adapter = new CodexAgentAdapter({
+      createRunner: vi.fn(() => ({
+        startSession: vi.fn(async () => primarySession),
+        resumeSession,
+      })),
+    });
+
+    const output = await adapter.execute(baseInput, baseContext);
+
+    releasePrimary?.();
+    expect(resumeSession).toHaveBeenCalledWith(
+      "codex-env-stall-1",
+      "continue from env",
+      expect.objectContaining({
+        model: "gpt-5-nano",
+        streamGranularity: "event",
+      }),
+    );
+    expect(output.payload).toEqual({ text: "env resumed reply" });
+    expect(output.processLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "codex-agent-stall-watch",
+          text: expect.stringContaining("5ms"),
         }),
       ]),
     );
