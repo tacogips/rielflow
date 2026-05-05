@@ -6,8 +6,8 @@
       "name": "divedra",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
-        "claude-code-agent": "github:tacogips/claude-code-agent#62407b5edf5b8c7c35903846acaf560462ac0ea3",
-        "codex-agent": "github:tacogips/codex-agent#f11f3deb539356e3c75e067830e0817efcc52404",
+        "claude-code-agent": "github:tacogips/claude-code-agent#c89d9bc5d8917b60b65e4b28cc12f5e507fa005a",
+        "codex-agent": "github:tacogips/codex-agent#83c3c2b6445df3d31b047b93d27a4bfe3e64ddcb",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
         "openai": "6.27.0",
@@ -201,9 +201,9 @@
 
     "check-error": ["check-error@2.1.3", "", {}, "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA=="],
 
-    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#62407b5", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-62407b5", "sha512-sL3jE/4St3glYz+m0gGLvJPKQtNPG1i6s/swZLJkiuPYbB1IiZsdvCa1cq22KECqDQkK7YNIN06DtXcshnCCYQ=="],
+    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#c89d9bc", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-c89d9bc", "sha512-c8gRJ5/hagDAMUJMzr77sSCYtfhlqe55YWtO3G3j8fNXJH2/dFG1OnkdZxlhhJRjFZh2CvskKORXHOboswaTbA=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#f11f3de", { "dependencies": { "graphql": "16.13.1" } }, "tacogips-codex-agent-f11f3de", "sha512-CjyVuvrfCvNtgfJSkIyIZGu0ehi6E5SgVqRY82cCQmNplqLUjoFYzvLOBpUD2wECj/D5TDG6BX2rbiPxrELdUQ=="],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#83c3c2b", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./src/bin.ts" } }, "tacogips-codex-agent-83c3c2b", "sha512-Mwt7kDnyyJNJu06cWrGv9RzTWbfIYO7h5oAOdGRchwBq6Cxk5KRAR6chlZSvxoVrSkL3ohMkcx/7bKVT3MPYxg=="],
 
     "commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
 
