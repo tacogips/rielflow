@@ -4,6 +4,7 @@ import {
   type AdapterExecutionContext,
   type AdapterExecutionInput,
   type NodeAdapter,
+  isAdapterExecutionOutputEnvelope,
   normalizeAdapterOutput,
   parseJsonObjectCandidate,
   ScenarioNodeAdapter,
@@ -42,6 +43,79 @@ describe("normalizeAdapterOutput", () => {
         "fallback-model",
       ),
     ).toThrowError(AdapterExecutionError);
+  });
+});
+
+describe("isAdapterExecutionOutputEnvelope", () => {
+  test("recognizes complete adapter output envelopes", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(true);
+  });
+
+  test("does not treat business payloads with provider and model fields as envelopes", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "external-system",
+        model: "business-model",
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects empty provider or model fields", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects malformed envelope control fields", () => {
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: "true" },
+        payload: { result: "ok" },
+      }),
+    ).toBe(false);
+
+    expect(
+      isAdapterExecutionOutputEnvelope({
+        provider: "codex-agent",
+        model: "gpt-5.5",
+        promptText: "prompt",
+        completionPassed: true,
+        when: { always: true },
+        payload: ["not", "an", "object"],
+      }),
+    ).toBe(false);
   });
 });
 

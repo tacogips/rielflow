@@ -161,6 +161,30 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+type AdapterExecutionOutputEnvelope = Pick<
+  AdapterExecutionOutput,
+  "provider" | "model" | "promptText" | "completionPassed" | "when" | "payload"
+>;
+
+export function isAdapterExecutionOutputEnvelope(
+  value: unknown,
+): value is AdapterExecutionOutputEnvelope {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value["provider"] === "string" &&
+    value["provider"].length > 0 &&
+    typeof value["model"] === "string" &&
+    value["model"].length > 0 &&
+    typeof value["promptText"] === "string" &&
+    typeof value["completionPassed"] === "boolean" &&
+    isBooleanMap(value["when"]) &&
+    isRecord(value["payload"])
+  );
+}
+
 function extractJsonObjectCandidateText(text: string): string {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
@@ -431,10 +455,7 @@ export function normalizeOutputContractEnvelope(
   }
 
   const completionPassed = value["completionPassed"];
-  if (
-    completionPassed !== undefined &&
-    typeof completionPassed !== "boolean"
-  ) {
+  if (completionPassed !== undefined && typeof completionPassed !== "boolean") {
     throw new AdapterExecutionError(
       "invalid_output",
       `${source}.completionPassed must be a boolean when provided`,

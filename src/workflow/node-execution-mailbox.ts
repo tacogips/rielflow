@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJsonFile as writeJsonFile } from "../shared/fs";
+import { isAdapterExecutionOutputEnvelope } from "./adapter";
 import {
   normalizeManagerMessageForMailbox,
   normalizePlainTextValue,
@@ -422,9 +423,7 @@ function renderStructureSection(
     return "";
   }
   const lines = ["Workflow structure:"];
-  lines.push(
-    `- Manager execution id: ${structure.managerStepId ?? ""}`,
-  );
+  lines.push(`- Manager execution id: ${structure.managerStepId ?? ""}`);
   lines.push("- Nodes:");
   for (const node of structure.nodes ?? []) {
     lines.push(`  - ${node.id} (${node.kind})`);
@@ -506,17 +505,33 @@ function renderUpstreamSection(
 function resolvePromptSummaryPayload(
   output: Readonly<Record<string, unknown>>,
 ): unknown {
-  const payload = output["payload"];
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    !Array.isArray(payload) &&
-    typeof output["provider"] === "string" &&
-    typeof output["model"] === "string"
-  ) {
-    return payload;
+  if (!isAdapterExecutionOutputEnvelope(output)) {
+    return output;
   }
-  return output;
+
+  if (output.completionPassed) {
+    return output.payload;
+  }
+
+  return {
+    completionPassed: output.completionPassed,
+    when: output.when,
+    payload: output.payload,
+    ...pickDefinedFields(output, ["error", "validationErrors"]),
+  };
+}
+
+function pickDefinedFields(
+  output: Readonly<Record<string, unknown>>,
+  fields: readonly string[],
+): Readonly<Record<string, unknown>> {
+  const picked: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (output[field] !== undefined) {
+      picked[field] = output[field];
+    }
+  }
+  return picked;
 }
 
 function renderManagerControlSection(
