@@ -480,7 +480,8 @@ function buildOutputPromptText(input: {
     "Return only the business JSON object for output.payload.",
     "Final output.json publication and mailbox delivery are runtime-owned.",
     "Do not write mailbox files, output.json, or invent communication ids.",
-    "If you write a file, write only to the reserved Candidate-Path.",
+    "If you choose to submit the final business JSON via a file, write that JSON only to the reserved Candidate-Path.",
+    "This Candidate-Path restriction applies only to the final structured output submission; repository edits explicitly requested by the node instructions are still allowed.",
   ];
   if (contract.description !== undefined) {
     sections.push(`Description: ${contract.description}`);

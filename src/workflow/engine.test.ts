@@ -6777,6 +6777,12 @@ describe("runWorkflow", () => {
     expect(captureAdapter.capturedPromptText).toContain(
       "Do not write mailbox files, output.json, or invent communication ids.",
     );
+    expect(captureAdapter.capturedPromptText).toContain(
+      "This Candidate-Path restriction applies only to the final structured output submission; repository edits explicitly requested by the node instructions are still allowed.",
+    );
+    expect(captureAdapter.capturedPromptText).not.toContain(
+      "If you write a file, write only to the reserved Candidate-Path.",
+    );
     expect(captureAdapter.capturedPromptText).toContain("Candidate-Path:");
     expect(captureAdapter.capturedOutputContract).toMatchObject({
       publication: {
