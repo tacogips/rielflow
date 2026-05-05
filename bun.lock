@@ -7,7 +7,7 @@
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "claude-code-agent": "github:tacogips/claude-code-agent#17090d0ff4aff1ab17102aa680c70da90ace9a0e",
-        "codex-agent": "github:tacogips/codex-agent#88cba949a8e4f3afd74d4d641a0675cd78f67c51",
+        "codex-agent": "github:tacogips/codex-agent#f11f3deb539356e3c75e067830e0817efcc52404",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
         "openai": "6.27.0",
@@ -213,7 +213,7 @@
 
     "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#17090d0", { "dependencies": { "@elysiajs/cors": "1.4.1", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "graphql": "16.13.1", "graphql-yoga": "5.18.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-17090d0"],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#88cba94", { "dependencies": { "graphql": "16.13.1" } }, "tacogips-codex-agent-88cba94", "sha512-gwWgXC8yLSgyLubOe4+xksKXnS0nlc6IlTPFqppF4HO6d6C2vNz85z/8Kag3YL1H/xQpe0WzwofSqcfs4f+isA=="],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#f11f3de", { "dependencies": { "graphql": "16.13.1" } }, "tacogips-codex-agent-f11f3de", "sha512-CjyVuvrfCvNtgfJSkIyIZGu0ehi6E5SgVqRY82cCQmNplqLUjoFYzvLOBpUD2wECj/D5TDG6BX2rbiPxrELdUQ=="],
 
     "commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
 

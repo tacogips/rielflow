@@ -42,7 +42,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
     "claude-code-agent": "github:tacogips/claude-code-agent#17090d0ff4aff1ab17102aa680c70da90ace9a0e",
-    "codex-agent": "github:tacogips/codex-agent#88cba949a8e4f3afd74d4d641a0675cd78f67c51",
+    "codex-agent": "github:tacogips/codex-agent#f11f3deb539356e3c75e067830e0817efcc52404",
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",
     "openai": "6.27.0"
