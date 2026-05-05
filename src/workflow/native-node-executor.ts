@@ -6,6 +6,7 @@ import {
   AdapterExecutionError,
   type AdapterExecutionOutput,
   type AdapterProcessLog,
+  normalizeOutputContractEnvelope,
 } from "./adapter";
 import type { NodeExecutionMailbox } from "./node-execution-mailbox";
 import { buildPromptTemplateVariables } from "./prompt-template-context";
@@ -318,13 +319,17 @@ function buildNativeOutput(input: {
   readonly payload: Readonly<Record<string, unknown>>;
   readonly processLogs?: readonly AdapterProcessLog[];
 }): AdapterExecutionOutput {
+  const normalized = normalizeOutputContractEnvelope(
+    input.payload,
+    "native command mailbox output",
+  );
   return {
     provider: input.provider,
     model: input.model,
     promptText: input.promptText,
-    completionPassed: true,
-    when: { always: true },
-    payload: input.payload,
+    completionPassed: normalized.completionPassed,
+    when: normalized.when,
+    payload: normalized.payload,
     ...(input.processLogs === undefined
       ? {}
       : { processLogs: input.processLogs }),

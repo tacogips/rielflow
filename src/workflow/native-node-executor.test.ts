@@ -566,6 +566,62 @@ describe("executeNativeNode", () => {
     ]);
   });
 
+  test("honors adapter envelopes written by command nodes", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptDirectory = path.join(workflowDirectory, "scripts");
+    await mkdir(scriptDirectory, { recursive: true });
+    await writeFile(
+      path.join(scriptDirectory, "write-envelope.sh"),
+      [
+        "#!/bin/sh",
+        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
+        `printf '{"completionPassed":true,"when":{"needs_item":true},"payload":{"decision":"delegate"}}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath: "scripts/write-envelope.sh",
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.completionPassed).toBe(true);
+    expect(output.when).toEqual({ needs_item: true });
+    expect(output.payload).toEqual({ decision: "delegate" });
+  });
+
   test("attaches command logs to invalid mailbox output failures", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
