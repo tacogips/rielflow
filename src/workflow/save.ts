@@ -35,36 +35,23 @@ import type {
   WorkflowNodeRegistryRef,
   WorkflowStepRef,
 } from "./types";
+import {
+  OBSOLETE_WORKFLOW_VISUALIZATION_FILE,
+  WORKFLOW_DEFINITION_FILE,
+  type SaveWorkflowFailure,
+  type SaveWorkflowInput,
+  type SaveWorkflowSuccess,
+} from "./save-types";
+import {
+  collectAuthoredNodeFiles,
+  collectAuthoredStepFiles,
+  isDefaultContainerRuntime,
+} from "./save-authored";
+
+export type { SaveWorkflowFailure, SaveWorkflowInput, SaveWorkflowSuccess };
 
 type AuthoredWorkflowRecord = AuthoredWorkflowJson &
   Readonly<Record<string, unknown>>;
-
-export interface SaveWorkflowInput {
-  readonly workflow: unknown;
-  readonly nodePayloads: Readonly<Record<string, unknown>>;
-  readonly expectedRevision?: string;
-}
-
-export interface SaveWorkflowSuccess {
-  readonly workflowName: string;
-  readonly workflowDirectory: string;
-  readonly revision: string;
-}
-
-export interface SaveWorkflowFailure {
-  readonly code: "INVALID_WORKFLOW_NAME" | "VALIDATION" | "CONFLICT" | "IO";
-  readonly message: string;
-  readonly issues?: readonly {
-    readonly severity: "error" | "warning";
-    readonly path: string;
-    readonly message: string;
-  }[];
-  readonly currentRevision?: string;
-}
-
-/** Obsolete sidecar filename from an earlier tooling path; removed on save if still present. */
-const OBSOLETE_WORKFLOW_VISUALIZATION_FILE = "workflow-vis.json";
-const WORKFLOW_DEFINITION_FILE = "workflow.json";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,58 +62,6 @@ function hasOwnKey(
   key: string,
 ): boolean {
   return value !== undefined && Object.hasOwn(value, key);
-}
-
-function collectAuthoredNodeFiles(
-  authoredWorkflow: Record<string, unknown> | undefined,
-): readonly string[] {
-  const authoredNodes = authoredWorkflow?.["nodes"];
-  if (!Array.isArray(authoredNodes)) {
-    return [];
-  }
-
-  return [
-    ...new Set(
-      authoredNodes.flatMap((node) =>
-        isRecord(node)
-          ? [resolveAuthoredNodeFileReference(node)].filter(
-              (nodeFile): nodeFile is string => nodeFile !== undefined,
-            )
-          : [],
-      ),
-    ),
-  ];
-}
-
-function collectAuthoredStepFiles(
-  authoredWorkflow: Record<string, unknown> | undefined,
-): readonly string[] {
-  const authoredSteps = authoredWorkflow?.["steps"];
-  if (!Array.isArray(authoredSteps)) {
-    return [];
-  }
-
-  return [
-    ...new Set(
-      authoredSteps.flatMap((step) => {
-        if (!isRecord(step)) {
-          return [];
-        }
-        const stepFile = step["stepFile"];
-        return typeof stepFile === "string" && stepFile.length > 0
-          ? [stepFile]
-          : [];
-      }),
-    ),
-  ];
-}
-
-function isDefaultContainerRuntime(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    value["runnerKind"] === "podman" &&
-    value["runnerPath"] === undefined
-  );
 }
 
 function projectAuthoredWorkflowFromNormalized(input: {

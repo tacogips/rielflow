@@ -7,7 +7,6 @@ import {
 } from "./types";
 import { loadSession, saveSession } from "./session-store";
 import type { WorkflowSessionState } from "./session";
-import type { MockNodeScenario } from "./adapter";
 import type { LoadOptions } from "./types";
 import {
   createEventSupervisedRunRepository,
@@ -21,100 +20,33 @@ import type {
   EventSupervisorCommand,
 } from "../events/types";
 import type { SupervisedRunCorrelationKey } from "../events/supervised-runs";
-import { defaultSupervisorWorkflowName } from "../events/supervisor-correlation";
+import type {
+  RestartSupervisedWorkflowInput,
+  StartSupervisedWorkflowInput,
+  StopSupervisedWorkflowInput,
+  SubmitSupervisedWorkflowInput,
+  SupervisedWorkflowLookup,
+  SupervisedWorkflowView,
+  SupervisorEngineOverrides,
+  WorkflowSupervisorClient,
+} from "./supervisor-client-types";
+import {
+  dedupeNodeIds,
+  resolveAutoImproveEnabled,
+  resolveMaxRestarts,
+  resolveSupervisorWorkflowName,
+} from "./supervisor-client-policy";
 
-export type SupervisorEngineOverrides = {
-  readonly mockScenario?: MockNodeScenario;
-  readonly dryRun?: boolean;
-  readonly maxSteps?: number;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
+export type {
+  RestartSupervisedWorkflowInput,
+  StartSupervisedWorkflowInput,
+  StopSupervisedWorkflowInput,
+  SubmitSupervisedWorkflowInput,
+  SupervisedWorkflowLookup,
+  SupervisedWorkflowView,
+  SupervisorEngineOverrides,
+  WorkflowSupervisorClient,
 };
-
-export interface SupervisedWorkflowView {
-  readonly supervisedRun: EventSupervisedRunRecord;
-  readonly activeTargetStatus?: WorkflowSessionState["status"];
-}
-
-export interface StartSupervisedWorkflowInput extends LoadOptions {
-  readonly sourceId: string;
-  readonly bindingId: string;
-  readonly correlationKey: string;
-  readonly targetWorkflowName: string;
-  readonly idempotencyKey?: string;
-  readonly runtimeVariables?: Readonly<Record<string, unknown>>;
-  readonly bindingSnapshot: EventBinding;
-  readonly mockScenario?: MockNodeScenario;
-  readonly dryRun?: boolean;
-  readonly maxSteps?: number;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
-}
-
-export interface StopSupervisedWorkflowInput extends LoadOptions {
-  readonly supervisedRunId?: string;
-  readonly sourceId?: string;
-  readonly bindingId?: string;
-  readonly correlationKey?: string;
-  readonly idempotencyKey?: string;
-  readonly reason?: string;
-}
-
-export interface RestartSupervisedWorkflowInput extends LoadOptions {
-  readonly supervisedRunId?: string;
-  readonly sourceId?: string;
-  readonly bindingId?: string;
-  readonly correlationKey?: string;
-  readonly idempotencyKey?: string;
-  readonly runtimeVariables?: Readonly<Record<string, unknown>>;
-  readonly mockScenario?: MockNodeScenario;
-  readonly dryRun?: boolean;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
-  readonly maxSteps?: number;
-}
-
-export interface SupervisedWorkflowLookup extends LoadOptions {
-  readonly supervisedRunId?: string;
-  readonly sourceId?: string;
-  readonly bindingId?: string;
-  readonly correlationKey?: string;
-  readonly idempotencyKey?: string;
-}
-
-export interface SubmitSupervisedWorkflowInput extends LoadOptions {
-  readonly supervisedRunId?: string;
-  readonly sourceId?: string;
-  readonly bindingId?: string;
-  readonly correlationKey?: string;
-  readonly targetWorkflowName?: string;
-  readonly bindingSnapshot?: EventBinding;
-  readonly idempotencyKey?: string;
-  readonly runtimeVariables?: Readonly<Record<string, unknown>>;
-  readonly mockScenario?: MockNodeScenario;
-  readonly dryRun?: boolean;
-  readonly maxSteps?: number;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
-}
-
-export interface WorkflowSupervisorClient {
-  dispatchCommand(input: {
-    readonly command: EventSupervisorCommand;
-    readonly binding: EventBinding;
-    readonly runtimeVariables: Readonly<Record<string, unknown>>;
-    readonly engine?: SupervisorEngineOverrides;
-  }): Promise<SupervisedWorkflowView>;
-  start(input: StartSupervisedWorkflowInput): Promise<SupervisedWorkflowView>;
-  stop(input: StopSupervisedWorkflowInput): Promise<SupervisedWorkflowView>;
-  restart(
-    input: RestartSupervisedWorkflowInput,
-  ): Promise<SupervisedWorkflowView>;
-  status(input: SupervisedWorkflowLookup): Promise<SupervisedWorkflowView>;
-  submitInput(
-    input: SubmitSupervisedWorkflowInput,
-  ): Promise<SupervisedWorkflowView>;
-}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -126,46 +58,6 @@ function isTerminalTargetStatus(
   return (
     status === "completed" || status === "failed" || status === "cancelled"
   );
-}
-
-function resolveAutoImproveEnabled(binding: EventBinding): boolean {
-  const raw = binding.execution?.autoImprove;
-  if (raw === undefined) {
-    return false;
-  }
-  if (typeof raw === "boolean") {
-    return raw;
-  }
-  return raw.enabled === true;
-}
-
-function resolveMaxRestarts(binding: EventBinding): number {
-  const n = binding.execution?.maxRestartsOnFailure;
-  if (n === undefined || !Number.isFinite(n)) {
-    return 3;
-  }
-  return Math.max(0, Math.floor(n));
-}
-
-function resolveSupervisorWorkflowName(binding: EventBinding): string {
-  const name = binding.execution?.supervisorWorkflowName;
-  if (typeof name === "string" && name.length > 0) {
-    return name;
-  }
-  return defaultSupervisorWorkflowName();
-}
-
-function dedupeNodeIds(nodeIds: readonly string[]): readonly string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const id of nodeIds) {
-    if (seen.has(id)) {
-      continue;
-    }
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
 }
 
 function localEngineOverrides(

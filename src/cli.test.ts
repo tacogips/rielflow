@@ -515,6 +515,12 @@ describe("runCli", () => {
     expect(help).toContain("--disable-targeted-rerun");
     expect(help).toContain("--workflow-definition-dir");
     expect(help).toContain("Does not control logs, sessions, or artifacts");
+    expect(help).toContain("divedra graphql <graphql-document>");
+    expect(help).not.toContain("divedra gql");
+    expect(help).toContain("session export");
+    expect(help).toContain("session logs");
+    expect(help).toContain("session health");
+    expect(help).toContain("session step-runs");
   });
 
   test("call-step executes locally with structured manager message input", async () => {

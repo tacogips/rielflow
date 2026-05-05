@@ -66,6 +66,7 @@ class OptionalDecisionAdapter implements NodeAdapter {
 class CrossWorkflowFanoutAdapter implements NodeAdapter {
   runningReviewers = 0;
   maxRunningReviewers = 0;
+  reviewerWorkingDirectories: string[] = [];
 
   async execute(
     input: Parameters<NodeAdapter["execute"]>[0],
@@ -94,6 +95,7 @@ class CrossWorkflowFanoutAdapter implements NodeAdapter {
         this.maxRunningReviewers,
         this.runningReviewers,
       );
+      this.reviewerWorkingDirectories.push(input.workingDirectory);
       await new Promise((resolve) => setTimeout(resolve, 10));
       this.runningReviewers -= 1;
       return {
@@ -1425,6 +1427,7 @@ async function createWorkflowCallFixture(
 async function createWorkflowCallFanoutFixture(
   root: string,
   workflowName: string,
+  writeOwnership: Record<string, unknown> = { mode: "read-only" },
 ): Promise<void> {
   const workflowDir = path.join(root, workflowName);
   await mkdir(workflowDir, { recursive: true });
@@ -1460,7 +1463,7 @@ async function createWorkflowCallFanoutFixture(
               joinStepId: "review-result",
               failurePolicy: "collect-all",
               resultOrder: "input",
-              writeOwnership: { mode: "read-only" },
+              writeOwnership,
             },
           },
         ],
@@ -3596,7 +3599,146 @@ describe("runWorkflow", () => {
     ]);
   });
 
-  test("executes local fanout with bounded concurrency and join runtime variables", async () => {
+  test("runs isolated-workspace cross-workflow fanout branches in branch-local workspaces", async () => {
+    const root = await makeTempDir();
+    await createWorkflowCallFanoutFixture(
+      root,
+      "workflow-call-isolated-fanout",
+      { mode: "isolated-workspace" },
+    );
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+    await writeFile(path.join(root, "source-marker.txt"), "copied", "utf8");
+    const adapter = new CrossWorkflowFanoutAdapter();
+
+    const result = await runWorkflow(
+      "workflow-call-isolated-fanout",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        workflowWorkingDirectory: root,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const group = result.value.session.fanoutGroups?.[0];
+    expect(group?.branches).toHaveLength(3);
+    const branchWorkspaces =
+      group?.branches.map((branch) => branch.workspaceRoot) ?? [];
+    expect(new Set(branchWorkspaces).size).toBe(3);
+    expect(
+      branchWorkspaces.every(
+        (workspaceRoot): workspaceRoot is string =>
+          typeof workspaceRoot === "string",
+      ),
+    ).toBe(true);
+    const definedBranchWorkspaces = branchWorkspaces.filter(
+      (workspaceRoot): workspaceRoot is string =>
+        typeof workspaceRoot === "string",
+    );
+    for (const workspaceRoot of definedBranchWorkspaces) {
+      expect(typeof workspaceRoot).toBe("string");
+      expect(workspaceRoot?.startsWith(root)).toBe(false);
+      expect(
+        await readFile(path.join(workspaceRoot, "source-marker.txt"), "utf8"),
+      ).toBe("copied");
+    }
+    expect(adapter.reviewerWorkingDirectories.sort()).toEqual(
+      [...definedBranchWorkspaces].sort(),
+    );
+
+    const writerExecution = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "writer",
+    );
+    expect(writerExecution).toBeDefined();
+    const crossWfArtifactPath = path.join(
+      root,
+      "artifacts",
+      "workflow-call-isolated-fanout",
+      "executions",
+      result.value.session.sessionId,
+      "nodes",
+      "writer",
+      writerExecution!.nodeExecId,
+      "workflow-calls",
+      "__cw:writer-0.json",
+    );
+    const crossWfParsed = JSON.parse(
+      await readFile(crossWfArtifactPath, "utf8"),
+    ) as Record<string, unknown>;
+    expect(crossWfParsed["fanoutGroupRunId"]).toBe(group?.fanoutGroupRunId);
+    expect(crossWfParsed["branchIndex"]).toBe(0);
+    expect(crossWfParsed["branchWorkspaceRoot"]).toBe(
+      definedBranchWorkspaces[0],
+    );
+    const fanoutJoin = result.value.session.runtimeVariables["fanoutJoin"] as
+      | {
+          readonly results?: readonly {
+            readonly branchIndex: number;
+            readonly workspaceRoot?: string;
+          }[];
+        }
+      | undefined;
+    const firstBranchWorkspace = definedBranchWorkspaces[0];
+    expect(firstBranchWorkspace).toBeDefined();
+    if (firstBranchWorkspace === undefined) {
+      return;
+    }
+    expect(fanoutJoin?.results?.[0]?.workspaceRoot).toBe(firstBranchWorkspace);
+  });
+
+  test("shares maxSteps across cross-workflow fanout branch runs", async () => {
+    const root = await makeTempDir();
+    const sessionStoreRoot = path.join(root, "sessions");
+    await createWorkflowCallFanoutFixture(root, "workflow-call-fanout-budget");
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+    const adapter = new CrossWorkflowFanoutAdapter();
+
+    const result = await runWorkflow(
+      "workflow-call-fanout-budget",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot,
+        maxSteps: 2,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("fanout max steps reached (2)");
+    expect(adapter.maxRunningReviewers).toBeLessThanOrEqual(1);
+    expect(result.error.sessionId).toBeDefined();
+    if (result.error.sessionId === undefined) {
+      return;
+    }
+    const stored = await loadSession(result.error.sessionId, {
+      sessionStoreRoot,
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const branches = stored.value.fanoutGroups?.[0]?.branches ?? [];
+    expect(branches.filter((branch) => branch.status === "succeeded")).toHaveLength(
+      1,
+    );
+    expect(branches.filter((branch) => branch.status === "failed").length).toBe(
+      2,
+    );
+  });
+
+  test("rejects local fanout until parent-session work items are implemented", async () => {
     const root = await makeTempDir();
     await createLocalFanoutFixture(root, "local-fanout");
     const adapter = new CrossWorkflowFanoutAdapter();
@@ -3612,25 +3754,14 @@ describe("runWorkflow", () => {
       adapter,
     );
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
+    expect(result.ok).toBe(false);
+    if (result.ok) {
       return;
     }
-
-    expect(adapter.maxRunningReviewers).toBeGreaterThan(1);
-    expect(adapter.maxRunningReviewers).toBeLessThanOrEqual(2);
-    expect(result.value.session.fanoutGroups).toHaveLength(1);
-    expect(result.value.session.fanoutGroups?.[0]?.branches).toHaveLength(3);
-    const joinExecution = result.value.session.nodeExecutions.find(
-      (entry) => entry.stepId === "review-result",
+    expect(result.error.message).toContain(
+      "local fanout transition 'always' is not yet supported",
     );
-    expect(joinExecution).toBeDefined();
-    const fanoutJoin = result.value.session.runtimeVariables["fanoutJoin"] as
-      | { readonly results?: readonly { readonly branchIndex: number }[] }
-      | undefined;
-    expect(fanoutJoin?.results?.map((entry) => entry.branchIndex)).toEqual([
-      0, 1, 2,
-    ]);
+    expect(adapter.maxRunningReviewers).toBe(0);
   });
 
   test("skips a cross-workflow dispatch when `when` does not match caller output (gated by evaluateBranch)", async () => {

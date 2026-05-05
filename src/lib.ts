@@ -1,5 +1,4 @@
 import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
-import { callStep, type CallStepInput } from "./workflow/call-step";
 import {
   executeGraphqlRequest,
   type GraphqlClientRequest,
@@ -14,9 +13,7 @@ import type {
 } from "./graphql/types";
 import {
   buildInspectionSummary,
-  buildFanoutGroupSummaries,
   getSupervisionSummary,
-  type FanoutGroupSummary,
   type WorkflowInspectionSummary,
 } from "./workflow/inspect";
 import {
@@ -28,36 +25,15 @@ import {
 import { loadWorkflowFromCatalog } from "./workflow/load";
 import { withResolvedWorkflowSourceOptions } from "./workflow/catalog";
 import {
-  listEventReplyDispatchesFromRuntimeDb,
-  listRuntimeHookEvents,
-  listRuntimeLlmSessionMessages,
-  listRuntimeNodeExecutions,
-  listRuntimeNodeLogs,
-} from "./workflow/runtime-db";
-import {
   loadSession,
-  listSessions as listStoredSessions,
-  saveSession,
   type SessionStoreOptions,
 } from "./workflow/session-store";
-import {
-  buildMergedContinuationTimeline,
-  loadContinuationRelatedSnapshots,
-} from "./workflow/history-continuation";
-import {
-  normalizeSessionState,
-  resolveCurrentStepId,
-  resolveCurrentStepIdFromWorkflow,
-  type NodeExecutionRecord,
-  type WorkflowSessionState,
-} from "./workflow/session";
+import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/adapter";
-import type { WorkflowExecutionSummary } from "./shared/ui-contract";
 import type {
   AutoImprovePolicy,
   ChatReplyDispatcher,
   LoadOptions,
-  WorkflowJson,
 } from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 
@@ -130,121 +106,6 @@ export interface ContinueWorkflowFromHistoryInput extends DivedraOptions {
   readonly dryRun?: boolean;
   readonly autoImprove?: AutoImprovePolicy;
   readonly nestedSuperviserDriver?: boolean;
-}
-
-/** Merged timeline view for CLI / GraphQL step-run listings (TASK-003 / TASK-004). */
-export interface MergedWorkflowExecutionStepRunRow {
-  readonly timelineOrdinal: number;
-  readonly executionOrdinal: number;
-  readonly persistedWorkflowExecutionId: string;
-  readonly stepRunId: string;
-  readonly stepId: string | undefined;
-  readonly nodeRegistryId: string | undefined;
-  readonly status: NodeExecutionRecord["status"];
-  readonly imported: boolean;
-  readonly startedAt: string;
-  readonly endedAt: string;
-}
-
-export interface RuntimeSessionView {
-  readonly session: WorkflowSessionState & {
-    readonly currentStepId: string | null;
-    readonly fanoutSummaries: readonly FanoutGroupSummary[];
-  };
-  readonly nodeExecutions: ReturnType<
-    typeof listRuntimeNodeExecutions
-  > extends Promise<infer T>
-    ? T
-    : never;
-  readonly nodeLogs: ReturnType<typeof listRuntimeNodeLogs> extends Promise<
-    infer T
-  >
-    ? T
-    : never;
-  readonly llmMessages: ReturnType<
-    typeof listRuntimeLlmSessionMessages
-  > extends Promise<infer T>
-    ? T
-    : never;
-  readonly hookEvents?: ReturnType<
-    typeof listRuntimeHookEvents
-  > extends Promise<infer T>
-    ? T
-    : never;
-  readonly replyDispatches?: ReturnType<
-    typeof listEventReplyDispatchesFromRuntimeDb
-  > extends Promise<infer T>
-    ? T
-    : never;
-}
-
-export interface CallWorkflowStepInput extends CallStepInput {}
-
-interface CurrentStepWorkflowView {
-  readonly workflowId: string;
-  readonly steps?: WorkflowJson["steps"];
-}
-
-function toWorkflowExecutionSummary(
-  session: WorkflowSessionState,
-  currentStepId: string | null = resolveCurrentStepId(session),
-): WorkflowExecutionSummary {
-  return {
-    workflowExecutionId: session.sessionId,
-    sessionId: session.sessionId,
-    workflowName: session.workflowName,
-    status: session.status,
-    currentNodeId: session.currentNodeId ?? null,
-    ...(currentStepId === null ? {} : { currentStepId }),
-    nodeExecutionCounter: session.nodeExecutionCounter,
-    startedAt: session.startedAt,
-    endedAt: session.endedAt ?? null,
-  };
-}
-
-async function resolveSessionCurrentStepId(input: {
-  readonly session: WorkflowSessionState;
-  readonly options: DivedraOptions;
-  readonly workflowCache?: Map<
-    string,
-    Promise<CurrentStepWorkflowView | undefined>
-  >;
-}): Promise<string | null> {
-  const currentStepId = resolveCurrentStepId(input.session);
-  if (currentStepId !== null) {
-    return currentStepId;
-  }
-
-  const cache =
-    input.workflowCache ??
-    new Map<string, Promise<CurrentStepWorkflowView | undefined>>();
-  const cacheKey = input.session.workflowName;
-  const cached = cache.get(cacheKey);
-  let pending: Promise<CurrentStepWorkflowView | undefined>;
-  if (cached === undefined) {
-    pending = loadWorkflowFromCatalog(cacheKey, input.options).then((loaded) =>
-      loaded.ok
-        ? {
-            workflowId: loaded.value.bundle.workflow.workflowId,
-            ...(loaded.value.bundle.workflow.steps === undefined
-              ? {}
-              : { steps: loaded.value.bundle.workflow.steps }),
-          }
-        : undefined,
-    );
-    cache.set(cacheKey, pending);
-  } else {
-    pending = cached;
-  }
-  const workflow = await pending;
-  if (workflow?.workflowId !== input.session.workflowId) {
-    return null;
-  }
-
-  return resolveCurrentStepIdFromWorkflow(
-    input.session,
-    workflow.steps === undefined ? undefined : { steps: workflow.steps },
-  );
 }
 
 export interface WorkflowExecutionClientOptions extends DivedraOptions {
@@ -850,242 +711,19 @@ export async function continueWorkflowFromHistory(
   };
 }
 
-function findOwningNodeExecutionRecord(
-  snapshot: WorkflowSessionState,
-  stepRunId: string,
-): NodeExecutionRecord | undefined {
-  return snapshot.nodeExecutions.find((row) => row.nodeExecId === stepRunId);
-}
-
-/**
- * Builds the operator-visible merged timeline for a workflow execution, including imported
- * prefix rows referenced via `historyImports` / continuation lineage.
- */
-export async function listMergedWorkflowExecutionStepRuns(
-  input: {
-    readonly workflowExecutionId: string;
-    readonly filterStepId?: string;
-    readonly filterStatus?: NodeExecutionRecord["status"];
-  } & DivedraOptions,
-): Promise<{
-  readonly workflowExecutionId: string;
-  readonly workflowId: string;
-  readonly workflowName: string;
-  readonly stepRuns: readonly MergedWorkflowExecutionStepRunRow[];
-}> {
-  const loaded = await loadSession(input.workflowExecutionId, input);
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
-  }
-  const root = normalizeSessionState(loaded.value);
-  const snapshotsResult = await loadContinuationRelatedSnapshots([root], input);
-  if (!snapshotsResult.ok) {
-    throw new Error(snapshotsResult.error);
-  }
-  const snapshots = snapshotsResult.value;
-  const mergedTimeline = buildMergedContinuationTimeline(
-    snapshots,
-    root.sessionId,
-  );
-  if (!mergedTimeline.ok) {
-    throw new Error(mergedTimeline.error.message);
-  }
-
-  const filterStepTrimmed = input.filterStepId?.trim();
-  const trimmedFilterStep =
-    filterStepTrimmed === undefined || filterStepTrimmed.length === 0
-      ? undefined
-      : filterStepTrimmed;
-
-  const rows: MergedWorkflowExecutionStepRunRow[] = [];
-  let timelineOrdinal = 0;
-  for (const entry of mergedTimeline.value) {
-    const owner = snapshots.get(entry.persistedWorkflowExecutionId);
-    if (owner === undefined) {
-      throw new Error(
-        `internal: missing owning snapshot '${entry.persistedWorkflowExecutionId}' for merged timeline row`,
-      );
-    }
-    const record = findOwningNodeExecutionRecord(owner, entry.stepRunId);
-    if (record === undefined) {
-      throw new Error(
-        `internal: node execution '${entry.stepRunId}' missing from owning session '${owner.sessionId}'`,
-      );
-    }
-    const stepId = record.stepId ?? record.nodeId ?? entry.stepId;
-    if (trimmedFilterStep !== undefined && stepId !== trimmedFilterStep) {
-      continue;
-    }
-    if (
-      input.filterStatus !== undefined &&
-      record.status !== input.filterStatus
-    ) {
-      continue;
-    }
-    timelineOrdinal += 1;
-    rows.push({
-      timelineOrdinal,
-      executionOrdinal: record.executionOrdinal ?? entry.executionOrdinal,
-      persistedWorkflowExecutionId: entry.persistedWorkflowExecutionId,
-      stepRunId: entry.stepRunId,
-      stepId: stepId ?? undefined,
-      nodeRegistryId: record.nodeRegistryId ?? entry.nodeRegistryId,
-      status: record.status,
-      imported: entry.persistedWorkflowExecutionId !== root.sessionId,
-      startedAt: record.startedAt,
-      endedAt: record.endedAt,
-    });
-  }
-
-  return {
-    workflowExecutionId: root.sessionId,
-    workflowId: root.workflowId,
-    workflowName: root.workflowName,
-    stepRuns: rows,
-  };
-}
-
-export async function cancelWorkflowExecution(
-  input: {
-    readonly workflowExecutionId: string;
-  } & DivedraOptions,
-): Promise<{
-  readonly accepted: boolean;
-  readonly workflowExecutionId: string;
-  readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
-}> {
-  const loaded = await loadSession(input.workflowExecutionId, input);
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
-  }
-  if (
-    loaded.value.status === "completed" ||
-    loaded.value.status === "failed" ||
-    loaded.value.status === "cancelled"
-  ) {
-    return {
-      accepted: false,
-      workflowExecutionId: loaded.value.sessionId,
-      sessionId: loaded.value.sessionId,
-      status: loaded.value.status,
-    };
-  }
-  const cancelled: WorkflowSessionState = {
-    ...loaded.value,
-    status: "cancelled",
-    endedAt: new Date().toISOString(),
-    lastError: "cancelled via cancelWorkflowExecution",
-  };
-  const saved = await saveSession(cancelled, input);
-  if (!saved.ok) {
-    throw new Error(saved.error.message);
-  }
-  return {
-    accepted: true,
-    workflowExecutionId: cancelled.sessionId,
-    sessionId: cancelled.sessionId,
-    status: cancelled.status,
-  };
-}
-
-export async function getSession(
-  sessionId: string,
-  options: DivedraOptions = {},
-): Promise<WorkflowSessionState> {
-  const loaded = await loadSession(sessionId, options);
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
-  }
-  return loaded.value;
-}
-
-export async function listSessions(options: DivedraOptions = {}) {
-  const listed = await listStoredSessions(options);
-  if (!listed.ok) {
-    throw new Error(listed.error.message);
-  }
-
-  const workflowCache = new Map<
-    string,
-    Promise<CurrentStepWorkflowView | undefined>
-  >();
-  const loadedSessions = await Promise.all(
-    listed.value.map(async (sessionId) => {
-      const loaded = await loadSession(sessionId, options);
-      if (!loaded.ok) {
-        return undefined;
-      }
-      const currentStepId = await resolveSessionCurrentStepId({
-        session: loaded.value,
-        options,
-        workflowCache,
-      });
-      return toWorkflowExecutionSummary(loaded.value, currentStepId);
-    }),
-  );
-
-  return loadedSessions
-    .filter((entry): entry is WorkflowExecutionSummary => entry !== undefined)
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
-}
-
-export async function getRuntimeSessionView(
-  sessionId: string,
-  options: DivedraOptions = {},
-): Promise<RuntimeSessionView> {
-  const session = await getSession(sessionId, options);
-  const currentStepId = await resolveSessionCurrentStepId({
-    session,
-    options,
-  });
-  const [nodeExecutions, nodeLogs, llmMessages, hookEvents, replyDispatches] =
-    await Promise.all([
-      listRuntimeNodeExecutions(sessionId, options),
-      listRuntimeNodeLogs(sessionId, options),
-      listRuntimeLlmSessionMessages(sessionId, options),
-      listRuntimeHookEvents(sessionId, options),
-      listEventReplyDispatchesFromRuntimeDb(
-        { workflowExecutionId: sessionId },
-        options,
-      ),
-    ]);
-  return {
-    session: {
-      ...session,
-      fanoutGroups: session.fanoutGroups ?? [],
-      currentStepId,
-      fanoutSummaries: buildFanoutGroupSummaries(session),
-    },
-    nodeExecutions,
-    nodeLogs,
-    llmMessages,
-    hookEvents,
-    replyDispatches,
-  };
-}
-
-export async function callWorkflowStep(input: CallWorkflowStepInput): Promise<{
-  readonly sessionId: string;
-  readonly stepId: string;
-  readonly nodeExecId: string;
-  readonly status: "succeeded";
-  readonly exitCode: number;
-  readonly output: Readonly<Record<string, unknown>>;
-}> {
-  const result = await callStep(input);
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
-  return {
-    sessionId: result.value.session.sessionId,
-    stepId: result.value.stepId,
-    nodeExecId: result.value.nodeExecution.nodeExecId,
-    status: "succeeded",
-    exitCode: result.value.exitCode,
-    output: result.value.output,
-  };
-}
+export {
+  listMergedWorkflowExecutionStepRuns,
+  type MergedWorkflowExecutionStepRunRow,
+} from "./lib-step-runs";
+export {
+  callWorkflowStep,
+  cancelWorkflowExecution,
+  getRuntimeSessionView,
+  getSession,
+  listSessions,
+  type CallWorkflowStepInput,
+  type RuntimeSessionView,
+} from "./lib-sessions";
 
 export { runCli } from "./cli";
 export { startServe } from "./server/serve";

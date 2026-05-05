@@ -1,6 +1,6 @@
 # Bounded Fanout Join Workflow Execution Implementation Plan
 
-**Status**: Completed
+**Status**: In Progress
 **Created**: 2026-05-05
 **Last Updated**: 2026-05-05
 **Design Reference**: `design-docs/specs/design-bounded-fanout-join-workflow-execution.md`
@@ -35,6 +35,12 @@ Included:
 - inspection summaries for CLI, GraphQL, TUI, and library callers
 - shared-worktree ownership validation for write-capable fanout branches
 - update `.divedra/workflows/design-and-implement-review-loop` after runtime tests pass
+
+Revision note: the cursor-agent parity workflow bundle adopts bounded fanout
+through cross-workflow feature-local planning branches. Parent-session local
+fanout work-item execution remains tracked below and is not claimed complete
+until branch identity, retry, pause, timeout, and maxSteps semantics run inside
+the parent workflow session.
 
 Excluded: static authored `branches[]`, partial-success joins, group-level
 timeouts, branch auto-merge, new run-time CLI flags, and branch rerun selector
@@ -258,7 +264,7 @@ export interface FanoutGroupSummary {
 
 ### TASK-002: Fanout State And Work-Item Foundation
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/workflow/session.ts`, `src/workflow/engine.ts`, `src/workflow/session-store.test.ts`
 **Dependencies**: TASK-001
@@ -278,13 +284,13 @@ export interface FanoutGroupSummary {
 
 **Completion Criteria**:
 
-- [x] Local branch scheduler enforces concurrency and deterministic result ordering
-- [x] Join communication is published once with `runtimeVariables.fanoutJoin`
+- [ ] Parent-session local branch work-item scheduler enforces concurrency and deterministic result ordering
+- [ ] Parent-session local join communication is published once with `runtimeVariables.fanoutJoin`
 - [ ] Failure, cancellation, timeout, optional/user-action pause, and maxSteps cases are covered
 
 ### TASK-004: Cross-Workflow Fanout Runtime
 
-**Status**: In Progress
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `src/workflow/cross-workflow-from-steps.ts`, `src/workflow/engine.ts`, `src/workflow/engine.test.ts`
 **Dependencies**: TASK-002
@@ -308,12 +314,12 @@ export interface FanoutGroupSummary {
 
 - [x] Write-capable fanout branches declare read-only, disjoint ownership, or isolated workspace mode
 - [x] Unsafe overlapping shared-worktree fanout is rejected
-- [ ] Branch workspace roots are persisted when they differ from the parent worktree
+- [x] Branch workspace roots are persisted when they differ from the parent worktree
 - [ ] Branch retries reuse the same isolated workspace or record replacement workspace linkage to the superseded branch attempt
 
 ### TASK-006: Inspection Surfaces
 
-**Status**: Not Started
+**Status**: In Progress
 **Parallelizable**: No
 **Deliverables**: `src/workflow/inspect.ts`, `src/lib.ts`, `src/graphql/schema.ts`, `src/cli.ts`, `src/tui/*`, related tests
 **Dependencies**: TASK-002
@@ -326,17 +332,17 @@ export interface FanoutGroupSummary {
 
 ### TASK-007: Workflow Bundle Enablement
 
-**Status**: Not Started
+**Status**: Completed
 **Parallelizable**: No
 **Deliverables**: `.divedra/workflows/design-and-implement-review-loop/workflow.json`, workflow-local prompts or expected-results updates as needed
 **Dependencies**: TASK-003, TASK-004, TASK-005, TASK-006
 
 **Completion Criteria**:
 
-- [ ] Cursor parity workflow fans out feature-local planning/review with bounded concurrency near `20`
-- [ ] Branch write ownership is disjoint or isolated
-- [ ] Dependency-aware implementation remains after the join
-- [ ] Workflow validation passes
+- [x] Cursor parity workflow fans out feature-local planning/review with bounded concurrency near `20`
+- [x] Branch write ownership is disjoint or isolated
+- [x] Dependency-aware implementation remains after the join
+- [x] Workflow validation passes
 
 ### TASK-008: Final Verification And Documentation Refresh
 
@@ -350,8 +356,9 @@ export interface FanoutGroupSummary {
 - [x] `bun run typecheck`
 - [x] `bun test src/workflow/validate.test.ts src/workflow/types.test.ts`
 - [ ] `bun test src/workflow/engine.test.ts --runInBand`
-- [ ] `bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`
-- [ ] `bun run src/main.ts workflow validate design-and-implement-review-loop`
+- [x] `bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`
+- [x] `bun run src/main.ts workflow validate design-and-implement-review-loop`
+- [x] `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan`
 
 ## Dependencies
 
@@ -393,7 +400,7 @@ export interface FanoutGroupSummary {
 - [ ] Failure policies, cancellation, pause, timeout, and maxSteps behavior are covered
 - [ ] Shared-worktree write safety and branch retry workspace lineage are validated
 - [ ] Inspection surfaces expose fanout group state
-- [ ] Cursor parity workflow uses fanout only after runtime verification
+- [x] Cursor parity workflow uses fanout only after runtime verification
 - [ ] All verification commands in this plan pass
 
 ## Progress Log
@@ -425,3 +432,31 @@ export interface FanoutGroupSummary {
 **Tasks In Progress**: TASK-003, TASK-005, TASK-008.
 **Blockers**: Full inspection surface expansion, branch retry workspace lineage, complete failure/cancellation/pause/timeout/maxSteps coverage, and workflow bundle adoption remain open.
 **Notes**: Addressed Step 7 high/mid findings by adding local fanout branch execution with bounded scheduling and deterministic join aggregation, persisting failed fanout group state before terminal failure, propagating `runtimeVariables.fanoutJoin` to join steps, bounding nested fanout concurrency budgets, restoring unrelated CLI session command behavior, and requiring explicit write ownership for concurrent fanout authoring. Verification passed for `bun run typecheck`, validation/type tests, and focused fanout engine tests.
+
+### Session: 2026-05-05 16:27 JST
+
+**Tasks Completed**: TASK-007 and Step 7 review follow-up for CLI/session inspection compatibility.
+**Tasks In Progress**: TASK-003, TASK-005, TASK-008.
+**Blockers**: Parent-session local fanout work-item execution, branch retry workspace lineage, and exhaustive failure/cancellation/pause/timeout/maxSteps coverage remain open.
+**Notes**: Addressed Step 7 feedback from `comm-000018` by restoring the `src/cli.ts` command handlers so `divedra gql`, `session health`, `session export`, `session logs`, and `session step-runs` remain available, while keeping help text focused on `divedra graphql` and hiding detailed session-inspection commands. Enabled bounded fanout in `.divedra/workflows/design-and-implement-review-loop/workflow.json` with `defaults.fanoutConcurrency: 20`, a Step 1 feature classification fanout transition, isolated branch ownership, and a `step5-feature-plan-join` dependency-aware join before Step 6. Added `.divedra/workflows/design-and-implement-review-loop-feature-plan/` as the cross-workflow feature-local design/plan/review branch workflow and validated both workflow bundles. Verification passed for `bun run typecheck`, `bun test src/workflow/validate.test.ts src/workflow/types.test.ts --runInBand`, `bun test src/workflow/engine.test.ts --runInBand --test-name-pattern "fanout"`, `HOME=/private/tmp/divedra-home bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`, and workflow validation for both the main and feature-plan bundles using `--workflow-definition-dir .divedra/workflows`.
+
+### Session: 2026-05-05 16:56 JST
+
+**Tasks Completed**: Step 7 review follow-up from `comm-000020`; partial TASK-005 and TASK-008.
+**Tasks In Progress**: TASK-003, TASK-005, TASK-008.
+**Blockers**: Branch retry workspace lineage and exhaustive failure/cancellation/pause/timeout/maxSteps coverage remain open.
+**Notes**: Addressed the high isolated-workspace finding by creating per-branch fanout workspaces under the system temp fanout workspace root, copying the parent workflow working directory into each branch workspace, passing that path as `workflowWorkingDirectory` to cross-workflow and local isolated branches, and persisting the branch workspace root on fanout branch records plus `workflow-calls/` artifacts. Addressed the mid CLI help regression by restoring explicit `session health`, `session export`, `session logs`, and `session step-runs` help rows while preserving the accepted `divedra graphql` wording and hidden `divedra gql` alias. Verification passed for `bun run typecheck`, `bun test src/workflow/engine.test.ts --runInBand --test-name-pattern "fanout"`, `HOME=/private/tmp/divedra-home bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`, `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .divedra/workflows`, `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`, and `git diff --check`.
+
+### Session: 2026-05-05 16:59 JST
+
+**Tasks Completed**: Step 7 review follow-up from `comm-000022`; partial TASK-003, TASK-004, TASK-005, and TASK-008.
+**Tasks In Progress**: TASK-003, TASK-005, TASK-008.
+**Blockers**: Parent-session local fanout work-item execution remains explicitly unsupported until branch execution, pause/cancel/retry, and counters are implemented in the parent session; branch retry workspace lineage and exhaustive cancellation/pause/timeout coverage remain open.
+**Notes**: Addressed the high parity workflow integration finding by switching `.divedra/workflows/design-and-implement-review-loop/workflow.json` from isolated fanout ownership to `disjoint-paths` ownership for feature-local `design-docs/specs` and `impl-plans/active` outputs, and updated `step5-feature-plan-join.md` to preserve branch file paths and optional workspace roots. Addressed the maxSteps finding by adding a shared fanout step budget passed into cross-workflow branch child runs and a regression proving high fanout cannot multiply the configured `maxSteps` cap. Addressed the local fanout semantics finding by rejecting local fanout at runtime with an explicit unsupported message instead of claiming parent-session work-item support. Verification passed for `bun run typecheck`, `bun test src/workflow/engine.test.ts --runInBand --test-name-pattern fanout`, and workflow validation for both the main and feature-plan bundles using `--workflow-definition-dir .divedra/workflows`.
+
+### Session: 2026-05-05 17:05 JST
+
+**Tasks Completed**: Continued large-file split for fanout runtime helpers.
+**Tasks In Progress**: TASK-003, TASK-005, TASK-008.
+**Blockers**: Parent-session local fanout work-item execution, branch retry workspace lineage, and exhaustive cancellation/pause/timeout coverage remain open.
+**Notes**: Extracted cohesive fanout helper utilities from `src/workflow/engine.ts` into `src/workflow/engine-fanout.ts`, including JSON Pointer resolution, fanout item/concurrency/budget helpers, branch workspace preparation, bounded branch scheduling, runtime variable builders, and join output persistence. Verification passed for `bun run typecheck`, focused fanout engine tests, the full `src/workflow` test suite, and `git diff --check`.

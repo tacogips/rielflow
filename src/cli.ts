@@ -188,7 +188,10 @@ async function resolveProjectScopeRootForSessionCommand(
 
   const configuredWorkflowRoot =
     options.workflowRoot ?? env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
-  if (configuredWorkflowRoot !== undefined && configuredWorkflowRoot.length > 0) {
+  if (
+    configuredWorkflowRoot !== undefined &&
+    configuredWorkflowRoot.length > 0
+  ) {
     const scopeRoot = await resolveProjectScopeRootFromWorkflowRoot(
       configuredWorkflowRoot,
       cwd,
@@ -539,7 +542,9 @@ function buildStepProgressSummaries(session: WorkflowSessionState): readonly {
     }));
 }
 
-function formatFanoutSummaryLines(session: WorkflowSessionState): readonly string[] {
+function formatFanoutSummaryLines(
+  session: WorkflowSessionState,
+): readonly string[] {
   const summaries = buildFanoutGroupSummaries(session);
   if (summaries.length === 0) {
     return [];
@@ -1294,13 +1299,19 @@ function printHelp(io: CliIo): void {
     "  divedra session continue <workflow-execution-id> --start-step <step-id> --after-step-run <step-run-id> [options]",
   );
   io.stdout(
+    "  divedra session export <workflow-execution-id> [--file <path>] [options]",
+  );
+  io.stdout(
+    "  divedra session logs <workflow-execution-id> [--format <text|json|jsonl>] [options]",
+  );
+  io.stdout(
     "  divedra session step-runs <workflow-execution-id> [--step <step-id>] [--status <status>] [options]",
   );
   io.stdout(
     "  divedra serve [workflow-name] [--host <host>] [--port <port>] [--read-only] [--no-exec]",
   );
   io.stdout(
-    "  divedra gql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
+    "  divedra graphql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
   );
   io.stdout(
     "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
@@ -2721,11 +2732,11 @@ export async function runCli(
     deps,
   );
 
-  if (scope === "gql") {
+  if (scope === "gql" || scope === "graphql") {
     const document = positionals.slice(1).join(" ").trim();
     if (document.length === 0) {
       io.stderr("GraphQL document is required");
-      io.stderr("usage: divedra gql <graphql-document> [options]");
+      io.stderr("usage: divedra graphql <graphql-document> [options]");
       return 2;
     }
 

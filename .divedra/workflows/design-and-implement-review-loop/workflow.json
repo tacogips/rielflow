@@ -2,11 +2,12 @@
   "workflowId": "design-and-implement-review-loop",
   "description": "Shared workflow for either full issue resolution or planning-only Codex-reference design and implementation-plan handoff, with explicit review gates, an issue-resolution user-facing documentation refresh step, a final commit-message step, a command-node git commit/push step, and return paths.",
   "defaults": {
+    "fanoutConcurrency": 20,
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 3600000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}}. Run Step 1 intake first, then Step 2 design-doc update, then Step 3 design review. If Step 3 reports any high or mid findings, route back to Step 2. After design acceptance, run Step 4 implementation-plan creation, then Step 5 implementation-plan and design consistency review. If Step 5 reports design changes are required, route back to Step 2. If Step 5 reports plan-only changes are required, route back to Step 4. After Step 5 acceptance for a planning-only run, run Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Otherwise run Step 6 implementation, then Step 7 implementation review. If Step 7 reports any high or mid findings, route back to Step 6. After Step 7 acceptance, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Finish only when the required review gates are accepted and the final workflow changes have been committed and pushed for the selected mode.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Run Step 1 intake first. If Step 1 classifies independent feature fanout items, dispatch feature-local design and implementation-plan work through the bounded fanout transition, join at Step 5 feature-plan join, then continue to Step 6 for issue-resolution mode or Step 9 for planning-only mode. If Step 1 does not classify fanout items, run the sequential path: Step 2 design-doc update, Step 3 design review, Step 4 implementation-plan creation, and Step 5 implementation-plan review. If Step 3 reports any high or mid findings, route back to Step 2. If Step 5 reports design changes are required, route back to Step 2. If Step 5 reports plan-only changes are required, route back to Step 4. After Step 5 acceptance for a planning-only run, run Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Otherwise run Step 6 implementation, then Step 7 implementation review. If Step 7 reports any high or mid findings, route back to Step 6. After Step 7 acceptance, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Finish only when the required review gates are accepted and the final workflow changes have been committed and pushed for the selected mode.",
     "workerSystemPromptTemplate": "Return concise business JSON only. Keep workflow mode, issue references, codex-agent references, file paths, findings, review decisions, and verification commands explicit."
   },
   "managerStepId": "divedra-manager",
@@ -35,6 +36,10 @@
     {
       "id": "step5-impl-plan-review",
       "nodeFile": "nodes/node-step5-impl-plan-review.json"
+    },
+    {
+      "id": "step5-feature-plan-join",
+      "nodeFile": "nodes/node-step5-feature-plan-join.json"
     },
     {
       "id": "step6-implement",
@@ -81,7 +86,30 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step2-design-doc-update"
+          "toStepId": "step2-design-doc-update",
+          "label": "!(has_feature_fanout)"
+        },
+        {
+          "toStepId": "step2-design-doc-update",
+          "toWorkflowId": "design-and-implement-review-loop-feature-plan",
+          "resumeStepId": "step5-feature-plan-join",
+          "label": "has_feature_fanout",
+          "fanout": {
+            "groupId": "feature-local-planning",
+            "itemsFrom": "/payload/featureFanoutItems",
+            "itemVariable": "feature",
+            "concurrency": 20,
+            "joinStepId": "step5-feature-plan-join",
+            "failurePolicy": "fail-fast",
+            "resultOrder": "input",
+            "writeOwnership": {
+              "mode": "disjoint-paths",
+              "directories": [
+                "design-docs/specs",
+                "impl-plans/active"
+              ]
+            }
+          }
         }
       ]
     },
@@ -144,6 +172,22 @@
         {
           "toStepId": "step6-implement",
           "label": "!(planning_only || needs_design_revision || needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step5-feature-plan-join",
+      "nodeId": "step5-feature-plan-join",
+      "description": "Join feature-local design and implementation-plan branch outputs before planning-only completion or dependency-aware implementation.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step9-commit-message",
+          "label": "planning_only"
+        },
+        {
+          "toStepId": "step6-implement",
+          "label": "!(planning_only)"
         }
       ]
     },

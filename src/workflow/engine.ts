@@ -134,7 +134,6 @@ import type {
   SupervisionIncident,
   SupervisionRemediationRecord,
   SupervisionRunState,
-  WorkflowStepFanout,
   WorkflowEdge,
   WorkflowJson,
   WorkflowTimeoutPolicy,
@@ -146,6 +145,21 @@ import {
   getNormalizedNodePayload,
   resolveWorkflowManagerStepId,
 } from "./types";
+import {
+  buildFanoutGroupRunId,
+  buildFanoutJoinRuntimeVariables,
+  buildFanoutRuntimeVariables,
+  buildFanoutStepBudget,
+  claimFanoutStepBudget,
+  itemAsWorkflowCallPayload,
+  persistFanoutJoinOutputRef,
+  prepareFanoutBranchWorkspace,
+  resolveChildFanoutConcurrencyBudget,
+  resolveFanoutConcurrency,
+  resolveFanoutItems,
+  runBoundedFanoutBranches,
+  type FanoutStepBudget,
+} from "./engine-fanout";
 
 export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly sessionId?: string;
@@ -200,6 +214,8 @@ export interface WorkflowRunOptions extends LoadOptions, SessionStoreOptions {
   readonly fanoutBranchStartStepId?: string;
   /** Internal maximum fanout budget inherited by nested fanout runs. */
   readonly fanoutConcurrencyBudget?: number;
+  /** Internal shared step budget for fanout branch child executions. */
+  readonly fanoutStepBudget?: FanoutStepBudget;
 }
 
 export interface WorkflowRunResult {
@@ -882,10 +898,16 @@ function buildCrossWorkflowCalleeRunOptions(
   runtimeVariables: Readonly<Record<string, unknown>>,
   overrides: Pick<
     WorkflowRunOptions,
-    "fanoutBranchStartStepId" | "fanoutConcurrencyBudget" | "maxSteps"
+    | "fanoutBranchStartStepId"
+    | "fanoutConcurrencyBudget"
+    | "fanoutStepBudget"
+    | "maxSteps"
+    | "workflowWorkingDirectory"
   > = {},
 ): WorkflowRunOptions {
   const maxSteps = overrides.maxSteps ?? options.maxSteps;
+  const workflowWorkingDirectory =
+    overrides.workflowWorkingDirectory ?? options.workflowWorkingDirectory;
   return {
     ...(options.workflowRoot === undefined
       ? {}
@@ -923,9 +945,9 @@ function buildCrossWorkflowCalleeRunOptions(
     ...(options.nodeAddonResolvers === undefined
       ? {}
       : { nodeAddonResolvers: options.nodeAddonResolvers }),
-    ...(options.workflowWorkingDirectory === undefined
+    ...(workflowWorkingDirectory === undefined
       ? {}
-      : { workflowWorkingDirectory: options.workflowWorkingDirectory }),
+      : { workflowWorkingDirectory }),
     runtimeVariables,
     ...(maxSteps === undefined ? {} : { maxSteps }),
     ...(options.maxLoopIterations === undefined
@@ -953,6 +975,9 @@ function buildCrossWorkflowCalleeRunOptions(
     ...(overrides.fanoutConcurrencyBudget === undefined
       ? {}
       : { fanoutConcurrencyBudget: overrides.fanoutConcurrencyBudget }),
+    ...(overrides.fanoutStepBudget === undefined
+      ? {}
+      : { fanoutStepBudget: overrides.fanoutStepBudget }),
   };
 }
 
@@ -973,6 +998,7 @@ async function persistCrossWorkflowDispatchArtifact(input: {
   readonly resultOutputRef?: OutputRef;
   readonly fanoutGroupRunId?: string;
   readonly branchIndex?: number;
+  readonly branchWorkspaceRoot?: string;
 }): Promise<void> {
   await mkdir(path.join(input.artifactDir, "workflow-calls"), {
     recursive: true,
@@ -994,6 +1020,9 @@ async function persistCrossWorkflowDispatchArtifact(input: {
       ...(input.branchIndex === undefined
         ? {}
         : { branchIndex: input.branchIndex }),
+      ...(input.branchWorkspaceRoot === undefined
+        ? {}
+        : { branchWorkspaceRoot: input.branchWorkspaceRoot }),
       calleeWorkflowName: calleeName,
       calleeWorkflowId: calleeId,
       calleeSessionId,
@@ -1060,184 +1089,6 @@ function crossWorkflowDispatchMatchesCallerExecution(input: {
   return entry.callerStepId === input.callerStepId;
 }
 
-function decodeJsonPointerSegment(segment: string): string {
-  return segment.replaceAll("~1", "/").replaceAll("~0", "~");
-}
-
-function readJsonPointer(
-  root: unknown,
-  pointer: string,
-): Result<unknown, string> {
-  if (pointer === "") {
-    return ok(root);
-  }
-  if (!pointer.startsWith("/")) {
-    return err(`JSON Pointer '${pointer}' must be empty or start with '/'`);
-  }
-  let current: unknown = root;
-  for (const rawSegment of pointer.slice(1).split("/")) {
-    const segment = decodeJsonPointerSegment(rawSegment);
-    if (Array.isArray(current)) {
-      const index = Number(segment);
-      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
-        return err(
-          `JSON Pointer '${pointer}' array index '${segment}' is missing`,
-        );
-      }
-      current = current[index];
-      continue;
-    }
-    if (typeof current !== "object" || current === null) {
-      return err(
-        `JSON Pointer '${pointer}' cannot descend through a non-object value`,
-      );
-    }
-    const record = current as Readonly<Record<string, unknown>>;
-    if (!(segment in record)) {
-      return err(`JSON Pointer '${pointer}' property '${segment}' is missing`);
-    }
-    current = record[segment];
-  }
-  return ok(current);
-}
-
-function resolveFanoutItems(input: {
-  readonly fanout: WorkflowStepFanout;
-  readonly outputPayload: Readonly<Record<string, unknown>>;
-}): Result<readonly unknown[], string> {
-  const selected = readJsonPointer(input.outputPayload, input.fanout.itemsFrom);
-  if (!selected.ok) {
-    return err(selected.error);
-  }
-  if (!Array.isArray(selected.value)) {
-    return err(
-      `fanout.itemsFrom '${input.fanout.itemsFrom}' must resolve to an array`,
-    );
-  }
-  return ok(selected.value);
-}
-
-function resolveFanoutConcurrency(input: {
-  readonly workflow: WorkflowJson;
-  readonly fanout: WorkflowStepFanout;
-  readonly budget?: number;
-}): number {
-  const authored =
-    input.fanout.concurrency ?? input.workflow.defaults.fanoutConcurrency ?? 20;
-  return Math.max(1, Math.min(authored, input.budget ?? authored));
-}
-
-function resolveChildFanoutConcurrencyBudget(input: {
-  readonly parentBudget: number | undefined;
-  readonly parentConcurrency: number;
-}): number {
-  const budget = input.parentBudget ?? input.parentConcurrency;
-  return Math.max(1, Math.floor(budget / Math.max(input.parentConcurrency, 1)));
-}
-
-function buildFanoutRuntimeVariables(input: {
-  readonly baseRuntimeVariables: Readonly<Record<string, unknown>>;
-  readonly fanout: WorkflowStepFanout;
-  readonly branchIndex: number;
-  readonly item: unknown;
-}): Readonly<Record<string, unknown>> {
-  return {
-    ...input.baseRuntimeVariables,
-    ...(input.fanout.itemVariable === undefined
-      ? {}
-      : { [input.fanout.itemVariable]: input.item }),
-    fanout: {
-      groupId: input.fanout.groupId,
-      branchIndex: input.branchIndex,
-      item: input.item,
-    },
-  };
-}
-
-async function runBoundedFanoutBranches<T>(
-  items: readonly unknown[],
-  concurrency: number,
-  runBranch: (branchIndex: number, item: unknown) => Promise<T>,
-): Promise<readonly T[]> {
-  const results = new Array<T>(items.length);
-  let nextIndex = 0;
-  async function worker(): Promise<void> {
-    for (;;) {
-      const branchIndex = nextIndex;
-      nextIndex += 1;
-      if (branchIndex >= items.length) {
-        return;
-      }
-      results[branchIndex] = await runBranch(branchIndex, items[branchIndex]);
-    }
-  }
-  const workerCount = Math.min(Math.max(concurrency, 1), items.length);
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      await worker();
-    }),
-  );
-  return results;
-}
-
-function buildFanoutGroupRunId(input: {
-  readonly groupId: string;
-  readonly sourceNodeExecId: string;
-}): string {
-  return `fanout-${input.groupId}-${input.sourceNodeExecId}`;
-}
-
-function buildFanoutJoinRuntimeVariables(input: {
-  readonly baseRuntimeVariables: Readonly<Record<string, unknown>>;
-  readonly aggregate: Readonly<Record<string, unknown>>;
-}): Readonly<Record<string, unknown>> {
-  return {
-    ...input.baseRuntimeVariables,
-    fanoutJoin: input.aggregate,
-  };
-}
-
-function itemAsWorkflowCallPayload(
-  item: unknown,
-): Readonly<Record<string, unknown>> {
-  if (typeof item === "object" && item !== null && !Array.isArray(item)) {
-    return item as Readonly<Record<string, unknown>>;
-  }
-  return { item };
-}
-
-async function persistFanoutJoinOutputRef(input: {
-  readonly artifactDir: string;
-  readonly workflow: WorkflowJson;
-  readonly session: WorkflowSessionState;
-  readonly sourceStepId: string;
-  readonly sourceNodeExecId: string;
-  readonly fanoutGroupRunId: string;
-  readonly aggregate: Readonly<Record<string, unknown>>;
-}): Promise<{ readonly outputRef: OutputRef; readonly outputRaw: string }> {
-  const outputDir = path.join(
-    input.artifactDir,
-    "fanout-groups",
-    input.fanoutGroupRunId,
-    "join-output",
-  );
-  await mkdir(outputDir, { recursive: true });
-  const outputRaw = `${stableJson(input.aggregate)}\n`;
-  await writeRawTextFile(path.join(outputDir, "output.json"), outputRaw);
-  return {
-    outputRef: {
-      kind: "node-output",
-      workflowExecutionId: input.session.sessionId,
-      workflowId: input.workflow.workflowId,
-      outputNodeId: input.sourceStepId,
-      outputStepId: input.sourceStepId,
-      nodeExecId: input.sourceNodeExecId,
-      artifactDir: outputDir,
-    },
-    outputRaw,
-  };
-}
-
 async function executeCrossWorkflowFanoutDispatch(input: {
   readonly base: ExecuteCrossWorkflowDispatchesInput;
   readonly dispatch: CrossWorkflowDispatch;
@@ -1291,12 +1142,16 @@ async function executeCrossWorkflowFanoutDispatch(input: {
     groupId: fanout.groupId,
     sourceNodeExecId: input.base.callerNodeExecId,
   });
+  const fanoutStepBudget = buildFanoutStepBudget({
+    options: input.base.options,
+    parentNodeExecutionCounter: input.base.session.nodeExecutionCounter,
+  });
   const calleeWorkflow = loadedCallee.value.bundle.workflow;
   const failurePolicy = fanout.failurePolicy ?? "fail-fast";
   const resultOrder = fanout.resultOrder ?? "input";
   let firstFailure: string | undefined;
 
-  const branchResults = await runBoundedFanoutBranches(
+  const branchResults = await runBoundedFanoutBranches<FanoutBranchRecord>(
     items.value,
     concurrency,
     async (branchIndex, item) => {
@@ -1315,6 +1170,24 @@ async function executeCrossWorkflowFanoutDispatch(input: {
         branchIndex,
         item,
       });
+      const branchWorkspace = await prepareFanoutBranchWorkspace({
+        fanout,
+        options: input.base.options,
+        sessionId: input.base.session.sessionId,
+        fanoutGroupRunId,
+        branchIndex,
+      });
+      if (!branchWorkspace.ok) {
+        const message = `branch ${branchIndex}: ${branchWorkspace.error}`;
+        firstFailure = firstFailure ?? message;
+        return {
+          branchIndex,
+          item,
+          status: "failed" as const,
+          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          error: message,
+        } satisfies FanoutBranchRecord;
+      }
       const calleeRun = await runWorkflowInternal(
         loadedCallee.value.workflowName,
         buildCrossWorkflowCalleeRunOptions(
@@ -1328,7 +1201,15 @@ async function executeCrossWorkflowFanoutDispatch(input: {
             crossWorkflowDispatchId: input.dispatch.id,
             payload: itemAsWorkflowCallPayload(item),
           }),
-          { fanoutConcurrencyBudget: childFanoutConcurrencyBudget },
+          {
+            fanoutConcurrencyBudget: childFanoutConcurrencyBudget,
+            ...(fanoutStepBudget === undefined
+              ? {}
+              : { fanoutStepBudget }),
+            ...(branchWorkspace.value === undefined
+              ? {}
+              : { workflowWorkingDirectory: branchWorkspace.value }),
+          },
         ),
         input.base.adapter,
         input.base.guards,
@@ -1345,6 +1226,27 @@ async function executeCrossWorkflowFanoutDispatch(input: {
           item,
           status: "failed" as const,
           workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          ...(branchWorkspace.value === undefined
+            ? {}
+            : { workspaceRoot: branchWorkspace.value }),
+          error: message,
+        } satisfies FanoutBranchRecord;
+      }
+      if (calleeRun.value.exitCode !== 0) {
+        const message = `branch ${branchIndex}: callee workflow exited with ${calleeRun.value.exitCode}${
+          calleeRun.value.session.lastError === undefined
+            ? ""
+            : `: ${calleeRun.value.session.lastError}`
+        }`;
+        firstFailure = firstFailure ?? message;
+        return {
+          branchIndex,
+          item,
+          status: "failed" as const,
+          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          ...(branchWorkspace.value === undefined
+            ? {}
+            : { workspaceRoot: branchWorkspace.value }),
           error: message,
         } satisfies FanoutBranchRecord;
       }
@@ -1375,6 +1277,9 @@ async function executeCrossWorkflowFanoutDispatch(input: {
         ...(calleeOutputRef === undefined
           ? {}
           : { resultOutputRef: calleeOutputRef }),
+        ...(branchWorkspace.value === undefined
+          ? {}
+          : { branchWorkspaceRoot: branchWorkspace.value }),
       });
       if (
         calleeResultExecution === undefined ||
@@ -1387,6 +1292,9 @@ async function executeCrossWorkflowFanoutDispatch(input: {
           item,
           status: "failed" as const,
           workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          ...(branchWorkspace.value === undefined
+            ? {}
+            : { workspaceRoot: branchWorkspace.value }),
           error: message,
         } satisfies FanoutBranchRecord;
       }
@@ -1397,6 +1305,9 @@ async function executeCrossWorkflowFanoutDispatch(input: {
         workItemId: `${fanoutGroupRunId}:${branchIndex}`,
         nodeExecIds: [calleeResultExecution.nodeExecId],
         outputRef: calleeOutputRef,
+        ...(branchWorkspace.value === undefined
+          ? {}
+          : { workspaceRoot: branchWorkspace.value }),
       } satisfies FanoutBranchRecord;
     },
   );
@@ -1450,6 +1361,9 @@ async function executeCrossWorkflowFanoutDispatch(input: {
       ...(branch.outputRef === undefined
         ? {}
         : { outputRef: branch.outputRef }),
+      ...(branch.workspaceRoot === undefined
+        ? {}
+        : { workspaceRoot: branch.workspaceRoot }),
     })),
   };
   const aggregateOutput = await persistFanoutJoinOutputRef({
@@ -1521,202 +1435,9 @@ async function executeLocalFanoutTransition(input: {
   if (fanout === undefined) {
     return err("internal: local fanout transition missing fanout");
   }
-  const items = resolveFanoutItems({
-    fanout,
-    outputPayload: input.callerOutputPayload,
-  });
-  if (!items.ok) {
-    return err(`local fanout transition '${input.edge.when}': ${items.error}`);
-  }
-  const concurrency = resolveFanoutConcurrency({
-    workflow: input.workflow,
-    fanout,
-    ...(input.options.fanoutConcurrencyBudget === undefined
-      ? {}
-      : { budget: input.options.fanoutConcurrencyBudget }),
-  });
-  const childFanoutConcurrencyBudget = resolveChildFanoutConcurrencyBudget({
-    parentBudget: input.options.fanoutConcurrencyBudget,
-    parentConcurrency: concurrency,
-  });
-  const fanoutGroupRunId = buildFanoutGroupRunId({
-    groupId: fanout.groupId,
-    sourceNodeExecId: input.callerNodeExecId,
-  });
-  const failurePolicy = fanout.failurePolicy ?? "fail-fast";
-  const resultOrder = fanout.resultOrder ?? "input";
-  let firstFailure: string | undefined;
-
-  const branchResults = await runBoundedFanoutBranches(
-    items.value,
-    concurrency,
-    async (branchIndex, item) => {
-      if (failurePolicy === "fail-fast" && firstFailure !== undefined) {
-        return {
-          branchIndex,
-          item,
-          status: "cancelled" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: "fanout fail-fast stopped before branch launch",
-        } satisfies FanoutBranchRecord;
-      }
-      const branchRuntimeVariables = buildFanoutRuntimeVariables({
-        baseRuntimeVariables: input.session.runtimeVariables,
-        fanout,
-        branchIndex,
-        item,
-      });
-      const branchRun = await runWorkflowInternal(
-        input.workflowName,
-        buildCrossWorkflowCalleeRunOptions(
-          input.options,
-          branchRuntimeVariables,
-          {
-            fanoutBranchStartStepId: input.edge.to,
-            fanoutConcurrencyBudget: childFanoutConcurrencyBudget,
-          },
-        ),
-        input.adapter,
-        input.guards,
-        input.crossWorkflowInvocationStack,
-      );
-      if (!branchRun.ok) {
-        const message = `branch ${branchIndex}: ${branchRun.error.message}`;
-        firstFailure = firstFailure ?? message;
-        return {
-          branchIndex,
-          item,
-          status: "failed" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-        } satisfies FanoutBranchRecord;
-      }
-      const resultExecution = findLatestCrossWorkflowCalleeResultExecution(
-        input.workflow,
-        branchRun.value.session,
-      );
-      const outputRef =
-        resultExecution === undefined
-          ? undefined
-          : buildOutputRefForExecution({
-              workflow: input.workflow,
-              session: branchRun.value.session,
-              execution: resultExecution,
-            });
-      if (resultExecution === undefined || outputRef === undefined) {
-        const message = `branch ${branchIndex}: local fanout target '${input.edge.to}' completed without a result execution`;
-        firstFailure = firstFailure ?? message;
-        return {
-          branchIndex,
-          item,
-          status: "failed" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-        } satisfies FanoutBranchRecord;
-      }
-      return {
-        branchIndex,
-        item,
-        status: "succeeded" as const,
-        workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-        nodeExecIds: [resultExecution.nodeExecId],
-        outputRef,
-      } satisfies FanoutBranchRecord;
-    },
+  return err(
+    `local fanout transition '${input.edge.when}' is not yet supported; use cross-workflow fanout until parent-session branch work items are implemented`,
   );
-
-  const completedBranches = branchResults.map((branch) => branch);
-  const group: FanoutGroupRunRecord = {
-    fanoutGroupRunId,
-    groupId: fanout.groupId,
-    sourceStepId: input.callerStepId,
-    sourceNodeExecId: input.callerNodeExecId,
-    transitionLabel: input.edge.when,
-    targetStepId: input.edge.to,
-    joinStepId: fanout.joinStepId,
-    concurrency,
-    failurePolicy,
-    resultOrder,
-    branches: completedBranches,
-  };
-
-  const failedBranches = completedBranches.filter(
-    (branch) => branch.status === "failed" || branch.status === "cancelled",
-  );
-  if (failedBranches.length > 0) {
-    return ok({
-      communications: input.currentCommunications,
-      communicationCounter: input.communicationCounter,
-      queuedNodeIds: [],
-      transitions: [],
-      fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
-      failureMessage: `fanout group '${fanoutGroupRunId}' failed: ${failedBranches
-        .map(
-          (branch) =>
-            `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
-        )
-        .join("; ")}`,
-    });
-  }
-
-  const aggregate = {
-    fanoutGroupRunId,
-    groupId: fanout.groupId,
-    sourceStepId: input.callerStepId,
-    resultOrder,
-    results: completedBranches.map((branch) => ({
-      branchIndex: branch.branchIndex,
-      item: branch.item,
-      status: branch.status,
-      ...(branch.outputRef === undefined
-        ? {}
-        : { outputRef: branch.outputRef }),
-    })),
-  };
-  const aggregateOutput = await persistFanoutJoinOutputRef({
-    artifactDir: input.callerArtifactDir,
-    workflow: input.workflow,
-    session: input.session,
-    sourceStepId: input.callerStepId,
-    sourceNodeExecId: input.callerNodeExecId,
-    fanoutGroupRunId,
-    aggregate,
-  });
-  const communication = await persistCommunicationArtifact({
-    artifactWorkflowRoot: input.artifactWorkflowRoot,
-    runtimeLogOptions: input.options,
-    workflowId: input.workflow.workflowId,
-    workflowExecutionId: input.session.sessionId,
-    communicationCounter: input.communicationCounter,
-    fromNodeId: input.callerNodeId,
-    toNodeId: fanout.joinStepId,
-    routingScope: "intra-workflow",
-    deliveryKind: "edge-transition",
-    transitionWhen: `fanout-join:${fanoutGroupRunId}`,
-    sourceNodeExecId: input.callerNodeExecId,
-    payloadRef: aggregateOutput.outputRef,
-    outputRaw: aggregateOutput.outputRaw,
-    deliveredByNodeId: resolveWorkflowManagerStepId(input.workflow),
-    createdAt: input.createdAt,
-  });
-
-  return ok({
-    communications: [...input.currentCommunications, communication],
-    communicationCounter: input.communicationCounter + 1,
-    queuedNodeIds: [fanout.joinStepId],
-    transitions: [
-      {
-        from: input.callerStepId,
-        to: fanout.joinStepId,
-        when: `fanout-join:${fanoutGroupRunId}`,
-      },
-    ],
-    fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
-    runtimeVariables: buildFanoutJoinRuntimeVariables({
-      baseRuntimeVariables: input.session.runtimeVariables,
-      aggregate,
-    }),
-  });
 }
 
 /**
@@ -3164,6 +2885,22 @@ async function runWorkflowInternal(
           : { currentNodeId: session.queue[0] }),
         endedAt: nowIso(),
         lastError: `max steps reached (${maxSteps})`,
+      };
+      await saveSession(paused, options);
+      return ok({ session: paused, exitCode: 4 });
+    }
+    if (!claimFanoutStepBudget(options.fanoutStepBudget)) {
+      const paused: WorkflowSessionState = {
+        ...session,
+        status: "paused",
+        ...(session.queue[0] === undefined
+          ? {}
+          : { currentNodeId: session.queue[0] }),
+        endedAt: nowIso(),
+        lastError:
+          maxSteps === undefined
+            ? "fanout step budget reached"
+            : `fanout max steps reached (${maxSteps})`,
       };
       await saveSession(paused, options);
       return ok({ session: paused, exitCode: 4 });
@@ -5283,6 +5020,7 @@ async function runWorkflowInternal(
           workflow,
           session: {
             ...session,
+            nodeExecutionCounter: nextExecutionCounter,
             nodeExecutions,
             communicationCounter: currentCommunicationCounter,
             communications: currentCommunications,
@@ -5380,6 +5118,7 @@ async function runWorkflowInternal(
           workflowName,
           session: {
             ...session,
+            nodeExecutionCounter: nextExecutionCounter,
             nodeExecutions,
             communicationCounter: currentCommunicationCounter,
             communications: currentCommunications,

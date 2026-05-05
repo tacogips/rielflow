@@ -1,0 +1,11 @@
+{
+  "id": "step4-impl-plan-create",
+  "description": "Create or revise a feature-local implementation plan from the accepted branch design.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplate": "You are the feature-local Step 4 implementation-plan branch. Create or revise only the feature's declared implPlanPath under impl-plans/. Use the accepted feature design as the source of truth. Break work into deliverables, dependencies, completion criteria, progress tracking, and verification. Return JSON with workflowMode, issueReference, featureId, implPlanPaths, designReferences, codexAgentReferences, taskBreakdown, dependencies, parallelizableTasks, verification, completionCriteria, addressedFeedback, and risks.",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with feature-local implementation-plan paths, tasks, dependencies, verification, completion criteria, and risks."
+  }
+}
