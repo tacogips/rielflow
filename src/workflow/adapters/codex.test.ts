@@ -1,116 +1,16 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  MockCodexRunningSession,
+  createMockCodexSessionRunner,
+  type MockCodexSessionStreamChunk,
+} from "codex-agent/sdk/testing";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
 } from "../adapter";
 import { CodexAgentAdapter } from "./codex";
 
-type SessionStreamChunk = Record<string, unknown>;
-type MockCodexSessionResultInput = {
-  readonly success?: boolean;
-  readonly exitCode?: number;
-  readonly startedAt?: string;
-  readonly completedAt?: string;
-  readonly messageCount?: number;
-};
-class MockCodexRunningSession {
-  readonly sessionId: string;
-  readonly #messages: readonly SessionStreamChunk[];
-  #result: Required<MockCodexSessionResultInput>;
-  #completed: boolean;
-  #completionResolver: (() => void) | undefined;
-
-  constructor(options: {
-    readonly sessionId: string;
-    readonly messages?: readonly SessionStreamChunk[];
-    readonly result?: MockCodexSessionResultInput;
-    readonly autoComplete?: boolean;
-  }) {
-    this.sessionId = options.sessionId;
-    this.#messages = options.messages ?? [];
-    this.#result = {
-      success: options.result?.success ?? true,
-      exitCode: options.result?.exitCode ?? 0,
-      startedAt: options.result?.startedAt ?? "2026-03-30T00:00:00.000Z",
-      completedAt: options.result?.completedAt ?? "2026-03-30T00:00:01.000Z",
-      messageCount: options.result?.messageCount ?? this.#messages.length,
-    };
-    this.#completed = options.autoComplete ?? true;
-  }
-
-  async *messages(): AsyncIterable<unknown> {
-    for (const message of this.#messages) {
-      yield message;
-    }
-  }
-
-  async waitForCompletion(): Promise<{
-    readonly success: boolean;
-    readonly exitCode: number;
-    readonly stats: {
-      readonly startedAt: string;
-      readonly completedAt: string;
-      readonly messageCount: number;
-    };
-  }> {
-    if (!this.#completed) {
-      await new Promise<void>((resolve) => {
-        this.#completionResolver = resolve;
-      });
-    }
-    return {
-      success: this.#result.success,
-      exitCode: this.#result.exitCode,
-      stats: {
-        startedAt: this.#result.startedAt,
-        completedAt: this.#result.completedAt,
-        messageCount: this.#result.messageCount,
-      },
-    };
-  }
-
-  async cancel(): Promise<void> {
-    this.complete({ success: false, exitCode: 1 });
-  }
-
-  complete(result?: MockCodexSessionResultInput): void {
-    this.#result = {
-      ...this.#result,
-      ...result,
-    };
-    this.#completed = true;
-    this.#completionResolver?.();
-    this.#completionResolver = undefined;
-  }
-
-  getState(): Readonly<Record<string, string>> {
-    return { status: this.#completed ? "completed" : "running" };
-  }
-}
-
-function createMockCodexSessionRunner(input?: {
-  readonly startSessions?: readonly MockCodexRunningSession[];
-  readonly resumeSessions?: readonly MockCodexRunningSession[];
-}) {
-  const startSessions = [...(input?.startSessions ?? [])];
-  const resumeSessions = [...(input?.resumeSessions ?? [])];
-  return {
-    startSession: vi.fn(async () => {
-      const session = startSessions.shift();
-      if (session === undefined) {
-        throw new Error("no mock codex start session available");
-      }
-      return session;
-    }),
-    resumeSession: vi.fn(async () => {
-      const session = resumeSessions.shift();
-      if (session === undefined) {
-        throw new Error("no mock codex resume session available");
-      }
-      return session;
-    }),
-  };
-}
+type SessionStreamChunk = MockCodexSessionStreamChunk;
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
