@@ -1,123 +1,13 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  MockClaudeRunningSession,
+  createMockClaudeSessionRunner,
+} from "claude-code-agent/sdk/testing";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
 } from "../adapter";
 import { ClaudeCodeAgentAdapter } from "./claude";
-
-type MockClaudeSessionResultInput = {
-  readonly success?: boolean;
-  readonly startedAt?: string;
-  readonly completedAt?: string;
-  readonly toolCallCount?: number;
-  readonly messageCount?: number;
-};
-class MockClaudeRunningSession {
-  readonly sessionId: string;
-  readonly #messages: readonly object[];
-  #result: Required<MockClaudeSessionResultInput>;
-  #state: string;
-  #completed: boolean;
-  #completionResolver: (() => void) | undefined;
-
-  constructor(options: {
-    readonly sessionId: string;
-    readonly messages?: readonly object[];
-    readonly result?: MockClaudeSessionResultInput;
-    readonly state?: string;
-    readonly autoComplete?: boolean;
-  }) {
-    this.sessionId = options.sessionId;
-    this.#messages = options.messages ?? [];
-    this.#result = {
-      success: options.result?.success ?? true,
-      startedAt: options.result?.startedAt ?? "2026-03-30T00:00:00.000Z",
-      completedAt: options.result?.completedAt ?? "2026-03-30T00:00:01.000Z",
-      toolCallCount: options.result?.toolCallCount ?? 0,
-      messageCount: options.result?.messageCount ?? this.#messages.length,
-    };
-    this.#state = options.state ?? "running";
-    this.#completed = options.autoComplete ?? true;
-  }
-
-  async *messages(): AsyncIterable<object> {
-    for (const message of this.#messages) {
-      yield message;
-    }
-  }
-
-  async waitForCompletion(): Promise<{
-    readonly success: boolean;
-    readonly stats: {
-      readonly startedAt: string;
-      readonly completedAt: string;
-      readonly toolCallCount: number;
-      readonly messageCount: number;
-    };
-  }> {
-    if (!this.#completed) {
-      await new Promise<void>((resolve) => {
-        this.#completionResolver = resolve;
-      });
-    }
-    return {
-      success: this.#result.success,
-      stats: {
-        startedAt: this.#result.startedAt,
-        completedAt: this.#result.completedAt,
-        toolCallCount: this.#result.toolCallCount,
-        messageCount: this.#result.messageCount,
-      },
-    };
-  }
-
-  async cancel(): Promise<void> {
-    this.complete({ success: false });
-  }
-
-  complete(result?: MockClaudeSessionResultInput): void {
-    this.#result = {
-      ...this.#result,
-      ...result,
-    };
-    this.#state = "completed";
-    this.#completed = true;
-    this.#completionResolver?.();
-    this.#completionResolver = undefined;
-  }
-
-  getState(): unknown {
-    return { status: this.#completed ? "completed" : this.#state };
-  }
-
-  on(_event: "error", _listener: (error: unknown) => void): void {}
-
-  removeListener(_event: "error", _listener: (error: unknown) => void): void {}
-}
-
-function createMockClaudeSessionRunner(input?: {
-  readonly startSessions?: readonly MockClaudeRunningSession[];
-  readonly resumeSessions?: readonly MockClaudeRunningSession[];
-}) {
-  const startSessions = [...(input?.startSessions ?? [])];
-  const resumeSessions = [...(input?.resumeSessions ?? [])];
-  return {
-    startSession: vi.fn(async () => {
-      const session = startSessions.shift();
-      if (session === undefined) {
-        throw new Error("no mock claude start session available");
-      }
-      return session;
-    }),
-    resumeSession: vi.fn(async () => {
-      const session = resumeSessions.shift();
-      if (session === undefined) {
-        throw new Error("no mock claude resume session available");
-      }
-      return session;
-    }),
-  };
-}
 
 const baseInput: AdapterExecutionInput = {
   workflowId: "wf",
