@@ -1,6 +1,6 @@
 # Inline Workflow Variables and Inspect Usage Implementation Plan
 
-**Status**: Ready
+**Status**: Completed
 **Design Reference**: `design-docs/specs/command.md#cli-workflow-run-name`, `design-docs/specs/command.md#cli-workflow-inspect-name`, `design-docs/specs/notes.md`
 **Created**: 2026-05-04
 **Last Updated**: 2026-05-04

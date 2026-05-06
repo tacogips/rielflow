@@ -59,6 +59,25 @@ const text = fs.readFileSync(planPath, "utf8");
 const taskRegex = /^### (TASK-\d+): ([^\n]+)\n([\s\S]*?)(?=^### TASK-\d+: |\n## Dependencies|\n## Parallelization Notes|\n## Verification Plan|\n## Plan Completion Criteria|\n## Progress Log|(?![\s\S]))/gm;
 const tasks = [];
 let match;
+function normalizeStatus(rawStatus, criteria) {
+  const trimmed = rawStatus?.trim();
+  if (trimmed !== undefined && /^completed$/i.test(trimmed)) {
+    return "Completed";
+  }
+  if (trimmed !== undefined && /^in progress$/i.test(trimmed)) {
+    return "In Progress";
+  }
+  if (trimmed !== undefined && /^not started$/i.test(trimmed)) {
+    return "Not Started";
+  }
+  if (trimmed !== undefined && /^ready$/i.test(trimmed)) {
+    return "Ready";
+  }
+  if (criteria.length > 0 && criteria.every((criterion) => criterion.done)) {
+    return "Completed";
+  }
+  return trimmed ?? "Unknown";
+}
 while ((match = taskRegex.exec(text)) !== null) {
   const [, taskId, title, body] = match;
   if (targetTasks !== null && !targetTasks.has(taskId)) {
@@ -73,10 +92,11 @@ while ((match = taskRegex.exec(text)) !== null) {
       text: criteriaMatch[2],
     });
   }
+  const status = normalizeStatus(statusMatch?.[1], criteria);
   tasks.push({
     taskId,
     title: title.trim(),
-    status: statusMatch?.[1]?.trim() ?? "Unknown",
+    status,
     dependencies: depsMatch?.[1]?.trim() ?? "None",
     completionCriteria: criteria,
   });
@@ -86,7 +106,8 @@ const completedTasks = tasks.filter((task) => task.status === "Completed");
 const incompleteTasks = tasks.filter((task) => task.status !== "Completed");
 const inProgress = incompleteTasks.find((task) => task.status === "In Progress");
 const notStarted = incompleteTasks.find((task) => task.status === "Not Started");
-const nextTask = inProgress ?? notStarted ?? incompleteTasks[0] ?? null;
+const ready = incompleteTasks.find((task) => task.status === "Ready");
+const nextTask = inProgress ?? notStarted ?? ready ?? incompleteTasks[0] ?? null;
 
 emit({
   plan_complete: incompleteTasks.length === 0,
