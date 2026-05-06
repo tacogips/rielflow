@@ -3,8 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
+  computeProjectScopedRootDataDir,
+  computeProjectScopedRootDataDirForScopeRoot,
+  encodeProjectRootForRuntimeData,
   isSafeSupervisionRunId,
   resolveEffectiveRoots,
+  resolveProjectRootForScopeRoot,
   resolveRootDataDir,
   resolveSupervisionMutableWorkflowDirectory,
   resolveSupervisionRunDirectory,
@@ -47,6 +51,62 @@ describe("runtime storage paths", () => {
     });
 
     expect(rootDataDir).toBe(path.join(cwd, "operator-home", "artifacts"));
+  });
+
+  test("builds project-scoped runtime data below the user root namespace", async () => {
+    const cwd = await makeTempDir();
+    const projectRoot = path.join(cwd, "workspace", "repo");
+    const userRoot = path.join(cwd, "user-home", ".divedra");
+    const encodedProjectRoot = encodeProjectRootForRuntimeData(projectRoot);
+
+    expect(encodedProjectRoot).toMatch(/^repo-[a-f0-9]{16}$/);
+    expect(
+      computeProjectScopedRootDataDir({ projectRoot, userRoot, cwd }),
+    ).toBe(path.join(userRoot, "projects", encodedProjectRoot, "artifacts"));
+  });
+
+  test("uses a collision-resistant compact project runtime namespace", async () => {
+    const cwd = await makeTempDir();
+    const nestedProjectRoot = path.join(cwd, "workspace", "repo");
+    const underscoreProjectRoot = path.join(cwd, "workspace__repo");
+    const longProjectRoot = path.join(cwd, "workspace", "a".repeat(300));
+
+    expect(encodeProjectRootForRuntimeData(nestedProjectRoot)).not.toBe(
+      encodeProjectRootForRuntimeData(underscoreProjectRoot),
+    );
+    expect(
+      encodeProjectRootForRuntimeData(longProjectRoot).length,
+    ).toBeLessThan(80);
+  });
+
+  test("resolves project identity from both .divedra and direct scope roots", () => {
+    const projectRoot = path.join(os.tmpdir(), "workspace", "repo");
+
+    expect(
+      resolveProjectRootForScopeRoot(path.join(projectRoot, ".divedra")),
+    ).toBe(projectRoot);
+    expect(resolveProjectRootForScopeRoot(projectRoot)).toBe(projectRoot);
+  });
+
+  test("builds project-scoped runtime data from project scope roots", async () => {
+    const cwd = await makeTempDir();
+    const projectRoot = path.join(cwd, "workspace", "repo");
+    const scopeRoot = path.join(projectRoot, ".divedra");
+    const userRoot = "operator-home";
+
+    expect(
+      computeProjectScopedRootDataDirForScopeRoot({
+        scopeRoot,
+        userRoot,
+        cwd,
+      }),
+    ).toBe(
+      computeProjectScopedRootDataDir({
+        projectRoot,
+        userRoot,
+        cwd,
+      }),
+    );
   });
 
   test("keeps DIVEDRA_ARTIFACT_DIR as the root data override", async () => {

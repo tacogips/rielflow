@@ -28,6 +28,17 @@ export interface PromptCompositionUpstreamInput {
   readonly outputRaw?: string;
 }
 
+export interface PromptCompositionLatestOutput {
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly status: string;
+  readonly artifactDir: string;
+  readonly payload: unknown;
+  readonly stepId?: string;
+  readonly nodeRegistryId?: string;
+  readonly mailboxInstanceId?: string;
+}
+
 export interface NodeExecutionMailboxManagedChild {
   readonly id: string;
   readonly nodeKind?: string;
@@ -107,6 +118,7 @@ export interface NodeExecutionMailboxInputPayload {
   readonly workflowOutput?: unknown;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly upstream: readonly PromptCompositionUpstreamInput[];
+  readonly latestOutputs?: readonly PromptCompositionLatestOutput[];
   readonly managerMessage?: unknown;
 }
 
@@ -135,6 +147,7 @@ export interface BuildNodeExecutionMailboxInput extends StepIdentityFields {
   readonly basePromptText: string;
   readonly assembledArguments: Readonly<Record<string, unknown>> | null;
   readonly upstreamInputs: readonly PromptCompositionUpstreamInput[];
+  readonly latestOutputs?: readonly PromptCompositionLatestOutput[];
   readonly managerMessage?: unknown;
 }
 
@@ -394,6 +407,9 @@ export function buildNodeExecutionMailbox(
         ? {}
         : { runtimeVariables: contextualRuntimeVariables }),
       upstream: input.upstreamInputs,
+      ...(input.latestOutputs === undefined || input.latestOutputs.length === 0
+        ? {}
+        : { latestOutputs: input.latestOutputs }),
       ...(input.managerMessage === undefined
         ? {}
         : {
@@ -502,6 +518,31 @@ function renderUpstreamSection(
   return lines.join("\n");
 }
 
+function renderLatestOutputsSection(
+  latestOutputs: readonly PromptCompositionLatestOutput[] | undefined,
+): string {
+  if (latestOutputs === undefined || latestOutputs.length === 0) {
+    return "";
+  }
+
+  const lines = [
+    "Latest completed step outputs:",
+    "- Full structured records are available in mailbox input field `latestOutputs`.",
+  ];
+  for (const entry of latestOutputs) {
+    const identityParts = [
+      `node=${entry.nodeId}`,
+      entry.stepId === undefined ? undefined : `step=${entry.stepId}`,
+      `exec=${entry.nodeExecId}`,
+      `status=${entry.status}`,
+    ].filter((part): part is string => part !== undefined);
+    lines.push(`- ${identityParts.join(", ")}`);
+    lines.push(`  artifactDir=${entry.artifactDir}`);
+    lines.push(`  payload=${summarizeJson(entry.payload)}`);
+  }
+  return lines.join("\n");
+}
+
 function resolvePromptSummaryPayload(
   output: Readonly<Record<string, unknown>>,
 ): unknown {
@@ -589,6 +630,7 @@ export function renderNodeExecutionMailboxPromptSections(
     renderManagedChildrenSection(mailbox.meta.managedChildren),
     renderGivenDataSection(mailbox.input),
     renderUpstreamSection(mailbox.input.upstream),
+    renderLatestOutputsSection(mailbox.input.latestOutputs),
     renderManagerControlSection(mailbox.meta.managerControl),
     renderManagerMessageSection(mailbox.input.managerMessage),
     `Node-specific instruction:\n${mailbox.meta.objective.instruction}`,

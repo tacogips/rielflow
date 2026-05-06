@@ -29,7 +29,7 @@ import {
   type SessionStoreOptions,
 } from "./workflow/session-store";
 import type { WorkflowSessionState } from "./workflow/session";
-import type { MockNodeScenario } from "./workflow/adapter";
+import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type {
   AutoImprovePolicy,
   ChatReplyDispatcher,

@@ -271,6 +271,7 @@ describe("ClaudeCodeAgentAdapter", () => {
             DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
             DIVEDRA_NODE_ID: "node-1",
             DIVEDRA_NODE_EXEC_ID: "exec-1",
+            DIVEDRA_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
             DIVEDRA_AGENT_BACKEND: "claude-code-agent",
           },
         },
@@ -295,6 +296,7 @@ describe("ClaudeCodeAgentAdapter", () => {
           DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
           DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
           DIVEDRA_NODE_EXEC_ID: "exec-1",
+          DIVEDRA_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
         }),
       }),
     );

@@ -41,7 +41,28 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step3-design-review"
+          "toStepId": "step2-design-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step2-design-self-review",
+      "nodeId": "step2-design-doc-update",
+      "description": "Self-review one feature-local design document before independent design review.",
+      "role": "worker",
+      "promptVariant": "self-review",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "step2-design-doc-update"
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step3-design-review",
+          "label": "!(needs_revision)"
         }
       ]
     },
@@ -68,7 +89,32 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step5-impl-plan-review"
+          "toStepId": "step4-impl-plan-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step4-impl-plan-self-review",
+      "nodeId": "step4-impl-plan-create",
+      "description": "Self-review one feature-local implementation plan before independent implementation-plan review.",
+      "role": "worker",
+      "promptVariant": "self-review",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "step4-impl-plan-create"
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_design_revision"
+        },
+        {
+          "toStepId": "step4-impl-plan-create",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step5-impl-plan-review",
+          "label": "!(needs_design_revision || needs_revision)"
         }
       ]
     },

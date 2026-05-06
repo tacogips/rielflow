@@ -6,6 +6,8 @@ import type {
   AgentWorkerAddonConfig,
   CliAgentBackend,
   ChatReplyWorkerConfig,
+  GitCommitAddonConfig,
+  GitPushAddonConfig,
   MailGatewayAddonConfig,
   MailGatewayReadAddonConfig,
   AsyncNodeAddonPayloadResolver,
@@ -44,6 +46,10 @@ export const MAIL_GATEWAY_READ_ADDON_NAME = "divedra/mail-gateway-read";
 export const MAIL_GATEWAY_READ_ADDON_VERSION = "1";
 export const DEFAULT_MAIL_GATEWAY_IMAGE =
   "ghcr.io/tacogips/mail-gateway:latest";
+export const GIT_COMMIT_ADDON_NAME = "divedra/git-commit";
+export const GIT_COMMIT_ADDON_VERSION = "1";
+export const GIT_PUSH_ADDON_NAME = "divedra/git-push";
+export const GIT_PUSH_ADDON_VERSION = "1";
 export const SUPERVISER_CONTROL_ADDON_VERSION = "1";
 
 const CHAT_REPLY_WORKER_OUTPUT: NodeOutputContract = {
@@ -152,6 +158,54 @@ const MAIL_GATEWAY_OUTPUT: NodeOutputContract = {
       mailGateway: {
         type: "object",
         additionalProperties: true,
+      },
+    },
+  },
+};
+
+const GIT_COMMIT_OUTPUT: NodeOutputContract = {
+  description:
+    "Git commit result produced by the built-in git commit add-on.",
+  jsonSchema: {
+    type: "object",
+    required: ["git"],
+    additionalProperties: true,
+    properties: {
+      git: {
+        type: "object",
+        required: ["status", "commitHash", "committedFiles"],
+        additionalProperties: true,
+        properties: {
+          status: { enum: ["committed"] },
+          commitHash: { type: "string", minLength: 1 },
+          committedFiles: {
+            type: "array",
+            items: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+  },
+};
+
+const GIT_PUSH_OUTPUT: NodeOutputContract = {
+  description:
+    "Git push result produced by the built-in git push add-on.",
+  jsonSchema: {
+    type: "object",
+    required: ["git"],
+    additionalProperties: true,
+    properties: {
+      git: {
+        type: "object",
+        required: ["status", "commitHash", "pushedRemote", "pushedBranch"],
+        additionalProperties: true,
+        properties: {
+          status: { enum: ["pushed"] },
+          commitHash: { type: "string", minLength: 1 },
+          pushedRemote: { type: "string", minLength: 1 },
+          pushedBranch: { type: "string", minLength: 1 },
+        },
       },
     },
   },
@@ -843,6 +897,123 @@ const MAIL_GATEWAY_DESCRIPTOR: BuiltinGatewayAddonDescriptor<MailGatewayAddonCon
     }),
   };
 
+function normalizeGitCommitConfig(
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+): {
+  readonly config?: GitCommitAddonConfig;
+  readonly issues: readonly ValidationIssue[];
+} {
+  const issues: ValidationIssue[] = [];
+  const config: Readonly<Record<string, unknown>> = value ?? {};
+  const allowedKeys = new Set([
+    "commitMessageTemplate",
+    "committedFilesTemplate",
+    "gitPath",
+  ]);
+
+  for (const key of Object.keys(config)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue(`${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const commitMessageTemplate = readRequiredStringConfig(
+    config,
+    "commitMessageTemplate",
+    path,
+    issues,
+  );
+  const committedFilesTemplate = readRequiredStringConfig(
+    config,
+    "committedFilesTemplate",
+    path,
+    issues,
+  );
+  const gitPath = readOptionalStringConfig(config, "gitPath", path, issues);
+
+  if (
+    issues.length > 0 ||
+    commitMessageTemplate === undefined ||
+    committedFilesTemplate === undefined
+  ) {
+    return { issues };
+  }
+
+  return {
+    config: {
+      commitMessageTemplate,
+      committedFilesTemplate,
+      ...(gitPath === undefined ? {} : { gitPath }),
+    },
+    issues,
+  };
+}
+
+function normalizeGitPushConfig(
+  value: Readonly<Record<string, unknown>> | undefined,
+  path: string,
+): {
+  readonly config?: GitPushAddonConfig;
+  readonly issues: readonly ValidationIssue[];
+} {
+  const issues: ValidationIssue[] = [];
+  const config: Readonly<Record<string, unknown>> = value ?? {};
+  const allowedKeys = new Set(["gitPath", "remoteTemplate", "branchTemplate"]);
+
+  for (const key of Object.keys(config)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(makeIssue(`${path}.${key}`, "is not supported"));
+    }
+  }
+
+  const gitPath = readOptionalStringConfig(
+    config,
+    "gitPath",
+    path,
+    issues,
+  );
+  const remoteTemplate = readOptionalStringConfig(
+    config,
+    "remoteTemplate",
+    path,
+    issues,
+  );
+  const branchTemplate = readOptionalStringConfig(
+    config,
+    "branchTemplate",
+    path,
+    issues,
+  );
+
+  if (issues.length > 0) {
+    return { issues };
+  }
+
+  return {
+    config: {
+      ...(gitPath === undefined ? {} : { gitPath }),
+      ...(remoteTemplate === undefined ? {} : { remoteTemplate }),
+      ...(branchTemplate === undefined ? {} : { branchTemplate }),
+    },
+    issues,
+  };
+}
+
+function validateGitAddonFields(
+  addon: WorkflowNodeAddonRef,
+  path: string,
+): readonly ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (addon.config !== undefined && !isRecord(addon.config)) {
+    issues.push(makeIssue(`${path}.config`, "must be an object"));
+  }
+  if (addon.inputs !== undefined && !isRecord(addon.inputs)) {
+    issues.push(makeIssue(`${path}.inputs`, "must be an object"));
+  }
+  return issues;
+}
+
 function normalizeAgentWorkerConfig(
   value: Readonly<Record<string, unknown>> | undefined,
   path: string,
@@ -1149,6 +1320,136 @@ function resolveMailGatewayPayload(input: {
   return resolveGatewayPayload(input, MAIL_GATEWAY_DESCRIPTOR);
 }
 
+function resolveGitCommitPayload(input: {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+}): {
+  readonly payload?: NodePayload;
+  readonly issues: readonly ValidationIssue[];
+} {
+  if (input.addon.name !== GIT_COMMIT_ADDON_NAME) {
+    return { issues: [] };
+  }
+
+  const version = input.addon.version ?? GIT_COMMIT_ADDON_VERSION;
+  if (version !== GIT_COMMIT_ADDON_VERSION) {
+    return {
+      issues: [
+        makeIssue(
+          `${input.path}.version`,
+          `unsupported version '${version}' for ${GIT_COMMIT_ADDON_NAME}`,
+        ),
+      ],
+    };
+  }
+
+  const fieldIssues = validateGitAddonFields(input.addon, input.path);
+  if (fieldIssues.length > 0) {
+    return { issues: fieldIssues };
+  }
+  const unsupportedEnvIssues = rejectUnsupportedAddonEnv(
+    input.addon,
+    input.path,
+  );
+  if (unsupportedEnvIssues.length > 0) {
+    return { issues: unsupportedEnvIssues };
+  }
+
+  const normalized = normalizeGitCommitConfig(
+    input.addon.config,
+    `${input.path}.config`,
+  );
+  if (normalized.config === undefined) {
+    return { issues: normalized.issues };
+  }
+
+  return {
+    payload: {
+      id: input.nodeId,
+      description:
+        "Built-in worker that stages explicit file paths and creates one git commit.",
+      nodeType: "addon",
+      variables: input.addon.inputs ?? {},
+      addon: {
+        name: GIT_COMMIT_ADDON_NAME,
+        version: GIT_COMMIT_ADDON_VERSION,
+        config: normalized.config,
+        ...(input.addon.inputs === undefined
+          ? {}
+          : { inputs: input.addon.inputs }),
+      },
+      output: GIT_COMMIT_OUTPUT,
+    },
+    issues: [],
+  };
+}
+
+function resolveGitPushPayload(input: {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+}): {
+  readonly payload?: NodePayload;
+  readonly issues: readonly ValidationIssue[];
+} {
+  if (input.addon.name !== GIT_PUSH_ADDON_NAME) {
+    return { issues: [] };
+  }
+
+  const version = input.addon.version ?? GIT_PUSH_ADDON_VERSION;
+  if (version !== GIT_PUSH_ADDON_VERSION) {
+    return {
+      issues: [
+        makeIssue(
+          `${input.path}.version`,
+          `unsupported version '${version}' for ${GIT_PUSH_ADDON_NAME}`,
+        ),
+      ],
+    };
+  }
+
+  const fieldIssues = validateGitAddonFields(input.addon, input.path);
+  if (fieldIssues.length > 0) {
+    return { issues: fieldIssues };
+  }
+  const unsupportedEnvIssues = rejectUnsupportedAddonEnv(
+    input.addon,
+    input.path,
+  );
+  if (unsupportedEnvIssues.length > 0) {
+    return { issues: unsupportedEnvIssues };
+  }
+
+  const normalized = normalizeGitPushConfig(
+    input.addon.config,
+    `${input.path}.config`,
+  );
+  if (normalized.config === undefined) {
+    return { issues: normalized.issues };
+  }
+
+  return {
+    payload: {
+      id: input.nodeId,
+      description:
+        "Built-in worker that pushes HEAD to an explicit or current git branch.",
+      nodeType: "addon",
+      variables: input.addon.inputs ?? {},
+      addon: {
+        name: GIT_PUSH_ADDON_NAME,
+        version: GIT_PUSH_ADDON_VERSION,
+        config: normalized.config,
+        ...(input.addon.inputs === undefined
+          ? {}
+          : { inputs: input.addon.inputs }),
+      },
+      output: GIT_PUSH_OUTPUT,
+    },
+    issues: [],
+  };
+}
+
 function resolveSuperviserControlPayload(input: {
   readonly nodeId: string;
   readonly addon: WorkflowNodeAddonRef;
@@ -1299,6 +1600,20 @@ export function resolveBuiltinNodeAddonPayload(
     mailGatewayPayload.issues.length > 0
   ) {
     return mailGatewayPayload;
+  }
+  const gitCommitPayload = resolveGitCommitPayload(input);
+  if (
+    gitCommitPayload.payload !== undefined ||
+    gitCommitPayload.issues.length > 0
+  ) {
+    return gitCommitPayload;
+  }
+  const gitPushPayload = resolveGitPushPayload(input);
+  if (
+    gitPushPayload.payload !== undefined ||
+    gitPushPayload.issues.length > 0
+  ) {
+    return gitPushPayload;
   }
 
   if (input.addon.name !== CHAT_REPLY_WORKER_ADDON_NAME) {

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { MockNodeScenario } from "./adapter";
+import type { MockNodeScenario } from "./scenario-adapter";
 import { createWorkflowTemplate } from "./create";
 import { runWorkflow } from "./engine";
 import { createCommunicationService } from "./communication-service";

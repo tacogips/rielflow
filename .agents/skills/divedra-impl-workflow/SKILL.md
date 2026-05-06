@@ -1,6 +1,6 @@
 ---
 name: divedra-impl-workflow
-description: Use when implementation work in this repository changes behavior, adds functionality, or fixes bugs and the user has not explicitly asked to avoid workflows. Routes the work through the project-local divedra workflow `.divedra/workflows/design-and-implement-review-loop`, including design/plan alignment, implementation, review, user-facing documentation refresh, commit-message generation, and command-node commit/push.
+description: Use when implementation work in this repository changes behavior, adds functionality, or fixes bugs and the user has not explicitly asked to avoid workflows. Routes the work through the project-local divedra workflow `.divedra/workflows/design-and-implement-review-loop`, including design/plan alignment, implementation, review, user-facing documentation refresh, commit-message generation, and built-in git commit/push steps.
 ---
 
 # Divedra Implementation Workflow
@@ -67,14 +67,17 @@ The workflow is responsible for:
 
 1. issue or task intake
 2. design-document updates
-3. design review
-4. implementation-plan creation or revision
-5. implementation-plan review
-6. implementation work
-7. implementation review
-8. user-facing documentation refresh (`README.md` and exposed workflow skill docs)
-9. commit-message generation
-10. command-node `git add` / `git commit` / `git push`
+3. design self-review
+4. design review
+5. implementation-plan creation or revision
+6. implementation-plan self-review
+7. implementation-plan review
+8. implementation work
+9. implementation self-review
+10. implementation review
+11. user-facing documentation refresh (`README.md` and exposed workflow skill docs)
+12. commit-message generation
+13. built-in git commit and git push add-on steps
 
 Because the workflow ends with commit/push, do not use it when the user has
 explicitly asked to avoid workflow-driven commits or wants manual local edits

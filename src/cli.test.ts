@@ -14,6 +14,7 @@ import {
 } from "./workflow/runtime-db";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
+import { computeProjectScopedRootDataDir } from "./workflow/paths";
 
 const tempDirs: string[] = [];
 
@@ -1630,6 +1631,139 @@ describe("runCli", () => {
     );
   });
 
+  test("project workflow run stores runtime data in user-root project namespace", async () => {
+    const projectRoot = await makeTempDir();
+    const projectScopeRoot = path.join(projectRoot, ".divedra");
+    const workflowRoot = path.join(projectScopeRoot, "workflows");
+    const userRoot = path.join(projectRoot, "user-home", ".divedra");
+    const expectedRootDataDir = computeProjectScopedRootDataDir({
+      projectRoot,
+      userRoot,
+    });
+    const scenarioPath = path.join(projectRoot, "mock-scenario.json");
+
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    await writeFile(
+      scenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const previousCwd = process.cwd();
+    process.chdir(projectRoot);
+    try {
+      const capture = createIoCapture();
+      const code = await runCli(
+        [
+          "workflow",
+          "run",
+          "demo",
+          "--mock-scenario",
+          scenarioPath,
+          "--output",
+          "json",
+        ],
+        capture.io,
+        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
+      );
+
+      expect(code).toBe(0);
+      const payload = JSON.parse(capture.stdout.join("\n")) as {
+        readonly sessionId: string;
+      };
+      await expect(
+        readFile(
+          path.join(
+            expectedRootDataDir,
+            "sessions",
+            `${payload.sessionId}.json`,
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain('"workflowName": "demo"');
+      await expect(
+        readFile(
+          path.join(
+            projectScopeRoot,
+            "artifacts",
+            "sessions",
+            `${payload.sessionId}.json`,
+          ),
+          "utf8",
+        ),
+      ).rejects.toThrow();
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  test("project workflow run uses direct project root as runtime namespace identity", async () => {
+    const projectRoot = await makeTempDir();
+    const workflowRoot = path.join(projectRoot, "workflows");
+    const userRoot = path.join(projectRoot, "user-home", ".divedra");
+    const expectedRootDataDir = computeProjectScopedRootDataDir({
+      projectRoot,
+      userRoot,
+    });
+    const scenarioPath = path.join(projectRoot, "mock-scenario.json");
+
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    await writeFile(
+      scenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const previousCwd = process.cwd();
+    process.chdir(await makeTempDir());
+    try {
+      const capture = createIoCapture();
+      const code = await runCli(
+        [
+          "workflow",
+          "run",
+          "demo",
+          "--mock-scenario",
+          scenarioPath,
+          "--output",
+          "json",
+        ],
+        capture.io,
+        createCliDeps({
+          env: {
+            DIVEDRA_PROJECT_ROOT: projectRoot,
+            DIVEDRA_USER_ROOT: userRoot,
+          },
+        }),
+      );
+
+      expect(code).toBe(0);
+      const payload = JSON.parse(capture.stdout.join("\n")) as {
+        readonly sessionId: string;
+      };
+      await expect(
+        readFile(
+          path.join(
+            expectedRootDataDir,
+            "sessions",
+            `${payload.sessionId}.json`,
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain('"workflowName": "demo"');
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   test("workflow run passes --auto-improve through to the engine (mock fail then succeed)", async () => {
     const root = await makeTempDir();
     const artifactsRoot = path.join(root, "artifacts");
@@ -2517,7 +2651,11 @@ describe("runCli", () => {
   test("session status discovers project-local session store from cwd", async () => {
     const projectRoot = await makeTempDir();
     const projectScopeRoot = path.join(projectRoot, ".divedra");
-    const artifactsRoot = path.join(projectScopeRoot, "artifacts");
+    const userRoot = path.join(projectRoot, "user-home", ".divedra");
+    const artifactsRoot = computeProjectScopedRootDataDir({
+      projectRoot,
+      userRoot,
+    });
     const sessionsRoot = path.join(artifactsRoot, "sessions");
     const sessionId = "sess-project-local-status";
     await mkdir(path.join(projectScopeRoot, "workflows"), { recursive: true });
@@ -2573,7 +2711,7 @@ describe("runCli", () => {
       const statusCode = await runCli(
         ["session", "status", sessionId, "--output", "json"],
         statusCapture.io,
-        createCliDeps({ env: {} }),
+        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
       );
       expect(statusCode).toBe(0);
       const payload = JSON.parse(statusCapture.stdout.join("\n")) as {
@@ -2594,7 +2732,12 @@ describe("runCli", () => {
     const externalRoot = await makeTempDir();
     const projectScopeRoot = path.join(projectRoot, ".divedra");
     const workflowRoot = path.join(projectScopeRoot, "workflows");
-    const artifactsRoot = path.join(projectScopeRoot, "artifacts");
+    const userRoot = path.join(projectRoot, "user-home", ".divedra");
+    const artifactsRoot = computeProjectScopedRootDataDir({
+      projectRoot,
+      userRoot,
+      cwd: externalRoot,
+    });
     const sessionsRoot = path.join(artifactsRoot, "sessions");
     const sessionId = "sess-project-local-workflow-root";
     await mkdir(workflowRoot, { recursive: true });
@@ -2658,7 +2801,7 @@ describe("runCli", () => {
           "json",
         ],
         statusCapture.io,
-        createCliDeps({ env: {} }),
+        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
       );
       expect(statusCode).toBe(0);
       const payload = JSON.parse(statusCapture.stdout.join("\n")) as {

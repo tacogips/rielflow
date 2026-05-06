@@ -1,4 +1,5 @@
-import { statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -16,6 +17,18 @@ function resolveRootPath(root: string, cwd: string): string {
 export interface ExplicitRuntimeStorageRoots {
   readonly artifactRoot?: string;
   readonly sessionStoreRoot?: string;
+  readonly cwd?: string;
+}
+
+export interface ProjectScopedRuntimeDataDirInput {
+  readonly projectRoot: string;
+  readonly userRoot?: string;
+  readonly cwd?: string;
+}
+
+export interface ProjectScopeRootRuntimeDataDirInput {
+  readonly scopeRoot: string;
+  readonly userRoot?: string;
   readonly cwd?: string;
 }
 
@@ -170,6 +183,61 @@ export function inferRootDataDirFromExplicitStorageRoots(
 export function computeDefaultRootDataDir(userRoot?: string): string {
   const resolvedUserRoot = expandLeadingHome(userRoot ?? "~/.divedra");
   return path.join(resolvedUserRoot, "artifacts");
+}
+
+export function encodeProjectRootForRuntimeData(projectRoot: string): string {
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  const canonicalProjectRoot = (() => {
+    try {
+      return realpathSync.native(resolvedProjectRoot);
+    } catch {
+      return resolvedProjectRoot;
+    }
+  })();
+  const slug =
+    path
+      .basename(canonicalProjectRoot)
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "project";
+  const digest = createHash("sha256")
+    .update(path.resolve(canonicalProjectRoot))
+    .digest("hex")
+    .slice(0, 16);
+  return `${slug}-${digest}`;
+}
+
+export function computeProjectScopedRootDataDir(
+  input: ProjectScopedRuntimeDataDirInput,
+): string {
+  const cwd = input.cwd ?? process.cwd();
+  const resolvedUserRoot = resolveRootPath(
+    expandLeadingHome(input.userRoot ?? "~/.divedra"),
+    cwd,
+  );
+  return path.join(
+    resolvedUserRoot,
+    "projects",
+    encodeProjectRootForRuntimeData(input.projectRoot),
+    "artifacts",
+  );
+}
+
+export function resolveProjectRootForScopeRoot(scopeRoot: string): string {
+  const resolvedScopeRoot = path.resolve(scopeRoot);
+  return path.basename(resolvedScopeRoot) === ".divedra"
+    ? path.dirname(resolvedScopeRoot)
+    : resolvedScopeRoot;
+}
+
+export function computeProjectScopedRootDataDirForScopeRoot(
+  input: ProjectScopeRootRuntimeDataDirInput,
+): string {
+  return computeProjectScopedRootDataDir({
+    projectRoot: resolveProjectRootForScopeRoot(input.scopeRoot),
+    ...(input.userRoot === undefined ? {} : { userRoot: input.userRoot }),
+    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+  });
 }
 
 const SAFE_WORKFLOW_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-_]{0,63}$/;

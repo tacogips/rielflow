@@ -1,4 +1,4 @@
-import type { MockNodeScenario } from "../workflow/adapter";
+import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import type { AutoImprovePolicyInput } from "../workflow/auto-improve-policy";
 import type { CreateWorkflowTemplateMode } from "../workflow/create";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";

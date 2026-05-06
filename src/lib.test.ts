@@ -16,7 +16,7 @@ import {
   resumeWorkflow,
 } from "./lib";
 import type { NodeAddonDefinition, NodeAddonPayloadResolver } from "./lib";
-import type { MockNodeScenario } from "./workflow/adapter";
+import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import { createWorkflowTemplate } from "./workflow/create";
 import * as workflowEngine from "./workflow/engine";
 import { createSessionState } from "./workflow/session";

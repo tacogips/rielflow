@@ -190,6 +190,23 @@ Retry and rerun rules:
 
 Optional decisions and user actions are branch-scoped. If a branch pauses for user action or optional-step decision, the fanout group remains running and the join waits until that branch reaches a terminal result.
 
+TASK-003 lifecycle semantics must be verified against the parent-session local fanout path, not inferred from cross-workflow fanout alone:
+
+- `fail-fast` must stop admitting new local branches after the first terminal failure and must preserve the failed branch record with `fanoutGroupRunId`, `branchIndex`, item snapshot, output or error details, and any node execution ids that were already created
+- `collect-all` must allow every admitted branch to reach a terminal result, persist all terminal branch records, fail the parent workflow when any branch failed, and avoid publishing or queueing the join communication
+- cancellation, timeout, optional-step pause, user-action pause, and resume decisions remain scoped to the concrete branch execution; the fanout group remains inspectable while waiting for paused branches or while cancellation drains already-started work
+- run-level `maxSteps` counts every local branch node execution exactly as an ordinary node execution and must not be multiplied or bypassed by fanout concurrency
+- run-level `maxConcurrency` clamps both authored/default local fanout concurrency and existing cross-workflow fanout concurrency; local lifecycle work must preserve the current effective-concurrency metadata used by status and join records
+- parent-session local fanout may stay serialized while session mutation is single-writer; future parallel local branch execution must report branch lifecycle events back through a serialized reducer before saving session state or publishing communications
+
+Every branch worker execution, including local fanout branches and join steps, must receive the same structured input through both worker-facing input surfaces:
+
+- root artifact `input.json` remains the runtime audit record for the node execution
+- `mailbox/inbox/input.json` is the worker-facing resolved input and must contain the same business input shape needed by prompts, commands, and containers
+- `mailbox/inbox/meta.json` declares `mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR"` and mailbox-root-relative paths such as `inbox/input.json` and `outbox/output.json`
+- prompt guidance for LLM workers must tell the worker where `mailbox/inbox/input.json` is and that `DIVEDRA_MAILBOX_DIR` points at the mailbox root
+- workers must not write canonical mailbox files or final `output.json`; final output publication and downstream mailbox delivery remain runtime-owned
+
 ## Cross-Workflow Dispatch
 
 `executeCrossWorkflowDispatchesForNode()` should use the same bounded scheduler primitive as local fanout. For ordinary multiple relevant dispatches without authored fanout, the runtime may preserve current deterministic behavior by using concurrency `1`. When a dispatch has `fanout`, each source item becomes an isolated callee workflow run bounded by the fanout concurrency.
@@ -244,8 +261,9 @@ The design is partially implemented and the remaining work must preserve the beh
 - cross-workflow fanout is supported and must keep using bounded scheduling, child workflow executions, branch-local `workflow-calls/` artifacts, nested concurrency-budget inheritance, and caller-workflow join aggregation
 - isolated fanout branch workspaces are prepared outside the parent checkout when `writeOwnership.mode` is `isolated-workspace`; branch records and join results should expose `workspaceRoot`
 - retrying an isolated fanout branch group must retain lineage by recording the prior attempt workspace as `supersededWorkspaceRoot` on the corresponding replacement branch
-- local inline fanout is the explicit gap for this issue: `src/workflow/engine.ts` currently rejects local fanout transitions with an unsupported message, but the target behavior is parent-session branch work-item execution with the same bounded scheduler and join semantics as cross-workflow fanout
-- implementation-plan status must distinguish the already-supported cross-workflow fanout path from the still-required parent-session local fanout path; local dynamic fanout is not complete until repeated executions of the same target step run with distinct branch context in the parent session and publish a single deterministic join
+- local inline fanout now executes `toStepId` branches in the parent workflow session through the direct step execution path, records distinct branch node execution ids and artifacts, restores parent runtime variables between branches, and publishes one deterministic join communication
+- local parent-session branch execution is currently serialized to preserve single-writer session mutation; remaining lifecycle work must extend coverage for failure policies, cancellation, timeout, pause/user-action behavior, and any future concurrent local branch reducer
+- implementation-plan status must continue to distinguish the already-supported cross-workflow fanout path from the parent-session local fanout path; local dynamic fanout is complete only for repeated target-step execution with distinct branch context and deterministic join publication until the remaining lifecycle coverage lands
 
 ## Rollout Constraints
 

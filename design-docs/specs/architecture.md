@@ -121,8 +121,9 @@ The runtime persists three distinct forms of state:
 - node and communication artifacts in `{rootDataDir}/workflow/`
 - query-oriented runtime index data in `{rootDataDir}/divedra.db`
 
-In scoped catalog mode, `{rootDataDir}` defaults to the owning workflow scope's
-`<scope-root>/artifacts`.
+In project-scoped catalog mode, `{rootDataDir}` defaults to
+`<user-root>/projects/<project-basename>-<project-root-hash>/artifacts`.
+In user-scoped catalog mode, `{rootDataDir}` defaults to `<user-root>/artifacts`.
 For direct workflow-definition-dir and other non-scoped runtime entrypoints, the default
 `{rootDataDir}` is `<user-root>/artifacts`.
 

@@ -571,6 +571,11 @@ describe("callStepExecution", () => {
       mode: "reuse",
       sessionId: "node-session-1",
     });
+    expect(
+      adapter.calls[0]?.divedraHookContext?.environment.DIVEDRA_MAILBOX_DIR,
+    ).toBe(path.join(result.value.outputRef.artifactDir, "mailbox"));
+    expect(adapter.calls[0]?.promptText).toContain("Runtime mailbox:");
+    expect(adapter.calls[0]?.promptText).toContain("DIVEDRA_MAILBOX_DIR");
     expect(result.value.output["payload"]).toEqual({
       summary: "fixed on retry",
     });
@@ -590,6 +595,7 @@ describe("callStepExecution", () => {
         "utf8",
       ),
     ) as {
+      promptText?: string;
       managerMessage?: { instruction?: string };
       executionMailbox?: {
         readonly meta: {
@@ -601,6 +607,11 @@ describe("callStepExecution", () => {
         };
       };
     };
+    expect(inputJson.promptText).toContain("Runtime mailbox:");
+    expect(inputJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(inputJson.promptText).toContain(
+      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+    );
     expect(inputJson.managerMessage?.instruction).toBe("produce review json");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
@@ -657,7 +668,12 @@ describe("callStepExecution", () => {
     );
     const firstRequest = JSON.parse(
       await readFile(path.join(firstAttemptDir, "request.json"), "utf8"),
-    ) as { validationErrors: readonly unknown[] };
+    ) as {
+      executionBackend: string;
+      model: string;
+      promptText: string;
+      validationErrors: readonly unknown[];
+    };
     const firstCandidate = JSON.parse(
       await readFile(path.join(firstAttemptDir, "candidate.json"), "utf8"),
     ) as { wrong: boolean };
@@ -666,17 +682,29 @@ describe("callStepExecution", () => {
     ) as { valid: boolean; errors: readonly { path: string }[] };
     const secondRequest = JSON.parse(
       await readFile(path.join(secondAttemptDir, "request.json"), "utf8"),
-    ) as { validationErrors: readonly { path: string }[] };
+    ) as {
+      promptText: string;
+      validationErrors: readonly { path: string }[];
+    };
     const secondValidation = JSON.parse(
       await readFile(path.join(secondAttemptDir, "validation.json"), "utf8"),
     ) as { valid: boolean };
 
     expect(firstRequest.validationErrors).toEqual([]);
+    expect(firstRequest.executionBackend).toBe("codex-agent");
+    expect(firstRequest.model).toBe("gpt-5-nano");
+    expect(firstRequest.promptText).toContain("Runtime mailbox:");
+    expect(firstRequest.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(firstRequest.promptText).toContain(
+      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+    );
     expect(firstCandidate.wrong).toBe(true);
     expect(firstValidation.valid).toBe(false);
     expect(firstValidation.errors[0]?.path).toBe("$.summary");
     expect(secondRequest.validationErrors[0]?.path).toBe("$.summary");
     expect(secondValidation.valid).toBe(true);
+    expect(secondRequest.promptText).toContain("Runtime mailbox:");
+    expect(secondRequest.promptText).toContain("DIVEDRA_MAILBOX_DIR");
   });
 
   test("retries adapter invalid_output failures for structured-output nodes", async () => {

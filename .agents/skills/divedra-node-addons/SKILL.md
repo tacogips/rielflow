@@ -20,6 +20,8 @@ Current built-ins, version `1`:
 - `divedra/x-gateway`
 - `divedra/mail-gateway-read`
 - `divedra/mail-gateway`
+- `divedra/git-commit`
+- `divedra/git-push`
 
 Read `references/addons-reference.md` for field contracts and resolver guidance.
 

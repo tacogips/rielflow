@@ -1,5 +1,5 @@
 import type { DivedraOptions } from "../lib";
-import type { MockNodeScenario } from "../workflow/adapter";
+import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import type { ChatReplyDispatcher } from "../workflow/types";
 import type { WorkflowSupervisorClient } from "../workflow/supervisor-client";
 

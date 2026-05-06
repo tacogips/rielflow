@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { MockNodeScenario } from "../workflow/adapter";
+import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
 import * as workflowEngine from "../workflow/engine";
@@ -943,6 +943,114 @@ describe("createGraphqlSchema", () => {
       options,
     );
     expect(overview?.session.currentStepId).toBe("writer-step");
+  });
+
+  test("exposes fanout summary branch details on workflow execution views", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const sessionId = "sess-schema-fanout-summary";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "writer-step",
+          runtimeVariables: {},
+        }),
+        fanoutGroups: [
+          {
+            fanoutGroupRunId: "fanout-local-exec-1",
+            groupId: "local-reviews",
+            sourceStepId: "writer-step",
+            sourceNodeExecId: "exec-writer-1",
+            targetStepId: "reviewer-step",
+            joinStepId: "join-step",
+            concurrency: 2,
+            failurePolicy: "collect-all" as const,
+            resultOrder: "input" as const,
+            branches: [
+              {
+                branchIndex: 0,
+                item: { id: "feature-a" },
+                status: "succeeded" as const,
+                workItemId: "fanout-local-exec-1:0",
+                nodeExecIds: ["exec-reviewer-1"],
+                outputRef: {
+                  kind: "node-output" as const,
+                  workflowExecutionId: sessionId,
+                  workflowId: "demo",
+                  outputNodeId: "reviewer-node",
+                  outputStepId: "reviewer-step",
+                  nodeRegistryId: "reviewer-node",
+                  nodeExecId: "exec-reviewer-1",
+                  artifactDir: path.join(
+                    options.artifactRoot,
+                    "demo",
+                    sessionId,
+                    "exec-reviewer-1",
+                  ),
+                },
+                workspaceRoot: "/tmp/divedra/fanout/new",
+                supersededWorkspaceRoot: "/tmp/divedra/fanout/old",
+              },
+              {
+                branchIndex: 1,
+                item: { id: "feature-b" },
+                status: "failed" as const,
+                workItemId: "fanout-local-exec-1:1",
+                error: "review failed",
+              },
+            ],
+          },
+        ],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const workflowExecution = await schema.query.workflowExecution(
+      { workflowExecutionId: sessionId },
+      options,
+    );
+
+    const summary = workflowExecution?.session.fanoutSummaries[0];
+    expect(summary).toMatchObject({
+      fanoutGroupRunId: "fanout-local-exec-1",
+      groupId: "local-reviews",
+      sourceStepId: "writer-step",
+      sourceNodeExecId: "exec-writer-1",
+      targetStepId: "reviewer-step",
+      joinStepId: "join-step",
+      concurrency: 2,
+      failurePolicy: "collect-all",
+      resultOrder: "input",
+      branchCounts: {
+        succeeded: 1,
+        failed: 1,
+      },
+      firstFailure: "branch 1: review failed",
+    });
+    expect(summary?.branches[0]).toMatchObject({
+      branchIndex: 0,
+      status: "succeeded",
+      workItemId: "fanout-local-exec-1:0",
+      nodeExecIds: ["exec-reviewer-1"],
+      workspaceRoot: "/tmp/divedra/fanout/new",
+      supersededWorkspaceRoot: "/tmp/divedra/fanout/old",
+    });
+    expect(summary?.branches[0]?.outputRef?.nodeExecId).toBe("exec-reviewer-1");
+    expect(summary?.branches[1]).toMatchObject({
+      branchIndex: 1,
+      status: "failed",
+      error: "review failed",
+    });
   });
 
   test("derives currentStepId from authored workflow state before the first execution record exists", async () => {

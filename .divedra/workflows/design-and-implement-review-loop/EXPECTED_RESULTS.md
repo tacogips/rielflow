@@ -30,8 +30,8 @@ Expected stable run summary:
   "status": "completed",
   "workflowName": "design-and-implement-review-loop",
   "workflowId": "design-and-implement-review-loop",
-  "nodeExecutions": 18,
-  "transitions": 17,
+  "nodeExecutions": 24,
+  "transitions": 23,
   "exitCode": 0
 }
 ```
@@ -50,9 +50,7 @@ Expected final output payload:
     "design-docs/specs/design-workflow-review-findings.md",
     "design-docs/user-qa/qa-review-finding-retention.md"
   ],
-  "implPlanPaths": [
-    "impl-plans/active/workflow-review-findings.md"
-  ],
+  "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
   "changedFiles": [
     "src/workflow/review-findings.ts",
     "src/workflow/review-findings.test.ts",
@@ -73,10 +71,7 @@ Expected final output payload:
   "commitHash": "abc123def4567890abc123def4567890abc123de",
   "pushedRemote": "origin",
   "pushedBranch": "main",
-  "verification": [
-    "task test",
-    "task typecheck"
-  ],
+  "verification": ["task test", "task typecheck"],
   "residualRisks": []
 }
 ```
@@ -96,8 +91,8 @@ Expected planning-only run summary:
   "status": "completed",
   "workflowName": "design-and-implement-review-loop",
   "workflowId": "design-and-implement-review-loop",
-  "nodeExecutions": 13,
-  "transitions": 12,
+  "nodeExecutions": 17,
+  "transitions": 16,
   "exitCode": 0
 }
 ```
@@ -111,9 +106,7 @@ Expected planning-only final output payload:
   "designDocPaths": [
     "design-docs/specs/design-codex-reference-session-history.md"
   ],
-  "implPlanPaths": [
-    "impl-plans/active/codex-reference-session-history.md"
-  ],
+  "implPlanPaths": ["impl-plans/active/codex-reference-session-history.md"],
   "codexAgentReferences": [
     "/Users/taco/gits/tacogips/codex-agent/src/session",
     "/Users/taco/gits/tacogips/codex-agent/src/cli"

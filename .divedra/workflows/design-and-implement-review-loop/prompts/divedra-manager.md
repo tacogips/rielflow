@@ -21,8 +21,8 @@ Rules:
 - Run Step 4 implementation-plan creation only after Step 3 accepts the design.
 - If Step 5 returns `when.needs_design_revision: true`, route back to Step 2.
 - If Step 5 returns `when.needs_revision: true`, route back to Step 4.
-- If Step 5 returns `when.planning_only: true` and no revision flag is set, run Step 9 commit-message creation, then Step 10 command-node commit and push, before workflow output.
+- If Step 5 returns `when.planning_only: true` and no revision flag is set, run Step 9 commit-message creation, Step 10 git commit, then Step 11 git push, before workflow output.
 - Run Step 6 implementation only after Step 5 accepts the plan for a full issue-resolution run.
 - If Step 7 returns `when.needs_revision: true`, route back to Step 6.
-- After Step 7 accepts the implementation, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, then Step 10 command-node commit and push, before workflow output.
+- After Step 7 accepts the implementation, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, Step 10 git commit, then Step 11 git push, before workflow output.
 - Finish only after the required review gates for the selected mode report no high or mid findings and the final workflow changes have been committed and pushed.

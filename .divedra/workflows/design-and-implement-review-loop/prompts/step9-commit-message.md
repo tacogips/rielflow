@@ -1,7 +1,7 @@
 You are Step 9: commit-message creation.
 
 Read the latest accepted workflow outputs and emit the final change summary that
-should become the git commit message for the next command-node step.
+should become the git commit message for the next built-in git commit step.
 
 Rules:
 - Do not commit or push anything yourself.

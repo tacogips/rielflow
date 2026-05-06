@@ -106,6 +106,7 @@ Agent node payload:
 - Node registry ids must match `^[a-z0-9][a-z0-9-]{1,63}$`.
 - Each registry entry declares exactly one of `nodeFile` or `addon`.
 - Manager steps must reference file-backed nodes; add-on-backed nodes are worker-only.
+- Prefer DRY workflow composition over combined one-off nodes. If behavior can be expressed as reusable primitive nodes chained by `steps[].transitions`, author it that way; for example, model commit-and-push as a git commit step followed by a git push step instead of duplicating commit logic in a separate commit-and-push node.
 - Agent nodes require `executionBackend`, backend-specific `model`, `promptTemplate` or `promptTemplateFile`, and `variables`.
 - Valid `executionBackend` values are `codex-agent`, `claude-code-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
 - Do not encode backend identifiers in `model`; `model` should be a provider/backend model name.
@@ -132,7 +133,7 @@ Use object form with explicit version:
 }
 ```
 
-Current built-ins include `divedra/chat-reply-worker`, `divedra/codex-worker`, `divedra/claude-code-worker`, `divedra/x-gateway-read`, `divedra/x-gateway`, `divedra/mail-gateway-read`, and `divedra/mail-gateway`, all version `1`.
+Current built-ins include `divedra/chat-reply-worker`, `divedra/codex-worker`, `divedra/claude-code-worker`, `divedra/x-gateway-read`, `divedra/x-gateway`, `divedra/mail-gateway-read`, `divedra/mail-gateway`, `divedra/git-commit`, and `divedra/git-push`, all version `1`.
 
 ## External Portability
 

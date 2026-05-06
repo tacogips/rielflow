@@ -6,10 +6,9 @@ import {
   AdapterExecutionError,
   DeterministicNodeAdapter,
   type AdapterExecutionOutput,
-  type MockNodeScenario,
-  ScenarioNodeAdapter,
 } from "./adapter";
 import type { NodeAdapter } from "./adapter";
+import { ScenarioNodeAdapter, type MockNodeScenario } from "./scenario-adapter";
 import { createWorkflowTemplate } from "./create";
 import { runWorkflow } from "./engine";
 import { createManagerSessionStore } from "./manager-session-store";
@@ -67,12 +66,28 @@ class CrossWorkflowFanoutAdapter implements NodeAdapter {
   runningReviewers = 0;
   maxRunningReviewers = 0;
   reviewerWorkingDirectories: string[] = [];
+  readonly calls: Array<{
+    readonly nodeId: string;
+    readonly promptText: string;
+    readonly divedraHookContext?: Parameters<
+      NodeAdapter["execute"]
+    >[0]["divedraHookContext"];
+  }> = [];
+
+  constructor(private readonly failingFeatureIds: readonly string[] = []) {}
 
   async execute(
     input: Parameters<NodeAdapter["execute"]>[0],
   ): Promise<
     ReturnType<NodeAdapter["execute"]> extends Promise<infer T> ? T : never
   > {
+    this.calls.push({
+      nodeId: input.nodeId,
+      promptText: input.promptText,
+      ...(input.divedraHookContext === undefined
+        ? {}
+        : { divedraHookContext: input.divedraHookContext }),
+    });
     if (input.nodeId === "writer") {
       return {
         provider: "fanout-test-adapter",
@@ -90,6 +105,18 @@ class CrossWorkflowFanoutAdapter implements NodeAdapter {
       };
     }
     if (input.nodeId === "reviewer") {
+      const feature = input.mergedVariables["feature"] as
+        | { readonly id?: string }
+        | undefined;
+      if (
+        feature?.id !== undefined &&
+        this.failingFeatureIds.includes(feature.id)
+      ) {
+        throw new AdapterExecutionError(
+          "provider_error",
+          `review failed for ${feature.id}`,
+        );
+      }
       this.runningReviewers += 1;
       this.maxRunningReviewers = Math.max(
         this.maxRunningReviewers,
@@ -1106,6 +1133,9 @@ class ManagerAmbientContextCaptureAdapter implements NodeAdapter {
     readonly ambientManagerContext?: Parameters<
       NodeAdapter["execute"]
     >[0]["ambientManagerContext"];
+    readonly divedraHookContext?: Parameters<
+      NodeAdapter["execute"]
+    >[0]["divedraHookContext"];
   }> = [];
 
   async execute(
@@ -1119,6 +1149,9 @@ class ManagerAmbientContextCaptureAdapter implements NodeAdapter {
       ...(input.ambientManagerContext === undefined
         ? {}
         : { ambientManagerContext: input.ambientManagerContext }),
+      ...(input.divedraHookContext === undefined
+        ? {}
+        : { divedraHookContext: input.divedraHookContext }),
     });
 
     return {
@@ -1659,9 +1692,110 @@ async function createFanoutRetryWorkspaceFixture(
   });
 }
 
+async function createLocalFanoutRetryWorkspaceFixture(
+  root: string,
+  workflowName: string,
+): Promise<void> {
+  const workflowDir = path.join(root, workflowName);
+  await mkdir(workflowDir, { recursive: true });
+
+  await writeJson(path.join(workflowDir, "workflow.json"), {
+    workflowId: workflowName,
+    description: "local isolated fanout branch retry workspace fixture",
+    managerStepId: "join-manager",
+    defaults: {
+      maxLoopIterations: 5,
+      nodeTimeoutMs: 120000,
+      fanoutConcurrency: 2,
+    },
+    entryStepId: "join-manager",
+    nodes: [
+      { id: "join-manager", nodeFile: "node-join-manager.json" },
+      { id: "writer", nodeFile: "node-writer.json" },
+      { id: "reviewer", nodeFile: "node-reviewer.json" },
+      { id: "end", nodeFile: "node-end.json" },
+    ],
+    steps: [
+      {
+        id: "join-manager",
+        nodeId: "join-manager",
+        role: "manager",
+        transitions: [
+          { toStepId: "writer", label: "runWriter" },
+          { toStepId: "end", label: "retryComplete" },
+        ],
+      },
+      {
+        id: "writer",
+        nodeId: "writer",
+        role: "worker",
+        transitions: [
+          {
+            toStepId: "reviewer",
+            fanout: {
+              groupId: "local-review-group",
+              itemsFrom: "/payload/features",
+              itemVariable: "feature",
+              concurrency: 2,
+              joinStepId: "join-manager",
+              failurePolicy: "collect-all",
+              resultOrder: "input",
+              writeOwnership: { mode: "isolated-workspace" },
+            },
+          },
+        ],
+      },
+      {
+        id: "reviewer",
+        nodeId: "reviewer",
+        role: "worker",
+      },
+      {
+        id: "end",
+        nodeId: "end",
+        role: "worker",
+      },
+    ],
+  });
+
+  await writeJson(path.join(workflowDir, "node-writer.json"), {
+    id: "writer",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "writer",
+    variables: {},
+  });
+
+  await writeJson(path.join(workflowDir, "node-join-manager.json"), {
+    id: "join-manager",
+    executionBackend: "claude-code-agent",
+    model: "claude-opus-4-1",
+    promptTemplate: "join manager",
+    variables: {},
+  });
+
+  await writeJson(path.join(workflowDir, "node-reviewer.json"), {
+    id: "reviewer",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "reviewer",
+    variables: {},
+  });
+
+  await writeJson(path.join(workflowDir, "node-end.json"), {
+    id: "end",
+    executionBackend: "codex-agent",
+    model: "gpt-5-nano",
+    promptTemplate: "end",
+    variables: {},
+  });
+}
+
 async function createLocalFanoutFixture(
   root: string,
   workflowName: string,
+  failurePolicy: "fail-fast" | "collect-all" = "collect-all",
+  reviewerMode: "agent" | "optional" | "user-action" = "agent",
 ): Promise<void> {
   const workflowDir = path.join(root, workflowName);
   await mkdir(workflowDir, { recursive: true });
@@ -1677,7 +1811,13 @@ async function createLocalFanoutFixture(
     entryStepId: "writer",
     nodes: [
       { id: "writer", nodeFile: "node-writer.json" },
-      { id: "reviewer", nodeFile: "node-reviewer.json" },
+      {
+        id: "reviewer",
+        nodeFile: "node-reviewer.json",
+        ...(reviewerMode === "optional"
+          ? { execution: { mode: "optional", decisionBy: "owning-manager" } }
+          : {}),
+      },
       { id: "review-result", nodeFile: "node-review-result.json" },
     ],
     steps: [
@@ -1694,7 +1834,7 @@ async function createLocalFanoutFixture(
               itemVariable: "feature",
               concurrency: 2,
               joinStepId: "review-result",
-              failurePolicy: "collect-all",
+              failurePolicy,
               resultOrder: "input",
               writeOwnership: { mode: "read-only" },
             },
@@ -1722,13 +1862,27 @@ async function createLocalFanoutFixture(
     variables: {},
   });
 
-  await writeJson(path.join(workflowDir, "node-reviewer.json"), {
-    id: "reviewer",
-    executionBackend: "codex-agent",
-    model: "gpt-5-nano",
-    promptTemplate: "reviewer",
-    variables: {},
-  });
+  if (reviewerMode === "user-action") {
+    await writeJson(path.join(workflowDir, "node-reviewer.json"), {
+      id: "reviewer",
+      nodeType: "user-action",
+      promptTemplate: "reviewer approval",
+      variables: {},
+      userAction: {
+        messageToolIds: ["matrix-primary"],
+        notificationToolIds: ["desktop-notify"],
+        replyPolicy: "first-valid-reply-wins",
+      },
+    });
+  } else {
+    await writeJson(path.join(workflowDir, "node-reviewer.json"), {
+      id: "reviewer",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "reviewer",
+      variables: {},
+    });
+  }
 
   await writeJson(path.join(workflowDir, "node-review-result.json"), {
     id: "review-result",
@@ -3859,7 +4013,7 @@ describe("runWorkflow", () => {
     expect(fanoutJoin?.results?.[0]?.workspaceRoot).toBe(firstBranchWorkspace);
   });
 
-  test("records superseded workspace root on isolated fanout branch retry", async () => {
+  test("records superseded retry workspace root on isolated fanout branch retry", async () => {
     const root = await makeTempDir();
     await createFanoutRetryWorkspaceFixture(root, "fanout-retry-workspace");
     await createWorkflowCallCalleeFixture(root, "review-flow");
@@ -3930,6 +4084,72 @@ describe("runWorkflow", () => {
     expect(adapter.joinCallCount).toBe(3);
   });
 
+  test("records superseded retry workspace root on local isolated fanout branch retry after reload", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutRetryWorkspaceFixture(
+      root,
+      "local-fanout-retry-workspace",
+    );
+    await writeFile(path.join(root, "source-marker.txt"), "source", "utf8");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const adapter = new FanoutRetryWorkspaceAdapter();
+
+    const result = await runWorkflow(
+      "local-fanout-retry-workspace",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot,
+        workflowWorkingDirectory: root,
+      },
+      adapter,
+    );
+
+    if (!result.ok) {
+      throw new Error(`workflow failed: ${result.error.message}`);
+    }
+    expect(result.ok).toBe(true);
+
+    const reloaded = await loadSession(result.value.session.sessionId, {
+      sessionStoreRoot,
+    });
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+
+    const groups = reloaded.value.fanoutGroups ?? [];
+    expect(groups.length).toBe(2);
+    const firstGroup = groups[0];
+    const secondGroup = groups[1];
+    expect(firstGroup?.targetWorkflowId).toBeUndefined();
+    expect(secondGroup?.targetWorkflowId).toBeUndefined();
+    expect(firstGroup?.groupId).toBe("local-review-group");
+    expect(secondGroup?.groupId).toBe("local-review-group");
+    expect(firstGroup?.branches).toHaveLength(2);
+    expect(secondGroup?.branches).toHaveLength(2);
+    if (firstGroup === undefined || secondGroup === undefined) {
+      return;
+    }
+
+    for (const branch of secondGroup.branches) {
+      const priorWorkspace = firstGroup.branches.find(
+        (b) => b.branchIndex === branch.branchIndex,
+      )?.workspaceRoot;
+      if (priorWorkspace === undefined) {
+        throw new Error(
+          `expected first local group branch ${branch.branchIndex} to have workspaceRoot`,
+        );
+      }
+      expect(branch.workspaceRoot).toBeDefined();
+      expect(branch.supersededWorkspaceRoot).toBe(priorWorkspace);
+      expect(branch.workspaceRoot).not.toBe(branch.supersededWorkspaceRoot);
+    }
+
+    expect(adapter.joinCallCount).toBe(3);
+  });
+
   test("shares maxSteps across cross-workflow fanout branch runs", async () => {
     const root = await makeTempDir();
     const sessionStoreRoot = path.join(root, "sessions");
@@ -3967,9 +4187,9 @@ describe("runWorkflow", () => {
       return;
     }
     const branches = stored.value.fanoutGroups?.[0]?.branches ?? [];
-    expect(branches.filter((branch) => branch.status === "succeeded")).toHaveLength(
-      1,
-    );
+    expect(
+      branches.filter((branch) => branch.status === "succeeded"),
+    ).toHaveLength(1);
     expect(branches.filter((branch) => branch.status === "failed").length).toBe(
       2,
     );
@@ -4025,7 +4245,7 @@ describe("runWorkflow", () => {
     }
   });
 
-  test("rejects local fanout until parent-session work items are implemented", async () => {
+  test("executes local fanout branches in the parent workflow session", async () => {
     const root = await makeTempDir();
     await createLocalFanoutFixture(root, "local-fanout");
     const adapter = new CrossWorkflowFanoutAdapter();
@@ -4041,14 +4261,720 @@ describe("runWorkflow", () => {
       adapter,
     );
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(adapter.maxRunningReviewers).toBeLessThanOrEqual(2);
+    const group = result.value.session.fanoutGroups?.[0];
+    expect(group).toBeDefined();
+    if (group === undefined) {
+      return;
+    }
+    expect(group?.groupId).toBe("local-feature-reviews");
+    expect(group?.targetWorkflowId).toBeUndefined();
+    expect(group?.concurrency).toBe(1);
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "succeeded",
+      "succeeded",
+      "succeeded",
+    ]);
+    const reviewerExecutions = result.value.session.nodeExecutions.filter(
+      (execution) => execution.nodeId === "reviewer",
+    );
+    expect(reviewerExecutions).toHaveLength(3);
+    expect(
+      new Set(reviewerExecutions.map((execution) => execution.nodeExecId)).size,
+    ).toBe(3);
+    expect(result.value.session.nodeExecutionCounts).toEqual({
+      writer: 1,
+      reviewer: 3,
+      "review-result": 1,
+    });
+    const reviewerOutputs = await Promise.all(
+      (group?.branches ?? []).map(async (branch) => {
+        if (branch.outputRef === undefined) {
+          throw new Error(`missing outputRef for branch ${branch.branchIndex}`);
+        }
+        const raw = await readFile(
+          path.join(branch.outputRef.artifactDir, "output.json"),
+          "utf8",
+        );
+        return JSON.parse(raw) as {
+          readonly payload: {
+            readonly feature?: { readonly id?: string };
+            readonly fanout?: { readonly branchIndex?: number };
+          };
+        };
+      }),
+    );
+    expect(reviewerOutputs.map((output) => output.payload.feature?.id)).toEqual(
+      ["feature-a", "feature-b", "feature-c"],
+    );
+    expect(
+      reviewerOutputs.map((output) => output.payload.fanout?.branchIndex),
+    ).toEqual([0, 1, 2]);
+    const joinCommunication = result.value.session.communications.find(
+      (entry) => entry.transitionWhen.startsWith("fanout-join:"),
+    );
+    expect(joinCommunication?.toNodeId).toBe("review-result");
+    const aggregateRaw = await readFile(
+      path.join(joinCommunication!.payloadRef.artifactDir, "output.json"),
+      "utf8",
+    );
+    const aggregate = JSON.parse(aggregateRaw) as {
+      readonly results: readonly {
+        readonly branchIndex: number;
+        readonly item: { readonly id: string };
+      }[];
+    };
+    expect(
+      aggregate.results.map((entry) => [entry.branchIndex, entry.item.id]),
+    ).toEqual([
+      [0, "feature-a"],
+      [1, "feature-b"],
+      [2, "feature-c"],
+    ]);
+
+    const reviewerInputRaw = await readFile(
+      path.join(reviewerExecutions[0]!.artifactDir, "input.json"),
+      "utf8",
+    );
+    const reviewerInput = JSON.parse(reviewerInputRaw) as {
+      readonly promptText: string;
+      readonly variables: {
+        readonly feature?: { readonly id?: string };
+        readonly fanout?: { readonly branchIndex?: number };
+      };
+    };
+    expect(reviewerInput.promptText).toContain("Runtime mailbox:");
+    expect(reviewerInput.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(reviewerInput.variables.feature?.id).toBe("feature-a");
+    expect(reviewerInput.variables.fanout?.branchIndex).toBe(0);
+
+    const reviewerMailboxMetaRaw = await readFile(
+      path.join(
+        reviewerExecutions[0]!.artifactDir,
+        "mailbox",
+        "inbox",
+        "meta.json",
+      ),
+      "utf8",
+    );
+    const reviewerMailboxMeta = JSON.parse(reviewerMailboxMetaRaw) as {
+      readonly mailboxDirEnvVar?: string;
+      readonly paths?: {
+        readonly inputPath?: string;
+        readonly outputPath?: string;
+      };
+    };
+    expect(reviewerMailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
+    expect(reviewerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
+    expect(reviewerMailboxMeta.paths?.outputPath).toBe("outbox/output.json");
+
+    const reviewerMailboxRaw = await readFile(
+      path.join(
+        reviewerExecutions[0]!.artifactDir,
+        "mailbox",
+        "inbox",
+        "input.json",
+      ),
+      "utf8",
+    );
+    const reviewerMailboxInput = JSON.parse(reviewerMailboxRaw) as {
+      readonly runtimeVariables?: {
+        readonly feature?: { readonly id?: string };
+        readonly fanout?: { readonly branchIndex?: number };
+      };
+    };
+    expect(reviewerMailboxInput.runtimeVariables?.feature?.id).toBe(
+      "feature-a",
+    );
+    expect(reviewerMailboxInput.runtimeVariables?.fanout?.branchIndex).toBe(0);
+
+    const joinExec = result.value.session.nodeExecutions.find(
+      (execution) => execution.nodeId === "review-result",
+    );
+    expect(joinExec).toBeDefined();
+    if (joinExec === undefined) {
+      return;
+    }
+    const joinInputRaw = await readFile(
+      path.join(joinExec.artifactDir, "input.json"),
+      "utf8",
+    );
+    const joinInput = JSON.parse(joinInputRaw) as {
+      readonly promptText: string;
+      readonly variables: {
+        readonly fanoutJoin?: {
+          readonly fanoutGroupRunId?: string;
+          readonly results?: readonly { readonly branchIndex: number }[];
+        };
+      };
+    };
+    expect(joinInput.promptText).toContain("Runtime mailbox:");
+    expect(joinInput.variables.fanoutJoin?.fanoutGroupRunId).toBe(
+      group.fanoutGroupRunId,
+    );
+    expect(
+      joinInput.variables.fanoutJoin?.results?.map(
+        (entry) => entry.branchIndex,
+      ),
+    ).toEqual([0, 1, 2]);
+
+    const joinMailboxRaw = await readFile(
+      path.join(joinExec.artifactDir, "mailbox", "inbox", "input.json"),
+      "utf8",
+    );
+    const joinMailboxInput = JSON.parse(joinMailboxRaw) as {
+      readonly runtimeVariables?: {
+        readonly fanoutJoin?: {
+          readonly fanoutGroupRunId?: string;
+          readonly results?: readonly { readonly branchIndex: number }[];
+        };
+      };
+    };
+    expect(
+      joinMailboxInput.runtimeVariables?.fanoutJoin?.fanoutGroupRunId,
+    ).toBe(group.fanoutGroupRunId);
+    expect(
+      joinMailboxInput.runtimeVariables?.fanoutJoin?.results?.map(
+        (entry) => entry.branchIndex,
+      ),
+    ).toEqual([0, 1, 2]);
+
+    const writerExecution = result.value.session.nodeExecutions.find(
+      (execution) => execution.nodeId === "writer",
+    );
+    expect(writerExecution).toBeDefined();
+    if (writerExecution === undefined) {
+      return;
+    }
+    await expect(
+      readFile(path.join(writerExecution.artifactDir, "input.json"), "utf8"),
+    ).resolves.toContain("Runtime mailbox:");
+    const writerMailboxMeta = JSON.parse(
+      await readFile(
+        path.join(writerExecution.artifactDir, "mailbox", "inbox", "meta.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly mailboxDirEnvVar?: string;
+      readonly paths?: { readonly inputPath?: string };
+    };
+    expect(writerMailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
+    expect(writerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
+  });
+
+  test("rerun rejects ambiguous local fanout branch target without branch context", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-rerun-ambiguous");
+    const options = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+
+    const first = await runWorkflow(
+      "local-fanout-rerun-ambiguous",
+      options,
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+
+    const rerun = await runWorkflow(
+      "local-fanout-rerun-ambiguous",
+      {
+        ...options,
+        rerunFromSessionId: first.value.session.sessionId,
+        rerunFromStepId: "reviewer",
+      },
+      new CrossWorkflowFanoutAdapter(),
+    );
+
+    expect(rerun.ok).toBe(false);
+    if (rerun.ok) {
+      return;
+    }
+    expect(rerun.error.exitCode).toBe(2);
+    expect(rerun.error.message).toContain(
+      "cannot rerun fanout branch target step 'reviewer' without fanout branch context",
+    );
+    expect(rerun.error.message).toContain("local-feature-reviews");
+  });
+
+  test("local fanout fail-fast records failed group and stops launching later branches", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-fail-fast", "fail-fast");
+    const adapter = new CrossWorkflowFanoutAdapter(["feature-b"]);
+
+    const result = await runWorkflow(
+      "local-fanout-fail-fast",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      adapter,
+    );
+
     expect(result.ok).toBe(false);
     if (result.ok) {
       return;
     }
-    expect(result.error.message).toContain(
-      "local fanout transition 'always' is not yet supported",
+    expect(result.error.message).toContain("fanout group");
+    expect(result.error.message).toContain("branch 1");
+    expect(result.error.sessionId).toBeDefined();
+    const stored = await loadSession(result.error.sessionId!, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.failurePolicy).toBe("fail-fast");
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "succeeded",
+      "failed",
+      "cancelled",
+    ]);
+    expect(
+      stored.value.nodeExecutions.filter(
+        (execution) => execution.nodeId === "reviewer",
+      ),
+    ).toHaveLength(2);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+  });
+
+  test("local fanout collect-all records every branch failure and skips the join", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-collect-all");
+    const adapter = new CrossWorkflowFanoutAdapter(["feature-b"]);
+
+    const result = await runWorkflow(
+      "local-fanout-collect-all",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      adapter,
     );
-    expect(adapter.maxRunningReviewers).toBe(0);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.sessionId).toBeDefined();
+    const stored = await loadSession(result.error.sessionId!, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.failurePolicy).toBe("collect-all");
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "succeeded",
+      "failed",
+      "succeeded",
+    ]);
+    expect(
+      stored.value.nodeExecutions.filter(
+        (execution) => execution.nodeId === "reviewer",
+      ),
+    ).toHaveLength(3);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+  });
+
+  test("local fanout maxSteps uses the parent session execution counter", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-max-steps");
+    const adapter = new CrossWorkflowFanoutAdapter();
+
+    const result = await runWorkflow(
+      "local-fanout-max-steps",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        maxSteps: 2,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("fanout max steps reached (2)");
+    expect(result.error.sessionId).toBeDefined();
+    const stored = await loadSession(result.error.sessionId!, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "succeeded",
+      "failed",
+      "failed",
+    ]);
+    expect(stored.value.nodeExecutions).toHaveLength(2);
+    expect(
+      stored.value.nodeExecutions.filter(
+        (execution) => execution.nodeId === "reviewer",
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("local fanout timeout records a branch failure without queueing the join", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-timeout", "fail-fast");
+    const adapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "writer") {
+          return {
+            provider: "local-fanout-timeout-adapter",
+            model: input.node.model,
+            promptText: input.promptText,
+            completionPassed: true,
+            when: { always: true },
+            payload: {
+              features: [
+                { id: "feature-a" },
+                { id: "feature-b" },
+                { id: "feature-c" },
+              ],
+            },
+          };
+        }
+        if (input.nodeId === "reviewer") {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        return {
+          provider: "local-fanout-timeout-adapter",
+          model: input.node.model,
+          promptText: input.promptText,
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const result = await runWorkflow(
+      "local-fanout-timeout",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        defaultTimeoutMs: 5,
+        restartOnStuck: false,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.message).toContain("fanout group");
+    expect(result.error.message).toContain("branch 0");
+    expect(result.error.sessionId).toBeDefined();
+    const stored = await loadSession(result.error.sessionId!, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "failed",
+      "cancelled",
+      "cancelled",
+    ]);
+    expect(
+      stored.value.nodeExecutions.filter(
+        (execution) => execution.nodeId === "reviewer",
+      ),
+    ).toMatchObject([{ status: "timed_out" }]);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+  });
+
+  test("local fanout cancellation records cancelled branches without queueing the join", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(
+      root,
+      "local-fanout-cancellation",
+      "fail-fast",
+    );
+    let cancelAfterSourceStep = false;
+    const adapter: NodeAdapter = {
+      async execute(input) {
+        const output = await new CrossWorkflowFanoutAdapter().execute(input);
+        if (input.nodeId === "writer") {
+          cancelAfterSourceStep = true;
+        }
+        return output;
+      },
+    };
+
+    const result = await runWorkflow(
+      "local-fanout-cancellation",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      adapter,
+      {
+        cancellationProbe: {
+          async isCancelled(): Promise<boolean> {
+            return cancelAfterSourceStep;
+          },
+        },
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.exitCode).toBe(130);
+    expect(result.error.message).toContain("cancelled by external request");
+    expect(result.error.sessionId).toBeDefined();
+    const stored = await loadSession(result.error.sessionId!, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    expect(stored.value.status).toBe("cancelled");
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "cancelled",
+      "cancelled",
+      "cancelled",
+    ]);
+    expect(
+      stored.value.nodeExecutions.filter(
+        (execution) => execution.nodeId === "reviewer",
+      ),
+    ).toHaveLength(0);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+  });
+
+  test("local fanout pauses optional branch decisions without queueing the join", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(
+      root,
+      "local-fanout-optional-branch",
+      "fail-fast",
+      "optional",
+    );
+
+    const result = await runWorkflow(
+      "local-fanout-optional-branch",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      new CrossWorkflowFanoutAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.exitCode).toBe(4);
+    expect(result.value.session.status).toBe("paused");
+    expect(result.value.session.lastError).toContain("branch 0");
+    expect(result.value.session.lastError).toContain(
+      "paused for optional step decision",
+    );
+    const stored = await loadSession(result.value.session.sessionId, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "paused",
+      "pending",
+      "pending",
+    ]);
+    expect(stored.value.pendingOptionalNodeDecisions).toMatchObject([
+      {
+        nodeId: "reviewer",
+        owningManagerStepId: "writer",
+        status: "pending",
+      },
+    ]);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+
+    const resumed = await runWorkflow(
+      "local-fanout-optional-branch",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        resumeSessionId: result.value.session.sessionId,
+      },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+    expect(resumed.value.exitCode).toBe(4);
+    expect(resumed.value.session.fanoutGroups?.[0]?.branches[0]?.status).toBe(
+      "paused",
+    );
+  });
+
+  test("local fanout pauses user-action branches without queueing the join", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(
+      root,
+      "local-fanout-user-action-branch",
+      "fail-fast",
+      "user-action",
+    );
+
+    const result = await runWorkflow(
+      "local-fanout-user-action-branch",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
+      new CrossWorkflowFanoutAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.exitCode).toBe(4);
+    expect(result.value.session.status).toBe("paused");
+    expect(result.value.session.lastError).toContain("branch 0");
+    expect(result.value.session.lastError).toContain("paused for user action");
+    const stored = await loadSession(result.value.session.sessionId, {
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) {
+      return;
+    }
+    const group = stored.value.fanoutGroups?.[0];
+    expect(group?.branches.map((branch) => branch.status)).toEqual([
+      "paused",
+      "pending",
+      "pending",
+    ]);
+    expect(stored.value.activeUserActions).toHaveLength(1);
+    const activeUserAction = stored.value.activeUserActions?.[0];
+    expect(activeUserAction?.nodeId).toBe("reviewer");
+    if (activeUserAction === undefined) {
+      return;
+    }
+    expect(group?.branches[0]?.nodeExecIds).toEqual([
+      activeUserAction.nodeExecId,
+    ]);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
+
+    const resumed = await runWorkflow(
+      "local-fanout-user-action-branch",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        resumeSessionId: result.value.session.sessionId,
+      },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+    expect(resumed.value.exitCode).toBe(4);
+    expect(resumed.value.session.activeUserActions).toHaveLength(1);
+    expect(resumed.value.session.fanoutGroups?.[0]?.branches[0]?.status).toBe(
+      "paused",
+    );
+  });
+
+  test("local fanout maxConcurrency clamps persisted effective concurrency", async () => {
+    const root = await makeTempDir();
+    await createLocalFanoutFixture(root, "local-fanout-max-concurrency");
+    const adapter = new CrossWorkflowFanoutAdapter();
+
+    const result = await runWorkflow(
+      "local-fanout-max-concurrency",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        maxConcurrency: 1,
+      },
+      adapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const group = result.value.session.fanoutGroups?.[0];
+    expect(group?.concurrency).toBe(1);
+    expect(adapter.maxRunningReviewers).toBe(1);
   });
 
   test("skips a cross-workflow dispatch when `when` does not match caller output (gated by evaluateBranch)", async () => {
@@ -4390,6 +5316,11 @@ describe("runWorkflow", () => {
     expect(inputJson.sessionId).toBe(result.value.session.sessionId);
     expect(inputJson.workflowExecutionId).toBe(result.value.session.sessionId);
     expect(inputJson.promptText).toContain("B");
+    expect(inputJson.promptText).toContain("Runtime mailbox:");
+    expect(inputJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(inputJson.promptText).toContain(
+      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+    );
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
         mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
@@ -5278,6 +6209,16 @@ describe("runWorkflow", () => {
 
     expect(adapter.calls).toHaveLength(2);
     expect(adapter.calls[0]?.nodeId).toBe("divedra-manager");
+    expect(
+      adapter.calls[0]?.divedraHookContext?.environment.DIVEDRA_MAILBOX_DIR,
+    ).toBe(
+      path.join(
+        result.value.session.nodeExecutions[0]?.artifactDir ?? "",
+        "mailbox",
+      ),
+    );
+    expect(adapter.calls[0]?.promptText).toContain("Runtime mailbox:");
+    expect(adapter.calls[0]?.promptText).toContain("DIVEDRA_MAILBOX_DIR");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
       DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
       DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
@@ -7387,11 +8328,20 @@ describe("runWorkflow", () => {
     );
     const firstRequestJson = JSON.parse(firstRequestRaw) as {
       attempt: number;
+      executionBackend: string;
+      model: string;
       promptText: string;
       candidatePath: string;
       validationErrors: readonly { path: string; message: string }[];
     };
     expect(firstRequestJson.attempt).toBe(1);
+    expect(firstRequestJson.executionBackend).toBe("claude-code-agent");
+    expect(firstRequestJson.model).toBe("claude-opus-4-1");
+    expect(firstRequestJson.promptText).toContain("Runtime mailbox:");
+    expect(firstRequestJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(firstRequestJson.promptText).toContain(
+      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+    );
     expect(firstRequestJson.promptText).toContain("Candidate-Path:");
     expect(firstRequestJson.promptText).not.toContain(
       "Previous output was rejected:",
@@ -7415,11 +8365,17 @@ describe("runWorkflow", () => {
     );
     const secondRequestJson = JSON.parse(secondRequestRaw) as {
       attempt: number;
+      executionBackend: string;
+      model: string;
       promptText: string;
       candidatePath: string;
       validationErrors: readonly { path: string; message: string }[];
     };
     expect(secondRequestJson.attempt).toBe(2);
+    expect(secondRequestJson.executionBackend).toBe("claude-code-agent");
+    expect(secondRequestJson.model).toBe("claude-opus-4-1");
+    expect(secondRequestJson.promptText).toContain("Runtime mailbox:");
+    expect(secondRequestJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
     expect(secondRequestJson.promptText).toContain(
       "Previous output was rejected:",
     );
@@ -7440,9 +8396,73 @@ describe("runWorkflow", () => {
     expect(outputJson.promptText).toContain(
       "Node-specific instruction:\nstep audit",
     );
+    expect(outputJson.promptText).toContain("Runtime mailbox:");
+    expect(outputJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
     expect(outputJson.promptText).not.toContain(
       "Previous output was rejected:",
     );
+  });
+
+  test("persists latest completed outputs in mailbox input for downstream review context", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "latest-mailbox-context");
+
+    const result = await runWorkflow(
+      "latest-mailbox-context",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: { topic: "context" },
+      },
+      deterministicAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const step2Exec = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-2",
+    );
+    expect(step2Exec).toBeDefined();
+    if (step2Exec === undefined) {
+      return;
+    }
+
+    const mailboxInput = JSON.parse(
+      await readFile(
+        path.join(step2Exec.artifactDir, "mailbox", "inbox", "input.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly latestOutputs?: readonly {
+        readonly nodeId: string;
+        readonly stepId?: string;
+        readonly nodeExecId: string;
+        readonly artifactDir: string;
+        readonly payload?: { readonly nodeId?: string };
+      }[];
+    };
+    expect(mailboxInput.latestOutputs).toHaveLength(1);
+    expect(mailboxInput.latestOutputs?.[0]).toMatchObject({
+      nodeId: "step-1",
+      stepId: "step-1",
+      nodeExecId: "exec-000001",
+      payload: { nodeId: "step-1" },
+    });
+    expect(mailboxInput.latestOutputs?.[0]?.artifactDir).toContain(
+      path.join("nodes", "step-1", "exec-000001"),
+    );
+
+    const nodeInput = JSON.parse(
+      await readFile(path.join(step2Exec.artifactDir, "input.json"), "utf8"),
+    ) as { readonly promptText?: string };
+    expect(nodeInput.promptText).toContain("Latest completed step outputs:");
+    expect(nodeInput.promptText).toContain("latestOutputs");
+    expect(nodeInput.promptText).toContain("node=step-1");
   });
 
   test("makes runtime-owned publication rules explicit to contract-enabled adapters", async () => {

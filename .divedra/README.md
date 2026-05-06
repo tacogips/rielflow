@@ -8,7 +8,7 @@ project catalog.
 
 ## Available Workflows
 
-- `design-and-implement-review-loop`: issue intake, design-doc update, design review, implementation-plan creation, implementation-plan review, optional implementation, and final review.
+- `design-and-implement-review-loop`: issue intake, design-doc update, design self-review, design review, implementation-plan creation, implementation-plan self-review, implementation-plan review, optional implementation with self-review, and final review.
 - `recent-change-quality-loop`: review recent committed and uncommitted changes, fix blocking findings, and loop until only low-severity risks remain.
 
 ## Root Commands

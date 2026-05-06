@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { MockNodeScenario } from "./adapter";
+import type { MockNodeScenario } from "./scenario-adapter";
 import { createCommunicationService } from "./communication-service";
 import { createWorkflowTemplate } from "./create";
 import { runWorkflow } from "./engine";
@@ -582,5 +582,4 @@ describe("manager-message-service", () => {
       },
     ]);
   });
-
 });

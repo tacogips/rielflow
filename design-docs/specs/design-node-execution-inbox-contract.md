@@ -206,12 +206,17 @@ Initial fields:
 - `workflowOutput`
 - `runtimeVariables`
 - `upstream`
+- `latestOutputs`
 - `managerMessage`
 
 Rules:
 
 - upstream payloads included here are execution-local resolved data, not
   canonical mailbox envelopes
+- `latestOutputs` carries the latest completed node execution records available
+  to the current step, including step id, node id, node execution id, status,
+  artifact directory, and structured payload; prompt summaries may truncate this
+  data, but `mailbox/inbox/input.json` must retain the full structured records
 - the runtime may keep richer audit data in the root `input.json`, but worker
   code should not need that file
 - workers must not read canonical `communications/...` directories directly
@@ -240,6 +245,55 @@ original upstream source was plain text or the eventual backend response is raw
 text.
 
 This keeps worker semantics aligned even if execution mechanisms differ.
+
+## Real-Backend Artifact Audit Requirements
+
+Issue mapping: `Verify non-mock impl-plan implementation workflow execution`.
+The `design-and-implement-review-loop` workflow must be auditable when run in
+`issue-resolution` workflow mode with real configured LLM backends such as
+`codex-agent`, not a mock scenario.
+
+For each runtime step, the persisted node execution artifacts must let a later
+review or summary step prove:
+
+- which execution backend and model were requested
+- which mailbox contract was materialized at `mailbox/inbox/meta.json`
+- which full resolved input was materialized at `mailbox/inbox/input.json`
+- which prompt/request was sent to the backend for each output attempt
+- which candidate payload was received or staged for each output attempt
+- which validation result accepted or rejected the candidate when an output
+  contract applies
+- which final runtime-owned `output.json`, `meta.json`, and `handoff.json`
+  records were published for the node execution
+
+Prompt text sent to an agent backend is an inspectable derivative of the
+mailbox contract, not a separate source of truth. When prompt text summarizes
+large upstream payloads, it must explicitly point workers and reviewers to
+`DIVEDRA_MAILBOX_DIR` and `mailbox/inbox/input.json` for full structured
+records. Downstream review steps must rely on `latestOutputs` in
+`mailbox/inbox/input.json` for complete prior-step data rather than on truncated
+prompt snippets.
+
+Mock scenarios remain valid for deterministic tests and examples, but a
+non-mock audit run must not accept mock-scenario responses as evidence that
+configured LLM backends were exercised. Runtime artifacts should make that
+distinction explicit through provider/backend metadata and request records.
+
+Codex-reference mapping:
+
+- local reference root: `/Users/taco/gits/tacogips/codex-agent`
+- relevant reference behavior:
+  `/Users/taco/gits/tacogips/codex-agent/design-docs/specs/design-codex-session-management.md`
+  describes Codex rollout/session audit records and
+  `/Users/taco/gits/tacogips/codex-agent/src/sdk/session-runner.ts` exposes
+  `SessionConfig`, `RunningSession`, and streamed rollout messages
+- intentional divedra boundary: divedra keeps workflow mailbox, validation,
+  routing, and final publication runtime-owned; `codex-agent` is used as a
+  backend session/process adapter and as an auditability reference, not as the
+  workflow mailbox or session store
+- Cursor-specific or CLI-specific behavior must stay behind adapter modules so
+  the worker-facing mailbox ABI stays stable across `codex-agent`,
+  `claude-code-agent`, SDK, command, and container execution
 
 ## Output Ownership
 

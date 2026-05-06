@@ -19,8 +19,10 @@ import {
   type NormalizedWorkflowBundle,
 } from "./types";
 import type {
+  FanoutBranchRecord,
   FanoutBranchStatus,
   FanoutGroupRunRecord,
+  OutputRef,
   WorkflowSessionState,
 } from "./session";
 export interface WorkflowInspectionCounts {
@@ -43,15 +45,30 @@ export interface WorkflowStepSummary {
   readonly description?: string;
 }
 
+export interface FanoutBranchSummary {
+  readonly branchIndex: number;
+  readonly status: FanoutBranchStatus;
+  readonly workItemId: string;
+  readonly nodeExecIds: readonly string[];
+  readonly outputRef?: OutputRef;
+  readonly error?: string;
+  readonly workspaceRoot?: string;
+  readonly supersededWorkspaceRoot?: string;
+}
+
 export interface FanoutGroupSummary {
   readonly fanoutGroupRunId: string;
   readonly groupId: string;
   readonly sourceStepId: string;
+  readonly sourceNodeExecId: string;
   readonly joinStepId: string;
   readonly targetStepId: string;
   readonly targetWorkflowId?: string;
   readonly concurrency: number;
+  readonly failurePolicy: FanoutGroupRunRecord["failurePolicy"];
+  readonly resultOrder: FanoutGroupRunRecord["resultOrder"];
   readonly branchCounts: Readonly<Record<FanoutBranchStatus, number>>;
+  readonly branches: readonly FanoutBranchSummary[];
   readonly firstFailure?: string;
 }
 
@@ -96,13 +113,18 @@ export function deriveWorkflowCallableContractSummary(
 }
 
 export function deriveWorkflowStepSummaries(
-  workflow: Pick<NormalizedWorkflowBundle["workflow"], "managerStepId" | "steps">,
+  workflow: Pick<
+    NormalizedWorkflowBundle["workflow"],
+    "managerStepId" | "steps"
+  >,
 ): readonly WorkflowStepSummary[] {
   return workflow.steps.map((step) => ({
     stepId: step.id,
     role:
       step.role ?? (workflow.managerStepId === step.id ? "manager" : "worker"),
-    ...(step.description === undefined ? {} : { description: step.description }),
+    ...(step.description === undefined
+      ? {}
+      : { description: step.description }),
   }));
 }
 
@@ -114,6 +136,25 @@ function emptyFanoutBranchCounts(): Record<FanoutBranchStatus, number> {
     failed: 0,
     cancelled: 0,
     paused: 0,
+  };
+}
+
+function buildFanoutBranchSummary(
+  branch: FanoutBranchRecord,
+): FanoutBranchSummary {
+  return {
+    branchIndex: branch.branchIndex,
+    status: branch.status,
+    workItemId: branch.workItemId,
+    nodeExecIds: branch.nodeExecIds ?? [],
+    ...(branch.outputRef === undefined ? {} : { outputRef: branch.outputRef }),
+    ...(branch.error === undefined ? {} : { error: branch.error }),
+    ...(branch.workspaceRoot === undefined
+      ? {}
+      : { workspaceRoot: branch.workspaceRoot }),
+    ...(branch.supersededWorkspaceRoot === undefined
+      ? {}
+      : { supersededWorkspaceRoot: branch.supersededWorkspaceRoot }),
   };
 }
 
@@ -136,13 +177,17 @@ export function buildFanoutGroupSummary(
     fanoutGroupRunId: group.fanoutGroupRunId,
     groupId: group.groupId,
     sourceStepId: group.sourceStepId,
+    sourceNodeExecId: group.sourceNodeExecId,
     joinStepId: group.joinStepId,
     targetStepId: group.targetStepId,
     ...(group.targetWorkflowId === undefined
       ? {}
       : { targetWorkflowId: group.targetWorkflowId }),
     concurrency: group.concurrency,
+    failurePolicy: group.failurePolicy,
+    resultOrder: group.resultOrder,
     branchCounts,
+    branches: group.branches.map((branch) => buildFanoutBranchSummary(branch)),
     ...(firstFailure === undefined ? {} : { firstFailure }),
   };
 }

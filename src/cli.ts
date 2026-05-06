@@ -22,7 +22,7 @@ import {
 import { emitEventFile } from "./events/manual-emit";
 import { listEventReceipts, replayEventReceipt } from "./events/receipt-ops";
 import type { EventListenerHandle } from "./events/listener-service";
-import type { MockNodeScenario } from "./workflow/adapter";
+import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type { WorkflowExecutionCompactSummary } from "./shared/ui-contract";
 import { normalizeAutoImprovePolicy } from "./workflow/auto-improve-policy";
 import { createWorkflowTemplate } from "./workflow/create";
@@ -38,7 +38,10 @@ import {
   resolveWorkflowSource,
   withResolvedWorkflowSourceOptions,
 } from "./workflow/catalog";
-import { inferRootDataDirFromExplicitStorageRoots } from "./workflow/paths";
+import {
+  computeProjectScopedRootDataDirForScopeRoot,
+  inferRootDataDirFromExplicitStorageRoots,
+} from "./workflow/paths";
 import {
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
@@ -227,11 +230,9 @@ function hasExplicitSessionStorageOverride(
     options.rootDataDir !== undefined ||
     options.artifactRoot !== undefined ||
     options.sessionStoreRoot !== undefined ||
-    options.userRoot !== undefined ||
     env["DIVEDRA_ARTIFACT_DIR"] !== undefined ||
     env["DIVEDRA_ARTIFACT_ROOT"] !== undefined ||
-    env["DIVEDRA_SESSION_STORE"] !== undefined ||
-    env["DIVEDRA_USER_ROOT"] !== undefined
+    env["DIVEDRA_SESSION_STORE"] !== undefined
   );
 }
 
@@ -248,9 +249,17 @@ async function resolveSessionCommandStorageOptions(
     return options;
   }
 
+  const env = options.env ?? process.env;
   return {
     ...options,
-    rootDataDir: path.join(projectScopeRoot, "artifacts"),
+    rootDataDir: computeProjectScopedRootDataDirForScopeRoot({
+      scopeRoot: projectScopeRoot,
+      ...(options.userRoot !== undefined
+        ? { userRoot: options.userRoot }
+        : env["DIVEDRA_USER_ROOT"] === undefined
+          ? {}
+          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
+    }),
   };
 }
 
@@ -557,7 +566,7 @@ function formatFanoutSummaryLines(
   }
   return [
     "fanoutGroups:",
-    ...summaries.map((summary) => {
+    ...summaries.flatMap((summary) => {
       const counts = Object.entries(summary.branchCounts)
         .filter(([, count]) => count > 0)
         .map(([status, count]) => `${status}=${count}`)
@@ -570,7 +579,25 @@ function formatFanoutSummaryLines(
         summary.firstFailure === undefined
           ? ""
           : ` firstFailure=${summary.firstFailure}`;
-      return `  - ${summary.groupId}: target=${target} join=${summary.joinStepId} concurrency=${summary.concurrency} branches=${counts || "none"}${failure}`;
+      const groupLine = `  - ${summary.groupId}: target=${target} source=${summary.sourceStepId} join=${summary.joinStepId} concurrency=${summary.concurrency} policy=${summary.failurePolicy} order=${summary.resultOrder} branches=${counts || "none"}${failure}`;
+      const branchLines = summary.branches.map((branch) => {
+        const output =
+          branch.outputRef === undefined
+            ? ""
+            : ` outputRef=${branch.outputRef.nodeExecId}`;
+        const workspace =
+          branch.workspaceRoot === undefined
+            ? ""
+            : ` workspaceRoot=${branch.workspaceRoot}`;
+        const superseded =
+          branch.supersededWorkspaceRoot === undefined
+            ? ""
+            : ` supersededWorkspaceRoot=${branch.supersededWorkspaceRoot}`;
+        const error =
+          branch.error === undefined ? "" : ` error=${branch.error}`;
+        return `    - branch ${branch.branchIndex}: status=${branch.status} workItem=${branch.workItemId} nodeExecIds=${branch.nodeExecIds.join(",") || "-"}${output}${workspace}${superseded}${error}`;
+      });
+      return [groupLine, ...branchLines];
     }),
   ];
 }

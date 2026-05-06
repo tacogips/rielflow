@@ -254,10 +254,14 @@ Built-in add-ons:
 - `divedra/x-gateway`
 - `divedra/mail-gateway-read`
 - `divedra/mail-gateway`
+- `divedra/git-commit`
+- `divedra/git-push`
 
 Use explicit object form with `version: "1"` unless a newer implementation documents a different version.
 
 `addon.inputs` becomes resolved node `variables`. `addon.config` is validated by the add-on descriptor. `addon.env` maps add-on environment variable names to divedra runtime environment variable names only for descriptors that support explicit environment bindings.
+
+Prefer DRY composition when using add-ons: chain reusable primitive steps in `steps[].transitions` instead of authoring combined nodes that duplicate behavior. For example, express commit-and-push as `divedra/git-commit` followed by `divedra/git-push`.
 
 ## Validation Commands
 

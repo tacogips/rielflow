@@ -1,0 +1,99 @@
+{
+  "workflowId": "impl-plan-completion-loop",
+  "description": "Execute an implementation plan until every authored task in the target plan is completed, with an explicit plan-assessment exit gate between implementation iterations.",
+  "defaults": {
+    "maxLoopIterations": 50,
+    "nodeTimeoutMs": 3600000
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start by assessing the target implementation plan. If the plan is complete, publish workflow output. Otherwise implement the next incomplete task, review it, and reassess the plan. Loop until the assessment reports plan_complete true. Do not commit, push, stage files, or revert unrelated dirty worktree changes.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep plan path, task ids, changed files, verification commands, review findings, routing flags, and remaining work explicit."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "step1-plan-assess",
+      "nodeFile": "nodes/node-step1-plan-assess.json"
+    },
+    {
+      "id": "step2-implement-next",
+      "nodeFile": "nodes/node-step2-implement-next.json"
+    },
+    {
+      "id": "step3-review",
+      "nodeFile": "nodes/node-step3-review.json"
+    },
+    {
+      "id": "workflow-output",
+      "kind": "output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "description": "Start the plan completion loop.",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "step1-plan-assess"
+        }
+      ]
+    },
+    {
+      "id": "step1-plan-assess",
+      "nodeId": "step1-plan-assess",
+      "description": "Read the target implementation plan and decide whether more task implementation is required.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output",
+          "label": "plan_complete"
+        },
+        {
+          "toStepId": "step2-implement-next",
+          "label": "!(plan_complete)"
+        }
+      ]
+    },
+    {
+      "id": "step2-implement-next",
+      "nodeId": "step2-implement-next",
+      "description": "Implement the next incomplete task selected by the plan assessment.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step3-review"
+        }
+      ]
+    },
+    {
+      "id": "step3-review",
+      "nodeId": "step3-review",
+      "description": "Review the latest implementation iteration and route back for revision or plan reassessment.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step2-implement-next",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step1-plan-assess",
+          "label": "!(needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "description": "Publish final evidence that the target implementation plan has no incomplete tasks.",
+      "role": "worker"
+    }
+  ]
+}

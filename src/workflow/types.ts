@@ -473,6 +473,18 @@ export interface MailGatewayAddonConfig {
   readonly networkPolicy?: "disabled" | "egress-allowed";
 }
 
+export interface GitCommitAddonConfig {
+  readonly commitMessageTemplate: string;
+  readonly committedFilesTemplate: string;
+  readonly gitPath?: string;
+}
+
+export interface GitPushAddonConfig {
+  readonly gitPath?: string;
+  readonly remoteTemplate?: string;
+  readonly branchTemplate?: string;
+}
+
 export interface AgentWorkerAddonConfig {
   readonly model: string;
   readonly promptTemplate: string;
@@ -568,6 +580,20 @@ export interface ResolvedMailGatewayAddon {
   readonly version: "1";
   readonly config: MailGatewayAddonConfig;
   readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedGitCommitAddon {
+  readonly name: "divedra/git-commit";
+  readonly version: "1";
+  readonly config: GitCommitAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
+export interface ResolvedGitPushAddon {
+  readonly name: "divedra/git-push";
+  readonly version: "1";
+  readonly config: GitPushAddonConfig;
   readonly inputs?: Readonly<Record<string, unknown>>;
 }
 
@@ -678,6 +704,8 @@ export type ResolvedNodeAddon =
   | ResolvedXGatewayAddon
   | ResolvedMailGatewayReadAddon
   | ResolvedMailGatewayAddon
+  | ResolvedGitCommitAddon
+  | ResolvedGitPushAddon
   | ResolvedAgentWorkerAddon
   | ResolvedSuperviserControlAddon;
 

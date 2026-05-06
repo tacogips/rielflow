@@ -23,11 +23,7 @@
         "The design maps the target codex-agent behavior to cursor-agent boundaries.",
         "The implementation plan is accepted and ready for a later execution workflow."
       ],
-      "impactedAreas": [
-        "src/cli",
-        "src/cursor",
-        "impl-plans/active"
-      ],
+      "impactedAreas": ["src/cli", "src/cursor", "impl-plans/active"],
       "constraints": [
         "Use codex-agent as a behavioral reference only.",
         "Keep Cursor-specific behavior behind adapter modules."
@@ -64,18 +60,14 @@
           "Map codex-agent session history behavior to cursor-agent local Cursor transcript discovery."
         ],
         "designSummary": "Drafted the design but did not describe the Cursor adapter boundary clearly.",
-        "decisions": [
-          "Use local Cursor state as the product boundary."
-        ],
+        "decisions": ["Use local Cursor state as the product boundary."],
         "openQuestions": [],
         "issueToDesignMapping": [
           "Codex-reference session history behavior must map to Cursor transcript discovery and local indexing."
         ],
         "intentionalDivergences": [],
         "addressedFeedback": [],
-        "risks": [
-          "Adapter boundary is underspecified."
-        ]
+        "risks": ["Adapter boundary is underspecified."]
       }
     },
     {
@@ -117,6 +109,23 @@
       }
     }
   ],
+  "step2-design-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedDesignDocPaths": [
+        "design-docs/specs/design-codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
   "step3-design-review": [
     {
       "provider": "scenario-mock",
@@ -178,16 +187,10 @@
           "Add transcript discovery adapter",
           "Add CLI output flow"
         ],
-        "dependencies": [
-          "CLI output depends on adapter records."
-        ],
+        "dependencies": ["CLI output depends on adapter records."],
         "parallelizableTasks": [],
-        "verification": [
-          "task typecheck"
-        ],
-        "completionCriteria": [
-          "Typecheck passes"
-        ],
+        "verification": ["task typecheck"],
+        "completionCriteria": ["Typecheck passes"],
         "addressedFeedback": [],
         "risks": [
           "The plan does not include tests for missing transcript files."
@@ -226,10 +229,7 @@
         "parallelizableTasks": [
           "CLI formatting tests can run after adapter record types are defined."
         ],
-        "verification": [
-          "task test",
-          "task typecheck"
-        ],
+        "verification": ["task test", "task typecheck"],
         "completionCriteria": [
           "Unit tests pass",
           "Typecheck passes",
@@ -242,6 +242,25 @@
       }
     }
   ],
+  "step4-impl-plan-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_design_revision": false,
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_design_revision": false,
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedImplPlanPaths": [
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
   "step5-impl-plan-review": [
     {
       "provider": "scenario-mock",
@@ -305,19 +324,49 @@
       "residualRisks": []
     }
   },
-  "step10-commit-push": {
+  "step10-git-commit": {
     "provider": "scenario-mock",
-    "model": "command/commit-and-push",
+    "model": "divedra/git-commit@1",
     "when": {
       "always": true
     },
     "payload": {
-      "workflowMode": "design-plan-only",
       "commitMessage": "docs: add codex-reference session history design and plan",
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "commitStatus": "committed",
+      "git": {
+        "status": "committed",
+        "commitMessage": "docs: add codex-reference session history design and plan",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "committedFiles": [
+          "design-docs/specs/design-codex-reference-session-history.md",
+          "impl-plans/active/codex-reference-session-history.md"
+        ]
+      },
+      "committedFiles": [
+        "design-docs/specs/design-codex-reference-session-history.md",
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
+  "step11-git-push": {
+    "provider": "scenario-mock",
+    "model": "divedra/git-push@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
       "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
       "pushedRemote": "origin",
       "pushedBranch": "main",
       "pushStatus": "pushed",
+      "git": {
+        "status": "pushed",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "pushedRemote": "origin",
+        "pushedBranch": "main"
+      },
       "residualRisks": []
     }
   },
@@ -333,9 +382,7 @@
       "designDocPaths": [
         "design-docs/specs/design-codex-reference-session-history.md"
       ],
-      "implPlanPaths": [
-        "impl-plans/active/codex-reference-session-history.md"
-      ],
+      "implPlanPaths": ["impl-plans/active/codex-reference-session-history.md"],
       "codexAgentReferences": [
         "/Users/taco/gits/tacogips/codex-agent/src/session",
         "/Users/taco/gits/tacogips/codex-agent/src/cli"

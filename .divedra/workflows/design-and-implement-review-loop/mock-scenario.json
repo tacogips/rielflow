@@ -30,15 +30,11 @@
         "review handoff storage",
         "implementation retry flow"
       ],
-      "constraints": [
-        "Preserve existing workflow step-addressed behavior."
-      ],
+      "constraints": ["Preserve existing workflow step-addressed behavior."],
       "unknowns": [
         "Retention duration for stored findings still needs product confirmation."
       ],
-      "risks": [
-        "Retention semantics are not fully decided."
-      ],
+      "risks": ["Retention semantics are not fully decided."],
       "codexAgentReferences": [],
       "referenceRepositoryRoot": "",
       "referenceRepositoryUrl": ""
@@ -96,9 +92,7 @@
           "Persist review findings alongside workflow execution metadata.",
           "Replay high and mid findings into rerun implementation context."
         ],
-        "openQuestions": [
-          "Retention duration is tracked in user QA."
-        ],
+        "openQuestions": ["Retention duration is tracked in user QA."],
         "issueToDesignMapping": [
           "Issue rerun feedback loss maps to persisted review-finding records."
         ],
@@ -110,6 +104,23 @@
       }
     }
   ],
+  "step2-design-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedDesignDocPaths": [
+        "design-docs/specs/design-workflow-review-findings.md"
+      ],
+      "residualRisks": []
+    }
+  },
   "step3-design-review": [
     {
       "provider": "scenario-mock",
@@ -157,9 +168,7 @@
       "payload": {
         "workflowMode": "issue-resolution",
         "issueReference": "tacogips/cursor-agent#123",
-        "implPlanPaths": [
-          "impl-plans/active/workflow-review-findings.md"
-        ],
+        "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
         "designReferences": [
           "design-docs/specs/design-workflow-review-findings.md"
         ],
@@ -172,12 +181,8 @@
           "Rerun context loading depends on persisted review-finding records."
         ],
         "parallelizableTasks": [],
-        "verification": [
-          "task typecheck"
-        ],
-        "completionCriteria": [
-          "Typecheck passes"
-        ],
+        "verification": ["task typecheck"],
+        "completionCriteria": ["Typecheck passes"],
         "addressedFeedback": [],
         "risks": [
           "Migration and regression verification work are underspecified."
@@ -193,9 +198,7 @@
       "payload": {
         "workflowMode": "issue-resolution",
         "issueReference": "tacogips/cursor-agent#123",
-        "implPlanPaths": [
-          "impl-plans/active/workflow-review-findings.md"
-        ],
+        "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
         "designReferences": [
           "design-docs/specs/design-workflow-review-findings.md"
         ],
@@ -214,10 +217,7 @@
         "parallelizableTasks": [
           "Progress-log updates can be prepared while persistence-test coverage is added."
         ],
-        "verification": [
-          "task test",
-          "task typecheck"
-        ],
+        "verification": ["task test", "task typecheck"],
         "completionCriteria": [
           "Tests pass",
           "Typecheck passes",
@@ -230,6 +230,25 @@
       }
     }
   ],
+  "step4-impl-plan-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_design_revision": false,
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_design_revision": false,
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedImplPlanPaths": [
+        "impl-plans/active/workflow-review-findings.md"
+      ],
+      "residualRisks": []
+    }
+  },
   "step5-impl-plan-review": [
     {
       "provider": "scenario-mock",
@@ -291,19 +310,11 @@
           "impl-plans/active/workflow-review-findings.md"
         ],
         "implementationSummary": "Implemented persisted review-finding records and rerun replay, but did not update the implementation-plan progress log yet.",
-        "implPlanPaths": [
-          "impl-plans/active/workflow-review-findings.md"
-        ],
-        "implPlanUpdates": [
-          "Marked persistence and replay tasks complete."
-        ],
-        "verification": [
-          "task test"
-        ],
+        "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
+        "implPlanUpdates": ["Marked persistence and replay tasks complete."],
+        "verification": ["task test"],
         "addressedFeedback": [],
-        "risks": [
-          "Progress log update is still missing."
-        ]
+        "risks": ["Progress log update is still missing."]
       }
     },
     {
@@ -320,17 +331,12 @@
           "impl-plans/active/workflow-review-findings.md"
         ],
         "implementationSummary": "Step 6 implemented the approved plan, addressed Step 7 feedback, and updated implementation-plan progress.",
-        "implPlanPaths": [
-          "impl-plans/active/workflow-review-findings.md"
-        ],
+        "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
         "implPlanUpdates": [
           "Marked persistence, replay, migration, and regression-test tasks complete.",
           "Updated progress log and completion criteria."
         ],
-        "verification": [
-          "task test",
-          "task typecheck"
-        ],
+        "verification": ["task test", "task typecheck"],
         "addressedFeedback": [
           "Updated the implementation-plan progress log and reran typecheck."
         ],
@@ -338,6 +344,26 @@
       }
     }
   ],
+  "step6-implement-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedFiles": [
+        "src/workflow/review-findings.ts",
+        "src/workflow/review-findings.test.ts",
+        "impl-plans/active/workflow-review-findings.md"
+      ],
+      "verificationGaps": [],
+      "residualRisks": []
+    }
+  },
   "step7-review": [
     {
       "provider": "scenario-mock",
@@ -417,19 +443,59 @@
       "residualRisks": []
     }
   },
-  "step10-commit-push": {
+  "step10-git-commit": {
     "provider": "scenario-mock",
-    "model": "command/commit-and-push",
+    "model": "divedra/git-commit@1",
     "when": {
       "always": true
     },
     "payload": {
-      "workflowMode": "issue-resolution",
       "commitMessage": "feat: persist workflow review findings across reruns",
+      "commitHash": "abc123def4567890abc123def4567890abc123de",
+      "commitStatus": "committed",
+      "committedFiles": [
+        "design-docs/specs/design-workflow-review-findings.md",
+        "design-docs/user-qa/qa-review-finding-retention.md",
+        "impl-plans/active/workflow-review-findings.md",
+        "src/workflow/review-findings.ts",
+        "src/workflow/review-findings.test.ts",
+        "README.md",
+        ".agents/skills/divedra-impl-workflow/SKILL.md"
+      ],
+      "git": {
+        "status": "committed",
+        "commitMessage": "feat: persist workflow review findings across reruns",
+        "commitHash": "abc123def4567890abc123def4567890abc123de",
+        "committedFiles": [
+          "design-docs/specs/design-workflow-review-findings.md",
+          "design-docs/user-qa/qa-review-finding-retention.md",
+          "impl-plans/active/workflow-review-findings.md",
+          "src/workflow/review-findings.ts",
+          "src/workflow/review-findings.test.ts",
+          "README.md",
+          ".agents/skills/divedra-impl-workflow/SKILL.md"
+        ]
+      },
+      "residualRisks": []
+    }
+  },
+  "step11-git-push": {
+    "provider": "scenario-mock",
+    "model": "divedra/git-push@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
       "commitHash": "abc123def4567890abc123def4567890abc123de",
       "pushedRemote": "origin",
       "pushedBranch": "main",
       "pushStatus": "pushed",
+      "git": {
+        "status": "pushed",
+        "commitHash": "abc123def4567890abc123def4567890abc123de",
+        "pushedRemote": "origin",
+        "pushedBranch": "main"
+      },
       "residualRisks": []
     }
   },
@@ -448,9 +514,7 @@
         "design-docs/specs/design-workflow-review-findings.md",
         "design-docs/user-qa/qa-review-finding-retention.md"
       ],
-      "implPlanPaths": [
-        "impl-plans/active/workflow-review-findings.md"
-      ],
+      "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
       "changedFiles": [
         "src/workflow/review-findings.ts",
         "src/workflow/review-findings.test.ts",
@@ -471,10 +535,7 @@
       "commitHash": "abc123def4567890abc123def4567890abc123de",
       "pushedRemote": "origin",
       "pushedBranch": "main",
-      "verification": [
-        "task test",
-        "task typecheck"
-      ],
+      "verification": ["task test", "task typecheck"],
       "residualRisks": []
     }
   }

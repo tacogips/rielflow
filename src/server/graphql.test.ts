@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { MockNodeScenario } from "../workflow/adapter";
+import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { createWorkflowTemplate } from "../workflow/create";
 import * as workflowEngine from "../workflow/engine";
 import { runWorkflow } from "../workflow/engine";

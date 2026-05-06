@@ -13,14 +13,13 @@ import {
 import {
   buildAdapterDivedraHookContext,
   normalizeOutputContractEnvelope,
-  ScenarioNodeAdapter,
   type AdapterAmbientManagerContext,
   type AdapterExecutionOutput,
   type AdapterLlmSessionMessage,
   type AdapterProcessLog,
-  type MockNodeScenario,
   type NodeAdapter,
 } from "./adapter";
+import { ScenarioNodeAdapter, type MockNodeScenario } from "./scenario-adapter";
 import {
   executeAdapterWithTimeout,
   executeNativeNodeWithTimeout,
@@ -35,6 +34,7 @@ import {
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
 } from "./node-execution-mailbox";
+import { appendMailboxPromptGuidance } from "./mailbox-prompt-guidance";
 import {
   loadWorkflowFromDisk,
   mergeLoadOptionsForSessionMutableBundle,
@@ -1010,8 +1010,13 @@ class ExecutionDispatcher {
       upstreamInputs: [],
       ...(input.message === undefined ? {} : { managerMessage: input.message }),
     });
+    let mailboxDir: string;
     try {
-      await writeNodeExecutionMailboxArtifacts(artifactDir, executionMailbox);
+      const mailboxPaths = await writeNodeExecutionMailboxArtifacts(
+        artifactDir,
+        executionMailbox,
+      );
+      mailboxDir = mailboxPaths.rootDir;
     } catch (error: unknown) {
       const message =
         error instanceof Error
@@ -1087,7 +1092,9 @@ class ExecutionDispatcher {
       includeSessionStartPrompt:
         agentNodePayload !== null && backendSession?.mode !== "reuse",
     });
-    const promptText = composedPrompts.promptText;
+    const promptText = appendMailboxPromptGuidance({
+      promptText: composedPrompts.promptText,
+    });
     const systemPromptText = composedPrompts.systemPromptText;
     const requestedBackendSessionMode = backendSession?.mode;
     let backendSessionId = backendSession?.sessionId;
@@ -1136,6 +1143,9 @@ class ExecutionDispatcher {
       nodeExecId,
       mailboxInstanceId,
       nodeType: executionNodePayload.nodeType ?? "agent",
+      ...(agentNodePayload === null
+        ? {}
+        : { executionBackend: agentNodePayload.executionBackend }),
       ...(agentNodePayload === null ? {} : { model: agentNodePayload.model }),
       ...(agentNodePayload?.systemPromptTemplate === undefined
         ? {}
@@ -1257,6 +1267,11 @@ class ExecutionDispatcher {
         if (requestPath !== undefined && candidatePath !== undefined) {
           await writeJsonFile(requestPath, {
             attempt,
+            executionBackend:
+              agentNodePayload?.executionBackend ??
+              executionNodePayload.nodeType ??
+              "agent",
+            model: agentNodePayload?.model ?? executionNodePayload.nodeType,
             promptText: executionPromptText,
             candidatePath,
             validationErrors: retryValidationFeedback,
@@ -1293,6 +1308,7 @@ class ExecutionDispatcher {
                     workflowExecutionId: session.sessionId,
                     nodeId: input.stepId,
                     nodeExecId,
+                    mailboxDir,
                     ...(agentNodePayload.executionBackend === undefined
                       ? {}
                       : { agentBackend: agentNodePayload.executionBackend }),

@@ -1,0 +1,34 @@
+{
+  "id": "divedra-manager",
+  "description": "Coordinate the implementation-plan completion loop.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/divedra-manager.md",
+  "variables": {},
+  "input": {
+    "description": "Workflow arguments. `workflowInput.planPath` should point to the implementation plan to complete. Optional `workflowInput.maxIterations` can document the operator's intended loop budget.",
+    "jsonSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "workflowInput": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "planPath": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxIterations": {
+              "type": "number",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "output": {
+    "description": "Return JSON preserving the target plan path and execution constraints for downstream steps."
+  }
+}

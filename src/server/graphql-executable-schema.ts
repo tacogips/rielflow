@@ -221,12 +221,27 @@ const GRAPHQL_SCHEMA_TEXT = `
     fanoutGroupRunId: String!
     groupId: String!
     sourceStepId: String!
+    sourceNodeExecId: String!
     joinStepId: String!
     targetStepId: String!
     targetWorkflowId: String
     concurrency: Int!
+    failurePolicy: String!
+    resultOrder: String!
     branchCounts: JSON!
+    branches: [FanoutBranchSummary!]!
     firstFailure: String
+  }
+
+  type FanoutBranchSummary {
+    branchIndex: Int!
+    status: String!
+    workItemId: String!
+    nodeExecIds: [String!]!
+    outputRef: JSON
+    error: String
+    workspaceRoot: String
+    supersededWorkspaceRoot: String
   }
 
   type RuntimeNodeExecutionSummary {

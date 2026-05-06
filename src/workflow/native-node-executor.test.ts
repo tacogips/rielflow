@@ -71,6 +71,46 @@ async function expectPayloadCwd(
   );
 }
 
+async function runGit(
+  cwd: string,
+  args: readonly string[],
+): Promise<string> {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (exitCode !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} failed with ${exitCode}: ${stderr}`,
+    );
+  }
+  return stdout;
+}
+
+async function createGitRepository(
+  root: string,
+): Promise<{ readonly repo: string; readonly remote: string }> {
+  const repo = path.join(root, "repo");
+  const remote = path.join(root, "remote.git");
+  await mkdir(repo, { recursive: true });
+  await runGit(root, ["init", "--bare", remote]);
+  await runGit(root, ["init", repo]);
+  await runGit(repo, ["config", "user.name", "Divedra Test"]);
+  await runGit(repo, ["config", "user.email", "divedra-test@example.test"]);
+  await runGit(repo, ["remote", "add", "origin", remote]);
+  await writeFile(path.join(repo, "README.md"), "initial\n", "utf8");
+  await runGit(repo, ["add", "README.md"]);
+  await runGit(repo, ["commit", "-m", "initial"]);
+  await runGit(repo, ["push", "-u", "origin", "HEAD:main"]);
+  return { repo, remote };
+}
+
 function makeExecutionMailbox() {
   return {
     meta: {
@@ -112,6 +152,221 @@ function makeExecutionMailbox() {
 }
 
 describe("executeNativeNode", () => {
+  test("runs built-in git commit add-on against explicit committed files", async () => {
+    const workflowDirectory = await makeTempDir();
+    const { repo } = await createGitRepository(workflowDirectory);
+    const artifactDir = path.join(workflowDirectory, "artifacts", "git-commit");
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(path.join(repo, "README.md"), "changed\n", "utf8");
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: repo,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "git-commit",
+        nodeExecId: "exec-1",
+        node: {
+          id: "git-commit",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/git-commit",
+            version: "1",
+            config: {
+              commitMessageTemplate:
+                "{{inbox.latest.output.payload.commitMessage}}",
+              committedFilesTemplate:
+                "{{inbox.latest.output.payload.committedFiles}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir,
+        executionMailbox: {
+          ...makeExecutionMailbox(),
+          input: {
+            arguments: {},
+            upstream: [
+              {
+                fromNodeId: "summary",
+                transitionWhen: "always",
+                communicationId: "comm-git-commit",
+                output: {
+                  payload: {
+                    commitMessage: "test: update readme",
+                    committedFiles: ["README.md"],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.provider).toBe("native-addon:git-commit");
+    expect(output.when).toEqual({ always: true });
+    expect(output.payload).toMatchObject({
+      commitStatus: "committed",
+      commitMessage: "test: update readme",
+      committedFiles: ["README.md"],
+      git: {
+        status: "committed",
+        commitMessage: "test: update readme",
+        committedFiles: ["README.md"],
+      },
+    });
+    expect(output.payload["commitHash"]).toEqual(
+      (await runGit(repo, ["rev-parse", "HEAD"])).trim(),
+    );
+  });
+
+  test("composes built-in git commit and git push add-ons with configured target branch", async () => {
+    const workflowDirectory = await makeTempDir();
+    const { repo, remote } = await createGitRepository(workflowDirectory);
+    const commitArtifactDir = path.join(
+      workflowDirectory,
+      "artifacts",
+      "git-commit-for-push",
+    );
+    const pushArtifactDir = path.join(workflowDirectory, "artifacts", "git-push");
+    await mkdir(commitArtifactDir, { recursive: true });
+    await mkdir(pushArtifactDir, { recursive: true });
+    await writeFile(path.join(repo, "README.md"), "pushed\n", "utf8");
+
+    const commitOutput = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: repo,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "git-commit",
+        nodeExecId: "exec-1",
+        node: {
+          id: "git-commit",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/git-commit",
+            version: "1",
+            config: {
+              commitMessageTemplate:
+                "{{inbox.latest.output.payload.commitMessage}}",
+              committedFilesTemplate:
+                "{{inbox.latest.output.payload.committedFiles}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: commitArtifactDir,
+        executionMailbox: {
+          ...makeExecutionMailbox(),
+          input: {
+            arguments: {},
+            upstream: [
+              {
+                fromNodeId: "summary",
+                transitionWhen: "always",
+                communicationId: "comm-git-commit",
+                output: {
+                  payload: {
+                    commitMessage: "test: push readme",
+                    committedFiles: ["README.md"],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: repo,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "git-push",
+        nodeExecId: "exec-2",
+        node: {
+          id: "git-push",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "divedra/git-push",
+            version: "1",
+            config: {
+              branchTemplate: "release/test-branch",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: pushArtifactDir,
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(commitOutput.provider).toBe("native-addon:git-commit");
+    expect(output.provider).toBe("native-addon:git-push");
+    expect(output.payload).toMatchObject({
+      pushStatus: "pushed",
+      pushedRemote: "origin",
+      pushedBranch: "release/test-branch",
+      git: {
+        status: "pushed",
+        pushedRemote: "origin",
+        pushedBranch: "release/test-branch",
+      },
+    });
+    expect(output.payload["commitHash"]).toEqual(
+      (await runGit(repo, ["rev-parse", "HEAD"])).trim(),
+    );
+    expect(
+      (await runGit(remote, ["rev-parse", "refs/heads/release/test-branch"]))
+        .trim()
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   test("renders built-in chat reply add-on output from inbox and event target", async () => {
     const workflowDirectory = await makeTempDir();
     const output = await executeNativeNode(

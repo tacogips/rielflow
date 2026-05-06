@@ -299,9 +299,20 @@ Therefore a user workflow run from any project records its default history under
 the user scope root. A project workflow records its default history under the
 project scope root.
 
+Project-scoped catalog entrypoints default runtime data to a project namespace
+under the user root:
+
+```text
+root data:     <user-root>/projects/<project-basename>-<project-root-hash>/artifacts
+artifact root: <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/workflow
+session root:  <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/sessions
+file root:     <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/files
+db path:       <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/divedra.db
+```
+
 Direct `--workflow-definition-dir` and other non-scoped runtime entrypoints do not have an
-owning project/user workflow scope. They should default to the user runtime data
-root instead of creating a separate per-cwd artifact namespace:
+owning project workflow scope. They should default to the user runtime data
+root:
 
 ```text
 artifact root: <user-root>/artifacts/workflow

@@ -1,6 +1,6 @@
 {
   "id": "divedra-manager",
-  "description": "Coordinate either the full issue-resolution workflow or the planning-only Codex-reference design-and-plan workflow, enforce the review gates, require an implementation-only user-facing documentation refresh, require a final commit-message step, and then require a command-node commit/push before completion.",
+  "description": "Coordinate either the full issue-resolution workflow or the planning-only Codex-reference design-and-plan workflow, enforce the review gates, require an implementation-only user-facing documentation refresh, require a final commit-message step, and then require built-in git commit and git push steps before completion.",
   "executionBackend": "codex-agent",
   "model": "gpt-5.5",
   "promptTemplateFile": "prompts/divedra-manager.md",

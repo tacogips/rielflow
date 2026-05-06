@@ -1,4 +1,4 @@
-import type { MockNodeScenario } from "./adapter";
+import type { MockNodeScenario } from "./scenario-adapter";
 import type { WorkflowSessionState } from "./session";
 import type { LoadOptions } from "./types";
 import type {

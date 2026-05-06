@@ -380,12 +380,28 @@ Default runtime data lives under:
 ~/.divedra/artifacts/
 ```
 
+For project-catalog workflows discovered from `<project>/.divedra/workflows`,
+the default is project-namespaced under the user root:
+
+```text
+~/.divedra/projects/{project_basename}-{project_root_hash}/artifacts/
+```
+
 By default this root contains:
 
 - `workflow/`: execution artifacts
 - `sessions/`: persisted session JSON files
 - `files/`: attachments
 - `divedra.db`: runtime index database
+
+Each workflow node execution stores runtime-owned audit records under its
+artifact directory. Agent executions include `input.json`, `mailbox/inbox/`
+metadata and input, final `output.json`, `meta.json`, `handoff.json`, and, for
+structured-output attempts, `output-attempts/attempt-*/request.json`,
+`candidate.json`, and `validation.json`. Request artifacts record the configured
+`executionBackend` and `model`, while `mailbox/inbox/input.json` preserves full
+`latestOutputs` for downstream review steps even when prompt summaries are
+truncated.
 
 Relocate storage with:
 
@@ -484,6 +500,9 @@ tooling is provided through Nix flakes and direnv.
 
 The repository-local `design-and-implement-review-loop` workflow refreshes
 user-facing docs after implementation review acceptance and before commit/push.
-Its required targets are `README.md` and
+Issue-resolution runs that audit real backend behavior should run without
+`--mock-scenario`, then use the runtime artifact records above to verify the
+configured backend/model, mailbox `latestOutputs`, request, candidate, and
+validation evidence. Its required documentation targets are `README.md` and
 `.agents/skills/divedra-impl-workflow/SKILL.md` so shipped behavior and the
 LLM-facing workflow skill stay aligned.

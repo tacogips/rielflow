@@ -26,7 +26,7 @@ impl-plans/
 
 | Plan                                            | Status      | Design Reference                                |
 | ----------------------------------------------- | ----------- | ----------------------------------------------- |
-| `active/bounded-fanout-join-workflow-execution` | Ready       | `design-bounded-fanout-join-workflow-execution` |
+| `active/bounded-fanout-join-workflow-execution` | In Progress | `design-bounded-fanout-join-workflow-execution` |
 
 ## Recently Completed
 

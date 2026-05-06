@@ -1,13 +1,13 @@
 {
   "workflowId": "design-and-implement-review-loop",
-  "description": "Shared workflow for either full issue resolution or planning-only Codex-reference design and implementation-plan handoff, with explicit review gates, an issue-resolution user-facing documentation refresh step, a final commit-message step, a command-node git commit/push step, and return paths.",
+  "description": "Shared workflow for either full issue resolution or planning-only Codex-reference design and implementation-plan handoff, with explicit review gates, an issue-resolution user-facing documentation refresh step, a final commit-message step, built-in git commit and git push steps, and return paths.",
   "defaults": {
     "fanoutConcurrency": 20,
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 3600000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}}. Run Step 1 intake first. If Step 1 classifies independent feature fanout items, dispatch feature-local design and implementation-plan work through the bounded fanout transition, join at Step 5 feature-plan join, then continue to Step 6 for issue-resolution mode or Step 9 for planning-only mode. If Step 1 does not classify fanout items, run the sequential path: Step 2 design-doc update, Step 3 design review, Step 4 implementation-plan creation, and Step 5 implementation-plan review. If Step 3 reports any high or mid findings, route back to Step 2. If Step 5 reports design changes are required, route back to Step 2. If Step 5 reports plan-only changes are required, route back to Step 4. After Step 5 acceptance for a planning-only run, run Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Otherwise run Step 6 implementation, then Step 7 implementation review. If Step 7 reports any high or mid findings, route back to Step 6. After Step 7 acceptance, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, then Step 10 command-node commit and push, then finish. Finish only when the required review gates are accepted and the final workflow changes have been committed and pushed for the selected mode.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Run Step 1 intake first. If Step 1 classifies independent feature fanout items, dispatch feature-local design and implementation-plan work through the bounded fanout transition, join at Step 5 feature-plan join, then continue to Step 6 for issue-resolution mode or Step 9 for planning-only mode. If Step 1 does not classify fanout items, run the sequential path: Step 2 design-doc update, Step 2 self-review, Step 3 design review, Step 4 implementation-plan creation, Step 4 self-review, and Step 5 implementation-plan review. If a self-review reports blocking findings, route back to its authoring step before running the independent review. If Step 3 reports any high or mid findings, route back to Step 2. If Step 5 reports design changes are required, route back to Step 2. If Step 5 reports plan-only changes are required, route back to Step 4. After Step 5 acceptance for a planning-only run, run Step 9 commit-message creation, Step 10 git commit, Step 11 git push, then finish. Otherwise run Step 6 implementation, Step 6 self-review, then Step 7 implementation review. If Step 6 self-review or Step 7 reports any high or mid findings, route back to Step 6. After Step 7 acceptance, run Step 8 user-facing documentation refresh, then Step 9 commit-message creation, Step 10 git commit, Step 11 git push, then finish. Finish only when the required self-review and independent review gates are accepted and the final workflow changes have been committed and pushed for the selected mode.",
     "workerSystemPromptTemplate": "Return concise business JSON only. Keep workflow mode, issue references, codex-agent references, file paths, findings, review decisions, and verification commands explicit."
   },
   "managerStepId": "divedra-manager",
@@ -58,8 +58,23 @@
       "nodeFile": "nodes/node-step9-commit-message.json"
     },
     {
-      "id": "step10-commit-push",
-      "nodeFile": "nodes/node-step10-commit-push.json"
+      "id": "step10-git-commit",
+      "addon": {
+        "name": "divedra/git-commit",
+        "version": "1",
+        "config": {
+          "commitMessageTemplate": "{{inbox.latest.output.payload.commitMessage}}",
+          "committedFilesTemplate": "{{inbox.latest.output.payload.committedFiles}}"
+        }
+      }
+    },
+    {
+      "id": "step11-git-push",
+      "addon": {
+        "name": "divedra/git-push",
+        "version": "1",
+        "config": {}
+      }
     },
     {
       "id": "workflow-output",
@@ -104,10 +119,7 @@
             "resultOrder": "input",
             "writeOwnership": {
               "mode": "disjoint-paths",
-              "directories": [
-                "design-docs/specs",
-                "impl-plans/active"
-              ]
+              "directories": ["design-docs/specs", "impl-plans/active"]
             }
           }
         }
@@ -120,7 +132,28 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step3-design-review"
+          "toStepId": "step2-design-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step2-design-self-review",
+      "nodeId": "step2-design-doc-update",
+      "description": "Self-review the design update before the independent design review.",
+      "role": "worker",
+      "promptVariant": "self-review",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "step2-design-doc-update"
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step3-design-review",
+          "label": "!(needs_revision)"
         }
       ]
     },
@@ -147,7 +180,32 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step5-impl-plan-review"
+          "toStepId": "step4-impl-plan-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step4-impl-plan-self-review",
+      "nodeId": "step4-impl-plan-create",
+      "description": "Self-review the implementation plan and design-plan consistency before the independent implementation-plan review.",
+      "role": "worker",
+      "promptVariant": "self-review",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "step4-impl-plan-create"
+      },
+      "transitions": [
+        {
+          "toStepId": "step2-design-doc-update",
+          "label": "needs_design_revision"
+        },
+        {
+          "toStepId": "step4-impl-plan-create",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step5-impl-plan-review",
+          "label": "!(needs_design_revision || needs_revision)"
         }
       ]
     },
@@ -198,7 +256,28 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step7-review"
+          "toStepId": "step6-implement-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step6-implement-self-review",
+      "nodeId": "step6-implement",
+      "description": "Self-review the implementation diff and verification evidence before the independent implementation review.",
+      "role": "worker",
+      "promptVariant": "self-review",
+      "sessionPolicy": {
+        "mode": "reuse",
+        "inheritFromStepId": "step6-implement"
+      },
+      "transitions": [
+        {
+          "toStepId": "step6-implement",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step7-review",
+          "label": "!(needs_revision)"
         }
       ]
     },
@@ -236,14 +315,25 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "step10-commit-push"
+          "toStepId": "step10-git-commit"
         }
       ]
     },
     {
-      "id": "step10-commit-push",
-      "nodeId": "step10-commit-push",
-      "description": "Use the Step 9 commit message in a command node that stages, commits, and pushes the accepted workflow changes.",
+      "id": "step10-git-commit",
+      "nodeId": "step10-git-commit",
+      "description": "Use the shared built-in git commit node to stage and commit the accepted workflow changes from Step 9.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step11-git-push"
+        }
+      ]
+    },
+    {
+      "id": "step11-git-push",
+      "nodeId": "step11-git-push",
+      "description": "Use the built-in git push node to push the commit created by Step 10 to the current branch.",
       "role": "worker",
       "transitions": [
         {

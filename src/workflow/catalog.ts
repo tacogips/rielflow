@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { err, ok, type Result } from "./result";
 import {
+  computeProjectScopedRootDataDirForScopeRoot,
   inferRootDataDirFromExplicitStorageRoots,
   isSafeWorkflowName,
 } from "./paths";
@@ -610,10 +611,25 @@ function scopedRootDataDirForSource(
     return undefined;
   }
 
-  return (
-    inferExplicitRuntimeRootDataDir(options) ??
-    path.join(source.scopeRoot, "artifacts")
-  );
+  const explicitRuntimeRootDataDir = inferExplicitRuntimeRootDataDir(options);
+  if (explicitRuntimeRootDataDir !== undefined) {
+    return explicitRuntimeRootDataDir;
+  }
+
+  if (source.scope === "project") {
+    const env = options.env ?? process.env;
+    return computeProjectScopedRootDataDirForScopeRoot({
+      scopeRoot: source.scopeRoot,
+      ...(options.userRoot !== undefined
+        ? { userRoot: options.userRoot }
+        : env["DIVEDRA_USER_ROOT"] === undefined
+          ? {}
+          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+  }
+
+  return path.join(source.scopeRoot, "artifacts");
 }
 
 export function withResolvedWorkflowSourceOptions<T extends LoadOptions>(

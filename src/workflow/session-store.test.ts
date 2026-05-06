@@ -138,6 +138,88 @@ describe("session-store", () => {
     expect(loaded.value.supervision?.incidents[0]?.category).toBe("stall");
   });
 
+  test("save/load roundtrip preserves fanout workspace lineage", async () => {
+    const root = await makeTempDir();
+    const session: ReturnType<typeof createSessionState> = {
+      ...createSessionState({
+        sessionId: "sess-fanout01",
+        workflowName: "wf",
+        workflowId: "wf",
+        initialNodeId: "manager",
+        runtimeVariables: {},
+      }),
+      fanoutGroups: [
+        {
+          fanoutGroupRunId: "fanout-review-node-exec-1",
+          groupId: "review",
+          sourceStepId: "writer",
+          sourceNodeExecId: "node-exec-1",
+          targetStepId: "reviewer",
+          joinStepId: "join",
+          concurrency: 1,
+          failurePolicy: "collect-all",
+          resultOrder: "input",
+          branches: [
+            {
+              branchIndex: 0,
+              item: { id: "feature-a" },
+              status: "succeeded",
+              workItemId: "fanout-review-node-exec-1:0",
+              workspaceRoot: "/tmp/divedra-fanout-workspaces/old-branch",
+            },
+            {
+              branchIndex: 1,
+              item: { id: "feature-b" },
+              status: "succeeded",
+              workItemId: "fanout-review-node-exec-1:1",
+              workspaceRoot: "/tmp/divedra-fanout-workspaces/old-branch-b",
+            },
+          ],
+        },
+        {
+          fanoutGroupRunId: "fanout-review-node-exec-2",
+          groupId: "review",
+          sourceStepId: "writer",
+          sourceNodeExecId: "node-exec-2",
+          targetStepId: "reviewer",
+          joinStepId: "join",
+          concurrency: 1,
+          failurePolicy: "collect-all",
+          resultOrder: "input",
+          branches: [
+            {
+              branchIndex: 0,
+              item: { id: "feature-a" },
+              status: "succeeded",
+              workItemId: "fanout-review-node-exec-2:0",
+              workspaceRoot: "/tmp/divedra-fanout-workspaces/new-branch",
+              supersededWorkspaceRoot:
+                "/tmp/divedra-fanout-workspaces/old-branch",
+            },
+          ],
+        },
+      ],
+    };
+
+    const save = await saveSession(session, { sessionStoreRoot: root });
+    expect(save.ok).toBe(true);
+
+    const loaded = await loadSession(session.sessionId, {
+      sessionStoreRoot: root,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+    const retryBranch = loaded.value.fanoutGroups?.[1]?.branches[0];
+    expect(retryBranch?.workspaceRoot).toBe(
+      "/tmp/divedra-fanout-workspaces/new-branch",
+    );
+    expect(retryBranch?.supersededWorkspaceRoot).toBe(
+      "/tmp/divedra-fanout-workspaces/old-branch",
+    );
+  });
+
   test("rejects invalid session id", async () => {
     const root = await makeTempDir();
     const loaded = await loadSession("../bad", { sessionStoreRoot: root });
