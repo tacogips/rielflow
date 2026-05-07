@@ -6,6 +6,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    git-hooks.url = "github:cachix/git-hooks.nix";
   };
 
   outputs =
@@ -14,6 +15,7 @@
       nixpkgs,
       nixpkgs-unstable,
       flake-utils,
+      git-hooks,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -96,7 +98,20 @@
           };
         };
 
-        devPackages = runtimePackages ++ devOnlyPackages ++ [ divedraCli ];
+        preCommitCheck = git-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = {
+            gitleaks = {
+              enable = true;
+              name = "gitleaks";
+              entry = "${pkgs.lib.getExe pkgs.gitleaks} git --pre-commit --redact --staged --verbose";
+              language = "system";
+              pass_filenames = false;
+            };
+          };
+        };
+
+        devPackages = runtimePackages ++ devOnlyPackages ++ [ divedraCli ] ++ preCommitCheck.enabledPackages;
 
       in
       {
@@ -113,20 +128,15 @@
           program = "${divedraCli}/bin/divedra";
         };
 
+        checks.pre-commit-check = preCommitCheck;
+
         devShells.default = pkgs.mkShell {
           packages = devPackages;
 
           shellHook = ''
             # Dev-only: fixed root data dir for this checkout (production default is ~/.divedra/project/<cwd-encoded>/divedra-artifact).
             export DIVEDRA_ARTIFACT_DIR="/tmp/divedra-artifact-dev"
-
-            if git rev-parse --show-toplevel >/dev/null 2>&1; then
-              repo_root="$(git rev-parse --show-toplevel)"
-              if [ -f "$repo_root/.githooks/pre-commit" ]; then
-                chmod +x "$repo_root/.githooks/pre-commit"
-                git config --local core.hooksPath "$repo_root/.githooks"
-              fi
-            fi
+            ${preCommitCheck.shellHook}
 
             echo "TypeScript development environment ready"
             echo "Bun version: $(bun --version)"

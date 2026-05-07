@@ -81,9 +81,9 @@ tasks:
       - gitleaks git --pre-commit --redact --staged --verbose
 
   install-git-hooks:
-    desc: Configure the repo-local Git hooks path
+    desc: Install the Nix-managed pre-commit hook configuration
     cmds:
-      - ./scripts/install-git-hooks.sh
+      - nix develop -c pre-commit install --install-hooks
 
   clean:
     desc: Clean build artifacts

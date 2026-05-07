@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-if ! command -v gitleaks >/dev/null 2>&1; then
-  printf '%s\n' "gitleaks is required for commits. Enter 'nix develop' or activate direnv before committing." >&2
-  exit 1
-fi
-
-exec gitleaks git --pre-commit --redact --staged --verbose
