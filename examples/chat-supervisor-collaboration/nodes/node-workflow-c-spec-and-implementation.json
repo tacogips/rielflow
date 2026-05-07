@@ -1,0 +1,10 @@
+{
+  "id": "workflow-c-spec-and-implementation",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/workflow-c-spec-and-implementation.md",
+  "variables": {},
+  "output": {
+    "description": "Return Workflow C's concise implementation specification."
+  }
+}

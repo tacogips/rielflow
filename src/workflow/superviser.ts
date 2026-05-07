@@ -48,15 +48,17 @@ export function isSupervisionStallLastError(
 export function buildSupervisionStallWatch(
   session: Pick<WorkflowSessionState, "sessionId" | "supervision">,
   loadOptions: LoadOptions,
+  overrides: { readonly stallTimeoutMs?: number } = {},
 ): SupervisionStallWatch | undefined {
   const p = session.supervision?.policy;
   if (p === undefined || p.enabled !== true) {
     return undefined;
   }
+  const stallTimeoutMs = overrides.stallTimeoutMs ?? p.stallTimeoutMs;
   return {
     sessionId: session.sessionId,
-    monitorIntervalMs: p.monitorIntervalMs,
-    stallTimeoutMs: p.stallTimeoutMs,
+    monitorIntervalMs: Math.min(p.monitorIntervalMs, stallTimeoutMs),
+    stallTimeoutMs,
     loadOptions,
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  applyWorkflowSupervisionDefaults,
   DEFAULT_MAX_SUPERVISED_ATTEMPTS,
   DEFAULT_MAX_WORKFLOW_PATCHES,
   DEFAULT_MONITOR_INTERVAL_MS,
@@ -29,14 +30,15 @@ describe("normalizeAutoImprovePolicy", () => {
     });
   });
 
-  test("returns undefined when auto-improve is disabled", () => {
+  test("maps disabled auto-improve to lifecycle-only supervision", () => {
     const result = normalizeAutoImprovePolicy({ enabled: false });
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
     }
-    expect(result.value).toBeUndefined();
+    expect(result.value?.enabled).toBe(true);
+    expect(result.value?.maxWorkflowPatches).toBe(0);
   });
 
   test("rejects disabled auto-improve payloads that still include policy fields", () => {
@@ -92,6 +94,19 @@ describe("normalizeAutoImprovePolicy", () => {
       return;
     }
     expect(result.value).toBe(DEFAULT_SUPERVISER_WORKFLOW_ID);
+  });
+
+  test("allows zero workflow patches for lifecycle-only supervision", () => {
+    const result = normalizeAutoImprovePolicy({
+      enabled: true,
+      maxWorkflowPatches: 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value?.maxWorkflowPatches).toBe(0);
   });
 
   test("rejects invalid runtime workflow mutation modes", () => {
@@ -153,5 +168,53 @@ describe("normalizeAutoImprovePolicy", () => {
       return;
     }
     expect(result.value?.allowTargetedRerun).toBe(false);
+  });
+
+  test("applies workflow supervision defaults only to omitted input values", () => {
+    expect(
+      applyWorkflowSupervisionDefaults(
+        {
+          enabled: true,
+          stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
+          maxWorkflowPatches: 0,
+        },
+        {
+          monitorIntervalMs: 12_000,
+          stallTimeoutMs: 900_000,
+          maxWorkflowPatches: 9,
+        },
+      ),
+    ).toEqual({
+      enabled: true,
+      monitorIntervalMs: 12_000,
+      stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
+      maxWorkflowPatches: 0,
+    });
+  });
+
+  test("normalizes workflow supervision defaults after applying them", () => {
+    const result = normalizeAutoImprovePolicy(
+      applyWorkflowSupervisionDefaults(
+        { enabled: true },
+        {
+          superviserWorkflowId: DEFAULT_SUPERVISER_WORKFLOW_ID,
+          monitorIntervalMs: 12_000,
+          stallTimeoutMs: 900_000,
+          maxSupervisedAttempts: DEFAULT_MAX_SUPERVISED_ATTEMPTS,
+          maxWorkflowPatches: 9,
+          workflowMutationMode: DEFAULT_WORKFLOW_MUTATION_MODE,
+        },
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value).toMatchObject({
+      monitorIntervalMs: 12_000,
+      stallTimeoutMs: 900_000,
+      maxWorkflowPatches: 9,
+    });
   });
 });

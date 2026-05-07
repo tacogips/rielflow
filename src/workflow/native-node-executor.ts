@@ -890,6 +890,8 @@ function resolveChatReplyStatus(input: {
 
 function buildChatReplyDispatchRequest(input: {
   readonly target: ChatReplyDispatchTarget;
+  readonly outputDestinationId?: string;
+  readonly outputDestinationIds?: readonly string[];
   readonly text: string;
   readonly addon: ResolvedChatReplyWorkerAddon;
   readonly workflowId: string;
@@ -900,6 +902,12 @@ function buildChatReplyDispatchRequest(input: {
 }): ChatReplyDispatchRequest {
   return {
     target: input.target,
+    ...(input.outputDestinationId === undefined
+      ? {}
+      : { outputDestinationId: input.outputDestinationId }),
+    ...(input.outputDestinationIds === undefined
+      ? {}
+      : { outputDestinationIds: input.outputDestinationIds }),
     message: { text: input.text },
     visibility: input.addon.config.visibility ?? "public",
     threadPolicy: input.addon.config.threadPolicy ?? "same-thread",
@@ -909,6 +917,20 @@ function buildChatReplyDispatchRequest(input: {
     nodeId: input.nodeId,
     nodeExecId: input.nodeExecId,
   };
+}
+
+function resolveOutputDestinationIds(
+  runtimeVariables: Readonly<Record<string, unknown>>,
+): readonly string[] | undefined {
+  const destinations = runtimeVariables["eventOutputDestinations"];
+  if (!Array.isArray(destinations)) {
+    return undefined;
+  }
+  const ids = destinations.filter(
+    (destination): destination is string =>
+      typeof destination === "string" && destination.length > 0,
+  );
+  return ids.length === 0 ? undefined : ids;
 }
 
 function buildChatReplyIdempotencyKey(input: {
@@ -964,12 +986,18 @@ async function executeChatReplyAddonNode(
     nodeId: input.nodeId,
     nodeExecId: input.nodeExecId,
   });
+  const outputDestinationIds = resolveOutputDestinationIds(
+    input.runtimeVariables,
+  );
   const dispatchResult =
     target === null || input.chatReplyDispatcher === undefined
       ? undefined
       : await input.chatReplyDispatcher.dispatchChatReply(
           buildChatReplyDispatchRequest({
             target,
+            ...(outputDestinationIds === undefined
+              ? {}
+              : { outputDestinationIds }),
             text: renderedText,
             addon,
             workflowId: input.workflowId,
@@ -1499,9 +1527,7 @@ function normalizeCommittedFilePath(input: {
   readonly filePath: string;
   readonly nodeId: string;
 }): string {
-  const normalized = path.posix.normalize(
-    input.filePath.replaceAll("\\", "/"),
-  );
+  const normalized = path.posix.normalize(input.filePath.replaceAll("\\", "/"));
   const segments = normalized.split("/");
   if (
     path.isAbsolute(input.filePath) ||
@@ -1868,8 +1894,7 @@ async function executeGitPushAddonNode(
           : renderPromptTemplate(addon.config.branchTemplate, variables),
       fieldName: "branchTemplate",
       nodeId: input.nodeId,
-    }) ??
-    currentBranch?.branch;
+    }) ?? currentBranch?.branch;
   if (branch === undefined) {
     throw new AdapterExecutionError(
       "provider_error",

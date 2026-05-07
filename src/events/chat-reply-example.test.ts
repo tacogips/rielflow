@@ -57,15 +57,16 @@ describe("chat reply event example", () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.receipt.status).toBe("dispatched");
     expect(results[0]?.workflowName).toBe("chat-reply-webhook");
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(calls[0]?.url).toBe("https://reply.example.test/messages");
-    expect(calls[0]?.init?.headers).toMatchObject({
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    const finalCall = calls.at(-1);
+    expect(finalCall?.url).toBe("https://reply.example.test/messages");
+    expect(finalCall?.init?.headers).toMatchObject({
       "content-type": "application/json",
       "x-divedra-idempotency-key": expect.stringContaining(
         "chat-reply:chat-reply-webhook:",
       ),
     });
-    expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
+    expect(JSON.parse(String(finalCall?.init?.body))).toMatchObject({
       type: "divedra.chat_reply",
       sourceId: "example-reply-webhook",
       target: {

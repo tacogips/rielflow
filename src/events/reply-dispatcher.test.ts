@@ -89,6 +89,7 @@ describe("event reply dispatcher", () => {
             path: "/events/webhook",
           },
         ],
+        destinations: [],
         bindings: [],
       },
       registry,
@@ -155,6 +156,7 @@ describe("event reply dispatcher", () => {
             path: "/events/webhook",
           },
         ],
+        destinations: [],
         bindings: [],
       },
       registry: createEventSourceRegistry([adapter]),
@@ -217,6 +219,7 @@ describe("event reply dispatcher", () => {
           path: "/events/webhook",
         },
       ],
+      destinations: [],
       bindings: [],
     } as const;
     const request = makeReplyRequest("persistent-reply-key");
@@ -298,6 +301,7 @@ describe("event reply dispatcher", () => {
             path: "/events/webhook",
           },
         ],
+        destinations: [],
         bindings: [],
       },
       registry: createEventSourceRegistry([adapter]),
@@ -321,6 +325,84 @@ describe("event reply dispatcher", () => {
     });
   });
 
+  test("persists failed explicit destination attempts with destination source provider", async () => {
+    const rootDataDir = await makeTempDir();
+    const adapter: EventSourceAdapter = {
+      kind: "webhook",
+      capabilities: {
+        eventTypes: ["chat.message"],
+        supportsStart: false,
+        webhook: true,
+        chatReply: true,
+      },
+      async start(input) {
+        return { sourceId: input.source.id, stop: async () => {} };
+      },
+      async normalize() {
+        throw new Error("not used");
+      },
+      async dispatchChatReply() {
+        throw new Error("reply destination unavailable");
+      },
+    };
+    const dispatcher = createEventReplyDispatcher({
+      configuration: {
+        eventRoot: "/events",
+        sources: [
+          {
+            id: "inbound-chat",
+            kind: "webhook",
+            provider: "inbound-provider",
+            path: "/events/inbound",
+          },
+          {
+            id: "reply-chat",
+            kind: "webhook",
+            provider: "reply-provider",
+            path: "/events/reply",
+          },
+        ],
+        destinations: [
+          {
+            id: "chat-output",
+            kind: "chat",
+            sourceId: "reply-chat",
+          },
+        ],
+        bindings: [],
+      },
+      registry: createEventSourceRegistry([adapter]),
+      env: {},
+      fetchImpl: async () => new Response(null, { status: 204 }),
+      runtimeOptions: { rootDataDir },
+    });
+
+    await expect(
+      dispatcher.dispatchChatReply({
+        ...makeReplyRequest("failed-explicit-destination-key"),
+        outputDestinationId: "chat-output",
+        target: {
+          sourceId: "inbound-chat",
+          provider: "inbound-provider",
+          eventId: "evt-1",
+          conversationId: "conv-1",
+        },
+      }),
+    ).rejects.toThrow("reply destination unavailable");
+
+    expect(
+      await loadEventReplyDispatchByIdempotencyKey(
+        "failed-explicit-destination-key",
+        { rootDataDir },
+      ),
+    ).toMatchObject({
+      idempotencyKey: "failed-explicit-destination-key",
+      provider: "reply-provider",
+      status: "failed",
+      error: "reply destination unavailable",
+    });
+  });
+
   test("rejects sources whose adapters do not support chat replies", async () => {
     const rootDataDir = await makeTempDir();
     const adapter: EventSourceAdapter = {
@@ -341,6 +423,7 @@ describe("event reply dispatcher", () => {
       configuration: {
         eventRoot: "/events",
         sources: [{ id: "webhook", kind: "cron" }],
+        destinations: [],
         bindings: [],
       },
       registry: createEventSourceRegistry([adapter]),
@@ -352,5 +435,207 @@ describe("event reply dispatcher", () => {
     await expect(
       dispatcher.dispatchChatReply(makeReplyRequest("unsupported-reply-key")),
     ).rejects.toThrow("does not support chat replies");
+  });
+
+  test("routes chat replies through an explicit chat output destination", async () => {
+    const rootDataDir = await makeTempDir();
+    const deliveredSourceIds: string[] = [];
+    const deliveredConversationIds: string[] = [];
+    const adapter: EventSourceAdapter = {
+      kind: "webhook",
+      capabilities: {
+        eventTypes: ["chat.message"],
+        supportsStart: false,
+        webhook: true,
+        chatReply: true,
+      },
+      async start(input) {
+        return { sourceId: input.source.id, stop: async () => {} };
+      },
+      async normalize() {
+        throw new Error("not used");
+      },
+      async dispatchChatReply(input) {
+        deliveredSourceIds.push(input.source.id);
+        deliveredConversationIds.push(input.request.target.conversationId);
+        return {
+          status: "sent",
+          provider: input.source.provider ?? input.source.kind,
+          providerMessageId: "message-explicit",
+        };
+      },
+    };
+    const dispatcher = createEventReplyDispatcher({
+      configuration: {
+        eventRoot: "/events",
+        sources: [
+          {
+            id: "inbound-chat",
+            kind: "webhook",
+            path: "/events/inbound",
+          },
+          {
+            id: "reply-chat",
+            kind: "webhook",
+            provider: "reply-provider",
+            path: "/events/reply",
+          },
+        ],
+        destinations: [
+          {
+            id: "chat-output",
+            kind: "chat",
+            sourceId: "reply-chat",
+            target: {
+              conversationId: "peer-conversation",
+            },
+          },
+        ],
+        bindings: [],
+      },
+      registry: createEventSourceRegistry([adapter]),
+      env: {},
+      fetchImpl: async () => new Response(null, { status: 204 }),
+      runtimeOptions: { rootDataDir },
+    });
+
+    const result = await dispatcher.dispatchChatReply({
+      ...makeReplyRequest("explicit-destination-key"),
+      outputDestinationId: "chat-output",
+      target: {
+        sourceId: "inbound-chat",
+        provider: "inbound",
+        eventId: "evt-1",
+        conversationId: "conv-1",
+      },
+    });
+
+    expect(result).toEqual({
+      status: "sent",
+      provider: "reply-provider",
+      providerMessageId: "message-explicit",
+    });
+    expect(deliveredSourceIds).toEqual(["reply-chat"]);
+    expect(deliveredConversationIds).toEqual(["peer-conversation"]);
+  });
+
+  test("fans out destination lists to all enabled chat destinations", async () => {
+    const rootDataDir = await makeTempDir();
+    const deliveredSourceIds: string[] = [];
+    const adapter: EventSourceAdapter = {
+      kind: "webhook",
+      capabilities: {
+        eventTypes: ["chat.message"],
+        supportsStart: false,
+        webhook: true,
+        chatReply: true,
+      },
+      async start(input) {
+        return { sourceId: input.source.id, stop: async () => {} };
+      },
+      async normalize() {
+        throw new Error("not used");
+      },
+      async dispatchChatReply(input) {
+        deliveredSourceIds.push(input.source.id);
+        return {
+          status: "sent",
+          provider: input.source.provider ?? input.source.kind,
+        };
+      },
+    };
+    const dispatcher = createEventReplyDispatcher({
+      configuration: {
+        eventRoot: "/events",
+        sources: [
+          {
+            id: "inbound-chat",
+            kind: "webhook",
+            path: "/events/inbound",
+          },
+          {
+            id: "reply-chat",
+            kind: "webhook",
+            provider: "reply-provider",
+            path: "/events/reply",
+          },
+          {
+            id: "peer-chat",
+            kind: "webhook",
+            provider: "peer-provider",
+            path: "/events/peer",
+          },
+        ],
+        destinations: [
+          {
+            id: "backup-output",
+            kind: "s3-backup",
+            provider: "s3-compatible",
+            bucket: "archive",
+          },
+          {
+            id: "chat-output",
+            kind: "chat",
+            sourceId: "reply-chat",
+          },
+          {
+            id: "peer-output",
+            kind: "chat",
+            sourceId: "peer-chat",
+          },
+        ],
+        bindings: [],
+      },
+      registry: createEventSourceRegistry([adapter]),
+      env: {},
+      fetchImpl: async () => new Response(null, { status: 204 }),
+      runtimeOptions: { rootDataDir },
+    });
+
+    const result = await dispatcher.dispatchChatReply({
+      ...makeReplyRequest("destination-list-key"),
+      outputDestinationIds: ["backup-output", "chat-output", "peer-output"],
+      target: {
+        sourceId: "inbound-chat",
+        provider: "inbound",
+        eventId: "evt-1",
+        conversationId: "conv-1",
+      },
+    });
+
+    expect(result).toEqual({
+      status: "sent",
+      provider: "reply-provider",
+      destinationResults: [
+        {
+          destinationId: "chat-output",
+          sourceId: "reply-chat",
+          idempotencyKey: "destination-list-key:destination:chat-output",
+          status: "sent",
+          provider: "reply-provider",
+        },
+        {
+          destinationId: "peer-output",
+          sourceId: "peer-chat",
+          idempotencyKey: "destination-list-key:destination:peer-output",
+          status: "sent",
+          provider: "peer-provider",
+        },
+      ],
+    });
+    expect(deliveredSourceIds).toEqual(["reply-chat", "peer-chat"]);
+
+    const replay = await dispatcher.dispatchChatReply({
+      ...makeReplyRequest("destination-list-key"),
+      outputDestinationIds: ["backup-output", "chat-output", "peer-output"],
+      target: {
+        sourceId: "inbound-chat",
+        provider: "inbound",
+        eventId: "evt-1",
+        conversationId: "conv-1",
+      },
+    });
+    expect(replay).toEqual(result);
+    expect(deliveredSourceIds).toEqual(["reply-chat", "peer-chat"]);
   });
 });

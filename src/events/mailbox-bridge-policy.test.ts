@@ -13,7 +13,9 @@ function binding(
       ? {}
       : { workflowName: overrides.workflowName.trim() }),
     inputMapping: overrides.inputMapping ?? { mode: "event-input" },
-    ...(overrides.execution === undefined ? {} : { execution: overrides.execution }),
+    ...(overrides.execution === undefined
+      ? {}
+      : { execution: overrides.execution }),
     ...(overrides.mailboxBridge === undefined
       ? {}
       : { mailboxBridge: overrides.mailboxBridge }),
@@ -31,7 +33,7 @@ describe("resolveEventMailboxBridgePolicy", () => {
     );
     expect(policy.input.consumer).toBe("direct-workflow");
     expect(policy.output.reply.mode).toBe("final");
-    expect(policy.output.progress.mode).toBe("none");
+    expect(policy.output.progress.mode).toBe("status-only");
     expect(policy.output.control.mode).toBe("none");
   });
 

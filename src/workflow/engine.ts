@@ -18,9 +18,12 @@ import {
 } from "./adapter";
 import { ScenarioNodeAdapter, type MockNodeScenario } from "./scenario-adapter";
 import {
+  applyWorkflowSupervisionDefaults,
+  createLifecycleSupervisionPolicyInput,
   DEFAULT_SUPERVISER_WORKFLOW_ID,
   normalizeAutoImprovePolicy,
   resolveSuperviserWorkflowId,
+  type AutoImprovePolicyInput,
 } from "./auto-improve-policy";
 import {
   executeAdapterWithTimeout,
@@ -191,7 +194,7 @@ export interface WorkflowRunOptions
   readonly superviserControl?: SuperviserRuntimeControl;
   readonly mockScenario?: MockNodeScenario;
   /** When set on a new run (not resume), seeds {@link WorkflowSessionState.supervision} and, unless {@link supervisionLoopExecution} is set, runs the supervision retry loop. */
-  readonly autoImprove?: AutoImprovePolicy;
+  readonly autoImprove?: AutoImprovePolicyInput;
   /**
    * When true, execute the workflow directly without wrapping in the auto-improve outer retry loop
    * (the loop uses this for inner attempts and for resume/rerun entry points).
@@ -240,6 +243,10 @@ export interface WorkflowRunOptions
   /** Best-effort local progress notifications for explicit debug consumers. */
   readonly onProgress?: (event: WorkflowRunProgressEvent) => void;
 }
+
+type NormalizedWorkflowRunOptions = Omit<WorkflowRunOptions, "autoImprove"> & {
+  readonly autoImprove?: AutoImprovePolicy;
+};
 
 export type WorkflowRunProgressEvent = WorkflowRunStepStartEvent;
 
@@ -1027,7 +1034,7 @@ function buildCrossWorkflowCalleeRuntimeVariables(input: {
  * Same filesystem/session roots as the caller except `runtimeVariables`.
  */
 function buildCrossWorkflowCalleeRunOptions(
-  options: WorkflowRunOptions,
+  options: NormalizedWorkflowRunOptions,
   runtimeVariables: Readonly<Record<string, unknown>>,
   overrides: Pick<
     WorkflowRunOptions,
@@ -1037,7 +1044,7 @@ function buildCrossWorkflowCalleeRunOptions(
     | "maxSteps"
     | "workflowWorkingDirectory"
   > = {},
-): WorkflowRunOptions {
+): NormalizedWorkflowRunOptions {
   const maxSteps = overrides.maxSteps ?? options.maxSteps;
   const workflowWorkingDirectory =
     overrides.workflowWorkingDirectory ?? options.workflowWorkingDirectory;
@@ -1195,7 +1202,7 @@ interface ExecuteCrossWorkflowDispatchesInput {
   readonly workflow: WorkflowJson;
   readonly workflowName: string;
   readonly session: WorkflowSessionState;
-  readonly options: WorkflowRunOptions;
+  readonly options: NormalizedWorkflowRunOptions;
   readonly artifactWorkflowRoot: string;
   readonly callerNodeId: string;
   readonly callerStepId: string;
@@ -1572,7 +1579,7 @@ async function executeLocalFanoutTransition(input: {
   readonly workflowName: string;
   readonly workflow: WorkflowJson;
   readonly session: WorkflowSessionState;
-  readonly options: WorkflowRunOptions;
+  readonly options: NormalizedWorkflowRunOptions;
   readonly artifactWorkflowRoot: string;
   readonly callerNodeId: string;
   readonly callerStepId: string;
@@ -2956,7 +2963,7 @@ function buildScenarioExecutableNodePayload(
 
 async function runWorkflowInternal(
   workflowName: string,
-  options: WorkflowRunOptions = {},
+  options: NormalizedWorkflowRunOptions,
   adapter?: NodeAdapter,
   guards?: EngineExecutionGuards,
   crossWorkflowInvocationStack: readonly string[] = [],
@@ -4573,6 +4580,11 @@ async function runWorkflowInternal(
             const supervisionStall = buildSupervisionStallWatch(
               session,
               options,
+              {
+                ...(executionNodePayload.stallTimeoutMs === undefined
+                  ? {}
+                  : { stallTimeoutMs: executionNodePayload.stallTimeoutMs }),
+              },
             );
             const execution =
               agentNodePayload !== null
@@ -6188,7 +6200,7 @@ async function runWorkflowInternal(
  */
 async function runAutoImproveLoop(
   workflowName: string,
-  options: WorkflowRunOptions,
+  options: NormalizedWorkflowRunOptions,
   adapter: NodeAdapter | undefined,
   guards: EngineExecutionGuards | undefined,
 ): Promise<Result<WorkflowRunResult, WorkflowRunFailure>> {
@@ -6196,11 +6208,11 @@ async function runAutoImproveLoop(
   if (policy === undefined) {
     return err(workflowRunFailure(1, "internal: autoImprove policy missing"));
   }
-  const innerBase: WorkflowRunOptions = {
+  const innerBase: NormalizedWorkflowRunOptions = {
     ...options,
     supervisionLoopExecution: true,
   };
-  let current: WorkflowRunOptions = innerBase;
+  let current: NormalizedWorkflowRunOptions = innerBase;
 
   for (;;) {
     const result = await runWorkflowInternal(
@@ -6476,11 +6488,50 @@ export async function runWorkflow(
     options.fanoutConcurrencyBudget === undefined
       ? { ...options, fanoutConcurrencyBudget: options.maxConcurrency }
       : options;
+  if (normalizedOptions.autoImprove?.enabled === false) {
+    normalizedOptions = {
+      ...normalizedOptions,
+      autoImprove: createLifecycleSupervisionPolicyInput(),
+    };
+  }
 
-  if (normalizedOptions.autoImprove !== undefined) {
-    const normalizedPolicy = normalizeAutoImprovePolicy(
-      normalizedOptions.autoImprove,
+  const freshRunForWorkflowDefaults =
+    normalizedOptions.resumeSessionId === undefined &&
+    normalizedOptions.rerunFromSessionId === undefined &&
+    normalizedOptions.continueFromWorkflowExecutionId === undefined;
+  if (
+    normalizedOptions.autoImprove !== undefined &&
+    freshRunForWorkflowDefaults
+  ) {
+    const loadedForDefaults = await loadWorkflowFromDisk(
+      workflowName,
+      normalizedOptions,
     );
+    if (!loadedForDefaults.ok) {
+      return err(
+        workflowRunFailure(
+          loadedForDefaults.error.code === "VALIDATION" ||
+            loadedForDefaults.error.code === "INVALID_WORKFLOW_NAME"
+            ? 2
+            : 1,
+          loadedForDefaults.error.message,
+        ),
+      );
+    }
+    normalizedOptions = {
+      ...normalizedOptions,
+      autoImprove: applyWorkflowSupervisionDefaults(
+        normalizedOptions.autoImprove,
+        loadedForDefaults.value.bundle.workflow.defaults.supervision,
+      ),
+    };
+  }
+
+  const { autoImprove: pendingAutoImprove, ...runOptionsBase } =
+    normalizedOptions;
+  let runOptions: NormalizedWorkflowRunOptions = runOptionsBase;
+  if (pendingAutoImprove !== undefined) {
+    const normalizedPolicy = normalizeAutoImprovePolicy(pendingAutoImprove);
     if (!normalizedPolicy.ok || normalizedPolicy.value === undefined) {
       return err(
         workflowRunFailure(
@@ -6491,32 +6542,20 @@ export async function runWorkflow(
         ),
       );
     }
-    normalizedOptions = {
-      ...normalizedOptions,
+    runOptions = {
+      ...runOptionsBase,
       autoImprove: normalizedPolicy.value,
     };
   }
 
-  if (normalizedOptions.autoImprove === undefined) {
-    return runWorkflowInternal(
-      workflowName,
-      normalizedOptions,
-      adapter,
-      guards,
-      [],
-    );
+  if (runOptions.autoImprove === undefined) {
+    return runWorkflowInternal(workflowName, runOptions, adapter, guards, []);
   }
-  if (normalizedOptions.supervisionLoopExecution === true) {
-    return runWorkflowInternal(
-      workflowName,
-      normalizedOptions,
-      adapter,
-      guards,
-      [],
-    );
+  if (runOptions.supervisionLoopExecution === true) {
+    return runWorkflowInternal(workflowName, runOptions, adapter, guards, []);
   }
-  if (normalizedOptions.nestedSuperviserDriver === true) {
-    if (normalizedOptions.rerunFromSessionId !== undefined) {
+  if (runOptions.nestedSuperviserDriver === true) {
+    if (runOptions.rerunFromSessionId !== undefined) {
       return err(
         workflowRunFailure(
           2,
@@ -6524,7 +6563,7 @@ export async function runWorkflow(
         ),
       );
     }
-    if (normalizedOptions.continueFromWorkflowExecutionId !== undefined) {
+    if (runOptions.continueFromWorkflowExecutionId !== undefined) {
       return err(
         workflowRunFailure(
           2,
@@ -6532,22 +6571,16 @@ export async function runWorkflow(
         ),
       );
     }
-    return runWorkflowInternal(
-      workflowName,
-      normalizedOptions,
-      adapter,
-      guards,
-      [],
-    );
+    return runWorkflowInternal(workflowName, runOptions, adapter, guards, []);
   }
-  return runAutoImproveLoop(workflowName, normalizedOptions, adapter, guards);
+  return runAutoImproveLoop(workflowName, runOptions, adapter, guards);
 }
 
 async function runNestedSuperviserSessionDriver(
   workflowName: string,
   session: WorkflowSessionState,
   loaded: LoadedWorkflow,
-  options: WorkflowRunOptions,
+  options: NormalizedWorkflowRunOptions,
   adapter: NodeAdapter | undefined,
   guards: EngineExecutionGuards | undefined,
   crossWorkflowInvocationStack: readonly string[],
@@ -6696,7 +6729,7 @@ async function runNestedSuperviserSessionDriver(
     ...supOptsBase
   } = baseForControl;
   const baseRv = supOptsBase.runtimeVariables ?? {};
-  const supOpts: WorkflowRunOptions = {
+  const supOpts: NormalizedWorkflowRunOptions = {
     ...supOptsBase,
     runtimeVariables: {
       ...baseRv,

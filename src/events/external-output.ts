@@ -76,7 +76,9 @@ export function resolveExternalOutputDispatchTarget(
       sourceId: embedded.sourceId,
       provider: embedded.provider,
       conversationId: embedded.conversationId,
-      ...(embedded.threadId === undefined ? {} : { threadId: embedded.threadId }),
+      ...(embedded.threadId === undefined
+        ? {}
+        : { threadId: embedded.threadId }),
       ...(embedded.eventId === undefined ? {} : { eventId: embedded.eventId }),
       ...(embedded.actorId === undefined ? {} : { actorId: embedded.actorId }),
     };
@@ -95,7 +97,9 @@ export function resolveExternalOutputDispatchTarget(
   }
   const providerHint =
     address.providerHint ??
-    (typeof payload["providerHint"] === "string" ? payload["providerHint"] : undefined) ??
+    (typeof payload["providerHint"] === "string"
+      ? payload["providerHint"]
+      : undefined) ??
     "unknown";
   return {
     sourceId: address.sourceId,
@@ -168,6 +172,8 @@ function persistedSuccessfulReply(
 export function buildChatReplyRequestForExternalOutput(input: {
   readonly message: ExternalOutputMessage;
   readonly target: ChatReplyDispatchTarget;
+  readonly outputDestinationId?: string;
+  readonly outputDestinationIds?: readonly string[];
   readonly transportText: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
@@ -176,6 +182,12 @@ export function buildChatReplyRequestForExternalOutput(input: {
 }): ChatReplyDispatchRequest {
   return {
     target: input.target,
+    ...(input.outputDestinationId === undefined
+      ? {}
+      : { outputDestinationId: input.outputDestinationId }),
+    ...(input.outputDestinationIds === undefined
+      ? {}
+      : { outputDestinationIds: input.outputDestinationIds }),
     message: { text: input.transportText },
     visibility: "public",
     threadPolicy: "same-thread",
@@ -280,9 +292,13 @@ export async function publishExternalOutputMessage(input: {
     });
     return null;
   }
+  const outputDestinationIds = resolveOutputDestinationIds(
+    input.message.payload,
+  );
   const request = buildChatReplyRequestForExternalOutput({
     message,
     target: dispatchTargetToChatTarget(target),
+    ...(outputDestinationIds === undefined ? {} : { outputDestinationIds }),
     transportText,
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
@@ -290,6 +306,20 @@ export async function publishExternalOutputMessage(input: {
     nodeExecId: input.nodeExecId,
   });
   return dispatcher.dispatchChatReply(request);
+}
+
+function resolveOutputDestinationIds(
+  variables: Readonly<Record<string, unknown>>,
+): readonly string[] | undefined {
+  const destinations = variables["eventOutputDestinations"];
+  if (!Array.isArray(destinations)) {
+    return undefined;
+  }
+  const ids = destinations.filter(
+    (destination): destination is string =>
+      typeof destination === "string" && destination.length > 0,
+  );
+  return ids.length === 0 ? undefined : ids;
 }
 
 export function createExternalOutputPublisher(input: {
@@ -471,6 +501,12 @@ export async function publishWorkflowBusinessFinalExternalOutput(input: {
     payload: {
       workflowOutput: input.workflowOutputPayload,
       chatReplyTarget: chatTarget,
+      ...(Array.isArray(input.runtimeVariables["eventOutputDestinations"])
+        ? {
+            eventOutputDestinations:
+              input.runtimeVariables["eventOutputDestinations"],
+          }
+        : {}),
       eventId: event.eventId,
     },
     context: {

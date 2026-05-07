@@ -30,7 +30,7 @@ flowchart TD
 - Run workflows using agent backends such as `codex-agent`, `claude-code-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
 - Run deterministic mock scenarios for demos, tests, and documentation without real agent calls.
 - Monitor, resume, rerun, continue, export, and inspect workflow executions.
-- Start workflows with supervisor-backed execution by default; use `--no-auto-improve` only for specialized unsupervised starts.
+- Start workflows with supervisor-backed execution by default; `--no-auto-improve` disables workflow patching but keeps deterministic supervision.
 - Start a local GraphQL control plane for remote execution and manager/control-plane operations.
 - Receive external events, replay event receipts, and inspect reply dispatch records.
 - Install shell hooks/snippets for Claude Code, Codex, and Gemini.
@@ -188,8 +188,11 @@ bun run src/main.ts workflow run <workflow-name> \
   --output json
 ```
 
-Use `--no-auto-improve` only when a quick check or isolated fixture must preserve
-legacy unsupervised behavior.
+Use `--no-auto-improve` when a quick check or isolated fixture must disable
+workflow patching while preserving supervisor retry and stall detection.
+Workflow bundles can set supervision defaults in `workflow.defaults.supervision`
+and long-running steps can override stall detection with `steps[].stallTimeoutMs`
+or node payload `stallTimeoutMs`; CLI flags still take precedence.
 
 ## Session Operations
 
@@ -286,7 +289,8 @@ bun run src/main.ts workflow run <workflow-name> \
 
 Endpoint-backed `workflow run` uses the same default supervised recovery policy
 as local execution. Pass `--no-auto-improve` when the remote GraphQL
-`executeWorkflow` start must receive `autoImprove: { enabled: false }`.
+`executeWorkflow` start must receive lifecycle-only supervision
+(`maxWorkflowPatches: 0`).
 
 Remote-capable CLI operations include `workflow list`, `workflow status`,
 `workflow run`, `session resume`, and `session rerun`. Detailed execution
@@ -374,8 +378,8 @@ Supported vendors:
 - `--output json`: emit structured output.
 - `--dry-run`: plan/check without normal execution where supported.
 - `--auto-improve`: explicitly request the default supervised recovery policy.
-- `--no-auto-improve`: opt out of default supervised recovery, including through
-  remote GraphQL `workflow run --endpoint ...` starts.
+- `--no-auto-improve`: keep supervised recovery but set the workflow patch budget
+  to zero, including through remote GraphQL `workflow run --endpoint ...` starts.
 - `--verbose` / `-v`: print local workflow step-start progress to stderr.
 - `--max-steps <n>`: cap workflow execution steps.
 - `--max-concurrency <n>`: cap fanout concurrency for a workflow run.

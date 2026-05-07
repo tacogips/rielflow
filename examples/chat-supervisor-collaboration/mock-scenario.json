@@ -1,0 +1,64 @@
+{
+  "workflow-a-brainstorm": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "persona": "workflow-a",
+      "focus": "product",
+      "proposal": "Acknowledge the chat request, publish a short plan, ask only blocking questions, then run the selected workflow."
+    }
+  },
+  "workflow-b-brainstorm": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "persona": "workflow-b",
+      "focus": "engineering",
+      "proposal": "Keep event destinations separate from internal workflow mail and validate the event binding before enabling it."
+    }
+  },
+  "workflow-c-spec-and-implementation": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "persona": "workflow-c",
+      "spec": [
+        "Send received and plan replies through chat output destinations.",
+        "Skip workflow start when required task input is missing.",
+        "Route review requests to Workflow A and Workflow B chat destinations."
+      ]
+    }
+  },
+  "workflow-c-request-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "toWorkflowA": "Review whether the plan is natural for the user.",
+      "toWorkflowB": "Review whether event/output separation and validation are sufficient."
+    }
+  },
+  "workflow-output": {
+    "provider": "scenario-mock",
+    "model": "gpt-5-nano",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "status": "ready",
+      "summary": "Chat task planning and multi-supervisor collaboration are represented as external event/output flows around normal workflow execution.",
+      "remainingQuestions": []
+    }
+  }
+}

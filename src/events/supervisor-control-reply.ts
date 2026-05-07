@@ -41,7 +41,8 @@ export function formatSupervisorDispatchControlReplyText(
     `decisionId: ${view.decision.decisionId}`,
     `applied: ${String(view.applied)}`,
     `profileRevision: ${view.conversation.profileRevision}`,
-    ...(view.validationIssues === undefined || view.validationIssues.length === 0
+    ...(view.validationIssues === undefined ||
+    view.validationIssues.length === 0
       ? []
       : [
           `validationIssues: ${view.validationIssues
@@ -54,6 +55,7 @@ export function formatSupervisorDispatchControlReplyText(
 
 export function buildDispatchControlExternalOutputMessage(input: {
   readonly event: ExternalEventEnvelope;
+  readonly outputDestinationIds?: readonly string[];
   readonly receiptId: string;
   readonly view: WorkflowSupervisorDispatchView;
   readonly createdAt?: string;
@@ -67,9 +69,7 @@ export function buildDispatchControlExternalOutputMessage(input: {
     input.view.proposal.reply,
   );
   const text =
-    replyLead !== undefined
-      ? `${replyLead}\n\n${metadata}`
-      : metadata;
+    replyLead !== undefined ? `${replyLead}\n\n${metadata}` : metadata;
   const workflowExecutionId = `supervisor-conversation:${input.view.conversation.supervisorConversationId}`;
   const createdAt = input.createdAt ?? new Date().toISOString();
   return {
@@ -93,6 +93,9 @@ export function buildDispatchControlExternalOutputMessage(input: {
     },
     payload: {
       chatReplyTarget: target,
+      ...(input.outputDestinationIds === undefined
+        ? {}
+        : { eventOutputDestinations: input.outputDestinationIds }),
       controlStatusText: text,
       eventId: input.event.eventId,
       action: "status",
@@ -127,6 +130,7 @@ export function formatSupervisorControlReplyText(
 
 export function buildControlStatusExternalOutputMessage(input: {
   readonly event: ExternalEventEnvelope;
+  readonly outputDestinationIds?: readonly string[];
   readonly receiptId: string;
   readonly action: EventSupervisorAction | "skip" | "failed";
   readonly view?: SupervisedWorkflowView;
@@ -174,6 +178,9 @@ export function buildControlStatusExternalOutputMessage(input: {
     },
     payload: {
       chatReplyTarget: target,
+      ...(input.outputDestinationIds === undefined
+        ? {}
+        : { eventOutputDestinations: input.outputDestinationIds }),
       controlStatusText: text,
       eventId: input.event.eventId,
       action: input.action,

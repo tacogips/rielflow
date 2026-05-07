@@ -33,7 +33,7 @@ export function resolveEventMailboxBridgePolicy(
     },
     output: {
       reply: { mode: authored?.output?.reply?.mode ?? "final" },
-      progress: { mode: authored?.output?.progress?.mode ?? "none" },
+      progress: { mode: authored?.output?.progress?.mode ?? "status-only" },
       control: {
         mode:
           authored?.output?.control?.mode ??

@@ -27,6 +27,10 @@ import {
   normalizeNodeExecutionBackend,
 } from "./backend";
 import {
+  DEFAULT_MONITOR_INTERVAL_MS,
+  DEFAULT_STALL_TIMEOUT_MS,
+} from "./auto-improve-policy";
+import {
   createAsyncNodeAddonRegistry,
   createNodeAddonRegistry,
   resolveNodeAddonPayload,
@@ -66,6 +70,7 @@ import {
   type WorkflowNodeRegistryRef,
   type WorkflowNodeRef,
   type WorkflowPrompts,
+  type WorkflowSupervisionDefaults,
   type WorkflowStepFanout,
   type WorkflowStepRef,
   type WorkflowStepSessionPolicy,
@@ -257,6 +262,51 @@ function readPositiveIntegerField(
     return null;
   }
   return value;
+}
+
+function normalizePositiveNumberField(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  issues.push(makeIssue("error", path, "must be > 0 when provided"));
+  return undefined;
+}
+
+function normalizePositiveIntegerValue(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return value;
+  }
+  issues.push(makeIssue("error", path, "must be a positive integer"));
+  return undefined;
+}
+
+function normalizeNonNegativeIntegerValue(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+  issues.push(makeIssue("error", path, "must be a non-negative integer"));
+  return undefined;
 }
 
 function isAbsoluteContainerPath(value: string): boolean {
@@ -482,6 +532,117 @@ function normalizeContainerRuntimeDefaults(
   return {
     runnerKind,
     ...(runnerPath === undefined ? {} : { runnerPath }),
+  };
+}
+
+function normalizeWorkflowSupervisionDefaults(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowSupervisionDefaults | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const superviserWorkflowIdRaw = value["superviserWorkflowId"];
+  let superviserWorkflowId: string | undefined;
+  if (superviserWorkflowIdRaw !== undefined) {
+    if (
+      typeof superviserWorkflowIdRaw === "string" &&
+      superviserWorkflowIdRaw.trim().length > 0
+    ) {
+      superviserWorkflowId = superviserWorkflowIdRaw.trim();
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.superviserWorkflowId`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+
+  const monitorIntervalMs = normalizePositiveIntegerValue(
+    value["monitorIntervalMs"],
+    `${path}.monitorIntervalMs`,
+    issues,
+  );
+  const stallTimeoutMs = normalizePositiveIntegerValue(
+    value["stallTimeoutMs"],
+    `${path}.stallTimeoutMs`,
+    issues,
+  );
+  const maxSupervisedAttempts = normalizePositiveIntegerValue(
+    value["maxSupervisedAttempts"],
+    `${path}.maxSupervisedAttempts`,
+    issues,
+  );
+  const maxWorkflowPatches = normalizeNonNegativeIntegerValue(
+    value["maxWorkflowPatches"],
+    `${path}.maxWorkflowPatches`,
+    issues,
+  );
+
+  const workflowMutationModeRaw = value["workflowMutationMode"];
+  let workflowMutationMode: "execution-copy" | "in-place" | undefined;
+  if (workflowMutationModeRaw !== undefined) {
+    if (
+      workflowMutationModeRaw === "execution-copy" ||
+      workflowMutationModeRaw === "in-place"
+    ) {
+      workflowMutationMode = workflowMutationModeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.workflowMutationMode`,
+          "must be 'execution-copy' or 'in-place' when provided",
+        ),
+      );
+    }
+  }
+
+  const allowTargetedRerunRaw = value["allowTargetedRerun"];
+  let allowTargetedRerun: boolean | undefined;
+  if (allowTargetedRerunRaw !== undefined) {
+    if (typeof allowTargetedRerunRaw === "boolean") {
+      allowTargetedRerun = allowTargetedRerunRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.allowTargetedRerun`,
+          "must be a boolean when provided",
+        ),
+      );
+    }
+  }
+
+  const effectiveMonitor = monitorIntervalMs ?? DEFAULT_MONITOR_INTERVAL_MS;
+  const effectiveStall = stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS;
+  if (effectiveStall < effectiveMonitor) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.stallTimeoutMs`,
+        "must be greater than or equal to monitorIntervalMs",
+      ),
+    );
+  }
+
+  return {
+    ...(superviserWorkflowId === undefined ? {} : { superviserWorkflowId }),
+    ...(monitorIntervalMs === undefined ? {} : { monitorIntervalMs }),
+    ...(stallTimeoutMs === undefined ? {} : { stallTimeoutMs }),
+    ...(maxSupervisedAttempts === undefined ? {} : { maxSupervisedAttempts }),
+    ...(maxWorkflowPatches === undefined ? {} : { maxWorkflowPatches }),
+    ...(workflowMutationMode === undefined ? {} : { workflowMutationMode }),
+    ...(allowTargetedRerun === undefined ? {} : { allowTargetedRerun }),
   };
 }
 
@@ -1764,6 +1925,7 @@ function normalizeWorkflowStepRef(
     "role",
     "promptVariant",
     "timeoutMs",
+    "stallTimeoutMs",
     "sessionPolicy",
     "transitions",
   ]);
@@ -1863,20 +2025,16 @@ function normalizeWorkflowStepRef(
   }
 
   const timeoutMsRaw = value["timeoutMs"];
-  let timeoutMs: number | undefined;
-  if (timeoutMsRaw !== undefined) {
-    if (
-      typeof timeoutMsRaw === "number" &&
-      Number.isFinite(timeoutMsRaw) &&
-      timeoutMsRaw > 0
-    ) {
-      timeoutMs = timeoutMsRaw;
-    } else {
-      issues.push(
-        makeIssue("error", `${path}.timeoutMs`, "must be > 0 when provided"),
-      );
-    }
-  }
+  const timeoutMs = normalizePositiveNumberField(
+    timeoutMsRaw,
+    `${path}.timeoutMs`,
+    issues,
+  );
+  const stallTimeoutMs = normalizePositiveIntegerValue(
+    value["stallTimeoutMs"],
+    `${path}.stallTimeoutMs`,
+    issues,
+  );
 
   const sessionPolicy = normalizeWorkflowStepSessionPolicy(
     value["sessionPolicy"],
@@ -1923,6 +2081,7 @@ function normalizeWorkflowStepRef(
     ...(role === undefined ? {} : { role }),
     ...(promptVariant === undefined ? {} : { promptVariant }),
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    ...(stallTimeoutMs === undefined ? {} : { stallTimeoutMs }),
     ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
     ...(transitions === undefined ? {} : { transitions }),
   };
@@ -1996,6 +2155,11 @@ function normalizeStepAddressedWorkflow(
           issues,
         )
       : 20;
+  const supervision = normalizeWorkflowSupervisionDefaults(
+    isRecord(defaultsValue) ? defaultsValue["supervision"] : undefined,
+    "workflow.defaults.supervision",
+    issues,
+  );
   const containerRuntime = normalizeContainerRuntimeDefaults(
     isRecord(defaultsValue) ? defaultsValue["containerRuntime"] : undefined,
     "workflow.defaults.containerRuntime",
@@ -2381,6 +2545,7 @@ function normalizeStepAddressedWorkflow(
       nodeTimeoutMs,
       maxLoopIterations: maxLoopIterationsRaw,
       fanoutConcurrency,
+      ...(supervision === undefined ? {} : { supervision }),
       ...(timeoutPolicy === undefined ? {} : { timeoutPolicy }),
       ...(containerRuntime === undefined ? {} : { containerRuntime }),
     },
@@ -2821,16 +2986,16 @@ function normalizeNodePayload(input: {
   }
 
   const timeoutRaw = payload["timeoutMs"];
-  let timeoutMs: number | undefined;
-  if (timeoutRaw !== undefined) {
-    if (typeof timeoutRaw === "number" && timeoutRaw > 0) {
-      timeoutMs = timeoutRaw;
-    } else {
-      issues.push(
-        makeIssue("error", `${path}.timeoutMs`, "must be > 0 when provided"),
-      );
-    }
-  }
+  const timeoutMs = normalizePositiveNumberField(
+    timeoutRaw,
+    `${path}.timeoutMs`,
+    issues,
+  );
+  const stallTimeoutMs = normalizePositiveIntegerValue(
+    payload["stallTimeoutMs"],
+    `${path}.stallTimeoutMs`,
+    issues,
+  );
 
   const durability = normalizeNodeDurability(
     payload["durability"],
@@ -3124,6 +3289,7 @@ function normalizeNodePayload(input: {
     ...(argumentBindings === undefined ? {} : { argumentBindings }),
     ...(templateEngine === undefined ? {} : { templateEngine }),
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    ...(stallTimeoutMs === undefined ? {} : { stallTimeoutMs }),
     ...(inputContract === undefined ? {} : { input: inputContract }),
     ...(outputContract === undefined ? {} : { output: outputContract }),
   };
@@ -4633,6 +4799,9 @@ function applyStepPromptVariant(input: {
     ...basePayload,
     id: step.id,
     ...(step.timeoutMs === undefined ? {} : { timeoutMs: step.timeoutMs }),
+    ...(step.stallTimeoutMs === undefined
+      ? {}
+      : { stallTimeoutMs: step.stallTimeoutMs }),
     ...(step.sessionPolicy?.mode === undefined
       ? {}
       : { sessionPolicy: { mode: step.sessionPolicy.mode } }),

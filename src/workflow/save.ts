@@ -81,6 +81,9 @@ function projectAuthoredWorkflowFromNormalized(input: {
       ...(workflow.defaults.fanoutConcurrency === undefined
         ? {}
         : { fanoutConcurrency: workflow.defaults.fanoutConcurrency }),
+      ...(workflow.defaults.supervision === undefined
+        ? {}
+        : { supervision: workflow.defaults.supervision }),
       ...(workflow.defaults.timeoutPolicy === undefined
         ? {}
         : { timeoutPolicy: workflow.defaults.timeoutPolicy }),
@@ -112,6 +115,9 @@ function projectAuthoredWorkflowFromNormalized(input: {
             ...(step.timeoutMs === undefined
               ? {}
               : { timeoutMs: step.timeoutMs }),
+            ...(step.stallTimeoutMs === undefined
+              ? {}
+              : { stallTimeoutMs: step.stallTimeoutMs }),
             ...(step.sessionPolicy === undefined
               ? {}
               : { sessionPolicy: step.sessionPolicy }),

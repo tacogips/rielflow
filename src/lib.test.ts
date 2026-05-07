@@ -876,6 +876,43 @@ describe("library api", () => {
     runWorkflowSpy.mockRestore();
   });
 
+  test("executeWorkflow forwards lifecycle-only supervision as raw input", async () => {
+    const root = await makeTempDir();
+    const workflowName = "disable-ai-lib";
+    await createCallStepFixture(root, workflowName);
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: createSessionState({
+            sessionId: "sess-disable-ai-lib",
+            workflowName,
+            workflowId: workflowName,
+            initialNodeId: "manager-step",
+            runtimeVariables: {},
+          }),
+          exitCode: 0,
+        },
+      });
+
+    await executeWorkflow({
+      workflowName,
+      workflowRoot: root,
+      disableAutoImprove: true,
+    });
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      workflowName,
+      expect.objectContaining({
+        autoImprove: {
+          enabled: true,
+          maxWorkflowPatches: 0,
+        },
+      }),
+    );
+  });
+
   test("executes a fixed workflow through the endpoint-backed library client", async () => {
     const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
       const payload = JSON.parse(String(init?.body)) as {

@@ -49,9 +49,15 @@ describe("event configuration", () => {
       kind: "webhook",
       path: "/events/local",
     });
+    await writeJson(path.join(eventRoot, "destinations", "local-chat.json"), {
+      id: "local-chat",
+      kind: "chat",
+      sourceId: "local-webhook",
+    });
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
       id: "to-demo",
       sourceId: "local-webhook",
+      outputDestinations: ["local-chat"],
       workflowName: "demo",
       inputMapping: {
         mode: "event-input",
@@ -66,7 +72,11 @@ describe("event configuration", () => {
     expect(loaded.sources.map((source) => source.id)).toEqual([
       "local-webhook",
     ]);
+    expect(loaded.destinations.map((destination) => destination.id)).toEqual([
+      "local-chat",
+    ]);
     expect(loaded.bindings.map((binding) => binding.id)).toEqual(["to-demo"]);
+    expect(loaded.bindings[0]?.outputDestinations).toEqual(["local-chat"]);
 
     const validation = await loadAndValidateEventConfiguration({
       workflowRoot,
@@ -189,6 +199,71 @@ describe("event configuration", () => {
         "bindings.to-missing.workflowName",
         "bindings.to-missing.inputMapping.template.request",
         "sources.local-webhook.replyEndpointEnv",
+      ]),
+    );
+  });
+
+  test("reports invalid output destinations and binding references", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "local-webhook.json"), {
+      id: "local-webhook",
+      kind: "webhook",
+      path: "/events/local",
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-chat.json"), {
+      id: "bad-chat",
+      kind: "chat",
+      sourceId: "missing-source",
+      target: {
+        conversationId: "",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-backup.json"), {
+      id: "bad-backup",
+      kind: "s3-backup",
+      provider: "other",
+      rootPrefix: "../unsafe",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "to-demo",
+      sourceId: "local-webhook",
+      outputDestinations: ["missing-destination"],
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+      taskPlanning: {
+        requiredInput: [
+          {
+            label: "missing path",
+          },
+        ],
+        planTemplate: "",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "destinations.bad-chat.sourceId",
+        "destinations.bad-chat.target.conversationId",
+        "destinations.bad-backup.provider",
+        "destinations.bad-backup.bucket",
+        "destinations.bad-backup.rootPrefix",
+        "bindings.to-demo.outputDestinations[0]",
+        "bindings.to-demo.taskPlanning.requiredInput[0].path",
+        "bindings.to-demo.taskPlanning.planTemplate",
       ]),
     );
   });

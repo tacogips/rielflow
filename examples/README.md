@@ -127,6 +127,33 @@ bun run src/main.ts workflow inspect chat-reply-webhook --workflow-definition-di
 See `examples/event-sources/README.md` for a local webhook event and reply
 endpoint demo.
 
+### `chat-supervisor-collaboration`
+
+Chat-triggered supervisor collaboration reference:
+
+- event binding emits natural chat lifecycle replies: received, plan or clarification, then starting
+- Workflow A and Workflow B brainstorm as separate personas
+- Workflow C turns their outputs into a specification and requests review through chat destinations
+- external event/output destinations stay separate from internal workflow mail
+
+Validate the workflow and event binding:
+
+```bash
+bun run src/main.ts workflow validate chat-supervisor-collaboration --workflow-definition-dir ./examples
+bun run src/main.ts events validate \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/chat-supervisor-collaboration/.divedra-events
+```
+
+Run the deterministic workflow scenario:
+
+```bash
+bun run src/main.ts workflow run chat-supervisor-collaboration \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/chat-supervisor-collaboration/mock-scenario.json \
+  --output json
+```
+
 ### `workflow-call-simple`
 
 Managed parent workflow reference for cross-workflow invocation in the

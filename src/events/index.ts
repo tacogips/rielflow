@@ -5,10 +5,12 @@ export {
 } from "./dispatch-supervisor-chat";
 export {
   isEventBindingEnabled,
+  isEventOutputDestinationEnabled,
   isEventSourceEnabled,
   loadEventConfiguration,
   resolveEventRoot,
 } from "./config";
+export { dispatchChatReplyToEventOutputDestination } from "./output-destination";
 export {
   loadAndValidateEventConfiguration,
   validateEventConfiguration,
@@ -32,12 +34,17 @@ export {
   planSupervisedLlmBindingsDispatch,
   type LlmBatchPlan,
 } from "./supervisor-llm-batch";
+export {
+  resolveEventTaskPlanningDecision,
+  type EventTaskPlanningDecision,
+} from "./task-planning";
 export type {
   EventBinding,
   EventConfigLoadOptions,
   EventConfigValidationIssue,
   EventConfigValidationResult,
   EventConfiguration,
+  EventOutputDestinationConfig,
   EventReceiptRecord,
   EventSourceConfig,
   EventSupervisorIntentMappingLlm,

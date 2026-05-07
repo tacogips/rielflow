@@ -56,9 +56,12 @@ import type {
 import type { WorkflowTriggerRunnerOptions } from "./workflow-trigger-runner-options";
 import { resolveEventMailboxBridgePolicy } from "./mailbox-bridge-policy";
 import {
+  dispatchEventProgressReplyIfConfigured,
+  dispatchEventTaskPlanningReplyIfConfigured,
   dispatchSupervisorControlReplyIfConfigured,
   dispatchSupervisorDispatchReplyIfConfigured,
 } from "./trigger-runner-replies";
+import { resolveEventTaskPlanningDecision } from "./task-planning";
 
 export type { WorkflowTriggerRunnerOptions } from "./workflow-trigger-runner-options";
 
@@ -503,6 +506,11 @@ export function createWorkflowTriggerRunner(
               workflowInput: {},
               event: buildEventRuntimeMetadata(input.event),
               eventBindingId: input.binding.id,
+              ...(input.binding.outputDestinations === undefined
+                ? {}
+                : {
+                    eventOutputDestinations: input.binding.outputDestinations,
+                  }),
               eventMailboxBridgePolicy: resolveEventMailboxBridgePolicy(
                 input.binding,
               ),
@@ -568,6 +576,51 @@ export function createWorkflowTriggerRunner(
           ...workflowNameResultField(input.binding.workflowName),
         };
       }
+      if (input.suppressSupervisorChatReply !== true && needsFullInputMapping) {
+        await dispatchEventProgressReplyIfConfigured({
+          options,
+          binding: input.binding,
+          event: input.event,
+          receiptId: receipt.receiptId,
+          stage: "received",
+          ...(input.binding.workflowName === undefined
+            ? {}
+            : { workflowName: input.binding.workflowName }),
+        });
+      }
+      if (needsFullInputMapping) {
+        const taskPlanningDecision = resolveEventTaskPlanningDecision({
+          binding: input.binding,
+          workflowInput: mapping.workflowInput,
+        });
+        if (taskPlanningDecision !== null) {
+          if (input.suppressSupervisorChatReply !== true) {
+            await dispatchEventTaskPlanningReplyIfConfigured({
+              options,
+              binding: input.binding,
+              event: input.event,
+              receiptId: receipt.receiptId,
+              decision: taskPlanningDecision,
+            });
+          }
+          if (taskPlanningDecision.status === "needs-clarification") {
+            const skipped = await updateEventReceipt(
+              {
+                record: receipt,
+                artifactDir: begin.artifactDir,
+                status: "skipped",
+                error: `task clarification required: ${taskPlanningDecision.missing.join(", ")}`,
+              },
+              options,
+            );
+            return {
+              receipt: skipped,
+              duplicate: false,
+              ...workflowNameResultField(input.binding.workflowName),
+            };
+          }
+        }
+      }
 
       try {
         receipt = await updateEventReceipt(
@@ -578,6 +631,21 @@ export function createWorkflowTriggerRunner(
           },
           options,
         );
+        if (
+          input.suppressSupervisorChatReply !== true &&
+          needsFullInputMapping
+        ) {
+          await dispatchEventProgressReplyIfConfigured({
+            options,
+            binding: input.binding,
+            event: input.event,
+            receiptId: receipt.receiptId,
+            stage: "starting",
+            ...(input.binding.workflowName === undefined
+              ? {}
+              : { workflowName: input.binding.workflowName }),
+          });
+        }
         if (input.binding.execution?.mode === "supervised") {
           if (
             supervisorIntent === undefined ||

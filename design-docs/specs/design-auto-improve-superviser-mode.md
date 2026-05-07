@@ -143,6 +143,46 @@ Rules:
 - `monitorIntervalMs` controls observation cadence and should be user-configurable on the CLI because it affects operator-visible responsiveness and load
 - `allowTargetedRerun` gates rerun from a specific step
 
+## Workflow-Authored Supervision Defaults
+
+Workflow bundles may author default supervision policy fields under
+`workflow.defaults.supervision`. These defaults are applied only after the
+runtime has preserved the caller's raw supervision intent. Default resolution
+must keep these sources distinct:
+
+- explicit caller policy fields from CLI, library, GraphQL, or direct engine
+  input
+- workflow-authored `defaults.supervision` fields
+- runtime fallback values used only when neither the caller nor workflow
+  supplied a value
+
+Lifecycle-only supervision is intentionally different from disabling
+supervision. Entry points such as CLI `--no-auto-improve`, library
+`disableAutoImprove: true`, GraphQL `autoImprove: { "enabled": false }`, and
+direct `runWorkflow` `autoImprove: { "enabled": false }` request supervision
+without workflow patching. They should canonicalize to a raw lifecycle-only
+policy with `enabled: true` and `maxWorkflowPatches: 0` before workflow defaults
+are merged. That raw lifecycle-only policy must not preseed
+`stallTimeoutMs` or `monitorIntervalMs`; otherwise the runtime cannot tell the
+difference between an explicit caller override and a fallback default.
+
+Default precedence for stall detection is:
+
+1. explicit caller `stallTimeoutMs`
+2. `workflow.defaults.supervision.stallTimeoutMs`
+3. runtime fallback `DEFAULT_STALL_TIMEOUT_MS`
+
+The same precedence applies to `monitorIntervalMs` and other policy fields that
+can be authored as workflow supervision defaults. Node and step stall overrides
+remain local execution controls and do not override workflow-level supervision
+policy unless they are intentionally mapped into the `autoImprove` policy input
+by an entry point.
+
+Validation should run after lifecycle-only canonicalization and workflow default
+application. Disabled raw input should therefore not be rejected merely because a
+workflow authored supervision defaults; the caller's disabled intent is
+preserved as lifecycle-only supervision with patching disabled.
+
 ## Why Execution-Copy Is The Default
 
 Automatic workflow patching is materially riskier than node rerun.
@@ -461,6 +501,7 @@ User-facing CLI direction:
 
 Initial CLI policy mapping should expose at least:
 
+- `--no-auto-improve`
 - `--superviser-workflow`
 - `--monitor-interval-ms`
 - `--stall-timeout-ms`

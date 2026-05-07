@@ -1278,7 +1278,11 @@ class ExecutionDispatcher {
           });
         }
 
-        const supervisionStall = buildSupervisionStallWatch(session, input);
+        const supervisionStall = buildSupervisionStallWatch(session, input, {
+          ...(executionNodePayload.stallTimeoutMs === undefined
+            ? {}
+            : { stallTimeoutMs: executionNodePayload.stallTimeoutMs }),
+        });
         const execution =
           agentNodePayload !== null
             ? await executeAdapterWithTimeout(

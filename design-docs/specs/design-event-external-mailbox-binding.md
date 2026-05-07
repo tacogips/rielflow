@@ -88,6 +88,13 @@ This document adds a higher-level interpretation for communications whose
 Event sources must bind to this external mailbox boundary, not to
 `nodes/.../mailbox/inbox` or `nodes/.../mailbox/outbox`.
 
+Workflow output mail and external output publication are intentionally separate.
+The internal mailbox/outbox artifacts preserve step execution payloads and
+manager-routed workflow data. They can be the source of a selected workflow
+business result, but they are not provider delivery requests. A provider-facing
+reply exists only after the runtime or supervisor creates an explicit
+`external-output` message and routes it through output-destination policy.
+
 The external mailbox boundary is a logical runtime boundary, not one global
 filesystem mailbox shared by all workflow executions. When a workflow execution
 exists, accepted external input and output can be represented as
@@ -290,8 +297,12 @@ Rules:
   publication.
 - `progress` payloads are derived from runtime state.
 - `control-status` payloads are supervisor-owned lifecycle or command replies.
+- supervisor-generated chat replies are `control-status` or dispatch-specific
+  external outputs before they become provider chat messages.
 - The output message is provider-neutral. Provider adapters may format text for
   their transport, but formatting must not change the stored canonical payload.
+- output destination ids are delivery context on the external-output message,
+  not implicit bindings to workflow output mail.
 
 ## Idempotency And Ordering
 

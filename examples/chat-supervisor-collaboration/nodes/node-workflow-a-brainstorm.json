@@ -1,0 +1,10 @@
+{
+  "id": "workflow-a-brainstorm",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplateFile": "prompts/workflow-a-brainstorm.md",
+  "variables": {},
+  "output": {
+    "description": "Return Workflow A's product-oriented brainstorm notes."
+  }
+}

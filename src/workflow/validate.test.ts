@@ -285,6 +285,73 @@ describe("validateWorkflowBundle", () => {
     expect("workflowCalls" in result.value.workflow).toBe(false);
   });
 
+  test("accepts workflow and step stall supervision defaults", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["defaults"] = {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      supervision: {
+        monitorIntervalMs: 15000,
+        stallTimeoutMs: 900000,
+        maxWorkflowPatches: 0,
+      },
+    };
+    const steps = raw.workflow["steps"] as Array<Record<string, unknown>>;
+    const workerStep = steps[1] ?? {};
+    steps[1] = {
+      ...workerStep,
+      stallTimeoutMs: 1200000,
+    };
+    const workerPayload = raw.nodePayloads["nodes/node-worker.json"] as Record<
+      string,
+      unknown
+    >;
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      ...workerPayload,
+      stallTimeoutMs: 600000,
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflow.defaults.supervision).toEqual({
+      monitorIntervalMs: 15000,
+      stallTimeoutMs: 900000,
+      maxWorkflowPatches: 0,
+    });
+    expect(result.value.workflow.steps[1]?.stallTimeoutMs).toBe(1200000);
+    expect(result.value.nodePayloads["worker"]?.stallTimeoutMs).toBe(1200000);
+    expect(
+      result.value.nodePayloads["nodes/node-worker.json"]?.stallTimeoutMs,
+    ).toBe(600000);
+  });
+
+  test("rejects invalid workflow supervision stall defaults", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["defaults"] = {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      supervision: {
+        monitorIntervalMs: 5000,
+        stallTimeoutMs: 4999,
+      },
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContainEqual(
+      expect.objectContaining({
+        path: "workflow.defaults.supervision.stallTimeoutMs",
+      }),
+    );
+  });
+
   test.each(REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS)(
     "rejects top-level workflow.%s on step-addressed bundles",
     (fieldName) => {

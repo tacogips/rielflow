@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "./result";
-import type { AutoImprovePolicy } from "./types";
+import type { AutoImprovePolicy, WorkflowSupervisionDefaults } from "./types";
 
 /** Default superviser bundle id (valid workflow id; loadWorkflowByIdFromDisk matches workflow.json). */
 export const DEFAULT_SUPERVISER_WORKFLOW_ID = "divedra-default-superviser";
@@ -7,6 +7,7 @@ export const DEFAULT_MONITOR_INTERVAL_MS = 5_000;
 export const DEFAULT_STALL_TIMEOUT_MS = 60 * 60 * 1000;
 export const DEFAULT_MAX_SUPERVISED_ATTEMPTS = 5;
 export const DEFAULT_MAX_WORKFLOW_PATCHES = 3;
+export const LIFECYCLE_SUPERVISION_MAX_WORKFLOW_PATCHES = 0;
 export const DEFAULT_WORKFLOW_MUTATION_MODE = "execution-copy" as const;
 
 export interface AutoImprovePolicyInput {
@@ -32,6 +33,53 @@ export function createDefaultAutoImprovePolicy(): AutoImprovePolicy {
   };
 }
 
+export function createDefaultLifecycleSupervisionPolicy(): AutoImprovePolicy {
+  return {
+    ...createDefaultAutoImprovePolicy(),
+    maxWorkflowPatches: LIFECYCLE_SUPERVISION_MAX_WORKFLOW_PATCHES,
+  };
+}
+
+export function createLifecycleSupervisionPolicyInput(): AutoImprovePolicyInput {
+  return {
+    enabled: true,
+    maxWorkflowPatches: LIFECYCLE_SUPERVISION_MAX_WORKFLOW_PATCHES,
+  };
+}
+
+export function applyWorkflowSupervisionDefaults(
+  input: AutoImprovePolicyInput,
+  defaults: WorkflowSupervisionDefaults | undefined,
+): AutoImprovePolicyInput {
+  if (defaults === undefined) {
+    return input;
+  }
+  return {
+    ...(defaults.superviserWorkflowId === undefined
+      ? {}
+      : { superviserWorkflowId: defaults.superviserWorkflowId }),
+    ...(defaults.monitorIntervalMs === undefined
+      ? {}
+      : { monitorIntervalMs: defaults.monitorIntervalMs }),
+    ...(defaults.stallTimeoutMs === undefined
+      ? {}
+      : { stallTimeoutMs: defaults.stallTimeoutMs }),
+    ...(defaults.maxSupervisedAttempts === undefined
+      ? {}
+      : { maxSupervisedAttempts: defaults.maxSupervisedAttempts }),
+    ...(defaults.maxWorkflowPatches === undefined
+      ? {}
+      : { maxWorkflowPatches: defaults.maxWorkflowPatches }),
+    ...(defaults.workflowMutationMode === undefined
+      ? {}
+      : { workflowMutationMode: defaults.workflowMutationMode }),
+    ...(defaults.allowTargetedRerun === undefined
+      ? {}
+      : { allowTargetedRerun: defaults.allowTargetedRerun }),
+    ...input,
+  };
+}
+
 function hasDisabledAutoImproveOverrides(
   input: AutoImprovePolicyInput,
 ): boolean {
@@ -52,6 +100,16 @@ function validatePositiveInteger(
 ): Result<number, string> {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     return err(`${fieldName} must be a positive integer`);
+  }
+  return ok(value);
+}
+
+function validateNonNegativeInteger(
+  value: unknown,
+  fieldName: string,
+): Result<number, string> {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    return err(`${fieldName} must be a non-negative integer`);
   }
   return ok(value);
 }
@@ -108,7 +166,7 @@ export function normalizeAutoImprovePolicy(
         "autoImprove settings require enabled=true when additional policy fields are provided",
       );
     }
-    return ok(undefined);
+    return ok(createDefaultLifecycleSupervisionPolicy());
   }
 
   const superviserWorkflowId = validateOptionalString(
@@ -154,7 +212,7 @@ export function normalizeAutoImprovePolicy(
     return maxSupervisedAttempts;
   }
 
-  const maxWorkflowPatches = validatePositiveInteger(
+  const maxWorkflowPatches = validateNonNegativeInteger(
     input.maxWorkflowPatches ?? DEFAULT_MAX_WORKFLOW_PATCHES,
     "maxWorkflowPatches",
   );

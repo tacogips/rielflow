@@ -564,9 +564,10 @@ describe("event listener service", () => {
     expect(response.status).toBe(202);
     expect(body.accepted).toBe(true);
     expect(body.receipts[0]?.status).toBe("dispatched");
-    expect(replyCalls).toHaveLength(1);
-    expect(replyCalls[0]?.url).toBe("https://reply.example.test/listener");
-    expect(JSON.parse(String(replyCalls[0]?.init?.body))).toMatchObject({
+    expect(replyCalls).toHaveLength(4);
+    const finalCall = replyCalls.at(-1);
+    expect(finalCall?.url).toBe("https://reply.example.test/listener");
+    expect(JSON.parse(String(finalCall?.init?.body))).toMatchObject({
       type: "divedra.chat_reply",
       target: {
         sourceId: "example-reply-webhook",
@@ -580,7 +581,7 @@ describe("event listener service", () => {
     });
     expect(
       await listEventReplyDispatchesFromRuntimeDb({}, { rootDataDir }),
-    ).toHaveLength(1);
+    ).toHaveLength(4);
     await listener.stop();
   });
 });

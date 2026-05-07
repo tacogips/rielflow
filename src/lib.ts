@@ -24,15 +24,17 @@ import {
 } from "./workflow/usage";
 import { loadWorkflowFromCatalog } from "./workflow/load";
 import { withResolvedWorkflowSourceOptions } from "./workflow/catalog";
-import { createDefaultAutoImprovePolicy } from "./workflow/auto-improve-policy";
-import { loadSession, type SessionStoreOptions } from "./workflow/session-store";
+import {
+  createLifecycleSupervisionPolicyInput,
+  type AutoImprovePolicyInput,
+} from "./workflow/auto-improve-policy";
+import {
+  loadSession,
+  type SessionStoreOptions,
+} from "./workflow/session-store";
 import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/scenario-adapter";
-import type {
-  AutoImprovePolicy,
-  ChatReplyDispatcher,
-  LoadOptions,
-} from "./workflow/types";
+import type { ChatReplyDispatcher, LoadOptions } from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
 
 export type DivedraOptions = LoadOptions & SessionStoreOptions;
@@ -52,8 +54,8 @@ export interface ExecuteWorkflowInput extends DivedraOptions {
    * seeds {@link WorkflowSessionState.supervision} and runs the supervision loop
    * (retry on terminal target failure) until success or `maxSupervisedAttempts`.
    */
-  readonly autoImprove?: AutoImprovePolicy;
-  /** Use only when a caller intentionally needs legacy unsupervised start semantics. */
+  readonly autoImprove?: AutoImprovePolicyInput;
+  /** Disable workflow patching while preserving lifecycle supervision. */
   readonly disableAutoImprove?: boolean;
   /**
    * Phase-2: run the configured superviser workflow as a nested session (requires
@@ -69,7 +71,7 @@ export interface ResumeWorkflowInput extends DivedraOptions {
   readonly workflowWorkingDirectory?: string;
   readonly mockScenario?: MockNodeScenario;
   /** Merges into persisted supervision policy when the session was started with `autoImprove`. */
-  readonly autoImprove?: AutoImprovePolicy;
+  readonly autoImprove?: AutoImprovePolicyInput;
   /**
    * When the session was started with `nestedSuperviserDriver`, pass `true` to continue the
    * nested superviser workflow (requires the same `autoImprove` policy shape as the original run).
@@ -88,7 +90,7 @@ export interface RerunWorkflowInput extends DivedraOptions {
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
-  readonly autoImprove?: AutoImprovePolicy;
+  readonly autoImprove?: AutoImprovePolicyInput;
 }
 
 export interface ContinueWorkflowFromHistoryInput extends DivedraOptions {
@@ -104,7 +106,7 @@ export interface ContinueWorkflowFromHistoryInput extends DivedraOptions {
   readonly maxLoopIterations?: number;
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
-  readonly autoImprove?: AutoImprovePolicy;
+  readonly autoImprove?: AutoImprovePolicyInput;
   readonly nestedSuperviserDriver?: boolean;
 }
 
@@ -433,9 +435,6 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
   readonly status: WorkflowSessionState["status"];
   readonly exitCode: number;
 }> {
-  if (input.disableAutoImprove && input.nestedSuperviserDriver) {
-    throw new Error("nestedSuperviserDriver requires supervised autoImprove");
-  }
   const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     input.workflowWorkingDirectory,
   );
@@ -489,8 +488,8 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
       ? {}
       : { defaultTimeoutMs: input.defaultTimeoutMs }),
     ...(input.disableAutoImprove
-      ? {}
-      : { autoImprove: input.autoImprove ?? createDefaultAutoImprovePolicy() }),
+      ? { autoImprove: createLifecycleSupervisionPolicyInput() }
+      : { autoImprove: input.autoImprove ?? { enabled: true } }),
     ...(input.nestedSuperviserDriver === true
       ? { nestedSuperviserDriver: true as const }
       : {}),

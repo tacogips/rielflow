@@ -1,0 +1,8 @@
+{
+  "id": "shared-brainstorm-chat",
+  "kind": "chat",
+  "sourceId": "collaboration-chat",
+  "target": {
+    "conversationId": "shared-brainstorm"
+  }
+}

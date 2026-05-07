@@ -1859,7 +1859,7 @@ describe("runCli", () => {
     ).toBe(true);
   });
 
-  test("workflow run supports --no-auto-improve as an explicit unsupervised escape hatch", async () => {
+  test("workflow run keeps supervision under --no-auto-improve but disables workflow patching", async () => {
     const root = await makeTempDir();
     const examplesRoot = path.join(process.cwd(), "examples");
     const scenarioPath = path.join(
@@ -1883,17 +1883,33 @@ describe("runCli", () => {
         "--mock-scenario",
         scenarioPath,
         "--no-auto-improve",
+        "--max-supervised-attempts",
+        "3",
         "--output",
         "json",
       ],
       capture.io,
     );
 
-    expect(code).toBe(5);
+    expect(code).toBe(0);
     const out = JSON.parse(capture.stdout.join("\n")) as {
-      readonly session?: { readonly supervision?: unknown };
+      readonly status: string;
+      readonly supervision?: {
+        readonly status: string;
+        readonly policy: {
+          readonly maxSupervisedAttempts: number;
+          readonly maxWorkflowPatches: number;
+        };
+        readonly incidents: readonly { readonly category: string }[];
+      };
     };
-    expect(out.session?.supervision).toBeUndefined();
+    expect(out.status).toBe("completed");
+    expect(out.supervision?.status).toBe("succeeded");
+    expect(out.supervision?.policy.maxSupervisedAttempts).toBe(3);
+    expect(out.supervision?.policy.maxWorkflowPatches).toBe(0);
+    expect(
+      (out.supervision?.incidents ?? []).some((i) => i.category === "failure"),
+    ).toBe(true);
   });
 
   test("commands without auto-improve flags do not synthesize supervision policy input", async () => {
@@ -1986,7 +2002,9 @@ describe("runCli", () => {
 
     expect(code).toBe(0);
     const out = JSON.parse(capture.stdout.join("\n")) as {
-      readonly supervision?: { readonly policy?: { monitorIntervalMs: number } };
+      readonly supervision?: {
+        readonly policy?: { monitorIntervalMs: number };
+      };
     };
     expect(out.supervision?.policy?.monitorIntervalMs).toBe(1000);
   });
@@ -3736,7 +3754,7 @@ describe("runCli", () => {
     });
   });
 
-  test("workflow run forwards --no-auto-improve through GraphQL transport", async () => {
+  test("workflow run forwards --no-auto-improve as lifecycle-only supervision through GraphQL transport", async () => {
     const capture = createIoCapture();
     const requests: Array<{
       url: string;
@@ -3807,9 +3825,10 @@ describe("runCli", () => {
       variables: {
         input: {
           workflowName: "demo",
-          autoImprove: {
-            enabled: false,
-          },
+          autoImprove: expect.objectContaining({
+            enabled: true,
+            maxWorkflowPatches: 0,
+          }),
         },
       },
     });
@@ -4290,9 +4309,7 @@ describe("runCli", () => {
         defaultTimeoutMs: 900,
       }),
     );
-    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty(
-      "autoImprove",
-    );
+    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty("autoImprove");
   });
 
   test("local session rerun forwards normalized workflow run overrides", async () => {
@@ -4366,9 +4383,7 @@ describe("runCli", () => {
         defaultTimeoutMs: 1200,
       }),
     );
-    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty(
-      "autoImprove",
-    );
+    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty("autoImprove");
     expect(JSON.parse(capture.stdout.join("\n"))).toEqual({
       sourceSessionId: "sess-local-rerun",
       sessionId: "sess-local-rerun-2",

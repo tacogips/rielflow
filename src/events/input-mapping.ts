@@ -150,6 +150,9 @@ export function mapEventToWorkflowInput(
       workflowInput: normalizedWorkflowInput,
       event: eventMetadata,
       eventBindingId: binding.id,
+      ...(binding.outputDestinations === undefined
+        ? {}
+        : { eventOutputDestinations: binding.outputDestinations }),
       eventMailboxBridgePolicy: mailboxPolicy,
       ...(shouldMirrorToHumanInput(binding, source)
         ? { humanInput: normalizedWorkflowInput }

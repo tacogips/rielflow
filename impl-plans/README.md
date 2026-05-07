@@ -28,30 +28,32 @@ No active implementation plans remain.
 
 ## Recently Completed
 
-| Plan                                             | Completed  | Design Reference                                                     |
-| ------------------------------------------------ | ---------- | -------------------------------------------------------------------- |
-| `default-supervision-runner-pool-regression-fixes` | 2026-05-06 | `architecture`, `command`, `design-event-supervisor-control` |
-| `workflow-runner-event-channel`                  | 2026-05-06 | `design-event-supervisor-control`                                    |
-| `deterministic-supervisor-runner-pool`           | 2026-05-06 | `architecture`, `command`, `design-event-supervisor-control`         |
-| `default-supervisor-backed-workflow-run`         | 2026-05-06 | `architecture`, `command`                                            |
-| `bounded-fanout-join-workflow-execution`         | 2026-05-06 | `design-bounded-fanout-join-workflow-execution`                      |
-| `default-node-timeout-60-minutes`                | 2026-05-06 | `design-workflow-json`                                               |
-| `inline-workflow-variables-and-inspect-usage`    | 2026-05-06 | `command`, `notes`                                                   |
-| `output-contract-candidate-path-prompt`          | 2026-05-06 | `architecture`                                                       |
-| `real-backend-runtime-artifact-audit`            | 2026-05-06 | `design-node-execution-inbox-contract`                               |
-| `session-command-project-scope`                  | 2026-05-06 | `design-user-scope-workflows`                                        |
-| `output-contract-adapter-envelope-normalization` | 2026-05-05 | `design-node-output-contract`, `architecture`                        |
-| `graphql-llm-session-message-selection`          | 2026-05-04 | `architecture`                                                       |
-| `graphql-llm-session-message-field-selection`    | 2026-05-04 | `architecture`                                                       |
-| `session-health-command`                         | 2026-05-04 | `design-session-health`                                              |
-| `robust-manager-output-parsing`                  | 2026-05-04 | `architecture`                                                       |
-| `graphql-llm-session-messages`                   | 2026-05-04 | `architecture`                                                       |
-| `step-run-history-rerun-runtime`                 | 2026-05-02 | `design-step-run-history-rerun`                                      |
-| `step-run-history-rerun-foundation`              | 2026-05-02 | `design-step-run-history-rerun`                                      |
-| `workflow-overview-status-surface`               | 2026-05-02 | `design-workflow-overview-status-surface`, `architecture`, `command` |
-| `workflow-supervisor-dispatcher`                 | 2026-05-02 | `design-workflow-supervisor-dispatcher`                              |
-| `workflow-supervisor-dispatcher-foundation`      | 2026-05-01 | `design-workflow-supervisor-dispatcher`                              |
-| `workflow-supervisor-dispatcher-runtime`         | 2026-05-02 | `design-workflow-supervisor-dispatcher`                              |
+| Plan                                               | Completed  | Design Reference                                                              |
+| -------------------------------------------------- | ---------- | ----------------------------------------------------------------------------- |
+| `chat-task-planning-and-supervisor-collaboration`  | 2026-05-07 | `design-chat-task-planning-lifecycle`, `design-supervisor-chat-collaboration` |
+| `output-destinations-supervisor-memory-foundation` | 2026-05-06 | `design-output-destinations-and-supervisor-memory`                            |
+| `default-supervision-runner-pool-regression-fixes` | 2026-05-06 | `architecture`, `command`, `design-event-supervisor-control`                  |
+| `workflow-runner-event-channel`                    | 2026-05-06 | `design-event-supervisor-control`                                             |
+| `deterministic-supervisor-runner-pool`             | 2026-05-06 | `architecture`, `command`, `design-event-supervisor-control`                  |
+| `default-supervisor-backed-workflow-run`           | 2026-05-06 | `architecture`, `command`                                                     |
+| `bounded-fanout-join-workflow-execution`           | 2026-05-06 | `design-bounded-fanout-join-workflow-execution`                               |
+| `default-node-timeout-60-minutes`                  | 2026-05-06 | `design-workflow-json`                                                        |
+| `inline-workflow-variables-and-inspect-usage`      | 2026-05-06 | `command`, `notes`                                                            |
+| `output-contract-candidate-path-prompt`            | 2026-05-06 | `architecture`                                                                |
+| `real-backend-runtime-artifact-audit`              | 2026-05-06 | `design-node-execution-inbox-contract`                                        |
+| `session-command-project-scope`                    | 2026-05-06 | `design-user-scope-workflows`                                                 |
+| `output-contract-adapter-envelope-normalization`   | 2026-05-05 | `design-node-output-contract`, `architecture`                                 |
+| `graphql-llm-session-message-selection`            | 2026-05-04 | `architecture`                                                                |
+| `graphql-llm-session-message-field-selection`      | 2026-05-04 | `architecture`                                                                |
+| `session-health-command`                           | 2026-05-04 | `design-session-health`                                                       |
+| `robust-manager-output-parsing`                    | 2026-05-04 | `architecture`                                                                |
+| `graphql-llm-session-messages`                     | 2026-05-04 | `architecture`                                                                |
+| `step-run-history-rerun-runtime`                   | 2026-05-02 | `design-step-run-history-rerun`                                               |
+| `step-run-history-rerun-foundation`                | 2026-05-02 | `design-step-run-history-rerun`                                               |
+| `workflow-overview-status-surface`                 | 2026-05-02 | `design-workflow-overview-status-surface`, `architecture`, `command`          |
+| `workflow-supervisor-dispatcher`                   | 2026-05-02 | `design-workflow-supervisor-dispatcher`                                       |
+| `workflow-supervisor-dispatcher-foundation`        | 2026-05-01 | `design-workflow-supervisor-dispatcher`                                       |
+| `workflow-supervisor-dispatcher-runtime`           | 2026-05-02 | `design-workflow-supervisor-dispatcher`                                       |
 
 ## Completed Plans
 

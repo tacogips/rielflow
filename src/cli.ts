@@ -25,7 +25,7 @@ import type { EventListenerHandle } from "./events/listener-service";
 import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type { WorkflowExecutionCompactSummary } from "./shared/ui-contract";
 import {
-  createDefaultAutoImprovePolicy,
+  createLifecycleSupervisionPolicyInput,
   normalizeAutoImprovePolicy,
   type AutoImprovePolicyInput,
 } from "./workflow/auto-improve-policy";
@@ -89,7 +89,6 @@ import {
   type WorkflowUsageSummary,
 } from "./workflow/usage";
 import type {
-  AutoImprovePolicy,
   LoadOptions,
   ResolvedWorkflowSource,
   WorkflowScopeSelector,
@@ -108,14 +107,17 @@ type AutoImproveCliInputs = {
 };
 
 function parseAutoImprovePolicyFromCliFlags(input: AutoImproveCliInputs): {
-  readonly policy?: AutoImprovePolicy;
+  readonly policy?: AutoImprovePolicyInput;
   readonly error?: string;
 } {
+  if (!input.enabled) {
+    return {};
+  }
   const normalized = normalizeAutoImprovePolicy(input);
   if (!normalized.ok) {
     return { error: normalized.error };
   }
-  return normalized.value === undefined ? {} : { policy: normalized.value };
+  return normalized.value === undefined ? {} : { policy: input };
 }
 
 export interface CliIo {
@@ -334,7 +336,7 @@ interface ParsedOptions {
   readonly live: boolean;
   readonly stallTimeoutMs?: number;
   readonly reason?: string;
-  readonly autoImprove?: AutoImprovePolicy;
+  readonly autoImprove?: AutoImprovePolicyInput;
   readonly disableAutoImprove: boolean;
   /** Phase-2: run superviser bundle as nested workflow; requires --auto-improve */
   readonly nestedSuperviser?: boolean;
@@ -1254,8 +1256,11 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   const hasWorkflowAutoImprovePolicyFlag =
     firstAutoImprovePolicyFlag !== undefined && !isSessionHealthCommand;
   const shouldEnableCliAutoImprovePolicy =
-    !disableAutoImprove &&
-    (autoImprove || nestedSuperviser || hasWorkflowAutoImprovePolicyFlag);
+    !isSessionHealthCommand &&
+    (disableAutoImprove ||
+      autoImprove ||
+      nestedSuperviser ||
+      hasWorkflowAutoImprovePolicyFlag);
   const autoImproveInputs = {
     enabled: shouldEnableCliAutoImprovePolicy,
     ...(superviserWorkflowId === undefined ? {} : { superviserWorkflowId }),
@@ -1264,8 +1269,14 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       ? {}
       : { stallTimeoutMs }),
     ...(maxSupervisedAttempts === undefined ? {} : { maxSupervisedAttempts }),
-    ...(maxWorkflowPatches === undefined ? {} : { maxWorkflowPatches }),
-    ...(workflowMutationMode === undefined ? {} : { workflowMutationMode }),
+    ...(disableAutoImprove
+      ? { maxWorkflowPatches: 0 }
+      : maxWorkflowPatches === undefined
+        ? {}
+        : { maxWorkflowPatches }),
+    ...(disableAutoImprove || workflowMutationMode === undefined
+      ? {}
+      : { workflowMutationMode }),
     ...(noAllowTargetedRerun ? { allowTargetedRerun: false } : {}),
   } as const;
   const autoImprovePolicy =
@@ -1276,11 +1287,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     } else if (nestedSuperviser && disableAutoImprove) {
       parseError =
         "--nested-superviser / --nested-supervisor cannot be combined with --no-auto-improve";
-    } else if (
-      disableAutoImprove &&
-      firstAutoImprovePolicyFlag !== undefined
-    ) {
-      parseError = `${firstAutoImprovePolicyFlag} cannot be combined with --no-auto-improve`;
+    } else if (disableAutoImprove && maxWorkflowPatches !== undefined) {
+      parseError =
+        "--max-workflow-patches cannot be combined with --no-auto-improve";
+    } else if (disableAutoImprove && workflowMutationMode !== undefined) {
+      parseError =
+        "--workflow-mutation-mode cannot be combined with --no-auto-improve";
     } else if (
       isSessionHealthCommand &&
       !autoImprove &&
@@ -1489,7 +1501,7 @@ function printHelp(io: CliIo): void {
     "  --auto-improve               Explicitly enable supervised runs with durable supervision state",
   );
   io.stdout(
-    "  --no-auto-improve            Send an explicit disabled auto-improve policy",
+    "  --no-auto-improve            Disable workflow patching while keeping lifecycle supervision",
   );
   io.stdout(
     "  --supervisor-workflow <id> Superviser bundle id (alias: --superviser-workflow; persisted; divedra/* control + optional nested driver)",
@@ -1991,7 +2003,10 @@ function buildRemoteExecutionInput(
     parsedOptions.workingDirectory,
   );
   const autoImprove: AutoImprovePolicyInput =
-    parsedOptions.autoImprove ?? { enabled: !parsedOptions.disableAutoImprove };
+    parsedOptions.autoImprove ??
+    (parsedOptions.disableAutoImprove
+      ? createLifecycleSupervisionPolicyInput()
+      : { enabled: true });
   return {
     autoImprove,
     ...(parsedOptions.nestedSuperviser ? { nestedSuperviser: true } : {}),
@@ -2128,9 +2143,11 @@ function buildLocalWorkflowRunOverrides(
   );
   const autoImprove =
     parsedOptions.autoImprove ??
-    (!defaultAutoImprove || parsedOptions.disableAutoImprove
+    (!defaultAutoImprove
       ? undefined
-      : createDefaultAutoImprovePolicy());
+      : parsedOptions.disableAutoImprove
+        ? createLifecycleSupervisionPolicyInput()
+        : { enabled: true });
   return {
     ...(workflowWorkingDirectory === undefined
       ? {}

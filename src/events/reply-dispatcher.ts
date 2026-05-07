@@ -7,13 +7,22 @@ import type {
 import {
   loadEventReplyDispatchByIdempotencyKey,
   saveEventReplyDispatchToRuntimeDb,
-  type RuntimeEventReplyDispatchRecord,
 } from "../workflow/runtime-db";
 import {
   createDefaultEventSourceRegistry,
   type EventSourceRegistry,
 } from "./adapter-registry";
-import { isEventSourceEnabled } from "./config";
+import {
+  buildChatReplyRequestForDeliveryTarget,
+  dispatchChatReplyToResolvedEventOutputDestination,
+  resolveChatReplyDeliveryTargets,
+  type EventOutputDestinationChatDeliveryTarget,
+} from "./output-destination";
+import {
+  buildReplyDispatchSaveInput,
+  persistedToDispatchResult,
+  resolveReplyDispatchProvider,
+} from "./reply-dispatch-record";
 import type { EventConfiguration } from "./types";
 
 export interface EventReplyDispatcherOptions {
@@ -73,8 +82,66 @@ async function dispatchChatReplyOnce(input: {
   readonly runtimeOptions: LoadOptions;
   readonly request: ChatReplyDispatchRequest;
 }): Promise<ChatReplyDispatchResult> {
+  const targets = resolveChatReplyDeliveryTargets({
+    configuration: input.configuration,
+    request: input.request,
+  });
+  if (targets.length === 0) {
+    throw new Error("no enabled chat output destination is available");
+  }
+  if (targets.length > 1) {
+    const results: ChatReplyDispatchResult[] = [];
+    for (const target of targets) {
+      results.push(
+        await dispatchChatReplyToOneTarget({
+          ...input,
+          request: withTargetIdempotency(input.request, target),
+          target,
+        }),
+      );
+    }
+    const [first] = results;
+    if (first === undefined) {
+      throw new Error("no chat output destination dispatch result");
+    }
+    return {
+      status: first.status,
+      provider: first.provider,
+      ...(first.dispatchId === undefined
+        ? {}
+        : { dispatchId: first.dispatchId }),
+      ...(first.providerMessageId === undefined
+        ? {}
+        : { providerMessageId: first.providerMessageId }),
+      destinationResults: results.flatMap(
+        (result) => result.destinationResults ?? [],
+      ),
+    };
+  }
+  const [target] = targets;
+  if (target === undefined) {
+    throw new Error("no enabled chat output destination is available");
+  }
+  return stripDestinationResults(
+    await dispatchChatReplyToOneTarget({ ...input, target }),
+  );
+}
+
+async function dispatchChatReplyToOneTarget(input: {
+  readonly configuration: EventConfiguration;
+  readonly registry: EventSourceRegistry;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly fetchImpl: typeof fetch;
+  readonly runtimeOptions: LoadOptions;
+  readonly request: ChatReplyDispatchRequest;
+  readonly target: EventOutputDestinationChatDeliveryTarget;
+}): Promise<ChatReplyDispatchResult> {
+  const request = buildChatReplyRequestForDeliveryTarget(
+    input.request,
+    input.target,
+  );
   const persisted = await loadEventReplyDispatchByIdempotencyKey(
-    input.request.idempotencyKey,
+    request.idempotencyKey,
     input.runtimeOptions,
   );
   const persistedResult = persistedToDispatchResult(persisted);
@@ -82,60 +149,60 @@ async function dispatchChatReplyOnce(input: {
     return persistedResult;
   }
 
-  const source = input.configuration.sources.find(
-    (entry) =>
-      entry.id === input.request.target.sourceId && isEventSourceEnabled(entry),
-  );
-  if (source === undefined) {
-    throw new Error(
-      `event source '${input.request.target.sourceId}' is not configured or enabled`,
-    );
-  }
-
-  const adapter = input.registry.get(source.kind);
-  if (adapter === undefined) {
-    throw new Error(`no event source adapter registered for '${source.kind}'`);
-  }
-  if (adapter.dispatchChatReply === undefined) {
-    throw new Error(
-      `event source adapter '${source.kind}' does not support chat replies`,
-    );
-  }
+  const provider = resolveReplyDispatchProvider({
+    configuration: input.configuration,
+    sourceId: request.target.sourceId,
+    ...(input.target.destinationId === undefined
+      ? {}
+      : { outputDestinationId: input.target.destinationId }),
+    ...(request.outputDestinationId === undefined
+      ? {}
+      : { outputDestinationId: request.outputDestinationId }),
+    ...(request.outputDestinationIds === undefined
+      ? {}
+      : { outputDestinationIds: request.outputDestinationIds }),
+  });
 
   const now = new Date().toISOString();
   await saveEventReplyDispatchToRuntimeDb(
     buildReplyDispatchSaveInput({
-      request: input.request,
-      provider: source.provider ?? source.kind,
+      request,
+      provider,
       status: "dispatching",
       updatedAt: now,
     }),
     input.runtimeOptions,
   );
   try {
-    const result = await adapter.dispatchChatReply({
-      source,
-      request: input.request,
+    const result = await dispatchChatReplyToResolvedEventOutputDestination({
+      registry: input.registry,
+      request,
+      target: input.target,
       env: input.env,
       fetchImpl: input.fetchImpl,
     });
+    const enrichedResult = enrichDestinationResult({
+      result,
+      request,
+      target: input.target,
+    });
     await saveEventReplyDispatchToRuntimeDb(
       buildReplyDispatchSaveInput({
-        request: input.request,
-        provider: result.provider,
-        status: result.status,
-        result,
+        request,
+        provider: enrichedResult.provider,
+        status: enrichedResult.status,
+        result: enrichedResult,
         updatedAt: new Date().toISOString(),
       }),
       input.runtimeOptions,
     );
-    return result;
+    return enrichedResult;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     await saveEventReplyDispatchToRuntimeDb(
       buildReplyDispatchSaveInput({
-        request: input.request,
-        provider: source.provider ?? source.kind,
+        request,
+        provider,
         status: "failed",
         error: message,
         updatedAt: new Date().toISOString(),
@@ -146,79 +213,65 @@ async function dispatchChatReplyOnce(input: {
   }
 }
 
-function persistedToDispatchResult(
-  record: RuntimeEventReplyDispatchRecord | null,
-): ChatReplyDispatchResult | null {
-  if (record === null) {
-    return null;
-  }
-  if (record.status !== "sent" && record.status !== "queued") {
-    return null;
-  }
+function withTargetIdempotency(
+  request: ChatReplyDispatchRequest,
+  target: EventOutputDestinationChatDeliveryTarget,
+): ChatReplyDispatchRequest {
+  const suffix = target.destinationId ?? target.source.id;
   return {
-    status: record.status,
-    provider: record.provider,
-    ...(record.dispatchId === null ? {} : { dispatchId: record.dispatchId }),
-    ...(record.providerMessageId === null
+    ...request,
+    idempotencyKey: `${request.idempotencyKey}:destination:${suffix}`,
+    ...(target.destinationId === undefined
       ? {}
-      : { providerMessageId: record.providerMessageId }),
+      : { outputDestinationId: target.destinationId }),
   };
 }
 
-function buildReplyDispatchSaveInput(input: {
+function enrichDestinationResult(input: {
+  readonly result: ChatReplyDispatchResult;
   readonly request: ChatReplyDispatchRequest;
-  readonly provider: string;
-  readonly status:
-    | "dispatching"
-    | "sent"
-    | "queued"
-    | "failed"
-    | "no_delivery_target";
-  readonly result?: ChatReplyDispatchResult;
-  readonly error?: string;
-  readonly updatedAt: string;
-}): Parameters<typeof saveEventReplyDispatchToRuntimeDb>[0] {
-  const responsePayload =
-    input.result === undefined
-      ? undefined
-      : {
-          status: input.result.status,
-          provider: input.result.provider,
-          ...(input.result.dispatchId === undefined
-            ? {}
-            : { dispatchId: input.result.dispatchId }),
-          ...(input.result.providerMessageId === undefined
-            ? {}
-            : { providerMessageId: input.result.providerMessageId }),
-        };
+  readonly target: EventOutputDestinationChatDeliveryTarget;
+}): ChatReplyDispatchResult {
   return {
-    idempotencyKey: input.request.idempotencyKey,
-    sourceId: input.request.target.sourceId,
-    provider: input.provider,
-    workflowId: input.request.workflowId,
-    workflowExecutionId: input.request.workflowExecutionId,
-    nodeId: input.request.nodeId,
-    nodeExecId: input.request.nodeExecId,
-    eventId: input.request.target.eventId,
-    conversationId: input.request.target.conversationId,
-    ...(input.request.target.threadId === undefined
-      ? {}
-      : { threadId: input.request.target.threadId }),
-    ...(input.request.target.actorId === undefined
-      ? {}
-      : { actorId: input.request.target.actorId }),
-    status: input.status,
-    ...(input.result?.dispatchId === undefined
+    status: input.result.status,
+    provider: input.result.provider,
+    ...(input.result.dispatchId === undefined
       ? {}
       : { dispatchId: input.result.dispatchId }),
-    ...(input.result?.providerMessageId === undefined
+    ...(input.result.providerMessageId === undefined
       ? {}
       : { providerMessageId: input.result.providerMessageId }),
-    requestJson: JSON.stringify(input.request),
-    ...(responsePayload === undefined
+    destinationResults: [
+      {
+        ...(input.target.destinationId === undefined
+          ? {}
+          : { destinationId: input.target.destinationId }),
+        sourceId: input.target.source.id,
+        idempotencyKey: input.request.idempotencyKey,
+        status: input.result.status,
+        provider: input.result.provider,
+        ...(input.result.dispatchId === undefined
+          ? {}
+          : { dispatchId: input.result.dispatchId }),
+        ...(input.result.providerMessageId === undefined
+          ? {}
+          : { providerMessageId: input.result.providerMessageId }),
+      },
+    ],
+  };
+}
+
+function stripDestinationResults(
+  result: ChatReplyDispatchResult,
+): ChatReplyDispatchResult {
+  return {
+    status: result.status,
+    provider: result.provider,
+    ...(result.dispatchId === undefined
       ? {}
-      : { responseJson: JSON.stringify(responsePayload) }),
-    ...(input.error === undefined ? {} : { error: input.error }),
-    updatedAt: input.updatedAt,
+      : { dispatchId: result.dispatchId }),
+    ...(result.providerMessageId === undefined
+      ? {}
+      : { providerMessageId: result.providerMessageId }),
   };
 }

@@ -50,18 +50,16 @@ Workflow start surfaces should prefer deterministic supervised execution without
 requiring an operator to remember `--auto-improve`. The start boundary is:
 
 - CLI `workflow run <name>` starts under deterministic in-process runner-pool
-  supervision unless `--no-auto-improve` or another explicit unsupervised escape
-  hatch is present.
-- CLI `workflow run <name> --endpoint ... --no-auto-improve` must forward the
-  opt-out as `autoImprove: { enabled: false }` instead of omitting
-  `autoImprove`, because the GraphQL start boundary treats omitted policy input
-  as a request for the default supervisor-backed start.
+  supervision.
+- CLI `workflow run <name> --endpoint ... --no-auto-improve` must forward an
+  enabled lifecycle-only supervision policy with `maxWorkflowPatches: 0`,
+  because `--no-auto-improve` disables patching, not supervision.
 - GraphQL `executeWorkflow` synthesizes the same deterministic supervisor policy
   when `autoImprove` is omitted; callers can pass
-  `autoImprove: { enabled: false }` to preserve unsupervised start semantics.
+  `autoImprove: { enabled: false }` for lifecycle-only supervision.
 - Library `executeWorkflow()` uses the same default and exposes
-  `disableAutoImprove` for specialized callers that intentionally need the
-  legacy normal-mode start.
+  `disableAutoImprove` to disable workflow patching while preserving lifecycle
+  supervision.
 - Resume, rerun, continuation, direct `call-step`, and low-level
   `runWorkflow()` do not silently add supervision because those paths may target
   old unsupervised sessions, imported history, or isolated test fixtures.
@@ -73,13 +71,12 @@ Implementation boundaries for this default are strict:
   supplied; ignoring the toggle is a contract violation because it silently
   reverts the default local path to unsupervised execution.
 - CLI local execution, CLI endpoint execution, GraphQL `executeWorkflow`, and
-  library `executeWorkflow()` must make the same default/opt-out decision before
-  invoking the engine or transport. Endpoint-backed CLI calls must serialize the
-  explicit opt-out as `autoImprove: { enabled: false }`.
+  library `executeWorkflow()` must make the same default/lifecycle-only decision
+  before invoking the engine or transport. Endpoint-backed CLI calls must
+  serialize `--no-auto-improve` as an enabled policy with `maxWorkflowPatches: 0`.
 - nested supervisor execution is valid only when the effective policy is
-  supervised. If the caller opts out with `--no-auto-improve` or
-  `disableAutoImprove`, nested supervisor flags must be rejected or ignored by a
-  documented validation rule rather than starting a partially supervised run.
+  supervised. Because lifecycle-only mode is still supervised, nested supervisor
+  flags remain compatible with `--no-auto-improve` and `disableAutoImprove`.
 
 This keeps the user-facing execution model supervisor-first while avoiding a
 second lifecycle implementation. The default policy records

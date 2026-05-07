@@ -390,6 +390,9 @@ describe("CodexAgentAdapter", () => {
     const adapter = new CodexAgentAdapter({
       createRunner: fixture.createRunner,
     });
+    const priorGraphqlEndpoint = process.env["DIVEDRA_GRAPHQL_ENDPOINT"];
+    const priorWorkflowExecutionId =
+      process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"];
     await adapter.execute(
       {
         ...baseInput,
@@ -422,8 +425,10 @@ describe("CodexAgentAdapter", () => {
     expect(observedWorkflowExecutionId).toBe("sess-1");
     expect(observedNodeExecId).toBe("exec-1");
     expect(observedMailboxDir).toBe("/tmp/node-1/exec-1/mailbox");
-    expect(process.env["DIVEDRA_GRAPHQL_ENDPOINT"]).toBeUndefined();
-    expect(process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"]).toBeUndefined();
+    expect(process.env["DIVEDRA_GRAPHQL_ENDPOINT"]).toBe(priorGraphqlEndpoint);
+    expect(process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"]).toBe(
+      priorWorkflowExecutionId,
+    );
   });
 
   test("maps invalid structured output to invalid_output", async () => {

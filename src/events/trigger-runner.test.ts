@@ -1229,6 +1229,156 @@ describe("workflow trigger runner supervised bindings", () => {
     expect(storedInput.workflowInput).toEqual({});
   });
 
+  test("read-only dispatch does not emit progress chat replies", async () => {
+    const root = await makeTempDir();
+    const workflowName = "readonly-progress-wf";
+    await writeManagerOnlyWorkflow({ root, workflowName, sticky: false });
+
+    const dispatched: unknown[] = [];
+    const runner = createWorkflowTriggerRunner({
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      readOnly: true,
+      eventReplyDispatcher: {
+        async dispatchChatReply(request: unknown) {
+          dispatched.push(request);
+          return { status: "sent" as const, provider: "test" };
+        },
+      },
+    });
+
+    const result = await runner.dispatch({
+      binding: buildBinding(workflowName, "readonly-progress-binding"),
+      source: buildSource(),
+      event: buildEvent({
+        eventId: "evt-readonly-progress-1",
+        dedupeKey: "dedupe-readonly-progress-1",
+        conversationId: "conv-readonly-progress",
+        threadId: "thread-readonly-progress",
+        text: "plan this",
+      }),
+    });
+
+    expect(result.receipt.status).toBe("skipped");
+    expect(result.receipt.error).toContain("read-only mode");
+    expect(dispatched).toHaveLength(0);
+  });
+
+  test("task planning asks for missing required info before workflow start", async () => {
+    const root = await makeTempDir();
+    const workflowName = "planning-clarify-wf";
+    await writeManagerOnlyWorkflow({ root, workflowName, sticky: false });
+
+    const dispatched: Array<{ readonly message: { readonly text: string } }> =
+      [];
+    const runner = createWorkflowTriggerRunner({
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      eventReplyDispatcher: {
+        async dispatchChatReply(request) {
+          dispatched.push(request);
+          return { status: "sent" as const, provider: "test" };
+        },
+      },
+    });
+    const binding: EventBinding = {
+      ...buildBinding(workflowName, "planning-clarify-binding"),
+      taskPlanning: {
+        requiredInput: [
+          {
+            path: "ticketId",
+            label: "ticket id",
+            question: "Which ticket should I use?",
+          },
+        ],
+        clarificationTemplate: "Please provide: {{missing}}. {{questions}}",
+      },
+    };
+
+    const result = await runner.dispatch({
+      binding,
+      source: buildSource(),
+      event: buildEvent({
+        eventId: "evt-planning-clarify-1",
+        dedupeKey: "dedupe-planning-clarify-1",
+        conversationId: "conv-planning-clarify",
+        threadId: "thread-planning-clarify",
+        text: "implement it",
+      }),
+    });
+
+    expect(result.receipt.status).toBe("skipped");
+    expect(result.receipt.error).toContain("task clarification required");
+    expect(dispatched.map((entry) => entry.message.text)).toEqual([
+      "I received the request and am preparing the execution plan.",
+      "Please provide: ticket id. Which ticket should I use?",
+    ]);
+  });
+
+  test("task planning publishes a plan before starting workflow execution", async () => {
+    const root = await makeTempDir();
+    const workflowName = "planning-ready-wf";
+    await writeManagerOnlyWorkflow({ root, workflowName, sticky: false });
+
+    const dispatched: Array<{ readonly message: { readonly text: string } }> =
+      [];
+    const runner = createWorkflowTriggerRunner({
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      eventReplyDispatcher: {
+        async dispatchChatReply(request) {
+          dispatched.push(request);
+          return { status: "sent" as const, provider: "test" };
+        },
+      },
+      mockScenario: {
+        "divedra-manager": {
+          payload: { reply: "planned" },
+          backendSession: { sessionId: "backend-planning-ready-1" },
+        },
+      },
+    });
+    const binding: EventBinding = {
+      ...buildBinding(workflowName, "planning-ready-binding"),
+      taskPlanning: {
+        requiredInput: [{ path: "ticketId", label: "ticket id" }],
+        planTemplate: "Plan: run {{workflowName}} after validating inputs.",
+      },
+    };
+
+    const event = buildEvent({
+      eventId: "evt-planning-ready-1",
+      dedupeKey: "dedupe-planning-ready-1",
+      conversationId: "conv-planning-ready",
+      threadId: "thread-planning-ready",
+      text: "implement ticket",
+    });
+    const result = await runner.dispatch({
+      binding,
+      source: buildSource(),
+      event: {
+        ...event,
+        input: { ...event.input, ticketId: "T-123" },
+      },
+    });
+
+    expect(result.receipt.status).toBe("dispatched");
+    expect(dispatched.slice(0, 3).map((entry) => entry.message.text)).toEqual([
+      "I received the request and am preparing the execution plan.",
+      `Plan: run ${workflowName} after validating inputs.`,
+      `I am starting the workflow: ${workflowName}`,
+    ]);
+  });
+
   test("supervised dispatch stays dispatched when chat reply dispatcher throws", async () => {
     const root = await makeTempDir();
     const workflowName = "supervised-reply-throw-wf";
@@ -1364,8 +1514,8 @@ describe("workflow trigger runner supervised bindings", () => {
     });
 
     expect(result.receipt.status).toBe("failed");
-    expect(dispatched).toHaveLength(1);
-    const req = dispatched[0] as {
+    expect(dispatched).toHaveLength(4);
+    const req = dispatched[3] as {
       readonly message: { readonly text: string };
     };
     expect(req.message.text).toContain(
@@ -1435,6 +1585,7 @@ describe("workflow trigger runner supervised bindings", () => {
     const configuration: EventConfiguration = {
       eventRoot: root,
       sources: [{ ...buildSource(), enabled: true }],
+      destinations: [],
       bindings: [
         supervisedLlm("b-amb-1", wfAlpha),
         supervisedLlm("b-amb-2", wfBeta),

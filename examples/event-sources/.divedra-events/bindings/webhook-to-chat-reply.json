@@ -1,6 +1,7 @@
 {
   "id": "webhook-to-chat-reply",
   "sourceId": "example-reply-webhook",
+  "outputDestinations": ["example-reply-chat"],
   "match": {
     "eventType": "chat.message"
   },

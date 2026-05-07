@@ -1,6 +1,23 @@
 import { isJsonObject } from "../shared/json";
 import { listWorkflowCatalogSources } from "../workflow/catalog";
-import { isEventSourceEnabled, loadEventConfiguration } from "./config";
+import {
+  isEventOutputDestinationEnabled,
+  isEventSourceEnabled,
+  loadEventConfiguration,
+} from "./config";
+import {
+  validateBindingOutputDestinations,
+  validateDestination,
+} from "./validate-destinations";
+import { validateTaskPlanning } from "./validate-task-planning";
+import {
+  eventConfigError as error,
+  eventConfigWarning as warning,
+  isNonEmptyString,
+  isPositiveInteger,
+  validateEnvName,
+  validateSecretEnvName,
+} from "./validation-utils";
 import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
   isValidEventHttpPath,
@@ -21,30 +38,11 @@ import type {
   EventConfigValidationResult,
   EventConfiguration,
   EventInputMapping,
+  EventOutputDestinationConfig,
   EventSourceConfig,
 } from "./types";
 
 const SUPPORTED_SOURCE_KINDS = new Set(["cron", "webhook", "s3-repository"]);
-const SAFE_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
-
-function error(pathName: string, message: string): EventConfigValidationIssue {
-  return { severity: "error", path: pathName, message };
-}
-
-function warning(
-  pathName: string,
-  message: string,
-): EventConfigValidationIssue {
-  return { severity: "warning", path: pathName, message };
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isPositiveInteger(value: unknown): boolean {
-  return Number.isInteger(value) && Number(value) > 0;
-}
 
 function validateUniqueIds(
   label: string,
@@ -132,28 +130,6 @@ function validateInputMapping(
       issues,
     );
   }
-}
-
-function validateEnvName(
-  value: unknown,
-  pathName: string,
-  label: string,
-  issues: EventConfigValidationIssue[],
-): void {
-  if (value === undefined) {
-    return;
-  }
-  if (!isNonEmptyString(value) || !SAFE_ENV_NAME_PATTERN.test(value)) {
-    issues.push(error(pathName, `${label} must be an uppercase env name`));
-  }
-}
-
-function validateSecretEnvName(
-  value: unknown,
-  pathName: string,
-  issues: EventConfigValidationIssue[],
-): void {
-  validateEnvName(value, pathName, "secret env var name", issues);
 }
 
 function validateSource(
@@ -772,6 +748,7 @@ function validateMailboxBridge(
 function validateBinding(
   binding: EventBinding,
   sourcesById: ReadonlyMap<string, EventSourceConfig>,
+  destinationsById: ReadonlyMap<string, EventOutputDestinationConfig>,
   workflowNames: ReadonlySet<string>,
   profilesById: ReadonlyMap<string, WorkflowSupervisorProfile>,
   issues: EventConfigValidationIssue[],
@@ -785,6 +762,12 @@ function validateBinding(
       ),
     );
   }
+  validateBindingOutputDestinations(
+    binding.id,
+    binding.outputDestinations,
+    destinationsById,
+    issues,
+  );
   const isDispatch = binding.execution?.mode === "supervisor-dispatch";
   const workflowName = binding.workflowName?.trim();
   if (workflowName !== undefined && workflowName.length > 0) {
@@ -844,6 +827,7 @@ function validateBinding(
     issues,
   );
   validateMailboxBridge(binding, issues);
+  validateTaskPlanning(binding, issues);
 }
 
 export async function validateEventConfiguration(
@@ -852,12 +836,24 @@ export async function validateEventConfiguration(
 ): Promise<EventConfigValidationResult> {
   const issues: EventConfigValidationIssue[] = [];
   validateUniqueIds("sources", configuration.sources, issues);
+  validateUniqueIds("destinations", configuration.destinations, issues);
   validateUniqueIds("bindings", configuration.bindings, issues);
 
+  const sourcesById = new Map(
+    configuration.sources.map((source) => [source.id, source] as const),
+  );
   for (const source of configuration.sources) {
     validateSource(source, issues);
     if (!isEventSourceEnabled(source)) {
       issues.push(warning(`sources.${source.id}`, "source is disabled"));
+    }
+  }
+  for (const destination of configuration.destinations) {
+    validateDestination(destination, sourcesById, issues);
+    if (!isEventOutputDestinationEnabled(destination)) {
+      issues.push(
+        warning(`destinations.${destination.id}`, "destination is disabled"),
+      );
     }
   }
   validateUniqueEventHttpPaths(
@@ -865,8 +861,10 @@ export async function validateEventConfiguration(
     issues,
   );
 
-  const sourcesById = new Map(
-    configuration.sources.map((source) => [source.id, source] as const),
+  const destinationsById = new Map(
+    configuration.destinations.map(
+      (destination) => [destination.id, destination] as const,
+    ),
   );
   const workflowNames = await listWorkflowNames(options, issues);
   const supervisorProfileLoad = await loadSupervisorProfilesFromEventRoot(
@@ -878,7 +876,14 @@ export async function validateEventConfiguration(
   }
   const profilesById = supervisorProfileLoad.profilesById;
   for (const binding of configuration.bindings) {
-    validateBinding(binding, sourcesById, workflowNames, profilesById, issues);
+    validateBinding(
+      binding,
+      sourcesById,
+      destinationsById,
+      workflowNames,
+      profilesById,
+      issues,
+    );
   }
 
   return {

@@ -81,6 +81,50 @@ export type EventSourceConfig =
   | S3RepositorySourceConfig
   | EventSourceConfigBase;
 
+export interface EventOutputDestinationConfigBase extends JsonObject {
+  readonly id: string;
+  readonly kind: string;
+  readonly enabled?: boolean;
+  readonly provider?: string;
+}
+
+export interface ChatOutputDestinationConfig
+  extends EventOutputDestinationConfigBase {
+  readonly kind: "chat";
+  /**
+   * Source adapter used for transport delivery until chat providers have
+   * independent destination adapters.
+   */
+  readonly sourceId: string;
+  /**
+   * Optional provider-side chat target override. When omitted, replies use the
+   * inbound event conversation, which is appropriate for normal user replies.
+   * When set, supervisors can address another chat conversation or supervisor.
+   */
+  readonly target?: {
+    readonly provider?: string;
+    readonly eventId?: string;
+    readonly conversationId?: string;
+    readonly threadId?: string;
+    readonly actorId?: string;
+  };
+}
+
+export interface S3BackupOutputDestinationConfig
+  extends EventOutputDestinationConfigBase {
+  readonly kind: "s3-backup";
+  readonly provider: "aws-s3" | "s3-compatible";
+  readonly endpointUrlEnv?: string;
+  readonly region?: string;
+  readonly bucket: string;
+  readonly rootPrefix?: string;
+}
+
+export type EventOutputDestinationConfig =
+  | ChatOutputDestinationConfig
+  | S3BackupOutputDestinationConfig
+  | EventOutputDestinationConfigBase;
+
 export interface EventMatchRule extends JsonObject {
   readonly eventType?: string;
   readonly conversationId?: string;
@@ -197,6 +241,19 @@ export interface EventMailboxBridgePolicy extends JsonObject {
   readonly output?: EventMailboxBridgeOutboundPolicy;
 }
 
+export interface EventTaskPlanningRequiredInput extends JsonObject {
+  readonly path: string;
+  readonly label?: string;
+  readonly question?: string;
+}
+
+export interface EventTaskPlanningPolicy extends JsonObject {
+  readonly enabled?: boolean;
+  readonly requiredInput?: readonly EventTaskPlanningRequiredInput[];
+  readonly planTemplate?: string;
+  readonly clarificationTemplate?: string;
+}
+
 export interface ExternalMailboxAddress extends JsonObject {
   readonly sourceId?: string;
   readonly bindingId?: string;
@@ -231,6 +288,7 @@ export interface EventBinding extends JsonObject {
   readonly id: string;
   readonly enabled?: boolean;
   readonly sourceId: string;
+  readonly outputDestinations?: readonly string[];
   readonly match?: EventMatchRule;
   /**
    * Target workflow for `direct` / `supervised` bindings. Optional for
@@ -239,6 +297,7 @@ export interface EventBinding extends JsonObject {
   readonly workflowName?: string;
   readonly inputMapping: EventInputMapping;
   readonly execution?: EventWorkflowExecutionPolicy;
+  readonly taskPlanning?: EventTaskPlanningPolicy;
   /**
    * Optional explicit bridge policy for external mailbox input/output streams.
    * When omitted, {@link resolveEventMailboxBridgePolicy} derives defaults from
@@ -250,7 +309,48 @@ export interface EventBinding extends JsonObject {
 export interface EventConfiguration {
   readonly eventRoot: string;
   readonly sources: readonly EventSourceConfig[];
+  readonly destinations: readonly EventOutputDestinationConfig[];
   readonly bindings: readonly EventBinding[];
+}
+
+export interface NodeMemoryScope extends JsonObject {
+  readonly workflowName: string;
+  readonly nodeId: string;
+  readonly conversationId?: string;
+  readonly actorId?: string;
+}
+
+export interface NodeMemoryRecord extends JsonObject {
+  readonly id: string;
+  readonly scope: NodeMemoryScope;
+  readonly content: string;
+  readonly createdAt: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface NodeMemoryWrite extends JsonObject {
+  readonly scope: NodeMemoryScope;
+  readonly content: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface NodeLongTermMemoryStore {
+  read(scope: NodeMemoryScope): Promise<readonly NodeMemoryRecord[]>;
+  write(record: NodeMemoryWrite): Promise<NodeMemoryRecord>;
+}
+
+export interface WorkflowNodeEventAttachment extends JsonObject {
+  readonly eventSourceIds?: readonly string[];
+  readonly outputDestinationIds?: readonly string[];
+  readonly memory?: {
+    readonly enabled?: boolean;
+    readonly provider?: string;
+    readonly scopeTemplate?: string;
+  };
+  readonly persona?: {
+    readonly systemPrompt?: string;
+    readonly systemPromptFile?: string;
+  };
 }
 
 export interface EventConfigLoadOptions extends DivedraOptions {

@@ -7,6 +7,7 @@ import type {
   EventConfigLoadOptions,
   EventConfiguration,
   EventInputMapping,
+  EventOutputDestinationConfig,
   EventSourceConfig,
   EventWorkflowExecutionPolicy,
 } from "./types";
@@ -92,6 +93,28 @@ function asSourceConfig(value: unknown, label: string): EventSourceConfig {
   } as EventSourceConfig;
 }
 
+function asDestinationConfig(
+  value: unknown,
+  label: string,
+): EventOutputDestinationConfig {
+  if (!isJsonObject(value)) {
+    throw new Error(`${label} must contain a JSON object`);
+  }
+  const id = readOptionalString(value, "id");
+  const kind = readOptionalString(value, "kind");
+  if (id === undefined || kind === undefined) {
+    throw new Error(`${label} must include non-empty id and kind`);
+  }
+  return {
+    ...value,
+    id,
+    kind,
+    ...(readOptionalBoolean(value, "enabled") === undefined
+      ? {}
+      : { enabled: readOptionalBoolean(value, "enabled") }),
+  } as EventOutputDestinationConfig;
+}
+
 function asExecutionPolicy(
   value: unknown,
 ): EventWorkflowExecutionPolicy | undefined {
@@ -152,6 +175,7 @@ function asBinding(value: unknown, label: string): EventBinding {
   }
   const match = value["match"];
   const enabled = readOptionalBoolean(value, "enabled");
+  const outputDestinations = value["outputDestinations"];
   return {
     ...value,
     id,
@@ -159,6 +183,7 @@ function asBinding(value: unknown, label: string): EventBinding {
     ...(workflowName === undefined ? {} : { workflowName }),
     inputMapping: asInputMapping(value["inputMapping"], label),
     ...(enabled === undefined ? {} : { enabled }),
+    ...(Array.isArray(outputDestinations) ? { outputDestinations } : {}),
     ...(isJsonObject(match) ? { match } : {}),
     ...(execution === undefined ? {} : { execution }),
   };
@@ -168,14 +193,18 @@ export async function loadEventConfiguration(
   options: EventConfigLoadOptions = {},
 ): Promise<EventConfiguration> {
   const eventRoot = resolveEventRoot(options);
-  const [sourceFiles, bindingFiles] = await Promise.all([
+  const [sourceFiles, destinationFiles, bindingFiles] = await Promise.all([
     readJsonFilesInDirectory(path.join(eventRoot, "sources")),
+    readJsonFilesInDirectory(path.join(eventRoot, "destinations")),
     readJsonFilesInDirectory(path.join(eventRoot, "bindings")),
   ]);
   return {
     eventRoot,
     sources: sourceFiles.map((entry) =>
       asSourceConfig(entry.value, entry.filePath),
+    ),
+    destinations: destinationFiles.map((entry) =>
+      asDestinationConfig(entry.value, entry.filePath),
     ),
     bindings: bindingFiles.map((entry) =>
       asBinding(entry.value, entry.filePath),
@@ -185,6 +214,12 @@ export async function loadEventConfiguration(
 
 export function isEventSourceEnabled(source: EventSourceConfig): boolean {
   return source.enabled !== false;
+}
+
+export function isEventOutputDestinationEnabled(
+  destination: EventOutputDestinationConfig,
+): boolean {
+  return destination.enabled !== false;
 }
 
 export function isEventBindingEnabled(binding: EventBinding): boolean {

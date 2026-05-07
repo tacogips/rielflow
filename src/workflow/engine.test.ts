@@ -3412,6 +3412,138 @@ describe("runWorkflow", () => {
     ).toBe(true);
   });
 
+  test("uses workflow-authored supervision stall defaults for fresh supervised runs", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "managerless");
+    const workflowPath = path.join(root, "managerless", "workflow.json");
+    const workflow = JSON.parse(await readFile(workflowPath, "utf8")) as {
+      defaults: Record<string, unknown>;
+    };
+    workflow.defaults["supervision"] = {
+      monitorIntervalMs: 25,
+      stallTimeoutMs: 1000,
+    };
+    await writeJson(workflowPath, workflow);
+
+    class SlowFirstStepAdapter extends DeterministicNodeAdapter {
+      override async execute(
+        input: Parameters<NodeAdapter["execute"]>[0],
+        context: Parameters<NodeAdapter["execute"]>[1],
+      ): Promise<AdapterExecutionOutput> {
+        if (input.nodeId === "step-1") {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+        return await super.execute(input, context);
+      }
+    }
+
+    const result = await runWorkflow(
+      "managerless",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: { topic: "managerless" },
+        autoImprove: { enabled: true },
+        supervisionLoopExecution: true,
+      },
+      new SlowFirstStepAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.session.supervision?.policy?.stallTimeoutMs).toBe(1000);
+  });
+
+  test("uses workflow-authored supervision stall defaults for lifecycle-only input", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "managerless");
+    const workflowPath = path.join(root, "managerless", "workflow.json");
+    const workflow = JSON.parse(await readFile(workflowPath, "utf8")) as {
+      defaults: Record<string, unknown>;
+    };
+    workflow.defaults["supervision"] = {
+      monitorIntervalMs: 25,
+      stallTimeoutMs: 1000,
+    };
+    await writeJson(workflowPath, workflow);
+
+    const result = await runWorkflow(
+      "managerless",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: { topic: "managerless" },
+        autoImprove: { enabled: false },
+        supervisionLoopExecution: true,
+      },
+      new DeterministicNodeAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.session.supervision?.policy).toMatchObject({
+      stallTimeoutMs: 1000,
+      maxWorkflowPatches: 0,
+    });
+  });
+
+  test("uses step-authored stall timeout over workflow supervision policy", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "managerless");
+    const workflowPath = path.join(root, "managerless", "workflow.json");
+    const workflow = JSON.parse(await readFile(workflowPath, "utf8")) as {
+      steps: Array<Record<string, unknown>>;
+    };
+    workflow.steps[0] = {
+      ...workflow.steps[0],
+      stallTimeoutMs: 1000,
+    };
+    await writeJson(workflowPath, workflow);
+
+    class SlowFirstStepAdapter extends DeterministicNodeAdapter {
+      override async execute(
+        input: Parameters<NodeAdapter["execute"]>[0],
+        context: Parameters<NodeAdapter["execute"]>[1],
+      ): Promise<AdapterExecutionOutput> {
+        if (input.nodeId === "step-1") {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+        }
+        return await super.execute(input, context);
+      }
+    }
+
+    const result = await runWorkflow(
+      "managerless",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: { topic: "managerless" },
+        autoImprove: {
+          enabled: true,
+          monitorIntervalMs: 25,
+          stallTimeoutMs: 200,
+          maxSupervisedAttempts: 1,
+          maxWorkflowPatches: 0,
+          workflowMutationMode: "execution-copy",
+        },
+        supervisionLoopExecution: true,
+      },
+      new SlowFirstStepAdapter(),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
   test("preserves supervision state on rerun when autoImprove and source session were supervised", async () => {
     const root = await makeTempDir();
     await createManagerlessWorkflowFixture(root, "managerless");

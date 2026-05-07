@@ -1,0 +1,7 @@
+{
+  "id": "collaboration-chat",
+  "kind": "webhook",
+  "path": "/events/chat-supervisor-collaboration",
+  "provider": "webhook",
+  "replyEndpointEnv": "DIVEDRA_COLLAB_REPLY_ENDPOINT"
+}

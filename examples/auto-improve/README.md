@@ -6,6 +6,10 @@ loop: on terminal **failure** or **stall** (no persisted session progress within
 a **remediation** (plain rerun, targeted step rerun, audited `patch-workflow`
 record on **repeat** the same error, or **stop** when budgets are hit). Policy
 and state live on the target **session** and survive resume.
+Workflow bundles may set default supervision timing under
+`workflow.defaults.supervision`; long-running nodes or steps may set
+`stallTimeoutMs` directly. Operator CLI/GraphQL policy fields override workflow
+defaults.
 
 - **Execution-copy** (`--workflow-mutation-mode execution-copy`, default) copies
   the bundle under the artifact area; patch revision records for escalation live

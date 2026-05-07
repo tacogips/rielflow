@@ -5,10 +5,7 @@ import type {
   ValidationResponse,
   WorkflowResponse,
 } from "../shared/ui-contract";
-import {
-  createDefaultAutoImprovePolicy,
-  normalizeAutoImprovePolicy,
-} from "../workflow/auto-improve-policy";
+import { normalizeAutoImprovePolicy } from "../workflow/auto-improve-policy";
 import { runWorkflow, type WorkflowRunOptions } from "../workflow/engine";
 import {
   createWorkflowTemplate,
@@ -277,31 +274,27 @@ function buildGraphqlWorkflowRunOverrides(
   const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     input.workingDirectory,
   );
-  const normalizedAutoImprove =
+  const autoImprove =
     input.autoImprove === undefined
-      ? {
-          ok: true as const,
-          value: defaultAutoImprove
-            ? createDefaultAutoImprovePolicy()
-            : undefined,
-        }
-      : normalizeAutoImprovePolicy(input.autoImprove);
+      ? defaultAutoImprove
+        ? { enabled: true }
+        : undefined
+      : input.autoImprove;
+  const normalizedAutoImprove =
+    autoImprove === undefined
+      ? { ok: true as const, value: undefined }
+      : normalizeAutoImprovePolicy(autoImprove);
   if (!normalizedAutoImprove.ok) {
     return err(`invalid autoImprove policy: ${normalizedAutoImprove.error}`);
   }
-  if (
-    input.nestedSuperviser === true &&
-    normalizedAutoImprove.value === undefined
-  ) {
+  if (input.nestedSuperviser === true && autoImprove === undefined) {
     return err("nestedSuperviser requires supervised autoImprove");
   }
   return ok({
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
-    ...(normalizedAutoImprove.value === undefined
-      ? {}
-      : { autoImprove: normalizedAutoImprove.value }),
+    ...(autoImprove === undefined ? {} : { autoImprove }),
     ...(input.nestedSuperviser === true
       ? { nestedSuperviserDriver: true }
       : {}),

@@ -31,8 +31,19 @@ export interface WorkflowDefaults {
   readonly nodeTimeoutMs: number;
   readonly maxLoopIterations: number;
   readonly fanoutConcurrency?: number;
+  readonly supervision?: WorkflowSupervisionDefaults;
   readonly timeoutPolicy?: WorkflowTimeoutPolicy;
   readonly containerRuntime?: ContainerRuntimeDefaults;
+}
+
+export interface WorkflowSupervisionDefaults {
+  readonly superviserWorkflowId?: string;
+  readonly monitorIntervalMs?: number;
+  readonly stallTimeoutMs?: number;
+  readonly maxSupervisedAttempts?: number;
+  readonly maxWorkflowPatches?: number;
+  readonly workflowMutationMode?: "execution-copy" | "in-place";
+  readonly allowTargetedRerun?: boolean;
 }
 
 export interface WorkflowPrompts {
@@ -156,6 +167,7 @@ export interface WorkflowStepRef {
   readonly role?: NodeRole;
   readonly promptVariant?: string;
   readonly timeoutMs?: number;
+  readonly stallTimeoutMs?: number;
   readonly sessionPolicy?: WorkflowStepSessionPolicy;
   readonly transitions?: readonly WorkflowStepTransition[];
 }
@@ -168,6 +180,7 @@ export interface AuthoredWorkflowStepRef {
   readonly role?: NodeRole;
   readonly promptVariant?: string;
   readonly timeoutMs?: number;
+  readonly stallTimeoutMs?: number;
   readonly sessionPolicy?: WorkflowStepSessionPolicy;
   readonly transitions?: readonly WorkflowStepTransition[];
 }
@@ -505,6 +518,8 @@ export interface ChatReplyDispatchTarget {
 
 export interface ChatReplyDispatchRequest {
   readonly target: ChatReplyDispatchTarget;
+  readonly outputDestinationId?: string;
+  readonly outputDestinationIds?: readonly string[];
   readonly message: {
     readonly text: string;
   };
@@ -532,6 +547,17 @@ export interface WorkflowExternalOutputContext {
 }
 
 export interface ChatReplyDispatchResult {
+  readonly status: "sent" | "queued";
+  readonly provider: string;
+  readonly dispatchId?: string;
+  readonly providerMessageId?: string;
+  readonly destinationResults?: readonly ChatReplyDestinationDispatchResult[];
+}
+
+export interface ChatReplyDestinationDispatchResult {
+  readonly destinationId?: string;
+  readonly sourceId: string;
+  readonly idempotencyKey: string;
   readonly status: "sent" | "queued";
   readonly provider: string;
   readonly dispatchId?: string;
@@ -735,6 +761,7 @@ export interface NodePayload {
   readonly argumentBindings?: readonly ArgumentBinding[];
   readonly templateEngine?: string;
   readonly timeoutMs?: number;
+  readonly stallTimeoutMs?: number;
   readonly input?: NodeInputContract;
   readonly output?: NodeOutputContract;
 }
