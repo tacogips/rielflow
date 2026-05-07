@@ -500,6 +500,32 @@ bun run src/main.ts workflow run codex-codex-euthanasia-debate \
   --output json
 ```
 
+### `codex-codex-topic-debate`
+
+Live-agent topic debate bundle for runtime-provided debate prompts:
+
+- two `codex-agent` speaker lanes use `gpt-5.3-codex-spark`
+- the topic comes from `runtimeVariables.humanInput.request`
+- speaker nodes bind `arguments.topic` from the normalized input step
+- output contracts force debate handoff payloads into structured JSON
+- `debate-judge` returns business JSON with `continue_debate`; branch routing
+  falls back to payload booleans when no adapter `when` flag is present
+
+Validate it:
+
+```bash
+bun src/main.ts workflow validate codex-codex-topic-debate --workflow-definition-dir ./examples
+```
+
+Run it with live backend execution:
+
+```bash
+bun src/main.ts workflow run codex-codex-topic-debate \
+  --workflow-definition-dir ./examples \
+  --variables '{"humanInput":{"request":"Debate immigration policy. The affirmative side should argue for more open immigration with managed legal pathways, and the negative side should argue for stricter border and asylum controls."}}' \
+  --output json
+```
+
 Live execution note:
 
 - this bundle depends on the configured `codex-agent` backend honoring the remote request body fields sent by this repository, including `systemPromptText`

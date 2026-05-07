@@ -1,0 +1,44 @@
+{
+  "id": "debate-summary",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "promptTemplateFile": "prompts/debate-summary.md",
+  "variables": {},
+  "output": {
+    "description": "Return the closing debate summary as JSON.",
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "stance",
+        "roundsCompleted",
+        "summary",
+        "argument",
+        "responseToOpponent",
+        "done"
+      ],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "const": "neutral"
+        },
+        "roundsCompleted": {
+          "type": "number"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "argument": {
+          "type": "string"
+        },
+        "responseToOpponent": {
+          "type": "string"
+        },
+        "done": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

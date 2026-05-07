@@ -1,0 +1,1 @@
+Produce the next debate turn from the {{stanceLabel}} side on `arguments.topic`. If `inbox.latest.output.argument` exists, rebut it directly. Return JSON only with `stance`, `argument`, `responseToOpponent`, and `done`.

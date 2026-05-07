@@ -1,0 +1,52 @@
+{
+  "id": "affirmative-speaker",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "systemPromptTemplateFile": "prompts/affirmative-system.md",
+  "promptTemplateFile": "prompts/affirmative-speaker.md",
+  "sessionStartPromptTemplateFile": "prompts/session-start.md",
+  "argumentsTemplate": {
+    "role": "affirmative",
+    "maxTurns": 10
+  },
+  "argumentBindings": [
+    {
+      "targetPath": "topic",
+      "source": "node-output",
+      "sourceRef": "affirmative-input",
+      "sourcePath": "output.payload.topic",
+      "required": true
+    }
+  ],
+  "variables": {
+    "stanceLabel": "affirmative",
+    "opponentStanceLabel": "negative"
+  },
+  "output": {
+    "description": "Return the next affirmative debate turn as JSON.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["stance", "argument", "responseToOpponent", "done"],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "const": "affirmative"
+        },
+        "argument": {
+          "type": "string"
+        },
+        "responseToOpponent": {
+          "type": "string"
+        },
+        "done": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

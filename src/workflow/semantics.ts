@@ -34,7 +34,23 @@ function lookupCondition(
       return false;
     }
   }
-  return output[key] === true;
+  if (output[key] === true) {
+    return true;
+  }
+  if (output[key] === false) {
+    return false;
+  }
+  const payload = output["payload"];
+  if (typeof payload === "object" && payload !== null) {
+    const fromPayload = (payload as Record<string, unknown>)[key];
+    if (fromPayload === true) {
+      return true;
+    }
+    if (fromPayload === false) {
+      return false;
+    }
+  }
+  return false;
 }
 
 function tokenizeExpression(expression: string): readonly string[] | null {

@@ -1,0 +1,33 @@
+{
+  "id": "negative-output",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "promptTemplateFile": "prompts/negative-output.md",
+  "variables": {
+    "stanceLabel": "negative"
+  },
+  "output": {
+    "description": "Return the publishable negative debate turn for the next conversation step.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["stance", "argument", "responseToOpponent", "done"],
+      "properties": {
+        "stance": {
+          "type": "string",
+          "const": "negative"
+        },
+        "argument": {
+          "type": "string"
+        },
+        "responseToOpponent": {
+          "type": "string"
+        },
+        "done": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "debate-judge",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "promptTemplateFile": "prompts/debate-judge.md",
+  "variables": {},
+  "output": {
+    "description": "Return the debate continuation decision as JSON.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["continue_debate"],
+      "properties": {
+        "continue_debate": {
+          "type": "boolean"
+        },
+        "completedRounds": {
+          "type": "number"
+        },
+        "decision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

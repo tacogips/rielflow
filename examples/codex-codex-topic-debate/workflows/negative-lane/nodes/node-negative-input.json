@@ -1,0 +1,30 @@
+{
+  "id": "negative-input",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.3-codex-spark",
+  "promptTemplateFile": "prompts/negative-input.md",
+  "variables": {
+    "stanceLabel": "negative"
+  },
+  "output": {
+    "description": "Return the normalized negative debate input as JSON.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["topic", "role", "opponentClaim"],
+      "properties": {
+        "topic": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "const": "negative"
+        },
+        "opponentClaim": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

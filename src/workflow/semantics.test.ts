@@ -22,6 +22,40 @@ describe("evaluateBranch", () => {
     ).toBe(true);
   });
 
+  test("falls back to payload booleans when adapter when flags are absent", () => {
+    expect(
+      evaluateBranch({
+        when: "continue_debate",
+        output: {
+          when: { always: true },
+          payload: { continue_debate: true },
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      evaluateBranch({
+        when: "!(continue_debate)",
+        output: {
+          when: { always: true },
+          payload: { continue_debate: true },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("prefers explicit when flags over payload booleans", () => {
+    expect(
+      evaluateBranch({
+        when: "continue_debate",
+        output: {
+          when: { continue_debate: false },
+          payload: { continue_debate: true },
+        },
+      }),
+    ).toBe(false);
+  });
+
   test("supports boolean operators and precedence", () => {
     const output = { when: { a: true, b: false, c: true } };
     expect(evaluateBranch({ when: "a && b || c", output })).toBe(true);
