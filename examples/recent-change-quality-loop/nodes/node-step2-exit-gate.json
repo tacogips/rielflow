@@ -1,0 +1,11 @@
+{
+  "id": "step2-exit-gate",
+  "description": "Route based on Step 1 review severity.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step2-exit-gate.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with when.needs_fix true only when Step 1 reported high or mid findings that must be delegated into the implementation workflow."
+  }
+}

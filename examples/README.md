@@ -225,6 +225,91 @@ bun run src/main.ts workflow run workflow-call-review-target \
   --output json
 ```
 
+### `design-and-implement-review-loop`
+
+Real development workflow sample adapted from the project-local workflow catalog:
+
+- starts with issue intake and design-document update
+- can call `design-and-implement-review-loop-feature-plan` for bounded
+  feature-plan fanout
+- runs self-review and independent review gates before implementation
+- creates and reviews an implementation plan before coding
+- delegates implementation to `codex-agent`
+- refreshes documentation, prepares a commit message, then uses the built-in
+  `divedra/git-commit` and `divedra/git-push` add-ons
+- includes deterministic mock scenarios for full issue resolution and
+  planning-only execution
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir ./examples
+```
+
+Run the full deterministic scenario:
+
+```bash
+bun run src/main.ts workflow run design-and-implement-review-loop \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/design-and-implement-review-loop/mock-scenario.json \
+  --output json
+```
+
+Live execution note:
+
+- this workflow can create commits and push them when run with live backends;
+  use the bundled mock scenarios for deterministic sample verification
+
+### `design-and-implement-review-loop-feature-plan`
+
+Worker-only companion workflow used by the bounded fanout path in
+`design-and-implement-review-loop`:
+
+- no authored manager step
+- starts at `step2-design-doc-update`
+- loops through design self-review, independent design review, implementation
+  plan creation, plan self-review, and independent plan review
+- returns a feature-local design and implementation-plan result to the caller
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir ./examples
+```
+
+### `recent-change-quality-loop`
+
+Real development workflow sample for reviewing recent repository changes:
+
+- reviews committed changes from a configurable recent time window plus
+  uncommitted changes
+- routes through an exit gate that detects high or mid severity findings
+- delegates blocking findings to `design-and-implement-review-loop` through a
+  cross-workflow transition
+- resumes after the delegated fix, then re-runs review until no blocking
+  finding remains
+
+Validate it:
+
+```bash
+bun run src/main.ts workflow validate recent-change-quality-loop --workflow-definition-dir ./examples
+```
+
+Run it with the bundled deterministic scenario:
+
+```bash
+bun run src/main.ts workflow run recent-change-quality-loop \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/recent-change-quality-loop/mock-scenario.json \
+  --output json
+```
+
+Live execution note:
+
+- because this workflow delegates to `design-and-implement-review-loop`, live
+  execution can also create commits and push them through that delegated
+  workflow
+
 ### `subworkflow-chained-simple`
 
 Minimal runnable reference for two sequential grouped lanes in the

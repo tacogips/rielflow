@@ -1,0 +1,400 @@
+{
+  "divedra-manager": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "stage": "start",
+      "policy": "codex-reference-design-plan-only"
+    }
+  },
+  "step1-issue-intake": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "workflowMode": "design-plan-only",
+      "problemSummary": "Plan how a sample CLI should adopt codex-agent-style session history behavior without implementing it yet.",
+      "acceptanceSignals": [
+        "The design maps the target codex-agent behavior to sample CLI boundaries.",
+        "The implementation plan is accepted and ready for a later execution workflow."
+      ],
+      "impactedAreas": ["src/cli", "src/adapters", "impl-plans/active"],
+      "constraints": [
+        "Use codex-agent as a behavioral reference only.",
+        "Keep product-specific behavior behind adapter modules."
+      ],
+      "unknowns": [],
+      "risks": [
+        "Reference behavior may not map one-to-one onto local session state."
+      ],
+      "codexAgentReferences": [
+        "../../codex-agent/src/session",
+        "../../codex-agent/src/cli"
+      ],
+      "referenceRepositoryRoot": "../../codex-agent",
+      "referenceRepositoryUrl": "https://github.com/tacogips/codex-agent"
+    }
+  },
+  "step2-design-doc-update": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "designDocPaths": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session"
+        ],
+        "referenceBehaviorMapping": [
+          "Map codex-agent session history behavior to sample CLI transcript discovery."
+        ],
+        "designSummary": "Drafted the design but did not describe the sample adapter boundary clearly.",
+        "decisions": ["Use local session state as the product boundary."],
+        "openQuestions": [],
+        "issueToDesignMapping": [
+          "Codex-reference session history behavior must map to sample transcript discovery and local indexing."
+        ],
+        "intentionalDivergences": [],
+        "addressedFeedback": [],
+        "risks": ["Adapter boundary is underspecified."]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "designDocPaths": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "referenceBehaviorMapping": [
+          "Map codex-agent session history behavior to sample CLI transcript discovery.",
+          "Keep transcript parsing behind src/adapters modules."
+        ],
+        "designSummary": "Revised the design with explicit sample adapter boundaries and CLI behavior.",
+        "decisions": [
+          "Use local session state as the product boundary.",
+          "Keep raw transcript payload handling inside adapter modules."
+        ],
+        "openQuestions": [],
+        "issueToDesignMapping": [
+          "Codex-reference session history behavior maps to sample CLI transcript discovery and CLI output."
+        ],
+        "intentionalDivergences": [
+          "The sample CLI reads local session state instead of codex-agent transcript sources."
+        ],
+        "addressedFeedback": [
+          "Clarified sample adapter boundary and reference mapping."
+        ],
+        "risks": []
+      }
+    }
+  ],
+  "step2-design-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedDesignDocPaths": [
+        "design-docs/specs/design-codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
+  "step3-design-review": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "needs_revision": true
+      },
+      "payload": {
+        "needs_revision": true,
+        "findings": [
+          {
+            "severity": "mid",
+            "file": "design-docs/specs/design-codex-reference-session-history.md",
+            "line": 1,
+            "message": "The design references codex-agent behavior but does not define the sample adapter boundary."
+          }
+        ],
+        "feedback": [
+          "Define which sample adapter owns raw transcript parsing and explain the codex-agent divergence."
+        ],
+        "accepted": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "needs_revision": false
+      },
+      "payload": {
+        "needs_revision": false,
+        "findings": [],
+        "feedback": [],
+        "accepted": true
+      }
+    }
+  ],
+  "step4-impl-plan-create": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "implPlanPaths": [
+          "impl-plans/active/codex-reference-session-history.md"
+        ],
+        "designReferences": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "taskBreakdown": [
+          "Add transcript discovery adapter",
+          "Add CLI output flow"
+        ],
+        "dependencies": ["CLI output depends on adapter records."],
+        "parallelizableTasks": [],
+        "verification": ["task typecheck"],
+        "completionCriteria": ["Typecheck passes"],
+        "addressedFeedback": [],
+        "risks": [
+          "The plan does not include tests for missing transcript files."
+        ]
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "always": true
+      },
+      "payload": {
+        "workflowMode": "design-plan-only",
+        "issueReference": "",
+        "implPlanPaths": [
+          "impl-plans/active/codex-reference-session-history.md"
+        ],
+        "designReferences": [
+          "design-docs/specs/design-codex-reference-session-history.md"
+        ],
+        "codexAgentReferences": [
+          "../../codex-agent/src/session",
+          "../../codex-agent/src/cli"
+        ],
+        "taskBreakdown": [
+          "Add transcript discovery adapter",
+          "Add missing-file and malformed-transcript tests",
+          "Add CLI output flow",
+          "Update progress log during implementation"
+        ],
+        "dependencies": [
+          "CLI output depends on adapter records.",
+          "Malformed-transcript tests depend on adapter parser fixtures."
+        ],
+        "parallelizableTasks": [
+          "CLI formatting tests can run after adapter record types are defined."
+        ],
+        "verification": ["task test", "task typecheck"],
+        "completionCriteria": [
+          "Unit tests pass",
+          "Typecheck passes",
+          "Progress log updated"
+        ],
+        "addressedFeedback": [
+          "Added missing-file and malformed-transcript test coverage tasks."
+        ],
+        "risks": []
+      }
+    }
+  ],
+  "step4-impl-plan-self-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "needs_design_revision": false,
+      "needs_revision": false
+    },
+    "payload": {
+      "needs_design_revision": false,
+      "needs_revision": false,
+      "findings": [],
+      "feedback": [],
+      "accepted": true,
+      "reviewedImplPlanPaths": [
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
+  "step5-impl-plan-review": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "needs_design_revision": false,
+        "needs_revision": true,
+        "planning_only": true
+      },
+      "payload": {
+        "needs_design_revision": false,
+        "needs_revision": true,
+        "planning_only": true,
+        "findings": [
+          {
+            "severity": "mid",
+            "targetStep": "step4-impl-plan-create",
+            "file": "impl-plans/active/codex-reference-session-history.md",
+            "line": 1,
+            "message": "The plan does not cover the design's malformed or missing transcript behavior."
+          }
+        ],
+        "feedback": [
+          "Add implementation tasks and verification for missing transcript files and malformed transcript records."
+        ],
+        "accepted": false
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "needs_design_revision": false,
+        "needs_revision": false,
+        "planning_only": true
+      },
+      "payload": {
+        "needs_design_revision": false,
+        "needs_revision": false,
+        "planning_only": true,
+        "findings": [],
+        "feedback": [],
+        "accepted": true
+      }
+    }
+  ],
+  "step9-commit-message": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "workflowMode": "design-plan-only",
+      "commitMessage": "docs: add codex-reference session history design and plan",
+      "committedFiles": [
+        "design-docs/specs/design-codex-reference-session-history.md",
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "changeSummary": "Accepted planning-only design and implementation-plan updates for codex-reference session history behavior.",
+      "residualRisks": []
+    }
+  },
+  "step10-git-commit": {
+    "provider": "scenario-mock",
+    "model": "divedra/git-commit@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "commitMessage": "docs: add codex-reference session history design and plan",
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "commitStatus": "committed",
+      "git": {
+        "status": "committed",
+        "commitMessage": "docs: add codex-reference session history design and plan",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "committedFiles": [
+          "design-docs/specs/design-codex-reference-session-history.md",
+          "impl-plans/active/codex-reference-session-history.md"
+        ]
+      },
+      "committedFiles": [
+        "design-docs/specs/design-codex-reference-session-history.md",
+        "impl-plans/active/codex-reference-session-history.md"
+      ],
+      "residualRisks": []
+    }
+  },
+  "step11-git-push": {
+    "provider": "scenario-mock",
+    "model": "divedra/git-push@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "pushedRemote": "origin",
+      "pushedBranch": "main",
+      "pushStatus": "pushed",
+      "git": {
+        "status": "pushed",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "pushedRemote": "origin",
+        "pushedBranch": "main"
+      },
+      "residualRisks": []
+    }
+  },
+  "workflow-output": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "status": "accepted",
+      "workflowMode": "design-plan-only",
+      "designDocPaths": [
+        "design-docs/specs/design-codex-reference-session-history.md"
+      ],
+      "implPlanPaths": ["impl-plans/active/codex-reference-session-history.md"],
+      "codexAgentReferences": [
+        "../../codex-agent/src/session",
+        "../../codex-agent/src/cli"
+      ],
+      "designReviewSummary": "Design accepted after sample adapter boundaries and codex-agent divergence were clarified.",
+      "implPlanReviewSummary": "Implementation plan and design consistency review accepted after transcript edge-case tasks were added.",
+      "commitMessage": "docs: add codex-reference session history design and plan",
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "pushedRemote": "origin",
+      "pushedBranch": "main",
+      "nextStep": "Run a full issue-resolution execution for impl-plans/active/codex-reference-session-history.md when implementation is approved.",
+      "residualRisks": []
+    }
+  }
+}

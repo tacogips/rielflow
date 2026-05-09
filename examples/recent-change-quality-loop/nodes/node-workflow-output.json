@@ -1,0 +1,11 @@
+{
+  "id": "workflow-output",
+  "description": "Summarize the accepted review result after any delegated implementation handoff completes.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/workflow-output.md",
+  "variables": {},
+  "output": {
+    "description": "Return the final review summary, delegated-workflow evidence, verification, and any low-severity residual risks."
+  }
+}
