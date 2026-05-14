@@ -4470,17 +4470,17 @@ describe("runWorkflow", () => {
       adapter,
     );
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
       return;
     }
-    expect(result.error.message).toContain("fanout max steps reached (2)");
+    expect(result.value.exitCode).toBe(4);
+    expect(result.value.session.status).toBe("paused");
+    expect(result.value.session.lastError).toContain(
+      "fanout max steps reached (2)",
+    );
     expect(adapter.maxRunningReviewers).toBeLessThanOrEqual(1);
-    expect(result.error.sessionId).toBeDefined();
-    if (result.error.sessionId === undefined) {
-      return;
-    }
-    const stored = await loadSession(result.error.sessionId, {
+    const stored = await loadSession(result.value.session.sessionId, {
       sessionStoreRoot,
     });
     expect(stored.ok).toBe(true);
@@ -4491,9 +4491,17 @@ describe("runWorkflow", () => {
     expect(
       branches.filter((branch) => branch.status === "succeeded"),
     ).toHaveLength(1);
-    expect(branches.filter((branch) => branch.status === "failed").length).toBe(
-      2,
-    );
+    expect(
+      branches.filter((branch) => branch.status === "paused"),
+    ).toHaveLength(1);
+    expect(
+      branches.filter((branch) => branch.status === "pending"),
+    ).toHaveLength(1);
+    expect(
+      stored.value.nodeExecutions.some(
+        (execution) => execution.nodeId === "review-result",
+      ),
+    ).toBe(false);
   });
 
   test("maxConcurrency cap clamps authored fanout concurrency and persists as group concurrency 1", async () => {
@@ -4937,17 +4945,16 @@ describe("runWorkflow", () => {
       adapter,
     );
 
-    expect(result.ok).toBe(false);
-    if (result.ok) {
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
       return;
     }
-    expect(result.error.message).toContain("fanout max steps reached (2)");
-    expect(result.error.sessionId).toBeDefined();
-    const sessionId = result.error.sessionId;
-    if (sessionId === undefined) {
-      return;
-    }
-    const stored = await loadSession(sessionId, {
+    expect(result.value.exitCode).toBe(4);
+    expect(result.value.session.status).toBe("paused");
+    expect(result.value.session.lastError).toContain(
+      "fanout max steps reached (2)",
+    );
+    const stored = await loadSession(result.value.session.sessionId, {
       sessionStoreRoot: path.join(root, "sessions"),
     });
     expect(stored.ok).toBe(true);
@@ -4957,8 +4964,8 @@ describe("runWorkflow", () => {
     const group = stored.value.fanoutGroups?.[0];
     expect(group?.branches.map((branch) => branch.status)).toEqual([
       "succeeded",
-      "failed",
-      "failed",
+      "paused",
+      "pending",
     ]);
     expect(stored.value.nodeExecutions).toHaveLength(2);
     expect(

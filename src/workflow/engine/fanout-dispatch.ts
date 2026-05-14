@@ -162,6 +162,16 @@ export async function executeLocalFanoutTransition(input: {
         } satisfies FanoutBranchRecord;
       }
 
+      if (firstPause !== undefined) {
+        return {
+          branchIndex,
+          item,
+          status: "pending" as const,
+          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          ...supersededRef,
+        } satisfies FanoutBranchRecord;
+      }
+
       if (failurePolicy === "fail-fast" && firstFailure !== undefined) {
         return {
           branchIndex,
@@ -177,11 +187,18 @@ export async function executeLocalFanoutTransition(input: {
         workingSession.nodeExecutionCounter >= input.options.maxSteps
       ) {
         const message = `fanout max steps reached (${input.options.maxSteps})`;
-        firstFailure = firstFailure ?? message;
+        firstPause = firstPause ?? message;
+        workingSession = {
+          ...workingSession,
+          status: "paused",
+          queue: [],
+          currentNodeId: input.edge.to,
+          lastError: message,
+        };
         return {
           branchIndex,
           item,
-          status: "failed" as const,
+          status: "paused" as const,
           workItemId: `${fanoutGroupRunId}:${branchIndex}`,
           error: message,
           ...supersededRef,
@@ -428,22 +445,6 @@ export async function executeLocalFanoutTransition(input: {
   const pausedBranches = completedBranches.filter(
     (branch) => branch.status === "paused",
   );
-  if (failedBranches.length > 0) {
-    return ok({
-      communications: input.currentCommunications,
-      communicationCounter: input.communicationCounter,
-      queuedNodeIds: [],
-      transitions: [],
-      fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
-      session: workingSession,
-      failureMessage: `fanout group '${fanoutGroupRunId}' failed: ${failedBranches
-        .map(
-          (branch) =>
-            `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
-        )
-        .join("; ")}`,
-    });
-  }
   if (pausedBranches.length > 0) {
     const nextFanoutGroups = [...(input.session.fanoutGroups ?? []), group];
     const pausedSession: WorkflowSessionState = {
@@ -465,6 +466,22 @@ export async function executeLocalFanoutTransition(input: {
       fanoutGroups: nextFanoutGroups,
       session: pausedSession,
       pausedMessage: `fanout group '${fanoutGroupRunId}' paused: ${pausedSession.lastError}`,
+    });
+  }
+  if (failedBranches.length > 0) {
+    return ok({
+      communications: input.currentCommunications,
+      communicationCounter: input.communicationCounter,
+      queuedNodeIds: [],
+      transitions: [],
+      fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
+      session: workingSession,
+      failureMessage: `fanout group '${fanoutGroupRunId}' failed: ${failedBranches
+        .map(
+          (branch) =>
+            `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
+        )
+        .join("; ")}`,
     });
   }
 
@@ -608,6 +625,22 @@ export async function executeCrossWorkflowDispatchesForNode(
             : { fanoutGroups: currentFanoutGroups }),
           runtimeVariables: currentRuntimeVariables,
           failureMessage: fanoutResult.value.failureMessage,
+        });
+      }
+      if (fanoutResult.value.pausedMessage !== undefined) {
+        return ok({
+          communications: currentCommunications,
+          communicationCounter: currentCommunicationCounter,
+          queuedNodeIds,
+          transitions,
+          ...(currentFanoutGroups === undefined
+            ? {}
+            : { fanoutGroups: currentFanoutGroups }),
+          runtimeVariables: currentRuntimeVariables,
+          ...(fanoutResult.value.session === undefined
+            ? {}
+            : { session: fanoutResult.value.session }),
+          pausedMessage: fanoutResult.value.pausedMessage,
         });
       }
       continue;

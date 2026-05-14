@@ -298,6 +298,41 @@ export async function finalizeStepTransitions(input) {
       ),
     );
   }
+  if (crossWorkflowDispatchResult.value.pausedMessage !== undefined) {
+    const paused = crossWorkflowDispatchResult.value.session;
+    if (paused === undefined) {
+      const failed: WorkflowSessionState = {
+        ...session,
+        queue,
+        status: "failed",
+        currentNodeId: nodeId,
+        endedAt,
+        nodeExecutionCounter: currentNodeExecutionCounter,
+        nodeExecutionCounts: currentNodeExecutionCounts,
+        nodeExecutions: currentNodeExecutions,
+        loopIterationCounts: updatedLoopIterationCounts,
+        communicationCounter: currentCommunicationCounter,
+        communications: currentCommunications,
+        nodeBackendSessions: currentNodeBackendSessions,
+        runtimeVariables: currentRuntimeVariables,
+        ...(crossWorkflowDispatchResult.value.fanoutGroups === undefined
+          ? {}
+          : { fanoutGroups: crossWorkflowDispatchResult.value.fanoutGroups }),
+        lastError:
+          "internal: cross-workflow fanout pause missing paused session state",
+      };
+      await saveSession(failed, options);
+      return err(
+        workflowRunFailure(
+          1,
+          failed.lastError ?? "cross-workflow fanout pause failed",
+          failed,
+        ),
+      );
+    }
+    await saveSession(paused, options);
+    return ok({ session: paused, exitCode: 4 });
+  }
   const transitions = [
     ...session.transitions,
     ...regularSelected.map((edge) => ({

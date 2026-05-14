@@ -459,6 +459,7 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
   const failurePolicy = fanout.failurePolicy ?? "fail-fast";
   const resultOrder = fanout.resultOrder ?? "input";
   let firstFailure: string | undefined;
+  let firstPause: string | undefined;
 
   const branchResults = await runBoundedFanoutBranches<FanoutBranchRecord>(
     items.value,
@@ -473,6 +474,16 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
         supersededWorkspaceRoot === undefined
           ? {}
           : { supersededWorkspaceRoot };
+
+      if (firstPause !== undefined) {
+        return {
+          branchIndex,
+          item,
+          status: "pending" as const,
+          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+          ...supersededRef,
+        } satisfies FanoutBranchRecord;
+      }
 
       if (failurePolicy === "fail-fast" && firstFailure !== undefined) {
         return {
@@ -558,6 +569,23 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
             ? ""
             : `: ${calleeRun.value.session.lastError}`
         }`;
+        if (
+          calleeRun.value.exitCode === 4 &&
+          calleeRun.value.session.status === "paused"
+        ) {
+          firstPause = firstPause ?? message;
+          return {
+            branchIndex,
+            item,
+            status: "paused" as const,
+            workItemId: `${fanoutGroupRunId}:${branchIndex}`,
+            ...(branchWorkspace.value === undefined
+              ? {}
+              : { workspaceRoot: branchWorkspace.value }),
+            error: message,
+            ...supersededRef,
+          } satisfies FanoutBranchRecord;
+        }
         firstFailure = firstFailure ?? message;
         return {
           branchIndex,
@@ -656,6 +684,35 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
   const failedBranches = completedBranches.filter(
     (branch) => branch.status === "failed" || branch.status === "cancelled",
   );
+  const pausedBranches = completedBranches.filter(
+    (branch) => branch.status === "paused",
+  );
+  if (pausedBranches.length > 0) {
+    const nextFanoutGroups = [
+      ...(input.base.session.fanoutGroups ?? []),
+      group,
+    ];
+    const pausedError = pausedBranches
+      .map(
+        (branch) =>
+          `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
+      )
+      .join("; ");
+    return ok({
+      communications: input.currentCommunications,
+      communicationCounter: input.communicationCounter,
+      queuedNodeIds: [],
+      transitions: [],
+      fanoutGroups: nextFanoutGroups,
+      session: {
+        ...input.base.session,
+        status: "paused",
+        fanoutGroups: nextFanoutGroups,
+        lastError: pausedError,
+      },
+      pausedMessage: `fanout group '${fanoutGroupRunId}' paused: ${pausedError}`,
+    });
+  }
   if (failedBranches.length > 0) {
     return ok({
       communications: input.currentCommunications,
