@@ -84,6 +84,35 @@ starting the homeserver, registering two users, creating a room, serving
 divedra Matrix events, sending an Alice message, and waiting for the divedra
 bot reply in the same room.
 
+The `chat-sdk-slack` source demonstrates the shared Chat SDK generic boundary.
+The provider allow-list is `slack`, `teams`, `gchat`, `discord`, `telegram`,
+`github`, `linear`, `whatsapp`, `messenger`, and `web`. This first pass does
+not import `@chat-adapter/*` packages directly; an operator-owned Chat SDK
+deployment posts normalized webhook payloads to divedra and receives replies
+through the configured send endpoint.
+
+Serve the source with env-var references only:
+
+```bash
+export DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET=<shared-webhook-secret>
+export DIVEDRA_CHAT_SDK_SLACK_BEARER_TOKEN=<inbound-bearer-token>
+export DIVEDRA_CHAT_SDK_SLACK_SEND_URL=https://chat-sdk.example.test/send
+export DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN=<outbound-send-token>
+divedra events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+```
+
+For deterministic local checks, emit the generic-boundary payload fixture:
+
+```bash
+divedra events emit chat-sdk-slack \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.divedra-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-slack-message.json \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
 Start a workflow control-plane endpoint in another shell when you want fixture
 events to dispatch real workflow executions:
 

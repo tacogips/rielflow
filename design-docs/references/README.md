@@ -13,6 +13,8 @@ This directory contains reference materials for system design and implementation
 | Amazon S3 Event Message Structure | https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-content-structure.html                   | Official Amazon S3 event notification payload structure                                   |
 | Vercel Chat SDK Documentation     | https://chat-sdk.dev/docs                                                                                   | Official Chat SDK documentation for multi-platform chat bot adapters and event handling   |
 | Vercel Chat SDK Platform Adapters | https://chat-sdk.dev/docs/adapters                                                                          | Official adapter capability matrix for Slack, Discord, Telegram, and other chat providers |
+| Vercel Chat SDK Adapter Catalog   | https://chat-sdk.dev/adapters                                                                               | Current package catalog for Slack, Teams, Google Chat, Discord, GitHub, Linear, Telegram, WhatsApp, Messenger, and Web adapters |
+| Vercel Chat SDK Contributing      | https://chat-sdk.dev/docs/contributing                                                                      | Adapter interface and community adapter guidance for evaluating direct integration risk   |
 | Vercel AI Elements                | https://vercel.com/changelog/introducing-ai-elements                                                        | Official Vercel AI Elements announcement and integration notes with the Vercel AI SDK     |
 
 ## Reference Documents

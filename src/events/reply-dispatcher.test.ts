@@ -709,4 +709,82 @@ describe("event reply dispatcher", () => {
     expect(replay).toEqual(result);
     expect(deliveredSourceIds).toEqual(["reply-chat", "peer-chat"]);
   });
+
+  test("dispatches Chat SDK replies through configured send endpoints with redacted persistence", async () => {
+    const rootDataDir = await makeTempDir();
+    const calls: RequestInit[] = [];
+    const dispatcher = createEventReplyDispatcher({
+      configuration: {
+        eventRoot: "/events",
+        sources: [
+          {
+            id: "team-slack",
+            kind: "chat-sdk",
+            provider: "slack",
+            webhook: { path: "chat-sdk/team-slack" },
+            send: {
+              endpointUrlEnv: "CHAT_SDK_SEND_URL",
+              tokenEnv: "CHAT_SDK_SEND_TOKEN",
+            },
+          },
+        ],
+        destinations: [],
+        bindings: [],
+      },
+      registry: createDefaultEventSourceRegistry(),
+      env: {
+        CHAT_SDK_SEND_URL: "https://chat-sdk.example.test/send",
+        CHAT_SDK_SEND_TOKEN: "secret-token",
+      },
+      fetchImpl: async (_url, init) => {
+        calls.push(init ?? {});
+        return new Response(
+          JSON.stringify({ providerMessageId: "slack-msg" }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+      runtimeOptions: { rootDataDir },
+    });
+
+    const result = await dispatcher.dispatchChatReply({
+      ...makeReplyRequest("chat-sdk-reply-key"),
+      target: {
+        sourceId: "team-slack",
+        provider: "slack",
+        eventId: "evt-1",
+        conversationId: "C123",
+        threadId: "T123",
+      },
+    });
+    const persisted = await loadEventReplyDispatchByIdempotencyKey(
+      "chat-sdk-reply-key",
+      { rootDataDir },
+    );
+
+    expect(result).toEqual({
+      status: "sent",
+      provider: "slack",
+      providerMessageId: "slack-msg",
+    });
+    expect(JSON.parse(String(calls[0]?.body))).toEqual({
+      provider: "slack",
+      target: { conversationId: "C123", threadId: "T123" },
+      message: { text: "hello" },
+      idempotencyKey: "chat-sdk-reply-key",
+    });
+    expect(calls[0]?.headers).toMatchObject({
+      authorization: "Bearer secret-token",
+    });
+    expect(persisted).toMatchObject({
+      idempotencyKey: "chat-sdk-reply-key",
+      sourceId: "team-slack",
+      provider: "slack",
+      status: "sent",
+      providerMessageId: "slack-msg",
+    });
+    expect(JSON.stringify(persisted)).not.toContain("secret-token");
+  });
 });

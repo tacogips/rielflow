@@ -16,6 +16,10 @@ import {
   resolveEventSourceHttpPath,
 } from "./http-routes";
 import { createEventReplyDispatcher } from "./reply-dispatcher";
+import {
+  createEventSourceRateLimiter,
+  type EventSourceRateLimiter,
+} from "./source-rate-limit";
 import type {
   EventSourceAdapter,
   EventSourceDiagnostic,
@@ -65,6 +69,11 @@ interface EventHttpRoute {
   readonly path: string;
 }
 
+interface BearerVerificationResult {
+  readonly ok: boolean;
+  readonly reason?: "missing-token-env" | "missing-bearer" | "invalid-bearer";
+}
+
 const DEFAULT_EVENT_LISTENER_RUNTIME: EventListenerRuntime = {
   serve: (options) => Bun.serve(options),
 };
@@ -80,6 +89,32 @@ function requestHeadersToRecord(
   headers: Headers,
 ): Readonly<Record<string, string>> {
   return Object.fromEntries([...headers.entries()]);
+}
+
+function verifyChatSdkBearerRequest(input: {
+  readonly source: EventSourceConfig;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly env: Readonly<Record<string, string | undefined>>;
+}): BearerVerificationResult {
+  if (input.source.kind !== "chat-sdk") {
+    return { ok: true };
+  }
+  const source = input.source as import("./types").ChatSdkSourceConfig;
+  const bearerTokenEnv = source.webhook.bearerTokenEnv;
+  if (bearerTokenEnv === undefined) {
+    return { ok: true };
+  }
+  const expected = input.env[bearerTokenEnv];
+  if (expected === undefined || expected.length === 0) {
+    return { ok: false, reason: "missing-token-env" };
+  }
+  const authorization = input.headers["authorization"];
+  if (authorization === undefined || authorization.length === 0) {
+    return { ok: false, reason: "missing-bearer" };
+  }
+  return authorization === `Bearer ${expected}`
+    ? { ok: true }
+    : { ok: false, reason: "invalid-bearer" };
 }
 
 function isS3RepositorySource(
@@ -169,6 +204,7 @@ export async function handleEventHttpRequest(
     readonly routes: readonly EventHttpRoute[];
     readonly triggerOptions: WorkflowTriggerRunnerOptions;
     readonly registry?: EventSourceRegistry;
+    readonly rateLimiter?: EventSourceRateLimiter;
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly now: () => Date;
   },
@@ -181,18 +217,20 @@ export async function handleEventHttpRequest(
   if (route === undefined) {
     return json({ error: "event source not found" }, 404);
   }
+  const requestNow = input.now();
   let body: unknown;
   let event: Awaited<ReturnType<typeof normalizeRouteEvent>>;
   try {
     const bodyText = await request.text();
+    const headers = requestHeadersToRecord(request.headers);
     const verificationSource = buildWebhookVerificationSource(route.source);
     if (verificationSource !== undefined) {
       const verified = verifyWebhookRequest({
         source: verificationSource,
-        headers: requestHeadersToRecord(request.headers),
+        headers,
         bodyText,
         env: input.env,
-        now: input.now(),
+        now: requestNow,
       });
       if (!verified.ok) {
         return json(
@@ -201,12 +239,26 @@ export async function handleEventHttpRequest(
         );
       }
     }
+    const bearer = verifyChatSdkBearerRequest({
+      source: route.source,
+      headers,
+      env: input.env,
+    });
+    if (!bearer.ok) {
+      return json(
+        { error: "event bearer token rejected", reason: bearer.reason },
+        401,
+      );
+    }
+    if (input.rateLimiter?.accept(route.source, requestNow) === false) {
+      return json({ error: "event source rate limit exceeded" }, 429);
+    }
     body = parseRequestJsonBody(bodyText);
     const raw: RawExternalEvent = {
       sourceId: route.source.id,
       source: route.source,
-      receivedAt: input.now().toISOString(),
-      headers: requestHeadersToRecord(request.headers),
+      receivedAt: requestNow.toISOString(),
+      headers,
       body,
     };
     event = await normalizeRouteEvent({ route, raw });
@@ -290,6 +342,7 @@ export function createEventListenerService(
       const abortController = new AbortController();
       const now = (): Date => new Date();
       const env = options.env ?? process.env;
+      const rateLimiter = createEventSourceRateLimiter();
       const eventReplyDispatcher =
         options.eventReplyDispatcher ??
         createEventReplyDispatcher({
@@ -367,6 +420,7 @@ export function createEventListenerService(
                     routes,
                     triggerOptions,
                     registry,
+                    rateLimiter,
                     env,
                     now,
                   }),

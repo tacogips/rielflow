@@ -1,0 +1,19 @@
+{
+  "provider": "slack",
+  "eventId": "chat-sdk-slack-evt-1",
+  "eventType": "message",
+  "occurredAt": "2026-05-14T00:00:00.000Z",
+  "actor": {
+    "id": "U123",
+    "displayName": "Slack Operator"
+  },
+  "conversation": {
+    "id": "C123",
+    "threadId": "1720000000.000100"
+  },
+  "message": {
+    "text": "Run the arithmetic workflow from Slack.",
+    "format": "plain",
+    "attachments": []
+  }
+}

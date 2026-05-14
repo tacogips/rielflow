@@ -441,6 +441,17 @@ Client-Server room send API with the reply idempotency key as the transaction
 id. The first slice excludes encrypted rooms, attachments, reactions, edits,
 redactions, and Application Service transactions.
 
+Chat SDK chat sources use `kind: "chat-sdk"` with the first-pass generic
+webhook/send boundary. Supported providers are `slack`, `teams`, `gchat`,
+`discord`, `telegram`, `github`, `linear`, `whatsapp`, `messenger`, and `web`.
+Inbound webhook payloads normalize to `chat.message`, and chat replies dispatch
+through a configured send endpoint referenced by env-var names. Each served
+chat-sdk webhook must configure a bearer token or signing secret env var, and
+the webhook path must remain relative and provider-scoped, such as
+`chat-sdk/slack`. divedra does not import direct `@chat-adapter/*` packages in
+this boundary; direct provider SDK integration remains future scope after
+dependency and credential review.
+
 ## Hooks
 
 Run a hook receiver:
@@ -555,7 +566,7 @@ Recommended starting points:
 - `node-combinations-showcase`: examples for command, container, and foreach-style workflow lanes.
 - `supervised-mock-retry`: deterministic example for `--auto-improve` retry behavior.
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
-- `event-sources`: includes webhook, cron, S3, and Element/Matrix source fixtures.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
 
 ## Library API
 

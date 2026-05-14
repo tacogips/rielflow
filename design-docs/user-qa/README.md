@@ -21,6 +21,8 @@ Store questions, pending decisions, and items awaiting user approval.
 - `qa-matrix-event-source.md`: receive transport, rich Matrix event scope,
   reply threading, token/identity, and sync-state retention decisions for
   Element/Matrix event sources.
+- `qa-chat-sdk-event-sources.md`: direct Chat SDK dependency policy, provider
+  rollout depth, web provider scope, and rich interaction normalization.
 
 ## Adding New Items
 

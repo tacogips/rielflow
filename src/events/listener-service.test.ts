@@ -344,6 +344,150 @@ describe("event listener service", () => {
     await listener.stop();
   });
 
+  test("serves Chat SDK routes with bearer auth, rate limits, and chat.message dispatch", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "team-slack.json"), {
+      id: "team-slack",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/team-slack",
+        bearerTokenEnv: "CHAT_SDK_TOKEN",
+        rateLimit: { windowMs: 60000, maxRequests: 2 },
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "team-slack.json"), {
+      id: "team-slack-demo",
+      sourceId: "team-slack",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          provider: "{{event.provider}}",
+          conversationId: "{{event.conversation.id}}",
+        },
+      },
+      execution: { async: true },
+    });
+
+    let capturedFetch:
+      | ((request: Request) => Response | Promise<Response>)
+      | undefined;
+    const runtime: EventListenerRuntime = {
+      serve: (options) => {
+        capturedFetch = options.fetch;
+        return { port: options.port, stop: () => {} };
+      },
+    };
+    const fetchImpl = vi.fn(async (_request, init) => {
+      const payload = JSON.parse(String(init?.body)) as {
+        variables: {
+          input: {
+            runtimeVariables: Readonly<Record<string, unknown>>;
+          };
+        };
+      };
+      expect(payload.variables.input.runtimeVariables["workflowInput"]).toEqual(
+        {
+          request: "ship it",
+          provider: "slack",
+          conversationId: "C123",
+        },
+      );
+      return new Response(
+        JSON.stringify({
+          data: {
+            executeWorkflow: {
+              workflowExecutionId: "sess-chat-sdk",
+              sessionId: "sess-chat-sdk",
+              status: "running",
+              accepted: true,
+              exitCode: null,
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const listener = await createEventListenerService(undefined, runtime).start(
+      {
+        workflowRoot,
+        eventRoot,
+        rootDataDir: path.join(root, "data"),
+        endpoint: "http://example.test/graphql",
+        env: { CHAT_SDK_TOKEN: "secret" },
+        fetchImpl,
+        cwd: root,
+        port: 0,
+      },
+    );
+    expect(capturedFetch).toBeDefined();
+    if (capturedFetch === undefined) {
+      return;
+    }
+
+    const request = {
+      provider: "slack",
+      eventId: "evt-chat-sdk-1",
+      actor: { id: "U123", displayName: "Operator" },
+      conversation: { id: "C123", threadId: "T123" },
+      message: { text: "ship it" },
+    };
+    const unauthorized = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        body: JSON.stringify(request),
+      }),
+    );
+    expect(unauthorized.status).toBe(401);
+
+    const first = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify(request),
+      }),
+    );
+    const duplicate = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify(request),
+      }),
+    );
+    const limited = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify({ ...request, eventId: "evt-chat-sdk-2" }),
+      }),
+    );
+    const firstBody = (await first.json()) as {
+      readonly accepted: boolean;
+      readonly receipts: readonly { readonly duplicate: boolean }[];
+    };
+    const duplicateBody = (await duplicate.json()) as {
+      readonly receipts: readonly { readonly duplicate: boolean }[];
+    };
+
+    expect(first.status).toBe(202);
+    expect(firstBody.accepted).toBe(true);
+    expect(firstBody.receipts[0]?.duplicate).toBe(false);
+    expect(duplicate.status).toBe(202);
+    expect(duplicateBody.receipts[0]?.duplicate).toBe(true);
+    expect(limited.status).toBe(429);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await listener.stop();
+  });
+
   test("starts enabled Matrix sources with env and fetch context", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");

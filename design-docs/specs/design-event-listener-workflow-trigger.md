@@ -404,20 +404,22 @@ Rules:
 
 Chat providers should initially be integrated through a Chat SDK adapter where
 the provider is supported. Current Chat SDK documentation describes a unified
-TypeScript API with adapters for platforms including Slack, Discord, Telegram,
-Microsoft Teams, Google Chat, GitHub, Linear, and WhatsApp, plus event handlers
-for messages, mentions, reactions, slash commands, buttons, and modals.
+TypeScript API and adapter catalog for platforms including Slack, Teams, Google
+Chat, Discord, Telegram, GitHub, Linear, WhatsApp, Messenger, and Web.
 
 Divedra should treat Chat SDK as one adapter family:
 
 - `kind: "chat-sdk"`
-- provider adapter selected in source config
+- provider selected in source config from a closed allow-list
 - normalized event types such as `chat.message`, `chat.mention`,
   `chat.command`, `chat.action`, and `chat.modal-submit`
-- optional response target metadata for future replies
+- response target metadata for external-output chat replies
+- generic webhook/send endpoint mode as the preferred first implementation
 
 Source config should include only logical names and environment variable names,
-not secret values.
+not secret values. See
+`design-docs/specs/design-chat-sdk-event-sources.md` for the full provider
+matrix, validation rules, and direct dependency policy.
 
 ### Element / Matrix
 
@@ -562,10 +564,17 @@ Recent-change review closure requires these design and rollout invariants:
 - verification preserves the local Synapse receive/send path via
   `./examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh`
 
-### Slack, Discord, Telegram
+### Chat SDK Providers
 
-Slack, Discord, and Telegram can be configured as Chat SDK-backed sources when
-their required capabilities match the workflow trigger use case.
+Chat SDK-backed sources are designed in detail in
+`design-docs/specs/design-chat-sdk-event-sources.md`. The shared source kind is
+`chat-sdk`, with a closed provider allow-list covering Slack, Teams, Google
+Chat, Discord, Telegram, GitHub, Linear, WhatsApp, Messenger, and Web.
+
+The first implementation should prefer a secure generic Chat SDK deployment
+boundary with webhook receive and send endpoint configuration. Direct
+`@chat-adapter/*` package integration remains optional until dependency
+stability, provider verification, and credential surface area are reviewed.
 
 Minimum first-iteration event support:
 
@@ -1049,8 +1058,10 @@ Event config validation should fail when:
 6. Generic webhook adapter for local testing.
 7. Matrix adapter for Element/Matrix room receive normalization and chat reply
    dispatch.
-8. Chat SDK adapter family for Slack, Discord, and Telegram.
-9. Web chat adapter for AI Elements or other browser chat frontends.
+8. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
+   GitHub, Linear, WhatsApp, Messenger, and Web.
+9. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
+   the shared Chat SDK `web` provider boundary.
 10. Optional S3 object download-to-data-root support.
 11. Optional reply publisher after workflow completion.
 12. Signal adapter if operational requirements and dependency choice are

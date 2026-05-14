@@ -59,11 +59,13 @@ describe("event source registry", () => {
     const registry = createDefaultEventSourceRegistry();
 
     expect(registry.list().map((adapter) => adapter.kind)).toEqual([
+      "chat-sdk",
       "cron",
       "matrix",
       "s3-repository",
       "webhook",
     ]);
+    expect(registry.get("chat-sdk")?.capabilities.chatReply).toBe(true);
     expect(registry.get("matrix")?.capabilities.chatReply).toBe(true);
   });
 });

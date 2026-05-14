@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-14T12:15:00.000Z",
+  "lastUpdated": "2026-05-14T13:35:00.000Z",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -500,6 +500,9 @@
       "status": "COMPLETED"
     },
     "167": {
+      "status": "COMPLETED"
+    },
+    "168": {
       "status": "COMPLETED"
     }
   },
@@ -5750,6 +5753,70 @@
             "TASK-002",
             "TASK-003",
             "TASK-004"
+          ]
+        }
+      }
+    },
+    "chat-sdk-event-sources": {
+      "phase": 168,
+      "status": "Completed",
+      "path": "impl-plans/active/chat-sdk-event-sources.md",
+      "designReference": "design-docs/specs/design-chat-sdk-event-sources.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
           ]
         }
       }
