@@ -3,6 +3,7 @@ import { readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AdapterExecutionOutput } from "../adapter";
+import type { ScheduledEventManager } from "../../events/scheduled-event-manager";
 import type { AutoImprovePolicyInput } from "../auto-improve-policy";
 import type { FanoutStepBudget } from "../engine-fanout";
 import type { JsonSchemaValidationError } from "../json-schema";
@@ -47,6 +48,7 @@ export interface WorkflowRunOptions
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
+  readonly scheduledEventManager?: ScheduledEventManager;
   /**
    * Phase-2 nested superviser: passed to native add-on execution so
    * `divedra/*` superviser control nodes can operate on the paired target session.

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { ScheduledEventManager } from "../events/scheduled-event-manager";
 import type { AdapterExecutionInput } from "./adapter";
 import {
   type StepIdentityFields,
@@ -219,6 +220,64 @@ export interface ActiveUserActionRef {
   readonly pausedAt: string;
 }
 
+export interface WorkflowScheduledEventRef {
+  readonly eventId: string;
+  readonly kind: "workflow-sleep";
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly dueAt: string;
+  readonly status: "pending" | "fired" | "cancelled" | "failed";
+  readonly createdAt: string;
+}
+
+export type WorkflowScheduledEventRefStatus =
+  WorkflowScheduledEventRef["status"];
+
+export function markWorkflowSleepScheduledEventRef(
+  session: WorkflowSessionState,
+  eventId: string,
+  status: WorkflowScheduledEventRefStatus,
+): WorkflowSessionState {
+  const scheduledEvents = session.scheduledEvents ?? [];
+  if (!scheduledEvents.some((entry) => entry.eventId === eventId)) {
+    return session;
+  }
+  return {
+    ...session,
+    scheduledEvents: scheduledEvents.map((entry) =>
+      entry.eventId === eventId && entry.kind === "workflow-sleep"
+        ? { ...entry, status }
+        : entry,
+    ),
+  };
+}
+
+export function reconcileTerminalWorkflowSleepScheduledEvents(
+  session: WorkflowSessionState,
+  manager?: ScheduledEventManager,
+): WorkflowSessionState {
+  if (!isTerminalWorkflowSessionStatus(session.status)) {
+    return session;
+  }
+  return cancelPendingWorkflowSleepScheduledEvents(session, manager);
+}
+
+export function cancelPendingWorkflowSleepScheduledEvents(
+  session: WorkflowSessionState,
+  manager?: ScheduledEventManager,
+): WorkflowSessionState {
+  let changed = false;
+  const scheduledEvents = (session.scheduledEvents ?? []).map((entry) => {
+    if (entry.kind !== "workflow-sleep" || entry.status !== "pending") {
+      return entry;
+    }
+    manager?.cancel(entry.eventId);
+    changed = true;
+    return { ...entry, status: "cancelled" as const };
+  });
+  return changed ? { ...session, scheduledEvents } : session;
+}
+
 export type FanoutBranchStatus =
   | "pending"
   | "running"
@@ -287,6 +346,7 @@ export interface WorkflowSessionState {
   >;
   readonly pendingOptionalNodeDecisions?: readonly PendingOptionalNodeDecision[];
   readonly activeUserActions?: readonly ActiveUserActionRef[];
+  readonly scheduledEvents?: readonly WorkflowScheduledEventRef[];
   readonly fanoutGroups?: readonly FanoutGroupRunRecord[];
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly lastError?: string;
@@ -368,6 +428,7 @@ export function createSessionState(
     nodeBackendSessions: {},
     pendingOptionalNodeDecisions: [],
     activeUserActions: [],
+    scheduledEvents: [],
     runtimeVariables: input.runtimeVariables,
   };
 }
@@ -525,6 +586,7 @@ export function normalizeSessionState(
       session.pendingOptionalNodeDecisions ?? []
     ).map((decision) => ({ ...decision })),
     activeUserActions: [...(session.activeUserActions ?? [])],
+    scheduledEvents: [...(session.scheduledEvents ?? [])],
     nodeExecutions: assignStableExecutionOrdinals(
       Array.isArray(session.nodeExecutions) ? session.nodeExecutions : [],
     ),

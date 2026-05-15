@@ -12,7 +12,7 @@ flowchart TD
   run["Start execution<br/>workflow run or GraphQL executeWorkflow"]
   session["Workflow execution session<br/>sessionId / workflowExecutionId"]
   steps["Workflow steps<br/>manager and worker steps"]
-  nodes["Node execution<br/>agent, command, container, user-action, or add-on"]
+  nodes["Node execution<br/>agent, command, container, sleep, user-action, or add-on"]
   backend["Backend or external action<br/>Codex, Claude Code, OpenAI, Anthropic, shell, container, user reply"]
   artifacts["Runtime data<br/>artifacts, logs, messages, attachments"]
   inspect["Operate session<br/>status, progress, logs, resume, rerun, continue, export"]
@@ -29,6 +29,7 @@ flowchart TD
 - Discover available workflows and their callable contracts before running them.
 - Run workflows using agent backends such as `codex-agent`, `claude-code-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
 - Run deterministic mock scenarios for demos, tests, and documentation without real agent calls.
+- Pause a workflow with `nodeType: "sleep"` without blocking the worker; the runtime registers a scheduled continuation event and resumes the queued steps when it fires.
 - Monitor, resume, rerun, continue, export, and inspect workflow executions.
 - Start workflows with supervisor-backed execution by default; `--no-auto-improve` disables workflow patching but keeps deterministic supervision.
 - Start a local GraphQL control plane for remote execution and manager/control-plane operations.
@@ -441,6 +442,42 @@ Client-Server room send API with the reply idempotency key as the transaction
 id. The first slice excludes encrypted rooms, attachments, reactions, edits,
 redactions, and Application Service transactions.
 
+Chat SDK chat sources use `kind: "chat-sdk"` with the first-pass generic
+webhook/send boundary. Supported providers are `slack`, `teams`, `gchat`,
+`discord`, `telegram`, `github`, `linear`, `whatsapp`, `messenger`, and `web`.
+Inbound webhook payloads normalize to `chat.message`, and chat replies dispatch
+through a configured send endpoint referenced by env-var names. Each served
+chat-sdk webhook must configure a bearer token or signing secret env var, and
+the webhook path must remain relative and provider-scoped, such as
+`chat-sdk/slack`. divedra does not import direct `@chat-adapter/*` packages in
+this boundary; direct provider SDK integration remains future scope after
+dependency and credential review.
+
+## Scheduling
+
+Workflow sleep nodes use `nodeType: "sleep"` with a `sleep` payload containing
+exactly one wake condition: `durationMs` as a positive integer or `until` as a
+timestamp with an explicit `Z` timezone or numeric UTC offset. Sleep nodes are
+worker-only and cannot declare agent, command, container, user-action, or addon
+execution payload fields.
+
+During workflow execution, a sleep node records a `workflow-sleep` scheduled
+event on the session and returns while the workflow is paused. The shared
+scheduled event manager owns the in-process timer, fires due sleep events,
+re-loads the paused session before continuation, and resumes queued workflow
+steps only when the session still owns the pending event. Pending sleep events
+are cancelled or marked failed across cancellation, rerun or replacement, and
+terminal session lifecycle paths so stale timers do not revive superseded work.
+Cancellation only transitions pending scheduled events; firing, fired, failed,
+and already-cancelled event states remain authoritative for inspection and
+failure handling.
+
+Cron event sources also register `cron` events through the shared scheduled
+event manager. `events serve` passes that manager into local workflow triggers,
+the cron adapter registers the next occurrence on startup, and each fired cron
+event computes and registers the following occurrence while preserving existing
+binding, dedupe, receipt, and input-mapping behavior.
+
 ## Hooks
 
 Run a hook receiver:
@@ -553,9 +590,10 @@ Recommended starting points:
 - `claude-divedra-codex-coding`: mixed backend workflow with coordination on Claude Code and coding work on Codex.
 - `workflow-call-simple`: parent workflow that calls a worker-only review workflow.
 - `node-combinations-showcase`: examples for command, container, and foreach-style workflow lanes.
+- `scheduled-sleep`: minimal workflow that waits with `nodeType: "sleep"` before continuing to a worker step.
 - `supervised-mock-retry`: deterministic example for `--auto-improve` retry behavior.
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
-- `event-sources`: includes webhook, cron, S3, and Element/Matrix source fixtures.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
 
 ## Library API
 

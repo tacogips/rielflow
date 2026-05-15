@@ -9,6 +9,10 @@ import {
 } from "./listener-service";
 import { listEventReplyDispatchesFromRuntimeDb } from "../workflow/runtime-db";
 import { createEventSourceRegistry } from "./adapter-registry";
+import {
+  createScheduledEventManager,
+  type ScheduledEventManager,
+} from "./scheduled-event-manager";
 import type { EventSourceAdapter } from "./source-adapter";
 
 const tempDirs: string[] = [];
@@ -344,6 +348,150 @@ describe("event listener service", () => {
     await listener.stop();
   });
 
+  test("serves Chat SDK routes with bearer auth, rate limits, and chat.message dispatch", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "team-slack.json"), {
+      id: "team-slack",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/team-slack",
+        bearerTokenEnv: "CHAT_SDK_TOKEN",
+        rateLimit: { windowMs: 60000, maxRequests: 2 },
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "team-slack.json"), {
+      id: "team-slack-demo",
+      sourceId: "team-slack",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          provider: "{{event.provider}}",
+          conversationId: "{{event.conversation.id}}",
+        },
+      },
+      execution: { async: true },
+    });
+
+    let capturedFetch:
+      | ((request: Request) => Response | Promise<Response>)
+      | undefined;
+    const runtime: EventListenerRuntime = {
+      serve: (options) => {
+        capturedFetch = options.fetch;
+        return { port: options.port, stop: () => {} };
+      },
+    };
+    const fetchImpl = vi.fn(async (_request, init) => {
+      const payload = JSON.parse(String(init?.body)) as {
+        variables: {
+          input: {
+            runtimeVariables: Readonly<Record<string, unknown>>;
+          };
+        };
+      };
+      expect(payload.variables.input.runtimeVariables["workflowInput"]).toEqual(
+        {
+          request: "ship it",
+          provider: "slack",
+          conversationId: "C123",
+        },
+      );
+      return new Response(
+        JSON.stringify({
+          data: {
+            executeWorkflow: {
+              workflowExecutionId: "sess-chat-sdk",
+              sessionId: "sess-chat-sdk",
+              status: "running",
+              accepted: true,
+              exitCode: null,
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const listener = await createEventListenerService(undefined, runtime).start(
+      {
+        workflowRoot,
+        eventRoot,
+        rootDataDir: path.join(root, "data"),
+        endpoint: "http://example.test/graphql",
+        env: { CHAT_SDK_TOKEN: "secret" },
+        fetchImpl,
+        cwd: root,
+        port: 0,
+      },
+    );
+    expect(capturedFetch).toBeDefined();
+    if (capturedFetch === undefined) {
+      return;
+    }
+
+    const request = {
+      provider: "slack",
+      eventId: "evt-chat-sdk-1",
+      actor: { id: "U123", displayName: "Operator" },
+      conversation: { id: "C123", threadId: "T123" },
+      message: { text: "ship it" },
+    };
+    const unauthorized = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        body: JSON.stringify(request),
+      }),
+    );
+    expect(unauthorized.status).toBe(401);
+
+    const first = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify(request),
+      }),
+    );
+    const duplicate = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify(request),
+      }),
+    );
+    const limited = await capturedFetch(
+      new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
+        method: "POST",
+        headers: { authorization: "Bearer secret" },
+        body: JSON.stringify({ ...request, eventId: "evt-chat-sdk-2" }),
+      }),
+    );
+    const firstBody = (await first.json()) as {
+      readonly accepted: boolean;
+      readonly receipts: readonly { readonly duplicate: boolean }[];
+    };
+    const duplicateBody = (await duplicate.json()) as {
+      readonly receipts: readonly { readonly duplicate: boolean }[];
+    };
+
+    expect(first.status).toBe(202);
+    expect(firstBody.accepted).toBe(true);
+    expect(firstBody.receipts[0]?.duplicate).toBe(false);
+    expect(duplicate.status).toBe(202);
+    expect(duplicateBody.receipts[0]?.duplicate).toBe(true);
+    expect(limited.status).toBe(429);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await listener.stop();
+  });
+
   test("starts enabled Matrix sources with env and fetch context", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");
@@ -397,6 +545,135 @@ describe("event listener service", () => {
     expect(listener.sources).toEqual(["team-matrix"]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     await listener.stop();
+  });
+
+  test("shares the listener scheduled event manager with started cron adapters", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "sleep-flow", "workflow.json"), {
+      workflowId: "sleep-flow",
+      description: "sleep flow",
+      entryStepId: "wait",
+      nodes: [
+        { id: "wait-node", nodeFile: "nodes/node-wait.json" },
+        { id: "worker-node", nodeFile: "nodes/node-worker.json" },
+      ],
+      steps: [
+        {
+          id: "wait",
+          nodeId: "wait-node",
+          role: "worker",
+          transitions: [{ toStepId: "worker", label: "always" }],
+        },
+        { id: "worker", nodeId: "worker-node", role: "worker" },
+      ],
+    });
+    await writeJson(
+      path.join(workflowRoot, "sleep-flow", "nodes/node-wait.json"),
+      {
+        id: "wait-node",
+        nodeType: "sleep",
+        variables: {},
+        sleep: { durationMs: 60_000 },
+      },
+    );
+    await writeJson(
+      path.join(workflowRoot, "sleep-flow", "nodes/node-worker.json"),
+      {
+        id: "worker-node",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "worker",
+        variables: {},
+      },
+    );
+    await writeJson(path.join(eventRoot, "sources", "a-cron.json"), {
+      id: "a-cron",
+      kind: "cron",
+      schedule: "0 2 * * *",
+      timezone: "UTC",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "a-cron-sleep.json"), {
+      id: "a-cron-sleep",
+      sourceId: "a-cron",
+      workflowName: "sleep-flow",
+      match: { eventType: "cron.tick" },
+      inputMapping: { mode: "event-input" },
+      execution: { async: false },
+    });
+
+    const scheduledEventManager = createScheduledEventManager();
+    let capturedScheduledEventManager: ScheduledEventManager | undefined;
+    const cronAdapter: EventSourceAdapter = {
+      kind: "cron",
+      capabilities: {
+        eventTypes: ["cron.tick"],
+        supportsStart: true,
+        webhook: false,
+      },
+      start: async (input) => {
+        capturedScheduledEventManager = input.scheduledEventManager;
+        input.scheduledEventManager?.register({
+          id: "cron:a-cron",
+          kind: "cron",
+          dueAt: new Date(Date.now() + 60_000),
+          dedupeKey: "cron:a-cron",
+          payload: { sourceId: "a-cron" },
+          fire: async () => {},
+        });
+        await input.dispatch({
+          sourceId: "a-cron",
+          eventId: "cron-1",
+          provider: "cron",
+          eventType: "cron.tick",
+          occurredAt: "2026-04-20T02:00:00.000Z",
+          receivedAt: "2026-04-20T02:00:01.000Z",
+          dedupeKey: "cron-1",
+          input: {
+            scheduleId: "a-cron",
+            scheduledAt: "2026-04-20T02:00:00.000Z",
+            firedAt: "2026-04-20T02:00:01.000Z",
+            timezone: "UTC",
+          },
+        });
+        return {
+          sourceId: input.source.id,
+          stop: async () => {},
+        };
+      },
+      normalize: async () => {
+        throw new Error("not used");
+      },
+    };
+    const registry = createEventSourceRegistry([cronAdapter]);
+    const runtime: EventListenerRuntime = {
+      serve: (options) => ({
+        port: options.port,
+        stop: () => {},
+      }),
+    };
+
+    const listener = await createEventListenerService(registry, runtime).start({
+      workflowRoot,
+      eventRoot,
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      artifactRoot: path.join(root, "artifacts"),
+      scheduledEventManager,
+      cwd: root,
+      port: 0,
+    });
+
+    expect(capturedScheduledEventManager).toBe(scheduledEventManager);
+    expect(
+      scheduledEventManager
+        .list()
+        .map((event) => event.kind)
+        .sort(),
+    ).toEqual(["cron"]);
+    await listener.stop();
+    scheduledEventManager.stop();
   });
 
   test("stops started adapters when HTTP listener startup fails", async () => {

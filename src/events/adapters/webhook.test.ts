@@ -1,9 +1,20 @@
 import { createHmac } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
+import type { EventSourceConfig } from "../types";
 import {
   createWebhookEventSourceAdapter,
   verifyWebhookRequest,
 } from "./webhook";
+
+async function readFixtureJson(
+  relativePath: string,
+): Promise<Record<string, unknown>> {
+  return JSON.parse(
+    await readFile(path.resolve(relativePath), "utf8"),
+  ) as Record<string, unknown>;
+}
 
 describe("webhook event source adapter", () => {
   test("verifies HMAC signatures and rejects replayed timestamps", () => {
@@ -76,6 +87,59 @@ describe("webhook event source adapter", () => {
       input: { text: "hello" },
       actor: { id: "u1", displayName: "User One" },
       conversation: { id: "c1" },
+    });
+  });
+
+  test("keeps checked-in webhook chat fixtures on the explicit chat reply contract", async () => {
+    const adapter = createWebhookEventSourceAdapter();
+    const source = await readFixtureJson(
+      "examples/event-sources/.divedra-events/sources/example-reply-webhook.json",
+    );
+    const binding = await readFixtureJson(
+      "examples/event-sources/.divedra-events/bindings/webhook-to-chat-reply.json",
+    );
+    const destination = await readFixtureJson(
+      "examples/event-sources/.divedra-events/destinations/example-reply-chat.json",
+    );
+    const payload = await readFixtureJson(
+      "examples/event-sources/payloads/chat-reply-message.json",
+    );
+
+    expect(source).toMatchObject({
+      id: "example-reply-webhook",
+      kind: "webhook",
+      provider: "webhook",
+      replyEndpointEnv: "DIVEDRA_EXAMPLE_REPLY_ENDPOINT",
+    });
+    expect(binding).toMatchObject({
+      id: "webhook-to-chat-reply",
+      sourceId: "example-reply-webhook",
+      outputDestinations: ["example-reply-chat"],
+      match: { eventType: "chat.message" },
+      workflowName: "chat-reply-webhook",
+      inputMapping: { mode: "event-input", mirrorToHumanInput: true },
+    });
+    expect(destination).toMatchObject({
+      id: "example-reply-chat",
+      kind: "chat",
+      sourceId: "example-reply-webhook",
+    });
+
+    const envelope = await adapter.normalize({
+      sourceId: "example-reply-webhook",
+      source: source as EventSourceConfig,
+      receivedAt: "2026-05-15T00:00:00.000Z",
+      body: payload,
+    });
+
+    expect(envelope).toMatchObject({
+      sourceId: "example-reply-webhook",
+      eventId: "chat-reply-fixture-1",
+      provider: "webhook",
+      eventType: "chat.message",
+      actor: { id: "user-1", displayName: "Example User" },
+      conversation: { id: "example-channel", threadId: "thread-1" },
+      input: { text: "Please acknowledge this webhook message." },
     });
   });
 

@@ -492,6 +492,7 @@ Optional:
 - `container`
 - `durability`
 - `userAction`
+- `sleep`
 - `argumentsTemplate`
 - `argumentBindings`
 - `templateEngine`
@@ -503,8 +504,8 @@ Important rules:
 - omitted `nodeType` defaults to `agent`
 - `agent` nodes require `executionBackend`, `model`, and `promptTemplate` unless a manager code-path default is explicitly allowed by the loader
 - manager-role nodes must stay on the agent execution path; `command`,
-  `container`, `user-action`, and runtime-owned `addon` payloads are worker
-  execution paths
+  `container`, `user-action`, `sleep`, and runtime-owned `addon` payloads are
+  worker execution paths
 - `managerType` is valid only for manager-role nodes; worker steps must not
   reference payloads that declare `managerType`
 - `systemPromptTemplateFile` is resolved into `systemPromptTemplate` during load
@@ -514,22 +515,53 @@ Important rules:
 
 ### `nodeType`
 
-Current supported authored values:
+Supported authored values, including the scheduled sleep runtime target:
 
 - `agent`
 - `command`
 - `container`
+- `sleep`
 - `user-action`
 
-Current execution reality:
+Target execution behavior for this schema:
 
-- `agent`, `command`, `container`, and `user-action` nodes are accepted by the validator
+- `agent`, `command`, `container`, `sleep`, and `user-action` nodes are
+  accepted by the validator
+- in full workflow execution, `sleep` nodes register a scheduled continuation
+  event through the shared scheduled event manager instead of blocking or
+  awaiting a long timer in the node executor
 - in full workflow execution, `user-action` nodes persist a request artifact,
   mark the session `paused`, and wait for external/user input rather than
   running an agent, command, or container
 - direct step execution rejects `user-action` nodes; they require the full
   workflow session lifecycle
 - `nodeType: "addon"` is runtime-owned and must not be authored in node payload files; author add-ons through `workflow.json.nodes[].addon`
+
+### `sleep`
+
+`sleep` is required when `nodeType` is `sleep` and invalid for other node types.
+Sleep nodes are runtime scheduling nodes: they pause the current workflow
+execution and register the continuation in the shared scheduled event pool
+described in `design-docs/specs/design-scheduled-sleep-node-runtime.md`.
+
+Rules:
+
+- exactly one wake condition is required for the first implementation
+- `durationMs` must be a positive integer when present
+- `until`, if supported, must be a timestamp with an explicit timezone or UTC
+  offset
+- `promptTemplate`, `promptTemplateFile`, `model`, `executionBackend`,
+  `sessionPolicy`, `command`, `container`, `userAction`, and `durability` must
+  be omitted
+- `variables` remains required, as with other node payloads
+
+Shape:
+
+```json
+{
+  "durationMs": 30000
+}
+```
 
 ### `executionBackend`
 

@@ -10,6 +10,7 @@ import type {
   NodeRole,
   NodeSessionPolicy,
   NodeType,
+  SleepNodeConfig,
   UserActionNodeConfig,
   ValidationIssue,
   WorkflowJson,
@@ -45,6 +46,73 @@ import {
   normalizeNodeOutputContract,
   normalizeOptionalBooleanField,
 } from "./output-contracts-and-callees";
+
+function normalizeSleepNodeConfig(
+  raw: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): SleepNodeConfig | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!isRecord(raw)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+  const durationMs = normalizePositiveIntegerValue(
+    raw["durationMs"],
+    `${path}.durationMs`,
+    issues,
+  );
+  let until: string | undefined;
+  const untilRaw = raw["until"];
+  if (untilRaw !== undefined) {
+    if (typeof untilRaw !== "string" || untilRaw.trim().length === 0) {
+      issues.push(
+        makeIssue("error", `${path}.until`, "must be a non-empty timestamp"),
+      );
+    } else if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(untilRaw.trim())) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.until`,
+          "must include an explicit timezone or UTC offset",
+        ),
+      );
+    } else if (!Number.isFinite(new Date(untilRaw).getTime())) {
+      issues.push(
+        makeIssue("error", `${path}.until`, "must be a parseable timestamp"),
+      );
+    } else {
+      until = untilRaw;
+    }
+  }
+  if (durationMs === undefined && until === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        path,
+        "must include exactly one of durationMs or until",
+      ),
+    );
+  }
+  if (durationMs !== undefined && until !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        path,
+        "must include exactly one of durationMs or until",
+      ),
+    );
+  }
+  if (durationMs === undefined && until === undefined) {
+    return undefined;
+  }
+  return {
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(until === undefined ? {} : { until }),
+  };
+}
 
 export function normalizeNodePayload(input: {
   readonly nodeId: string;
@@ -86,7 +154,7 @@ export function normalizeNodePayload(input: {
         makeIssue(
           "error",
           `${path}.nodeType`,
-          "must be 'agent', 'command', 'container', or 'user-action'",
+          "must be 'agent', 'command', 'container', 'sleep', or 'user-action'",
         ),
       );
     }
@@ -308,6 +376,11 @@ export function normalizeNodePayload(input: {
     `${path}.durability`,
     issues,
   );
+  const sleepConfig = normalizeSleepNodeConfig(
+    payload["sleep"],
+    `${path}.sleep`,
+    issues,
+  );
   const userAction = normalizeUserActionNodeConfig(
     payload["userAction"],
     `${path}.userAction`,
@@ -467,6 +540,24 @@ export function normalizeNodePayload(input: {
       ),
     );
   }
+  if (sleepConfig !== undefined && nodeType !== "sleep") {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.sleep`,
+        "is valid only when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && sleepConfig === undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.sleep`,
+        "is required when nodeType is 'sleep'",
+      ),
+    );
+  }
   if (userAction !== undefined && nodeType !== "user-action") {
     issues.push(
       makeIssue(
@@ -539,6 +630,69 @@ export function normalizeNodePayload(input: {
       ),
     );
   }
+  if (nodeType === "sleep" && model !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.model`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && executionBackend !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.executionBackend`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && sessionPolicy !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.sessionPolicy`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && command !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.command`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && container !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.container`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && durability !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.durability`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
+  if (nodeType === "sleep" && userAction !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.userAction`,
+        "must be omitted when nodeType is 'sleep'",
+      ),
+    );
+  }
   if (
     nodeType === "user-action" &&
     promptTemplate === undefined &&
@@ -557,6 +711,7 @@ export function normalizeNodePayload(input: {
     id === null ||
     variables === null ||
     nodeType === "addon" ||
+    (nodeType === "sleep" && sleepConfig === undefined) ||
     (nodeType === "agent" &&
       (model === undefined || promptTemplate === undefined) &&
       !allowsManagerCodePathDefaults)
@@ -590,6 +745,7 @@ export function normalizeNodePayload(input: {
     ...(command === undefined ? {} : { command }),
     ...(container === undefined ? {} : { container }),
     ...(durability === undefined ? {} : { durability }),
+    ...(sleepConfig === undefined ? {} : { sleep: sleepConfig }),
     ...(userAction === undefined ? {} : { userAction }),
     ...(argumentsTemplate === undefined ? {} : { argumentsTemplate }),
     ...(argumentBindings === undefined ? {} : { argumentBindings }),

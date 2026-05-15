@@ -1,0 +1,8 @@
+{
+  "id": "wait-node",
+  "nodeType": "sleep",
+  "variables": {},
+  "sleep": {
+    "durationMs": 1000
+  }
+}

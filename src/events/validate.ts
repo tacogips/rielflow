@@ -19,6 +19,10 @@ import {
   validateSecretEnvName,
 } from "./validation-utils";
 import { validateMatrixSource } from "./validate-source-matrix";
+import {
+  validateChatSdkBindingCapabilities,
+  validateChatSdkSource,
+} from "./validate-source-chat-sdk";
 import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
   isValidEventHttpPath,
@@ -44,6 +48,7 @@ import type {
 } from "./types";
 
 const SUPPORTED_SOURCE_KINDS = new Set([
+  "chat-sdk",
   "cron",
   "matrix",
   "webhook",
@@ -153,6 +158,10 @@ function validateSource(
 
   if (source.kind === "matrix") {
     validateMatrixSource(source, issues);
+  }
+
+  if (source.kind === "chat-sdk") {
+    validateChatSdkSource(source, issues);
   }
 
   if (source.kind === "cron") {
@@ -835,6 +844,7 @@ function validateBinding(
     issues,
   );
   validateMailboxBridge(binding, issues);
+  validateChatSdkBindingCapabilities({ binding, source, issues });
   validateTaskPlanning(binding, issues);
 }
 

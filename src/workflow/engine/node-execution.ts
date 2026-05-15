@@ -308,6 +308,7 @@ export async function runWorkflowQueue(input) {
       agentNodePayload === null &&
       nativeNodePayload === null &&
       nodePayload.nodeType !== "user-action" &&
+      nodePayload.nodeType !== "sleep" &&
       !skipOptionalNode
     ) {
       const failed: WorkflowSessionState = {
@@ -620,6 +621,7 @@ export async function runWorkflowQueue(input) {
         options,
         upstreamCommunicationIds,
         loaded,
+        workflowName,
       });
       if (preparedStepInputResult.kind === "done") {
         session = preparedStepInputResult.session;

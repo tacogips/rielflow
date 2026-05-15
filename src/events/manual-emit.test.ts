@@ -261,4 +261,74 @@ describe("manual event emit", () => {
       },
     });
   });
+
+  test("emits Chat SDK generic payloads through normalization", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    const rootDataDir = path.join(root, "data");
+    const eventFile = path.join(root, "chat-sdk-event.json");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "team-slack.json"), {
+      id: "team-slack",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/team-slack",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "team-slack.json"), {
+      id: "team-slack-demo",
+      sourceId: "team-slack",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          provider: "{{event.input.provider}}",
+          conversationId: "{{event.conversation.id}}",
+        },
+      },
+    });
+    await writeJson(eventFile, {
+      provider: "slack",
+      eventId: "evt-chat-sdk",
+      actor: { id: "U123", displayName: "Operator" },
+      conversation: { id: "C123", threadId: "T123" },
+      message: { text: "run release workflow" },
+    });
+
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const results = await emitEventFile({
+      sourceId: "team-slack",
+      eventFile,
+      workflowRoot,
+      eventRoot,
+      rootDataDir,
+      endpoint: "http://example.test/graphql",
+      fetchImpl,
+      cwd: root,
+      readOnly: true,
+    });
+
+    expect(results[0]?.receipt.status).toBe("skipped");
+    const inputRef = results[0]?.receipt.inputRef;
+    expect(inputRef).toBeDefined();
+    if (inputRef === undefined) {
+      return;
+    }
+    expect(
+      JSON.parse(await readFile(path.join(rootDataDir, inputRef.path), "utf8")),
+    ).toMatchObject({
+      workflowInput: {
+        request: "run release workflow",
+        provider: "slack",
+        conversationId: "C123",
+      },
+    });
+  });
 });

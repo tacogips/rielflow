@@ -32,6 +32,11 @@ Current direction:
 - manager nodes should default to a deterministic `code` manager, with `llm` manager retained as experimental
 - repeated visits to the same node should materialize distinct mailbox instances and support same-session continuation with prompt variants
 - new workflow starts should be supervisor-backed by default at the CLI, GraphQL, and library entrypoint layer. The default supervisor is deterministic in-process runner-pool mode: it represents supervision as a workflow boundary, but the runtime service that owns lifecycle control starts, tracks, cancels, resumes, and reruns target workflows asynchronously in the same process. The supervisor command surface is the default lifecycle boundary for event sources and operators; `runWorkflow()` remains the low-level engine primitive used by the runner pool, tests, and specialized embedding.
+- scheduled workflow sleeps and cron occurrences should share a scheduled event
+  manager. Sleep nodes register resumable workflow continuation events instead
+  of blocking the executor, and cron sources register their next occurrence
+  through the same manager after each firing. See
+  `design-docs/specs/design-scheduled-sleep-node-runtime.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 
 The authoritative implementation for those behaviors lives in:

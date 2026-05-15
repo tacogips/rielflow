@@ -425,6 +425,339 @@ describe("event configuration", () => {
     ).toEqual([]);
   });
 
+  test.each([
+    "slack",
+    "teams",
+    "gchat",
+    "discord",
+    "telegram",
+    "github",
+    "linear",
+    "whatsapp",
+    "messenger",
+    "web",
+  ] as const)("validates Chat SDK %s source configuration", async (provider) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", `${provider}.json`), {
+      id: `${provider}-chat`,
+      kind: "chat-sdk",
+      provider,
+      mode: "generic-webhook",
+      webhook: {
+        path: `chat-sdk/${provider}`,
+        signingSecretEnv: "DIVEDRA_CHAT_SDK_WEBHOOK_SECRET",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        rateLimit: { windowMs: 60000, maxRequests: 10 },
+      },
+      send: {
+        endpointUrlEnv: "DIVEDRA_CHAT_SDK_SEND_URL",
+        tokenEnv: "DIVEDRA_CHAT_SDK_SEND_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", `${provider}.json`), {
+      id: `${provider}-reply`,
+      kind: "chat",
+      sourceId: `${provider}-chat`,
+    });
+    await writeJson(path.join(eventRoot, "bindings", `${provider}.json`), {
+      id: `${provider}-to-demo`,
+      sourceId: `${provider}-chat`,
+      outputDestinations: [`${provider}-reply`],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Chat SDK source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-chat-sdk.json"), {
+      id: "bad-chat-sdk",
+      kind: "chat-sdk",
+      provider: "irc",
+      mode: "direct-package",
+      webhook: {
+        path: "../unsafe",
+        signingSecretEnv: "literal-secret-value",
+        bearerTokenEnv: "not-loud-enough",
+        rateLimit: { windowMs: 0, maxRequests: 0 },
+      },
+      send: {
+        endpointUrlEnv: "https://send.example.test",
+        tokenEnv: "plain-token",
+      },
+      providerConfig: {
+        eventType: "chat.action",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad.json"), {
+      id: "bad-to-demo",
+      sourceId: "bad-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-chat-sdk.provider",
+        "sources.bad-chat-sdk.mode",
+        "sources.bad-chat-sdk.webhook.path",
+        "sources.bad-chat-sdk.webhook.signingSecretEnv",
+        "sources.bad-chat-sdk.webhook.bearerTokenEnv",
+        "sources.bad-chat-sdk.webhook.rateLimit.windowMs",
+        "sources.bad-chat-sdk.webhook.rateLimit.maxRequests",
+        "sources.bad-chat-sdk.send.endpointUrlEnv",
+        "sources.bad-chat-sdk.send.tokenEnv",
+        "sources.bad-chat-sdk.providerConfig.eventType",
+      ]),
+    );
+  });
+
+  test("reports non-string Chat SDK webhook paths without throwing", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-path.json"), {
+      id: "bad-path-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: 123,
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-path.json"), {
+      id: "bad-path-to-demo",
+      sourceId: "bad-path-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.bad-path-chat-sdk.webhook.path",
+      }),
+    );
+  });
+
+  test("reports unsupported Chat SDK providers with binding event types without throwing", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "irc.json"), {
+      id: "irc-chat-sdk",
+      kind: "chat-sdk",
+      provider: "irc",
+      webhook: {
+        path: "chat-sdk/irc",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "irc.json"), {
+      id: "irc-to-demo",
+      sourceId: "irc-chat-sdk",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.irc-chat-sdk.provider",
+      }),
+    );
+  });
+
+  test("rejects Chat SDK webhook sources without inbound authentication", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "no-auth.json"), {
+      id: "no-auth-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: { path: "chat-sdk/no-auth" },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "no-auth.json"), {
+      id: "no-auth-to-demo",
+      sourceId: "no-auth-chat-sdk",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "sources.no-auth-chat-sdk.webhook",
+        message: expect.stringContaining("signingSecretEnv or bearerTokenEnv"),
+      }),
+    );
+  });
+
+  test("rejects Chat SDK duplicate paths, destinations without send config, and unsupported event types", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "first.json"), {
+      id: "first-chat-sdk",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/shared",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "sources", "second.json"), {
+      id: "second-chat-sdk",
+      kind: "chat-sdk",
+      provider: "discord",
+      webhook: {
+        path: "chat-sdk/shared",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+      send: { endpointUrlEnv: "DIVEDRA_CHAT_SDK_SEND_URL" },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "reply.json"), {
+      id: "missing-send-reply",
+      kind: "chat",
+      sourceId: "first-chat-sdk",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "unsupported.json"), {
+      id: "unsupported-event-type",
+      sourceId: "second-chat-sdk",
+      workflowName: "demo",
+      match: { eventType: "chat.action" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.second-chat-sdk.path",
+          message: expect.stringContaining("already used"),
+        }),
+        expect.objectContaining({
+          path: "destinations.missing-send-reply.sourceId",
+          message: expect.stringContaining("does not configure send"),
+        }),
+        expect.objectContaining({
+          path: "bindings.unsupported-event-type.match.eventType",
+          message: expect.stringContaining("does not support event type"),
+        }),
+      ]),
+    );
+  });
+
+  test.each([
+    "chat.mention",
+    "chat.command",
+    "chat.action",
+    "chat.modal-submit",
+  ])("rejects undeclared Chat SDK capability event type %s", async (eventType) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "slack.json"), {
+      id: "slack-chat",
+      kind: "chat-sdk",
+      provider: "slack",
+      webhook: {
+        path: "chat-sdk/slack",
+        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "slack.json"), {
+      id: "slack-to-demo",
+      sourceId: "slack-chat",
+      workflowName: "demo",
+      match: { eventType },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: "bindings.slack-to-demo.match.eventType",
+      }),
+    );
+  });
+
   test("rejects malformed Matrix source configuration", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");

@@ -444,6 +444,27 @@ bun run src/main.ts workflow run node-combinations-showcase \
   --output json
 ```
 
+### `scheduled-sleep`
+
+Minimal scheduled continuation workflow:
+
+- `wait` uses `nodeType: "sleep"` with `sleep.durationMs`
+- the runtime records a pending `workflow-sleep` scheduled event and returns
+  while the workflow session is paused
+- when the shared scheduled event manager fires the event, the session resumes
+  and runs `worker`
+- cancellation only applies to pending scheduled events, so firing, fired,
+  failed, and already-cancelled event states remain visible for inspection
+
+Run it with the bundled deterministic scenario:
+
+```bash
+bun run src/main.ts workflow run scheduled-sleep \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/scheduled-sleep/mock-scenario.json \
+  --output json
+```
+
 ### `first-four-arithmetic-pipeline`
 
 Validation-oriented arithmetic pipeline reference:

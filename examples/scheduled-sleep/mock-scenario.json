@@ -1,0 +1,10 @@
+{
+  "worker": {
+    "payload": {
+      "summary": "Scheduled sleep completed and worker resumed."
+    },
+    "when": {
+      "always": true
+    }
+  }
+}

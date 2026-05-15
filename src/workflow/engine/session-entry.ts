@@ -1,5 +1,6 @@
 // @ts-nocheck
 // biome-ignore-all lint/correctness/noUnusedVariables: shared lifecycle dependency extraction keeps original helper names available.
+import { cancelPendingWorkflowSleepScheduledEvents } from "../session";
 import { workflowRunnerDeps } from "./workflow-runner-deps";
 
 const {
@@ -173,6 +174,13 @@ export async function enterWorkflowSession(setup) {
         result: err({ exitCode: 2, message: ambiguousFanoutBranchRerun }),
       };
     }
+    const sourceWithCancelledSleep = cancelPendingWorkflowSleepScheduledEvents(
+      source,
+      options.scheduledEventManager,
+    );
+    if (sourceWithCancelledSleep !== source) {
+      await saveSession(sourceWithCancelledSleep, options);
+    }
     session = createSessionState({
       sessionId:
         options.sessionId ??
@@ -318,11 +326,17 @@ export async function enterWorkflowSession(setup) {
         ),
       };
     }
-    if (session.status === "completed") {
+    if (isTerminalStatus(session.status)) {
       if (options.autoImprove !== undefined) {
         await saveSession(session, options);
       }
-      return { kind: "result", result: ok({ session, exitCode: 0 }) };
+      return {
+        kind: "result",
+        result: ok({
+          session,
+          exitCode: session.status === "completed" ? 0 : 1,
+        }),
+      };
     }
     if ((session.activeUserActions?.length ?? 0) > 0) {
       if (options.autoImprove !== undefined) {

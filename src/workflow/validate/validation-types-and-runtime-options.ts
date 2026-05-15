@@ -86,6 +86,7 @@ export function isNodeType(value: unknown): value is NodeType {
     value === "agent" ||
     value === "command" ||
     value === "container" ||
+    value === "sleep" ||
     value === "user-action"
   );
 }

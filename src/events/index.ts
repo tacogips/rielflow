@@ -21,6 +21,11 @@ export {
 } from "./trigger-runner";
 export { createEventListenerService } from "./listener-service";
 export {
+  createScheduledEventManager,
+  type ScheduledEvent,
+  type ScheduledEventManager,
+} from "./scheduled-event-manager";
+export {
   parseSupervisorChatCommandDecision,
   type SupervisorChatDecisionAction,
   type SupervisorChatCommandDecision,

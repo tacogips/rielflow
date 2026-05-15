@@ -57,6 +57,45 @@ export interface WebhookSourceConfig extends EventSourceConfigBase {
   readonly replyEndpointEnv?: string;
 }
 
+export type ChatSdkProvider =
+  | "slack"
+  | "teams"
+  | "gchat"
+  | "discord"
+  | "telegram"
+  | "github"
+  | "linear"
+  | "whatsapp"
+  | "messenger"
+  | "web";
+
+export interface ChatSdkWebhookConfig extends JsonObject {
+  readonly path: string;
+  readonly signingSecretEnv?: string;
+  readonly bearerTokenEnv?: string;
+  readonly signatureHeader?: string;
+  readonly timestampHeader?: string;
+  readonly replayWindowMs?: number;
+  readonly rateLimit?: {
+    readonly windowMs: number;
+    readonly maxRequests: number;
+  };
+}
+
+export interface ChatSdkSendConfig extends JsonObject {
+  readonly endpointUrlEnv: string;
+  readonly tokenEnv?: string;
+}
+
+export interface ChatSdkSourceConfig extends EventSourceConfigBase {
+  readonly kind: "chat-sdk";
+  readonly provider: ChatSdkProvider;
+  readonly mode?: "generic-webhook";
+  readonly webhook: ChatSdkWebhookConfig;
+  readonly send?: ChatSdkSendConfig;
+  readonly providerConfig?: JsonObject;
+}
+
 export interface MatrixSourceRoomConfig extends JsonObject {
   readonly roomId: string;
   readonly alias?: string;
@@ -98,6 +137,7 @@ export interface S3RepositorySourceConfig extends EventSourceConfigBase {
 
 export type EventSourceConfig =
   | CronSourceConfig
+  | ChatSdkSourceConfig
   | MatrixSourceConfig
   | WebhookSourceConfig
   | S3RepositorySourceConfig

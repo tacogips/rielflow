@@ -26,6 +26,8 @@ impl-plans/
 
 | Plan | Created | Design Reference |
 | ---- | ------- | ---------------- |
+| `active/chat-event-sources-review-improvements` | 2026-05-15 | `design-event-listener-workflow-trigger#shared-chat-source-review-invariants`, `design-chat-sdk-event-sources#examples-and-tests` |
+| `active/chat-sdk-event-sources` | 2026-05-14 | `design-chat-sdk-event-sources` |
 | `active/supervisor-runner-pool-package-boundary` | 2026-05-14 | `architecture#supervisor-runner-pool-package-boundary`, `design-event-supervisor-control#codex-agent-reference-mapping` |
 | `active/package-boundary-architecture` | 2026-05-14 | `architecture#package-boundary-architecture` |
 

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-14T12:15:00.000Z",
+  "lastUpdated": "2026-05-15T01:05:00.000+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -500,6 +500,9 @@
       "status": "COMPLETED"
     },
     "167": {
+      "status": "COMPLETED"
+    },
+    "168": {
       "status": "COMPLETED"
     }
   },
@@ -5747,6 +5750,113 @@
           "parallelizable": false,
           "deps": [
             "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
+          ]
+        }
+      }
+    },
+    "chat-sdk-event-sources": {
+      "phase": 168,
+      "status": "Completed",
+      "path": "impl-plans/active/chat-sdk-event-sources.md",
+      "designReference": "design-docs/specs/design-chat-sdk-event-sources.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
+          ]
+        }
+      }
+    },
+    "chat-event-sources-review-improvements": {
+      "phase": 169,
+      "status": "Completed",
+      "path": "impl-plans/active/chat-event-sources-review-improvements.md",
+      "designReference": "design-docs/specs/design-event-listener-workflow-trigger.md#shared-chat-source-review-invariants; design-docs/specs/design-chat-sdk-event-sources.md#examples-and-tests",
+      "tasks": {
+        "TASK-001": {
+          "status": "COMPLETED",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "COMPLETED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "COMPLETED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "COMPLETED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-005": {
+          "status": "COMPLETED",
+          "parallelizable": false,
+          "deps": [
             "TASK-002",
             "TASK-003",
             "TASK-004"

@@ -289,7 +289,10 @@ payloads must not be shell-interpolated into command arguments.
 
 ### Cron
 
-Cron is an internal event source, not a workflow node type.
+Cron is an internal event source, not a workflow node type. Its next occurrence
+should be registered through the shared scheduled event manager described in
+`design-docs/specs/design-scheduled-sleep-node-runtime.md`, rather than through
+adapter-owned long-lived timers.
 
 Source config:
 
@@ -310,6 +313,17 @@ Normalized input should include:
 
 First iteration may use a single-process scheduler. Distributed locking should
 be an explicit later milestone because the current runtime is local-first.
+
+Scheduled cron behavior:
+
+- source startup registers the next due occurrence in the scheduled event pool
+- event registration, cancellation, or replacement re-arms the manager's next
+  due timer
+- events whose scheduled time has passed execute promptly
+- after a cron event fires, the next occurrence is computed and registered
+  through the same manager
+- the cron adapter preserves existing config, binding, input mapping, dedupe,
+  and event receipt behavior
 
 ### S3 Repository File Creation
 
@@ -404,20 +418,22 @@ Rules:
 
 Chat providers should initially be integrated through a Chat SDK adapter where
 the provider is supported. Current Chat SDK documentation describes a unified
-TypeScript API with adapters for platforms including Slack, Discord, Telegram,
-Microsoft Teams, Google Chat, GitHub, Linear, and WhatsApp, plus event handlers
-for messages, mentions, reactions, slash commands, buttons, and modals.
+TypeScript API and adapter catalog for platforms including Slack, Teams, Google
+Chat, Discord, Telegram, GitHub, Linear, WhatsApp, Messenger, and Web.
 
 Divedra should treat Chat SDK as one adapter family:
 
 - `kind: "chat-sdk"`
-- provider adapter selected in source config
+- provider selected in source config from a closed allow-list
 - normalized event types such as `chat.message`, `chat.mention`,
   `chat.command`, `chat.action`, and `chat.modal-submit`
-- optional response target metadata for future replies
+- response target metadata for external-output chat replies
+- generic webhook/send endpoint mode as the preferred first implementation
 
 Source config should include only logical names and environment variable names,
-not secret values.
+not secret values. See
+`design-docs/specs/design-chat-sdk-event-sources.md` for the full provider
+matrix, validation rules, and direct dependency policy.
 
 ### Element / Matrix
 
@@ -562,10 +578,17 @@ Recent-change review closure requires these design and rollout invariants:
 - verification preserves the local Synapse receive/send path via
   `./examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh`
 
-### Slack, Discord, Telegram
+### Chat SDK Providers
 
-Slack, Discord, and Telegram can be configured as Chat SDK-backed sources when
-their required capabilities match the workflow trigger use case.
+Chat SDK-backed sources are designed in detail in
+`design-docs/specs/design-chat-sdk-event-sources.md`. The shared source kind is
+`chat-sdk`, with a closed provider allow-list covering Slack, Teams, Google
+Chat, Discord, Telegram, GitHub, Linear, WhatsApp, Messenger, and Web.
+
+The first implementation should prefer a secure generic Chat SDK deployment
+boundary with webhook receive and send endpoint configuration. Direct
+`@chat-adapter/*` package integration remains optional until dependency
+stability, provider verification, and credential surface area are reviewed.
 
 Minimum first-iteration event support:
 
@@ -580,6 +603,39 @@ Minimum first-iteration event support:
 Provider-specific capabilities should stay in adapter capability metadata, not
 in workflow bindings. For example, Slack scheduled messages or native streaming
 support should not change the event trigger contract.
+
+#### Shared Chat Source Review Invariants
+
+The webhook-shaped mock chat source, chat reply webhook fixture, Matrix source,
+and Chat SDK source should remain reviewable as one event-source family even
+though each adapter owns different provider details.
+
+Cross-source behavior:
+
+- all four surfaces normalize chat input through `eventType: "chat.message"`
+  unless a provider capability explicitly declares a narrower event type
+- bindings should match provider-neutral fields such as event type,
+  conversation id, thread id, actor, and input text rather than raw provider
+  payload fields
+- reply-capable examples should declare explicit `kind: "chat"` destinations
+  so fallback-to-source reply routing is compatibility behavior, not the main
+  documented path
+- local examples must support deterministic `events emit` fixture runs without
+  live webhook, Matrix, Chat SDK, GraphQL, or agent services
+- live Matrix and Chat SDK flows are optional operator verification layers on
+  top of the same checked-in source, binding, destination, and payload files
+
+Review closure for changes in this family requires validating the shared
+event-source root and the two chat reply workflows, then running the focused
+adapter and reply-dispatch tests:
+
+```bash
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts workflow validate chat-reply-webhook --workflow-definition-dir ./examples
+bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
+bun test src/events/adapters/webhook.test.ts src/events/adapters/matrix.test.ts src/events/adapters/chat-sdk.test.ts src/events/chat-reply-example.test.ts src/events/matrix-chat-reply-example.test.ts src/events/reply-dispatcher.test.ts
+bun run typecheck
+```
 
 ### Signal
 
@@ -1049,8 +1105,10 @@ Event config validation should fail when:
 6. Generic webhook adapter for local testing.
 7. Matrix adapter for Element/Matrix room receive normalization and chat reply
    dispatch.
-8. Chat SDK adapter family for Slack, Discord, and Telegram.
-9. Web chat adapter for AI Elements or other browser chat frontends.
+8. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
+   GitHub, Linear, WhatsApp, Messenger, and Web.
+9. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
+   the shared Chat SDK `web` provider boundary.
 10. Optional S3 object download-to-data-root support.
 11. Optional reply publisher after workflow completion.
 12. Signal adapter if operational requirements and dependency choice are

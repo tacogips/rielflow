@@ -6,6 +6,7 @@ import {
   validateSafeObjectPrefix,
 } from "./validation-utils";
 import type {
+  ChatSdkSourceConfig,
   ChatOutputDestinationConfig,
   EventConfigValidationIssue,
   EventOutputDestinationConfig,
@@ -90,6 +91,19 @@ function validateChatDestination(
         `unknown source '${sourceId}'`,
       ),
     );
+  } else {
+    const source = sourcesById.get(sourceId);
+    if (
+      source?.kind === "chat-sdk" &&
+      (source as ChatSdkSourceConfig).send === undefined
+    ) {
+      issues.push(
+        error(
+          `destinations.${destination.id}.sourceId`,
+          `chat-sdk source '${sourceId}' does not configure send`,
+        ),
+      );
+    }
   }
 
   const target = destination["target"];

@@ -95,6 +95,7 @@ describe("cron event source adapter", () => {
       dispatch,
     });
 
+    now = new Date("2026-04-20T02:00:00.000Z");
     vi.advanceTimersByTime(1);
     await Promise.resolve();
     await Promise.resolve();

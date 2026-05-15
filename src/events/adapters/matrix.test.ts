@@ -1,8 +1,18 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { createMatrixEventSourceAdapter } from "./matrix";
 import type { MatrixSourceConfig } from "../types";
 import type { ChatReplyDispatchRequest } from "../../workflow/types";
 import type { EventSourceDiagnostic } from "../source-adapter";
+
+async function readFixtureJson(
+  relativePath: string,
+): Promise<Record<string, unknown>> {
+  return JSON.parse(
+    await readFile(path.resolve(relativePath), "utf8"),
+  ) as Record<string, unknown>;
+}
 
 function matrixSource(
   overrides: Partial<MatrixSourceConfig> = {},
@@ -119,6 +129,74 @@ describe("matrix event source adapter", () => {
           threadId: "$thread-root",
           actorId: "@alice:matrix.example",
         },
+      },
+    });
+  });
+
+  test("keeps checked-in Matrix fixtures on the explicit chat reply contract", async () => {
+    const adapter = createMatrixEventSourceAdapter();
+    const source = (await readFixtureJson(
+      "examples/event-sources/.divedra-events/sources/team-matrix.json",
+    )) as unknown as MatrixSourceConfig;
+    const binding = await readFixtureJson(
+      "examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json",
+    );
+    const destination = await readFixtureJson(
+      "examples/event-sources/.divedra-events/destinations/release-matrix-chat.json",
+    );
+    const payload = await readFixtureJson(
+      "examples/event-sources/payloads/matrix-room-message.json",
+    );
+
+    expect(source).toMatchObject({
+      id: "team-matrix",
+      kind: "matrix",
+      homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
+      accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+      rooms: [{ roomId: "!release:matrix.example" }],
+    });
+    expect(binding).toMatchObject({
+      id: "matrix-release-chat-to-workflow",
+      sourceId: "team-matrix",
+      outputDestinations: ["release-matrix-chat"],
+      match: {
+        eventType: "chat.message",
+        conversationId: "!release:matrix.example",
+      },
+      workflowName: "matrix-chat-reply",
+      inputMapping: { mode: "event-input", mirrorToHumanInput: true },
+    });
+    expect(destination).toMatchObject({
+      id: "release-matrix-chat",
+      kind: "chat",
+      sourceId: "team-matrix",
+      target: {
+        provider: "matrix",
+        conversationId: "!release:matrix.example",
+      },
+    });
+
+    const envelope = await adapter.normalize({
+      sourceId: "team-matrix",
+      source,
+      receivedAt: "2026-05-15T00:00:00.000Z",
+      body: payload,
+    });
+
+    expect(envelope).toMatchObject({
+      sourceId: "team-matrix",
+      eventId: "$release-event-1",
+      provider: "matrix",
+      eventType: "chat.message",
+      conversation: {
+        id: "!release:matrix.example",
+        threadId: "$release-thread-root",
+      },
+      input: {
+        text: "Run the release workflow from Matrix.",
+        roomId: "!release:matrix.example",
+        replyToEventId: "$release-parent",
+        threadRootEventId: "$release-thread-root",
       },
     });
   });
