@@ -1,9 +1,11 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { ScheduledEventManager } from "../events/scheduled-event-manager";
 import { err, ok, type Result } from "./result";
 import {
   isSafeSessionId,
   normalizeSessionState,
+  reconcileTerminalWorkflowSleepScheduledEvents,
   type WorkflowSessionState,
 } from "./session";
 import { resolveRootDataDir } from "./paths";
@@ -12,6 +14,7 @@ import { ROOT_DATA_SESSIONS_SUBDIR, type LoadOptions } from "./types";
 
 export interface SessionStoreOptions extends LoadOptions {
   readonly sessionStoreRoot?: string;
+  readonly scheduledEventManager?: ScheduledEventManager;
 }
 
 export interface SessionStoreFailure {
@@ -45,6 +48,10 @@ export async function saveSession(
   session: WorkflowSessionState,
   options: SessionStoreOptions = {},
 ): Promise<Result<string, SessionStoreFailure>> {
+  const sessionToPersist = reconcileTerminalWorkflowSleepScheduledEvents(
+    session,
+    options.scheduledEventManager,
+  );
   if (!isSafeSessionId(session.sessionId)) {
     return err({
       code: "INVALID_SESSION_ID",
@@ -57,9 +64,13 @@ export async function saveSession(
 
   try {
     await mkdir(root, { recursive: true });
-    await writeFile(target, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+    await writeFile(
+      target,
+      `${JSON.stringify(sessionToPersist, null, 2)}\n`,
+      "utf8",
+    );
     try {
-      await saveSessionSnapshotToRuntimeDb(session, options);
+      await saveSessionSnapshotToRuntimeDb(sessionToPersist, options);
     } catch {
       // runtime DB index is best-effort and must not break primary file persistence
     }

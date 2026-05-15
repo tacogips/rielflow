@@ -379,6 +379,7 @@ export type NodeType =
   | "agent"
   | "command"
   | "container"
+  | "sleep"
   | "user-action"
   | "addon";
 
@@ -404,6 +405,11 @@ export interface CommandExecution {
   readonly argvTemplate?: readonly string[];
   readonly envTemplate?: Readonly<Record<string, string>>;
   readonly workingDirectory?: string;
+}
+
+export interface SleepNodeConfig {
+  readonly durationMs?: number;
+  readonly until?: string;
 }
 
 export interface ContainerBuild {
@@ -758,6 +764,7 @@ export interface NodePayload {
   readonly command?: CommandExecution;
   readonly container?: ContainerExecution;
   readonly durability?: NodeDurability;
+  readonly sleep?: SleepNodeConfig;
   readonly userAction?: UserActionNodeConfig;
   readonly addon?: ResolvedNodeAddon;
   readonly argumentsTemplate?: Readonly<Record<string, unknown>>;

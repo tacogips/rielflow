@@ -607,6 +607,7 @@ export function cloneSession(
       ...(session.pendingOptionalNodeDecisions ?? []),
     ],
     activeUserActions: [...(session.activeUserActions ?? [])],
+    scheduledEvents: [...(session.scheduledEvents ?? [])],
     runtimeVariables: { ...session.runtimeVariables },
   };
   if (session.supervision === undefined) {

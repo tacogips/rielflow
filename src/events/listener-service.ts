@@ -20,6 +20,7 @@ import {
   createEventSourceRateLimiter,
   type EventSourceRateLimiter,
 } from "./source-rate-limit";
+import { createScheduledEventManager } from "./scheduled-event-manager";
 import type {
   EventSourceAdapter,
   EventSourceDiagnostic,
@@ -343,6 +344,10 @@ export function createEventListenerService(
       const now = (): Date => new Date();
       const env = options.env ?? process.env;
       const rateLimiter = createEventSourceRateLimiter();
+      const scheduledEventManager =
+        options.scheduledEventManager ?? createScheduledEventManager({ now });
+      const ownsScheduledEventManager =
+        options.scheduledEventManager === undefined;
       const eventReplyDispatcher =
         options.eventReplyDispatcher ??
         createEventReplyDispatcher({
@@ -357,6 +362,7 @@ export function createEventListenerService(
       const triggerOptions: WorkflowTriggerRunnerOptions = {
         ...options,
         eventReplyDispatcher,
+        scheduledEventManager,
       };
       const runner = createWorkflowTriggerRunner(triggerOptions);
       const handles: Awaited<ReturnType<EventSourceAdapter["start"]>>[] = [];
@@ -387,6 +393,7 @@ export function createEventListenerService(
                   ? {}
                   : { fetchImpl: options.fetchImpl }),
                 diagnosticSink: writeEventSourceDiagnostic,
+                scheduledEventManager,
                 dispatch: async (event, raw) => {
                   await dispatchEventToMatchingBindings(
                     {
@@ -430,6 +437,9 @@ export function createEventListenerService(
           ...(server === undefined ? {} : { host, port: server.port }),
           sources: enabledSources.map((source) => source.id),
           stop: async () => {
+            if (ownsScheduledEventManager) {
+              scheduledEventManager.stop();
+            }
             await stopEventListenerResources({
               abortController,
               handles,
@@ -438,6 +448,9 @@ export function createEventListenerService(
           },
         };
       } catch (error: unknown) {
+        if (ownsScheduledEventManager) {
+          scheduledEventManager.stop();
+        }
         await stopEventListenerResources({
           abortController,
           handles,

@@ -7,6 +7,7 @@ import type {
   EventSourceConfig,
   ExternalEventEnvelope,
 } from "./types";
+import type { ScheduledEventManager } from "./scheduled-event-manager";
 
 export interface RawExternalEvent {
   readonly sourceId: string;
@@ -35,6 +36,7 @@ export interface EventSourceStartInput {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly fetchImpl?: typeof fetch;
   readonly diagnosticSink?: EventSourceDiagnosticSink;
+  readonly scheduledEventManager?: ScheduledEventManager;
 }
 
 export interface EventSourceHandle {

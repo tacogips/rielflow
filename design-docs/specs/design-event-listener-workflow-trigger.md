@@ -289,7 +289,10 @@ payloads must not be shell-interpolated into command arguments.
 
 ### Cron
 
-Cron is an internal event source, not a workflow node type.
+Cron is an internal event source, not a workflow node type. Its next occurrence
+should be registered through the shared scheduled event manager described in
+`design-docs/specs/design-scheduled-sleep-node-runtime.md`, rather than through
+adapter-owned long-lived timers.
 
 Source config:
 
@@ -310,6 +313,17 @@ Normalized input should include:
 
 First iteration may use a single-process scheduler. Distributed locking should
 be an explicit later milestone because the current runtime is local-first.
+
+Scheduled cron behavior:
+
+- source startup registers the next due occurrence in the scheduled event pool
+- event registration, cancellation, or replacement re-arms the manager's next
+  due timer
+- events whose scheduled time has passed execute promptly
+- after a cron event fires, the next occurrence is computed and registered
+  through the same manager
+- the cron adapter preserves existing config, binding, input mapping, dedupe,
+  and event receipt behavior
 
 ### S3 Repository File Creation
 
@@ -589,6 +603,39 @@ Minimum first-iteration event support:
 Provider-specific capabilities should stay in adapter capability metadata, not
 in workflow bindings. For example, Slack scheduled messages or native streaming
 support should not change the event trigger contract.
+
+#### Shared Chat Source Review Invariants
+
+The webhook-shaped mock chat source, chat reply webhook fixture, Matrix source,
+and Chat SDK source should remain reviewable as one event-source family even
+though each adapter owns different provider details.
+
+Cross-source behavior:
+
+- all four surfaces normalize chat input through `eventType: "chat.message"`
+  unless a provider capability explicitly declares a narrower event type
+- bindings should match provider-neutral fields such as event type,
+  conversation id, thread id, actor, and input text rather than raw provider
+  payload fields
+- reply-capable examples should declare explicit `kind: "chat"` destinations
+  so fallback-to-source reply routing is compatibility behavior, not the main
+  documented path
+- local examples must support deterministic `events emit` fixture runs without
+  live webhook, Matrix, Chat SDK, GraphQL, or agent services
+- live Matrix and Chat SDK flows are optional operator verification layers on
+  top of the same checked-in source, binding, destination, and payload files
+
+Review closure for changes in this family requires validating the shared
+event-source root and the two chat reply workflows, then running the focused
+adapter and reply-dispatch tests:
+
+```bash
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts workflow validate chat-reply-webhook --workflow-definition-dir ./examples
+bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
+bun test src/events/adapters/webhook.test.ts src/events/adapters/matrix.test.ts src/events/adapters/chat-sdk.test.ts src/events/chat-reply-example.test.ts src/events/matrix-chat-reply-example.test.ts src/events/reply-dispatcher.test.ts
+bun run typecheck
+```
 
 ### Signal
 

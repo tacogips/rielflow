@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isJsonObject } from "../../shared/json";
 import type { EventSourceAdapter, EventSourceHandle } from "../source-adapter";
+import { createScheduledEventManager } from "../scheduled-event-manager";
 import type {
   CronSourceConfig,
   EventSourceConfig,
@@ -268,8 +269,12 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
         throw new Error("cron adapter requires a cron source");
       }
       const source = input.source;
+      const manager =
+        input.scheduledEventManager ??
+        createScheduledEventManager({ now: input.now });
+      const ownsManager = input.scheduledEventManager === undefined;
       let stopped = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let scheduledEventId: string | undefined;
       const scheduleNext = (): void => {
         if (stopped) {
           return;
@@ -280,10 +285,20 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
           now,
           source.timezone,
         );
-        const waitMs = Math.max(0, scheduled.getTime() - now.getTime());
-        timer = setTimeout(() => {
-          const firedAt = input.now().toISOString();
-          void (async () => {
+        scheduledEventId = `cron:${source.id}`;
+        manager.register({
+          id: scheduledEventId,
+          kind: "cron",
+          dueAt: scheduled,
+          dedupeKey: hashDedupeKey(
+            [source.id, "cron.tick", scheduled.toISOString()].join(":"),
+          ),
+          payload: {
+            sourceId: source.id,
+            scheduledAt: scheduled.toISOString(),
+          },
+          fire: async () => {
+            const firedAt = input.now().toISOString();
             try {
               await input.dispatch(
                 buildCronEnvelope({
@@ -298,13 +313,16 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
             } finally {
               scheduleNext();
             }
-          })();
-        }, waitMs);
+          },
+        });
       };
       const stop = (): void => {
         stopped = true;
-        if (timer !== undefined) {
-          clearTimeout(timer);
+        if (scheduledEventId !== undefined) {
+          manager.cancel(scheduledEventId);
+        }
+        if (ownsManager) {
+          manager.stop();
         }
       };
       input.signal.addEventListener("abort", stop, { once: true });

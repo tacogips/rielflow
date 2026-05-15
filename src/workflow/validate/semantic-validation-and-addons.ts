@@ -315,6 +315,7 @@ export function runSemanticValidation(
       node.role === "manager" &&
       (payload.nodeType === "command" ||
         payload.nodeType === "container" ||
+        payload.nodeType === "sleep" ||
         payload.nodeType === "user-action" ||
         payload.nodeType === "addon")
     ) {

@@ -458,6 +458,9 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
     ...(input.sessionStoreRoot === undefined
       ? {}
       : { sessionStoreRoot: input.sessionStoreRoot }),
+    ...(input.scheduledEventManager === undefined
+      ? {}
+      : { scheduledEventManager: input.scheduledEventManager }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
@@ -534,6 +537,9 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
     ...(input.sessionStoreRoot === undefined
       ? {}
       : { sessionStoreRoot: input.sessionStoreRoot }),
+    ...(input.scheduledEventManager === undefined
+      ? {}
+      : { scheduledEventManager: input.scheduledEventManager }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
@@ -593,6 +599,9 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
     ...(input.sessionStoreRoot === undefined
       ? {}
       : { sessionStoreRoot: input.sessionStoreRoot }),
+    ...(input.scheduledEventManager === undefined
+      ? {}
+      : { scheduledEventManager: input.scheduledEventManager }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
@@ -665,6 +674,9 @@ export async function continueWorkflowFromHistory(
     ...(input.sessionStoreRoot === undefined
       ? {}
       : { sessionStoreRoot: input.sessionStoreRoot }),
+    ...(input.scheduledEventManager === undefined
+      ? {}
+      : { scheduledEventManager: input.scheduledEventManager }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),

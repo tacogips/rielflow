@@ -321,6 +321,7 @@ export function workflowTriggerLocalEngineOverrides(
   | "maxConcurrency"
   | "maxLoopIterations"
   | "defaultTimeoutMs"
+  | "scheduledEventManager"
 > {
   return {
     ...(options.mockScenario === undefined
@@ -337,5 +338,8 @@ export function workflowTriggerLocalEngineOverrides(
     ...(options.defaultTimeoutMs === undefined
       ? {}
       : { defaultTimeoutMs: options.defaultTimeoutMs }),
+    ...(options.scheduledEventManager === undefined
+      ? {}
+      : { scheduledEventManager: options.scheduledEventManager }),
   };
 }

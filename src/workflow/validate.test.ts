@@ -329,6 +329,93 @@ describe("validateWorkflowBundle", () => {
     ).toBe(600000);
   });
 
+  test("accepts worker sleep nodes with a relative duration", () => {
+    const raw = makeStepAddressedRaw();
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      id: "worker",
+      nodeType: "sleep",
+      variables: {},
+      sleep: { durationMs: 500 },
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.nodePayloads["worker"]?.nodeType).toBe("sleep");
+    expect(result.value.nodePayloads["worker"]?.sleep).toEqual({
+      durationMs: 500,
+    });
+  });
+
+  test("accepts worker sleep nodes with an explicit-offset wake time", () => {
+    const raw = makeStepAddressedRaw();
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      id: "worker",
+      nodeType: "sleep",
+      variables: {},
+      sleep: { until: "2026-05-15T12:00:00+09:00" },
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.nodePayloads["worker"]?.sleep).toEqual({
+      until: "2026-05-15T12:00:00+09:00",
+    });
+  });
+
+  test("rejects sleep until timestamps without explicit timezone", () => {
+    const raw = makeStepAddressedRaw();
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      id: "worker",
+      nodeType: "sleep",
+      variables: {},
+      sleep: { until: "2026-05-15T12:00:00" },
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContainEqual(
+      expect.objectContaining({
+        path: "nodePayloads.nodes/node-worker.json.sleep.until",
+        message: "must include an explicit timezone or UTC offset",
+      }),
+    );
+  });
+
+  test("rejects sleep nodes with agent execution fields", () => {
+    const raw = makeStepAddressedRaw();
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      id: "worker",
+      nodeType: "sleep",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "worker",
+      variables: {},
+      sleep: { durationMs: 500 },
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.map((issue) => issue.path)).toContain(
+      "nodePayloads.nodes/node-worker.json.executionBackend",
+    );
+  });
+
   test("rejects invalid workflow supervision stall defaults", () => {
     const raw = makeStepAddressedRaw();
     raw.workflow["defaults"] = {

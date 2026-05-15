@@ -9,6 +9,10 @@ import {
 } from "./listener-service";
 import { listEventReplyDispatchesFromRuntimeDb } from "../workflow/runtime-db";
 import { createEventSourceRegistry } from "./adapter-registry";
+import {
+  createScheduledEventManager,
+  type ScheduledEventManager,
+} from "./scheduled-event-manager";
 import type { EventSourceAdapter } from "./source-adapter";
 
 const tempDirs: string[] = [];
@@ -541,6 +545,135 @@ describe("event listener service", () => {
     expect(listener.sources).toEqual(["team-matrix"]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     await listener.stop();
+  });
+
+  test("shares the listener scheduled event manager with started cron adapters", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "sleep-flow", "workflow.json"), {
+      workflowId: "sleep-flow",
+      description: "sleep flow",
+      entryStepId: "wait",
+      nodes: [
+        { id: "wait-node", nodeFile: "nodes/node-wait.json" },
+        { id: "worker-node", nodeFile: "nodes/node-worker.json" },
+      ],
+      steps: [
+        {
+          id: "wait",
+          nodeId: "wait-node",
+          role: "worker",
+          transitions: [{ toStepId: "worker", label: "always" }],
+        },
+        { id: "worker", nodeId: "worker-node", role: "worker" },
+      ],
+    });
+    await writeJson(
+      path.join(workflowRoot, "sleep-flow", "nodes/node-wait.json"),
+      {
+        id: "wait-node",
+        nodeType: "sleep",
+        variables: {},
+        sleep: { durationMs: 60_000 },
+      },
+    );
+    await writeJson(
+      path.join(workflowRoot, "sleep-flow", "nodes/node-worker.json"),
+      {
+        id: "worker-node",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "worker",
+        variables: {},
+      },
+    );
+    await writeJson(path.join(eventRoot, "sources", "a-cron.json"), {
+      id: "a-cron",
+      kind: "cron",
+      schedule: "0 2 * * *",
+      timezone: "UTC",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "a-cron-sleep.json"), {
+      id: "a-cron-sleep",
+      sourceId: "a-cron",
+      workflowName: "sleep-flow",
+      match: { eventType: "cron.tick" },
+      inputMapping: { mode: "event-input" },
+      execution: { async: false },
+    });
+
+    const scheduledEventManager = createScheduledEventManager();
+    let capturedScheduledEventManager: ScheduledEventManager | undefined;
+    const cronAdapter: EventSourceAdapter = {
+      kind: "cron",
+      capabilities: {
+        eventTypes: ["cron.tick"],
+        supportsStart: true,
+        webhook: false,
+      },
+      start: async (input) => {
+        capturedScheduledEventManager = input.scheduledEventManager;
+        input.scheduledEventManager?.register({
+          id: "cron:a-cron",
+          kind: "cron",
+          dueAt: new Date(Date.now() + 60_000),
+          dedupeKey: "cron:a-cron",
+          payload: { sourceId: "a-cron" },
+          fire: async () => {},
+        });
+        await input.dispatch({
+          sourceId: "a-cron",
+          eventId: "cron-1",
+          provider: "cron",
+          eventType: "cron.tick",
+          occurredAt: "2026-04-20T02:00:00.000Z",
+          receivedAt: "2026-04-20T02:00:01.000Z",
+          dedupeKey: "cron-1",
+          input: {
+            scheduleId: "a-cron",
+            scheduledAt: "2026-04-20T02:00:00.000Z",
+            firedAt: "2026-04-20T02:00:01.000Z",
+            timezone: "UTC",
+          },
+        });
+        return {
+          sourceId: input.source.id,
+          stop: async () => {},
+        };
+      },
+      normalize: async () => {
+        throw new Error("not used");
+      },
+    };
+    const registry = createEventSourceRegistry([cronAdapter]);
+    const runtime: EventListenerRuntime = {
+      serve: (options) => ({
+        port: options.port,
+        stop: () => {},
+      }),
+    };
+
+    const listener = await createEventListenerService(registry, runtime).start({
+      workflowRoot,
+      eventRoot,
+      rootDataDir: path.join(root, "data"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      artifactRoot: path.join(root, "artifacts"),
+      scheduledEventManager,
+      cwd: root,
+      port: 0,
+    });
+
+    expect(capturedScheduledEventManager).toBe(scheduledEventManager);
+    expect(
+      scheduledEventManager
+        .list()
+        .map((event) => event.kind)
+        .sort(),
+    ).toEqual(["cron"]);
+    await listener.stop();
+    scheduledEventManager.stop();
   });
 
   test("stops started adapters when HTTP listener startup fails", async () => {

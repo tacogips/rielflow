@@ -1,0 +1,7 @@
+{
+  "id": "worker-node",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5-nano",
+  "promptTemplate": "Report that the scheduled sleep completed.",
+  "variables": {}
+}
