@@ -165,7 +165,12 @@ export function findLatestCrossWorkflowCalleeResultExecution(
     return published;
   }
 
-  if (workflow.hasManagerNode !== false) {
+  const hasManagerNode =
+    workflow.hasManagerNode === true ||
+    workflow.managerStepId !== undefined ||
+    workflow.steps.some((step) => step.role === "manager") ||
+    workflow.nodes.some((node) => node.role === "manager");
+  if (hasManagerNode) {
     return undefined;
   }
 

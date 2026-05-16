@@ -1,5 +1,6 @@
 import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
+import { isGatewayReadinessAddon } from "../../packages/divedra-addons/src/runtime-readiness";
 import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import { loadWorkflowByIdFromDisk } from "./load";
 import {
@@ -10,11 +11,6 @@ import {
   type LoadOptions,
   type NodeExecutionBackend,
   type NormalizedWorkflowBundle,
-  type ResolvedMailGatewayAddon,
-  type ResolvedMailGatewayReadAddon,
-  type ResolvedNodeAddon,
-  type ResolvedXGatewayAddon,
-  type ResolvedXGatewayReadAddon,
 } from "./types";
 import {
   probeClaudeBackend,
@@ -23,36 +19,6 @@ import {
   runCommand,
   type AgentBackendRequirementCandidate,
 } from "./runtime-readiness-agent-probes";
-
-function builtinAddonName(parts: readonly string[]): string {
-  return ["divedra", parts.join("-")].join("/");
-}
-
-const X_GATEWAY_READ_ADDON_NAME = builtinAddonName(["x", "gateway", "read"]);
-const X_GATEWAY_ADDON_NAME = builtinAddonName(["x", "gateway"]);
-const MAIL_GATEWAY_READ_ADDON_NAME = builtinAddonName([
-  "mail",
-  "gateway",
-  "read",
-]);
-const MAIL_GATEWAY_ADDON_NAME = builtinAddonName(["mail", "gateway"]);
-
-type GatewayReadinessAddon =
-  | ResolvedXGatewayReadAddon
-  | ResolvedXGatewayAddon
-  | ResolvedMailGatewayReadAddon
-  | ResolvedMailGatewayAddon;
-
-function isGatewayReadinessAddon(
-  addon: ResolvedNodeAddon | undefined,
-): addon is GatewayReadinessAddon {
-  return (
-    addon?.name === X_GATEWAY_READ_ADDON_NAME ||
-    addon?.name === X_GATEWAY_ADDON_NAME ||
-    addon?.name === MAIL_GATEWAY_READ_ADDON_NAME ||
-    addon?.name === MAIL_GATEWAY_ADDON_NAME
-  );
-}
 
 export type WorkflowRuntimeRequirementStatus =
   | "available"

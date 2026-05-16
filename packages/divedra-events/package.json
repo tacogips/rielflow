@@ -1,0 +1,34 @@
+{
+  "name": "divedra-events",
+  "version": "0.1.0",
+  "description": "External event contracts and runtime ports for divedra",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./runtime-ports": {
+      "types": "./dist/runtime-ports.d.ts",
+      "import": "./dist/runtime-ports.js",
+      "default": "./dist/runtime-ports.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../.. build:server",
+    "typecheck": "bun run --cwd ../.. typecheck"
+  },
+  "dependencies": {
+    "divedra-core": "workspace:*"
+  },
+  "license": "MIT"
+}

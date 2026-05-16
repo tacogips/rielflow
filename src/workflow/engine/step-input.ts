@@ -1,7 +1,10 @@
-// @ts-nocheck
 import { createScheduledEventManager } from "../../events/scheduled-event-manager";
 import { markWorkflowSleepScheduledEventRef } from "../session";
-import { workflowRunnerDeps } from "./workflow-runner-deps";
+import { workflowStepInputPort } from "./workflow-runner-deps";
+
+type LoopRule = any;
+type NodeExecutionRecord = any;
+type WorkflowSessionState = any;
 
 const {
   mkdir,
@@ -27,24 +30,24 @@ const {
   resolveWorkflowManagerStepId,
   dedupeNodeIds,
   isWorkflowOutputKindNode,
-} = workflowRunnerDeps;
+} = workflowStepInputPort;
 
 const defaultWorkflowSleepScheduledEventManager = createScheduledEventManager();
 
-function resolveSleepDueAt(sleepConfig) {
+function resolveSleepDueAt(sleepConfig: any) {
   if (sleepConfig.until !== undefined) {
     return new Date(sleepConfig.until);
   }
   return new Date(Date.now() + sleepConfig.durationMs);
 }
 
-function buildWorkflowSleepSchedule(input) {
+function buildWorkflowSleepSchedule(input: any) {
   const eventId = `workflow-sleep:${input.session.sessionId}:${input.nodeId}:${input.nodeExecId}`;
   const dueAt = resolveSleepDueAt(input.nodePayload.sleep);
   return { eventId, dueAt };
 }
 
-async function markWorkflowSleepRef(input, status) {
+async function markWorkflowSleepRef(input: any, status: any) {
   const loaded = await loadSession(input.sessionId, input.options);
   if (!loaded.ok) {
     return undefined;
@@ -82,11 +85,15 @@ async function markWorkflowSleepRef(input, status) {
   return updated;
 }
 
-function ownsPendingWorkflowSleepEvent(session, eventId, nodeExecId) {
+function ownsPendingWorkflowSleepEvent(
+  session: any,
+  eventId: string,
+  nodeExecId: string,
+) {
   return (
     session.status === "paused" &&
     session.scheduledEvents?.some(
-      (entry) =>
+      (entry: any) =>
         entry.kind === "workflow-sleep" &&
         entry.eventId === eventId &&
         entry.nodeExecId === nodeExecId &&
@@ -95,7 +102,7 @@ function ownsPendingWorkflowSleepEvent(session, eventId, nodeExecId) {
   );
 }
 
-function registerWorkflowSleepResume(input) {
+function registerWorkflowSleepResume(input: any) {
   const manager =
     input.options.scheduledEventManager ??
     defaultWorkflowSleepScheduledEventManager;
@@ -160,7 +167,7 @@ function registerWorkflowSleepResume(input) {
   });
 }
 
-export async function handlePreparedStepInput(input) {
+export async function handlePreparedStepInput(input: any) {
   let {
     nodePayload,
     baseInputPayload,
@@ -202,7 +209,7 @@ export async function handlePreparedStepInput(input) {
       scheduledAt: startedAt,
       wakeAt: dueAt.toISOString(),
     };
-    const selected = (outgoingEdges.get(nodeId) ?? []).filter((edge) =>
+    const selected = (outgoingEdges.get(nodeId) ?? []).filter((edge: any) =>
       evaluateEdge(edge, outputPayload),
     );
     const inputJson = stableJson({
@@ -238,7 +245,7 @@ export async function handlePreparedStepInput(input) {
     const outputRaw = `${outputJson}\n`;
     const inputHash = sha256Hex(inputJson);
     const outputHash = sha256Hex(outputJson);
-    const nextNodes = selected.map((edge) => edge.to);
+    const nextNodes = selected.map((edge: any) => edge.to);
     await writeRawTextFile(path.join(artifactDir, "output.json"), outputRaw);
     await writeJsonFile(path.join(artifactDir, "meta.json"), {
       nodeId,
@@ -318,7 +325,7 @@ export async function handlePreparedStepInput(input) {
       });
     }
     const transitionCommunications = await Promise.all(
-      selected.map((edge, index) =>
+      selected.map((edge: any, index: number) =>
         persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
@@ -353,7 +360,7 @@ export async function handlePreparedStepInput(input) {
       nodeExecutions: [...session.nodeExecutions, nodeExecution],
       transitions: [
         ...session.transitions,
-        ...selected.map((edge) => ({
+        ...selected.map((edge: any) => ({
           from: edge.from,
           to: edge.to,
           when: edge.when,
@@ -367,7 +374,7 @@ export async function handlePreparedStepInput(input) {
       ],
       scheduledEvents: [
         ...(session.scheduledEvents ?? []).filter(
-          (entry) => entry.eventId !== eventId,
+          (entry: any) => entry.eventId !== eventId,
         ),
         {
           eventId,
@@ -450,7 +457,7 @@ export async function handlePreparedStepInput(input) {
       ),
       activeUserActions: [
         ...(session.activeUserActions ?? []).filter(
-          (entry) => entry.nodeId !== nodeId,
+          (entry: any) => entry.nodeId !== nodeId,
         ),
         {
           nodeId,
@@ -472,7 +479,7 @@ export async function handlePreparedStepInput(input) {
       pendingOptionalDecision?.reason,
     );
     const loopRule = loopRuleByJudgeNodeId.get(nodeId);
-    let selected = (outgoingEdges.get(nodeId) ?? []).filter((edge) =>
+    let selected = (outgoingEdges.get(nodeId) ?? []).filter((edge: any) =>
       evaluateEdge(edge, outputPayload),
     );
     let updatedLoopIterationCounts = session.loopIterationCounts ?? {};
@@ -489,7 +496,7 @@ export async function handlePreparedStepInput(input) {
       });
       if (transition === "continue") {
         selected = (outgoingEdges.get(nodeId) ?? []).filter(
-          (edge) => edge.when === effectiveLoopRule.continueWhen,
+          (edge: any) => edge.when === effectiveLoopRule.continueWhen,
         );
         updatedLoopIterationCounts = {
           ...(session.loopIterationCounts ?? {}),
@@ -497,7 +504,7 @@ export async function handlePreparedStepInput(input) {
         };
       } else if (transition === "exit") {
         selected = (outgoingEdges.get(nodeId) ?? []).filter(
-          (edge) => edge.when === effectiveLoopRule.exitWhen,
+          (edge: any) => edge.when === effectiveLoopRule.exitWhen,
         );
       }
     }
@@ -533,7 +540,7 @@ export async function handlePreparedStepInput(input) {
     const outputRaw = `${outputJson}\n`;
     const inputHash = sha256Hex(inputJson);
     const outputHash = sha256Hex(outputJson);
-    const nextNodes = selected.map((edge) => edge.to);
+    const nextNodes = selected.map((edge: any) => edge.to);
     await writeRawTextFile(path.join(artifactDir, "output.json"), outputRaw);
     await writeJsonFile(path.join(artifactDir, "meta.json"), {
       nodeId,
@@ -613,7 +620,7 @@ export async function handlePreparedStepInput(input) {
     }
     let currentCommunications = consumedCommunicationsResult.value;
     const transitionCommunications = await Promise.all(
-      selected.map((edge, index) => {
+      selected.map((edge: any, index: number) => {
         return persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
@@ -647,7 +654,7 @@ export async function handlePreparedStepInput(input) {
       loopIterationCounts: updatedLoopIterationCounts,
       transitions: [
         ...session.transitions,
-        ...selected.map((edge) => ({
+        ...selected.map((edge: any) => ({
           from: edge.from,
           to: edge.to,
           when: edge.when,

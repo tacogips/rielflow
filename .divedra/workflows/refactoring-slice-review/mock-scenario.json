@@ -6,44 +6,62 @@
       "has_findings": true
     },
     "payload": {
-      "sliceId": "workflow-runtime-boundary",
-      "title": "Workflow runtime boundary",
-      "ownedPaths": ["src/workflow"],
+      "sliceId": "package-source-boundary",
+      "title": "Package source boundary",
+      "ownedPaths": [
+        "package.json",
+        "Taskfile.yml",
+        "scripts",
+        "packages/divedra/src",
+        "packages/divedra-core/src",
+        "packages/divedra-addons/src",
+        "src"
+      ],
       "reviewedPaths": [
-        "src/workflow/adapter-execution.ts",
-        "src/workflow/addon-package-boundary.ts"
+        "package.json",
+        "scripts/sync-package-declarations.ts",
+        "packages/divedra/src/index.ts",
+        "src/lib.ts"
       ],
       "findings": [
         {
           "severity": "mid",
-          "file": "src/workflow/addon-package-boundary.ts",
-          "line": 149,
-          "problem": "Validation and native execution can drift when package add-on loading is duplicated.",
-          "recommendedRefactor": "Route validation and execution through one typed package-boundary loader.",
-          "risk": "A package may validate successfully but fail at execution time.",
+          "file": "packages/divedra/src/index.ts",
+          "line": 1,
+          "problem": "Package entrypoints still depend on root src as the source owner.",
+          "recommendedRefactor": "Move implementation ownership behind package-local entrypoints while keeping root src as compatibility shims.",
+          "risk": "Package contracts can drift from the implementation they are intended to own.",
           "confidence": "high"
         }
       ],
       "proposedTasks": [
         {
           "taskId": "REF-001",
-          "title": "Unify add-on package boundary loading",
+          "title": "Establish package source boundary contracts",
           "ownedPaths": [
-            "src/workflow/addon-package-boundary.ts",
-            "src/workflow/adapter-execution.ts"
+            "package.json",
+            "Taskfile.yml",
+            "scripts",
+            "packages/*/src"
           ],
           "blockedBy": [],
           "verificationCommands": [
-            "bun test src/workflow/addon-package-boundary.test.ts"
+            "bun test src/package-boundaries.test.ts",
+            "bun run build"
           ]
         }
       ],
-      "conflictNotes": [],
-      "verificationSuggestions": [
-        "bun test src/workflow/addon-package-boundary.test.ts",
-        "bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows"
+      "conflictNotes": [
+        "Root src remains a temporary compatibility surface until package-owned entrypoints pass verification.",
+        "No provisioning package should be created because no concrete provisioning source surface was identified."
       ],
-      "residualRisks": []
+      "verificationSuggestions": [
+        "bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows",
+        "bun run build"
+      ],
+      "residualRisks": [
+        "No provisioning package is created without a concrete provisioning source surface."
+      ]
     }
   }
 }

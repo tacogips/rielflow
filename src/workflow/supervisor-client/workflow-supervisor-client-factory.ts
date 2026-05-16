@@ -735,7 +735,7 @@ export function createWorkflowSupervisorClient(
       };
       return dispatchCommandImpl({
         command: cmd,
-        binding: input.bindingSnapshot,
+        binding: input.bindingSnapshot as EventBinding,
         runtimeVariables: input.runtimeVariables ?? {},
         engine: {
           ...(input.mockScenario === undefined
@@ -900,7 +900,7 @@ export function createWorkflowSupervisorClient(
           ? {}
           : { runtimeVariables: input.runtimeVariables }),
       };
-      const withControl: EventBinding = {
+      const withControl = {
         ...binding,
         execution: {
           ...binding.execution,
@@ -913,7 +913,7 @@ export function createWorkflowSupervisorClient(
                 },
               }),
         },
-      };
+      } as EventBinding;
       return dispatchCommandImpl({
         command: cmd,
         binding: withControl,

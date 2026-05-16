@@ -12,6 +12,7 @@ import {
   validateWorkflowBundle,
   validateWorkflowBundleAsync,
   validateWorkflowBundleDetailed,
+  validatePureWorkflowBundle,
 } from "./validate";
 import {
   getStructuralEdges,
@@ -268,6 +269,304 @@ describe("workflow defaults", () => {
 });
 
 describe("validateWorkflowBundle", () => {
+  test("pure validation accepts authored addon refs without resolving add-ons", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["nodes"] = [
+      {
+        id: "manager",
+        addon: {
+          name: "missing/package-owned-addon",
+          config: { promptTemplate: "manager" },
+        },
+      },
+    ];
+    raw.workflow["steps"] = [
+      {
+        id: "manager",
+        nodeId: "manager",
+        role: "manager",
+      },
+    ];
+    raw.nodePayloads = {};
+
+    const pureResult = validatePureWorkflowBundle(raw);
+
+    expect(pureResult.ok).toBe(true);
+    if (!pureResult.ok) {
+      return;
+    }
+    expect(pureResult.value.workflow.nodeRegistry[0]?.addon?.name).toBe(
+      "missing/package-owned-addon",
+    );
+    expect(pureResult.value.nodePayloads).toEqual({});
+
+    const runtimeResult = validateWorkflowBundle(raw);
+    expect(runtimeResult.ok).toBe(false);
+    if (runtimeResult.ok) {
+      return;
+    }
+    expect(runtimeResult.error.map((issue) => issue.path)).toContain(
+      "workflow.nodes[0].addon",
+    );
+  });
+
+  test("rejects inline resolved step fields when stepFile is authored by default", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["steps"] = [
+      {
+        id: "manager",
+        stepFile: "steps/manager.json",
+        nodeId: "manager",
+        role: "manager",
+      },
+    ];
+
+    const defaultResult = validateWorkflowBundle(raw);
+
+    expect(defaultResult.ok).toBe(false);
+    if (defaultResult.ok) {
+      return;
+    }
+    expect(defaultResult.error).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.steps[0].nodeId",
+          message:
+            "must not be authored inline when workflow.steps[].stepFile is used",
+        }),
+        expect.objectContaining({
+          path: "workflow.steps[0].role",
+          message:
+            "must not be authored inline when workflow.steps[].stepFile is used",
+        }),
+      ]),
+    );
+
+    const resolvedResult = validateWorkflowBundle(raw, {
+      allowResolvedStepFileFields: true,
+    });
+    expect(resolvedResult.ok).toBe(true);
+  });
+
+  test("rejects malformed authored stepFile values", () => {
+    for (const stepFile of ["", 42] as const) {
+      const raw = makeStepAddressedRaw();
+      raw.workflow["steps"] = [
+        {
+          id: "manager",
+          stepFile,
+          nodeId: "manager",
+          role: "manager",
+        },
+      ];
+
+      const result = validateWorkflowBundle(raw);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) {
+        continue;
+      }
+      expect(result.error).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: "workflow.steps[0].stepFile",
+            message: "must be a non-empty string",
+          }),
+        ]),
+      );
+    }
+  });
+
+  test("pure validation preserves full authored workflow and node payload fields", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["defaults"] = {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      fanoutConcurrency: 2,
+      supervision: {
+        monitorIntervalMs: 15000,
+        stallTimeoutMs: 900000,
+        maxWorkflowPatches: 0,
+        workflowMutationMode: "execution-copy",
+        allowTargetedRerun: true,
+      },
+      timeoutPolicy: {
+        onTimeout: "jump-to-step",
+        jumpStepId: "worker",
+        maxRetries: 2,
+        retryTimeoutIncrementMs: 1000,
+        reuseBackendSession: true,
+      },
+      containerRuntime: {
+        runnerKind: "docker",
+        runnerPath: "/usr/bin/docker",
+      },
+    };
+    raw.workflow["nodes"] = [
+      {
+        id: "manager",
+        nodeFile: "nodes/node-manager.json",
+        execution: { mode: "optional", decisionBy: "owning-manager" },
+        kind: "loop-judge",
+        repeat: { while: "again", restartAt: "worker", maxIterations: 2 },
+      },
+      {
+        id: "worker",
+        addon: {
+          name: "missing/package-owned-addon",
+          env: { API_TOKEN: { fromEnv: "API_TOKEN", required: true } },
+          inputs: { prompt: "{{input}}" },
+        },
+      },
+    ];
+    raw.workflow["steps"] = [
+      {
+        id: "manager",
+        nodeId: "manager",
+        role: "manager",
+        sessionPolicy: { mode: "reuse" },
+        transitions: [
+          {
+            toStepId: "worker",
+            label: "fanout",
+            fanout: {
+              groupId: "group",
+              itemsFrom: "/items",
+              itemVariable: "item",
+              concurrency: 2,
+              joinStepId: "worker",
+              failurePolicy: "collect-all",
+              resultOrder: "input",
+              writeOwnership: {
+                mode: "disjoint-paths",
+                paths: ["packages/divedra-core/src"],
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: "worker",
+        nodeId: "worker",
+        role: "worker",
+        timeoutMs: 5000,
+        stallTimeoutMs: 6000,
+        sessionPolicy: { mode: "reuse", inheritFromStepId: "manager" },
+      },
+    ];
+    raw.nodePayloads["nodes/node-manager.json"] = {
+      id: "manager",
+      nodeType: "command",
+      managerType: "code",
+      workingDirectory: ".",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      systemPromptTemplateFile: "prompts/system.md",
+      promptTemplate: "manager",
+      promptTemplateFile: "prompts/manager.md",
+      sessionStartPromptTemplate: "start",
+      sessionStartPromptTemplateFile: "prompts/start.md",
+      promptVariants: {
+        review: {
+          promptTemplateFile: "prompts/review.md",
+        },
+      },
+      variables: { mode: "test" },
+      command: { scriptPath: "scripts/run.ts", argvTemplate: ["--json"] },
+      argumentsTemplate: { input: "{{input}}" },
+      argumentBindings: [
+        {
+          targetPath: "/input",
+          source: "workflow-output",
+          sourcePath: "/payload",
+          required: true,
+        },
+      ],
+      templateEngine: "handlebars",
+      timeoutMs: 1234,
+      stallTimeoutMs: 5678,
+      input: { description: "input", jsonSchema: { type: "object" } },
+      output: {
+        description: "output",
+        jsonSchema: { type: "object" },
+        maxValidationAttempts: 2,
+      },
+    };
+
+    const pureResult = validatePureWorkflowBundle(raw);
+
+    expect(pureResult.ok).toBe(true);
+    if (!pureResult.ok) {
+      return;
+    }
+    expect(pureResult.value.workflow.defaults.supervision).toMatchObject({
+      maxWorkflowPatches: 0,
+      workflowMutationMode: "execution-copy",
+      allowTargetedRerun: true,
+    });
+    expect(pureResult.value.workflow.defaults.timeoutPolicy).toMatchObject({
+      onTimeout: "jump-to-step",
+      jumpStepId: "worker",
+      maxRetries: 2,
+    });
+    expect(pureResult.value.workflow.defaults.containerRuntime).toEqual({
+      runnerKind: "docker",
+      runnerPath: "/usr/bin/docker",
+    });
+    expect(pureResult.value.workflow.nodeRegistry[0]).toMatchObject({
+      execution: { mode: "optional", decisionBy: "owning-manager" },
+      kind: "loop-judge",
+      repeat: { while: "again", restartAt: "worker", maxIterations: 2 },
+    });
+    expect(pureResult.value.workflow.nodeRegistry[1]?.addon).toMatchObject({
+      env: { API_TOKEN: { fromEnv: "API_TOKEN", required: true } },
+      inputs: { prompt: "{{input}}" },
+    });
+    expect(pureResult.value.workflow.steps[0]).toMatchObject({
+      sessionPolicy: { mode: "reuse" },
+      transitions: [
+        {
+          toStepId: "worker",
+          fanout: {
+            groupId: "group",
+            writeOwnership: {
+              mode: "disjoint-paths",
+              paths: ["packages/divedra-core/src"],
+            },
+          },
+        },
+      ],
+    });
+    expect(pureResult.value.workflow.steps[1]).toMatchObject({
+      timeoutMs: 5000,
+      stallTimeoutMs: 6000,
+      sessionPolicy: { mode: "reuse", inheritFromStepId: "manager" },
+    });
+    expect(pureResult.value.nodePayloads["manager"]).toMatchObject({
+      nodeType: "command",
+      managerType: "code",
+      workingDirectory: ".",
+      executionBackend: "codex-agent",
+      promptTemplateFile: "prompts/manager.md",
+      promptVariants: { review: { promptTemplateFile: "prompts/review.md" } },
+      command: { scriptPath: "scripts/run.ts", argvTemplate: ["--json"] },
+      argumentBindings: [
+        {
+          targetPath: "/input",
+          source: "workflow-output",
+          sourcePath: "/payload",
+          required: true,
+        },
+      ],
+      input: { description: "input", jsonSchema: { type: "object" } },
+      output: {
+        description: "output",
+        jsonSchema: { type: "object" },
+        maxValidationAttempts: 2,
+      },
+    });
+  });
+
   test("accepts a canonical step-addressed workflow bundle", () => {
     const result = validateWorkflowBundle(makeStepAddressedRaw());
     expect(result.ok).toBe(true);

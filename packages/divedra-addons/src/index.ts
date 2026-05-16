@@ -1,7 +1,14 @@
-// Add-ons package contract: mirror the source node-addons surface and add only
-// native add-on execution entrypoints owned by this package.
-export * from "../../../src/workflow/node-addons";
+// Add-ons package contract: own add-on resolution and expose native execution
+// compatibility until native executor internals move behind this package.
+export * from "./node-addons";
+export * from "./local-node-addons";
+export * from "./addon-source-summary";
+export * from "./mailbox-prompt-guidance";
+export {
+  isGatewayReadinessAddon,
+  type GatewayReadinessAddon,
+} from "./runtime-readiness";
 export {
   executeAddonNode,
   executeNativeNode,
-} from "../../../src/workflow/native-node-executor";
+} from "./native-node-executor/git-and-addon-execution";

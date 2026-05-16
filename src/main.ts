@@ -1,4 +1,4 @@
-import { runCli } from "./cli";
+import { runCli } from "../packages/divedra/src/cli";
 
 async function main(): Promise<void> {
   const exitCode = await runCli(process.argv.slice(2));

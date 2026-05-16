@@ -15,10 +15,18 @@ Plan-only mode:
 Aggregation rules:
 - Deduplicate overlapping findings across slices.
 - Reject weak findings that are cosmetic-only, not actionable, or lack an ownership path.
+- Reject package creation for a named surface when slice review or operator
+  constraints say no concrete source surface exists. In particular, do not add a
+  provisioning package only because provisioning was mentioned as a possible
+  category.
 - Convert accepted high/mid findings into a task DAG with dependencies.
 - Keep each task bounded to a small write scope.
 - Mark tasks parallelizable only when write scopes are disjoint.
 - Preserve conflict notes and cross-slice dependency risks.
+- Preserve package-first ownership intent: tasks should move source ownership
+  toward packages and leave root `src` as compatibility shims until package
+  entrypoints, tests, build outputs, CLI smoke checks, and library API
+  compatibility pass.
 - Prefer writing the plan under `impl-plans/active/refactoring-<topic>.md` unless `workflowInput.planPath` is provided.
 
 Implementation-plan requirements:
@@ -49,17 +57,20 @@ Return adapter JSON:
     "tasks": [
       {
         "taskId": "REF-001",
-        "title": "Extract runtime validation boundary",
+        "title": "Move workflow runtime ownership to package exports",
         "status": "Ready",
-        "ownedPaths": ["src/workflow"],
-        "excludedPaths": [],
+        "ownedPaths": ["packages/divedra-core/src", "packages/divedra-core/package.json"],
+        "excludedPaths": ["src/workflow/**/*.test.ts", "dist", "packages/divedra-core/dist"],
         "dependsOn": [],
-        "verificationCommands": ["bun test src/workflow/validate.test.ts"]
+        "verificationCommands": ["bun test src/workflow/**/*.test.ts", "bun run build"]
       }
     ],
     "nextTaskId": "REF-001",
     "conflicts": [],
-    "residualRisks": []
+    "residualRisks": [
+      "Root src/workflow compatibility shims remain until package entrypoints, tests, and build outputs pass.",
+      "No provisioning package is planned because no concrete provisioning source surface was identified."
+    ]
   }
 }
 ```

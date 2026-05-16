@@ -149,7 +149,7 @@ export function createGraphqlSchema(
         input: WorkflowExecutionLookupInput,
         context: GraphqlRequestContext = {},
       ): Promise<WorkflowExecutionView | null> {
-        return buildWorkflowExecutionView(input, context);
+        return buildWorkflowExecutionView(input, context, deps);
       },
 
       async workflowExecutionOverview(
@@ -163,7 +163,7 @@ export function createGraphqlSchema(
         input: WorkflowExecutionsQueryInput,
         context: GraphqlRequestContext = {},
       ): Promise<WorkflowExecutionConnection> {
-        return buildWorkflowExecutionConnection(input, context);
+        return buildWorkflowExecutionConnection(input, context, deps);
       },
 
       async workflowCatalogOverview(
@@ -201,7 +201,7 @@ export function createGraphqlSchema(
         input: NodeExecutionLookupInput,
         context: GraphqlRequestContext = {},
       ): Promise<NodeExecutionView | null> {
-        return buildNodeExecutionView(input, context);
+        return buildNodeExecutionView(input, context, deps);
       },
 
       async managerSession(
@@ -237,7 +237,7 @@ export function createGraphqlSchema(
         input: WorkflowExecutionStepRunsQueryInput,
         context: GraphqlRequestContext = {},
       ): Promise<WorkflowExecutionStepRunsPayload> {
-        return workflowExecutionStepRunsQuery(input, context);
+        return workflowExecutionStepRunsQuery(input, context, deps);
       },
     },
 
@@ -267,28 +267,28 @@ export function createGraphqlSchema(
         input: ExecuteWorkflowInput,
         context: GraphqlRequestContext = {},
       ): Promise<ExecuteWorkflowPayload> {
-        return executeWorkflowMutation(input, context);
+        return executeWorkflowMutation(input, context, deps);
       },
 
       async resumeWorkflowExecution(
         input: ResumeWorkflowExecutionInput,
         context: GraphqlRequestContext = {},
       ): Promise<ResumeWorkflowExecutionPayload> {
-        return resumeWorkflowExecutionMutation(input, context);
+        return resumeWorkflowExecutionMutation(input, context, deps);
       },
 
       async rerunWorkflowExecution(
         input: RerunWorkflowExecutionInput,
         context: GraphqlRequestContext = {},
       ): Promise<RerunWorkflowExecutionPayload> {
-        return rerunWorkflowExecutionMutation(input, context);
+        return rerunWorkflowExecutionMutation(input, context, deps);
       },
 
       async continueWorkflowExecution(
         input: ContinueWorkflowExecutionInput,
         context: GraphqlRequestContext = {},
       ): Promise<ContinueWorkflowExecutionPayload> {
-        return continueWorkflowExecutionMutation(input, context);
+        return continueWorkflowExecutionMutation(input, context, deps);
       },
 
       async sendManagerMessage(
@@ -346,7 +346,12 @@ export function createGraphqlSchema(
           input.workflowExecutionId,
           scope,
         );
-        await loadScopedCommunicationForManagerMutation(input, scope, context);
+        await loadScopedCommunicationForManagerMutation(
+          input,
+          scope,
+          context,
+          deps,
+        );
 
         const payloadInput: ServiceRetryCommunicationInput = {
           workflowId: input.workflowId,
@@ -378,7 +383,12 @@ export function createGraphqlSchema(
           input.workflowExecutionId,
           scope,
         );
-        await loadScopedCommunicationForManagerMutation(input, scope, context);
+        await loadScopedCommunicationForManagerMutation(
+          input,
+          scope,
+          context,
+          deps,
+        );
 
         const payloadInput: ServiceReplayCommunicationInput = {
           workflowId: input.workflowId,
@@ -400,7 +410,7 @@ export function createGraphqlSchema(
         input: CancelWorkflowExecutionInput,
         context: GraphqlRequestContext = {},
       ): Promise<CancelWorkflowExecutionPayload> {
-        return cancelWorkflowExecutionMutation(input, context);
+        return cancelWorkflowExecutionMutation(input, context, deps);
       },
 
       async dispatchSupervisedWorkflowCommand(

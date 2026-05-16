@@ -28,7 +28,11 @@
   },
   "dependencies": {
     "divedra-addons": "workspace:*",
-    "divedra-core": "workspace:*"
+    "divedra-core": "workspace:*",
+    "divedra-events": "workspace:*",
+    "divedra-graphql": "workspace:*",
+    "divedra-server": "workspace:*",
+    "divedra-hook": "workspace:*"
   },
   "license": "MIT"
 }

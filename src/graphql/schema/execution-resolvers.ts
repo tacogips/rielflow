@@ -1,29 +1,18 @@
 import { EVENT_SUPERVISOR_ACTION_SET } from "../../events/supervisor-command-contract";
 import type { EventBinding } from "../../events/types";
-import {
-  continueWorkflowFromHistory,
-  listMergedWorkflowExecutionStepRuns,
-} from "../../lib";
+import type { WorkflowControlPlaneSession } from "divedra-graphql";
 import type { WorkflowExecutionSummary } from "../../shared/ui-contract";
-import { runWorkflow } from "../../workflow/engine";
 import { buildFanoutGroupSummaries } from "../../workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../workflow/load";
 import { assertCommunicationInManagerScope } from "../../workflow/manager-control";
-import {
-  listEventReplyDispatchesFromRuntimeDb,
-  listRuntimeHookEvents,
-  listRuntimeLlmSessionMessages,
-  listRuntimeNodeExecutions,
-  listRuntimeNodeLogs,
-} from "../../workflow/runtime-db";
 import {
   createSessionId,
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
   type CommunicationRecord,
+  type NodeExecutionRecord,
   type WorkflowSessionState,
 } from "../../workflow/session";
-import { listSessions, loadSession } from "../../workflow/session-store";
 import type { WorkflowJson } from "../../workflow/types";
 import type {
   CommunicationConnection,
@@ -51,6 +40,7 @@ import type {
   WorkflowExecutionsQueryInput,
   WorkflowSessionView,
 } from "../types";
+import { resolveWorkflowControlPlaneService } from "./llm-run-overrides";
 import {
   buildGraphqlWorkflowRunOverrides,
   buildNodeExecutionViewFromState,
@@ -64,13 +54,17 @@ import {
 export async function buildNodeExecutionView(
   input: NodeExecutionLookupInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<NodeExecutionView | null> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok || loaded.value.workflowId !== input.workflowId) {
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const session = await controlPlane.loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (session === null || session.workflowId !== input.workflowId) {
     return null;
   }
 
-  const session = loaded.value;
   const sessionRecord = session.nodeExecutions.find(
     (execution) =>
       execution.nodeId === input.nodeId &&
@@ -80,7 +74,7 @@ export async function buildNodeExecutionView(
     return null;
   }
 
-  const runtimeExecutions = await listRuntimeNodeExecutions(
+  const runtimeExecutions = await controlPlane.listNodeExecutions(
     input.workflowExecutionId,
     context,
   );
@@ -89,18 +83,18 @@ export async function buildNodeExecutionView(
       execution.nodeId === input.nodeId &&
       execution.nodeExecId === input.nodeExecId,
   );
-  const runtimeLogs = await listRuntimeNodeLogs(
+  const runtimeLogs = await controlPlane.listNodeLogs(
     input.workflowExecutionId,
     context,
   );
-  const runtimeLlmMessages = await listRuntimeLlmSessionMessages(
+  const runtimeLlmMessages = await controlPlane.listLlmSessionMessages(
     input.workflowExecutionId,
     context,
   );
 
   return buildNodeExecutionViewFromState(
-    session,
-    sessionRecord,
+    toWorkflowSessionState(session),
+    toNodeExecutionRecord(sessionRecord),
     runtimeExecution === undefined ? [] : [runtimeExecution],
     runtimeLogs,
     runtimeLlmMessages,
@@ -108,9 +102,24 @@ export async function buildNodeExecutionView(
     input.llmMessages,
   );
 }
+
+function toWorkflowSessionState(
+  session: WorkflowControlPlaneSession,
+): WorkflowSessionState {
+  return session as unknown as WorkflowSessionState;
+}
+
+function toNodeExecutionRecord(
+  record: WorkflowControlPlaneSession["nodeExecutions"][number],
+): NodeExecutionRecord {
+  return record as unknown as NodeExecutionRecord;
+}
+
 export function toWorkflowExecutionSummary(
-  session: WorkflowSessionState,
-  currentStepId: string | null = resolveCurrentStepId(session),
+  session: WorkflowControlPlaneSession,
+  currentStepId: string | null = resolveCurrentStepId(
+    toWorkflowSessionState(session),
+  ),
 ): WorkflowExecutionSummary {
   return {
     workflowExecutionId: session.sessionId,
@@ -129,14 +138,16 @@ export interface CurrentStepWorkflowView {
   readonly steps?: WorkflowJson["steps"];
 }
 export async function resolveSessionCurrentStepId(input: {
-  readonly session: WorkflowSessionState;
+  readonly session: WorkflowControlPlaneSession;
   readonly context: GraphqlRequestContext;
   readonly workflowCache?: Map<
     string,
     Promise<CurrentStepWorkflowView | undefined>
   >;
 }): Promise<string | null> {
-  const currentStepId = resolveCurrentStepId(input.session);
+  const currentStepId = resolveCurrentStepId(
+    toWorkflowSessionState(input.session),
+  );
   if (currentStepId !== null) {
     return currentStepId;
   }
@@ -168,46 +179,48 @@ export async function resolveSessionCurrentStepId(input: {
   }
 
   return resolveCurrentStepIdFromWorkflow(
-    input.session,
+    toWorkflowSessionState(input.session),
     workflow.steps === undefined ? undefined : { steps: workflow.steps },
   );
 }
 export async function toWorkflowSessionView(
-  session: WorkflowSessionState,
+  session: WorkflowControlPlaneSession,
   context: GraphqlRequestContext,
 ): Promise<WorkflowSessionView> {
   return {
     ...session,
     fanoutGroups: session.fanoutGroups ?? [],
     currentStepId: await resolveSessionCurrentStepId({ session, context }),
-    fanoutSummaries: buildFanoutGroupSummaries(session),
+    fanoutSummaries: buildFanoutGroupSummaries(toWorkflowSessionState(session)),
   };
 }
 export async function buildWorkflowExecutionConnection(
   input: WorkflowExecutionsQueryInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<WorkflowExecutionConnection> {
-  const listed = await listSessions(context);
-  if (!listed.ok) {
-    throw new Error(listed.error.message);
-  }
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const listed = await controlPlane.listSessionIds(context);
 
   const workflowCache = new Map<
     string,
     Promise<CurrentStepWorkflowView | undefined>
   >();
   const loadedSessions = await Promise.all(
-    listed.value.map(async (workflowExecutionId) => {
-      const loaded = await loadSession(workflowExecutionId, context);
-      if (!loaded.ok) {
+    listed.map(async (workflowExecutionId) => {
+      const session = await controlPlane.loadSession(
+        workflowExecutionId,
+        context,
+      );
+      if (session === null) {
         return undefined;
       }
       const currentStepId = await resolveSessionCurrentStepId({
-        session: loaded.value,
+        session,
         context,
         workflowCache,
       });
-      return toWorkflowExecutionSummary(loaded.value, currentStepId);
+      return toWorkflowExecutionSummary(session, currentStepId);
     }),
   );
 
@@ -252,25 +265,27 @@ export async function buildWorkflowExecutionConnection(
 export async function buildWorkflowExecutionView(
   input: WorkflowExecutionLookupInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<WorkflowExecutionView | null> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok) {
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const session = await controlPlane.loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (session === null) {
     return null;
   }
   const [nodeExecutions, nodeLogs, llmMessages, hookEvents, replyDispatches] =
     await Promise.all([
-      listRuntimeNodeExecutions(input.workflowExecutionId, context),
-      listRuntimeNodeLogs(input.workflowExecutionId, context),
-      listRuntimeLlmSessionMessages(input.workflowExecutionId, context),
-      listRuntimeHookEvents(input.workflowExecutionId, context),
-      listEventReplyDispatchesFromRuntimeDb(
-        { workflowExecutionId: input.workflowExecutionId },
-        context,
-      ),
+      controlPlane.listNodeExecutions(input.workflowExecutionId, context),
+      controlPlane.listNodeLogs(input.workflowExecutionId, context),
+      controlPlane.listLlmSessionMessages(input.workflowExecutionId, context),
+      controlPlane.listHookEvents(input.workflowExecutionId, context),
+      controlPlane.listReplyDispatches(input.workflowExecutionId, context),
     ]);
   return {
     workflowExecutionId: input.workflowExecutionId,
-    session: await toWorkflowSessionView(loaded.value, context),
+    session: await toWorkflowSessionView(session, context),
     nodeExecutions,
     nodeLogs,
     llmMessages: selectGraphqlLlmSessionMessages(
@@ -286,12 +301,15 @@ export async function buildWorkflowExecutionOverviewView(
   context: GraphqlRequestContext,
   deps: GraphqlSchemaDependencies,
 ): Promise<WorkflowExecutionOverviewView | null> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok) {
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const session = await controlPlane.loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (session === null) {
     return null;
   }
 
-  const session = loaded.value;
   const [
     runtimeExecutions,
     runtimeLogs,
@@ -299,20 +317,17 @@ export async function buildWorkflowExecutionOverviewView(
     hookEvents,
     replyDispatches,
   ] = await Promise.all([
-    listRuntimeNodeExecutions(input.workflowExecutionId, context),
-    listRuntimeNodeLogs(input.workflowExecutionId, context),
-    listRuntimeLlmSessionMessages(input.workflowExecutionId, context),
-    listRuntimeHookEvents(input.workflowExecutionId, context),
-    listEventReplyDispatchesFromRuntimeDb(
-      { workflowExecutionId: input.workflowExecutionId },
-      context,
-    ),
+    controlPlane.listNodeExecutions(input.workflowExecutionId, context),
+    controlPlane.listNodeLogs(input.workflowExecutionId, context),
+    controlPlane.listLlmSessionMessages(input.workflowExecutionId, context),
+    controlPlane.listHookEvents(input.workflowExecutionId, context),
+    controlPlane.listReplyDispatches(input.workflowExecutionId, context),
   ]);
   const nodes = await Promise.all(
     session.nodeExecutions.map((execution) =>
       buildNodeExecutionViewFromState(
-        session,
-        execution,
+        toWorkflowSessionState(session),
+        toNodeExecutionRecord(execution),
         runtimeExecutions,
         runtimeLogs,
         runtimeLlmMessages,
@@ -359,12 +374,16 @@ export async function buildCommunicationConnection(
   context: GraphqlRequestContext,
   deps: GraphqlSchemaDependencies,
 ): Promise<CommunicationConnection> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok || loaded.value.workflowId !== input.workflowId) {
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const session = await controlPlane.loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (session === null || session.workflowId !== input.workflowId) {
     return { items: [], totalCount: 0 };
   }
 
-  let records = loaded.value.communications.filter((communication) => {
+  let records = session.communications.filter((communication) => {
     if (communication.workflowId !== input.workflowId) {
       return false;
     }
@@ -432,17 +451,23 @@ export async function loadScopedCommunicationForManagerMutation(
   },
   scope: GraphqlManagerScope,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<CommunicationRecord> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
+  const loaded = await resolveWorkflowControlPlaneService(deps).loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (loaded === null) {
+    throw new Error(
+      `workflow execution '${input.workflowExecutionId}' was not found`,
+    );
   }
-  if (loaded.value.workflowId !== input.workflowId) {
+  if (loaded.workflowId !== input.workflowId) {
     throw new Error(
       `workflow execution '${input.workflowExecutionId}' does not belong to workflow '${input.workflowId}'`,
     );
   }
-  const communication = loaded.value.communications.find(
+  const communication = loaded.communications.find(
     (entry) => entry.communicationId === input.communicationId,
   );
   if (communication === undefined) {
@@ -451,25 +476,26 @@ export async function loadScopedCommunicationForManagerMutation(
     );
   }
   const loadedWorkflow = await loadWorkflowDefinitionForGraphql(
-    loaded.value.workflowName,
+    loaded.workflowName,
     context,
   );
   if (loadedWorkflow === null) {
-    throw new Error(`workflow '${loaded.value.workflowName}' was not found`);
+    throw new Error(`workflow '${loaded.workflowName}' was not found`);
   }
   assertCommunicationInManagerScope(
-    communication,
+    communication as unknown as CommunicationRecord,
     loadedWorkflow.bundle.workflow,
     {
       managerStepId: scope.session.managerStepId,
     },
     "GraphQL manager mutation",
   );
-  return communication;
+  return communication as unknown as CommunicationRecord;
 }
 export async function executeWorkflowMutation(
   input: ExecuteWorkflowInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<ExecuteWorkflowPayload> {
   const workflowRunOverrides = buildGraphqlWorkflowRunOverrides(input, true);
   if (!workflowRunOverrides.ok) {
@@ -490,17 +516,22 @@ export async function executeWorkflowMutation(
     const workflowExecutionId = createSessionId({
       workflowId: loadedWorkflow.value.bundle.workflow.workflowId,
     });
-    void runWorkflow(input.workflowName, {
-      ...workflowContext,
-      sessionId: workflowExecutionId,
-      ...workflowRunOverrides.value,
-      ...(input.runtimeVariables === undefined
-        ? {}
-        : { runtimeVariables: input.runtimeVariables }),
-      ...(input.mockScenario === undefined
-        ? {}
-        : { mockScenario: input.mockScenario }),
-    }).catch(() => undefined);
+    void resolveWorkflowControlPlaneService(deps)
+      .runWorkflow({
+        workflowName: input.workflowName,
+        options: {
+          ...workflowContext,
+          sessionId: workflowExecutionId,
+          ...workflowRunOverrides.value,
+          ...(input.runtimeVariables === undefined
+            ? {}
+            : { runtimeVariables: input.runtimeVariables }),
+          ...(input.mockScenario === undefined
+            ? {}
+            : { mockScenario: input.mockScenario }),
+        },
+      })
+      .catch(() => undefined);
     return {
       workflowExecutionId,
       sessionId: workflowExecutionId,
@@ -509,60 +540,68 @@ export async function executeWorkflowMutation(
     };
   }
 
-  const result = await runWorkflow(input.workflowName, {
-    ...workflowContext,
-    ...workflowRunOverrides.value,
-    ...(input.runtimeVariables === undefined
-      ? {}
-      : { runtimeVariables: input.runtimeVariables }),
-    ...(input.mockScenario === undefined
-      ? {}
-      : { mockScenario: input.mockScenario }),
+  const result = await resolveWorkflowControlPlaneService(deps).runWorkflow({
+    workflowName: input.workflowName,
+    options: {
+      ...workflowContext,
+      ...workflowRunOverrides.value,
+      ...(input.runtimeVariables === undefined
+        ? {}
+        : { runtimeVariables: input.runtimeVariables }),
+      ...(input.mockScenario === undefined
+        ? {}
+        : { mockScenario: input.mockScenario }),
+    },
   });
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
   return {
-    workflowExecutionId: result.value.session.sessionId,
-    sessionId: result.value.session.sessionId,
-    status: result.value.session.status,
-    exitCode: result.value.exitCode,
+    workflowExecutionId: result.workflowExecutionId,
+    sessionId: result.sessionId,
+    status: result.status,
+    exitCode: result.exitCode,
   };
 }
 export async function resumeWorkflowExecutionMutation(
   input: ResumeWorkflowExecutionInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<ResumeWorkflowExecutionPayload> {
   const workflowRunOverrides = buildGraphqlWorkflowRunOverrides(input);
   if (!workflowRunOverrides.ok) {
     throw new Error(workflowRunOverrides.error);
   }
-  const existing = await loadSession(input.workflowExecutionId, context);
-  if (!existing.ok) {
-    throw new Error(existing.error.message);
-  }
-  const workflowContext = await resolveWorkflowContextForGraphql(
-    existing.value.workflowName,
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const existing = await controlPlane.loadSession(
+    input.workflowExecutionId,
     context,
   );
-  const result = await runWorkflow(existing.value.workflowName, {
-    ...workflowContext,
-    resumeSessionId: input.workflowExecutionId,
-    ...workflowRunOverrides.value,
-  });
-  if (!result.ok) {
-    throw new Error(result.error.message);
+  if (existing === null) {
+    throw new Error(
+      `workflow execution '${input.workflowExecutionId}' was not found`,
+    );
   }
+  const workflowContext = await resolveWorkflowContextForGraphql(
+    existing.workflowName,
+    context,
+  );
+  const result = await controlPlane.runWorkflow({
+    workflowName: existing.workflowName,
+    options: {
+      ...workflowContext,
+      resumeSessionId: input.workflowExecutionId,
+      ...workflowRunOverrides.value,
+    },
+  });
   return {
-    workflowExecutionId: result.value.session.sessionId,
-    sessionId: result.value.session.sessionId,
-    status: result.value.session.status,
-    exitCode: result.value.exitCode,
+    workflowExecutionId: result.workflowExecutionId,
+    sessionId: result.sessionId,
+    status: result.status,
+    exitCode: result.exitCode,
   };
 }
 export async function rerunWorkflowExecutionMutation(
   input: RerunWorkflowExecutionInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<RerunWorkflowExecutionPayload> {
   const rerunFromStepId = input.stepId.trim();
   if (rerunFromStepId.length === 0) {
@@ -572,37 +611,44 @@ export async function rerunWorkflowExecutionMutation(
   if (!workflowRunOverrides.ok) {
     throw new Error(workflowRunOverrides.error);
   }
-  const existing = await loadSession(input.workflowExecutionId, context);
-  if (!existing.ok) {
-    throw new Error(existing.error.message);
-  }
-  const workflowContext = await resolveWorkflowContextForGraphql(
-    existing.value.workflowName,
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const existing = await controlPlane.loadSession(
+    input.workflowExecutionId,
     context,
   );
-  const result = await runWorkflow(existing.value.workflowName, {
-    ...workflowContext,
-    rerunFromSessionId: input.workflowExecutionId,
-    rerunFromStepId,
-    ...workflowRunOverrides.value,
-    ...(input.runtimeVariables === undefined
-      ? {}
-      : { runtimeVariables: input.runtimeVariables }),
-  });
-  if (!result.ok) {
-    throw new Error(result.error.message);
+  if (existing === null) {
+    throw new Error(
+      `workflow execution '${input.workflowExecutionId}' was not found`,
+    );
   }
+  const workflowContext = await resolveWorkflowContextForGraphql(
+    existing.workflowName,
+    context,
+  );
+  const result = await controlPlane.runWorkflow({
+    workflowName: existing.workflowName,
+    options: {
+      ...workflowContext,
+      rerunFromSessionId: input.workflowExecutionId,
+      rerunFromStepId,
+      ...workflowRunOverrides.value,
+      ...(input.runtimeVariables === undefined
+        ? {}
+        : { runtimeVariables: input.runtimeVariables }),
+    },
+  });
   return {
-    workflowExecutionId: result.value.session.sessionId,
-    sessionId: result.value.session.sessionId,
-    status: result.value.session.status,
+    workflowExecutionId: result.workflowExecutionId,
+    sessionId: result.sessionId,
+    status: result.status,
     rerunFromStepId,
-    exitCode: result.value.exitCode,
+    exitCode: result.exitCode,
   };
 }
 export async function workflowExecutionStepRunsQuery(
   input: WorkflowExecutionStepRunsQueryInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<WorkflowExecutionStepRunsPayload> {
   const workflowExecutionId = input.workflowExecutionId.trim();
   if (workflowExecutionId.length === 0) {
@@ -614,7 +660,9 @@ export async function workflowExecutionStepRunsQuery(
       ? undefined
       : stepTrimmed;
   const filterStatus = parseWorkflowExecutionStepRunsStatusFilter(input.status);
-  const listed = await listMergedWorkflowExecutionStepRuns({
+  const listed = await resolveWorkflowControlPlaneService(
+    deps,
+  ).listWorkflowExecutionStepRuns({
     workflowExecutionId,
     ...(filterStepId === undefined ? {} : { filterStepId }),
     ...(filterStatus === undefined ? {} : { filterStatus }),
@@ -635,7 +683,7 @@ export async function workflowExecutionStepRunsQuery(
         : { nodeRegistryId: row.nodeRegistryId }),
       status: row.status,
       imported: row.imported,
-      sourceWorkflowExecutionId: row.persistedWorkflowExecutionId,
+      sourceWorkflowExecutionId: row.sourceWorkflowExecutionId,
       startedAt: row.startedAt,
       endedAt: row.endedAt,
     })),
@@ -644,6 +692,7 @@ export async function workflowExecutionStepRunsQuery(
 export async function continueWorkflowExecutionMutation(
   input: ContinueWorkflowExecutionInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<ContinueWorkflowExecutionPayload> {
   if (context.readOnly === true) {
     throw new Error("read-only mode enabled");
@@ -664,15 +713,21 @@ export async function continueWorkflowExecutionMutation(
   if (!workflowRunOverrides.ok) {
     throw new Error(workflowRunOverrides.error);
   }
-  const existing = await loadSession(sourceWorkflowExecutionId, context);
-  if (!existing.ok) {
-    throw new Error(existing.error.message);
-  }
-  const workflowContext = await resolveWorkflowContextForGraphql(
-    existing.value.workflowName,
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const existing = await controlPlane.loadSession(
+    sourceWorkflowExecutionId,
     context,
   );
-  const result = await continueWorkflowFromHistory({
+  if (existing === null) {
+    throw new Error(
+      `workflow execution '${sourceWorkflowExecutionId}' was not found`,
+    );
+  }
+  const workflowContext = await resolveWorkflowContextForGraphql(
+    existing.workflowName,
+    context,
+  );
+  const result = await controlPlane.continueWorkflowFromHistory({
     ...workflowContext,
     ...workflowRunOverrides.value,
     sourceWorkflowExecutionId,
@@ -686,7 +741,7 @@ export async function continueWorkflowExecutionMutation(
       : { mockScenario: input.mockScenario }),
   });
   return {
-    workflowExecutionId: result.sessionId,
+    workflowExecutionId: result.workflowExecutionId,
     sessionId: result.sessionId,
     status: result.status,
     exitCode: result.exitCode,

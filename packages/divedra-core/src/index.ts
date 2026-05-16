@@ -1,8 +1,10 @@
 // Core package contract: expose workflow runtime and supervision primitives
 // without pulling in CLI, server transport, or native add-on ownership.
+export type * from "./workflow-model";
 export {
   noopWorkflowRunEventSink,
   runWorkflow,
+  type WorkflowRunOptions,
   type WorkflowRunEvent,
   type WorkflowRunEventOptions,
   type WorkflowRunEventSink,
@@ -14,18 +16,28 @@ export {
 } from "../../../src/workflow/load";
 export {
   listWorkflowCatalogSources,
+  resolveAddonSource,
   resolveWorkflowCreateSource,
   resolveWorkflowScopeSelector,
   resolveWorkflowSource,
   withResolvedWorkflowSourceOptions,
 } from "../../../src/workflow/catalog";
 export {
+  listSessions,
   loadSession,
   saveSession,
   type SessionStoreOptions,
 } from "../../../src/workflow/session-store";
-export type { WorkflowSessionState } from "../../../src/workflow/session";
 export {
+  normalizeSessionState,
+  resolveCurrentStepId,
+  resolveCurrentStepIdFromWorkflow,
+  type NodeExecutionRecord,
+  type WorkflowSessionState,
+} from "../../../src/workflow/session";
+export {
+  listEventReplyDispatchesFromRuntimeDb,
+  listRuntimeHookEvents,
   resolveRuntimeDbPath,
   listRuntimeLlmSessionMessages,
   listRuntimeNodeExecutions,
@@ -72,18 +84,47 @@ export {
   type ParsedManagerControl,
 } from "../../../src/workflow/manager-control";
 export type {
+  AgentNodePayload,
+  AgentWorkerAddonConfig,
   AsyncNodeAddonPayloadResolver,
   AutoImprovePolicy,
+  ChatReplyDispatchRequest,
+  ChatReplyDispatchResult,
+  ChatReplyDispatchTarget,
   ChatReplyDispatcher,
+  ChatReplyWorkerConfig,
+  CliAgentBackend,
+  ContainerExecution,
+  ContainerRunnerKind,
+  GitCommitAddonConfig,
+  GitPushAddonConfig,
+  JsonObject,
   LoadOptions,
+  MailGatewayAddonConfig,
+  MailGatewayReadAddonConfig,
   MutableWorkflowWorkspace,
   NodeAddonDefinition,
   NodeAddonDefinitionResolver,
   NodeAddonPayloadResolver,
   NodeAddonResolveInput,
   NodeAddonResolveResult,
+  NodeExecutionBackend,
+  NodeOutputContract,
   NodePayload,
+  ResolvedAddonSource,
+  ResolvedAgentWorkerAddon,
+  ResolvedChatReplyWorkerAddon,
+  ResolvedClaudeCodeWorkerAddon,
+  ResolvedCodexWorkerAddon,
+  ResolvedGitCommitAddon,
+  ResolvedGitPushAddon,
+  ResolvedMailGatewayAddon,
+  ResolvedMailGatewayReadAddon,
+  ResolvedNodeAddon,
+  ResolvedSuperviserControlAddon,
   ResolvedWorkflowSource,
+  ResolvedXGatewayAddon,
+  ResolvedXGatewayReadAddon,
   SupervisionIncident,
   SupervisionRemediationAction,
   SupervisionRemediationRecord,
@@ -91,13 +132,48 @@ export type {
   SupervisionRunStatus,
   SupervisionStallWatch,
   SupervisionSummary,
+  SuperviserControlAddonName,
   ValidationIssue,
   WorkflowPatchRevisionInput,
   WorkflowPatchRevisionRecord,
+  WorkflowDefaults,
+  WorkflowJson,
   WorkflowNodeAddonRef,
+  WorkflowNodeAddonEnvBinding,
   WorkflowScopeSelector,
   WorkflowSourceScope,
+  XGatewayAddonConfig,
+  XGatewayReadAddonConfig,
 } from "../../../src/workflow/types";
+export {
+  describeSuperviserControlAddon,
+  getSuperviserControlAddonProviderOperationId,
+  isSuperviserControlAddonName,
+} from "../../../src/workflow/types";
+export {
+  listNodeTemplateFieldContainers,
+  NODE_TEMPLATE_FIELD_SPECS,
+} from "./node-template-fields";
+export { renderPromptTemplate } from "./render";
+export { buildPromptTemplateVariables } from "./prompt-template-context";
+export {
+  AdapterExecutionError,
+  normalizeOutputContractEnvelope,
+  parseJsonObjectCandidate,
+  type AdapterExecutionContext,
+  type AdapterExecutionInput,
+  type AdapterExecutionOutput,
+  type AdapterLlmSessionMessage,
+  type AdapterProcessLog,
+  type NodeAdapter,
+} from "../../../src/workflow/adapter";
+export { normalizeTextBusinessPayload } from "../../../src/workflow/json-boundary";
+export type { NodeExecutionMailbox } from "../../../src/workflow/node-execution-mailbox";
+export { err, ok, type Result } from "./result";
+export {
+  validateJsonSchemaDefinition,
+  validateJsonValueAgainstSchema,
+} from "./json-schema";
 export { callStep } from "../../../src/workflow/call-step";
 export type {
   CallStepFailure,
@@ -107,8 +183,10 @@ export type {
 } from "../../../src/workflow/call-step";
 export { deriveWorkflowVisualization } from "../../../src/workflow/visualization";
 export {
+  buildFanoutGroupSummaries,
   buildInspectionSummary,
   getSupervisionSummary,
+  type FanoutGroupSummary,
   type WorkflowInspectionCounts,
   type WorkflowInspectionSummary,
 } from "../../../src/workflow/inspect";
@@ -137,7 +215,14 @@ export {
   type SupervisionRemediationDecision,
   type SupervisionRemediationPlan,
 } from "../../../src/workflow/superviser";
-export type { SuperviserRuntimeControl } from "../../../src/workflow/superviser-control";
+export {
+  executeSuperviserControlNativeOperation,
+  type SuperviserRuntimeControl,
+} from "../../../src/workflow/superviser-control";
+export {
+  normalizeWorkflowWorkingDirectoryOverride,
+  resolveNodeExecutionWorkingDirectory,
+} from "../../../src/workflow/working-directory";
 export {
   createWorkflowSupervisorDispatchClient,
   type DispatchSupervisorConversationInput,
@@ -178,4 +263,3 @@ export {
 export { createLifecycleSupervisionPolicyInput } from "../../../src/workflow/auto-improve-policy";
 export type { AutoImprovePolicyInput } from "../../../src/workflow/auto-improve-policy";
 export { atomicWriteJsonFile, atomicWriteTextFile } from "../../../src/shared/fs";
-export type { JsonObject } from "../../../src/shared/json";

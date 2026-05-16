@@ -1,5 +1,5 @@
 import type { LoadOptions } from "../types";
-import { withDatabase } from "./schema-and-record-types";
+import { withEventRuntimeDatabase } from "./schema-and-record-types";
 import type {
   RuntimeSupervisorConversationSaveInput,
   RuntimeSupervisorDispatchDecisionSaveInput,
@@ -14,7 +14,7 @@ export async function insertSupervisorConversationToRuntimeDb(
   row: RuntimeSupervisorConversationSaveInput,
   options: LoadOptions = {},
 ): Promise<"inserted" | "duplicate"> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     try {
       const stmt = db.prepare(`
         INSERT INTO supervisor_conversations (
@@ -56,7 +56,7 @@ export async function loadSupervisorConversationFromRuntimeDb(
   supervisorConversationId: string,
   options: LoadOptions = {},
 ): Promise<RuntimeSupervisorConversationSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -83,7 +83,7 @@ export async function findSupervisorConversationByCorrelationInRuntimeDb(
   },
   options: LoadOptions = {},
 ): Promise<RuntimeSupervisorConversationSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -114,7 +114,7 @@ export async function updateSupervisorConversationCasInRuntimeDb(
   },
   options: LoadOptions = {},
 ): Promise<RuntimeSupervisorConversationSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const result = db
       .prepare(
         `UPDATE supervisor_conversations SET
@@ -162,7 +162,7 @@ export async function upsertSupervisorManagedRunToRuntimeDb(
   row: RuntimeSupervisorManagedRunSaveInput,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     try {
       const stmt = db.prepare(`
       INSERT INTO supervisor_conversation_managed_runs (
@@ -212,7 +212,7 @@ export async function listSupervisorManagedRunsFromRuntimeDb(
   supervisorConversationId: string,
   options: LoadOptions = {},
 ): Promise<readonly RuntimeSupervisorManagedRunSaveInput[]> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const rows = db
       .query(
         `SELECT
@@ -233,7 +233,7 @@ export async function insertSupervisorDispatchDecisionToRuntimeDb(
   row: RuntimeSupervisorDispatchDecisionSaveInput,
   options: LoadOptions = {},
 ): Promise<"inserted" | "duplicate"> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     try {
       const stmt = db.prepare(`
         INSERT INTO supervisor_dispatch_decisions (
@@ -277,7 +277,7 @@ export async function updateSupervisorDispatchDecisionFromProposedInRuntimeDb(
   },
   options: LoadOptions = {},
 ): Promise<boolean> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const result = db
       .prepare(
         `UPDATE supervisor_dispatch_decisions SET
@@ -308,7 +308,7 @@ export async function loadSupervisorDispatchDecisionBySourceMessageFromRuntimeDb
   },
   options: LoadOptions = {},
 ): Promise<RuntimeSupervisorDispatchDecisionSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT

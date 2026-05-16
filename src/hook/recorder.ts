@@ -2,29 +2,26 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { atomicWriteJsonFile } from "../shared/fs";
 import { resolveRootDataDir } from "../workflow/paths";
-import {
-  saveHookEventToRuntimeDb,
-  type RuntimeHookEventSaveInput,
-} from "../workflow/runtime-db";
+import type {
+  HookEventSaveInput,
+  HookEventStatus,
+  HookEventStore,
+} from "divedra-hook/recorder-contracts";
 import type { LoadOptions } from "../workflow/types";
 import { HookBlockError } from "./handler";
 import { redactHookPayload } from "./redaction";
+import { runtimeDbHookEventStore } from "./runtime-event-store";
 import type {
   HookPayloadCaptureMode,
   HookResponse,
   ParsedHookContext,
 } from "./types";
 
-export type HookEventStatus =
-  | "recorded"
-  | "blocked"
-  | "handler_failed"
-  | "recording_failed";
-
 export interface HookEventRecorderOptions extends LoadOptions {
   readonly captureMode?: HookPayloadCaptureMode;
   readonly now?: () => string;
   readonly idFactory?: () => string;
+  readonly eventStore?: HookEventStore;
 }
 
 function safeSegment(value: string): string {
@@ -99,7 +96,7 @@ function buildHookEventRow(input: {
   readonly status: HookEventStatus;
   readonly error?: string;
   readonly now: string;
-}): RuntimeHookEventSaveInput | undefined {
+}): HookEventSaveInput | undefined {
   const divedra = input.ctx.divedra;
   if (divedra === undefined) {
     return undefined;
@@ -177,7 +174,10 @@ export async function recordHookEvent(
     now,
   });
   if (row !== undefined) {
-    await saveHookEventToRuntimeDb(row, options);
+    await (options.eventStore ?? runtimeDbHookEventStore).saveHookEvent(
+      row,
+      options,
+    );
   }
 }
 

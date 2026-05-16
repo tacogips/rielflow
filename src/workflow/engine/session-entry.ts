@@ -1,116 +1,29 @@
-// @ts-nocheck
-// biome-ignore-all lint/correctness/noUnusedVariables: shared lifecycle dependency extraction keeps original helper names available.
 import { cancelPendingWorkflowSleepScheduledEvents } from "../session";
-import { workflowRunnerDeps } from "./workflow-runner-deps";
+import { workflowSessionEntryPort } from "./workflow-runner-deps";
+
+type SupervisionRunState = any;
+type WorkflowSessionState = any;
 
 const {
-  mkdir,
-  rm,
-  path,
-  writeJsonFile,
-  writeRawTextFile,
-  buildAdapterDivedraHookContext,
-  normalizeOutputContractEnvelope,
-  executeAdapterWithTimeout,
-  executePackageNodeWithTimeout,
-  DispatchingNodeAdapter,
-  claimFanoutStepBudget,
   loadContinuationRelatedSnapshots,
   resolveContinuationAnchorPlacement,
-  assembleNodeInput,
-  validateJsonValueAgainstSchema,
-  loadWorkflowFromDisk,
-  appendMailboxPromptGuidance,
-  parseManagerControlPayload,
-  buildAmbientManagerControlPlaneEnvironment,
-  createManagerSessionStore,
-  hashManagerAuthToken,
-  mintManagerAuthToken,
-  createExecutionCopyMutableWorkspace,
-  buildNodeExecutionMailbox,
-  writeNodeExecutionMailboxArtifacts,
-  describeWorkflowNodeKind,
-  isManagerNodeRef,
-  resolveEffectiveRoots,
-  composeExecutionPrompts,
   err,
   ok,
-  isWorkflowOutputKindNode,
-  resolveBackendSessionSelection,
-  resolveRequiredStepExecutionAddress,
-  toStepIdentityFields,
-  saveNodeExecutionToRuntimeDb,
-  saveProcessLogsToRuntimeDb,
-  inspectWorkflowRuntimeReadiness,
-  ScenarioNodeAdapter,
-  evaluateCompletion,
-  resolveLoopTransition,
-  buildOutputRefForExecution,
   createSessionId,
   createSessionState,
-  persistNodeBackendSession,
-  resolveRequestedBackendSession,
-  loadSession,
   saveSession,
-  buildSupervisionStallWatch,
-  isSupervisionStallLastError,
-  getNormalizedNodePayload,
-  getStructuralEdges,
-  getStructuralLoops,
   resolveWorkflowManagerStepId,
-  resolveNodeExecutionWorkingDirectory,
-  resolveWorkflowExecutionWorkingDirectory,
-  NON_CONTRACT_CANDIDATE_FILE_ERROR,
-  addMillisecondsToIso,
-  buildOptionalSkipOutput,
-  buildOutputPromptText,
-  buildOutputPublicationPolicy,
-  buildReservedCandidateSubmissionPath,
-  buildRetryValidationFeedback,
-  cleanupReservedCandidateSubmissionPath,
-  dedupeNodeIds,
   describeAmbiguousFanoutBranchRerunTarget,
-  emitWorkflowRunEvent,
-  evaluateEdge,
-  findOwningManagerNodeId,
-  findPendingOptionalNodeDecision,
   hasPendingPausedFanoutBranch,
-  mergeVariables,
-  nextManagerSessionId,
-  nextNodeExecId,
-  nextOutputAttemptId,
-  notifyWorkflowProgress,
-  nowIso,
-  removePendingOptionalNodeDecision,
-  resolveCandidatePayload,
-  resolveOutputValidationAttempts,
-  resolveTimeoutMs,
-  resolveTimeoutRestartBudget,
-  sha256Hex,
-  sleep,
-  stableJson,
-  upsertPendingOptionalNodeDecision,
   workflowRunFailure,
-  applyOptionalManagerDecisions,
-  executeCrossWorkflowDispatchesForNode,
-  executeLocalFanoutTransition,
   runNestedSuperviserSessionDriver,
-  buildLatestOutputMailboxIndex,
-  buildCommitMessageTemplate,
-  buildScenarioExecutableNodePayload,
-  buildUpstreamInputs,
   cloneSession,
   cloneSupervisionForContinuedRun,
-  createInitialSupervisionRunState,
   isTerminalStatus,
-  markCommunicationsConsumed,
-  persistCommunicationArtifact,
   persistExternalMailboxInputCommunication,
-  readBusinessPayload,
-  finalizeCompletedWorkflowRun,
-} = workflowRunnerDeps;
+} = workflowSessionEntryPort;
 
-export async function enterWorkflowSession(setup) {
+export async function enterWorkflowSession(setup: any) {
   const {
     workflowName,
     options,
@@ -150,7 +63,7 @@ export async function enterWorkflowSession(setup) {
     const stepIdSet =
       workflow.steps === undefined
         ? undefined
-        : new Set(workflow.steps.map((st) => st.id));
+        : new Set(workflow.steps.map((st: any) => st.id));
     const rerunIdKnown =
       stepIdSet === undefined
         ? workflowNodes.has(rerunTargetId)
@@ -230,7 +143,7 @@ export async function enterWorkflowSession(setup) {
     const stepIdSetContinue =
       workflow.steps === undefined
         ? undefined
-        : new Set(workflow.steps.map((st) => st.id));
+        : new Set(workflow.steps.map((st: any) => st.id));
     const continuationStartKnown =
       stepIdSetContinue === undefined
         ? workflowNodes.has(trimmedStart)

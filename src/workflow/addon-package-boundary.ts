@@ -63,17 +63,18 @@ export function createBoundaryAsyncNodeAddonRegistry(
   };
 }
 
-const addonPackageEntrypointCandidates = [
-  "../packages/divedra-addons/dist/index.js",
-  "../../packages/divedra-addons/dist/index.js",
-  "../../packages/divedra-addons/src/index.ts",
-  "../../divedra-addons/dist/index.js",
-  "../../divedra-addons/src/index.ts",
-] as const;
-
 interface BoundaryNodeAddonResolveInputBase extends NodeAddonResolveInput {
   readonly options?: unknown;
   readonly workflowSource?: unknown;
+}
+
+type AddonPackageModule = Readonly<Record<string, unknown>>;
+
+export type AddonPackageLoader = () => Promise<AddonPackageModule>;
+
+interface BoundaryAddonPackageEntrypoints {
+  readonly builtEntrypoint: URL;
+  readonly sourceEntrypoint: URL;
 }
 
 interface BoundaryAsyncNodeAddonResolveInput
@@ -86,21 +87,74 @@ interface BoundarySyncNodeAddonResolveInput
   readonly thirdPartyResolvers?: readonly NodeAddonPayloadResolver[];
 }
 
-export async function loadBoundaryAddonPackage(): Promise<
-  Readonly<Record<string, unknown>>
-> {
-  let lastError: unknown;
-  for (const candidate of addonPackageEntrypointCandidates) {
-    try {
-      return (await import(
-        new URL(candidate, import.meta.url).href
-      )) as Readonly<Record<string, unknown>>;
-    } catch (error: unknown) {
-      lastError = error;
-    }
+function isMissingPackageEntrypoint(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
   }
-  const reason = lastError instanceof Error ? `: ${lastError.message}` : "";
-  throw new Error(`unable to load add-on package${reason}`);
+  const record = error as Readonly<Record<string, unknown>>;
+  const code = typeof record["code"] === "string" ? record["code"] : undefined;
+  const message =
+    typeof record["message"] === "string" ? record["message"] : String(error);
+  return (
+    code === "ERR_MODULE_NOT_FOUND" ||
+    code === "MODULE_NOT_FOUND" ||
+    code === "ENOENT" ||
+    message.includes("Cannot find module") ||
+    message.includes("Module not found")
+  );
+}
+
+async function importAddonPackageEntrypoint(
+  packageEntryUrl: URL,
+): Promise<AddonPackageModule> {
+  return (await import(packageEntryUrl.href)) as AddonPackageModule;
+}
+
+export function createBoundaryAddonPackageLoader(input: {
+  readonly builtEntrypoint: URL;
+  readonly sourceEntrypoint: URL;
+}): AddonPackageLoader {
+  return async () => {
+    try {
+      return await importAddonPackageEntrypoint(input.builtEntrypoint);
+    } catch (error: unknown) {
+      if (!isMissingPackageEntrypoint(error)) {
+        throw error;
+      }
+      return await importAddonPackageEntrypoint(input.sourceEntrypoint);
+    }
+  };
+}
+
+export function resolveDefaultBoundaryAddonPackageEntrypoints(
+  entrypointUrl: URL,
+): BoundaryAddonPackageEntrypoints {
+  const pathname = entrypointUrl.pathname.replaceAll("\\", "/");
+  const packageBaseUrl = pathname.includes("/packages/divedra/dist/")
+    ? new URL("../../divedra-addons/", entrypointUrl)
+    : pathname.includes("/dist/")
+      ? new URL("../packages/divedra-addons/", entrypointUrl)
+      : new URL("../../packages/divedra-addons/", entrypointUrl);
+
+  return {
+    builtEntrypoint: new URL("dist/index.js", packageBaseUrl),
+    sourceEntrypoint: new URL("src/index.ts", packageBaseUrl),
+  };
+}
+
+const loadDefaultBoundaryAddonPackage = createBoundaryAddonPackageLoader(
+  resolveDefaultBoundaryAddonPackageEntrypoints(new URL(import.meta.url)),
+);
+
+export async function loadBoundaryAddonPackage(
+  loader: AddonPackageLoader = loadDefaultBoundaryAddonPackage,
+): Promise<AddonPackageModule> {
+  try {
+    return await loader();
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? `: ${error.message}` : "";
+    throw new Error(`unable to load add-on package${reason}`);
+  }
 }
 
 export async function resolveBoundaryNodeAddonPayloadAsync(

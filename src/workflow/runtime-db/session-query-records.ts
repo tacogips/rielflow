@@ -10,6 +10,7 @@ import type {
 import {
   toRuntimeSessionSummary,
   withDatabase,
+  withEventRuntimeDatabase,
 } from "./schema-and-record-types";
 import {
   formatCommunicationEventMessage,
@@ -358,7 +359,7 @@ export async function upsertEventSupervisedRunToRuntimeDb(
   row: RuntimeEventSupervisedRunSaveInput,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     const stmt = db.prepare(`
       INSERT INTO event_supervised_runs (
         supervised_run_id, source_id, binding_id, correlation_key,
@@ -405,7 +406,7 @@ export async function findActiveEventSupervisedRunRow(
   },
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -470,7 +471,7 @@ export async function findLatestEventSupervisedRunRow(
   },
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -530,7 +531,7 @@ export async function loadEventSupervisedRunRowById(
   supervisedRunId: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -589,7 +590,7 @@ export async function loadEventSupervisedRunRowByActiveTargetExecutionId(
   activeTargetExecutionId: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -649,7 +650,7 @@ export async function loadEventSupervisedRunRowByCommandId(
   commandId: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -711,7 +712,7 @@ export async function findEventSupervisorCommandResultJson(
   commandId: string,
   options: LoadOptions = {},
 ): Promise<string | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         "SELECT result_json FROM event_supervisor_commands WHERE command_id = ? LIMIT 1",
@@ -724,7 +725,7 @@ export async function insertEventSupervisorCommandRow(
   row: RuntimeEventSupervisorCommandSaveInput,
   options: LoadOptions = {},
 ): Promise<"inserted" | "duplicate"> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     try {
       const stmt = db.prepare(`
         INSERT INTO event_supervisor_commands (
@@ -759,7 +760,7 @@ export async function updateEventSupervisorCommandResultJson(
   resultJson: string,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     db.prepare(
       "UPDATE event_supervisor_commands SET result_json = ? WHERE command_id = ?",
     ).run(resultJson, commandId);

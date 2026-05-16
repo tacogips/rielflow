@@ -31,17 +31,18 @@ import type {
   ManagerSessionStore,
 } from "../workflow/manager-session-store";
 import type {
-  RuntimeEventReplyDispatchRecord,
-  RuntimeLlmSessionMessageRecord,
-  RuntimeNodeExecutionSummary,
-  RuntimeHookEventRecord,
-  RuntimeNodeLogEntry,
-} from "../workflow/runtime-db";
+  GraphqlRuntimeEventReplyDispatchRecord,
+  GraphqlRuntimeHookEventRecord,
+  GraphqlRuntimeLlmSessionMessageRecord,
+  GraphqlRuntimeNodeExecutionSummary,
+  GraphqlRuntimeNodeLogEntry,
+  WorkflowControlPlaneCommunicationRecord,
+  WorkflowControlPlaneNodeExecutionRecord,
+  WorkflowControlPlaneService,
+  WorkflowControlPlaneSession,
+  WorkflowControlPlaneSessionStatus,
+} from "divedra-graphql";
 import type { SessionStoreOptions } from "../workflow/session-store";
-import type {
-  NodeExecutionRecord,
-  WorkflowSessionState,
-} from "../workflow/session";
 import type {
   ChatReplyDispatcher,
   LoadOptions,
@@ -111,7 +112,7 @@ export type WorkflowDefinitionsView = WorkflowListResponse["workflows"];
 
 export interface WorkflowExecutionsQueryInput {
   readonly workflowName?: string;
-  readonly status?: WorkflowSessionState["status"];
+  readonly status?: WorkflowControlPlaneSessionStatus;
   readonly first?: number;
   readonly afterWorkflowExecutionId?: string;
 }
@@ -146,7 +147,7 @@ export interface CommunicationsQueryInput {
   readonly workflowExecutionId: string;
   readonly fromNodeId?: string;
   readonly toNodeId?: string;
-  readonly status?: WorkflowSessionState["communications"][number]["status"];
+  readonly status?: WorkflowControlPlaneCommunicationRecord["status"];
   readonly first?: number;
   readonly afterCommunicationId?: string;
 }
@@ -155,7 +156,7 @@ export interface WorkflowView extends WorkflowInspectionSummary {}
 
 export interface WorkflowDefinitionView extends WorkflowResponse {}
 
-export interface WorkflowSessionView extends WorkflowSessionState {
+export interface WorkflowSessionView extends WorkflowControlPlaneSession {
   readonly currentStepId: string | null;
   readonly fanoutSummaries: readonly FanoutGroupSummary[];
 }
@@ -163,25 +164,25 @@ export interface WorkflowSessionView extends WorkflowSessionState {
 export interface WorkflowExecutionView {
   readonly workflowExecutionId: string;
   readonly session: WorkflowSessionView;
-  readonly nodeExecutions: readonly RuntimeNodeExecutionSummary[];
-  readonly nodeLogs: readonly RuntimeNodeLogEntry[];
-  readonly llmMessages: readonly RuntimeLlmSessionMessageRecord[];
-  readonly hookEvents: readonly RuntimeHookEventRecord[];
-  readonly replyDispatches: readonly RuntimeEventReplyDispatchRecord[];
+  readonly nodeExecutions: readonly GraphqlRuntimeNodeExecutionSummary[];
+  readonly nodeLogs: readonly GraphqlRuntimeNodeLogEntry[];
+  readonly llmMessages: readonly GraphqlRuntimeLlmSessionMessageRecord[];
+  readonly hookEvents: readonly GraphqlRuntimeHookEventRecord[];
+  readonly replyDispatches: readonly GraphqlRuntimeEventReplyDispatchRecord[];
 }
 
 export interface WorkflowExecutionOverviewView {
   readonly workflowExecutionId: string;
   readonly workflowId: string;
   readonly workflowName: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
   readonly session: WorkflowSessionView;
   readonly nodes: readonly NodeExecutionView[];
   readonly communications: CommunicationConnection;
-  readonly nodeLogs: readonly RuntimeNodeLogEntry[];
-  readonly llmMessages: readonly RuntimeLlmSessionMessageRecord[];
-  readonly hookEvents: readonly RuntimeHookEventRecord[];
-  readonly replyDispatches: readonly RuntimeEventReplyDispatchRecord[];
+  readonly nodeLogs: readonly GraphqlRuntimeNodeLogEntry[];
+  readonly llmMessages: readonly GraphqlRuntimeLlmSessionMessageRecord[];
+  readonly hookEvents: readonly GraphqlRuntimeHookEventRecord[];
+  readonly replyDispatches: readonly GraphqlRuntimeEventReplyDispatchRecord[];
 }
 
 export interface WorkflowExecutionConnection {
@@ -198,7 +199,7 @@ export interface NodeExecutionView {
   readonly nodeRegistryId?: string;
   readonly nodeExecId: string;
   readonly mailboxInstanceId?: string;
-  readonly status: NodeExecutionRecord["status"];
+  readonly status: WorkflowControlPlaneNodeExecutionRecord["status"];
   readonly startedAt: string;
   readonly endedAt: string;
   readonly attempt?: number;
@@ -216,8 +217,8 @@ export interface NodeExecutionView {
   readonly output: string | null;
   readonly meta: string | null;
   readonly terminalMessage: string | null;
-  readonly recentLogs: readonly RuntimeNodeLogEntry[];
-  readonly llmMessages: readonly RuntimeLlmSessionMessageRecord[];
+  readonly recentLogs: readonly GraphqlRuntimeNodeLogEntry[];
+  readonly llmMessages: readonly GraphqlRuntimeLlmSessionMessageRecord[];
 }
 
 export interface CommunicationConnection {
@@ -285,7 +286,7 @@ export interface ValidateWorkflowDefinitionPayload extends ValidationResponse {}
 export interface ExecuteWorkflowPayload {
   readonly workflowExecutionId: string;
   readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
   readonly accepted?: boolean;
   readonly exitCode?: number;
 }
@@ -305,7 +306,7 @@ export interface ResumeWorkflowExecutionInput {
 export interface ResumeWorkflowExecutionPayload {
   readonly workflowExecutionId: string;
   readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
   readonly exitCode: number;
 }
 
@@ -325,7 +326,7 @@ export interface RerunWorkflowExecutionInput {
 export interface RerunWorkflowExecutionPayload {
   readonly workflowExecutionId: string;
   readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
   readonly rerunFromStepId?: string;
   readonly exitCode: number;
 }
@@ -349,7 +350,7 @@ export interface ContinueWorkflowExecutionInput {
 export interface ContinueWorkflowExecutionPayload {
   readonly workflowExecutionId: string;
   readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
   readonly exitCode: number;
   readonly continuedAfterStepRunId: string;
   readonly continuedStartStepId: string;
@@ -390,7 +391,7 @@ export interface CancelWorkflowExecutionPayload {
   readonly accepted: boolean;
   readonly workflowExecutionId: string;
   readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
+  readonly status: WorkflowControlPlaneSessionStatus;
 }
 
 export interface EventSupervisorCommandInput {
@@ -423,7 +424,7 @@ export interface DispatchSupervisedWorkflowCommandInput {
 export interface SupervisedWorkflowGraphqlPayload {
   readonly supervisedRun: EventSupervisedRunRecord;
   readonly runnerPoolRunId?: string;
-  readonly activeTargetStatus?: WorkflowSessionState["status"];
+  readonly activeTargetStatus?: WorkflowControlPlaneSessionStatus;
   readonly commandResult?: Readonly<Record<string, unknown>>;
 }
 
@@ -543,6 +544,7 @@ export interface GraphqlSchemaDependencies {
   readonly communicationService?: CommunicationService;
   readonly managerMessageService?: ManagerMessageService;
   readonly managerSessionStore?: ManagerSessionStore;
+  readonly workflowControlPlaneService?: WorkflowControlPlaneService<GraphqlRequestContext>;
 }
 
 export interface GraphqlQueryRoot {

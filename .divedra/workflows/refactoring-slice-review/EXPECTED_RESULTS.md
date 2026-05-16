@@ -43,19 +43,21 @@ Expected final output payload highlights:
 
 ```json
 {
-  "sliceId": "workflow-runtime-boundary",
+  "sliceId": "package-source-boundary",
   "findings": [
     {
       "severity": "mid",
-      "file": "src/workflow/addon-package-boundary.ts"
+      "file": "packages/divedra/src/index.ts"
     }
   ],
   "proposedTasks": [
     {
       "taskId": "REF-001",
-      "title": "Unify add-on package boundary loading"
+      "title": "Establish package source boundary contracts"
     }
   ],
-  "residualRisks": []
+  "residualRisks": [
+    "No provisioning package is created without a concrete provisioning source surface."
+  ]
 }
 ```

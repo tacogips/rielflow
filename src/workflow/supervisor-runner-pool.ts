@@ -1,9 +1,10 @@
-import type { EventBinding, EventSupervisorCommand } from "../events/types";
 import type {
   SupervisedWorkflowLookup,
   SupervisedWorkflowView,
   SupervisorEngineOverrides,
+  WorkflowSupervisorBinding,
   WorkflowSupervisorClient,
+  WorkflowSupervisorCommand,
 } from "./supervisor-client-types";
 
 export interface SupervisorRunnerPoolHandle {
@@ -16,8 +17,8 @@ export interface SupervisorRunnerPoolHandle {
 
 export interface SupervisorRunnerPool {
   dispatch(input: {
-    readonly command: EventSupervisorCommand;
-    readonly binding: EventBinding;
+    readonly command: WorkflowSupervisorCommand;
+    readonly binding: WorkflowSupervisorBinding;
     readonly runtimeVariables: Readonly<Record<string, unknown>>;
     readonly engine?: SupervisorEngineOverrides;
   }): Promise<SupervisedWorkflowView>;

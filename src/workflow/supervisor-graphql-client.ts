@@ -344,7 +344,7 @@ export function createWorkflowSupervisorGraphqlClient(
       };
       return dispatchRemote({
         command: cmd,
-        binding: input.bindingSnapshot,
+        binding: input.bindingSnapshot as EventBinding,
         runtimeVariables: input.runtimeVariables ?? {},
         engine: {
           ...(input.mockScenario === undefined
@@ -531,7 +531,7 @@ export function createWorkflowSupervisorGraphqlClient(
           ? {}
           : { runtimeVariables: input.runtimeVariables }),
       };
-      const withControl: EventBinding = {
+      const withControl = {
         ...binding,
         execution: {
           ...binding.execution,
@@ -544,7 +544,7 @@ export function createWorkflowSupervisorGraphqlClient(
                 },
               }),
         },
-      };
+      } as EventBinding;
       return dispatchRemote({
         command: cmd,
         binding: withControl,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { NodeAdapter } from "../adapter";
 import { err, type Result } from "../result";
 import type {
@@ -30,10 +29,10 @@ export async function runWorkflowInternal(
   }
   const sessionEntry = await enterWorkflowSession(setup.value);
   if (sessionEntry.kind === "result") {
-    return sessionEntry.result;
+    return sessionEntry.result as Result<WorkflowRunResult, WorkflowRunFailure>;
   }
-  return await runWorkflowQueue({
+  return (await runWorkflowQueue({
     ...setup.value,
     session: sessionEntry.session,
-  });
+  })) as Result<WorkflowRunResult, WorkflowRunFailure>;
 }

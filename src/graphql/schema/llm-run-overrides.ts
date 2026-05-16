@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import type { WorkflowControlPlaneService } from "divedra-graphql";
 import type {
   SaveWorkflowResponse,
   ValidationResponse,
   WorkflowResponse,
 } from "../../shared/ui-contract";
+import { createWorkflowControlPlaneService } from "../control-plane-service";
 import { collectWorkflowAddonSourceSummaries } from "../../workflow/addon-source-summary";
 import { normalizeAutoImprovePolicy } from "../../workflow/auto-improve-policy";
 import {
@@ -282,6 +284,13 @@ export function resolveManagerMessageService(
     })
   );
 }
+export function resolveWorkflowControlPlaneService(
+  deps: GraphqlSchemaDependencies,
+): WorkflowControlPlaneService<GraphqlRequestContext> {
+  return (
+    deps.workflowControlPlaneService ?? createWorkflowControlPlaneService()
+  );
+}
 export function resolveScopedManagerSessionId(
   managerSessionId: string | undefined,
   context: GraphqlRequestContext,
@@ -463,14 +472,20 @@ export async function buildWorkflowDefinitionView(
     nodeFiles,
     collectPromptTemplateFiles(loaded.bundle.nodePayloads),
   );
+  const workflow = {
+    ...loaded.bundle.workflow,
+    hasManagerNode:
+      loaded.bundle.workflow.hasManagerNode ??
+      loaded.bundle.workflow.managerStepId !== undefined,
+  };
   return {
     workflowName: loaded.workflowName,
     workflowDirectory: loaded.workflowDirectory,
     artifactWorkflowRoot: loaded.artifactWorkflowRoot,
     revision: revision.ok ? revision.value : null,
-    bundle: loaded.bundle,
+    bundle: { ...loaded.bundle, workflow },
     derivedVisualization: deriveWorkflowVisualization({
-      workflow: loaded.bundle.workflow,
+      workflow,
     }),
   } satisfies WorkflowResponse;
 }
