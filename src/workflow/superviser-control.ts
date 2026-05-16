@@ -1,6 +1,6 @@
 import {
   normalizeAutoImprovePolicy,
-  type AutoImprovePolicyInput,
+  parseAutoImprovePolicyInput,
 } from "./auto-improve-policy";
 import { err, ok, type Result } from "./result";
 import { parseWorkflowBundleInput } from "./workflow-bundle-input";
@@ -35,94 +35,6 @@ function readNonEmptyString(
     return err(`${path}.${key} must be a non-empty string`);
   }
   return ok(v.trim());
-}
-
-function parseAutoImprovePolicyInput(
-  value: unknown,
-  path: string,
-): Result<AutoImprovePolicyInput, string> {
-  if (!isRecord(value)) {
-    return err(`${path} must be an object when provided`);
-  }
-  if (typeof value["enabled"] !== "boolean") {
-    return err(`${path}.enabled must be a boolean`);
-  }
-  const input: {
-    enabled: boolean;
-    superviserWorkflowId?: string;
-    monitorIntervalMs?: number;
-    stallTimeoutMs?: number;
-    maxSupervisedAttempts?: number;
-    maxWorkflowPatches?: number;
-    workflowMutationMode?: "execution-copy" | "in-place";
-    allowTargetedRerun?: boolean;
-  } = {
-    enabled: value["enabled"],
-  };
-  const optionalNumberFields = [
-    "monitorIntervalMs",
-    "stallTimeoutMs",
-    "maxSupervisedAttempts",
-    "maxWorkflowPatches",
-  ] as const;
-  for (const key of optionalNumberFields) {
-    const field = value[key];
-    if (field === undefined) {
-      continue;
-    }
-    if (typeof field !== "number" || !Number.isFinite(field)) {
-      return err(`${path}.${key} must be a finite number when provided`);
-    }
-    input[key] = field;
-  }
-  if (
-    value["superviserWorkflowId"] !== undefined &&
-    typeof value["superviserWorkflowId"] !== "string"
-  ) {
-    return err(`${path}.superviserWorkflowId must be a string when provided`);
-  }
-  if (
-    value["superviserWorkflowId"] !== undefined &&
-    value["superviserWorkflowId"].trim().length === 0
-  ) {
-    return err(
-      `${path}.superviserWorkflowId must be a non-empty string when provided`,
-    );
-  }
-  if (typeof value["superviserWorkflowId"] === "string") {
-    input.superviserWorkflowId = value["superviserWorkflowId"];
-  }
-  if (
-    value["workflowMutationMode"] !== undefined &&
-    typeof value["workflowMutationMode"] !== "string"
-  ) {
-    return err(`${path}.workflowMutationMode must be a string when provided`);
-  }
-  if (
-    value["workflowMutationMode"] !== undefined &&
-    value["workflowMutationMode"] !== "execution-copy" &&
-    value["workflowMutationMode"] !== "in-place"
-  ) {
-    return err(
-      `${path}.workflowMutationMode must be 'execution-copy' or 'in-place' when provided`,
-    );
-  }
-  if (
-    value["workflowMutationMode"] === "execution-copy" ||
-    value["workflowMutationMode"] === "in-place"
-  ) {
-    input.workflowMutationMode = value["workflowMutationMode"];
-  }
-  if (
-    value["allowTargetedRerun"] !== undefined &&
-    typeof value["allowTargetedRerun"] !== "boolean"
-  ) {
-    return err(`${path}.allowTargetedRerun must be a boolean when provided`);
-  }
-  if (typeof value["allowTargetedRerun"] === "boolean") {
-    input.allowTargetedRerun = value["allowTargetedRerun"];
-  }
-  return ok(input);
 }
 
 /**

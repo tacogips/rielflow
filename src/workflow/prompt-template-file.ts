@@ -5,6 +5,10 @@ export interface WorkflowRelativePathFailure {
   readonly message: string;
 }
 
+export interface WorkflowRelativePathOptions {
+  readonly fieldName?: string;
+}
+
 function splitWorkflowRelativePath(relativePath: string): readonly string[] {
   return relativePath.split(/[\\/]+/).filter((segment) => segment.length > 0);
 }
@@ -44,15 +48,17 @@ export function isReservedWorkflowDefinitionPath(
 export function resolveWorkflowRelativePath(
   workflowDirectory: string,
   relativePath: string,
+  options: WorkflowRelativePathOptions = {},
 ): Result<string, WorkflowRelativePathFailure> {
+  const fieldName = options.fieldName ?? "promptTemplateFile";
   if (!isSafeWorkflowRelativePath(relativePath)) {
     return err({
-      message: `promptTemplateFile '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
+      message: `${fieldName} '${relativePath}' must be a workflow-relative path without '.' or '..' segments`,
     });
   }
   if (isReservedWorkflowDefinitionPath(relativePath)) {
     return err({
-      message: `promptTemplateFile '${relativePath}' must not overwrite canonical workflow definition files`,
+      message: `${fieldName} '${relativePath}' must not overwrite canonical workflow definition files`,
     });
   }
 
@@ -60,7 +66,7 @@ export function resolveWorkflowRelativePath(
   const relative = path.relative(workflowDirectory, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     return err({
-      message: `promptTemplateFile '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
+      message: `${fieldName} '${relativePath}' must stay within workflow directory '${workflowDirectory}'`,
     });
   }
 

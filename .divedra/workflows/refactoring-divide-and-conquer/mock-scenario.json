@@ -1,0 +1,183 @@
+{
+  "divedra-manager": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "mode": "plan-only",
+      "targetPaths": ["src/workflow", "src/cli"],
+      "excludePaths": ["dist", "node_modules"],
+      "constraints": ["Do not stage, commit, or push."],
+      "notes": ["Start divide-and-conquer refactoring planning."]
+    }
+  },
+  "step1-slice-codebase": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "has_review_slices": true,
+      "no_review_slices": false
+    },
+    "payload": {
+      "has_review_slices": true,
+      "no_review_slices": false,
+      "strategy": "package-and-processing-group",
+      "reviewSlices": [
+        {
+          "sliceId": "workflow-runtime",
+          "title": "Workflow runtime",
+          "ownedPaths": ["src/workflow"],
+          "excludedPaths": ["src/workflow/**/*.test.ts"],
+          "dependencyNotes": ["Public APIs in src/lib.ts must remain stable."],
+          "reviewQuestions": [
+            "Are validation and execution responsibilities coupled?",
+            "Can package-boundary loading be simpler?"
+          ],
+          "suggestedVerification": ["bun test src/workflow/**/*.test.ts"]
+        },
+        {
+          "sliceId": "cli-surface",
+          "title": "CLI surface",
+          "ownedPaths": ["src/cli", "src/main.ts"],
+          "excludedPaths": [],
+          "dependencyNotes": ["CLI behavior must remain aligned with library APIs."],
+          "reviewQuestions": [
+            "Are command parsing and execution dispatch boundaries clear?"
+          ],
+          "suggestedVerification": ["bun test src/cli.test.ts"]
+        }
+      ],
+      "globalConstraints": ["Read-only review fanout."],
+      "maxSlicesApplied": 2
+    }
+  },
+  "slice-review": [
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "has_findings": true
+      },
+      "payload": {
+        "sliceId": "workflow-runtime",
+        "title": "Workflow runtime",
+        "ownedPaths": ["src/workflow"],
+        "reviewedPaths": ["src/workflow/addon-package-boundary.ts"],
+        "findings": [
+          {
+            "severity": "mid",
+            "file": "src/workflow/addon-package-boundary.ts",
+            "line": 149,
+            "problem": "Runtime add-on package loading can drift between validation and execution paths.",
+            "recommendedRefactor": "Use one package-boundary loader for both validation and native node execution.",
+            "risk": "Workflow validation and execution may disagree before package dist files exist.",
+            "confidence": "high"
+          }
+        ],
+        "proposedTasks": [
+          {
+            "taskId": "REF-001",
+            "title": "Unify add-on package boundary loading",
+            "ownedPaths": [
+              "src/workflow/addon-package-boundary.ts",
+              "src/workflow/adapter-execution.ts"
+            ],
+            "blockedBy": [],
+            "verificationCommands": [
+              "bun test src/workflow/addon-package-boundary.test.ts"
+            ]
+          }
+        ],
+        "conflictNotes": [],
+        "verificationSuggestions": [
+          "bun run src/main.ts workflow validate refactoring-divide-and-conquer --output json"
+        ],
+        "residualRisks": []
+      }
+    },
+    {
+      "provider": "scenario-mock",
+      "model": "gpt-5.5",
+      "when": {
+        "has_findings": false
+      },
+      "payload": {
+        "sliceId": "cli-surface",
+        "title": "CLI surface",
+        "ownedPaths": ["src/cli", "src/main.ts"],
+        "reviewedPaths": ["src/cli", "src/main.ts"],
+        "findings": [],
+        "proposedTasks": [],
+        "conflictNotes": [],
+        "verificationSuggestions": ["bun test src/cli.test.ts"],
+        "residualRisks": []
+      }
+    }
+  ],
+  "step3-merge-review-plan": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "plan_only": true,
+      "no_plan_tasks": false,
+      "implementation_ready": false
+    },
+    "payload": {
+      "planPath": "impl-plans/active/refactoring-package-boundary-loading.md",
+      "plan_only": true,
+      "no_plan_tasks": false,
+      "implementation_ready": false,
+      "has_plan_tasks": true,
+      "planOnly": true,
+      "hasPlanTasks": true,
+      "acceptedFindings": ["workflow-runtime:add-on-package-boundary-loader"],
+      "rejectedFindings": [],
+      "tasks": [
+        {
+          "taskId": "REF-001",
+          "title": "Unify add-on package boundary loading",
+          "status": "Ready",
+          "ownedPaths": [
+            "src/workflow/addon-package-boundary.ts",
+            "src/workflow/adapter-execution.ts"
+          ],
+          "excludedPaths": [],
+          "dependsOn": [],
+          "verificationCommands": [
+            "bun test src/workflow/addon-package-boundary.test.ts",
+            "bun run src/main.ts workflow validate refactoring-divide-and-conquer --output json"
+          ]
+        }
+      ],
+      "nextTaskId": "REF-001",
+      "conflicts": [],
+      "residualRisks": []
+    }
+  },
+  "workflow-output": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "mode": "plan-only",
+      "planPath": "impl-plans/active/refactoring-package-boundary-loading.md",
+      "completedTasks": [],
+      "remainingTasks": ["REF-001"],
+      "blockedTasks": [],
+      "changedFiles": [],
+      "verificationEvidence": [
+        {
+          "command": "mock fanout plan-only run",
+          "result": "passed"
+        }
+      ],
+      "reviewSummary": "Two review slices were dispatched; one produced an accepted plan task.",
+      "residualRisks": [],
+      "notes": ["No implementation was performed in plan-only mode."]
+    }
+  }
+}

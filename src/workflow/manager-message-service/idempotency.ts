@@ -8,11 +8,7 @@ import type {
 export interface IdempotencyStore
   extends Pick<
     ManagerSessionStore,
-    | "loadIdempotentResult"
-    | "saveIdempotentResult"
-    | "loadSession"
-    | "listMessages"
-    | "appendMessage"
+    "loadIdempotentResult" | "saveIdempotentResult"
   > {}
 
 function sha256Hex(value: string): string {
@@ -40,13 +36,21 @@ function stableStringify(value: unknown): string {
 export async function runIdempotentMutation<TResult>(args: {
   readonly mutationName: string;
   readonly idempotencyKey: string | undefined;
-  readonly managerSessionId: string;
+  readonly managerSessionId: string | undefined;
   readonly normalizedPayload: unknown;
-  readonly store: IdempotencyStore;
+  readonly store: IdempotencyStore | undefined;
   readonly action: () => Promise<TResult>;
   readonly now: string;
 }): Promise<TResult> {
   if (args.idempotencyKey === undefined) {
+    return await args.action();
+  }
+  if (args.managerSessionId === undefined) {
+    throw new Error(
+      `${args.mutationName} idempotency requires a managerSessionId scope`,
+    );
+  }
+  if (args.store === undefined) {
     return await args.action();
   }
 

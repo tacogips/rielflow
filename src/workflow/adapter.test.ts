@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach } from "vitest";
 import { describe, expect, test } from "vitest";
 import {
   AdapterExecutionError,
@@ -8,7 +12,28 @@ import {
   normalizeAdapterOutput,
   parseJsonObjectCandidate,
 } from "./adapter";
-import { executeAdapterWithTimeout } from "./adapter-execution";
+import {
+  executeAdapterWithTimeout,
+  executePackageNodeWithTimeout,
+} from "./adapter-execution";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
+
+async function makeTempDir(): Promise<string> {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "divedra-adapter-execution-test-"),
+  );
+  tempDirs.push(directory);
+  return directory;
+}
 
 describe("normalizeAdapterOutput", () => {
   test("normalizes valid adapter output", () => {
@@ -301,6 +326,46 @@ function makeExecutionInput(
   };
 }
 
+function makeExecutionMailbox() {
+  return {
+    meta: {
+      protocolVersion: 1,
+      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      node: {
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        nodeId: "node-1",
+        nodeKind: "task",
+      },
+      objective: {
+        reason: "Run native node.",
+        expectedReturn: "Return JSON.",
+        instruction: "run native node",
+      },
+      paths: {
+        inputPath: "inbox/input.json",
+        inputFilesDir: "inbox/files",
+        outputPath: "outbox/output.json",
+        outputFilesDir: "outbox/files",
+      },
+      input: {
+        kind: "json",
+        upstreamSources: [],
+      },
+      output: {
+        kind: "json",
+        required: true,
+        path: "outbox/output.json",
+        filesDirectory: "outbox/files",
+      },
+    },
+    input: {
+      arguments: {},
+      upstream: [],
+    },
+  } as const;
+}
+
 describe("executeAdapterWithTimeout", () => {
   test("classifies non-DOM abort errors from timed-out adapters as timeout", async () => {
     const abortingAdapter = {
@@ -354,5 +419,125 @@ describe("executeAdapterWithTimeout", () => {
     }
     expect(result.error.code).toBe("provider_error");
     expect(result.error.message).toBe("operation aborted by adapter");
+  });
+
+  test("classifies native package execution timeout even while loading the package executor", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    const scriptsDir = path.join(workflowDirectory, "scripts");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    await mkdir(scriptsDir, { recursive: true });
+    await writeFile(
+      path.join(scriptsDir, "slow.sh"),
+      [
+        "#!/bin/sh",
+        "sleep 1",
+        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
+        `printf '{"ok":true}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o755 },
+    );
+
+    const result = await executePackageNodeWithTimeout({
+      workflowDirectory,
+      workflowWorkingDirectory,
+      artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+      workflowId: "wf",
+      workflowDescription: "demo workflow",
+      workflowExecutionId: "sess-1",
+      nodeId: "node-1",
+      nodeExecId: "exec-1",
+      node: {
+        id: "node-1",
+        nodeType: "command",
+        variables: {},
+        command: {
+          scriptPath: "scripts/slow.sh",
+        },
+      },
+      workflowDefaults: {
+        maxLoopIterations: 3,
+        nodeTimeoutMs: 120000,
+      },
+      runtimeVariables: {},
+      mergedVariables: {},
+      arguments: {},
+      artifactDir,
+      executionMailbox: makeExecutionMailbox(),
+      timeoutMs: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("timeout");
+    expect(result.error.message).toBe("native node execution timed out");
+  });
+
+  test("does not start native package execution after timeout wins during package loading", async () => {
+    let executeNativeNodeCalls = 0;
+    const executeNativeNode = async () => {
+      executeNativeNodeCalls += 1;
+      return {
+        provider: "native",
+        model: "command",
+        promptText: "native node",
+        completionPassed: true,
+        when: { always: true },
+        payload: { started: true },
+      };
+    };
+    const loadExecutor = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return executeNativeNode;
+    };
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+
+    const result = await executePackageNodeWithTimeout(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath: "scripts/should-not-run.sh",
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir,
+        executionMailbox: makeExecutionMailbox(),
+        timeoutMs: 1,
+      },
+      { loadExecutor },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("timeout");
+    expect(result.error.message).toBe("native node execution timed out");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(executeNativeNodeCalls).toBe(0);
   });
 });

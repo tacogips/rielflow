@@ -1,0 +1,1 @@
+You are the feature-local workflow output step. Summarize the accepted feature design and implementation-plan branch. Include workflowMode, issueReference, featureId, featureTitle, designDocPaths, implPlanPaths, reviewDecisions, codexAgentReferences, verification, addressedFeedback, and risks. Return JSON only.

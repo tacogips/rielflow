@@ -28,12 +28,11 @@ import {
   formatValidationIssues,
   printHelp,
   readMockScenarioOption,
+  readRemoteWorkflowExecutionPayload,
   readRuntimeVariables,
   rejectUnsupportedRemoteMockScenario,
   requireArrayField,
-  requireNumberField,
   requireObjectField,
-  requireStringField,
 } from "./input-output-helpers";
 import {
   WORKFLOW_CATALOG_OVERVIEW_GQL,
@@ -570,43 +569,31 @@ export async function runCliWorkflowScope(
             },
           },
         });
-        const payload = requireObjectField(
-          data["executeWorkflow"],
+        const payload = readRemoteWorkflowExecutionPayload(
+          data,
           "executeWorkflow",
-        );
-        const sessionId = requireStringField(
-          payload["sessionId"],
-          "executeWorkflow.sessionId",
-        );
-        const status = requireStringField(
-          payload["status"],
-          "executeWorkflow.status",
-        );
-        const exitCode = requireNumberField(
-          payload["exitCode"],
-          "executeWorkflow.exitCode",
         );
         const summary = await fetchRemoteWorkflowRunSummary(
           graphqlCliTransport,
-          sessionId,
+          payload.sessionId,
         );
 
         if (parsed.options.output === "json") {
           emitJson(io, {
-            sessionId,
-            status,
+            sessionId: payload.sessionId,
+            status: payload.status,
             workflowName: summary.workflowName,
             workflowId: summary.workflowId,
             nodeExecutions: summary.nodeExecutions,
             transitions: summary.transitions,
-            exitCode,
+            exitCode: payload.exitCode,
           });
         } else {
-          io.stdout(`run session: ${sessionId}`);
-          io.stdout(`status: ${status}`);
+          io.stdout(`run session: ${payload.sessionId}`);
+          io.stdout(`status: ${payload.status}`);
           io.stdout(`nodeExecutions: ${summary.nodeExecutions}`);
         }
-        return exitCode;
+        return payload.exitCode;
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "unknown error";

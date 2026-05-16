@@ -24,17 +24,21 @@ impl-plans/
 
 ## Active Plans
 
-| Plan | Created | Design Reference |
-| ---- | ------- | ---------------- |
-| `active/chat-event-sources-review-improvements` | 2026-05-15 | `design-event-listener-workflow-trigger#shared-chat-source-review-invariants`, `design-chat-sdk-event-sources#examples-and-tests` |
-| `active/chat-sdk-event-sources` | 2026-05-14 | `design-chat-sdk-event-sources` |
-| `active/supervisor-runner-pool-package-boundary` | 2026-05-14 | `architecture#supervisor-runner-pool-package-boundary`, `design-event-supervisor-control#codex-agent-reference-mapping` |
-| `active/package-boundary-architecture` | 2026-05-14 | `architecture#package-boundary-architecture` |
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
+| `active/package-boundary-architecture` | Completed (Staged Facade Milestone) | `architecture` |
 
 ## Recently Completed
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `refactoring-runtime-boundaries` | 2026-05-16 | `refactoring-divide-and-conquer slice reviews` |
+| `chat-event-sources-review-improvements` | 2026-05-15 | `design-event-listener-workflow-trigger`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources` |
+| `chat-sdk-event-sources` | 2026-05-15 | `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-event-listener-workflow-trigger` |
+| `scheduled-sleep-node-runtime` | 2026-05-15 | `design-scheduled-sleep-node-runtime`, `design-workflow-json`, `design-event-listener-workflow-trigger` |
+| `scheduled-sleep-runtime-review-improvements` | 2026-05-15 | `design-scheduled-sleep-node-runtime` |
+| `supervisor-runner-pool-multi-run-follow-up-review` | 2026-05-15 | `architecture` |
+| `supervisor-runner-pool-package-boundary` | 2026-05-15 | `architecture`, `design-event-supervisor-control` |
 | `reject-numbered-part-filenames-biome-lint`      | 2026-05-13 | `architecture`                                                                                                                                                                           |
 | `workflow-inspect-structure-description-lines`   | 2026-05-13 | `command`                                                                                                                                                                                |
 | `workflow-inspect-structure-compact-routing`     | 2026-05-13 | `command`                                                                                                                                                                                |

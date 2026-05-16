@@ -1,3 +1,5 @@
+// Core package contract: expose workflow runtime and supervision primitives
+// without pulling in CLI, server transport, or native add-on ownership.
 export {
   noopWorkflowRunEventSink,
   runWorkflow,

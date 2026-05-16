@@ -1,9 +1,7 @@
 import { timingSafeEqual, createHash, randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { DEFAULT_GRAPHQL_ENDPOINT } from "../graphql/endpoint";
-import { resolveRuntimeDbPath } from "./runtime-db";
+import { withRuntimeDatabase } from "./runtime-db";
 import type { LoadOptions } from "./types";
 
 export interface ManagerIntentSummary {
@@ -314,9 +312,8 @@ export function stripAmbientManagerExecutionContext(
   return sanitized;
 }
 
-function ensureSchema(db: Database): void {
+function ensureManagerSessionSchema(db: Database): void {
   db.exec(`
-    PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS manager_sessions (
       manager_session_id TEXT PRIMARY KEY,
@@ -396,15 +393,11 @@ async function withManagerDatabase<T>(
   options: LoadOptions,
   action: (db: Database) => T,
 ): Promise<T> {
-  const dbPath = resolveRuntimeDbPath(options);
-  await mkdir(path.dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
-  try {
-    ensureSchema(db);
-    return action(db);
-  } finally {
-    db.close();
-  }
+  return await withRuntimeDatabase(
+    options,
+    [ensureManagerSessionSchema],
+    action,
+  );
 }
 
 export function createManagerSessionStore(

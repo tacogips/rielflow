@@ -88,7 +88,9 @@ export async function computeWorkflowRevisionFromFiles(
     const chunks: string[] = [];
     for (const fileName of files) {
       const filePath = extraFileSet.has(fileName)
-        ? resolveWorkflowRelativePath(workflowDirectory, fileName)
+        ? resolveWorkflowRelativePath(workflowDirectory, fileName, {
+            fieldName: "workflow-relative file",
+          })
         : nodeFileSet.has(fileName)
           ? resolveWorkflowRelativeNodeFilePath(workflowDirectory, fileName)
           : ok(path.join(workflowDirectory, fileName));

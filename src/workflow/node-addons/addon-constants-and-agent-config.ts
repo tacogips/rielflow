@@ -300,48 +300,71 @@ export function describeAddonDefinitionVersions(
     .sort((left, right) => left.localeCompare(right))
     .join(", ");
 }
+export type NodeAddonDefinitionSelection =
+  | { readonly kind: "missing" }
+  | { readonly kind: "issues"; readonly issues: readonly ValidationIssue[] }
+  | { readonly kind: "definition"; readonly definition: NodeAddonDefinition };
+export function selectNodeAddonDefinition(input: {
+  readonly definitions: readonly NodeAddonDefinition[];
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+}): NodeAddonDefinitionSelection {
+  const matchingNameDefinitions = input.definitions.filter(
+    (definition) => definition.name === input.addon.name,
+  );
+  if (matchingNameDefinitions.length === 0) {
+    return { kind: "missing" };
+  }
+
+  const matchingDefinitions = matchingNameDefinitions.filter((definition) =>
+    definitionVersionMatches(definition, input.addon),
+  );
+  if (matchingDefinitions.length === 0) {
+    return {
+      kind: "issues",
+      issues: [
+        makeIssue(
+          `${input.path}.version`,
+          `unsupported version '${input.addon.version ?? "<unspecified>"}' for third-party node add-on '${input.addon.name}'; registered versions: ${describeAddonDefinitionVersions(matchingNameDefinitions)}`,
+        ),
+      ],
+    };
+  }
+
+  if (input.addon.version === undefined && matchingDefinitions.length > 1) {
+    return {
+      kind: "issues",
+      issues: [
+        makeIssue(
+          `${input.path}.version`,
+          `must be specified because multiple versions are registered for third-party node add-on '${input.addon.name}': ${describeAddonDefinitionVersions(matchingDefinitions)}`,
+        ),
+      ],
+    };
+  }
+
+  const [definition] = matchingDefinitions;
+  return definition === undefined
+    ? { kind: "missing" }
+    : { kind: "definition", definition };
+}
 export function createNodeAddonRegistry(
   definitions: readonly NodeAddonDefinition[],
 ): NodeAddonPayloadResolver {
   const registeredDefinitions = [...definitions];
   return (input) => {
-    const matchingNameDefinitions = registeredDefinitions.filter(
-      (definition) => definition.name === input.addon.name,
-    );
-    if (matchingNameDefinitions.length === 0) {
+    const selection = selectNodeAddonDefinition({
+      definitions: registeredDefinitions,
+      addon: input.addon,
+      path: input.path,
+    });
+    if (selection.kind === "missing") {
       return undefined;
     }
-
-    const matchingDefinitions = matchingNameDefinitions.filter((definition) =>
-      definitionVersionMatches(definition, input.addon),
-    );
-    if (matchingDefinitions.length === 0) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `unsupported version '${input.addon.version ?? "<unspecified>"}' for third-party node add-on '${input.addon.name}'; registered versions: ${describeAddonDefinitionVersions(matchingNameDefinitions)}`,
-          ),
-        ],
-      };
+    if (selection.kind === "issues") {
+      return { issues: selection.issues };
     }
-
-    if (input.addon.version === undefined && matchingDefinitions.length > 1) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `must be specified because multiple versions are registered for third-party node add-on '${input.addon.name}': ${describeAddonDefinitionVersions(matchingDefinitions)}`,
-          ),
-        ],
-      };
-    }
-
-    const [definition] = matchingDefinitions;
-    if (definition === undefined) {
-      return undefined;
-    }
-    const resolved = definition.resolve(input);
+    const resolved = selection.definition.resolve(input);
     if (isPromiseLike(resolved)) {
       void Promise.resolve(resolved).catch(() => undefined);
       return {
@@ -366,42 +389,18 @@ export function createAsyncNodeAddonRegistry(
 ): AsyncNodeAddonPayloadResolver {
   const registeredDefinitions = [...definitions];
   return async (input) => {
-    const matchingNameDefinitions = registeredDefinitions.filter(
-      (definition) => definition.name === input.addon.name,
-    );
-    if (matchingNameDefinitions.length === 0) {
+    const selection = selectNodeAddonDefinition({
+      definitions: registeredDefinitions,
+      addon: input.addon,
+      path: input.path,
+    });
+    if (selection.kind === "missing") {
       return undefined;
     }
-
-    const matchingDefinitions = matchingNameDefinitions.filter((definition) =>
-      definitionVersionMatches(definition, input.addon),
-    );
-    if (matchingDefinitions.length === 0) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `unsupported version '${input.addon.version ?? "<unspecified>"}' for third-party node add-on '${input.addon.name}'; registered versions: ${describeAddonDefinitionVersions(matchingNameDefinitions)}`,
-          ),
-        ],
-      };
+    if (selection.kind === "issues") {
+      return { issues: selection.issues };
     }
-
-    if (input.addon.version === undefined && matchingDefinitions.length > 1) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `must be specified because multiple versions are registered for third-party node add-on '${input.addon.name}': ${describeAddonDefinitionVersions(matchingDefinitions)}`,
-          ),
-        ],
-      };
-    }
-
-    const [definition] = matchingDefinitions;
-    return definition === undefined
-      ? undefined
-      : await definition.resolve(input);
+    return await selection.definition.resolve(input);
   };
 }
 export function createAsyncNodeAddonPayloadResolver(

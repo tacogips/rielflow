@@ -12,8 +12,18 @@ import os from "node:os";
 import path from "node:path";
 import { atomicWriteTextFile as writeRawTextFile } from "../shared/fs";
 import { err, ok, type Result } from "./result";
-import type { OutputRef, WorkflowSessionState } from "./session";
-import type { WorkflowJson, WorkflowStepFanout } from "./types";
+import type {
+  FanoutBranchRecord,
+  FanoutGroupRunRecord,
+  OutputRef,
+  WorkflowSessionState,
+} from "./session";
+import type {
+  WorkflowFanoutFailurePolicy,
+  WorkflowFanoutResultOrder,
+  WorkflowJson,
+  WorkflowStepFanout,
+} from "./types";
 import { resolveWorkflowExecutionWorkingDirectory } from "./working-directory";
 
 // ---------------------------------------------------------------------------
@@ -334,6 +344,165 @@ export function buildFanoutGroupRunId(input: {
   readonly sourceNodeExecId: string;
 }): string {
   return `fanout-${input.groupId}-${input.sourceNodeExecId}`;
+}
+
+export interface BuildFanoutGroupRunRecordInput {
+  readonly fanoutGroupRunId: string;
+  readonly groupId: string;
+  readonly sourceStepId: string;
+  readonly sourceNodeExecId: string;
+  readonly transitionLabel?: string;
+  readonly targetStepId: string;
+  readonly targetWorkflowId?: string;
+  readonly joinStepId: string;
+  readonly concurrency: number;
+  readonly failurePolicy: WorkflowFanoutFailurePolicy;
+  readonly resultOrder: WorkflowFanoutResultOrder;
+  readonly branches: readonly FanoutBranchRecord[];
+}
+
+export function buildFanoutGroupRunRecord(
+  input: BuildFanoutGroupRunRecordInput,
+): FanoutGroupRunRecord {
+  return {
+    fanoutGroupRunId: input.fanoutGroupRunId,
+    groupId: input.groupId,
+    sourceStepId: input.sourceStepId,
+    sourceNodeExecId: input.sourceNodeExecId,
+    ...(input.transitionLabel === undefined
+      ? {}
+      : { transitionLabel: input.transitionLabel }),
+    targetStepId: input.targetStepId,
+    ...(input.targetWorkflowId === undefined
+      ? {}
+      : { targetWorkflowId: input.targetWorkflowId }),
+    joinStepId: input.joinStepId,
+    concurrency: input.concurrency,
+    failurePolicy: input.failurePolicy,
+    resultOrder: input.resultOrder,
+    branches: input.branches,
+  };
+}
+
+function formatFanoutBranchMessages(
+  branches: readonly FanoutBranchRecord[],
+): string {
+  return branches
+    .map(
+      (branch) =>
+        `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
+    )
+    .join("; ");
+}
+
+export type FanoutJoinAggregate = Readonly<Record<string, unknown>> & {
+  readonly fanoutGroupRunId: string;
+  readonly groupId: string;
+  readonly sourceStepId: string;
+  readonly resultOrder: WorkflowFanoutResultOrder;
+  readonly results: readonly {
+    readonly branchIndex: number;
+    readonly item: unknown;
+    readonly status: FanoutBranchRecord["status"];
+    readonly outputRef?: OutputRef;
+    readonly workspaceRoot?: string;
+  }[];
+};
+
+export function buildFanoutJoinAggregate(input: {
+  readonly group: FanoutGroupRunRecord;
+}): FanoutJoinAggregate {
+  return {
+    fanoutGroupRunId: input.group.fanoutGroupRunId,
+    groupId: input.group.groupId,
+    sourceStepId: input.group.sourceStepId,
+    resultOrder: input.group.resultOrder,
+    results: input.group.branches.map((branch) => ({
+      branchIndex: branch.branchIndex,
+      item: branch.item,
+      status: branch.status,
+      ...(branch.outputRef === undefined
+        ? {}
+        : { outputRef: branch.outputRef }),
+      ...(branch.workspaceRoot === undefined
+        ? {}
+        : { workspaceRoot: branch.workspaceRoot }),
+    })),
+  };
+}
+
+export type FanoutBranchResultReduction =
+  | {
+      readonly outcome: "paused";
+      readonly group: FanoutGroupRunRecord;
+      readonly fanoutGroups: readonly FanoutGroupRunRecord[];
+      readonly session: WorkflowSessionState;
+      readonly pausedMessage: string;
+    }
+  | {
+      readonly outcome: "failed";
+      readonly group: FanoutGroupRunRecord;
+      readonly fanoutGroups: readonly FanoutGroupRunRecord[];
+      readonly session: WorkflowSessionState;
+      readonly failureMessage: string;
+    }
+  | {
+      readonly outcome: "succeeded";
+      readonly group: FanoutGroupRunRecord;
+      readonly fanoutGroups: readonly FanoutGroupRunRecord[];
+      readonly session: WorkflowSessionState;
+      readonly aggregate: FanoutJoinAggregate;
+    };
+
+export function reduceFanoutBranchResults(input: {
+  readonly group: FanoutGroupRunRecord;
+  readonly priorFanoutGroups: readonly FanoutGroupRunRecord[];
+  readonly workingSession: WorkflowSessionState;
+}): FanoutBranchResultReduction {
+  const fanoutGroups = [...input.priorFanoutGroups, input.group];
+  const failedBranches = input.group.branches.filter(
+    (branch) => branch.status === "failed" || branch.status === "cancelled",
+  );
+  const pausedBranches = input.group.branches.filter(
+    (branch) => branch.status === "paused",
+  );
+
+  if (pausedBranches.length > 0) {
+    const lastError = formatFanoutBranchMessages(pausedBranches);
+    const session: WorkflowSessionState = {
+      ...input.workingSession,
+      status: "paused",
+      fanoutGroups,
+      lastError,
+    };
+    return {
+      outcome: "paused",
+      group: input.group,
+      fanoutGroups,
+      session,
+      pausedMessage: `fanout group '${input.group.fanoutGroupRunId}' paused: ${lastError}`,
+    };
+  }
+
+  if (failedBranches.length > 0) {
+    return {
+      outcome: "failed",
+      group: input.group,
+      fanoutGroups,
+      session: input.workingSession,
+      failureMessage: `fanout group '${input.group.fanoutGroupRunId}' failed: ${formatFanoutBranchMessages(
+        failedBranches,
+      )}`,
+    };
+  }
+
+  return {
+    outcome: "succeeded",
+    group: input.group,
+    fanoutGroups,
+    session: input.workingSession,
+    aggregate: buildFanoutJoinAggregate({ group: input.group }),
+  };
 }
 
 // ---------------------------------------------------------------------------

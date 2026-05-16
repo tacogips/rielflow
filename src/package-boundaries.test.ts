@@ -44,6 +44,18 @@ async function importCopiedPackageEntrypoint(
   }
 }
 
+async function importRepositoryModule(
+  relativePath: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  return (await import(
+    pathToFileURL(path.join(process.cwd(), relativePath)).href
+  )) as Readonly<Record<string, unknown>>;
+}
+
+function sortedExportKeys(module: Readonly<Record<string, unknown>>): string[] {
+  return Object.keys(module).sort();
+}
+
 describe("package boundaries", () => {
   test("root package is a private Bun workspace orchestrator", async () => {
     const manifest = await readManifest("package.json");
@@ -93,6 +105,97 @@ describe("package boundaries", () => {
     expect(declarations).toContain("continueWorkflowFromHistory");
     expect(declarations).toContain("listWorkflowUsage");
     expect(declarations).toContain("WorkflowUsageCatalog");
+  });
+
+  test("source package facades preserve their documented public contracts", async () => {
+    const compatibility = await importRepositoryModule(
+      "packages/divedra/src/index.ts",
+    );
+    const rootLibrary = await importRepositoryModule("src/lib.ts");
+    expect(sortedExportKeys(compatibility)).toEqual(
+      sortedExportKeys(rootLibrary),
+    );
+
+    const addons = await importRepositoryModule(
+      "packages/divedra-addons/src/index.ts",
+    );
+    const sourceNodeAddons = await importRepositoryModule(
+      "src/workflow/node-addons.ts",
+    );
+    expect(sortedExportKeys(addons)).toEqual(
+      [
+        ...sortedExportKeys(sourceNodeAddons),
+        "executeAddonNode",
+        "executeNativeNode",
+      ].sort(),
+    );
+  });
+
+  test("core source facade stays within the core runtime contract", async () => {
+    const core = await importRepositoryModule(
+      "packages/divedra-core/src/index.ts",
+    );
+
+    expect(sortedExportKeys(core)).toEqual([
+      "SUPERVISION_STALL_ERROR_PREFIX",
+      "atomicWriteJsonFile",
+      "atomicWriteTextFile",
+      "buildInspectionSummary",
+      "buildMutableWorkflowWorkspace",
+      "buildSupervisionStallWatch",
+      "buildWorkflowUsageCatalog",
+      "buildWorkflowUsageSummary",
+      "callStep",
+      "createCommunicationService",
+      "createExecutionCopyMutableWorkspace",
+      "createLifecycleSupervisionPolicyInput",
+      "createManagerMessageService",
+      "createManagerSessionStore",
+      "createSupervisorProgressEventSink",
+      "createSupervisorProgressRenderer",
+      "createSupervisorRunnerPool",
+      "createWorkflowSupervisorClient",
+      "createWorkflowSupervisorDispatchClient",
+      "createWorkflowSupervisorGraphqlClient",
+      "deriveWorkflowVisualization",
+      "getEngineSupervisionPatcherId",
+      "getSupervisionSummary",
+      "hashManagerAuthToken",
+      "isSupervisionStallLastError",
+      "listRuntimeLlmSessionMessages",
+      "listRuntimeNodeExecutions",
+      "listRuntimeNodeLogs",
+      "listRuntimeSessions",
+      "listWorkflowCatalogSources",
+      "loadSession",
+      "loadWorkflowFromCatalog",
+      "loadWorkflowFromDisk",
+      "mergeLoadOptionsForSessionMutableBundle",
+      "noopWorkflowRunEventSink",
+      "parseManagerControlActions",
+      "parseManagerControlPayload",
+      "planSupervisionRemediation",
+      "postDispatchSupervisorConversationThroughGraphql",
+      "readWorkflowPatchRevisionsFromArtifact",
+      "recordWorkflowPatchRevision",
+      "resolveAmbientManagerExecutionContext",
+      "resolveRuntimeDbPath",
+      "resolveSupervisionRerunAnchor",
+      "resolveSupervisionRerunTarget",
+      "resolveWorkflowCreateSource",
+      "resolveWorkflowScopeSelector",
+      "resolveWorkflowSource",
+      "runWorkflow",
+      "saveSession",
+      "verifyManagerAuthToken",
+      "withResolvedWorkflowSourceOptions",
+    ]);
+    expect(core["runCli"]).toBeUndefined();
+    expect(core["startServe"]).toBeUndefined();
+    expect(core["handleApiRequest"]).toBeUndefined();
+    expect(core["createGraphqlSchema"]).toBeUndefined();
+    expect(core["createNodeAddonRegistry"]).toBeUndefined();
+    expect(core["executeNativeNode"]).toBeUndefined();
   });
 
   test("core package build does not inline add-on implementation ownership", async () => {

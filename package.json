@@ -47,7 +47,7 @@
   "trustedDependencies": [],
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
-    "claude-code-agent": "github:tacogips/claude-code-agent#4b27720b4708b93426d4c73fa5b800dac36ebc5b",
+    "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
     "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
     "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
     "graphql": "16.13.1",
@@ -56,6 +56,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.1.14",
+    "bun-types": "1.1.37",
     "typescript": "5.7.2",
     "vitest": "2.1.8"
   }

@@ -1,19 +1,87 @@
-// @ts-nocheck
 // biome-ignore-all lint/correctness/noUnusedVariables: mechanical extraction preserves transition context fields.
 // biome-ignore-all lint/style/useConst: mechanical extraction preserves original mutable state names across phase boundaries.
-import { workflowRunnerDeps } from "./workflow-runner-deps";
-
-const {
-  executeLocalFanoutTransition,
-  saveSession,
-  err,
-  workflowRunFailure,
-  ok,
+import type { NodeAdapter } from "../adapter";
+import type { LoadedWorkflow } from "../load";
+import type { ParsedManagerControl } from "../manager-control";
+import { err, ok, type Result } from "../result";
+import type { ResolvedStepExecutionAddress } from "../runtime-addressing";
+import type {
+  CommunicationRecord,
+  FanoutGroupRunRecord,
+  NodeBackendSessionRecord,
+  NodeExecutionRecord,
+  OutputRef,
+  PendingOptionalNodeDecision,
+  WorkflowSessionState,
+} from "../session";
+import { saveSession } from "../session-store";
+import type { NodePayload, WorkflowEdge, WorkflowJson } from "../types";
+import {
   executeCrossWorkflowDispatchesForNode,
+  executeLocalFanoutTransition,
+} from "./fanout-dispatch";
+import {
   removePendingOptionalNodeDecision,
-} = workflowRunnerDeps;
+  type EngineExecutionGuards,
+  type NormalizedWorkflowRunOptions,
+  type WorkflowRunFailure,
+  type WorkflowRunResult,
+  workflowRunFailure,
+} from "./types-and-session-state";
 
-export async function finalizeStepTransitions(input) {
+export type StepTransitionFinalizationResult =
+  | Result<WorkflowRunResult, WorkflowRunFailure>
+  | {
+      readonly kind: "done";
+      readonly session: WorkflowSessionState;
+    };
+
+export interface FinalizeStepTransitionsInput {
+  readonly session: WorkflowSessionState;
+  readonly workflowName: string;
+  readonly workflow: WorkflowJson;
+  readonly nextExecutionCounter: number;
+  readonly updatedCounts: Readonly<Record<string, number>>;
+  readonly nodeExecutions: readonly NodeExecutionRecord[];
+  readonly currentCommunicationCounter: number;
+  readonly currentCommunications: readonly CommunicationRecord[];
+  readonly nextNodeBackendSessions: Readonly<
+    Record<string, NodeBackendSessionRecord>
+  >;
+  readonly currentRuntimeVariables: Readonly<Record<string, unknown>>;
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly loaded: { readonly value: LoadedWorkflow };
+  readonly nodeId: string;
+  readonly stepExecutionAddress: ResolvedStepExecutionAddress;
+  readonly nodeExecId: string;
+  readonly artifactDir: string;
+  readonly outputPayload: Readonly<Record<string, unknown>>;
+  readonly endedAt: string;
+  readonly effectiveAdapter: NodeAdapter;
+  readonly guards: EngineExecutionGuards | undefined;
+  readonly crossWorkflowInvocationStack: readonly string[];
+  readonly nodeMap: Readonly<Record<string, NodePayload>>;
+  readonly localFanoutEdges: readonly WorkflowEdge[];
+  readonly queue: readonly string[];
+  readonly updatedLoopIterationCounts: Readonly<Record<string, number>>;
+  readonly currentNodeExecutionCounter: number;
+  readonly currentNodeExecutionCounts: Readonly<Record<string, number>>;
+  readonly currentNodeExecutions: readonly NodeExecutionRecord[];
+  readonly currentNodeBackendSessions: Readonly<
+    Record<string, NodeBackendSessionRecord>
+  >;
+  readonly outputRaw: string;
+  readonly regularSelected: readonly WorkflowEdge[];
+  readonly outputRef: OutputRef;
+  readonly managerControl: ParsedManagerControl | null;
+  readonly queuedOptionalDecisionNodeIds: readonly string[];
+  readonly isOptionalExecutionNode: boolean;
+  readonly pendingOptionalNodeDecisionsAfterManagerActions: readonly PendingOptionalNodeDecision[];
+}
+
+export async function finalizeStepTransitions(
+  input: FinalizeStepTransitionsInput,
+): Promise<StepTransitionFinalizationResult> {
   let {
     session,
     workflowName,
@@ -46,7 +114,6 @@ export async function finalizeStepTransitions(input) {
     currentNodeBackendSessions,
     outputRaw,
     regularSelected,
-    outputRef,
     managerControl,
     queuedOptionalDecisionNodeIds,
     isOptionalExecutionNode,

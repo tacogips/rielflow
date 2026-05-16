@@ -4,88 +4,30 @@ import type {
   NodeAddonPayloadResolver,
   NodeAddonResolveInput,
   NodeAddonResolveResult,
-  WorkflowNodeAddonRef,
 } from "./types";
-
-interface PromiseLikeValue {
-  readonly then: unknown;
-}
-
-function isPromiseLike(value: unknown): value is PromiseLikeValue {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "then" in value &&
-    typeof (value as { readonly then?: unknown }).then === "function"
-  );
-}
-
-function makeIssue(path: string, message: string) {
-  return { severity: "error" as const, path, message };
-}
-
-function definitionVersionMatches(
-  definition: NodeAddonDefinition,
-  addon: WorkflowNodeAddonRef,
-): boolean {
-  return (
-    definition.version === undefined ||
-    addon.version === undefined ||
-    definition.version === addon.version
-  );
-}
-
-function describeAddonDefinitionVersions(
-  definitions: readonly NodeAddonDefinition[],
-): string {
-  return definitions
-    .map((definition) => definition.version ?? "<unspecified>")
-    .sort((left, right) => left.localeCompare(right))
-    .join(", ");
-}
+import {
+  isPromiseLike,
+  makeIssue,
+  selectNodeAddonDefinition,
+} from "./node-addons/addon-constants-and-agent-config";
 
 export function createBoundaryNodeAddonRegistry(
   definitions: readonly NodeAddonDefinition[],
 ): NodeAddonPayloadResolver {
   const registeredDefinitions = [...definitions];
   return (input) => {
-    const matchingNameDefinitions = registeredDefinitions.filter(
-      (definition) => definition.name === input.addon.name,
-    );
-    if (matchingNameDefinitions.length === 0) {
+    const selection = selectNodeAddonDefinition({
+      definitions: registeredDefinitions,
+      addon: input.addon,
+      path: input.path,
+    });
+    if (selection.kind === "missing") {
       return undefined;
     }
-
-    const matchingDefinitions = matchingNameDefinitions.filter((definition) =>
-      definitionVersionMatches(definition, input.addon),
-    );
-    if (matchingDefinitions.length === 0) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `unsupported version '${input.addon.version ?? "<unspecified>"}' for third-party node add-on '${input.addon.name}'; registered versions: ${describeAddonDefinitionVersions(matchingNameDefinitions)}`,
-          ),
-        ],
-      };
+    if (selection.kind === "issues") {
+      return { issues: selection.issues };
     }
-
-    if (input.addon.version === undefined && matchingDefinitions.length > 1) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `must be specified because multiple versions are registered for third-party node add-on '${input.addon.name}': ${describeAddonDefinitionVersions(matchingDefinitions)}`,
-          ),
-        ],
-      };
-    }
-
-    const [definition] = matchingDefinitions;
-    if (definition === undefined) {
-      return undefined;
-    }
-    const resolved = definition.resolve(input);
+    const resolved = selection.definition.resolve(input);
     if (isPromiseLike(resolved)) {
       void Promise.resolve(resolved).catch(() => undefined);
       return {
@@ -106,50 +48,27 @@ export function createBoundaryAsyncNodeAddonRegistry(
 ): AsyncNodeAddonPayloadResolver {
   const registeredDefinitions = [...definitions];
   return async (input) => {
-    const matchingNameDefinitions = registeredDefinitions.filter(
-      (definition) => definition.name === input.addon.name,
-    );
-    if (matchingNameDefinitions.length === 0) {
+    const selection = selectNodeAddonDefinition({
+      definitions: registeredDefinitions,
+      addon: input.addon,
+      path: input.path,
+    });
+    if (selection.kind === "missing") {
       return undefined;
     }
-
-    const matchingDefinitions = matchingNameDefinitions.filter((definition) =>
-      definitionVersionMatches(definition, input.addon),
-    );
-    if (matchingDefinitions.length === 0) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `unsupported version '${input.addon.version ?? "<unspecified>"}' for third-party node add-on '${input.addon.name}'; registered versions: ${describeAddonDefinitionVersions(matchingNameDefinitions)}`,
-          ),
-        ],
-      };
+    if (selection.kind === "issues") {
+      return { issues: selection.issues };
     }
-
-    if (input.addon.version === undefined && matchingDefinitions.length > 1) {
-      return {
-        issues: [
-          makeIssue(
-            `${input.path}.version`,
-            `must be specified because multiple versions are registered for third-party node add-on '${input.addon.name}': ${describeAddonDefinitionVersions(matchingDefinitions)}`,
-          ),
-        ],
-      };
-    }
-
-    const [definition] = matchingDefinitions;
-    if (definition === undefined) {
-      return undefined;
-    }
-    return await definition.resolve(input);
+    return await selection.definition.resolve(input);
   };
 }
 
 const addonPackageEntrypointCandidates = [
   "../packages/divedra-addons/dist/index.js",
   "../../packages/divedra-addons/dist/index.js",
+  "../../packages/divedra-addons/src/index.ts",
   "../../divedra-addons/dist/index.js",
+  "../../divedra-addons/src/index.ts",
 ] as const;
 
 interface BoundaryNodeAddonResolveInputBase extends NodeAddonResolveInput {
@@ -167,7 +86,9 @@ interface BoundarySyncNodeAddonResolveInput
   readonly thirdPartyResolvers?: readonly NodeAddonPayloadResolver[];
 }
 
-async function loadAddonPackage(): Promise<Readonly<Record<string, unknown>>> {
+export async function loadBoundaryAddonPackage(): Promise<
+  Readonly<Record<string, unknown>>
+> {
   let lastError: unknown;
   for (const candidate of addonPackageEntrypointCandidates) {
     try {
@@ -185,7 +106,7 @@ async function loadAddonPackage(): Promise<Readonly<Record<string, unknown>>> {
 export async function resolveBoundaryNodeAddonPayloadAsync(
   input: BoundaryAsyncNodeAddonResolveInput,
 ): Promise<NodeAddonResolveResult> {
-  const module = await loadAddonPackage();
+  const module = await loadBoundaryAddonPackage();
   const resolver = module[["resolve", "NodeAddonPayloadAsync"].join("")];
   if (typeof resolver !== "function") {
     throw new Error("add-on package does not expose async payload resolution");

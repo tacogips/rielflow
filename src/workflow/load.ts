@@ -167,6 +167,7 @@ async function resolvePromptTemplateFileForNode(input: {
       const resolvedPath = resolveWorkflowRelativePath(
         input.workflowDirectory,
         templateFile,
+        { fieldName: spec.fileField },
       );
       if (!resolvedPath.ok) {
         return err({
@@ -241,6 +242,7 @@ async function resolveWorkflowStepFiles(input: {
     const resolvedPath = resolveWorkflowRelativePath(
       input.workflowDirectory,
       stepFileRaw,
+      { fieldName: "stepFile" },
     );
     if (!resolvedPath.ok) {
       return err({

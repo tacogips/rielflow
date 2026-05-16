@@ -1,40 +1,18 @@
 import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../shared/fs";
 import {
   cloneNodeTemplateAwarePayload,
-  collectNodeTemplateFiles,
-  listNodeTemplateFieldContainers,
   NODE_TEMPLATE_FIELD_SPECS,
+  listNodeTemplateFieldContainers,
 } from "./node-template-fields";
-import {
-  remapAuthoredNodePayloadsByNodeFile,
-  resolveAuthoredNodeFileReference,
-  resolveWorkflowRelativeNodeFilePath,
-} from "./authored-node";
+import { resolveWorkflowRelativeNodeFilePath } from "./authored-node";
 import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import { isSafeWorkflowName, resolveEffectiveRoots } from "./paths";
-import {
-  collectStepAddressedAuthoredWorkflowFieldIssues,
-  isNormalizedStepAddressedWorkflow,
-  stripNormalizedWorkflowFieldsForPersistence,
-} from "./authored-workflow";
 import { validateWorkflowBundleAsync } from "./validate";
-import {
-  collectPromptTemplateFiles,
-  collectWorkflowRevisionNodeFiles,
-  collectWorkflowRevisionStepFiles,
-  computeWorkflowRevisionFromFiles,
-} from "./revision";
-import type {
-  AuthoredWorkflowJson,
-  LoadOptions,
-  WorkflowJson,
-  WorkflowNodeRegistryRef,
-  WorkflowStepRef,
-} from "./types";
+import { computeWorkflowRevisionFromFiles } from "./revision";
+import type { LoadOptions, WorkflowStepRef } from "./types";
 import {
   OBSOLETE_WORKFLOW_VISUALIZATION_FILE,
   WORKFLOW_DEFINITION_FILE,
@@ -45,378 +23,16 @@ import {
 import {
   collectAuthoredNodeFiles,
   collectAuthoredStepFiles,
-  isDefaultContainerRuntime,
 } from "./save-authored";
+import {
+  buildWorkflowSavePersistencePlan,
+  buildWorkflowSaveValidationPlan,
+  checkWorkflowSaveRevisionConflict,
+  collectPayloadPromptTemplateFiles,
+  isRecord,
+} from "./save-plan";
 
 export type { SaveWorkflowFailure, SaveWorkflowInput, SaveWorkflowSuccess };
-
-type AuthoredWorkflowRecord = AuthoredWorkflowJson &
-  Readonly<Record<string, unknown>>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasOwnKey(
-  value: Record<string, unknown> | undefined,
-  key: string,
-): boolean {
-  return value !== undefined && Object.hasOwn(value, key);
-}
-
-function projectAuthoredWorkflowFromNormalized(input: {
-  readonly workflow: WorkflowJson;
-  readonly persistManagerStepId: boolean;
-}): AuthoredWorkflowJson {
-  const { workflow } = input;
-
-  return {
-    workflowId: workflow.workflowId,
-    ...(workflow.description.length === 0
-      ? {}
-      : { description: workflow.description }),
-    defaults: {
-      nodeTimeoutMs: workflow.defaults.nodeTimeoutMs,
-      maxLoopIterations: workflow.defaults.maxLoopIterations,
-      ...(workflow.defaults.fanoutConcurrency === undefined
-        ? {}
-        : { fanoutConcurrency: workflow.defaults.fanoutConcurrency }),
-      ...(workflow.defaults.supervision === undefined
-        ? {}
-        : { supervision: workflow.defaults.supervision }),
-      ...(workflow.defaults.timeoutPolicy === undefined
-        ? {}
-        : { timeoutPolicy: workflow.defaults.timeoutPolicy }),
-      ...(workflow.defaults.containerRuntime === undefined ||
-      isDefaultContainerRuntime(workflow.defaults.containerRuntime)
-        ? {}
-        : { containerRuntime: workflow.defaults.containerRuntime }),
-    },
-    ...(workflow.prompts === undefined ? {} : { prompts: workflow.prompts }),
-    ...(input.persistManagerStepId &&
-    workflow.hasManagerNode !== false &&
-    workflow.managerStepId !== undefined
-      ? { managerStepId: workflow.managerStepId }
-      : {}),
-    entryStepId: workflow.entryStepId,
-    nodes: workflow.nodeRegistry.map(projectAuthoredWorkflowRegistryNode),
-    steps: workflow.steps.map((step) =>
-      step.stepFile === undefined
-        ? {
-            id: step.id,
-            nodeId: step.nodeId,
-            ...(step.description === undefined
-              ? {}
-              : { description: step.description }),
-            ...(step.role === undefined ? {} : { role: step.role }),
-            ...(step.promptVariant === undefined
-              ? {}
-              : { promptVariant: step.promptVariant }),
-            ...(step.timeoutMs === undefined
-              ? {}
-              : { timeoutMs: step.timeoutMs }),
-            ...(step.stallTimeoutMs === undefined
-              ? {}
-              : { stallTimeoutMs: step.stallTimeoutMs }),
-            ...(step.sessionPolicy === undefined
-              ? {}
-              : { sessionPolicy: step.sessionPolicy }),
-            ...(step.transitions === undefined
-              ? {}
-              : { transitions: step.transitions }),
-          }
-        : {
-            id: step.id,
-            stepFile: step.stepFile,
-          },
-    ),
-  };
-}
-
-function projectAuthoredWorkflowRegistryNode(
-  node: WorkflowNodeRegistryRef,
-): WorkflowNodeRegistryRef {
-  return { ...node };
-}
-
-function createPersistedWorkflowJson(input: {
-  readonly workflow: WorkflowJson;
-  readonly authoredWorkflow: AuthoredWorkflowRecord | undefined;
-}): AuthoredWorkflowJson {
-  const shouldPersistManagerStepId = (() => {
-    if (
-      input.workflow.hasManagerNode === false ||
-      input.workflow.managerStepId === undefined
-    ) {
-      return false;
-    }
-    if (hasOwnKey(input.authoredWorkflow, "managerStepId")) {
-      return true;
-    }
-    const explicitManagerSteps =
-      input.workflow.steps?.filter((step) => step.role === "manager") ?? [];
-    return !(
-      explicitManagerSteps.length === 1 &&
-      explicitManagerSteps[0]?.id === input.workflow.managerStepId
-    );
-  })();
-
-  return projectAuthoredWorkflowFromNormalized({
-    workflow: input.workflow,
-    persistManagerStepId: shouldPersistManagerStepId,
-  });
-}
-
-function createStepAddressedWorkflowForValidation(
-  workflow: WorkflowJson,
-): AuthoredWorkflowJson {
-  return projectAuthoredWorkflowFromNormalized({
-    workflow,
-    persistManagerStepId:
-      workflow.hasManagerNode !== false && workflow.managerStepId !== undefined,
-  });
-}
-
-function collectReferencedNodePayloads(input: {
-  readonly workflow: {
-    readonly nodeRegistry?: readonly {
-      readonly id: string;
-      readonly nodeFile?: string;
-      readonly addon?: unknown;
-    }[];
-    readonly steps?: readonly {
-      readonly id: string;
-      readonly promptVariant?: string;
-      readonly timeoutMs?: number;
-      readonly sessionPolicy?: unknown;
-    }[];
-    readonly nodes: readonly {
-      readonly id: string;
-      readonly nodeFile: string;
-      readonly addon?: unknown;
-    }[];
-  };
-  readonly nodePayloads: Readonly<Record<string, unknown>>;
-}): Readonly<Record<string, unknown>> {
-  const referencedPayloads: Record<string, unknown> = {};
-  const authoredNodes =
-    input.workflow.nodeRegistry?.map((node) => ({
-      id: node.id,
-      ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
-      ...(node.addon === undefined ? {} : { addon: node.addon }),
-    })) ?? input.workflow.nodes;
-  for (const node of authoredNodes) {
-    if (node.addon !== undefined) {
-      continue;
-    }
-    if (node.nodeFile === undefined) {
-      continue;
-    }
-    const prefersNodeFilePayload =
-      input.workflow.nodeRegistry !== undefined &&
-      hasStepAddressedDerivedNodePayload({
-        workflow: input.workflow,
-        nodeId: node.id,
-        nodeFile: node.nodeFile,
-        nodePayloads: input.nodePayloads,
-      });
-    const payload =
-      input.workflow.nodeRegistry !== undefined
-        ? prefersNodeFilePayload
-          ? (input.nodePayloads[node.nodeFile] ?? input.nodePayloads[node.id])
-          : (input.nodePayloads[node.id] ?? input.nodePayloads[node.nodeFile])
-        : (input.nodePayloads[node.nodeFile] ?? input.nodePayloads[node.id]);
-    if (payload !== undefined) {
-      referencedPayloads[node.nodeFile] = payload;
-    }
-  }
-  return referencedPayloads;
-}
-
-function collectReferencedPromptTemplateFiles(
-  nodePayloads: Readonly<Record<string, unknown>>,
-): ReadonlySet<string> {
-  return new Set(collectPromptTemplateFiles(nodePayloads));
-}
-
-function collectAuthoredReferencedNodePayloads(
-  workflow: unknown,
-  nodePayloads: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  if (typeof workflow !== "object" || workflow === null) {
-    return nodePayloads;
-  }
-
-  const nodesRaw = (workflow as Record<string, unknown>)["nodes"];
-  if (!Array.isArray(nodesRaw)) {
-    return nodePayloads;
-  }
-
-  const referencedPayloads: Record<string, unknown> = {};
-  for (const node of nodesRaw) {
-    if (typeof node !== "object" || node === null) {
-      continue;
-    }
-
-    const nodeRecord = node as Record<string, unknown>;
-    const nodeId =
-      typeof nodeRecord["id"] === "string" ? nodeRecord["id"] : undefined;
-    const nodeFile = resolveAuthoredNodeFileReference(nodeRecord);
-    if (!nodeId || nodeFile === undefined) {
-      continue;
-    }
-
-    const payload = nodePayloads[nodeFile] ?? nodePayloads[nodeId];
-    if (payload !== undefined) {
-      referencedPayloads[nodeFile] = payload;
-    }
-  }
-
-  return referencedPayloads;
-}
-
-function applyPromptVariantProjection(input: {
-  readonly payload: Record<string, unknown>;
-  readonly variant: Record<string, unknown>;
-}): Record<string, unknown> {
-  const projectedPayload = cloneNodeTemplateAwarePayload(input.payload);
-
-  for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
-    const variantTemplate = input.variant[spec.textField];
-    const variantTemplateFile = input.variant[spec.fileField];
-    if (variantTemplate === undefined && variantTemplateFile === undefined) {
-      continue;
-    }
-
-    delete projectedPayload[spec.textField];
-    delete projectedPayload[spec.fileField];
-    if (variantTemplate !== undefined) {
-      projectedPayload[spec.textField] = variantTemplate;
-    }
-    if (variantTemplateFile !== undefined) {
-      projectedPayload[spec.fileField] = variantTemplateFile;
-    }
-  }
-
-  return projectedPayload;
-}
-
-function hasStepAddressedDerivedNodePayload(input: {
-  readonly workflow: {
-    readonly managerStepId?: string;
-    readonly steps?: readonly {
-      readonly id: string;
-      readonly role?: unknown;
-      readonly promptVariant?: string;
-      readonly timeoutMs?: number;
-      readonly sessionPolicy?: unknown;
-    }[];
-  };
-  readonly nodeId: string;
-  readonly nodeFile: string;
-  readonly nodePayloads: Readonly<Record<string, unknown>>;
-}): boolean {
-  const step = input.workflow.steps?.find((entry) => entry.id === input.nodeId);
-  if (step === undefined) {
-    return false;
-  }
-
-  const nodeFilePayload = input.nodePayloads[input.nodeFile];
-  const nodeIdPayload = input.nodePayloads[input.nodeId];
-  if (!isRecord(nodeFilePayload) || !isRecord(nodeIdPayload)) {
-    return false;
-  }
-
-  let stepProjectedPayload = cloneNodeTemplateAwarePayload(nodeFilePayload);
-  stepProjectedPayload["id"] = step.id;
-  if (step.timeoutMs === undefined) {
-    delete stepProjectedPayload["timeoutMs"];
-  } else {
-    stepProjectedPayload["timeoutMs"] = step.timeoutMs;
-  }
-  const sessionPolicy =
-    isRecord(step.sessionPolicy) &&
-    typeof step.sessionPolicy["mode"] === "string"
-      ? { mode: step.sessionPolicy["mode"] }
-      : undefined;
-  if (sessionPolicy === undefined) {
-    delete stepProjectedPayload["sessionPolicy"];
-  } else {
-    stepProjectedPayload["sessionPolicy"] = sessionPolicy;
-  }
-
-  const isManagerStep =
-    step.role === "manager" ||
-    (step.role === undefined && input.workflow.managerStepId === step.id);
-  if (isManagerStep) {
-    stepProjectedPayload["managerType"] =
-      typeof stepProjectedPayload["managerType"] === "string"
-        ? stepProjectedPayload["managerType"]
-        : "code";
-  } else {
-    delete stepProjectedPayload["managerType"];
-  }
-
-  if (step.promptVariant !== undefined) {
-    const promptVariants = stepProjectedPayload["promptVariants"];
-    const variantRaw =
-      isRecord(promptVariants) && isRecord(promptVariants[step.promptVariant])
-        ? promptVariants[step.promptVariant]
-        : undefined;
-    if (isRecord(variantRaw)) {
-      stepProjectedPayload = applyPromptVariantProjection({
-        payload: stepProjectedPayload,
-        variant: variantRaw,
-      });
-    }
-  }
-
-  return isDeepStrictEqual(stepProjectedPayload, nodeIdPayload);
-}
-
-function preferStepAddressedRegistryIdPayloads(
-  workflow: unknown,
-  nodePayloads: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  if (!isRecord(workflow) || !Array.isArray(workflow["steps"])) {
-    return nodePayloads;
-  }
-  const nodesRaw = workflow["nodes"];
-  if (!Array.isArray(nodesRaw)) {
-    return nodePayloads;
-  }
-
-  const preferredPayloads: Record<string, unknown> = { ...nodePayloads };
-  for (const node of nodesRaw) {
-    if (!isRecord(node)) {
-      continue;
-    }
-    const nodeId =
-      typeof node["id"] === "string" && node["id"].length > 0
-        ? node["id"]
-        : undefined;
-    const nodeFile =
-      typeof node["nodeFile"] === "string" && node["nodeFile"].length > 0
-        ? node["nodeFile"]
-        : undefined;
-    if (nodeId === undefined || nodeFile === undefined) {
-      continue;
-    }
-    const prefersNodeFilePayload = hasStepAddressedDerivedNodePayload({
-      workflow,
-      nodeId,
-      nodeFile,
-      nodePayloads,
-    });
-    if (
-      nodePayloads[nodeId] !== undefined &&
-      (preferredPayloads[nodeFile] === undefined || !prefersNodeFilePayload)
-    ) {
-      preferredPayloads[nodeFile] = nodePayloads[nodeId];
-    }
-  }
-  return preferredPayloads;
-}
 
 async function readExistingAuthoredWorkflow(
   workflowDirectory: string,
@@ -459,12 +75,6 @@ async function readExistingNodePayload(
     }
     throw error;
   }
-}
-
-function collectPayloadPromptTemplateFiles(
-  payload: unknown,
-): readonly string[] {
-  return collectNodeTemplateFiles(payload);
 }
 
 async function collectExistingPromptTemplateFiles(input: {
@@ -539,28 +149,11 @@ async function loadExistingAuthoredWorkflowFileState(input: {
 
 async function removeStaleWorkflowFiles(input: {
   readonly workflowDirectory: string;
-  readonly existingNodeFiles: readonly string[];
-  readonly existingStepFiles: readonly string[];
-  readonly existingPromptTemplateFiles: ReadonlySet<string>;
-  readonly persistedNodeFiles: readonly string[];
-  readonly persistedStepFiles: readonly string[];
-  readonly persistedPromptTemplateFiles: ReadonlySet<string>;
+  readonly staleNodeFiles: readonly string[];
+  readonly staleStepFiles: readonly string[];
+  readonly stalePromptTemplateFiles: readonly string[];
 }): Promise<void> {
-  const persistedNodeFileSet = new Set(input.persistedNodeFiles);
-  const staleNodeFiles = input.existingNodeFiles.filter(
-    (nodeFile) => !persistedNodeFileSet.has(nodeFile),
-  );
-  const persistedStepFileSet = new Set(input.persistedStepFiles);
-  const staleStepFiles = input.existingStepFiles.filter(
-    (stepFile) => !persistedStepFileSet.has(stepFile),
-  );
-  const stalePromptTemplateFiles = [
-    ...input.existingPromptTemplateFiles,
-  ].filter(
-    (templateFile) => !input.persistedPromptTemplateFiles.has(templateFile),
-  );
-
-  for (const nodeFile of staleNodeFiles) {
+  for (const nodeFile of input.staleNodeFiles) {
     const nodeFilePath = resolveWorkflowRelativeNodeFilePath(
       input.workflowDirectory,
       nodeFile,
@@ -571,10 +164,11 @@ async function removeStaleWorkflowFiles(input: {
     await rm(nodeFilePath.value, { force: true });
   }
 
-  for (const stepFile of staleStepFiles) {
+  for (const stepFile of input.staleStepFiles) {
     const stepFilePath = resolveWorkflowRelativePath(
       input.workflowDirectory,
       stepFile,
+      { fieldName: "stepFile" },
     );
     if (!stepFilePath.ok) {
       continue;
@@ -582,10 +176,11 @@ async function removeStaleWorkflowFiles(input: {
     await rm(stepFilePath.value, { force: true });
   }
 
-  for (const templateFile of stalePromptTemplateFiles) {
+  for (const templateFile of input.stalePromptTemplateFiles) {
     const templateFilePath = resolveWorkflowRelativePath(
       input.workflowDirectory,
       templateFile,
+      { fieldName: "promptTemplateFile" },
     );
     if (!templateFilePath.ok) {
       continue;
@@ -627,6 +222,7 @@ async function persistNodePayload(input: {
       const promptFilePath = resolveWorkflowRelativePath(
         input.workflowDirectory,
         templateFile,
+        { fieldName: spec.fileField },
       );
       if (!promptFilePath.ok) {
         throw new Error(promptFilePath.error.message);
@@ -654,6 +250,7 @@ async function persistStepDefinition(input: {
   const stepFilePath = resolveWorkflowRelativePath(
     input.workflowDirectory,
     input.stepFile,
+    { fieldName: "stepFile" },
   );
   if (!stepFilePath.ok) {
     throw new Error(stepFilePath.error.message);
@@ -712,6 +309,7 @@ async function hydratePromptTemplateFilesForValidation(input: {
         const resolvedPath = resolveWorkflowRelativePath(
           input.workflowDirectory,
           templateFile,
+          { fieldName: spec.fileField },
         );
         if (!resolvedPath.ok) {
           return err({
@@ -792,30 +390,10 @@ export async function saveWorkflowToDisk(
     return err(existingAuthoredWorkflow.error);
   }
 
-  const normalizedInputWorkflow = isNormalizedStepAddressedWorkflow(
-    input.workflow,
-  )
-    ? input.workflow
-    : undefined;
-  const stepAddressedLegacyIssues =
-    normalizedInputWorkflow !== undefined
-      ? collectStepAddressedAuthoredWorkflowFieldIssues(input.workflow)
-      : [];
-  const authoredWorkflow =
-    normalizedInputWorkflow === undefined
-      ? stripNormalizedWorkflowFieldsForPersistence(input.workflow)
-      : createStepAddressedWorkflowForValidation(normalizedInputWorkflow);
-  const normalizedNodePayloads = preferStepAddressedRegistryIdPayloads(
-    authoredWorkflow,
-    remapAuthoredNodePayloadsByNodeFile(authoredWorkflow, input.nodePayloads),
-  );
-  const authoredReferencedNodePayloads = collectAuthoredReferencedNodePayloads(
-    authoredWorkflow,
-    normalizedNodePayloads,
-  );
+  const validationPlan = buildWorkflowSaveValidationPlan(input);
   const validationNodePayloads = await hydratePromptTemplateFilesForValidation({
     workflowDirectory,
-    nodePayloads: authoredReferencedNodePayloads,
+    nodePayloads: validationPlan.authoredReferencedNodePayloads,
   });
   if (!validationNodePayloads.ok) {
     return err(validationNodePayloads.error);
@@ -823,7 +401,7 @@ export async function saveWorkflowToDisk(
 
   const validation = await validateWorkflowBundleAsync(
     {
-      workflow: authoredWorkflow,
+      workflow: validationPlan.authoredWorkflow,
       nodePayloads: validationNodePayloads.value,
     },
     {
@@ -836,23 +414,20 @@ export async function saveWorkflowToDisk(
     return err({
       code: "VALIDATION",
       message: "workflow validation failed",
-      issues: [...stepAddressedLegacyIssues, ...validation.error],
+      issues: [
+        ...validationPlan.stepAddressedLegacyIssues,
+        ...validation.error,
+      ],
     });
   }
-  if (stepAddressedLegacyIssues.length > 0) {
+  if (validationPlan.stepAddressedLegacyIssues.length > 0) {
     return err({
       code: "VALIDATION",
       message: "workflow validation failed",
-      issues: stepAddressedLegacyIssues,
+      issues: validationPlan.stepAddressedLegacyIssues,
     });
   }
 
-  const nodeFiles = collectWorkflowRevisionNodeFiles(validation.value.workflow);
-  const stepFiles = collectWorkflowRevisionStepFiles(validation.value.workflow);
-  const referencedNodePayloads = collectReferencedNodePayloads({
-    workflow: validation.value.workflow,
-    nodePayloads: normalizedNodePayloads,
-  });
   const existingWorkflowFileState = await loadExistingAuthoredWorkflowFileState(
     {
       workflowDirectory,
@@ -862,116 +437,55 @@ export async function saveWorkflowToDisk(
   if (!existingWorkflowFileState.ok) {
     return err(existingWorkflowFileState.error);
   }
+  const persistencePlan = buildWorkflowSavePersistencePlan({
+    workflow: validation.value.workflow,
+    authoredWorkflow: validationPlan.authoredWorkflow,
+    normalizedNodePayloads: validationPlan.normalizedNodePayloads,
+    existingFileState: existingWorkflowFileState.value,
+  });
+  if (!persistencePlan.ok) {
+    return err(persistencePlan.error);
+  }
 
   const currentRevision = await computeWorkflowRevisionFromFiles(
     workflowDirectory,
-    existingWorkflowFileState.value.existingAuthoredWorkflowRecord === undefined
-      ? nodeFiles
-      : existingWorkflowFileState.value.existingNodeFiles,
-    existingWorkflowFileState.value.existingAuthoredWorkflowRecord === undefined
-      ? [...stepFiles, ...collectPromptTemplateFiles(referencedNodePayloads)]
-      : [
-          ...existingWorkflowFileState.value.existingStepFiles,
-          ...existingWorkflowFileState.value.existingPromptTemplateFiles,
-        ],
+    persistencePlan.value.currentRevisionNodeFiles,
+    persistencePlan.value.currentRevisionExtraFiles,
   );
-  if (input.expectedRevision !== undefined) {
-    if (
-      currentRevision.ok &&
-      currentRevision.value !== input.expectedRevision
-    ) {
-      return err({
-        code: "CONFLICT",
-        message: "workflow revision conflict",
-        currentRevision: currentRevision.value,
-      });
-    }
+  const revisionConflict = checkWorkflowSaveRevisionConflict({
+    expectedRevision: input.expectedRevision,
+    currentRevision: currentRevision.ok ? currentRevision.value : undefined,
+  });
+  if (revisionConflict !== undefined) {
+    return err(revisionConflict);
   }
 
   try {
-    const persistedWorkflow = createPersistedWorkflowJson({
-      workflow: validation.value.workflow,
-      authoredWorkflow: isRecord(authoredWorkflow)
-        ? (authoredWorkflow as AuthoredWorkflowRecord)
-        : undefined,
-    });
     await mkdir(workflowDirectory, { recursive: true });
     await atomicWriteJsonFile(
       path.join(workflowDirectory, WORKFLOW_DEFINITION_FILE),
-      persistedWorkflow,
+      persistencePlan.value.persistedWorkflow,
     );
-    if (validation.value.workflow.steps !== undefined) {
-      for (const step of validation.value.workflow.steps) {
-        if (step.stepFile === undefined) {
-          continue;
-        }
-        await persistStepDefinition({
-          workflowDirectory,
-          stepFile: step.stepFile,
-          step,
-        });
-      }
+    for (const stepPlan of persistencePlan.value.stepsToPersist) {
+      await persistStepDefinition({
+        workflowDirectory,
+        stepFile: stepPlan.stepFile,
+        step: stepPlan.step,
+      });
     }
-    const nodesToPersist =
-      validation.value.workflow.nodeRegistry?.map((node) => ({
-        id: node.id,
-        ...(node.nodeFile === undefined ? {} : { nodeFile: node.nodeFile }),
-        ...(node.addon === undefined ? {} : { addon: node.addon }),
-      })) ?? validation.value.workflow.nodes;
-    for (const node of nodesToPersist) {
-      if (node.addon !== undefined) {
-        continue;
-      }
-      if (node.nodeFile === undefined) {
-        continue;
-      }
-      const prefersNodeFilePayload =
-        validation.value.workflow.nodeRegistry !== undefined &&
-        hasStepAddressedDerivedNodePayload({
-          workflow: validation.value.workflow,
-          nodeId: node.id,
-          nodeFile: node.nodeFile,
-          nodePayloads: normalizedNodePayloads,
-        });
-      const payload =
-        validation.value.workflow.nodeRegistry !== undefined
-          ? prefersNodeFilePayload
-            ? (normalizedNodePayloads[node.nodeFile] ??
-              normalizedNodePayloads[node.id])
-            : (normalizedNodePayloads[node.id] ??
-              normalizedNodePayloads[node.nodeFile])
-          : (normalizedNodePayloads[node.nodeFile] ??
-            normalizedNodePayloads[node.id]);
-      if (payload === undefined) {
-        return err({
-          code: "VALIDATION",
-          message: `missing node payload for ${node.nodeFile}`,
-          issues: [
-            {
-              severity: "error",
-              path: `bundle.nodePayloads.${node.nodeFile}`,
-              message: "required payload is missing",
-            },
-          ],
-        });
-      }
+    for (const node of persistencePlan.value.nodesToPersist) {
       await persistNodePayload({
         workflowDirectory,
         nodeFile: node.nodeFile,
-        payload,
+        payload: node.payload,
       });
     }
     await removeStaleWorkflowFiles({
       workflowDirectory,
-      existingNodeFiles: existingWorkflowFileState.value.existingNodeFiles,
-      existingStepFiles: existingWorkflowFileState.value.existingStepFiles,
-      existingPromptTemplateFiles:
-        existingWorkflowFileState.value.existingPromptTemplateFiles,
-      persistedNodeFiles: nodeFiles,
-      persistedStepFiles: stepFiles,
-      persistedPromptTemplateFiles: collectReferencedPromptTemplateFiles(
-        referencedNodePayloads,
-      ),
+      staleNodeFiles: persistencePlan.value.staleFiles.nodeFiles,
+      staleStepFiles: persistencePlan.value.staleFiles.stepFiles,
+      stalePromptTemplateFiles:
+        persistencePlan.value.staleFiles.promptTemplateFiles,
     });
     await rm(
       path.join(workflowDirectory, OBSOLETE_WORKFLOW_VISUALIZATION_FILE),
@@ -989,8 +503,8 @@ export async function saveWorkflowToDisk(
 
   const revision = await computeWorkflowRevisionFromFiles(
     workflowDirectory,
-    nodeFiles,
-    [...stepFiles, ...collectPromptTemplateFiles(referencedNodePayloads)],
+    persistencePlan.value.finalRevisionNodeFiles,
+    persistencePlan.value.finalRevisionExtraFiles,
   );
   if (!revision.ok) {
     return err({ code: "IO", message: revision.error.message });

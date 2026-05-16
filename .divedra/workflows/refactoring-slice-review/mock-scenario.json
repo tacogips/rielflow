@@ -1,0 +1,49 @@
+{
+  "slice-review": {
+    "provider": "scenario-mock",
+    "model": "gpt-5.5",
+    "when": {
+      "has_findings": true
+    },
+    "payload": {
+      "sliceId": "workflow-runtime-boundary",
+      "title": "Workflow runtime boundary",
+      "ownedPaths": ["src/workflow"],
+      "reviewedPaths": [
+        "src/workflow/adapter-execution.ts",
+        "src/workflow/addon-package-boundary.ts"
+      ],
+      "findings": [
+        {
+          "severity": "mid",
+          "file": "src/workflow/addon-package-boundary.ts",
+          "line": 149,
+          "problem": "Validation and native execution can drift when package add-on loading is duplicated.",
+          "recommendedRefactor": "Route validation and execution through one typed package-boundary loader.",
+          "risk": "A package may validate successfully but fail at execution time.",
+          "confidence": "high"
+        }
+      ],
+      "proposedTasks": [
+        {
+          "taskId": "REF-001",
+          "title": "Unify add-on package boundary loading",
+          "ownedPaths": [
+            "src/workflow/addon-package-boundary.ts",
+            "src/workflow/adapter-execution.ts"
+          ],
+          "blockedBy": [],
+          "verificationCommands": [
+            "bun test src/workflow/addon-package-boundary.test.ts"
+          ]
+        }
+      ],
+      "conflictNotes": [],
+      "verificationSuggestions": [
+        "bun test src/workflow/addon-package-boundary.test.ts",
+        "bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows"
+      ],
+      "residualRisks": []
+    }
+  }
+}

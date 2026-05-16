@@ -6,6 +6,7 @@ import {
   type AdapterProcessLog,
   type NodeAdapter,
 } from "./adapter";
+import { loadBoundaryAddonPackage } from "./addon-package-boundary";
 import type { NodeExecutionMailbox } from "./node-execution-mailbox";
 import { loadRuntimeSessionSummary } from "./runtime-db";
 import { err, ok, type Result } from "./result";
@@ -77,6 +78,13 @@ type SupervisionStallController = {
   readonly promise: Promise<never>;
 };
 
+type ExecutionTimeoutController = {
+  readonly controller: AbortController;
+  readonly clear: () => void;
+  readonly expired: () => boolean;
+  readonly promise: Promise<never>;
+};
+
 interface PackageNodeExecutionInput {
   readonly workflowDirectory: string;
   readonly workflowWorkingDirectory: string;
@@ -106,32 +114,44 @@ type NativeNodeExecutor = (
   },
 ) => Promise<AdapterExecutionOutput>;
 
+interface PackageNodeExecutionDependencies {
+  readonly loadExecutor?: () => Promise<NativeNodeExecutor>;
+}
+
 const nativeNodeExecutorExportName = ["execute", "Native", "Node"].join("");
-const addonEntrypointCandidates = [
-  "../packages/divedra-addons/dist/index.js",
-  "../../packages/divedra-addons/dist/index.js",
-  "../../divedra-addons/dist/index.js",
-] as const;
 
 async function loadPackageNodeExecutor(): Promise<NativeNodeExecutor> {
-  let lastError: unknown;
-  for (const candidate of addonEntrypointCandidates) {
-    try {
-      const module = (await import(
-        new URL(candidate, import.meta.url).href
-      )) as Readonly<Record<string, unknown>>;
-      const executor = module[nativeNodeExecutorExportName];
-      if (typeof executor === "function") {
-        return executor as NativeNodeExecutor;
-      }
-    } catch (error: unknown) {
-      lastError = error;
-    }
+  const module = await loadBoundaryAddonPackage().catch((error: unknown) => {
+    const reason = error instanceof Error ? `: ${error.message}` : "";
+    throw new AdapterExecutionError(
+      "provider_error",
+      `unable to load add-on node executor${reason}`,
+    );
+  });
+  const executor = module[nativeNodeExecutorExportName];
+  if (typeof executor === "function") {
+    return executor as NativeNodeExecutor;
   }
-  const reason = lastError instanceof Error ? `: ${lastError.message}` : "";
   throw new AdapterExecutionError(
     "provider_error",
-    `unable to load add-on node executor${reason}`,
+    "add-on package does not expose native node execution",
+  );
+}
+
+function throwIfNativeExecutionAlreadyAborted(input: {
+  readonly signal: AbortSignal;
+  readonly timeoutExpired: boolean;
+  readonly timeoutMessage: string;
+}): void {
+  if (!input.signal.aborted) {
+    return;
+  }
+  if (input.timeoutExpired) {
+    throw new AdapterExecutionError("timeout", input.timeoutMessage);
+  }
+  throw new AdapterExecutionError(
+    "provider_error",
+    "native node execution aborted before start",
   );
 }
 
@@ -192,34 +212,55 @@ function attachSupervisionStallToAbort(
   return { clear, promise };
 }
 
+function createRejectingExecutionTimeout(input: {
+  readonly timeoutMs: number;
+  readonly timeoutMessage: string;
+}): ExecutionTimeoutController {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timeoutExpired = false;
+  const promise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      timeoutExpired = true;
+      controller.abort();
+      reject(new AdapterExecutionError("timeout", input.timeoutMessage));
+    }, input.timeoutMs);
+  });
+  return {
+    controller,
+    clear: () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    },
+    expired: () => timeoutExpired,
+    promise,
+  };
+}
+
 export async function executeAdapterWithTimeout(
   adapter: NodeAdapter,
   input: AdapterExecutionInput,
   timeoutMs: number,
   supervisionStall?: SupervisionStallWatch,
 ): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let timeoutExpired = false;
   const timeoutMessage = "adapter execution timed out";
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      timeoutExpired = true;
-      controller.abort();
-      reject(new AdapterExecutionError("timeout", timeoutMessage));
-    }, timeoutMs);
+  const timeout = createRejectingExecutionTimeout({
+    timeoutMs,
+    timeoutMessage,
   });
   const stall = supervisionStall
-    ? attachSupervisionStallToAbort(controller, supervisionStall)
+    ? attachSupervisionStallToAbort(timeout.controller, supervisionStall)
     : undefined;
 
   try {
     const output = await Promise.race([
       adapter.execute(input, {
         timeoutMs,
-        signal: controller.signal,
+        signal: timeout.controller.signal,
       }),
-      timeoutPromise,
+      timeout.promise,
       ...(stall ? [stall.promise] : []),
     ]);
     return ok(output);
@@ -228,13 +269,11 @@ export async function executeAdapterWithTimeout(
       toExecutionFailure(error, {
         timeoutMessage,
         unknownFailureMessage: "unknown adapter execution failure",
-        timeoutExpired,
+        timeoutExpired: timeout.expired(),
       }),
     );
   } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
+    timeout.clear();
     stall?.clear();
   }
 }
@@ -244,26 +283,35 @@ export async function executePackageNodeWithTimeout(
     readonly timeoutMs: number;
     readonly supervisionStall?: SupervisionStallWatch;
   },
+  dependencies: PackageNodeExecutionDependencies = {},
 ): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
-  const controller = new AbortController();
-  let timeoutExpired = false;
   const timeoutMessage = "native node execution timed out";
-  const timer = setTimeout(() => {
-    timeoutExpired = true;
-    controller.abort();
-  }, input.timeoutMs);
+  const timeout = createRejectingExecutionTimeout({
+    timeoutMs: input.timeoutMs,
+    timeoutMessage,
+  });
   const { supervisionStall, ...rest } = input;
   const stall = supervisionStall
-    ? attachSupervisionStallToAbort(controller, supervisionStall)
+    ? attachSupervisionStallToAbort(timeout.controller, supervisionStall)
     : undefined;
 
   try {
-    const executePackageNode = await loadPackageNodeExecutor();
-    const output = await Promise.race([
-      executePackageNode(rest, {
+    const loadExecutor = dependencies.loadExecutor ?? loadPackageNodeExecutor;
+    const packageExecution = (async (): Promise<AdapterExecutionOutput> => {
+      const executePackageNode = await loadExecutor();
+      throwIfNativeExecutionAlreadyAborted({
+        signal: timeout.controller.signal,
+        timeoutExpired: timeout.expired(),
+        timeoutMessage,
+      });
+      return await executePackageNode(rest, {
         timeoutMs: input.timeoutMs,
-        signal: controller.signal,
-      }),
+        signal: timeout.controller.signal,
+      });
+    })();
+    const output = await Promise.race([
+      packageExecution,
+      timeout.promise,
       ...(stall ? [stall.promise] : []),
     ]);
     return ok(output);
@@ -272,11 +320,11 @@ export async function executePackageNodeWithTimeout(
       toExecutionFailure(error, {
         timeoutMessage,
         unknownFailureMessage: "unknown native node execution failure",
-        timeoutExpired,
+        timeoutExpired: timeout.expired(),
       }),
     );
   } finally {
-    clearTimeout(timer);
+    timeout.clear();
     stall?.clear();
   }
 }

@@ -8,6 +8,7 @@ import {
   DEFAULT_SUPERVISER_WORKFLOW_ID,
   DEFAULT_WORKFLOW_MUTATION_MODE,
   normalizeAutoImprovePolicy,
+  parseAutoImprovePolicyInput,
   resolveSuperviserWorkflowId,
 } from "./auto-improve-policy";
 
@@ -216,5 +217,48 @@ describe("normalizeAutoImprovePolicy", () => {
       stallTimeoutMs: 900_000,
       maxWorkflowPatches: 9,
     });
+  });
+});
+
+describe("parseAutoImprovePolicyInput", () => {
+  test("accepts raw nested superviser auto-improve policy input", () => {
+    const result = parseAutoImprovePolicyInput(
+      {
+        enabled: true,
+        monitorIntervalMs: 1500,
+        workflowMutationMode: "execution-copy",
+        allowTargetedRerun: false,
+      },
+      "args.autoImprove",
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value).toEqual({
+      enabled: true,
+      monitorIntervalMs: 1500,
+      workflowMutationMode: "execution-copy",
+      allowTargetedRerun: false,
+    });
+  });
+
+  test("preserves parser validation messages for raw policy input", () => {
+    const result = parseAutoImprovePolicyInput(
+      {
+        enabled: true,
+        maxWorkflowPatches: Number.NaN,
+      },
+      "args.autoImprove",
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toBe(
+      "args.autoImprove.maxWorkflowPatches must be a finite number when provided",
+    );
   });
 });

@@ -1,0 +1,166 @@
+{
+  "workflowId": "refactoring-divide-and-conquer",
+  "description": "Divide the codebase into package or related processing-group slices, review slices concurrently, merge findings into a refactoring plan, implement one bounded task at a time, self-review, independently post-review, and loop until the plan is complete or only accepted residual risks remain.",
+  "defaults": {
+    "fanoutConcurrency": 8,
+    "maxLoopIterations": 60,
+    "nodeTimeoutMs": 3600000,
+    "supervision": {
+      "monitorIntervalMs": 15000,
+      "stallTimeoutMs": 900000
+    }
+  },
+  "prompts": {
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start by slicing the codebase. Dispatch read-only slice reviews through bounded fanout. Merge review results into a deduplicated refactoring plan. If workflowInput.executionMode requests plan-only, finish after plan creation. Otherwise implement exactly one ready plan task per implementation pass, self-review it, then run an independent post-refactor review. Route back to implementation when high or mid findings remain. If the task is accepted and the plan still has ready tasks, continue with the next task. Finish only when the plan is complete, blocked, or only accepted low residual risks remain. Do not stage, commit, push, or revert unrelated dirty worktree changes.",
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep slice ids, plan ids, task ids, changed files, verification commands, review findings, routing flags, blockers, and residual risks explicit."
+  },
+  "managerStepId": "divedra-manager",
+  "entryStepId": "divedra-manager",
+  "nodes": [
+    {
+      "id": "divedra-manager",
+      "nodeFile": "nodes/node-divedra-manager.json"
+    },
+    {
+      "id": "step1-slice-codebase",
+      "nodeFile": "nodes/node-step1-slice-codebase.json"
+    },
+    {
+      "id": "step3-merge-review-plan",
+      "nodeFile": "nodes/node-step3-merge-review-plan.json"
+    },
+    {
+      "id": "step4-implement-next-task",
+      "nodeFile": "nodes/node-step4-implement-next-task.json"
+    },
+    {
+      "id": "step5-self-review",
+      "nodeFile": "nodes/node-step5-self-review.json"
+    },
+    {
+      "id": "step6-post-refactor-review",
+      "nodeFile": "nodes/node-step6-post-refactor-review.json"
+    },
+    {
+      "id": "workflow-output",
+      "kind": "output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "divedra-manager",
+      "nodeId": "divedra-manager",
+      "description": "Start the refactoring divide-and-conquer workflow.",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "step1-slice-codebase"
+        }
+      ]
+    },
+    {
+      "id": "step1-slice-codebase",
+      "nodeId": "step1-slice-codebase",
+      "description": "Divide the codebase into bounded package or processing-group review slices.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "slice-review",
+          "toWorkflowId": "refactoring-slice-review",
+          "resumeStepId": "step3-merge-review-plan",
+          "label": "has_review_slices",
+          "fanout": {
+            "groupId": "refactoring-slice-review",
+            "itemsFrom": "/payload/reviewSlices",
+            "itemVariable": "refactorSlice",
+            "concurrency": 8,
+            "joinStepId": "step3-merge-review-plan",
+            "failurePolicy": "fail-fast",
+            "resultOrder": "input",
+            "writeOwnership": {
+              "mode": "read-only"
+            }
+          }
+        },
+        {
+          "toStepId": "workflow-output",
+          "label": "no_review_slices"
+        }
+      ]
+    },
+    {
+      "id": "step3-merge-review-plan",
+      "nodeId": "step3-merge-review-plan",
+      "description": "Merge concurrent slice-review results into a deduplicated, dependency-aware refactoring plan.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output",
+          "label": "plan_only"
+        },
+        {
+          "toStepId": "workflow-output",
+          "label": "no_plan_tasks"
+        },
+        {
+          "toStepId": "step4-implement-next-task",
+          "label": "implementation_ready"
+        }
+      ]
+    },
+    {
+      "id": "step4-implement-next-task",
+      "nodeId": "step4-implement-next-task",
+      "description": "Implement exactly one ready refactoring task from the merged plan.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step5-self-review"
+        }
+      ]
+    },
+    {
+      "id": "step5-self-review",
+      "nodeId": "step5-self-review",
+      "description": "Self-review the latest implementation task before independent review.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step4-implement-next-task",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step6-post-refactor-review",
+          "label": "!(needs_revision)"
+        }
+      ]
+    },
+    {
+      "id": "step6-post-refactor-review",
+      "nodeId": "step6-post-refactor-review",
+      "description": "Independently review the latest refactoring task and decide whether to revise, continue, or finish.",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "step4-implement-next-task",
+          "label": "needs_revision"
+        },
+        {
+          "toStepId": "step4-implement-next-task",
+          "label": "plan_remaining"
+        },
+        {
+          "toStepId": "workflow-output",
+          "label": "workflow_complete"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "description": "Publish final refactoring plan, implementation status, verification evidence, and residual risks.",
+      "role": "worker"
+    }
+  ]
+}

@@ -95,6 +95,55 @@ describe("session-store", () => {
     expect(loaded.value.activeUserActions).toEqual([]);
   });
 
+  test("uses injected session snapshot indexer when saving", async () => {
+    const root = await makeTempDir();
+    const indexedSessionIds: string[] = [];
+    const session = createSessionState({
+      sessionId: "sess-index001",
+      workflowName: "wf",
+      workflowId: "wf",
+      initialNodeId: "manager",
+      runtimeVariables: {},
+    });
+
+    const save = await saveSession(session, {
+      sessionStoreRoot: root,
+      sessionSnapshotIndexer: {
+        async saveSnapshot(savedSession) {
+          indexedSessionIds.push(savedSession.sessionId);
+        },
+      },
+    });
+
+    expect(save.ok).toBe(true);
+    expect(indexedSessionIds).toEqual([session.sessionId]);
+  });
+
+  test("does not fail primary save when snapshot indexing fails", async () => {
+    const root = await makeTempDir();
+    const session = createSessionState({
+      sessionId: "sess-indexfail",
+      workflowName: "wf",
+      workflowId: "wf",
+      initialNodeId: "manager",
+      runtimeVariables: {},
+    });
+
+    const save = await saveSession(session, {
+      sessionStoreRoot: root,
+      sessionSnapshotIndexer: {
+        async saveSnapshot() {
+          throw new Error("index unavailable");
+        },
+      },
+    });
+
+    expect(save.ok).toBe(true);
+    await expect(
+      readFile(path.join(root, `${session.sessionId}.json`), "utf8"),
+    ).resolves.toContain(session.sessionId);
+  });
+
   test("save/load roundtrip preserves supervision state", async () => {
     const root = await makeTempDir();
     const session: ReturnType<typeof createSessionState> = {

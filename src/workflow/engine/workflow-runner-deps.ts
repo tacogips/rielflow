@@ -134,10 +134,6 @@ import {
   workflowRunFailure,
 } from "./types-and-session-state";
 import { applyOptionalManagerDecisions } from "./cross-workflow-dispatch";
-import {
-  executeCrossWorkflowDispatchesForNode,
-  executeLocalFanoutTransition,
-} from "./fanout-dispatch";
 import { runNestedSuperviserSessionDriver } from "./auto-improve-and-runner";
 import {
   buildLatestOutputMailboxIndex,
@@ -244,8 +240,6 @@ export const workflowRunnerDeps = {
   upsertPendingOptionalNodeDecision,
   workflowRunFailure,
   applyOptionalManagerDecisions,
-  executeCrossWorkflowDispatchesForNode,
-  executeLocalFanoutTransition,
   runNestedSuperviserSessionDriver,
   buildLatestOutputMailboxIndex,
   buildCommitMessageTemplate,

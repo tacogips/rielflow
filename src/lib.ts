@@ -1,4 +1,4 @@
-import { runWorkflow, type WorkflowRunOptions } from "./workflow/engine";
+import { runWorkflow } from "./workflow/engine";
 import {
   executeGraphqlRequest,
   type GraphqlClientRequest,
@@ -36,6 +36,7 @@ import type { WorkflowSessionState } from "./workflow/session";
 import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type { ChatReplyDispatcher, LoadOptions } from "./workflow/types";
 import { normalizeWorkflowWorkingDirectoryOverride } from "./workflow/working-directory";
+import { buildLibraryWorkflowRunOptions } from "./lib-workflow-run-options";
 
 export type DivedraOptions = LoadOptions & SessionStoreOptions;
 
@@ -91,23 +92,6 @@ export interface RerunWorkflowInput extends DivedraOptions {
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
   readonly autoImprove?: AutoImprovePolicyInput;
-}
-
-export interface ContinueWorkflowFromHistoryInput extends DivedraOptions {
-  readonly sourceWorkflowExecutionId: string;
-  /** Inclusive imported-history boundary (`nodeExecId` / step-run id). */
-  readonly afterStepRunId: string;
-  /** Entry step id for the new workflow execution. */
-  readonly startStepId: string;
-  readonly workflowWorkingDirectory?: string;
-  readonly runtimeVariables?: Readonly<Record<string, unknown>>;
-  readonly mockScenario?: MockNodeScenario;
-  readonly maxSteps?: number;
-  readonly maxLoopIterations?: number;
-  readonly defaultTimeoutMs?: number;
-  readonly dryRun?: boolean;
-  readonly autoImprove?: AutoImprovePolicyInput;
-  readonly nestedSuperviserDriver?: boolean;
 }
 
 export interface WorkflowExecutionClientOptions extends DivedraOptions {
@@ -435,68 +419,16 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
   readonly status: WorkflowSessionState["status"];
   readonly exitCode: number;
 }> {
-  const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
-    input.workflowWorkingDirectory,
-  );
-  const options: WorkflowRunOptions = {
-    ...(input.workflowRoot === undefined
-      ? {}
-      : { workflowRoot: input.workflowRoot }),
-    ...(input.workflowScope === undefined
-      ? {}
-      : { workflowScope: input.workflowScope }),
-    ...(input.userRoot === undefined ? {} : { userRoot: input.userRoot }),
-    ...(input.projectRoot === undefined
-      ? {}
-      : { projectRoot: input.projectRoot }),
-    ...(input.artifactRoot === undefined
-      ? {}
-      : { artifactRoot: input.artifactRoot }),
-    ...(input.rootDataDir === undefined
-      ? {}
-      : { rootDataDir: input.rootDataDir }),
-    ...(input.sessionStoreRoot === undefined
-      ? {}
-      : { sessionStoreRoot: input.sessionStoreRoot }),
-    ...(input.scheduledEventManager === undefined
-      ? {}
-      : { scheduledEventManager: input.scheduledEventManager }),
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
-    ...(input.asyncNodeAddonResolvers === undefined
-      ? {}
-      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
-    ...(input.nodeAddonResolvers === undefined
-      ? {}
-      : { nodeAddonResolvers: input.nodeAddonResolvers }),
-    ...(workflowWorkingDirectory === undefined
-      ? {}
-      : { workflowWorkingDirectory }),
-    ...(input.runtimeVariables === undefined
-      ? {}
-      : { runtimeVariables: input.runtimeVariables }),
-    ...(input.mockScenario === undefined
-      ? {}
-      : { mockScenario: input.mockScenario }),
-    ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
-    ...(input.eventReplyDispatcher === undefined
-      ? {}
-      : { eventReplyDispatcher: input.eventReplyDispatcher }),
-    ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
-    ...(input.maxLoopIterations === undefined
-      ? {}
-      : { maxLoopIterations: input.maxLoopIterations }),
-    ...(input.defaultTimeoutMs === undefined
-      ? {}
-      : { defaultTimeoutMs: input.defaultTimeoutMs }),
-    ...(input.disableAutoImprove
-      ? { autoImprove: createLifecycleSupervisionPolicyInput() }
-      : { autoImprove: input.autoImprove ?? { enabled: true } }),
-    ...(input.nestedSuperviserDriver === true
-      ? { nestedSuperviserDriver: true as const }
-      : {}),
-  };
+  const options = buildLibraryWorkflowRunOptions(input, {
+    includeWorkflowSourceOptions: true,
+    includeRuntimeVariables: true,
+    includeExecutionLimits: true,
+    includeDryRun: true,
+    includeEventReplyDispatcher: true,
+    autoImprove: input.disableAutoImprove
+      ? createLifecycleSupervisionPolicyInput()
+      : (input.autoImprove ?? { enabled: true }),
+  });
   const executionOptions = await resolveWorkflowCatalogOptions(
     input.workflowName,
     options,
@@ -517,50 +449,16 @@ export async function resumeWorkflow(input: ResumeWorkflowInput): Promise<{
   readonly status: WorkflowSessionState["status"];
   readonly exitCode: number;
 }> {
-  const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
-    input.workflowWorkingDirectory,
-  );
   const existing = await loadSession(input.sessionId, input);
   if (!existing.ok) {
     throw new Error(existing.error.message);
   }
   const result = await runWorkflow(existing.value.workflowName, {
-    ...(input.workflowRoot === undefined
-      ? {}
-      : { workflowRoot: input.workflowRoot }),
-    ...(input.artifactRoot === undefined
-      ? {}
-      : { artifactRoot: input.artifactRoot }),
-    ...(input.rootDataDir === undefined
-      ? {}
-      : { rootDataDir: input.rootDataDir }),
-    ...(input.sessionStoreRoot === undefined
-      ? {}
-      : { sessionStoreRoot: input.sessionStoreRoot }),
-    ...(input.scheduledEventManager === undefined
-      ? {}
-      : { scheduledEventManager: input.scheduledEventManager }),
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
-    ...(input.asyncNodeAddonResolvers === undefined
-      ? {}
-      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
-    ...(input.nodeAddonResolvers === undefined
-      ? {}
-      : { nodeAddonResolvers: input.nodeAddonResolvers }),
-    ...(workflowWorkingDirectory === undefined
-      ? {}
-      : { workflowWorkingDirectory }),
-    ...(input.mockScenario === undefined
-      ? {}
-      : { mockScenario: input.mockScenario }),
-    ...(input.autoImprove === undefined
-      ? {}
-      : { autoImprove: input.autoImprove }),
-    ...(input.nestedSuperviserDriver === true
-      ? { nestedSuperviserDriver: true as const }
-      : {}),
+    ...buildLibraryWorkflowRunOptions(input, {
+      ...(input.autoImprove === undefined
+        ? {}
+        : { autoImprove: input.autoImprove }),
+    }),
     resumeSessionId: existing.value.sessionId,
   });
   if (!result.ok) {
@@ -579,60 +477,21 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   readonly rerunFromStepId: string;
   readonly exitCode: number;
 }> {
-  const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
-    input.workflowWorkingDirectory,
-  );
   const source = await loadSession(input.sourceSessionId, input);
   if (!source.ok) {
     throw new Error(source.error.message);
   }
   const result = await runWorkflow(source.value.workflowName, {
-    ...(input.workflowRoot === undefined
-      ? {}
-      : { workflowRoot: input.workflowRoot }),
-    ...(input.artifactRoot === undefined
-      ? {}
-      : { artifactRoot: input.artifactRoot }),
-    ...(input.rootDataDir === undefined
-      ? {}
-      : { rootDataDir: input.rootDataDir }),
-    ...(input.sessionStoreRoot === undefined
-      ? {}
-      : { sessionStoreRoot: input.sessionStoreRoot }),
-    ...(input.scheduledEventManager === undefined
-      ? {}
-      : { scheduledEventManager: input.scheduledEventManager }),
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
-    ...(input.asyncNodeAddonResolvers === undefined
-      ? {}
-      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
-    ...(input.nodeAddonResolvers === undefined
-      ? {}
-      : { nodeAddonResolvers: input.nodeAddonResolvers }),
-    ...(workflowWorkingDirectory === undefined
-      ? {}
-      : { workflowWorkingDirectory }),
-    ...(input.runtimeVariables === undefined
-      ? {}
-      : { runtimeVariables: input.runtimeVariables }),
-    ...(input.mockScenario === undefined
-      ? {}
-      : { mockScenario: input.mockScenario }),
+    ...buildLibraryWorkflowRunOptions(input, {
+      includeRuntimeVariables: true,
+      includeExecutionLimits: true,
+      includeDryRun: true,
+      ...(input.autoImprove === undefined
+        ? {}
+        : { autoImprove: input.autoImprove }),
+    }),
     rerunFromSessionId: source.value.sessionId,
     rerunFromStepId: input.fromStepId,
-    ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
-    ...(input.maxLoopIterations === undefined
-      ? {}
-      : { maxLoopIterations: input.maxLoopIterations }),
-    ...(input.defaultTimeoutMs === undefined
-      ? {}
-      : { defaultTimeoutMs: input.defaultTimeoutMs }),
-    ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
-    ...(input.autoImprove === undefined
-      ? {}
-      : { autoImprove: input.autoImprove }),
   });
   if (!result.ok) {
     throw new Error(result.error.message);
@@ -645,86 +504,10 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   };
 }
 
-export async function continueWorkflowFromHistory(
-  input: ContinueWorkflowFromHistoryInput,
-): Promise<{
-  readonly sessionId: string;
-  readonly status: WorkflowSessionState["status"];
-  readonly exitCode: number;
-  readonly continuedAfterStepRunId: string;
-  readonly continuedStartStepId: string;
-}> {
-  const workflowWorkingDirectory = normalizeWorkflowWorkingDirectoryOverride(
-    input.workflowWorkingDirectory,
-  );
-  const source = await loadSession(input.sourceWorkflowExecutionId, input);
-  if (!source.ok) {
-    throw new Error(source.error.message);
-  }
-  const result = await runWorkflow(source.value.workflowName, {
-    ...(input.workflowRoot === undefined
-      ? {}
-      : { workflowRoot: input.workflowRoot }),
-    ...(input.artifactRoot === undefined
-      ? {}
-      : { artifactRoot: input.artifactRoot }),
-    ...(input.rootDataDir === undefined
-      ? {}
-      : { rootDataDir: input.rootDataDir }),
-    ...(input.sessionStoreRoot === undefined
-      ? {}
-      : { sessionStoreRoot: input.sessionStoreRoot }),
-    ...(input.scheduledEventManager === undefined
-      ? {}
-      : { scheduledEventManager: input.scheduledEventManager }),
-    ...(input.env === undefined ? {} : { env: input.env }),
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-    ...(input.nodeAddons === undefined ? {} : { nodeAddons: input.nodeAddons }),
-    ...(input.asyncNodeAddonResolvers === undefined
-      ? {}
-      : { asyncNodeAddonResolvers: input.asyncNodeAddonResolvers }),
-    ...(input.nodeAddonResolvers === undefined
-      ? {}
-      : { nodeAddonResolvers: input.nodeAddonResolvers }),
-    ...(workflowWorkingDirectory === undefined
-      ? {}
-      : { workflowWorkingDirectory }),
-    ...(input.runtimeVariables === undefined
-      ? {}
-      : { runtimeVariables: input.runtimeVariables }),
-    ...(input.mockScenario === undefined
-      ? {}
-      : { mockScenario: input.mockScenario }),
-    continueFromWorkflowExecutionId: source.value.sessionId,
-    continueAfterStepRunId: input.afterStepRunId,
-    continueStartStepId: input.startStepId,
-    ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps }),
-    ...(input.maxLoopIterations === undefined
-      ? {}
-      : { maxLoopIterations: input.maxLoopIterations }),
-    ...(input.defaultTimeoutMs === undefined
-      ? {}
-      : { defaultTimeoutMs: input.defaultTimeoutMs }),
-    ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
-    ...(input.autoImprove === undefined
-      ? {}
-      : { autoImprove: input.autoImprove }),
-    ...(input.nestedSuperviserDriver === true
-      ? { nestedSuperviserDriver: true as const }
-      : {}),
-  });
-  if (!result.ok) {
-    throw new Error(result.error.message);
-  }
-  return {
-    sessionId: result.value.session.sessionId,
-    status: result.value.session.status,
-    exitCode: result.value.exitCode,
-    continuedAfterStepRunId: input.afterStepRunId.trim(),
-    continuedStartStepId: input.startStepId.trim(),
-  };
-}
-
+export {
+  continueWorkflowFromHistory,
+  type ContinueWorkflowFromHistoryInput,
+} from "./lib-continuation";
 export {
   listMergedWorkflowExecutionStepRuns,
   type MergedWorkflowExecutionStepRunRow,

@@ -255,8 +255,12 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
   }
   return path.join(resolveRootDataDir(options), "divedra.db");
 }
-export async function withDatabase<T>(
+
+export type RuntimeDatabaseSchemaExtension = (db: Database) => void;
+
+export async function withRuntimeDatabase<T>(
   options: LoadOptions,
+  schemaExtensions: readonly RuntimeDatabaseSchemaExtension[],
   action: (db: Database) => T,
 ): Promise<T> {
   const dbPath = resolveRuntimeDbPath(options);
@@ -264,10 +268,20 @@ export async function withDatabase<T>(
   const db = new Database(dbPath);
   try {
     ensureSchema(db);
+    for (const extendSchema of schemaExtensions) {
+      extendSchema(db);
+    }
     return action(db);
   } finally {
     db.close();
   }
+}
+
+export async function withDatabase<T>(
+  options: LoadOptions,
+  action: (db: Database) => T,
+): Promise<T> {
+  return await withRuntimeDatabase(options, [], action);
 }
 export interface RuntimeSessionRow {
   readonly session_id: string;

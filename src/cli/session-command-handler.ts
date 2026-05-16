@@ -1,7 +1,5 @@
-import {
-  continueWorkflowFromHistory,
-  listMergedWorkflowExecutionStepRuns,
-} from "../lib";
+import { continueWorkflowFromHistory } from "../lib-continuation";
+import { listMergedWorkflowExecutionStepRuns } from "../lib-step-runs";
 import { runWorkflow } from "../workflow/engine";
 import { buildFanoutGroupSummaries } from "../workflow/inspect";
 import { listRuntimeNodeLogs } from "../workflow/runtime-db";
@@ -28,10 +26,8 @@ import {
   parseStepRunExecutionStatusFilter,
   printHelp,
   readMockScenarioOption,
+  readRemoteWorkflowExecutionPayload,
   rejectUnsupportedRemoteMockScenario,
-  requireNumberField,
-  requireObjectField,
-  requireStringField,
   serializeRuntimeNodeLogs,
   writeExportFile,
   writeTextFile,
@@ -240,34 +236,22 @@ export async function runCliSessionScope(
             },
           },
         });
-        const payload = requireObjectField(
-          data["resumeWorkflowExecution"],
+        const payload = readRemoteWorkflowExecutionPayload(
+          data,
           "resumeWorkflowExecution",
-        );
-        const sessionId = requireStringField(
-          payload["sessionId"],
-          "resumeWorkflowExecution.sessionId",
-        );
-        const status = requireStringField(
-          payload["status"],
-          "resumeWorkflowExecution.status",
-        );
-        const exitCode = requireNumberField(
-          payload["exitCode"],
-          "resumeWorkflowExecution.exitCode",
         );
 
         if (parsed.options.output === "json") {
           emitJson(io, {
-            sessionId,
-            status,
-            exitCode,
+            sessionId: payload.sessionId,
+            status: payload.status,
+            exitCode: payload.exitCode,
           });
         } else {
-          io.stdout(`session resumed: ${sessionId}`);
-          io.stdout(`status: ${status}`);
+          io.stdout(`session resumed: ${payload.sessionId}`);
+          io.stdout(`status: ${payload.status}`);
         }
-        return exitCode;
+        return payload.exitCode;
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "unknown error";
@@ -446,38 +430,26 @@ export async function runCliSessionScope(
             },
           },
         });
-        const payload = requireObjectField(
-          data["rerunWorkflowExecution"],
+        const payload = readRemoteWorkflowExecutionPayload(
+          data,
           "rerunWorkflowExecution",
-        );
-        const sessionId = requireStringField(
-          payload["sessionId"],
-          "rerunWorkflowExecution.sessionId",
-        );
-        const status = requireStringField(
-          payload["status"],
-          "rerunWorkflowExecution.status",
-        );
-        const exitCode = requireNumberField(
-          payload["exitCode"],
-          "rerunWorkflowExecution.exitCode",
         );
 
         if (parsed.options.output === "json") {
           emitJson(io, {
             sourceSessionId: sessionTarget,
-            sessionId,
-            status,
+            sessionId: payload.sessionId,
+            status: payload.status,
             rerunFromStepId: fromStepId,
-            exitCode,
+            exitCode: payload.exitCode,
           });
         } else {
           io.stdout(`sourceSessionId: ${sessionTarget}`);
-          io.stdout(`rerun session: ${sessionId}`);
+          io.stdout(`rerun session: ${payload.sessionId}`);
           io.stdout(`rerunFromStepId: ${fromStepId}`);
-          io.stdout(`status: ${status}`);
+          io.stdout(`status: ${payload.status}`);
         }
-        return exitCode;
+        return payload.exitCode;
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "unknown error";

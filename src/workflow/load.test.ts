@@ -125,6 +125,33 @@ describe("loadWorkflowFromDisk", () => {
     ]);
   });
 
+  test("reports workflow-relative stepFile path diagnostics with the stepFile field name", async () => {
+    const workflowRoot = makeTempDir();
+    const workflowDirectory = path.join(workflowRoot, "demo");
+    writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "demo",
+      description: "demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "manager",
+      nodes: [{ id: "manager", nodeFile: "nodes/node-manager.json" }],
+      steps: [{ id: "manager", stepFile: "../manager-step.json" }],
+    });
+
+    const result = await loadWorkflowFromDisk("demo", { workflowRoot });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toContainEqual({
+      severity: "error",
+      path: "workflow.steps[0].stepFile",
+      message:
+        "stepFile '../manager-step.json' must be a workflow-relative path without '.' or '..' segments",
+    });
+  });
+
   test("resolves workflows by authored workflowId even when the directory name differs", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({

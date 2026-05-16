@@ -702,4 +702,65 @@ describe("validateWorkflowBundle", () => {
     });
     expect(asyncResult.ok).toBe(true);
   });
+
+  test("sync and async validation infer callee manager entry from stepFile", async () => {
+    const workflowRoot = makeTempDir();
+    const caller = makeStepAddressedRaw();
+    caller.workflow["steps"] = [
+      {
+        id: "manager",
+        nodeId: "manager",
+        role: "manager",
+        transitions: [
+          {
+            toStepId: "child-manager",
+            toWorkflowId: "child-flow",
+            resumeStepId: "after-child",
+          },
+        ],
+      },
+      {
+        id: "after-child",
+        nodeId: "after-child",
+        role: "worker",
+      },
+    ];
+
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "child-directory",
+      workflow: {
+        workflowId: "child-flow",
+        description: "child",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "child-entry",
+        nodes: [
+          { id: "child-manager", nodeFile: "nodes/node-child-manager.json" },
+        ],
+        steps: [{ id: "child-manager", stepFile: "steps/manager.json" }],
+      },
+      nodePayloads: {
+        "nodes/node-child-manager.json": {
+          id: "child-manager",
+          promptTemplate: "child manager",
+          variables: {},
+        },
+      },
+    });
+    writeJson(
+      path.join(workflowRoot, "child-directory", "steps/manager.json"),
+      {
+        nodeId: "child-manager",
+        role: "manager",
+      },
+    );
+
+    const syncResult = validateWorkflowBundleDetailed(caller, { workflowRoot });
+    expect(syncResult.ok).toBe(true);
+
+    const asyncResult = await validateWorkflowBundleAsync(caller, {
+      workflowRoot,
+    });
+    expect(asyncResult.ok).toBe(true);
+  });
 });

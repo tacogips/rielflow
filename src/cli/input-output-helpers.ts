@@ -586,6 +586,25 @@ export function requireArrayField(
   }
   return value;
 }
+export interface RemoteWorkflowExecutionPayload {
+  readonly sessionId: string;
+  readonly status: string;
+  readonly exitCode: number;
+}
+export function readRemoteWorkflowExecutionPayload(
+  data: Readonly<Record<string, unknown>>,
+  fieldName: string,
+): RemoteWorkflowExecutionPayload {
+  const payload = requireObjectField(data[fieldName], fieldName);
+  return {
+    sessionId: requireStringField(
+      payload["sessionId"],
+      `${fieldName}.sessionId`,
+    ),
+    status: requireStringField(payload["status"], `${fieldName}.status`),
+    exitCode: requireNumberField(payload["exitCode"], `${fieldName}.exitCode`),
+  };
+}
 export function resolveCliEnv(
   deps: CliDependencies,
 ): Readonly<Record<string, string | undefined>> {

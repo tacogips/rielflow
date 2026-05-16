@@ -9,6 +9,9 @@ project catalog.
 ## Available Workflows
 
 - `design-and-implement-review-loop`: issue intake, design-doc update, design self-review, design review, implementation-plan creation, implementation-plan self-review, implementation-plan review, optional implementation with self-review, and final review.
+- `refactoring-divide-and-conquer`: divide the codebase into package or related processing-group slices, review slices concurrently through `refactoring-slice-review`, merge findings into a refactoring plan, implement one bounded task at a time, self-review, independently post-review, and loop until complete.
+- `refactoring-slice-review`: read-only review workflow used as the fanout child for one refactoring slice.
+- `impl-plan-completion-loop`: execute active implementation-plan tasks until the selected target plan is completed, without staging, committing, or pushing.
 - `recent-change-quality-loop`: review recent committed and uncommitted changes, fix blocking findings, and loop until only low-severity risks remain.
 
 ## Root Commands
@@ -16,48 +19,54 @@ project catalog.
 List available workflows from this repository:
 
 ```bash
-task divedra-workflows
+bun run src/main.ts workflow list
 ```
 
-Validate the bundled design-and-implement workflow:
+Validate the bundled workflows:
 
 ```bash
-task divedra-design-loop-validate
+bun run src/main.ts workflow validate design-and-implement-review-loop
+bun run src/main.ts workflow validate refactoring-divide-and-conquer
+bun run src/main.ts workflow validate refactoring-slice-review
+bun run src/main.ts workflow validate impl-plan-completion-loop
+bun run src/main.ts workflow validate recent-change-quality-loop
 ```
 
-Validate the bundled recent-change workflow:
+Inspect workflow usage:
 
 ```bash
-task divedra-recent-change-validate
-```
-
-Run any `divedra` command through the local submodule:
-
-```bash
-task divedra -- workflow list
-task divedra -- workflow inspect design-and-implement-review-loop --output json
-task divedra -- workflow usage --output json
+bun run src/main.ts workflow inspect design-and-implement-review-loop --output json
+bun run src/main.ts workflow usage --output json
 ```
 
 Run the bundled planning and implementation workflow with its deterministic mock
 scenario:
 
 ```bash
-task divedra -- workflow run design-and-implement-review-loop \
+bun run src/main.ts workflow run design-and-implement-review-loop \
   --mock-scenario .divedra/workflows/design-and-implement-review-loop/mock-scenario.json \
+  --output json
+```
+
+Run the refactoring workflow in deterministic plan-only mode:
+
+```bash
+bun run src/main.ts workflow run refactoring-divide-and-conquer \
+  --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json \
+  --variables '{"workflowInput":{"executionMode":"plan-only","targetPaths":["src/workflow","src/cli"],"maxSlices":2}}' \
   --output json
 ```
 
 Run the bundled recent-change workflow with its deterministic mock scenario:
 
 ```bash
-task divedra -- workflow run recent-change-quality-loop \
+bun run src/main.ts workflow run recent-change-quality-loop \
   --mock-scenario .divedra/workflows/recent-change-quality-loop/mock-scenario.json \
   --output json
 ```
 
-For direct `nix` usage without `task`, the equivalent entry point is:
+For `nix` usage, the equivalent entry point is:
 
 ```bash
-nix run ./divedra -- workflow list
+nix run .#divedra -- workflow list
 ```
