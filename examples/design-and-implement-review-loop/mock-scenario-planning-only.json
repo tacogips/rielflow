@@ -18,19 +18,19 @@
     },
     "payload": {
       "workflowMode": "design-plan-only",
-      "problemSummary": "Plan how a sample CLI should adopt codex-agent-style session history behavior without implementing it yet.",
+      "problemSummary": "Plan how cursor-agent should adopt codex-agent-style session history behavior without implementing it yet.",
       "acceptanceSignals": [
-        "The design maps the target codex-agent behavior to sample CLI boundaries.",
+        "The design maps the target codex-agent behavior to cursor-agent boundaries.",
         "The implementation plan is accepted and ready for a later execution workflow."
       ],
-      "impactedAreas": ["src/cli", "src/adapters", "impl-plans/active"],
+      "impactedAreas": ["src/cli", "src/cursor", "impl-plans/active"],
       "constraints": [
         "Use codex-agent as a behavioral reference only.",
-        "Keep product-specific behavior behind adapter modules."
+        "Keep Cursor-specific behavior behind adapter modules."
       ],
       "unknowns": [],
       "risks": [
-        "Reference behavior may not map one-to-one onto local session state."
+        "Reference behavior may not map one-to-one onto local Cursor state."
       ],
       "codexAgentReferences": [
         "../../codex-agent/src/session",
@@ -56,14 +56,14 @@
         "codexAgentReferences": [
           "../../codex-agent/src/session"
         ],
-        "referenceBehaviorMapping": [
-          "Map codex-agent session history behavior to sample CLI transcript discovery."
+        "cursorCliBehaviorMapping": [
+          "Map codex-agent session history behavior to cursor-agent local Cursor transcript discovery."
         ],
-        "designSummary": "Drafted the design but did not describe the sample adapter boundary clearly.",
-        "decisions": ["Use local session state as the product boundary."],
+        "designSummary": "Drafted the design but did not describe the Cursor adapter boundary clearly.",
+        "decisions": ["Use local Cursor state as the product boundary."],
         "openQuestions": [],
         "issueToDesignMapping": [
-          "Codex-reference session history behavior must map to sample transcript discovery and local indexing."
+          "Codex-reference session history behavior must map to Cursor transcript discovery and local indexing."
         ],
         "intentionalDivergences": [],
         "addressedFeedback": [],
@@ -86,24 +86,24 @@
           "../../codex-agent/src/session",
           "../../codex-agent/src/cli"
         ],
-        "referenceBehaviorMapping": [
-          "Map codex-agent session history behavior to sample CLI transcript discovery.",
-          "Keep transcript parsing behind src/adapters modules."
+        "cursorCliBehaviorMapping": [
+          "Map codex-agent session history behavior to cursor-agent local Cursor transcript discovery.",
+          "Keep Cursor transcript parsing behind src/cursor adapters."
         ],
-        "designSummary": "Revised the design with explicit sample adapter boundaries and CLI behavior.",
+        "designSummary": "Revised the design with explicit Cursor adapter boundaries and CLI behavior.",
         "decisions": [
-          "Use local session state as the product boundary.",
-          "Keep raw transcript payload handling inside adapter modules."
+          "Use local Cursor state as the product boundary.",
+          "Keep raw Cursor payload handling inside adapter modules."
         ],
         "openQuestions": [],
         "issueToDesignMapping": [
-          "Codex-reference session history behavior maps to sample CLI transcript discovery and CLI output."
+          "Codex-reference session history behavior maps to cursor-agent transcript discovery and CLI output."
         ],
         "intentionalDivergences": [
-          "The sample CLI reads local session state instead of codex-agent transcript sources."
+          "cursor-agent reads Cursor local state instead of codex-agent transcript sources."
         ],
         "addressedFeedback": [
-          "Clarified sample adapter boundary and reference mapping."
+          "Clarified Cursor adapter boundary and reference mapping."
         ],
         "risks": []
       }
@@ -140,11 +140,11 @@
             "severity": "mid",
             "file": "design-docs/specs/design-codex-reference-session-history.md",
             "line": 1,
-            "message": "The design references codex-agent behavior but does not define the sample adapter boundary."
+            "message": "The design references codex-agent behavior but does not define the Cursor adapter boundary."
           }
         ],
         "feedback": [
-          "Define which sample adapter owns raw transcript parsing and explain the codex-agent divergence."
+          "Define which cursor-agent adapter owns raw Cursor transcript parsing and explain the codex-agent divergence."
         ],
         "accepted": false
       }
@@ -387,7 +387,7 @@
         "../../codex-agent/src/session",
         "../../codex-agent/src/cli"
       ],
-      "designReviewSummary": "Design accepted after sample adapter boundaries and codex-agent divergence were clarified.",
+      "designReviewSummary": "Design accepted after Cursor adapter boundaries and codex-agent divergence were clarified.",
       "implPlanReviewSummary": "Implementation plan and design consistency review accepted after transcript edge-case tasks were added.",
       "commitMessage": "docs: add codex-reference session history design and plan",
       "commitHash": "fedcba9876543210fedcba9876543210fedcba98",

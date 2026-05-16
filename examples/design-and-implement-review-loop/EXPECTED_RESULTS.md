@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir ./examples
+nix run ./divedra -- workflow validate design-and-implement-review-loop
 ```
 
 Expected result: the workflow is valid.
@@ -18,9 +18,8 @@ Expected result: the workflow is valid.
 Issue-resolution command:
 
 ```bash
-bun run src/main.ts workflow run design-and-implement-review-loop \
-  --workflow-definition-dir ./examples \
-  --mock-scenario ./examples/design-and-implement-review-loop/mock-scenario.json \
+nix run ./divedra -- workflow run design-and-implement-review-loop \
+  --mock-scenario .divedra/workflows/design-and-implement-review-loop/mock-scenario.json \
   --output json
 ```
 
@@ -31,8 +30,8 @@ Expected stable run summary:
   "status": "completed",
   "workflowName": "design-and-implement-review-loop",
   "workflowId": "design-and-implement-review-loop",
-  "nodeExecutions": 25,
-  "transitions": 24,
+  "nodeExecutions": 24,
+  "transitions": 23,
   "exitCode": 0
 }
 ```
@@ -45,7 +44,7 @@ Expected final output payload:
 {
   "status": "accepted",
   "workflowMode": "issue-resolution",
-  "issueReference": "divedra/examples#123",
+  "issueReference": "tacogips/cursor-agent#123",
   "issueTitle": "Persist workflow review findings across reruns",
   "designDocPaths": [
     "design-docs/specs/design-workflow-review-findings.md",
@@ -80,9 +79,8 @@ Expected final output payload:
 Planning-only command:
 
 ```bash
-bun run src/main.ts workflow run design-and-implement-review-loop \
-  --workflow-definition-dir ./examples \
-  --mock-scenario ./examples/design-and-implement-review-loop/mock-scenario-planning-only.json \
+nix run ./divedra -- workflow run design-and-implement-review-loop \
+  --mock-scenario .divedra/workflows/design-and-implement-review-loop/mock-scenario-planning-only.json \
   --output json
 ```
 
@@ -93,8 +91,8 @@ Expected planning-only run summary:
   "status": "completed",
   "workflowName": "design-and-implement-review-loop",
   "workflowId": "design-and-implement-review-loop",
-  "nodeExecutions": 18,
-  "transitions": 17,
+  "nodeExecutions": 17,
+  "transitions": 16,
   "exitCode": 0
 }
 ```
@@ -113,7 +111,7 @@ Expected planning-only final output payload:
     "../../codex-agent/src/session",
     "../../codex-agent/src/cli"
   ],
-  "designReviewSummary": "Design accepted after sample adapter boundaries and codex-agent divergence were clarified.",
+  "designReviewSummary": "Design accepted after Cursor adapter boundaries and codex-agent divergence were clarified.",
   "implPlanReviewSummary": "Implementation plan and design consistency review accepted after transcript edge-case tasks were added.",
   "commitMessage": "docs: add codex-reference session history design and plan",
   "commitHash": "fedcba9876543210fedcba9876543210fedcba98",

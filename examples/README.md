@@ -3,8 +3,10 @@
 This directory contains reference workflow bundles that can be validated or run
 without copying them into `./.divedra`.
 
-Each example directory also includes `EXPECTED_RESULTS.md`, which records the
-stable assertions used for deterministic verification.
+Each workflow example directory also includes `EXPECTED_RESULTS.md`, which
+records the stable assertions used for deterministic verification. Support
+directories such as `auto-improve/`, `default-supervisor-dispatcher/`, and
+`event-sources/` document cross-workflow demos and fixtures.
 
 Shipped reference bundles use the step-addressed authored shape; repository
 tests may still construct legacy fixtures under explicit non-strict validation.
@@ -16,8 +18,8 @@ tests may still construct legacy fixtures under explicit non-strict validation.
   `resumeStepId` (executed as a derived cross-workflow dispatch at runtime; not stored on `workflow.workflowCalls`)
 - shipped workflow bundles omit structural `subWorkflows` and
   `subWorkflowConversations`; multi-round demos use explicit steps (for example a
-  judge step with labeled `transitions`, as in `codex-codex-euthanasia-debate`
-  and the foreach lane in `node-combinations-showcase`)
+  judge step with labeled `transitions`, as in `codex-codex-topic-debate` and
+  the foreach lane in `node-combinations-showcase`)
 - node payload files live under `nodes/` by default
 - grouped lane payloads may live under `workflows/*/nodes/`
 
@@ -594,48 +596,17 @@ Live execution note:
 - actual backend session continuation still depends on the configured
   `claude-code-agent` or `codex-agent` backend returning a reusable session id
 
-### `codex-codex-euthanasia-debate`
-
-Step-addressed debate bundle for the node-local prompt split:
-
-- two `codex-agent` speaker lanes (grouped under `workflows/*/nodes/`) debate euthanasia from opposing positions
-- the affirmative speaker uses a node-local `systemPromptTemplateFile`
-- the negative speaker uses a different node-local `systemPromptTemplateFile`
-- both speakers use `sessionStartPromptTemplateFile` with the first-turn wrapper format:
-  `##prompt ... ## args ...`
-- after each full affirmative-then-negative round, `debate-judge` chooses labeled
-  transitions (`continue_debate` / `!(continue_debate)`) to loop or finish at
-  `debate-summary`; the bundled mock runs six rounds (same node-execution depth as
-  the former structural conversation fixture)
-
-Validate it:
-
-```bash
-bun run src/main.ts workflow validate codex-codex-euthanasia-debate --workflow-definition-dir ./examples
-```
-
-Inspect it:
-
-```bash
-bun run src/main.ts workflow inspect codex-codex-euthanasia-debate --workflow-definition-dir ./examples --output json
-```
-
-Run it with the bundled deterministic scenario:
-
-```bash
-bun run src/main.ts workflow run codex-codex-euthanasia-debate \
-  --workflow-definition-dir ./examples \
-  --mock-scenario ./examples/codex-codex-euthanasia-debate/mock-scenario.json \
-  --output json
-```
-
 ### `codex-codex-topic-debate`
 
-Live-agent topic debate bundle for runtime-provided debate prompts:
+Live-agent topic debate bundle for runtime-provided debate prompts. This is the
+canonical debate example and replaces the older hard-coded topic variant:
 
 - two `codex-agent` speaker lanes use `gpt-5.3-codex-spark`
 - the topic comes from `runtimeVariables.humanInput.request`
+- the speaker lanes remain grouped under `workflows/*/nodes/`
 - speaker nodes bind `arguments.topic` from the normalized input step
+- speakers use node-local `systemPromptTemplateFile` and
+  `sessionStartPromptTemplateFile` prompt assets
 - output contracts force debate handoff payloads into structured JSON
 - `debate-judge` returns business JSON with `continue_debate`; branch routing
   falls back to payload booleans when no adapter `when` flag is present
@@ -643,13 +614,13 @@ Live-agent topic debate bundle for runtime-provided debate prompts:
 Validate it:
 
 ```bash
-bun src/main.ts workflow validate codex-codex-topic-debate --workflow-definition-dir ./examples
+bun run src/main.ts workflow validate codex-codex-topic-debate --workflow-definition-dir ./examples
 ```
 
 Run it with live backend execution:
 
 ```bash
-bun src/main.ts workflow run codex-codex-topic-debate \
+bun run src/main.ts workflow run codex-codex-topic-debate \
   --workflow-definition-dir ./examples \
   --variables '{"humanInput":{"request":"Debate immigration policy. The affirmative side should argue for more open immigration with managed legal pathways, and the negative side should argue for stricter border and asylum controls."}}' \
   --output json

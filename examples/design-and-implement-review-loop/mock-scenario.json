@@ -18,7 +18,7 @@
     },
     "payload": {
       "workflowMode": "issue-resolution",
-      "issueReference": "divedra/examples#123",
+      "issueReference": "tacogips/cursor-agent#123",
       "issueTitle": "Persist workflow review findings across reruns",
       "problemSummary": "Review findings are lost across reruns, so subsequent retries cannot reliably address earlier review feedback.",
       "acceptanceSignals": [
@@ -49,12 +49,12 @@
       },
       "payload": {
         "workflowMode": "issue-resolution",
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "designDocPaths": [
           "design-docs/specs/design-workflow-review-findings.md"
         ],
         "codexAgentReferences": [],
-        "referenceBehaviorMapping": [],
+        "cursorCliBehaviorMapping": [],
         "designSummary": "Drafted the design for persisted review findings but left retention behavior inline as an unresolved note.",
         "decisions": [
           "Persist review findings alongside workflow execution metadata."
@@ -80,13 +80,13 @@
       },
       "payload": {
         "workflowMode": "issue-resolution",
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "designDocPaths": [
           "design-docs/specs/design-workflow-review-findings.md",
           "design-docs/user-qa/qa-review-finding-retention.md"
         ],
         "codexAgentReferences": [],
-        "referenceBehaviorMapping": [],
+        "cursorCliBehaviorMapping": [],
         "designSummary": "Revised the design to move retention policy into user QA while keeping the persistence boundary and replay behavior explicit.",
         "decisions": [
           "Persist review findings alongside workflow execution metadata.",
@@ -167,7 +167,7 @@
       },
       "payload": {
         "workflowMode": "issue-resolution",
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
         "designReferences": [
           "design-docs/specs/design-workflow-review-findings.md"
@@ -197,7 +197,7 @@
       },
       "payload": {
         "workflowMode": "issue-resolution",
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "implPlanPaths": ["impl-plans/active/workflow-review-findings.md"],
         "designReferences": [
           "design-docs/specs/design-workflow-review-findings.md"
@@ -303,7 +303,7 @@
         "always": true
       },
       "payload": {
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "changedFiles": [
           "src/workflow/review-findings.ts",
           "src/workflow/review-findings.test.ts",
@@ -324,7 +324,7 @@
         "always": true
       },
       "payload": {
-        "issueReference": "divedra/examples#123",
+        "issueReference": "tacogips/cursor-agent#123",
         "changedFiles": [
           "src/workflow/review-findings.ts",
           "src/workflow/review-findings.test.ts",
@@ -508,7 +508,7 @@
     "payload": {
       "status": "accepted",
       "workflowMode": "issue-resolution",
-      "issueReference": "divedra/examples#123",
+      "issueReference": "tacogips/cursor-agent#123",
       "issueTitle": "Persist workflow review findings across reruns",
       "designDocPaths": [
         "design-docs/specs/design-workflow-review-findings.md",

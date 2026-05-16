@@ -1,1 +1,0 @@
-Produce the next debate turn from the {{stanceLabel}} side on euthanasia. If `inbox.latest.output.argument` exists, rebut it directly. Return JSON with `stance`, `argument`, `responseToOpponent`, and `done`.

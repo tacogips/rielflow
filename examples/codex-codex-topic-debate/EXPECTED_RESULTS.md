@@ -9,7 +9,7 @@ focus on validation and runtime shape rather than fixed text.
 Command:
 
 ```bash
-bun src/main.ts workflow validate codex-codex-topic-debate --workflow-definition-dir ./examples
+bun run src/main.ts workflow validate codex-codex-topic-debate --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -19,7 +19,7 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun src/main.ts workflow run codex-codex-topic-debate \
+bun run src/main.ts workflow run codex-codex-topic-debate \
   --workflow-definition-dir ./examples \
   --variables '{"humanInput":{"request":"Debate immigration policy. The affirmative side should argue for more open immigration with managed legal pathways, and the negative side should argue for stricter border and asylum controls."}}' \
   --output json
