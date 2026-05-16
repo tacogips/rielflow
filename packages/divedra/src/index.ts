@@ -591,6 +591,8 @@ export type {
   NodeAddonPayloadResolver,
   NodeAddonResolveInput,
   NodeAddonResolveResult,
+  NodeAddonValidateInput,
+  NodeAddonValidateResult,
   NodePayload,
   ResolvedWorkflowSource,
   SupervisionIncident,
@@ -703,6 +705,13 @@ export type {
   CallStepSuccess,
 } from "divedra-core";
 export { deriveWorkflowVisualization } from "divedra-core";
+export {
+  NodeValidationResult,
+  hasInvalidNodeValidationResult,
+  type NodeValidationResultInput,
+  type NodeValidationSource,
+  type NodeValidationStatus,
+} from "divedra-core";
 export { getSupervisionSummary };
 export {
   buildMutableWorkflowWorkspace,

@@ -260,8 +260,17 @@ export function runSemanticValidation(
       return;
     }
 
+    const isManagerNode =
+      node.role === "manager" ||
+      node.id === bundle.workflow.managerStepId ||
+      bundle.workflow.steps.some(
+        (step) =>
+          step.nodeId === node.id &&
+          resolveWorkflowStepExecutionRole(bundle.workflow, step) === "manager",
+      );
+
     if (
-      node.role === "manager" &&
+      isManagerNode &&
       (payload.nodeType === "command" ||
         payload.nodeType === "container" ||
         payload.nodeType === "sleep" ||
@@ -276,7 +285,7 @@ export function runSemanticValidation(
         ),
       );
     }
-    if (node.role !== "manager" && payload.managerType !== undefined) {
+    if (!isManagerNode && payload.managerType !== undefined) {
       issues.push(
         makeIssue(
           "error",

@@ -85,6 +85,11 @@ Dedicated branch/loop authoring is removed in favor of jump-driven routing.
 - Node output ingestion contract: ordinary node completion is runtime-captured in the execution path itself, not discovered by periodic scanning for `output.json` files. File watching is only an adapter-local fallback for special external backends and must still feed results back into the runtime-owned completion path.
 - Timeout inspection fallback: if the normal transition/notification path fails, Divedra still needs a deterministic inspection path for node `status`, published `output.json`, `meta.json`, and timeout/failure messages via GraphQL `nodeExecution(...)` or internal runtime-db/session helpers.
 - Node backend/model contract: node payloads use explicit `executionBackend` plus provider-specific `model`; new authored workflows should not encode backend selection inside `model`.
+- Node executability validation contract: workflow validation may return
+  `NodeValidationResult(status,message)` records for resolved node payloads,
+  add-on hooks, and adapter-owned backend preflight. Structural validation stays
+  passive by default; active CLI/model/auth probes require an explicit
+  executable preflight request such as `workflow validate --executable`.
 - Prompt layering contract: node payloads may provide `systemPromptTemplate*` and `sessionStartPromptTemplate*` so stable role instructions and first-session bootstrapping are separated from per-execution prompt bodies.
 - External output publication contract: the externally published workflow result is selected from the latest accepted root-scope `output` node artifact in the current workflow execution, not from an arbitrary last manager or worker response.
 - Handoff checkpoint contract: accepted node executions persist `handoff.json` metadata and `commit-message.txt` operator helpers so Git/Jujutsu checkpoint workflows can track exact input/output provenance without becoming runtime dependencies.

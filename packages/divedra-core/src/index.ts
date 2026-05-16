@@ -108,6 +108,8 @@ export type {
   NodeAddonPayloadResolver,
   NodeAddonResolveInput,
   NodeAddonResolveResult,
+  NodeAddonValidateInput,
+  NodeAddonValidateResult,
   NodeExecutionBackend,
   NodeOutputContract,
   NodePayload,
@@ -174,6 +176,13 @@ export {
   validateJsonSchemaDefinition,
   validateJsonValueAgainstSchema,
 } from "./json-schema";
+export {
+  NodeValidationResult,
+  hasInvalidNodeValidationResult,
+  type NodeValidationResultInput,
+  type NodeValidationSource,
+  type NodeValidationStatus,
+} from "../../../src/workflow/validate/node-validation-result";
 export { callStep } from "../../../src/workflow/call-step";
 export type {
   CallStepFailure,

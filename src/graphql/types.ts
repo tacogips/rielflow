@@ -274,6 +274,7 @@ export interface SaveWorkflowDefinitionPayload
 export interface ValidateWorkflowDefinitionInput {
   readonly workflowName: string;
   readonly bundle?: GraphqlWorkflowBundleInput;
+  readonly executablePreflight?: boolean;
 }
 
 export interface GraphqlWorkflowBundleInput {

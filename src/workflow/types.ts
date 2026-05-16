@@ -1,3 +1,5 @@
+import type { NodeValidationResult } from "./validate/node-validation-result";
+
 export type CliAgentBackend =
   | "codex-agent"
   | "claude-code-agent"
@@ -84,11 +86,13 @@ export interface NodeAddonResolveInput {
   readonly nodeId: string;
   readonly addon: WorkflowNodeAddonRef;
   readonly path: string;
+  readonly executablePreflight?: boolean;
 }
 
 export interface NodeAddonResolveResult {
   readonly payload?: NodePayload;
   readonly issues?: readonly ValidationIssue[];
+  readonly nodeValidationResults?: readonly NodeValidationResult[];
 }
 
 export type NodeAddonPayloadResolver = (
@@ -96,6 +100,18 @@ export type NodeAddonPayloadResolver = (
 ) => NodeAddonResolveResult | undefined;
 
 export type Awaitable<T> = T | Promise<T>;
+
+export interface NodeAddonValidateInput {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly resolvedPayload?: NodePayload;
+  readonly path: string;
+  readonly executablePreflight: boolean;
+}
+
+export type NodeAddonValidateResult =
+  | NodeValidationResult
+  | readonly NodeValidationResult[];
 
 export type AsyncNodeAddonPayloadResolver = (
   input: NodeAddonResolveInput,
@@ -109,6 +125,9 @@ export interface NodeAddonDefinition {
   readonly name: string;
   readonly version?: string;
   readonly resolve: NodeAddonDefinitionResolver;
+  readonly validate?: (
+    input: NodeAddonValidateInput,
+  ) => Awaitable<NodeAddonValidateResult>;
 }
 
 export interface WorkflowNodeRepeatPolicy {
@@ -857,6 +876,7 @@ export interface LoadOptions {
   readonly nodeAddons?: readonly NodeAddonDefinition[];
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
+  readonly executablePreflight?: boolean;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";
