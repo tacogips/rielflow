@@ -607,7 +607,7 @@ interface XGatewayReadAddonConfig {
 Defaults:
 
 - `image`: runtime default x-gateway image
-- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `podman`
+- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `docker`
 - `runnerPath`: `workflow.defaults.containerRuntime.runnerPath` or the runner
   kind executable name
 - `networkPolicy`: runner default egress behavior
@@ -707,7 +707,7 @@ interface XGatewayAddonConfig {
 Defaults:
 
 - `image`: runtime default x-gateway image
-- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `podman`
+- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `docker`
 - `runnerPath`: `workflow.defaults.containerRuntime.runnerPath` or the runner
   kind executable name
 - `networkPolicy`: runner default egress behavior
@@ -791,7 +791,7 @@ interface MailGatewayReadAddonConfig {
 Defaults:
 
 - `image`: runtime default mail-gateway image
-- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `podman`
+- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `docker`
 - `runnerPath`: `workflow.defaults.containerRuntime.runnerPath` or the runner
   kind executable name
 - `networkPolicy`: runner default egress behavior
@@ -876,7 +876,7 @@ interface MailGatewayAddonConfig {
 Defaults:
 
 - `image`: runtime default mail-gateway image
-- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `podman`
+- `runnerKind`: `workflow.defaults.containerRuntime.runnerKind` or `docker`
 - `runnerPath`: `workflow.defaults.containerRuntime.runnerPath` or the runner
   kind executable name
 - `networkPolicy`: runner default egress behavior

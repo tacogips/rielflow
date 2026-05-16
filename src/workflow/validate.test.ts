@@ -17,6 +17,7 @@ import {
 import {
   getStructuralEdges,
   getStructuralLoops,
+  DEFAULT_CONTAINER_RUNNER_KIND,
   DEFAULT_NODE_TIMEOUT_MS,
   resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerStepId,
@@ -265,6 +266,26 @@ describe("workflow defaults", () => {
     expect(result.value.workflow.defaults.nodeTimeoutMs).toBe(
       DEFAULT_NODE_TIMEOUT_MS,
     );
+  });
+
+  test("defaults omitted container runner kind to Docker", () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["defaults"] = {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      containerRuntime: {},
+    };
+
+    const result = validateWorkflowBundle(raw);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected workflow validation to succeed");
+    }
+    expect(result.value.workflow.defaults.containerRuntime).toEqual({
+      runnerKind: DEFAULT_CONTAINER_RUNNER_KIND,
+    });
+    expect(DEFAULT_CONTAINER_RUNNER_KIND).toBe("docker");
   });
 });
 

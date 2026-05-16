@@ -31,8 +31,8 @@ Workflow defaults may declare:
 {
   "defaults": {
     "containerRuntime": {
-      "runnerKind": "podman",
-      "runnerPath": "/usr/bin/podman"
+      "runnerKind": "docker",
+      "runnerPath": "/usr/bin/docker"
     }
   }
 }
@@ -87,12 +87,12 @@ or:
 
 ## Rules
 
-- `workflow.defaults.containerRuntime.runnerKind` defaults to `podman`
+- `workflow.defaults.containerRuntime.runnerKind` defaults to `docker`
 - `workflow.defaults.containerRuntime.runnerPath` is optional
 - `nodeType = "container"` requires a `container` object
 - `container` nodes do not require agent-only `model` or `promptTemplate` fields
 - `container.runnerKind`, when omitted, falls back to workflow defaults and then
-  to `podman`
+  to `docker`
 - `container.runnerPath`, when omitted, falls back to workflow defaults
 - exactly one image source must be declared for a `container` node:
   - `image`

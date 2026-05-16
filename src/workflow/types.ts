@@ -890,7 +890,7 @@ export interface EffectiveRoots {
 
 export const DEFAULT_MAX_LOOP_ITERATIONS = 3;
 export const DEFAULT_NODE_TIMEOUT_MS = 60 * 60 * 1000;
-export const DEFAULT_CONTAINER_RUNNER_KIND: ContainerRunnerKind = "podman";
+export const DEFAULT_CONTAINER_RUNNER_KIND: ContainerRunnerKind = "docker";
 export const DEFAULT_WORKFLOW_ROOT = "./.divedra";
 
 /** Subdirectories inside the root data directory (`DIVEDRA_ARTIFACT_DIR` / computed default). */

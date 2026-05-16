@@ -297,7 +297,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     expect(
       findRequirement(
         readiness.requirements,
-        "container-runner:podman:/definitely/missing/podman",
+        "container-runner:docker:/definitely/missing/podman",
       ),
     ).toMatchObject({
       kind: "container-runner",

@@ -81,6 +81,58 @@ tasks:
     cmds:
       - gitleaks git --pre-commit --redact --staged --verbose
 
+  colima:docker:
+    desc: Restart the Colima Docker runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: docker
+          COLIMA_RUNTIME: docker
+
+  colima:all:
+    desc: Restart all Colima runtime profiles managed by this Taskfile
+    cmds:
+      - task: colima:docker
+      - task: colima:containerd
+      - task: colima:incus
+
+  colima:containerd:
+    desc: Restart the Colima containerd runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: containerd
+          COLIMA_RUNTIME: containerd
+
+  colima:nerdctl:
+    desc: Restart the Colima containerd profile for nerdctl
+    cmds:
+      - task: colima:containerd
+
+  colima:incus:
+    desc: Restart the Colima Incus runtime profile
+    cmds:
+      - task: colima:start
+        vars:
+          COLIMA_PROFILE: incus
+          COLIMA_RUNTIME: incus
+
+  colima:start:
+    internal: true
+    requires:
+      vars:
+        - COLIMA_PROFILE
+        - COLIMA_RUNTIME
+    cmds:
+      - |
+        set -euo pipefail
+
+        if colima status "{{.COLIMA_PROFILE}}" >/dev/null 2>&1; then
+          colima stop "{{.COLIMA_PROFILE}}"
+        fi
+
+        colima start "{{.COLIMA_PROFILE}}" --runtime "{{.COLIMA_RUNTIME}}"
+
   install-git-hooks:
     desc: Install the Nix-managed pre-commit hook configuration
     cmds:

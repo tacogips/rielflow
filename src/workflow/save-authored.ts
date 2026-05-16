@@ -51,7 +51,7 @@ export function collectAuthoredStepFiles(
 export function isDefaultContainerRuntime(value: unknown): boolean {
   return (
     isRecord(value) &&
-    value["runnerKind"] === "podman" &&
+    value["runnerKind"] === "docker" &&
     value["runnerPath"] === undefined
   );
 }

@@ -368,7 +368,7 @@ function resolveGatewayRunner(input: {
   readonly runnerCommand: string;
 } {
   const runnerKind =
-    input.addon.config.runnerKind ?? input.defaults?.runnerKind ?? "podman";
+    input.addon.config.runnerKind ?? input.defaults?.runnerKind ?? "docker";
   if (!isContainerRunnerWithDockerCli(runnerKind)) {
     throw new AdapterExecutionError(
       "policy_blocked",

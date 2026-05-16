@@ -432,7 +432,7 @@ export function resolveContainerRunner(input: {
   readonly runnerCommand: string;
 } {
   const runnerKind =
-    input.container.runnerKind ?? input.defaults?.runnerKind ?? "podman";
+    input.container.runnerKind ?? input.defaults?.runnerKind ?? "docker";
   return {
     runnerKind,
     runnerCommand:
