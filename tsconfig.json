@@ -5,6 +5,23 @@
     "lib": ["ESNext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "divedra-core": ["packages/divedra-core/src/index.ts"],
+      "divedra-core/*": ["packages/divedra-core/src/*.ts"],
+      "divedra-addons": ["packages/divedra-addons/src/index.ts"],
+      "divedra-addons/*": ["packages/divedra-addons/src/*.ts"],
+      "divedra-adapters": ["packages/divedra-adapters/src/index.ts"],
+      "divedra-adapters/*": ["packages/divedra-adapters/src/*.ts"],
+      "divedra-graphql": ["packages/divedra-graphql/src/index.ts"],
+      "divedra-graphql/*": ["packages/divedra-graphql/src/*.ts"],
+      "divedra-events": ["packages/divedra-events/src/index.ts"],
+      "divedra-events/*": ["packages/divedra-events/src/*.ts"],
+      "divedra-hook": ["packages/divedra-hook/src/index.ts"],
+      "divedra-hook/*": ["packages/divedra-hook/src/*.ts"],
+      "divedra-server": ["packages/divedra-server/src/index.ts"],
+      "divedra-server/*": ["packages/divedra-server/src/*.ts"]
+    },
     "types": ["bun-types"],
 
     /* Emit */

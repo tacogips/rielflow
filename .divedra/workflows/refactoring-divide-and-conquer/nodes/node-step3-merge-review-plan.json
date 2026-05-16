@@ -1,0 +1,11 @@
+{
+  "id": "step3-merge-review-plan",
+  "description": "Aggregate slice-review outputs into a deduplicated refactoring plan.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step3-merge-review-plan.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with plan_only, has_plan_tasks, plan path, task DAG, rejected findings, and verification strategy."
+  }
+}

@@ -8,9 +8,11 @@ import {
   buildFanoutGroupRunId,
   buildFanoutJoinRuntimeVariables,
   buildFanoutRuntimeVariables,
+  buildFanoutGroupRunRecord,
   findPriorBranchWorkspaceRoot,
   persistFanoutJoinOutputRef,
   prepareFanoutBranchWorkspace,
+  reduceFanoutBranchResults,
   resolveFanoutConcurrency,
   resolveFanoutItems,
   runBoundedFanoutBranches,
@@ -25,7 +27,12 @@ import {
   type WorkflowSessionState,
 } from "../session";
 import { loadSession, saveSession } from "../session-store";
-import type { NodePayload, WorkflowEdge, WorkflowJson } from "../types";
+import type {
+  NodePayload,
+  WorkflowEdge,
+  WorkflowJson,
+  WorkflowStepFanout,
+} from "../types";
 import { resolveWorkflowManagerStepId } from "../types";
 import type {
   EngineExecutionGuards,
@@ -59,7 +66,7 @@ import {
 } from "./mailbox-and-communications";
 import { runWorkflow } from "./auto-improve-and-runner";
 
-export async function executeLocalFanoutTransition(input: {
+interface ExecuteLocalFanoutTransitionInput {
   readonly workflowName: string;
   readonly workflow: WorkflowJson;
   readonly session: WorkflowSessionState;
@@ -78,7 +85,336 @@ export async function executeLocalFanoutTransition(input: {
   readonly crossWorkflowInvocationStack: readonly string[];
   readonly edge: WorkflowEdge;
   readonly nodePayloads: Readonly<Record<string, NodePayload>>;
-}): Promise<Result<CrossWorkflowDispatchExecutionResult, string>> {
+}
+
+interface LocalFanoutBranchExecutionState {
+  firstFailure?: string;
+  firstPause?: string;
+  workingSession: WorkflowSessionState;
+}
+
+async function executeLocalFanoutBranch(input: {
+  readonly transitionInput: ExecuteLocalFanoutTransitionInput;
+  readonly fanout: WorkflowStepFanout;
+  readonly fanoutGroupRunId: string;
+  readonly baseRuntimeVariables: Readonly<Record<string, unknown>>;
+  readonly state: LocalFanoutBranchExecutionState;
+  readonly branchIndex: number;
+  readonly item: unknown;
+}): Promise<FanoutBranchRecord> {
+  const transitionInput = input.transitionInput;
+  const supersededWorkspaceRoot = findPriorBranchWorkspaceRoot({
+    priorGroups: transitionInput.session.fanoutGroups ?? [],
+    groupId: input.fanout.groupId,
+    branchIndex: input.branchIndex,
+  });
+  const supersededRef =
+    supersededWorkspaceRoot === undefined ? {} : { supersededWorkspaceRoot };
+  const workItemId = `${input.fanoutGroupRunId}:${input.branchIndex}`;
+
+  if (input.state.firstPause !== undefined) {
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "pending",
+      workItemId,
+      ...supersededRef,
+    };
+  }
+
+  if (
+    (await transitionInput.guards?.cancellationProbe.isCancelled(
+      transitionInput.session.sessionId,
+    )) === true
+  ) {
+    const message = "cancelled by external request";
+    input.state.firstFailure = input.state.firstFailure ?? message;
+    input.state.workingSession = {
+      ...input.state.workingSession,
+      status: "cancelled",
+      queue: [],
+      currentNodeId: transitionInput.edge.to,
+      endedAt: nowIso(),
+      lastError: message,
+    };
+    await saveSession(input.state.workingSession, transitionInput.options);
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "cancelled",
+      workItemId,
+      error: message,
+      ...supersededRef,
+    };
+  }
+
+  if (input.state.firstPause !== undefined) {
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "pending",
+      workItemId,
+      ...supersededRef,
+    };
+  }
+
+  if (
+    (input.fanout.failurePolicy ?? "fail-fast") === "fail-fast" &&
+    input.state.firstFailure !== undefined
+  ) {
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "cancelled",
+      workItemId,
+      error: "fanout fail-fast stopped before branch launch",
+      ...supersededRef,
+    };
+  }
+
+  if (
+    transitionInput.options.maxSteps !== undefined &&
+    input.state.workingSession.nodeExecutionCounter >=
+      transitionInput.options.maxSteps
+  ) {
+    const message = `fanout max steps reached (${transitionInput.options.maxSteps})`;
+    input.state.firstPause = input.state.firstPause ?? message;
+    input.state.workingSession = {
+      ...input.state.workingSession,
+      status: "paused",
+      queue: [],
+      currentNodeId: transitionInput.edge.to,
+      lastError: message,
+    };
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "paused",
+      workItemId,
+      error: message,
+      ...supersededRef,
+    };
+  }
+
+  const branchWorkspace = await prepareFanoutBranchWorkspace({
+    fanout: input.fanout,
+    options: transitionInput.options,
+    sessionId: transitionInput.session.sessionId,
+    fanoutGroupRunId: input.fanoutGroupRunId,
+    branchIndex: input.branchIndex,
+  });
+  if (!branchWorkspace.ok) {
+    const message = branchWorkspace.error;
+    input.state.firstFailure = input.state.firstFailure ?? message;
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "failed",
+      workItemId,
+      error: message,
+      ...supersededRef,
+    };
+  }
+
+  const branchRuntimeVariables = buildFanoutRuntimeVariables({
+    baseRuntimeVariables: input.baseRuntimeVariables,
+    fanout: input.fanout,
+    branchIndex: input.branchIndex,
+    item: input.item,
+  });
+  const targetNodePayload =
+    transitionInput.nodePayloads[transitionInput.edge.to];
+  if (
+    findNodeRef(transitionInput.workflow, transitionInput.edge.to)?.execution
+      ?.mode === "optional"
+  ) {
+    const requestedAt = nowIso();
+    const owningManagerStepId = findOwningManagerNodeId(
+      transitionInput.workflow,
+      transitionInput.edge.to,
+    );
+    const message = `fanout branch ${input.branchIndex} paused for optional step decision`;
+    input.state.firstPause = input.state.firstPause ?? message;
+    input.state.workingSession = {
+      ...input.state.workingSession,
+      status: "paused",
+      queue: dedupeNodeIds([owningManagerStepId]),
+      currentNodeId: transitionInput.edge.to,
+      runtimeVariables: branchRuntimeVariables,
+      pendingOptionalNodeDecisions: upsertPendingOptionalNodeDecision(
+        input.state.workingSession.pendingOptionalNodeDecisions ?? [],
+        {
+          nodeId: transitionInput.edge.to,
+          owningManagerStepId,
+          requestedAt,
+          status: "pending",
+        },
+      ),
+      lastError: message,
+    };
+    await saveSession(input.state.workingSession, transitionInput.options);
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "paused",
+      workItemId,
+      error: message,
+      ...supersededRef,
+    };
+  }
+
+  if (targetNodePayload?.nodeType === "user-action") {
+    const {
+      endedAt: _endedAt,
+      lastError: _lastError,
+      ...runningSessionBase
+    } = input.state.workingSession;
+    await saveSession(
+      {
+        ...runningSessionBase,
+        status: "running",
+        queue: [transitionInput.edge.to],
+        currentNodeId: transitionInput.edge.to,
+        runtimeVariables: branchRuntimeVariables,
+      },
+      transitionInput.options,
+    );
+    const branchRun = await runWorkflow(
+      transitionInput.workflowName,
+      {
+        ...transitionInput.options,
+        resumeSessionId: transitionInput.session.sessionId,
+      },
+      transitionInput.adapter,
+      transitionInput.guards,
+    );
+    if (!branchRun.ok) {
+      const message = branchRun.error.message;
+      input.state.firstFailure = input.state.firstFailure ?? message;
+      if (branchRun.error.sessionId !== undefined) {
+        const loadedBranchSession = await loadSession(
+          branchRun.error.sessionId,
+          transitionInput.options,
+        );
+        if (loadedBranchSession.ok) {
+          input.state.workingSession = loadedBranchSession.value;
+        }
+      }
+      return {
+        branchIndex: input.branchIndex,
+        item: input.item,
+        status: "failed",
+        workItemId,
+        ...(branchWorkspace.value === undefined
+          ? {}
+          : { workspaceRoot: branchWorkspace.value }),
+        error: message,
+        ...supersededRef,
+      };
+    }
+    const branchSession = branchRun.value.session;
+    input.state.workingSession = branchSession;
+    if (branchRun.value.exitCode === 4 && branchSession.status === "paused") {
+      const message = `fanout branch ${input.branchIndex} paused for user action`;
+      input.state.firstPause = input.state.firstPause ?? message;
+      return {
+        branchIndex: input.branchIndex,
+        item: input.item,
+        status: "paused",
+        workItemId,
+        ...((branchSession.activeUserActions ?? []).length === 0
+          ? {}
+          : {
+              nodeExecIds: (branchSession.activeUserActions ?? [])
+                .filter((entry) => entry.nodeId === transitionInput.edge.to)
+                .map((entry) => entry.nodeExecId),
+            }),
+        error: message,
+        ...(branchWorkspace.value === undefined
+          ? {}
+          : { workspaceRoot: branchWorkspace.value }),
+        ...supersededRef,
+      };
+    }
+  }
+
+  const {
+    endedAt: _endedAt,
+    lastError: _lastError,
+    ...runningSessionBase
+  } = input.state.workingSession;
+  await saveSession(
+    {
+      ...runningSessionBase,
+      status: "running",
+      queue: [],
+      currentNodeId: transitionInput.edge.to,
+      runtimeVariables: branchRuntimeVariables,
+    },
+    transitionInput.options,
+  );
+
+  const branchExecution = await callStepExecution(
+    {
+      ...transitionInput.options,
+      workflowId: transitionInput.workflow.workflowId,
+      workflowRunId: transitionInput.session.sessionId,
+      stepId: transitionInput.edge.to,
+      ...(branchWorkspace.value === undefined
+        ? {}
+        : { workflowWorkingDirectory: branchWorkspace.value }),
+    },
+    transitionInput.adapter,
+  );
+  const branchSession = branchExecution.ok
+    ? branchExecution.value.session
+    : branchExecution.error.session;
+  input.state.workingSession = {
+    ...branchSession,
+    status: "running",
+    queue: [],
+    runtimeVariables: input.baseRuntimeVariables,
+  };
+  await saveSession(input.state.workingSession, transitionInput.options);
+
+  if (!branchExecution.ok) {
+    const message = branchExecution.error.message;
+    input.state.firstFailure = input.state.firstFailure ?? message;
+    return {
+      branchIndex: input.branchIndex,
+      item: input.item,
+      status: "failed",
+      workItemId,
+      ...(branchExecution.error.nodeExecution === undefined
+        ? {}
+        : {
+            nodeExecIds: [branchExecution.error.nodeExecution.nodeExecId],
+          }),
+      ...(branchWorkspace.value === undefined
+        ? {}
+        : { workspaceRoot: branchWorkspace.value }),
+      error: message,
+      ...supersededRef,
+    };
+  }
+
+  return {
+    branchIndex: input.branchIndex,
+    item: input.item,
+    status: "succeeded",
+    workItemId,
+    nodeExecIds: [branchExecution.value.nodeExecution.nodeExecId],
+    outputRef: branchExecution.value.outputRef,
+    ...(branchWorkspace.value === undefined
+      ? {}
+      : { workspaceRoot: branchWorkspace.value }),
+    ...supersededRef,
+  };
+}
+
+export async function executeLocalFanoutTransition(
+  input: ExecuteLocalFanoutTransitionInput,
+): Promise<Result<CrossWorkflowDispatchExecutionResult, string>> {
   const fanout = input.edge.fanout;
   if (fanout === undefined) {
     return err("internal: local fanout transition missing fanout");
@@ -107,323 +443,28 @@ export async function executeLocalFanoutTransition(input: {
   });
   const failurePolicy = fanout.failurePolicy ?? "fail-fast";
   const resultOrder = fanout.resultOrder ?? "input";
-  let firstFailure: string | undefined;
-  let firstPause: string | undefined;
-  let workingSession: WorkflowSessionState = input.session;
   const baseRuntimeVariables = input.session.runtimeVariables;
+  const branchState: LocalFanoutBranchExecutionState = {
+    workingSession: input.session,
+  };
 
   const branchResults = await runBoundedFanoutBranches<FanoutBranchRecord>(
     items.value,
     executionConcurrency,
-    async (branchIndex, item) => {
-      const supersededWorkspaceRoot = findPriorBranchWorkspaceRoot({
-        priorGroups: input.session.fanoutGroups ?? [],
-        groupId: fanout.groupId,
-        branchIndex,
-      });
-      const supersededRef =
-        supersededWorkspaceRoot === undefined
-          ? {}
-          : { supersededWorkspaceRoot };
-
-      if (firstPause !== undefined) {
-        return {
-          branchIndex,
-          item,
-          status: "pending" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      if (
-        (await input.guards?.cancellationProbe.isCancelled(
-          input.session.sessionId,
-        )) === true
-      ) {
-        const message = "cancelled by external request";
-        firstFailure = firstFailure ?? message;
-        workingSession = {
-          ...workingSession,
-          status: "cancelled",
-          queue: [],
-          currentNodeId: input.edge.to,
-          endedAt: nowIso(),
-          lastError: message,
-        };
-        await saveSession(workingSession, input.options);
-        return {
-          branchIndex,
-          item,
-          status: "cancelled" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      if (firstPause !== undefined) {
-        return {
-          branchIndex,
-          item,
-          status: "pending" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      if (failurePolicy === "fail-fast" && firstFailure !== undefined) {
-        return {
-          branchIndex,
-          item,
-          status: "cancelled" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: "fanout fail-fast stopped before branch launch",
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-      if (
-        input.options.maxSteps !== undefined &&
-        workingSession.nodeExecutionCounter >= input.options.maxSteps
-      ) {
-        const message = `fanout max steps reached (${input.options.maxSteps})`;
-        firstPause = firstPause ?? message;
-        workingSession = {
-          ...workingSession,
-          status: "paused",
-          queue: [],
-          currentNodeId: input.edge.to,
-          lastError: message,
-        };
-        return {
-          branchIndex,
-          item,
-          status: "paused" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      const branchWorkspace = await prepareFanoutBranchWorkspace({
+    async (branchIndex, item) =>
+      executeLocalFanoutBranch({
+        transitionInput: input,
         fanout,
-        options: input.options,
-        sessionId: input.session.sessionId,
         fanoutGroupRunId,
-        branchIndex,
-      });
-      if (!branchWorkspace.ok) {
-        const message = branchWorkspace.error;
-        firstFailure = firstFailure ?? message;
-        return {
-          branchIndex,
-          item,
-          status: "failed" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      const branchRuntimeVariables = buildFanoutRuntimeVariables({
         baseRuntimeVariables,
-        fanout,
+        state: branchState,
         branchIndex,
         item,
-      });
-      const targetNodePayload = input.nodePayloads[input.edge.to];
-      if (
-        findNodeRef(input.workflow, input.edge.to)?.execution?.mode ===
-        "optional"
-      ) {
-        const requestedAt = nowIso();
-        const owningManagerStepId = findOwningManagerNodeId(
-          input.workflow,
-          input.edge.to,
-        );
-        const message = `fanout branch ${branchIndex} paused for optional step decision`;
-        firstPause = firstPause ?? message;
-        workingSession = {
-          ...workingSession,
-          status: "paused",
-          queue: dedupeNodeIds([owningManagerStepId]),
-          currentNodeId: input.edge.to,
-          runtimeVariables: branchRuntimeVariables,
-          pendingOptionalNodeDecisions: upsertPendingOptionalNodeDecision(
-            workingSession.pendingOptionalNodeDecisions ?? [],
-            {
-              nodeId: input.edge.to,
-              owningManagerStepId,
-              requestedAt,
-              status: "pending",
-            },
-          ),
-          lastError: message,
-        };
-        await saveSession(workingSession, input.options);
-        return {
-          branchIndex,
-          item,
-          status: "paused" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          error: message,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-      if (targetNodePayload?.nodeType === "user-action") {
-        const {
-          endedAt: _endedAt,
-          lastError: _lastError,
-          ...runningSessionBase
-        } = workingSession;
-        await saveSession(
-          {
-            ...runningSessionBase,
-            status: "running",
-            queue: [input.edge.to],
-            currentNodeId: input.edge.to,
-            runtimeVariables: branchRuntimeVariables,
-          },
-          input.options,
-        );
-        const branchRun = await runWorkflow(
-          input.workflowName,
-          {
-            ...input.options,
-            resumeSessionId: input.session.sessionId,
-          },
-          input.adapter,
-          input.guards,
-        );
-        if (!branchRun.ok) {
-          const message = branchRun.error.message;
-          firstFailure = firstFailure ?? message;
-          if (branchRun.error.sessionId !== undefined) {
-            const loadedBranchSession = await loadSession(
-              branchRun.error.sessionId,
-              input.options,
-            );
-            if (loadedBranchSession.ok) {
-              workingSession = loadedBranchSession.value;
-            }
-          }
-          return {
-            branchIndex,
-            item,
-            status: "failed" as const,
-            workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-            ...(branchWorkspace.value === undefined
-              ? {}
-              : { workspaceRoot: branchWorkspace.value }),
-            error: message,
-            ...supersededRef,
-          } satisfies FanoutBranchRecord;
-        }
-        const branchSession = branchRun.value.session;
-        workingSession = branchSession;
-        if (
-          branchRun.value.exitCode === 4 &&
-          branchSession.status === "paused"
-        ) {
-          const message = `fanout branch ${branchIndex} paused for user action`;
-          firstPause = firstPause ?? message;
-          return {
-            branchIndex,
-            item,
-            status: "paused" as const,
-            workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-            ...((branchSession.activeUserActions ?? []).length === 0
-              ? {}
-              : {
-                  nodeExecIds: (branchSession.activeUserActions ?? [])
-                    .filter((entry) => entry.nodeId === input.edge.to)
-                    .map((entry) => entry.nodeExecId),
-                }),
-            error: message,
-            ...(branchWorkspace.value === undefined
-              ? {}
-              : { workspaceRoot: branchWorkspace.value }),
-            ...supersededRef,
-          } satisfies FanoutBranchRecord;
-        }
-      }
-      const {
-        endedAt: _endedAt,
-        lastError: _lastError,
-        ...runningSessionBase
-      } = workingSession;
-      await saveSession(
-        {
-          ...runningSessionBase,
-          status: "running",
-          queue: [],
-          currentNodeId: input.edge.to,
-          runtimeVariables: branchRuntimeVariables,
-        },
-        input.options,
-      );
-
-      const branchExecution = await callStepExecution(
-        {
-          ...input.options,
-          workflowId: input.workflow.workflowId,
-          workflowRunId: input.session.sessionId,
-          stepId: input.edge.to,
-          ...(branchWorkspace.value === undefined
-            ? {}
-            : { workflowWorkingDirectory: branchWorkspace.value }),
-        },
-        input.adapter,
-      );
-      const branchSession = branchExecution.ok
-        ? branchExecution.value.session
-        : branchExecution.error.session;
-      workingSession = {
-        ...branchSession,
-        status: "running",
-        queue: [],
-        runtimeVariables: baseRuntimeVariables,
-      };
-      await saveSession(workingSession, input.options);
-
-      if (!branchExecution.ok) {
-        const message = branchExecution.error.message;
-        firstFailure = firstFailure ?? message;
-        return {
-          branchIndex,
-          item,
-          status: "failed" as const,
-          workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-          ...(branchExecution.error.nodeExecution === undefined
-            ? {}
-            : {
-                nodeExecIds: [branchExecution.error.nodeExecution.nodeExecId],
-              }),
-          ...(branchWorkspace.value === undefined
-            ? {}
-            : { workspaceRoot: branchWorkspace.value }),
-          error: message,
-          ...supersededRef,
-        } satisfies FanoutBranchRecord;
-      }
-
-      return {
-        branchIndex,
-        item,
-        status: "succeeded" as const,
-        workItemId: `${fanoutGroupRunId}:${branchIndex}`,
-        nodeExecIds: [branchExecution.value.nodeExecution.nodeExecId],
-        outputRef: branchExecution.value.outputRef,
-        ...(branchWorkspace.value === undefined
-          ? {}
-          : { workspaceRoot: branchWorkspace.value }),
-        ...supersededRef,
-      } satisfies FanoutBranchRecord;
-    },
+      }),
   );
 
   const completedBranches = branchResults.map((branch) => branch);
-  const group: FanoutGroupRunRecord = {
+  const group = buildFanoutGroupRunRecord({
     fanoutGroupRunId,
     groupId: fanout.groupId,
     sourceStepId: input.callerStepId,
@@ -437,71 +478,37 @@ export async function executeLocalFanoutTransition(input: {
     failurePolicy,
     resultOrder,
     branches: completedBranches,
-  };
+  });
+  const reduction = reduceFanoutBranchResults({
+    group,
+    priorFanoutGroups: input.session.fanoutGroups ?? [],
+    workingSession: branchState.workingSession,
+  });
 
-  const failedBranches = completedBranches.filter(
-    (branch) => branch.status === "failed" || branch.status === "cancelled",
-  );
-  const pausedBranches = completedBranches.filter(
-    (branch) => branch.status === "paused",
-  );
-  if (pausedBranches.length > 0) {
-    const nextFanoutGroups = [...(input.session.fanoutGroups ?? []), group];
-    const pausedSession: WorkflowSessionState = {
-      ...workingSession,
-      status: "paused",
-      fanoutGroups: nextFanoutGroups,
-      lastError: pausedBranches
-        .map(
-          (branch) =>
-            `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
-        )
-        .join("; "),
-    };
+  if (reduction.outcome === "paused") {
     return ok({
       communications: input.currentCommunications,
       communicationCounter: input.communicationCounter,
       queuedNodeIds: [],
       transitions: [],
-      fanoutGroups: nextFanoutGroups,
-      session: pausedSession,
-      pausedMessage: `fanout group '${fanoutGroupRunId}' paused: ${pausedSession.lastError}`,
+      fanoutGroups: reduction.fanoutGroups,
+      session: reduction.session,
+      pausedMessage: reduction.pausedMessage,
     });
   }
-  if (failedBranches.length > 0) {
+
+  if (reduction.outcome === "failed") {
     return ok({
       communications: input.currentCommunications,
       communicationCounter: input.communicationCounter,
       queuedNodeIds: [],
       transitions: [],
-      fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
-      session: workingSession,
-      failureMessage: `fanout group '${fanoutGroupRunId}' failed: ${failedBranches
-        .map(
-          (branch) =>
-            `branch ${branch.branchIndex}: ${branch.error ?? branch.status}`,
-        )
-        .join("; ")}`,
+      fanoutGroups: reduction.fanoutGroups,
+      session: reduction.session,
+      failureMessage: reduction.failureMessage,
     });
   }
 
-  const aggregate = {
-    fanoutGroupRunId,
-    groupId: fanout.groupId,
-    sourceStepId: input.callerStepId,
-    resultOrder,
-    results: completedBranches.map((branch) => ({
-      branchIndex: branch.branchIndex,
-      item: branch.item,
-      status: branch.status,
-      ...(branch.outputRef === undefined
-        ? {}
-        : { outputRef: branch.outputRef }),
-      ...(branch.workspaceRoot === undefined
-        ? {}
-        : { workspaceRoot: branch.workspaceRoot }),
-    })),
-  };
   const aggregateOutput = await persistFanoutJoinOutputRef({
     artifactDir: input.callerArtifactDir,
     workflow: input.workflow,
@@ -509,7 +516,7 @@ export async function executeLocalFanoutTransition(input: {
     sourceStepId: input.callerStepId,
     sourceNodeExecId: input.callerNodeExecId,
     fanoutGroupRunId,
-    aggregate,
+    aggregate: reduction.aggregate,
   });
   const communication = await persistCommunicationArtifact({
     artifactWorkflowRoot: input.artifactWorkflowRoot,
@@ -540,12 +547,12 @@ export async function executeLocalFanoutTransition(input: {
         when: `fanout-join:${fanoutGroupRunId}`,
       },
     ],
-    fanoutGroups: [...(input.session.fanoutGroups ?? []), group],
+    fanoutGroups: reduction.fanoutGroups,
     runtimeVariables: buildFanoutJoinRuntimeVariables({
       baseRuntimeVariables,
-      aggregate,
+      aggregate: reduction.aggregate,
     }),
-    session: workingSession,
+    session: reduction.session,
   });
 }
 export async function executeCrossWorkflowDispatchesForNode(

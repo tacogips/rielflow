@@ -7,6 +7,10 @@ import {
   createSupervisorRunnerPool,
   type SupervisorRunnerPool,
 } from "../../workflow/supervisor-runner-pool";
+import type {
+  EventReceiptStore,
+  WorkflowTriggerExecutionPort,
+} from "divedra-events/runtime-ports";
 import {
   isEventBindingEnabled,
   isEventSourceEnabled,
@@ -57,10 +61,16 @@ import {
   workflowTriggerLocalEngineOverrides,
 } from "./sticky-dispatch-planning";
 
+const defaultEventReceiptStore: EventReceiptStore = {
+  begin: beginEventReceipt,
+  update: updateEventReceipt,
+};
+
 export function createWorkflowTriggerRunner(
   options: WorkflowTriggerRunnerOptions = {},
 ): WorkflowTriggerRunner {
   let localSupervisorRunnerPool: SupervisorRunnerPool | undefined;
+  const receiptStore = options.eventReceiptStore ?? defaultEventReceiptStore;
 
   function getLocalSupervisorRunnerPool(): SupervisorRunnerPool {
     if (localSupervisorRunnerPool === undefined) {
@@ -71,11 +81,41 @@ export function createWorkflowTriggerRunner(
     return localSupervisorRunnerPool;
   }
 
+  const workflowExecutionPort: WorkflowTriggerExecutionPort =
+    options.workflowExecutionPort ?? {
+      async execute(input) {
+        return await createWorkflowExecutionClient(
+          buildWorkflowExecutionClientOptions(input.workflowName, options),
+        ).execute({
+          input: input.runtimeVariables,
+          ...workflowTriggerLocalEngineOverrides(options),
+          ...(input.async === undefined ? {} : { async: input.async }),
+        });
+      },
+      async resume(input) {
+        const resumed = await runWorkflow(input.workflowName, {
+          ...input.options,
+          resumeSessionId: input.sessionId,
+          ...workflowTriggerLocalEngineOverrides(options),
+        });
+        if (!resumed.ok) {
+          throw new Error(resumed.error.message);
+        }
+        return {
+          workflowName: input.workflowName,
+          workflowExecutionId: resumed.value.session.sessionId,
+          sessionId: resumed.value.session.sessionId,
+          status: resumed.value.session.status,
+          exitCode: resumed.value.exitCode,
+        };
+      },
+    };
+
   return {
     async dispatch(
       input: WorkflowTriggerDispatchInput,
     ): Promise<WorkflowTriggerResult> {
-      const begin = await beginEventReceipt(
+      const begin = await receiptStore.begin(
         {
           event: input.event,
           binding: input.binding,
@@ -113,7 +153,7 @@ export function createWorkflowTriggerRunner(
           });
         }
         if (supervisorIntent.outcome === "skip") {
-          const skipped = await updateEventReceipt(
+          const skipped = await receiptStore.update(
             {
               record: begin.record,
               artifactDir: begin.artifactDir,
@@ -177,7 +217,7 @@ export function createWorkflowTriggerRunner(
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "unknown error";
-        const failed = await updateEventReceipt(
+        const failed = await receiptStore.update(
           {
             record: begin.record,
             artifactDir: begin.artifactDir,
@@ -208,7 +248,7 @@ export function createWorkflowTriggerRunner(
         };
       }
 
-      let receipt = await updateEventReceipt(
+      let receipt = await receiptStore.update(
         {
           record: begin.record,
           artifactDir: begin.artifactDir,
@@ -218,7 +258,7 @@ export function createWorkflowTriggerRunner(
         options,
       );
       if (options.readOnly === true) {
-        const skipped = await updateEventReceipt(
+        const skipped = await receiptStore.update(
           {
             record: receipt,
             artifactDir: begin.artifactDir,
@@ -261,7 +301,7 @@ export function createWorkflowTriggerRunner(
             });
           }
           if (taskPlanningDecision.status === "needs-clarification") {
-            const skipped = await updateEventReceipt(
+            const skipped = await receiptStore.update(
               {
                 record: receipt,
                 artifactDir: begin.artifactDir,
@@ -280,7 +320,7 @@ export function createWorkflowTriggerRunner(
       }
 
       try {
-        receipt = await updateEventReceipt(
+        receipt = await receiptStore.update(
           {
             record: receipt,
             artifactDir: begin.artifactDir,
@@ -372,7 +412,7 @@ export function createWorkflowTriggerRunner(
             router === undefined
               ? await getLocalSupervisorRunnerPool().dispatch(dispatchInput)
               : await router.dispatch(dispatchInput);
-          receipt = await updateEventReceipt(
+          receipt = await receiptStore.update(
             {
               record: receipt,
               artifactDir: begin.artifactDir,
@@ -438,6 +478,7 @@ export function createWorkflowTriggerRunner(
           });
           const eventRoot = resolveEventRoot(options);
           const dispatchClient =
+            options.supervisorDispatchClient ??
             createWorkflowSupervisorDispatchClient(options);
           const view = await dispatchClient.dispatchExternalInput({
             ...options,
@@ -455,7 +496,7 @@ export function createWorkflowTriggerRunner(
             view,
             workflowExecutionIdResolved,
           );
-          receipt = await updateEventReceipt(
+          receipt = await receiptStore.update(
             {
               record: receipt,
               artifactDir: begin.artifactDir,
@@ -497,7 +538,7 @@ export function createWorkflowTriggerRunner(
           directWorkflowName === undefined ||
           directWorkflowName.length === 0
         ) {
-          const failed = await updateEventReceipt(
+          const failed = await receiptStore.update(
             {
               record: receipt,
               artifactDir: begin.artifactDir,
@@ -523,7 +564,7 @@ export function createWorkflowTriggerRunner(
           runtimeVariables: mapping.runtimeVariables,
         });
         if (stickyResolution.outcome === "blocked-active-user-actions") {
-          const skipped = await updateEventReceipt(
+          const skipped = await receiptStore.update(
             {
               record: receipt,
               artifactDir: begin.artifactDir,
@@ -543,39 +584,22 @@ export function createWorkflowTriggerRunner(
           stickyResolution.outcome === "resume" ? stickyResolution.plan : null;
         const result =
           stickyPlan === null
-            ? await createWorkflowExecutionClient(
-                buildWorkflowExecutionClientOptions(
-                  directWorkflowName,
-                  options,
-                ),
-              ).execute({
-                input: mapping.runtimeVariables,
-                ...workflowTriggerLocalEngineOverrides(options),
+            ? await workflowExecutionPort.execute({
+                workflowName: directWorkflowName,
+                runtimeVariables: mapping.runtimeVariables,
                 async: input.binding.execution?.async ?? true,
               })
-            : await (async () => {
-                const resumed = await runWorkflow(directWorkflowName, {
-                  ...stickyPlan.options,
-                  resumeSessionId: stickyPlan.sessionId,
-                  ...workflowTriggerLocalEngineOverrides(options),
-                });
-                if (!resumed.ok) {
-                  throw new Error(resumed.error.message);
-                }
-                return {
-                  workflowName: directWorkflowName,
-                  workflowExecutionId: resumed.value.session.sessionId,
-                  sessionId: resumed.value.session.sessionId,
-                  status: resumed.value.session.status,
-                  exitCode: resumed.value.exitCode,
-                };
-              })();
+            : await workflowExecutionPort.resume({
+                workflowName: directWorkflowName,
+                sessionId: stickyPlan.sessionId,
+                options: stickyPlan.options,
+              });
         await persistStickySessionBinding({
           stickyContext,
           workflowExecutionId: result.workflowExecutionId,
           workflowStatus: result.status,
         });
-        receipt = await updateEventReceipt(
+        receipt = await receiptStore.update(
           {
             record: receipt,
             artifactDir: begin.artifactDir,
@@ -594,7 +618,7 @@ export function createWorkflowTriggerRunner(
       } catch (error: unknown) {
         const message =
           error instanceof Error ? error.message : "unknown error";
-        const failed = await updateEventReceipt(
+        const failed = await receiptStore.update(
           {
             record: receipt,
             artifactDir: begin.artifactDir,
@@ -658,6 +682,7 @@ export async function dispatchEventToMatchingBindings(
   },
   options: WorkflowTriggerRunnerOptions = {},
 ): Promise<readonly WorkflowTriggerResult[]> {
+  const receiptStore = options.eventReceiptStore ?? defaultEventReceiptStore;
   const source = input.configuration.sources.find(
     (entry) => entry.id === input.event.sourceId && isEventSourceEnabled(entry),
   );
@@ -670,7 +695,7 @@ export async function dispatchEventToMatchingBindings(
     input.event,
   );
   if (bindings.length === 0) {
-    const skipped = await beginEventReceipt(
+    const skipped = await receiptStore.begin(
       {
         event: input.event,
         ...(input.raw === undefined ? {} : { raw: input.raw }),

@@ -14,10 +14,10 @@ for arg in "$@"; do
   passthrough_args+=("$arg")
 done
 
-mapfile -t test_files < <(rg --files src scripts -g '*.test.ts' -g '*.test.tsx' | sort)
+mapfile -t test_files < <(rg --files src scripts packages -g '*.test.ts' -g '*.test.tsx' | sort)
 
 if [[ "${#test_files[@]}" -eq 0 ]]; then
-  echo "error: no Bun test files were found under src/ or scripts/" >&2
+  echo "error: no Bun test files were found under src/, scripts/, or packages/" >&2
   exit 1
 fi
 

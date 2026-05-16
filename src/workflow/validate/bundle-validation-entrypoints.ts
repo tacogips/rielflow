@@ -2,6 +2,7 @@ import {
   remapAuthoredNodePayloadsByNodeFile,
   synthesizeInlineNodeFile,
 } from "../authored-node";
+import { validatePureWorkflowBundleDetailed } from "divedra-core/workflow-validation";
 import {
   resolveBoundaryNodeAddonPayloadAsync,
   resolveBoundaryNodeAddonPayloadSync,
@@ -249,13 +250,22 @@ export function validateWorkflowBundleDetailed(
   raw: RawBundle,
   options: WorkflowValidationOptions = {},
 ): Result<ValidationSuccessDetails, readonly ValidationIssue[]> {
-  const issues: ValidationIssue[] = [];
+  const pureValidation = validatePureWorkflowBundleDetailed(raw, {
+    ...(options.allowResolvedStepFileFields === undefined
+      ? {}
+      : { allowResolvedStepFileFields: options.allowResolvedStepFileFields }),
+  });
+  const issues: ValidationIssue[] = pureValidation.ok
+    ? [...pureValidation.value.issues]
+    : [...pureValidation.error];
   const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
     raw.workflow,
     raw.nodePayloads,
   );
 
-  const workflow = normalizeWorkflow(raw.workflow, issues, options);
+  const workflow = pureValidation.ok
+    ? pureValidation.value.workflow
+    : normalizeWorkflow(raw.workflow, issues, options);
 
   const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
 
@@ -358,13 +368,22 @@ export async function validateWorkflowBundleDetailedAsync(
   raw: RawBundle,
   options: WorkflowValidationOptions = {},
 ): Promise<Result<ValidationSuccessDetails, readonly ValidationIssue[]>> {
-  const issues: ValidationIssue[] = [];
+  const pureValidation = validatePureWorkflowBundleDetailed(raw, {
+    ...(options.allowResolvedStepFileFields === undefined
+      ? {}
+      : { allowResolvedStepFileFields: options.allowResolvedStepFileFields }),
+  });
+  const issues: ValidationIssue[] = pureValidation.ok
+    ? [...pureValidation.value.issues]
+    : [...pureValidation.error];
   const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
     raw.workflow,
     raw.nodePayloads,
   );
 
-  const workflow = normalizeWorkflow(raw.workflow, issues, options);
+  const workflow = pureValidation.ok
+    ? pureValidation.value.workflow
+    : normalizeWorkflow(raw.workflow, issues, options);
   const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
 
   let nodePayloads: Record<string, NodePayload> = {};

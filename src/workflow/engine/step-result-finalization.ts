@@ -1,8 +1,11 @@
-// @ts-nocheck
-// biome-ignore-all lint/correctness/noUnusedVariables: extracted finalization keeps phase-local state names aligned with the original runner.
-import { workflowRunnerDeps } from "./workflow-runner-deps";
+import { workflowStepResultFinalizationPort } from "./workflow-runner-deps";
 
 import { finalizeStepTransitions } from "./step-transition-finalization";
+
+type CommunicationRecord = any;
+type LoopRule = any;
+type NodeExecutionRecord = any;
+type WorkflowSessionState = any;
 
 const {
   path,
@@ -12,7 +15,6 @@ const {
   hashManagerAuthToken,
   isManagerNodeRef,
   err,
-  ok,
   isWorkflowOutputKindNode,
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
@@ -37,9 +39,9 @@ const {
   markCommunicationsConsumed,
   persistCommunicationArtifact,
   readBusinessPayload,
-} = workflowRunnerDeps;
+} = workflowStepResultFinalizationPort;
 
-export async function finalizeExecutedNode(input) {
+export async function finalizeExecutedNode(input: any) {
   let {
     session,
     options,
@@ -80,6 +82,7 @@ export async function finalizeExecutedNode(input) {
     guards,
     crossWorkflowInvocationStack,
     workflowName,
+    workflowNodes,
     nodeMap,
     isOptionalExecutionNode,
     inputJson,
@@ -465,7 +468,9 @@ export async function finalizeExecutedNode(input) {
     );
   }
   const edges = outgoingEdges.get(nodeId) ?? [];
-  const matched = edges.filter((edge) => evaluateEdge(edge, outputPayload));
+  const matched = edges.filter((edge: any) =>
+    evaluateEdge(edge, outputPayload),
+  );
   const loopIterationCounts = session.loopIterationCounts ?? {};
   let selected = matched;
   let updatedLoopIterationCounts = loopIterationCounts;
@@ -482,7 +487,7 @@ export async function finalizeExecutedNode(input) {
     });
     if (transition === "continue") {
       selected = edges.filter(
-        (edge) => edge.when === effectiveLoopRule.continueWhen,
+        (edge: any) => edge.when === effectiveLoopRule.continueWhen,
       );
       updatedLoopIterationCounts = {
         ...loopIterationCounts,
@@ -490,11 +495,11 @@ export async function finalizeExecutedNode(input) {
       };
     } else if (transition === "exit") {
       selected = edges.filter(
-        (edge) => edge.when === effectiveLoopRule.exitWhen,
+        (edge: any) => edge.when === effectiveLoopRule.exitWhen,
       );
     } else {
       selected = matched.filter(
-        (edge) =>
+        (edge: any) =>
           edge.when !== effectiveLoopRule.continueWhen &&
           edge.when !== effectiveLoopRule.exitWhen,
       );
@@ -520,9 +525,13 @@ export async function finalizeExecutedNode(input) {
       });
     }
   }
-  const localFanoutEdges = selected.filter((edge) => edge.fanout !== undefined);
-  const regularSelected = selected.filter((edge) => edge.fanout === undefined);
-  const nextNodes = regularSelected.map((edge) => edge.to);
+  const localFanoutEdges = selected.filter(
+    (edge: any) => edge.fanout !== undefined,
+  );
+  const regularSelected = selected.filter(
+    (edge: any) => edge.fanout === undefined,
+  );
+  const nextNodes = regularSelected.map((edge: any) => edge.to);
   const outputJson = stableJson(outputPayload);
   const outputRaw = `${outputJson}\n`;
   const metaPayload = {
@@ -865,7 +874,7 @@ export async function finalizeExecutedNode(input) {
   }
   currentCommunications = consumedCommunicationsResult.value;
   const transitionCommunications = await Promise.all(
-    regularSelected.map((edge, index) => {
+    regularSelected.map((edge: any, index: number) => {
       return persistCommunicationArtifact({
         artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
         runtimeLogOptions: options,

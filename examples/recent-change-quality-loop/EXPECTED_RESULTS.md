@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run src/main.ts workflow validate recent-change-quality-loop --workflow-definition-dir ./examples
+nix run ./divedra -- workflow validate recent-change-quality-loop
 ```
 
 Expected result: the workflow is valid.
@@ -18,9 +18,8 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run src/main.ts workflow run recent-change-quality-loop \
-  --workflow-definition-dir ./examples \
-  --mock-scenario ./examples/recent-change-quality-loop/mock-scenario.json \
+nix run ./divedra -- workflow run recent-change-quality-loop \
+  --mock-scenario .divedra/workflows/recent-change-quality-loop/mock-scenario.json \
   --output json
 ```
 
@@ -62,8 +61,9 @@ Expected final output payload:
     }
   ],
   "changedFiles": [
-    "examples/README.md",
-    "examples/recent-change-quality-loop/workflow.json"
+    "README.md",
+    ".divedra/README.md",
+    ".divedra/workflows/recent-change-quality-loop/workflow.json"
   ],
   "verification": [
     "task divedra-design-loop-validate",

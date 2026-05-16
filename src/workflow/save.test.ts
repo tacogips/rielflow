@@ -10,7 +10,12 @@ import {
 import { createWorkflowTemplate } from "./create";
 import { loadWorkflowFromDisk } from "./load";
 import { saveWorkflowToDisk } from "./save";
+import {
+  buildWorkflowSavePersistencePlan,
+  checkWorkflowSaveRevisionConflict,
+} from "./save-plan";
 import { resolveWorkflowManagerStepId } from "./types";
+import type { WorkflowJson } from "./types";
 
 const tempDirs: string[] = [];
 
@@ -55,6 +60,172 @@ function sampleRemovedTopLevelFieldValue(
       return {};
   }
 }
+
+function makeSampleValidatedWorkflow(): WorkflowJson {
+  return {
+    workflowId: "demo",
+    description: "Demo workflow",
+    defaults: {
+      nodeTimeoutMs: 120000,
+      maxLoopIterations: 8,
+    },
+    entryStepId: "main",
+    nodeRegistry: [
+      {
+        id: "main-node",
+        nodeFile: "nodes/node-main.json",
+      },
+    ],
+    steps: [
+      {
+        id: "main",
+        nodeId: "main-node",
+        stepFile: "steps/main.json",
+      },
+    ],
+    nodes: [
+      {
+        id: "main-node",
+        nodeFile: "nodes/node-main.json",
+      },
+    ],
+  };
+}
+
+describe("buildWorkflowSavePersistencePlan", () => {
+  test("plans persistence and stale cleanup decisions without filesystem writes", () => {
+    const plan = buildWorkflowSavePersistencePlan({
+      workflow: makeSampleValidatedWorkflow(),
+      authoredWorkflow: {
+        workflowId: "demo",
+        defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 8 },
+        entryStepId: "main",
+        nodes: [{ id: "main-node", nodeFile: "nodes/node-main.json" }],
+        steps: [{ id: "main", stepFile: "steps/main.json" }],
+      },
+      normalizedNodePayloads: {
+        "nodes/node-main.json": {
+          id: "main-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5",
+          promptTemplateFile: "prompts/main.md",
+          promptTemplate: "Run the main step.",
+          variables: {},
+        },
+      },
+      existingFileState: {
+        existingAuthoredWorkflowRecord: {
+          workflowId: "demo",
+          nodes: [
+            { id: "main-node", nodeFile: "nodes/node-main.json" },
+            { id: "old-node", nodeFile: "nodes/node-old.json" },
+          ],
+          steps: [
+            { id: "main", stepFile: "steps/main.json" },
+            { id: "old", stepFile: "steps/old.json" },
+          ],
+        },
+        existingNodeFiles: ["nodes/node-main.json", "nodes/node-old.json"],
+        existingStepFiles: ["steps/main.json", "steps/old.json"],
+        existingPromptTemplateFiles: new Set([
+          "prompts/main.md",
+          "prompts/old.md",
+        ]),
+      },
+    });
+
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) {
+      return;
+    }
+
+    expect(plan.value.nodesToPersist).toEqual([
+      {
+        nodeFile: "nodes/node-main.json",
+        payload: {
+          id: "main-node",
+          executionBackend: "codex-agent",
+          model: "gpt-5",
+          promptTemplateFile: "prompts/main.md",
+          promptTemplate: "Run the main step.",
+          variables: {},
+        },
+      },
+    ]);
+    expect(plan.value.stepsToPersist).toEqual([
+      {
+        stepFile: "steps/main.json",
+        step: {
+          id: "main",
+          nodeId: "main-node",
+          stepFile: "steps/main.json",
+        },
+      },
+    ]);
+    expect(plan.value.staleFiles).toEqual({
+      nodeFiles: ["nodes/node-old.json"],
+      stepFiles: ["steps/old.json"],
+      promptTemplateFiles: ["prompts/old.md"],
+    });
+    expect(plan.value.finalRevisionNodeFiles).toEqual(["nodes/node-main.json"]);
+    expect(plan.value.finalRevisionExtraFiles).toEqual([
+      "steps/main.json",
+      "prompts/main.md",
+    ]);
+  });
+
+  test("returns validation failure when a referenced node payload is missing", () => {
+    const plan = buildWorkflowSavePersistencePlan({
+      workflow: makeSampleValidatedWorkflow(),
+      authoredWorkflow: {},
+      normalizedNodePayloads: {},
+      existingFileState: {
+        existingAuthoredWorkflowRecord: undefined,
+        existingNodeFiles: [],
+        existingStepFiles: [],
+        existingPromptTemplateFiles: new Set(),
+      },
+    });
+
+    expect(plan.ok).toBe(false);
+    if (plan.ok) {
+      return;
+    }
+
+    expect(plan.error).toEqual({
+      code: "VALIDATION",
+      message: "missing node payload for nodes/node-main.json",
+      issues: [
+        {
+          severity: "error",
+          path: "bundle.nodePayloads.nodes/node-main.json",
+          message: "required payload is missing",
+        },
+      ],
+    });
+  });
+});
+
+describe("checkWorkflowSaveRevisionConflict", () => {
+  test("reports a conflict only when both revisions are known and different", () => {
+    expect(
+      checkWorkflowSaveRevisionConflict({
+        expectedRevision: "expected",
+        currentRevision: "actual",
+      }),
+    ).toEqual({
+      code: "CONFLICT",
+      message: "workflow revision conflict",
+      currentRevision: "actual",
+    });
+    expect(
+      checkWorkflowSaveRevisionConflict({
+        expectedRevision: "expected",
+        currentRevision: undefined,
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("saveWorkflowToDisk", () => {
   test("round-trips managed templates without writing legacy workflow fields", async () => {

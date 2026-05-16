@@ -255,8 +255,12 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
   }
   return path.join(resolveRootDataDir(options), "divedra.db");
 }
-export async function withDatabase<T>(
+
+export type RuntimeDatabaseSchemaExtension = (db: Database) => void;
+
+export async function withRuntimeDatabase<T>(
   options: LoadOptions,
+  schemaExtensions: readonly RuntimeDatabaseSchemaExtension[],
   action: (db: Database) => T,
 ): Promise<T> {
   const dbPath = resolveRuntimeDbPath(options);
@@ -264,10 +268,228 @@ export async function withDatabase<T>(
   const db = new Database(dbPath);
   try {
     ensureSchema(db);
+    for (const extendSchema of schemaExtensions) {
+      extendSchema(db);
+    }
     return action(db);
   } finally {
     db.close();
   }
+}
+
+export async function withDatabase<T>(
+  options: LoadOptions,
+  action: (db: Database) => T,
+): Promise<T> {
+  return await withRuntimeDatabase(options, [], action);
+}
+
+export function ensureEventRuntimeSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_receipts (
+      receipt_id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      binding_id TEXT,
+      dedupe_key TEXT NOT NULL,
+      status TEXT NOT NULL,
+      workflow_name TEXT,
+      workflow_execution_id TEXT,
+      artifact_dir TEXT NOT NULL,
+      error TEXT,
+      received_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS event_reply_dispatches (
+      idempotency_key TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      workflow_id TEXT NOT NULL,
+      workflow_execution_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      node_exec_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      thread_id TEXT,
+      actor_id TEXT,
+      status TEXT NOT NULL,
+      dispatch_id TEXT,
+      provider_message_id TEXT,
+      request_json TEXT NOT NULL,
+      response_json TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS hook_events (
+      hook_event_id TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL,
+      workflow_execution_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      node_exec_id TEXT NOT NULL,
+      manager_session_id TEXT,
+      vendor TEXT NOT NULL,
+      agent_session_id TEXT NOT NULL,
+      raw_event_name TEXT NOT NULL,
+      event_name TEXT NOT NULL,
+      cwd TEXT NOT NULL,
+      transcript_path TEXT,
+      model TEXT,
+      turn_id TEXT,
+      payload_hash TEXT NOT NULL,
+      payload_ref_json TEXT,
+      response_json TEXT,
+      status TEXT NOT NULL,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_receipts_dedupe ON event_receipts (source_id, binding_id, dedupe_key, received_at);
+    CREATE INDEX IF NOT EXISTS idx_event_receipts_status ON event_receipts (status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_event_reply_dispatches_workflow_execution ON event_reply_dispatches (workflow_execution_id, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_event_reply_dispatches_status ON event_reply_dispatches (status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_hook_events_workflow_execution ON hook_events (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_hook_events_agent_session ON hook_events (workflow_execution_id, agent_session_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_hook_events_manager_session ON hook_events (manager_session_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_hook_events_node_exec ON hook_events (node_exec_id, created_at);
+    CREATE TABLE IF NOT EXISTS event_supervised_runs (
+      supervised_run_id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      binding_id TEXT NOT NULL,
+      correlation_key TEXT NOT NULL,
+      supervisor_workflow_name TEXT NOT NULL,
+      supervisor_execution_id TEXT,
+      target_workflow_name TEXT NOT NULL,
+      active_target_execution_id TEXT,
+      status TEXT NOT NULL,
+      restart_count INTEGER NOT NULL,
+      max_restarts_on_failure INTEGER NOT NULL,
+      auto_improve_enabled INTEGER NOT NULL,
+      artifact_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS event_supervisor_commands (
+      command_id TEXT PRIMARY KEY,
+      supervised_run_id TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      binding_id TEXT NOT NULL,
+      correlation_key TEXT NOT NULL,
+      action TEXT NOT NULL,
+      args_json TEXT,
+      receipt_id TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_correlation
+      ON event_supervised_runs (source_id, binding_id, correlation_key, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_active_target
+      ON event_supervised_runs (active_target_execution_id);
+    CREATE INDEX IF NOT EXISTS idx_event_supervisor_commands_run
+      ON event_supervisor_commands (supervised_run_id, created_at);
+    CREATE TABLE IF NOT EXISTS supervisor_conversations (
+      supervisor_conversation_id TEXT PRIMARY KEY,
+      supervisor_profile_id TEXT NOT NULL,
+      profile_revision TEXT NOT NULL,
+      supervisor_workflow_name TEXT NOT NULL,
+      supervisor_execution_id TEXT,
+      source_id TEXT NOT NULL,
+      binding_id TEXT,
+      correlation_key TEXT NOT NULL,
+      conversation_revision INTEGER NOT NULL,
+      selected_managed_run_id TEXT,
+      selected_managed_run_ids_by_workflow_key_json TEXT,
+      status TEXT NOT NULL,
+      artifact_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS supervisor_conversation_managed_runs (
+      managed_run_id TEXT PRIMARY KEY,
+      supervisor_conversation_id TEXT NOT NULL,
+      managed_workflow_key TEXT NOT NULL,
+      target_workflow_name TEXT NOT NULL,
+      run_alias TEXT,
+      active_target_execution_id TEXT,
+      status TEXT NOT NULL,
+      restart_count INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS supervisor_dispatch_decisions (
+      decision_id TEXT PRIMARY KEY,
+      supervisor_conversation_id TEXT NOT NULL,
+      source_message_id TEXT NOT NULL,
+      profile_revision TEXT NOT NULL,
+      conversation_revision INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      proposal_json TEXT NOT NULL,
+      result_summary_json TEXT,
+      receipt_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_supervisor_conversations_correlation
+      ON supervisor_conversations (source_id, binding_id, correlation_key, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_supervisor_managed_runs_conversation
+      ON supervisor_conversation_managed_runs (supervisor_conversation_id, updated_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_dispatch_decisions_dedupe
+      ON supervisor_dispatch_decisions (supervisor_conversation_id, source_message_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_conversations_active_correlation
+      ON supervisor_conversations (source_id, correlation_key, ifnull(binding_id, ''))
+      WHERE status IN ('active', 'idle');
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_managed_runs_alias_scope
+      ON supervisor_conversation_managed_runs (
+        supervisor_conversation_id,
+        managed_workflow_key,
+        run_alias
+      )
+      WHERE run_alias IS NOT NULL;
+  `);
+
+  const receiptColumns = db
+    .query("PRAGMA table_info(event_receipts)")
+    .all() as Array<{ name: string }>;
+  const receiptColumnSet = new Set(receiptColumns.map((row) => row.name));
+  if (!receiptColumnSet.has("supervised_run_id")) {
+    db.exec("ALTER TABLE event_receipts ADD COLUMN supervised_run_id TEXT");
+  }
+  if (!receiptColumnSet.has("supervisor_execution_id")) {
+    db.exec(
+      "ALTER TABLE event_receipts ADD COLUMN supervisor_execution_id TEXT",
+    );
+  }
+  if (!receiptColumnSet.has("supervisor_conversation_id")) {
+    db.exec(
+      "ALTER TABLE event_receipts ADD COLUMN supervisor_conversation_id TEXT",
+    );
+  }
+  if (!receiptColumnSet.has("supervisor_decision_id")) {
+    db.exec(
+      "ALTER TABLE event_receipts ADD COLUMN supervisor_decision_id TEXT",
+    );
+  }
+  const supervisorCommandColumns = db
+    .query("PRAGMA table_info(event_supervisor_commands)")
+    .all() as Array<{ name: string }>;
+  const supervisorCommandColumnSet = new Set(
+    supervisorCommandColumns.map((row) => row.name),
+  );
+  if (!supervisorCommandColumnSet.has("args_json")) {
+    db.exec("ALTER TABLE event_supervisor_commands ADD COLUMN args_json TEXT");
+  }
+}
+
+export const eventRuntimeSchemaExtensions = [ensureEventRuntimeSchema] as const;
+
+export async function withEventRuntimeDatabase<T>(
+  options: LoadOptions,
+  action: (db: Database) => T,
+): Promise<T> {
+  return await withRuntimeDatabase(
+    options,
+    eventRuntimeSchemaExtensions,
+    action,
+  );
 }
 export interface RuntimeSessionRow {
   readonly session_id: string;
@@ -401,168 +623,10 @@ export function ensureSchema(db: Database): void {
       raw_message_json TEXT,
       at TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS event_receipts (
-      receipt_id TEXT PRIMARY KEY,
-      source_id TEXT NOT NULL,
-      binding_id TEXT,
-      dedupe_key TEXT NOT NULL,
-      status TEXT NOT NULL,
-      workflow_name TEXT,
-      workflow_execution_id TEXT,
-      artifact_dir TEXT NOT NULL,
-      error TEXT,
-      received_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS event_reply_dispatches (
-      idempotency_key TEXT PRIMARY KEY,
-      source_id TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      workflow_id TEXT NOT NULL,
-      workflow_execution_id TEXT NOT NULL,
-      node_id TEXT NOT NULL,
-      node_exec_id TEXT NOT NULL,
-      event_id TEXT NOT NULL,
-      conversation_id TEXT NOT NULL,
-      thread_id TEXT,
-      actor_id TEXT,
-      status TEXT NOT NULL,
-      dispatch_id TEXT,
-      provider_message_id TEXT,
-      request_json TEXT NOT NULL,
-      response_json TEXT,
-      error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS hook_events (
-      hook_event_id TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL,
-      workflow_execution_id TEXT NOT NULL,
-      node_id TEXT NOT NULL,
-      node_exec_id TEXT NOT NULL,
-      manager_session_id TEXT,
-      vendor TEXT NOT NULL,
-      agent_session_id TEXT NOT NULL,
-      raw_event_name TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      cwd TEXT NOT NULL,
-      transcript_path TEXT,
-      model TEXT,
-      turn_id TEXT,
-      payload_hash TEXT NOT NULL,
-      payload_ref_json TEXT,
-      response_json TEXT,
-      status TEXT NOT NULL,
-      error TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
     CREATE INDEX IF NOT EXISTS idx_sessions_workflow_name ON sessions (workflow_name);
     CREATE INDEX IF NOT EXISTS idx_node_exec_session ON node_executions (session_id, node_id);
     CREATE INDEX IF NOT EXISTS idx_node_logs_session ON node_logs (session_id, at);
     CREATE INDEX IF NOT EXISTS idx_llm_session_messages_session ON llm_session_messages (session_id, node_exec_id, ordinal);
-    CREATE INDEX IF NOT EXISTS idx_event_receipts_dedupe ON event_receipts (source_id, binding_id, dedupe_key, received_at);
-    CREATE INDEX IF NOT EXISTS idx_event_receipts_status ON event_receipts (status, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_event_reply_dispatches_workflow_execution ON event_reply_dispatches (workflow_execution_id, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_event_reply_dispatches_status ON event_reply_dispatches (status, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_hook_events_workflow_execution ON hook_events (workflow_execution_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_hook_events_agent_session ON hook_events (workflow_execution_id, agent_session_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_hook_events_manager_session ON hook_events (manager_session_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_hook_events_node_exec ON hook_events (node_exec_id, created_at);
-    CREATE TABLE IF NOT EXISTS event_supervised_runs (
-      supervised_run_id TEXT PRIMARY KEY,
-      source_id TEXT NOT NULL,
-      binding_id TEXT NOT NULL,
-      correlation_key TEXT NOT NULL,
-      supervisor_workflow_name TEXT NOT NULL,
-      supervisor_execution_id TEXT,
-      target_workflow_name TEXT NOT NULL,
-      active_target_execution_id TEXT,
-      status TEXT NOT NULL,
-      restart_count INTEGER NOT NULL,
-      max_restarts_on_failure INTEGER NOT NULL,
-      auto_improve_enabled INTEGER NOT NULL,
-      artifact_dir TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS event_supervisor_commands (
-      command_id TEXT PRIMARY KEY,
-      supervised_run_id TEXT NOT NULL,
-      source_id TEXT NOT NULL,
-      binding_id TEXT NOT NULL,
-      correlation_key TEXT NOT NULL,
-      action TEXT NOT NULL,
-      args_json TEXT,
-      receipt_id TEXT NOT NULL,
-      result_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_correlation
-      ON event_supervised_runs (source_id, binding_id, correlation_key, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_active_target
-      ON event_supervised_runs (active_target_execution_id);
-    CREATE INDEX IF NOT EXISTS idx_event_supervisor_commands_run
-      ON event_supervisor_commands (supervised_run_id, created_at);
-    CREATE TABLE IF NOT EXISTS supervisor_conversations (
-      supervisor_conversation_id TEXT PRIMARY KEY,
-      supervisor_profile_id TEXT NOT NULL,
-      profile_revision TEXT NOT NULL,
-      supervisor_workflow_name TEXT NOT NULL,
-      supervisor_execution_id TEXT,
-      source_id TEXT NOT NULL,
-      binding_id TEXT,
-      correlation_key TEXT NOT NULL,
-      conversation_revision INTEGER NOT NULL,
-      selected_managed_run_id TEXT,
-      selected_managed_run_ids_by_workflow_key_json TEXT,
-      status TEXT NOT NULL,
-      artifact_dir TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS supervisor_conversation_managed_runs (
-      managed_run_id TEXT PRIMARY KEY,
-      supervisor_conversation_id TEXT NOT NULL,
-      managed_workflow_key TEXT NOT NULL,
-      target_workflow_name TEXT NOT NULL,
-      run_alias TEXT,
-      active_target_execution_id TEXT,
-      status TEXT NOT NULL,
-      restart_count INTEGER NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS supervisor_dispatch_decisions (
-      decision_id TEXT PRIMARY KEY,
-      supervisor_conversation_id TEXT NOT NULL,
-      source_message_id TEXT NOT NULL,
-      profile_revision TEXT NOT NULL,
-      conversation_revision INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      proposal_json TEXT NOT NULL,
-      result_summary_json TEXT,
-      receipt_id TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_supervisor_conversations_correlation
-      ON supervisor_conversations (source_id, binding_id, correlation_key, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_supervisor_managed_runs_conversation
-      ON supervisor_conversation_managed_runs (supervisor_conversation_id, updated_at);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_dispatch_decisions_dedupe
-      ON supervisor_dispatch_decisions (supervisor_conversation_id, source_message_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_conversations_active_correlation
-      ON supervisor_conversations (source_id, correlation_key, ifnull(binding_id, ''))
-      WHERE status IN ('active', 'idle');
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_supervisor_managed_runs_alias_scope
-      ON supervisor_conversation_managed_runs (
-        supervisor_conversation_id,
-        managed_workflow_key,
-        run_alias
-      )
-      WHERE run_alias IS NOT NULL;
   `);
 
   const nodeExecutionColumns = db
@@ -651,38 +715,6 @@ export function ensureSchema(db: Database): void {
   if (!sessionContinuationColumnSet.has("history_imports_json")) {
     db.exec("ALTER TABLE sessions ADD COLUMN history_imports_json TEXT");
   }
-  const receiptColumns = db
-    .query("PRAGMA table_info(event_receipts)")
-    .all() as Array<{ name: string }>;
-  const receiptColumnSet = new Set(receiptColumns.map((row) => row.name));
-  if (!receiptColumnSet.has("supervised_run_id")) {
-    db.exec("ALTER TABLE event_receipts ADD COLUMN supervised_run_id TEXT");
-  }
-  if (!receiptColumnSet.has("supervisor_execution_id")) {
-    db.exec(
-      "ALTER TABLE event_receipts ADD COLUMN supervisor_execution_id TEXT",
-    );
-  }
-  if (!receiptColumnSet.has("supervisor_conversation_id")) {
-    db.exec(
-      "ALTER TABLE event_receipts ADD COLUMN supervisor_conversation_id TEXT",
-    );
-  }
-  if (!receiptColumnSet.has("supervisor_decision_id")) {
-    db.exec(
-      "ALTER TABLE event_receipts ADD COLUMN supervisor_decision_id TEXT",
-    );
-  }
-  const supervisorCommandColumns = db
-    .query("PRAGMA table_info(event_supervisor_commands)")
-    .all() as Array<{ name: string }>;
-  const supervisorCommandColumnSet = new Set(
-    supervisorCommandColumns.map((row) => row.name),
-  );
-  if (!supervisorCommandColumnSet.has("args_json")) {
-    db.exec("ALTER TABLE event_supervisor_commands ADD COLUMN args_json TEXT");
-  }
-
   backfillMissingNodeExecutionOrdinals(db);
 }
 export function toRuntimeEventReceiptIndexRecord(row: {

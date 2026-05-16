@@ -1,118 +1,66 @@
-// @ts-nocheck
-// biome-ignore-all lint/correctness/noUnusedVariables: shared lifecycle dependency extraction keeps original helper names available.
-import { workflowRunnerDeps } from "./workflow-runner-deps";
+import { workflowNodeExecutionPort } from "./workflow-runner-deps";
 import { resolveNodeExecutionOutput } from "./node-output-attempts";
 import { handlePreparedStepInput } from "./step-input";
 import { finalizeExecutedNode } from "./step-result-finalization";
 
+type AdapterAmbientManagerContext = any;
+type AdapterLlmSessionMessage = any;
+type AdapterProcessLog = any;
+type JsonSchemaValidationError = any;
+type NodeExecutionRecord = any;
+type WorkflowEdge = any;
+type WorkflowSessionState = any;
+
 const {
   mkdir,
-  rm,
   path,
-  writeJsonFile,
   writeRawTextFile,
-  buildAdapterDivedraHookContext,
-  normalizeOutputContractEnvelope,
-  executeAdapterWithTimeout,
-  executePackageNodeWithTimeout,
-  DispatchingNodeAdapter,
   claimFanoutStepBudget,
   loadContinuationRelatedSnapshots,
-  resolveContinuationAnchorPlacement,
   assembleNodeInput,
-  validateJsonValueAgainstSchema,
-  loadWorkflowFromDisk,
   appendMailboxPromptGuidance,
-  parseManagerControlPayload,
   buildAmbientManagerControlPlaneEnvironment,
-  createManagerSessionStore,
   hashManagerAuthToken,
   mintManagerAuthToken,
-  createExecutionCopyMutableWorkspace,
   buildNodeExecutionMailbox,
   writeNodeExecutionMailboxArtifacts,
   describeWorkflowNodeKind,
   isManagerNodeRef,
-  resolveEffectiveRoots,
   composeExecutionPrompts,
   err,
   ok,
-  isWorkflowOutputKindNode,
   resolveBackendSessionSelection,
   resolveRequiredStepExecutionAddress,
   toStepIdentityFields,
-  saveNodeExecutionToRuntimeDb,
-  saveProcessLogsToRuntimeDb,
-  inspectWorkflowRuntimeReadiness,
-  ScenarioNodeAdapter,
-  evaluateCompletion,
-  resolveLoopTransition,
-  buildOutputRefForExecution,
-  createSessionId,
-  createSessionState,
-  persistNodeBackendSession,
   resolveRequestedBackendSession,
   loadSession,
   saveSession,
-  buildSupervisionStallWatch,
-  isSupervisionStallLastError,
   getNormalizedNodePayload,
   getStructuralEdges,
-  getStructuralLoops,
-  resolveWorkflowManagerStepId,
-  resolveNodeExecutionWorkingDirectory,
-  resolveWorkflowExecutionWorkingDirectory,
-  NON_CONTRACT_CANDIDATE_FILE_ERROR,
   addMillisecondsToIso,
-  buildOptionalSkipOutput,
-  buildOutputPromptText,
   buildOutputPublicationPolicy,
-  buildReservedCandidateSubmissionPath,
-  buildRetryValidationFeedback,
-  cleanupReservedCandidateSubmissionPath,
   dedupeNodeIds,
-  describeAmbiguousFanoutBranchRerunTarget,
   emitWorkflowRunEvent,
-  evaluateEdge,
   findOwningManagerNodeId,
   findPendingOptionalNodeDecision,
-  hasPendingPausedFanoutBranch,
   mergeVariables,
   nextManagerSessionId,
   nextNodeExecId,
-  nextOutputAttemptId,
   notifyWorkflowProgress,
   nowIso,
-  removePendingOptionalNodeDecision,
-  resolveCandidatePayload,
   resolveOutputValidationAttempts,
   resolveTimeoutMs,
-  resolveTimeoutRestartBudget,
-  sha256Hex,
-  sleep,
   stableJson,
   upsertPendingOptionalNodeDecision,
   workflowRunFailure,
-  applyOptionalManagerDecisions,
-  executeCrossWorkflowDispatchesForNode,
-  executeLocalFanoutTransition,
-  runNestedSuperviserSessionDriver,
   buildLatestOutputMailboxIndex,
-  buildCommitMessageTemplate,
   buildScenarioExecutableNodePayload,
   buildUpstreamInputs,
-  cloneSession,
-  cloneSupervisionForContinuedRun,
-  createInitialSupervisionRunState,
   isTerminalStatus,
-  markCommunicationsConsumed,
-  persistCommunicationArtifact,
-  persistExternalMailboxInputCommunication,
-  readBusinessPayload,
   finalizeCompletedWorkflowRun,
-} = workflowRunnerDeps;
+} = workflowNodeExecutionPort;
 
-export async function runWorkflowQueue(input) {
+export async function runWorkflowQueue(input: any) {
   let {
     session,
     workflow,
@@ -465,15 +413,17 @@ export async function runWorkflowQueue(input) {
       const upstreamCommunicationIds = upstreamInputs.map(
         (entry) => entry.communicationId,
       );
-      const transcriptInput = (session.conversationTurns ?? []).map((turn) => ({
-        conversationId: turn.conversationId,
-        turnIndex: turn.turnIndex,
-        fromManagerStepId: turn.fromManagerStepId,
-        toManagerStepId: turn.toManagerStepId,
-        communicationId: turn.communicationId,
-        outputRef: turn.outputRef,
-        sentAt: turn.sentAt,
-      }));
+      const transcriptInput = (session.conversationTurns ?? []).map(
+        (turn: any) => ({
+          conversationId: turn.conversationId,
+          turnIndex: turn.turnIndex,
+          fromManagerStepId: turn.fromManagerStepId,
+          toManagerStepId: turn.toManagerStepId,
+          communicationId: turn.communicationId,
+          outputRef: turn.outputRef,
+          sentAt: turn.sentAt,
+        }),
+      );
       let assembledPromptText: string;
       let assembledArguments: Readonly<Record<string, unknown>> | null;
       let executionMailbox:
@@ -597,7 +547,7 @@ export async function runWorkflowQueue(input) {
           : { restartedFromNodeExecId: previousNodeExecId }),
         dryRun: options.dryRun ?? false,
       };
-      const preparedStepInputResult = await handlePreparedStepInput({
+      const preparedStepInputResult: any = await handlePreparedStepInput({
         nodePayload,
         baseInputPayload,
         artifactDir,
@@ -817,13 +767,13 @@ export async function runWorkflowQueue(input) {
           });
         }
       }
-      let outputPayload: Readonly<Record<string, unknown>>;
+      let outputPayload: any;
       let nodeStatus: NodeExecutionRecord["status"] = "succeeded";
       let outputValidationErrors: readonly JsonSchemaValidationError[] = [];
       let outputAttemptCount = 1;
       let processLogs: readonly AdapterProcessLog[] = [];
       let llmMessages: readonly AdapterLlmSessionMessage[] = [];
-      const outputResolution = await resolveNodeExecutionOutput({
+      const outputResolution: any = await resolveNodeExecutionOutput({
         options,
         agentNodePayload,
         executionNodePayload,
@@ -866,7 +816,7 @@ export async function runWorkflowQueue(input) {
       backendSessionProvider = outputResolution.backendSessionProvider;
       backendSession = outputResolution.backendSession;
       backendSessionId = outputResolution.backendSessionId;
-      const finalization = await finalizeExecutedNode({
+      const finalization: any = await finalizeExecutedNode({
         session,
         options,
         workflow,

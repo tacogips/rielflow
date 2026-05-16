@@ -1,9 +1,6 @@
 import { timingSafeEqual, createHash, randomBytes } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import { Database } from "bun:sqlite";
-import { DEFAULT_GRAPHQL_ENDPOINT } from "../graphql/endpoint";
-import { resolveRuntimeDbPath } from "./runtime-db";
+import type { Database } from "bun:sqlite";
+import { withRuntimeDatabase } from "./runtime-db";
 import type { LoadOptions } from "./types";
 
 export interface ManagerIntentSummary {
@@ -94,6 +91,8 @@ const AMBIENT_MANAGER_ENV_KEYS = [
   "DIVEDRA_MANAGER_STEP_ID",
   "DIVEDRA_MANAGER_NODE_EXEC_ID",
 ] as const;
+
+const DEFAULT_MANAGER_CONTROL_ENDPOINT = "http://127.0.0.1:43173/graphql";
 
 export interface ManagerSessionStore {
   createOrResumeSession(
@@ -276,13 +275,16 @@ export function resolveAmbientManagerExecutionContext(
   };
 }
 
-export function resolveManagerGraphqlEndpoint(
+export function resolveManagerControlEndpoint(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
   return (
-    readEnvValue(env, "DIVEDRA_GRAPHQL_ENDPOINT") ?? DEFAULT_GRAPHQL_ENDPOINT
+    readEnvValue(env, "DIVEDRA_GRAPHQL_ENDPOINT") ??
+    DEFAULT_MANAGER_CONTROL_ENDPOINT
   );
 }
+
+export const resolveManagerGraphqlEndpoint = resolveManagerControlEndpoint;
 
 export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly workflowId: string;
@@ -294,7 +296,7 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly env?: Readonly<Record<string, string | undefined>>;
 }): AmbientManagerControlPlaneEnvironment {
   return {
-    DIVEDRA_GRAPHQL_ENDPOINT: resolveManagerGraphqlEndpoint(input.env),
+    DIVEDRA_GRAPHQL_ENDPOINT: resolveManagerControlEndpoint(input.env),
     DIVEDRA_MANAGER_AUTH_TOKEN: input.authToken,
     DIVEDRA_MANAGER_SESSION_ID: input.managerSessionId,
     DIVEDRA_WORKFLOW_ID: input.workflowId,
@@ -314,9 +316,8 @@ export function stripAmbientManagerExecutionContext(
   return sanitized;
 }
 
-function ensureSchema(db: Database): void {
+function ensureManagerSessionSchema(db: Database): void {
   db.exec(`
-    PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS manager_sessions (
       manager_session_id TEXT PRIMARY KEY,
@@ -396,15 +397,11 @@ async function withManagerDatabase<T>(
   options: LoadOptions,
   action: (db: Database) => T,
 ): Promise<T> {
-  const dbPath = resolveRuntimeDbPath(options);
-  await mkdir(path.dirname(dbPath), { recursive: true });
-  const db = new Database(dbPath);
-  try {
-    ensureSchema(db);
-    return action(db);
-  } finally {
-    db.close();
-  }
+  return await withRuntimeDatabase(
+    options,
+    [ensureManagerSessionSchema],
+    action,
+  );
 }
 
 export function createManagerSessionStore(

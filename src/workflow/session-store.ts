@@ -9,12 +9,16 @@ import {
   type WorkflowSessionState,
 } from "./session";
 import { resolveRootDataDir } from "./paths";
-import { saveSessionSnapshotToRuntimeDb } from "./runtime-db";
+import {
+  createRuntimeDbSessionSnapshotIndexer,
+  type SessionSnapshotIndexer,
+} from "./runtime-db";
 import { ROOT_DATA_SESSIONS_SUBDIR, type LoadOptions } from "./types";
 
 export interface SessionStoreOptions extends LoadOptions {
   readonly sessionStoreRoot?: string;
   readonly scheduledEventManager?: ScheduledEventManager;
+  readonly sessionSnapshotIndexer?: SessionSnapshotIndexer;
 }
 
 export interface SessionStoreFailure {
@@ -44,6 +48,16 @@ function sessionFilePath(sessionStoreRoot: string, sessionId: string): string {
   return path.join(sessionStoreRoot, `${sessionId}.json`);
 }
 
+async function saveSessionSnapshotIndex(
+  session: WorkflowSessionState,
+  options: SessionStoreOptions,
+): Promise<void> {
+  const indexer =
+    options.sessionSnapshotIndexer ??
+    createRuntimeDbSessionSnapshotIndexer(options);
+  await indexer.saveSnapshot(session);
+}
+
 export async function saveSession(
   session: WorkflowSessionState,
   options: SessionStoreOptions = {},
@@ -70,7 +84,7 @@ export async function saveSession(
       "utf8",
     );
     try {
-      await saveSessionSnapshotToRuntimeDb(sessionToPersist, options);
+      await saveSessionSnapshotIndex(sessionToPersist, options);
     } catch {
       // runtime DB index is best-effort and must not break primary file persistence
     }

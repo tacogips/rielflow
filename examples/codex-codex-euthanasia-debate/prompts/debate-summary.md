@@ -1,1 +1,0 @@
-The debate loop has ended. Read the latest affirmative and negative outputs from `inbox` and emit a short closing JSON summary: `stance` (use `neutral`), `roundsCompleted`, `summary` (one paragraph), and repeat the last affirmative `argument` and `responseToOpponent` fields so verification can match the final published affirmative turn.

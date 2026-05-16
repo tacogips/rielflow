@@ -1,0 +1,11 @@
+{
+  "id": "step6-post-refactor-review",
+  "description": "Independently review the latest refactoring task and routing state.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/step6-post-refactor-review.md",
+  "variables": {},
+  "output": {
+    "description": "Return adapter JSON with needs_revision, plan_remaining, accepted, findings, verification evidence, and residual risks."
+  }
+}

@@ -25,13 +25,10 @@ import {
   resolveWorkflowStepExecutionRole,
 } from "./node-payload-validation";
 import {
-  inferSingleManagerStepIdFromRawAsync,
-  inferSingleManagerStepIdFromRawSync,
   intervalsPartiallyOverlap,
   pushCrossingIntervalIssue,
-  resolveCalleeWorkflowEntry,
-  resolveCalleeWorkflowJsonByIdAsync,
-  resolveCalleeWorkflowJsonByIdSync,
+  resolveCalleeWorkflowEntryByIdAsync,
+  resolveCalleeWorkflowEntryByIdSync,
 } from "./output-contracts-and-callees";
 
 export function validateCrossWorkflowCalleeEntryAlignmentSync(
@@ -69,33 +66,9 @@ export function validateCrossWorkflowCalleeEntryAlignmentSync(
     }
 
     try {
-      const resolvedWorkflow = resolveCalleeWorkflowJsonByIdSync({
+      const resolved = resolveCalleeWorkflowEntryByIdSync({
         workflowRoot: resolvedRoot,
         workflowId: calleeId,
-      });
-      if (!resolvedWorkflow.ok) {
-        calleeEntryById.set(calleeId, {
-          status: "error",
-          message: resolvedWorkflow.message,
-        });
-        return { ok: false, message: resolvedWorkflow.message };
-      }
-      const inferred = inferSingleManagerStepIdFromRawSync({
-        raw: resolvedWorkflow.raw,
-        workflowDirectory: resolvedWorkflow.workflowDirectory,
-      });
-      if (!inferred.ok) {
-        calleeEntryById.set(calleeId, {
-          status: "error",
-          message: inferred.message,
-        });
-        return { ok: false, message: inferred.message };
-      }
-      const resolved = resolveCalleeWorkflowEntry({
-        raw: resolvedWorkflow.raw,
-        ...(inferred.managerStepId === undefined
-          ? {}
-          : { inferredManagerStepId: inferred.managerStepId }),
       });
       if (!resolved.ok) {
         calleeEntryById.set(calleeId, {
@@ -189,33 +162,9 @@ export async function validateCrossWorkflowCalleeEntryAlignment(
     }
 
     try {
-      const resolvedWorkflow = await resolveCalleeWorkflowJsonByIdAsync({
+      const resolved = await resolveCalleeWorkflowEntryByIdAsync({
         workflowRoot: resolvedRoot,
         workflowId: calleeId,
-      });
-      if (!resolvedWorkflow.ok) {
-        calleeEntryById.set(calleeId, {
-          status: "error",
-          message: resolvedWorkflow.message,
-        });
-        return { ok: false, message: resolvedWorkflow.message };
-      }
-      const inferred = await inferSingleManagerStepIdFromRawAsync({
-        raw: resolvedWorkflow.raw,
-        workflowDirectory: resolvedWorkflow.workflowDirectory,
-      });
-      if (!inferred.ok) {
-        calleeEntryById.set(calleeId, {
-          status: "error",
-          message: inferred.message,
-        });
-        return { ok: false, message: inferred.message };
-      }
-      const resolved = resolveCalleeWorkflowEntry({
-        raw: resolvedWorkflow.raw,
-        ...(inferred.managerStepId === undefined
-          ? {}
-          : { inferredManagerStepId: inferred.managerStepId }),
       });
       if (!resolved.ok) {
         calleeEntryById.set(calleeId, {

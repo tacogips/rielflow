@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
   atomicWriteJsonFile as writeJsonFile,
@@ -44,6 +44,7 @@ import {
 } from "../runtime-addressing";
 import { saveProcessLogsToRuntimeDb } from "../runtime-db";
 import { inspectWorkflowRuntimeReadiness } from "../runtime-readiness";
+import { runOutputAttempts } from "../output-attempt-runner";
 import {
   isTerminalWorkflowSessionStatus,
   persistNodeBackendSession,
@@ -71,15 +72,8 @@ import {
   resolveTimeoutMs,
   resolveOutputValidationAttempts,
   buildOutputPublicationPolicy,
-  nextOutputAttemptId,
-  buildReservedCandidateSubmissionPath,
-  cleanupReservedCandidateSubmissionPath,
-  NON_CONTRACT_CANDIDATE_FILE_ERROR,
-  formatOutputValidationErrors,
-  buildOutputPromptText,
   buildScenarioExecutableNodePayload,
   applyDirectExecutionOverrides,
-  OutputValidator,
   MailboxPublisher,
 } from "./direct-step-helpers";
 import {
@@ -88,7 +82,6 @@ import {
 } from "./direct-step-session-updates";
 export class ExecutionDispatcher {
   readonly #adapter: NodeAdapter;
-  readonly #validator = new OutputValidator();
   readonly #publisher: MailboxPublisher;
   constructor(adapter: NodeAdapter, options: LoadOptions) {
     this.#adapter = adapter;
@@ -488,336 +481,115 @@ export class ExecutionDispatcher {
         payload: { skippedExecution: true },
       };
     } else {
-      const maxAttempts = resolveOutputValidationAttempts(executionNodePayload);
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        outputAttemptCount = attempt;
-        const outputAttemptId =
-          executionNodePayload.output === undefined
-            ? undefined
-            : nextOutputAttemptId(attempt);
-        const attemptDir =
-          outputAttemptId === undefined
-            ? undefined
-            : path.join(artifactDir, "output-attempts", outputAttemptId);
-        const requestPath =
-          attemptDir === undefined
-            ? undefined
-            : path.join(attemptDir, "request.json");
-        const validationPath =
-          attemptDir === undefined
-            ? undefined
-            : path.join(attemptDir, "validation.json");
-        const candidateArtifactPath =
-          attemptDir === undefined
-            ? undefined
-            : path.join(attemptDir, "candidate.json");
-        const candidatePath =
-          outputAttemptId === undefined || agentNodePayload === null
-            ? undefined
-            : buildReservedCandidateSubmissionPath({
+      const attemptResult = await runOutputAttempts({
+        workflowId: workflow.workflowId,
+        workflowExecutionId: session.sessionId,
+        nodeId: input.stepId,
+        nodeExecId,
+        artifactDir,
+        agentNodePayload,
+        executionNodePayload,
+        basePromptText: promptText,
+        ...(systemPromptText === undefined ? {} : { systemPromptText }),
+        initialOutputValidationErrors: outputValidationErrors,
+        initialProcessLogs: processLogs,
+        initialLlmMessages: llmMessages,
+        ...(backendSession === undefined
+          ? {}
+          : { initialBackendSession: backendSession }),
+        clearValidationErrorsOnExecutionFailure: false,
+        executeAttempt: async ({
+          executionPromptText,
+          outputContract,
+          backendSession: currentBackendSession,
+        }) => {
+          const supervisionStall = buildSupervisionStallWatch(session, input, {
+            ...(executionNodePayload.stallTimeoutMs === undefined
+              ? {}
+              : { stallTimeoutMs: executionNodePayload.stallTimeoutMs }),
+          });
+          if (agentNodePayload !== null) {
+            return await executeAdapterWithTimeout(
+              this.#adapter,
+              {
                 workflowId: workflow.workflowId,
                 workflowExecutionId: session.sessionId,
                 nodeId: input.stepId,
                 nodeExecId,
-                outputAttemptId,
-              });
-        if (
-          attemptDir !== undefined &&
-          requestPath !== undefined &&
-          candidatePath !== undefined
-        ) {
-          await mkdir(attemptDir, { recursive: true });
-          await mkdir(path.dirname(candidatePath), { recursive: true });
-          await rm(candidatePath, { force: true });
-        }
-        const executionPromptText =
-          candidatePath === undefined || agentNodePayload === null
-            ? promptText
-            : buildOutputPromptText({
-                basePromptText: promptText,
                 node: agentNodePayload,
-                candidatePath,
-                validationErrors: outputValidationErrors,
-              });
-        const retryValidationFeedback = formatOutputValidationErrors(
-          outputValidationErrors,
-        );
-        if (requestPath !== undefined && candidatePath !== undefined) {
-          await writeJsonFile(requestPath, {
-            attempt,
-            executionBackend:
-              agentNodePayload?.executionBackend ??
-              executionNodePayload.nodeType ??
-              "agent",
-            model: agentNodePayload?.model ?? executionNodePayload.nodeType,
-            promptText: executionPromptText,
-            candidatePath,
-            validationErrors: retryValidationFeedback,
-          });
-        }
-        const supervisionStall = buildSupervisionStallWatch(session, input, {
-          ...(executionNodePayload.stallTimeoutMs === undefined
-            ? {}
-            : { stallTimeoutMs: executionNodePayload.stallTimeoutMs }),
-        });
-        const execution =
-          agentNodePayload !== null
-            ? await executeAdapterWithTimeout(
-                this.#adapter,
-                {
+                workingDirectory: resolveNodeExecutionWorkingDirectory(
+                  workflowWorkingDirectory,
+                  agentNodePayload.workingDirectory,
+                ),
+                mergedVariables,
+                ...(systemPromptText === undefined ? {} : { systemPromptText }),
+                promptText: executionPromptText,
+                arguments: assembled.arguments,
+                executionIndex,
+                artifactDir,
+                upstreamCommunicationIds: [],
+                executionMailbox,
+                divedraHookContext: buildAdapterDivedraHookContext({
                   workflowId: workflow.workflowId,
                   workflowExecutionId: session.sessionId,
                   nodeId: input.stepId,
                   nodeExecId,
-                  node: agentNodePayload,
-                  workingDirectory: resolveNodeExecutionWorkingDirectory(
-                    workflowWorkingDirectory,
-                    agentNodePayload.workingDirectory,
-                  ),
-                  mergedVariables,
-                  ...(systemPromptText === undefined
+                  mailboxDir,
+                  ...(agentNodePayload.executionBackend === undefined
                     ? {}
-                    : { systemPromptText }),
-                  promptText: executionPromptText,
-                  arguments: assembled.arguments,
-                  executionIndex,
-                  artifactDir,
-                  upstreamCommunicationIds: [],
-                  executionMailbox,
-                  divedraHookContext: buildAdapterDivedraHookContext({
-                    workflowId: workflow.workflowId,
-                    workflowExecutionId: session.sessionId,
-                    nodeId: input.stepId,
-                    nodeExecId,
-                    mailboxDir,
-                    ...(agentNodePayload.executionBackend === undefined
-                      ? {}
-                      : { agentBackend: agentNodePayload.executionBackend }),
-                  }),
-                  ...(backendSession === undefined ? {} : { backendSession }),
-                  ...(ambientManagerContext === undefined
-                    ? {}
-                    : { ambientManagerContext }),
-                  ...(candidatePath === undefined ||
-                  agentNodePayload.output === undefined
-                    ? {}
-                    : {
-                        output: {
-                          ...(agentNodePayload.output.description === undefined
-                            ? {}
-                            : {
-                                description:
-                                  agentNodePayload.output.description,
-                              }),
-                          ...(agentNodePayload.output.jsonSchema === undefined
-                            ? {}
-                            : {
-                                jsonSchema: agentNodePayload.output.jsonSchema,
-                              }),
-                          maxValidationAttempts: maxAttempts,
-                          attempt,
-                          candidatePath,
-                          validationErrors: formatOutputValidationErrors(
-                            outputValidationErrors,
-                          ),
-                          publication: buildOutputPublicationPolicy(),
-                        },
-                      }),
-                },
-                timeoutMs,
-                supervisionStall,
-              )
-            : await executePackageNodeWithTimeout({
-                workflowDirectory: loaded.value.workflowDirectory,
-                workflowWorkingDirectory,
-                artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
-                workflowId: workflow.workflowId,
-                workflowDescription: workflow.description,
-                workflowExecutionId: session.sessionId,
-                nodeId: input.stepId,
-                nodeExecId,
-                node: executionNodePayload,
-                workflowDefaults: workflow.defaults,
-                runtimeVariables: session.runtimeVariables,
-                mergedVariables,
-                arguments: assembled.arguments,
-                artifactDir,
-                executionMailbox,
-                ...(input.eventReplyDispatcher === undefined
+                    : { agentBackend: agentNodePayload.executionBackend }),
+                }),
+                ...(currentBackendSession === undefined
                   ? {}
-                  : { chatReplyDispatcher: input.eventReplyDispatcher }),
-                ...(input.env === undefined ? {} : { env: input.env }),
-                ...(input.superviserControl === undefined
+                  : { backendSession: currentBackendSession }),
+                ...(ambientManagerContext === undefined
                   ? {}
-                  : { superviserControl: input.superviserControl }),
-                timeoutMs,
-                ...(supervisionStall === undefined ? {} : { supervisionStall }),
-              });
-        try {
-          if (!execution.ok) {
-            processLogs = [
-              ...processLogs,
-              ...(execution.error.processLogs ?? []),
-            ];
-            if (
-              execution.error.code === "invalid_output" &&
-              executionNodePayload.output !== undefined &&
-              validationPath !== undefined
-            ) {
-              outputValidationErrors = [
-                { path: "$", message: execution.error.message },
-              ];
-              await writeJsonFile(validationPath, {
-                valid: false,
-                errors: outputValidationErrors,
-                rejectedAt: nowIso(),
-              });
-              if (attempt < maxAttempts) {
-                continue;
-              }
-              nodeStatus = "failed";
-              finalOutputPayload = {
-                provider: "deterministic-local",
-                model:
-                  agentNodePayload?.model ??
-                  executionNodePayload.nodeType ??
-                  "node",
-                promptText,
-                completionPassed: false,
-                when: {},
-                payload: {},
-                error: "output_validation_failed",
-                validationErrors: outputValidationErrors,
-              };
-              break;
-            }
-            nodeStatus =
-              execution.error.code === "timeout" ? "timed_out" : "failed";
-            finalOutputPayload = {
-              provider: "deterministic-local",
-              model:
-                agentNodePayload?.model ??
-                executionNodePayload.nodeType ??
-                "node",
-              promptText,
-              completionPassed: false,
-              when: {},
-              payload:
-                execution.error.code === "provider_error" &&
-                execution.error.message.length > 0
-                  ? { providerErrorMessage: execution.error.message }
-                  : {},
-              error: execution.error.code,
-            };
-            break;
-          }
-          backendSessionProvider = execution.value.provider;
-          processLogs = [
-            ...processLogs,
-            ...(execution.value.processLogs ?? []),
-          ];
-          llmMessages = [
-            ...llmMessages,
-            ...(execution.value.llmMessages ?? []),
-          ];
-          if (execution.value.backendSession?.sessionId !== undefined) {
-            backendSession = {
-              mode: "reuse",
-              sessionId: execution.value.backendSession.sessionId,
-            };
-            backendSessionId = execution.value.backendSession.sessionId;
-          }
-          if (
-            executionNodePayload.output === undefined &&
-            execution.value.candidateFilePath !== undefined
-          ) {
-            outputValidationErrors = [
-              { path: "$", message: NON_CONTRACT_CANDIDATE_FILE_ERROR },
-            ];
-            nodeStatus = "failed";
-            finalOutputPayload = {
-              provider: execution.value.provider,
-              model: execution.value.model,
-              promptText,
-              completionPassed: false,
-              when: {},
-              payload: {},
-              error: "invalid_output",
-              validationErrors: outputValidationErrors,
-            };
-            break;
-          }
-          const validation = await this.#validator.validate({
-            node: executionNodePayload,
-            execution: execution.value,
-            ...(candidatePath === undefined
-              ? {}
-              : { expectedCandidatePath: candidatePath }),
-          });
-          if (!validation.ok && validation.error.payload !== undefined) {
-            if (candidateArtifactPath !== undefined) {
-              await writeJsonFile(
-                candidateArtifactPath,
-                validation.error.payload,
-              );
-            }
-          }
-          if (!validation.ok) {
-            outputValidationErrors = validation.error.errors;
-            if (validationPath !== undefined) {
-              await writeJsonFile(validationPath, {
-                valid: false,
-                errors: outputValidationErrors,
-                rejectedAt: nowIso(),
-              });
-            }
-            if (attempt < maxAttempts && validation.error.retryable) {
-              continue;
-            }
-            nodeStatus = "failed";
-            finalOutputPayload = {
-              provider: execution.value.provider,
-              model: execution.value.model,
-              promptText,
-              completionPassed: false,
-              when: {},
-              payload: {},
-              error: validation.error.retryable
-                ? "output_validation_failed"
-                : "invalid_output",
-              validationErrors: validation.error.errors,
-            };
-            break;
-          }
-          if (candidateArtifactPath !== undefined) {
-            await writeJsonFile(
-              candidateArtifactPath,
-              validation.value.payload,
+                  : { ambientManagerContext }),
+                ...(outputContract === undefined
+                  ? {}
+                  : { output: outputContract }),
+              },
+              timeoutMs,
+              supervisionStall,
             );
           }
-          if (validationPath !== undefined) {
-            await writeJsonFile(validationPath, {
-              valid: true,
-              errors: [],
-              validatedAt: nowIso(),
-            });
-          }
-          finalOutputPayload = {
-            provider: execution.value.provider,
-            model: execution.value.model,
-            promptText,
-            completionPassed: validation.value.completionPassed,
-            when: validation.value.when,
-            payload: validation.value.payload,
-          };
-          outputValidationErrors = validation.value.errors;
-          break;
-        } finally {
-          if (candidatePath !== undefined) {
-            await cleanupReservedCandidateSubmissionPath(candidatePath);
-          }
-        }
-      }
+          return await executePackageNodeWithTimeout({
+            workflowDirectory: loaded.value.workflowDirectory,
+            workflowWorkingDirectory,
+            artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
+            workflowId: workflow.workflowId,
+            workflowDescription: workflow.description,
+            workflowExecutionId: session.sessionId,
+            nodeId: input.stepId,
+            nodeExecId,
+            node: executionNodePayload,
+            workflowDefaults: workflow.defaults,
+            runtimeVariables: session.runtimeVariables,
+            mergedVariables,
+            arguments: assembled.arguments,
+            artifactDir,
+            executionMailbox,
+            ...(input.eventReplyDispatcher === undefined
+              ? {}
+              : { chatReplyDispatcher: input.eventReplyDispatcher }),
+            ...(input.env === undefined ? {} : { env: input.env }),
+            ...(input.superviserControl === undefined
+              ? {}
+              : { superviserControl: input.superviserControl }),
+            timeoutMs,
+            ...(supervisionStall === undefined ? {} : { supervisionStall }),
+          });
+        },
+      });
+      finalOutputPayload = attemptResult.outputPayload;
+      nodeStatus = attemptResult.nodeStatus;
+      outputValidationErrors = attemptResult.outputValidationErrors;
+      outputAttemptCount = attemptResult.outputAttemptCount;
+      processLogs = attemptResult.processLogs;
+      llmMessages = attemptResult.llmMessages;
+      backendSessionProvider = attemptResult.backendSessionProvider;
+      backendSession = attemptResult.backendSession;
+      backendSessionId = attemptResult.backendSessionId;
     }
     const endedAt = nowIso();
     try {

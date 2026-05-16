@@ -1,3 +1,11 @@
+export {
+  validatePureWorkflowBundle,
+  validatePureWorkflowBundleDetailed,
+  type PureWorkflowValidationOptions,
+  type PureWorkflowValidationResult,
+  type PureWorkflowValidationSuccess,
+  type RawWorkflowBundle,
+} from "divedra-core/workflow-validation";
 export * from "./validate/validation-types-and-runtime-options";
 export * from "./validate/node-container-and-addon-validation";
 export * from "./validate/workflow-step-validation";

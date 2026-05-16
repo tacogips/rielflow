@@ -1,1 +1,0 @@
-Normalize the current debate state for the {{stanceLabel}} side. On the first turn, use the human input topic. On later turns, use `inbox.latest.output` as the latest opposing statement. Return JSON with the topic, role, and the opponent claim to answer.

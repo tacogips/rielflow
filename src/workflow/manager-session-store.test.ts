@@ -11,6 +11,7 @@ import {
   resolveAmbientManagerExecutionContext,
   stripAmbientManagerExecutionContext,
 } from "./manager-session-store";
+import { resolveRuntimeDbPath } from "./runtime-db";
 
 const tempDirs: string[] = [];
 
@@ -305,6 +306,49 @@ describe("manager-session-store", () => {
     const finalized = await store.loadSession("mgrsess-000001");
     expect(finalized?.lastMessageId).toBe("mgrmsg-000001");
     expect(finalized?.controlMode).toBe("graphql-manager-message");
+  });
+
+  test("extends the shared runtime database schema for manager tables", async () => {
+    const root = await makeTempDir();
+    const options = {
+      cwd: root,
+      rootDataDir: path.join(root, "data"),
+    };
+    const store = createManagerSessionStore(options);
+
+    await store.createOrResumeSession({
+      managerSessionId: "mgrsess-schema",
+      workflowId: "wf",
+      workflowExecutionId: "exec-1",
+      managerStepId: "manager",
+      managerNodeExecId: "exec-000001",
+      status: "active",
+      createdAt: "2026-05-16T00:00:00.000Z",
+      updatedAt: "2026-05-16T00:00:00.000Z",
+      authTokenHash: hashManagerAuthToken("token"),
+      authTokenExpiresAt: "2026-05-17T00:00:00.000Z",
+    });
+
+    const db = new Database(resolveRuntimeDbPath(options), { readonly: true });
+    try {
+      const tableRows = db
+        .query(
+          `
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name IN ('sessions', 'manager_sessions')
+            ORDER BY name ASC
+          `,
+        )
+        .all() as readonly { readonly name: string }[];
+      expect(tableRows.map((row) => row.name)).toEqual([
+        "manager_sessions",
+        "sessions",
+      ]);
+    } finally {
+      db.close();
+    }
   });
 
   test("resolves ambient manager execution context only when required fields exist", () => {

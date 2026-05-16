@@ -2,6 +2,11 @@ import type { DivedraOptions } from "../lib";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import type { ChatReplyDispatcher } from "../workflow/types";
 import type { WorkflowSupervisorClient } from "../workflow/supervisor-client";
+import type { WorkflowSupervisorDispatchClient } from "../workflow/supervisor-dispatch-client";
+import type {
+  EventReceiptStore,
+  WorkflowTriggerExecutionPort,
+} from "divedra-events/runtime-ports";
 
 /**
  * Options for {@link import("./trigger-runner").createWorkflowTriggerRunner} and
@@ -20,5 +25,8 @@ export interface WorkflowTriggerRunnerOptions extends DivedraOptions {
   readonly defaultTimeoutMs?: number;
   readonly readOnly?: boolean;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
+  readonly eventReceiptStore?: EventReceiptStore;
+  readonly workflowExecutionPort?: WorkflowTriggerExecutionPort;
   readonly supervisorClient?: WorkflowSupervisorClient;
+  readonly supervisorDispatchClient?: WorkflowSupervisorDispatchClient;
 }

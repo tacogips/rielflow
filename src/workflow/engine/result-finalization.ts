@@ -1,7 +1,10 @@
-// @ts-nocheck
 import { publishWorkflowBusinessFinalExternalOutput } from "../../events/external-output";
 import { err, ok } from "../result";
 import type { CommunicationRecord } from "../session";
+import type { LoadedWorkflow } from "../load";
+import type { WorkflowJson } from "../types";
+import type { WorkflowRunOptions } from "./types-and-session-state";
+import type { WorkflowSessionState } from "../session";
 import { loadSession } from "../session-store";
 import { findLatestPublishedWorkflowResult } from "./cross-workflow-dispatch";
 import {
@@ -17,7 +20,16 @@ import {
   workflowRunFailure,
 } from "./types-and-session-state";
 
-export async function finalizeCompletedWorkflowRun(input) {
+interface FinalizeCompletedWorkflowRunInput {
+  readonly session: WorkflowSessionState;
+  readonly workflow: WorkflowJson;
+  readonly loaded: LoadedWorkflow;
+  readonly options: WorkflowRunOptions;
+}
+
+export async function finalizeCompletedWorkflowRun(
+  input: FinalizeCompletedWorkflowRunInput,
+) {
   const { session, workflow, loaded, options } = input;
   const beforeComplete = await loadSession(session.sessionId, options);
   if (beforeComplete.ok && isTerminalStatus(beforeComplete.value.status)) {
@@ -35,7 +47,7 @@ export async function finalizeCompletedWorkflowRun(input) {
     );
   }
 
-  let completed = {
+  let completed: WorkflowSessionState = {
     ...session,
     status: "completed",
     endedAt: nowIso(),

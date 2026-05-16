@@ -1,5 +1,3 @@
-// @ts-nocheck
-// biome-ignore-all lint/correctness/noUnusedImports: shared dependency module intentionally centralizes imports for extracted lifecycle phases.
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -9,10 +7,6 @@ import {
 import {
   buildAdapterDivedraHookContext,
   normalizeOutputContractEnvelope,
-  type AdapterAmbientManagerContext,
-  type AdapterLlmSessionMessage,
-  type AdapterProcessLog,
-  type NodeAdapter,
 } from "../adapter";
 import {
   executeAdapterWithTimeout,
@@ -25,10 +19,7 @@ import {
   resolveContinuationAnchorPlacement,
 } from "../history-continuation";
 import { assembleNodeInput } from "../input-assembly";
-import {
-  validateJsonValueAgainstSchema,
-  type JsonSchemaValidationError,
-} from "../json-schema";
+import { validateJsonValueAgainstSchema } from "../json-schema";
 import { loadWorkflowFromDisk } from "../load";
 import { appendMailboxPromptGuidance } from "../mailbox-prompt-guidance";
 import { parseManagerControlPayload } from "../manager-control";
@@ -46,7 +37,7 @@ import {
 import { describeWorkflowNodeKind, isManagerNodeRef } from "../node-role";
 import { resolveEffectiveRoots } from "../paths";
 import { composeExecutionPrompts } from "../prompt-composition";
-import { err, ok, type Result } from "../result";
+import { err, ok } from "../result";
 import {
   isWorkflowOutputKindNode,
   resolveBackendSessionSelection,
@@ -66,22 +57,12 @@ import {
   createSessionState,
   persistNodeBackendSession,
   resolveRequestedBackendSession,
-  type CommunicationRecord,
-  type FanoutGroupRunRecord,
-  type NodeExecutionRecord,
-  type WorkflowSessionState,
 } from "../session";
 import { loadSession, saveSession } from "../session-store";
 import {
   buildSupervisionStallWatch,
   isSupervisionStallLastError,
 } from "../superviser";
-import type {
-  JsonObject,
-  LoopRule,
-  SupervisionRunState,
-  WorkflowEdge,
-} from "../types";
 import {
   getNormalizedNodePayload,
   getStructuralEdges,
@@ -92,14 +73,6 @@ import {
   resolveNodeExecutionWorkingDirectory,
   resolveWorkflowExecutionWorkingDirectory,
 } from "../working-directory";
-import type {
-  CancellationProbe,
-  EngineExecutionGuards,
-  NormalizedWorkflowRunOptions,
-  WorkflowRunFailure,
-  WorkflowRunOptions,
-  WorkflowRunResult,
-} from "./types-and-session-state";
 import {
   NON_CONTRACT_CANDIDATE_FILE_ERROR,
   addMillisecondsToIso,
@@ -260,4 +233,367 @@ export const workflowRunnerDeps = {
   persistExternalMailboxInputCommunication,
   readBusinessPayload,
   finalizeCompletedWorkflowRun,
+} as const;
+
+export type WorkflowRunnerDeps = typeof workflowRunnerDeps;
+
+export type WorkflowRunnerFileSystemPort = Pick<
+  WorkflowRunnerDeps,
+  "mkdir" | "rm" | "path" | "writeJsonFile" | "writeRawTextFile"
+>;
+
+export type WorkflowRunnerAdapterPort = Pick<
+  WorkflowRunnerDeps,
+  | "buildAdapterDivedraHookContext"
+  | "normalizeOutputContractEnvelope"
+  | "executeAdapterWithTimeout"
+  | "executePackageNodeWithTimeout"
+  | "DispatchingNodeAdapter"
+  | "ScenarioNodeAdapter"
+>;
+
+export type WorkflowRunnerPersistencePort = Pick<
+  WorkflowRunnerDeps,
+  | "createManagerSessionStore"
+  | "saveNodeExecutionToRuntimeDb"
+  | "saveProcessLogsToRuntimeDb"
+  | "loadSession"
+  | "saveSession"
+>;
+
+export type WorkflowRunnerAuthoringPort = Pick<
+  WorkflowRunnerDeps,
+  | "loadContinuationRelatedSnapshots"
+  | "resolveContinuationAnchorPlacement"
+  | "validateJsonValueAgainstSchema"
+  | "loadWorkflowFromDisk"
+  | "appendMailboxPromptGuidance"
+  | "resolveEffectiveRoots"
+  | "composeExecutionPrompts"
+  | "inspectWorkflowRuntimeReadiness"
+  | "getNormalizedNodePayload"
+  | "getStructuralEdges"
+  | "getStructuralLoops"
+  | "resolveWorkflowManagerStepId"
+  | "resolveNodeExecutionWorkingDirectory"
+  | "resolveWorkflowExecutionWorkingDirectory"
+>;
+
+export type WorkflowRunnerExecutionPort = Omit<
+  WorkflowRunnerDeps,
+  | keyof WorkflowRunnerFileSystemPort
+  | keyof WorkflowRunnerAdapterPort
+  | keyof WorkflowRunnerPersistencePort
+  | keyof WorkflowRunnerAuthoringPort
+>;
+
+export type WorkflowRunSetupPort = Pick<
+  WorkflowRunnerDeps,
+  | "DispatchingNodeAdapter"
+  | "loadWorkflowFromDisk"
+  | "createManagerSessionStore"
+  | "createExecutionCopyMutableWorkspace"
+  | "resolveEffectiveRoots"
+  | "err"
+  | "ok"
+  | "inspectWorkflowRuntimeReadiness"
+  | "ScenarioNodeAdapter"
+  | "loadSession"
+  | "getStructuralLoops"
+  | "resolveWorkflowExecutionWorkingDirectory"
+  | "createInitialSupervisionRunState"
+>;
+
+export const workflowRunSetupPort: WorkflowRunSetupPort = {
+  DispatchingNodeAdapter,
+  loadWorkflowFromDisk,
+  createManagerSessionStore,
+  createExecutionCopyMutableWorkspace,
+  resolveEffectiveRoots,
+  err,
+  ok,
+  inspectWorkflowRuntimeReadiness,
+  ScenarioNodeAdapter,
+  loadSession,
+  getStructuralLoops,
+  resolveWorkflowExecutionWorkingDirectory,
+  createInitialSupervisionRunState,
 };
+
+export type WorkflowSessionEntryPort = Pick<
+  WorkflowRunnerDeps,
+  | "loadContinuationRelatedSnapshots"
+  | "resolveContinuationAnchorPlacement"
+  | "err"
+  | "ok"
+  | "createSessionId"
+  | "createSessionState"
+  | "saveSession"
+  | "resolveWorkflowManagerStepId"
+  | "describeAmbiguousFanoutBranchRerunTarget"
+  | "hasPendingPausedFanoutBranch"
+  | "workflowRunFailure"
+  | "runNestedSuperviserSessionDriver"
+  | "cloneSession"
+  | "cloneSupervisionForContinuedRun"
+  | "isTerminalStatus"
+  | "persistExternalMailboxInputCommunication"
+>;
+
+export const workflowSessionEntryPort: WorkflowSessionEntryPort = {
+  loadContinuationRelatedSnapshots,
+  resolveContinuationAnchorPlacement,
+  err,
+  ok,
+  createSessionId,
+  createSessionState,
+  saveSession,
+  resolveWorkflowManagerStepId,
+  describeAmbiguousFanoutBranchRerunTarget,
+  hasPendingPausedFanoutBranch,
+  workflowRunFailure,
+  runNestedSuperviserSessionDriver,
+  cloneSession,
+  cloneSupervisionForContinuedRun,
+  isTerminalStatus,
+  persistExternalMailboxInputCommunication,
+};
+
+export type WorkflowNodeExecutionPort = Pick<
+  WorkflowRunnerDeps,
+  | "mkdir"
+  | "path"
+  | "writeRawTextFile"
+  | "claimFanoutStepBudget"
+  | "loadContinuationRelatedSnapshots"
+  | "assembleNodeInput"
+  | "appendMailboxPromptGuidance"
+  | "buildAmbientManagerControlPlaneEnvironment"
+  | "hashManagerAuthToken"
+  | "mintManagerAuthToken"
+  | "buildNodeExecutionMailbox"
+  | "writeNodeExecutionMailboxArtifacts"
+  | "describeWorkflowNodeKind"
+  | "isManagerNodeRef"
+  | "composeExecutionPrompts"
+  | "err"
+  | "ok"
+  | "resolveBackendSessionSelection"
+  | "resolveRequiredStepExecutionAddress"
+  | "toStepIdentityFields"
+  | "resolveRequestedBackendSession"
+  | "loadSession"
+  | "saveSession"
+  | "getNormalizedNodePayload"
+  | "getStructuralEdges"
+  | "addMillisecondsToIso"
+  | "buildOutputPublicationPolicy"
+  | "dedupeNodeIds"
+  | "emitWorkflowRunEvent"
+  | "findOwningManagerNodeId"
+  | "findPendingOptionalNodeDecision"
+  | "mergeVariables"
+  | "nextManagerSessionId"
+  | "nextNodeExecId"
+  | "notifyWorkflowProgress"
+  | "nowIso"
+  | "resolveOutputValidationAttempts"
+  | "resolveTimeoutMs"
+  | "stableJson"
+  | "upsertPendingOptionalNodeDecision"
+  | "workflowRunFailure"
+  | "buildLatestOutputMailboxIndex"
+  | "buildScenarioExecutableNodePayload"
+  | "buildUpstreamInputs"
+  | "isTerminalStatus"
+  | "finalizeCompletedWorkflowRun"
+>;
+
+export const workflowNodeExecutionPort: WorkflowNodeExecutionPort = {
+  mkdir,
+  path,
+  writeRawTextFile,
+  claimFanoutStepBudget,
+  loadContinuationRelatedSnapshots,
+  assembleNodeInput,
+  appendMailboxPromptGuidance,
+  buildAmbientManagerControlPlaneEnvironment,
+  hashManagerAuthToken,
+  mintManagerAuthToken,
+  buildNodeExecutionMailbox,
+  writeNodeExecutionMailboxArtifacts,
+  describeWorkflowNodeKind,
+  isManagerNodeRef,
+  composeExecutionPrompts,
+  err,
+  ok,
+  resolveBackendSessionSelection,
+  resolveRequiredStepExecutionAddress,
+  toStepIdentityFields,
+  resolveRequestedBackendSession,
+  loadSession,
+  saveSession,
+  getNormalizedNodePayload,
+  getStructuralEdges,
+  addMillisecondsToIso,
+  buildOutputPublicationPolicy,
+  dedupeNodeIds,
+  emitWorkflowRunEvent,
+  findOwningManagerNodeId,
+  findPendingOptionalNodeDecision,
+  mergeVariables,
+  nextManagerSessionId,
+  nextNodeExecId,
+  notifyWorkflowProgress,
+  nowIso,
+  resolveOutputValidationAttempts,
+  resolveTimeoutMs,
+  stableJson,
+  upsertPendingOptionalNodeDecision,
+  workflowRunFailure,
+  buildLatestOutputMailboxIndex,
+  buildScenarioExecutableNodePayload,
+  buildUpstreamInputs,
+  isTerminalStatus,
+  finalizeCompletedWorkflowRun,
+};
+
+export type WorkflowNodeOutputAttemptPort = Pick<
+  WorkflowRunnerDeps,
+  | "buildAdapterDivedraHookContext"
+  | "executeAdapterWithTimeout"
+  | "executePackageNodeWithTimeout"
+  | "buildSupervisionStallWatch"
+  | "resolveNodeExecutionWorkingDirectory"
+>;
+
+export const workflowNodeOutputAttemptPort: WorkflowNodeOutputAttemptPort = {
+  buildAdapterDivedraHookContext,
+  executeAdapterWithTimeout,
+  executePackageNodeWithTimeout,
+  buildSupervisionStallWatch,
+  resolveNodeExecutionWorkingDirectory,
+};
+
+export type WorkflowStepInputPort = Pick<
+  WorkflowRunnerDeps,
+  | "mkdir"
+  | "path"
+  | "writeJsonFile"
+  | "writeRawTextFile"
+  | "nowIso"
+  | "stableJson"
+  | "removePendingOptionalNodeDecision"
+  | "loadSession"
+  | "saveSession"
+  | "ok"
+  | "buildOptionalSkipOutput"
+  | "evaluateEdge"
+  | "resolveLoopTransition"
+  | "buildOutputRefForExecution"
+  | "sha256Hex"
+  | "buildCommitMessageTemplate"
+  | "saveNodeExecutionToRuntimeDb"
+  | "markCommunicationsConsumed"
+  | "err"
+  | "persistCommunicationArtifact"
+  | "resolveWorkflowManagerStepId"
+  | "dedupeNodeIds"
+  | "isWorkflowOutputKindNode"
+>;
+
+export const workflowStepInputPort: WorkflowStepInputPort = {
+  mkdir,
+  path,
+  writeJsonFile,
+  writeRawTextFile,
+  nowIso,
+  stableJson,
+  removePendingOptionalNodeDecision,
+  loadSession,
+  saveSession,
+  ok,
+  buildOptionalSkipOutput,
+  evaluateEdge,
+  resolveLoopTransition,
+  buildOutputRefForExecution,
+  sha256Hex,
+  buildCommitMessageTemplate,
+  saveNodeExecutionToRuntimeDb,
+  markCommunicationsConsumed,
+  err,
+  persistCommunicationArtifact,
+  resolveWorkflowManagerStepId,
+  dedupeNodeIds,
+  isWorkflowOutputKindNode,
+};
+
+export type WorkflowStepResultFinalizationPort = Pick<
+  WorkflowRunnerDeps,
+  | "path"
+  | "writeJsonFile"
+  | "writeRawTextFile"
+  | "parseManagerControlPayload"
+  | "hashManagerAuthToken"
+  | "isManagerNodeRef"
+  | "err"
+  | "isWorkflowOutputKindNode"
+  | "saveNodeExecutionToRuntimeDb"
+  | "saveProcessLogsToRuntimeDb"
+  | "evaluateCompletion"
+  | "resolveLoopTransition"
+  | "buildOutputRefForExecution"
+  | "persistNodeBackendSession"
+  | "saveSession"
+  | "isSupervisionStallLastError"
+  | "resolveWorkflowManagerStepId"
+  | "dedupeNodeIds"
+  | "emitWorkflowRunEvent"
+  | "evaluateEdge"
+  | "nowIso"
+  | "resolveTimeoutRestartBudget"
+  | "sha256Hex"
+  | "sleep"
+  | "stableJson"
+  | "workflowRunFailure"
+  | "applyOptionalManagerDecisions"
+  | "buildCommitMessageTemplate"
+  | "markCommunicationsConsumed"
+  | "persistCommunicationArtifact"
+  | "readBusinessPayload"
+>;
+
+export const workflowStepResultFinalizationPort: WorkflowStepResultFinalizationPort =
+  {
+    path,
+    writeJsonFile,
+    writeRawTextFile,
+    parseManagerControlPayload,
+    hashManagerAuthToken,
+    isManagerNodeRef,
+    err,
+    isWorkflowOutputKindNode,
+    saveNodeExecutionToRuntimeDb,
+    saveProcessLogsToRuntimeDb,
+    evaluateCompletion,
+    resolveLoopTransition,
+    buildOutputRefForExecution,
+    persistNodeBackendSession,
+    saveSession,
+    isSupervisionStallLastError,
+    resolveWorkflowManagerStepId,
+    dedupeNodeIds,
+    emitWorkflowRunEvent,
+    evaluateEdge,
+    nowIso,
+    resolveTimeoutRestartBudget,
+    sha256Hex,
+    sleep,
+    stableJson,
+    workflowRunFailure,
+    applyOptionalManagerDecisions,
+    buildCommitMessageTemplate,
+    markCommunicationsConsumed,
+    persistCommunicationArtifact,
+    readBusinessPayload,
+  };

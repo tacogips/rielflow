@@ -29,7 +29,20 @@ async function collectSourceFiles(
   relativeDir: string,
 ): Promise<string[]> {
   const absoluteDir = path.join(rootDir, relativeDir);
-  const entries = await readdir(absoluteDir, { withFileTypes: true });
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(absoluteDir, { withFileTypes: true });
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return [];
+    }
+    throw error;
+  }
   const files: string[] = [];
 
   for (const entry of entries) {
@@ -48,12 +61,39 @@ async function collectSourceFiles(
   return files;
 }
 
+async function collectPackageSourceRoots(rootDir: string): Promise<string[]> {
+  const packagesDir = path.join(rootDir, "packages");
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(packagesDir, { withFileTypes: true });
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return [];
+    }
+    throw error;
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join("packages", entry.name, "src"));
+}
+
 export async function checkSourceFilenames(
   rootDir: string,
 ): Promise<FilenamePolicyCheckResult> {
-  const sourceFiles = (await collectSourceFiles(rootDir, "src")).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const sourceRoots = ["src", ...(await collectPackageSourceRoots(rootDir))];
+  const sourceFiles = (
+    await Promise.all(
+      sourceRoots.map((sourceRoot) => collectSourceFiles(rootDir, sourceRoot)),
+    )
+  )
+    .flat()
+    .sort((a, b) => a.localeCompare(b));
   const filesInBiomeScope = [...sourceFiles, "vitest.config.ts"];
   const violations = filesInBiomeScope
     .filter((filePath) =>

@@ -1,0 +1,14 @@
+{
+  "id": "divedra-manager",
+  "description": "Coordinate the refactoring divide-and-conquer workflow and preserve runtime inputs.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/divedra-manager.md",
+  "variables": {},
+  "input": {
+    "description": "Workflow arguments. Optional workflowInput fields include targetPaths, excludePaths, maxSlices, executionMode, requestedOutcome, constraints, verificationPreferences, and planPath."
+  },
+  "output": {
+    "description": "Return JSON preserving the operator request and routing constraints."
+  }
+}

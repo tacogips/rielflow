@@ -1,6 +1,6 @@
 import type { LoadOptions } from "../types";
 import type { RuntimeEventSupervisedRunSaveInput } from "./session-query-records";
-import { withDatabase } from "./schema-and-record-types";
+import { withEventRuntimeDatabase } from "./schema-and-record-types";
 
 type EventSupervisedRunRow = {
   readonly supervised_run_id: string;
@@ -50,7 +50,7 @@ export async function listActiveEventSupervisedRunRowsByTargetWorkflowName(
   targetWorkflowName: string,
   options: LoadOptions = {},
 ): Promise<readonly RuntimeEventSupervisedRunSaveInput[]> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const rows = db
       .query(
         `SELECT
@@ -73,7 +73,7 @@ export async function findLatestEventSupervisedRunRowByTargetWorkflowName(
   targetWorkflowName: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventSupervisedRunSaveInput | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT

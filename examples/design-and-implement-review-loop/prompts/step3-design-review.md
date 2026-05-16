@@ -9,7 +9,7 @@ Check:
 - User decisions or unknowns that need confirmation are tracked in `design-docs/user-qa/`.
 - The design does not jump into implementation details prematurely.
 - When Codex-reference inputs are present, the design identifies concrete reference paths, commands, data flows, or modules from the reference repository.
-- When Codex-reference inputs are present, intentional divergences and product adapter boundaries are explicit and justified.
+- When Codex-reference inputs are present, intentional divergences and Cursor adapter boundaries are explicit and justified.
 
 Classify findings as `high`, `mid`, or `low`.
 Set `when.needs_revision` to `true` only when any `high` or `mid` finding exists.

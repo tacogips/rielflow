@@ -6,7 +6,7 @@
       "name": "divedra-workspace",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
-        "claude-code-agent": "github:tacogips/claude-code-agent#4b27720b4708b93426d4c73fa5b800dac36ebc5b",
+        "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
         "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
         "graphql": "16.13.1",
@@ -15,6 +15,7 @@
       },
       "devDependencies": {
         "@types/bun": "1.1.14",
+        "bun-types": "1.1.37",
         "typescript": "5.7.2",
         "vitest": "2.1.8",
       },
@@ -22,9 +23,28 @@
     "packages/divedra": {
       "name": "divedra",
       "version": "0.1.0",
+      "bin": {
+        "divedra": "dist/main.js",
+      },
       "dependencies": {
         "divedra-addons": "workspace:*",
         "divedra-core": "workspace:*",
+        "divedra-events": "workspace:*",
+        "divedra-graphql": "workspace:*",
+        "divedra-hook": "workspace:*",
+        "divedra-server": "workspace:*",
+      },
+    },
+    "packages/divedra-adapters": {
+      "name": "divedra-adapters",
+      "version": "0.1.0",
+      "dependencies": {
+        "@anthropic-ai/sdk": "0.78.0",
+        "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
+        "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
+        "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
+        "divedra-core": "workspace:*",
+        "openai": "6.27.0",
       },
     },
     "packages/divedra-addons": {
@@ -36,6 +56,31 @@
     },
     "packages/divedra-core": {
       "name": "divedra-core",
+      "version": "0.1.0",
+    },
+    "packages/divedra-events": {
+      "name": "divedra-events",
+      "version": "0.1.0",
+      "dependencies": {
+        "divedra-core": "workspace:*",
+      },
+    },
+    "packages/divedra-graphql": {
+      "name": "divedra-graphql",
+      "version": "0.1.0",
+      "dependencies": {
+        "graphql": "16.13.1",
+      },
+    },
+    "packages/divedra-hook": {
+      "name": "divedra-hook",
+      "version": "0.1.0",
+      "dependencies": {
+        "divedra-core": "workspace:*",
+      },
+    },
+    "packages/divedra-server": {
+      "name": "divedra-server",
       "version": "0.1.0",
     },
   },
@@ -220,7 +265,7 @@
 
     "check-error": ["check-error@2.1.3", "", {}, "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA=="],
 
-    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#4b27720", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-4b27720"],
+    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#12f3af4", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-12f3af4"],
 
     "codex-agent": ["codex-agent@github:tacogips/codex-agent#05f4e9d", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./src/bin.ts" } }, "tacogips-codex-agent-05f4e9d"],
 
@@ -235,6 +280,22 @@
     "debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="],
 
     "deep-eql": ["deep-eql@5.0.2", "", {}, "sha512-h5k/5U50IJJFpzfL6nO9jaaumfjO/f2NjK/oYB2Djzm4p9L+3T9qWpZqZ2hAbLPuuYq9wrU08WQyBTL5GbPk5Q=="],
+
+    "divedra": ["divedra@workspace:packages/divedra"],
+
+    "divedra-adapters": ["divedra-adapters@workspace:packages/divedra-adapters"],
+
+    "divedra-addons": ["divedra-addons@workspace:packages/divedra-addons"],
+
+    "divedra-core": ["divedra-core@workspace:packages/divedra-core"],
+
+    "divedra-events": ["divedra-events@workspace:packages/divedra-events"],
+
+    "divedra-graphql": ["divedra-graphql@workspace:packages/divedra-graphql"],
+
+    "divedra-hook": ["divedra-hook@workspace:packages/divedra-hook"],
+
+    "divedra-server": ["divedra-server@workspace:packages/divedra-server"],
 
     "es-module-lexer": ["es-module-lexer@1.7.0", "", {}, "sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA=="],
 

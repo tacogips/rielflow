@@ -1,1 +1,0 @@
-Normalize the current debate state for the {{stanceLabel}} side. Use the latest affirmative statement from `inbox.latest.output` when present; otherwise use the initial topic passed from the affirmative lane. Return JSON with the topic, role, and the opponent claim to answer.

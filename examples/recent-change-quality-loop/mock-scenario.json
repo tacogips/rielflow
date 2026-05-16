@@ -9,8 +9,9 @@
       "payload": {
         "hours": 24,
         "targetScope": [
-          "examples/README.md",
-          "examples/recent-change-quality-loop"
+          "README.md",
+          ".divedra/README.md",
+          ".divedra/workflows/recent-change-quality-loop"
         ],
         "notes": [
           "Start the recent-change quality loop."
@@ -50,7 +51,7 @@
         "findings": [
           {
             "severity": "mid",
-            "file": "examples/README.md",
+            "file": "README.md",
             "line": 1,
             "message": "The repository does not explain that recent-change quality findings are delegated into the design-and-implement workflow before re-review.",
             "recommendedFix": "Update the workflow definition and repository-facing docs so blocking findings are delegated through design-and-implement-review-loop."
@@ -60,7 +61,7 @@
         "needs_fix": true,
         "recommendedFixPlan": [
           "Replace the local fixer step with a delegated workflow handoff.",
-          "Document the delegated-review behavior in examples/README.md."
+          "Document the delegated-review behavior in README and .divedra/README."
         ],
         "verificationSuggestions": [
           "task divedra-design-loop-validate",
@@ -111,7 +112,7 @@
         "blockingFindings": [
           {
             "severity": "mid",
-            "file": "examples/README.md",
+            "file": "README.md",
             "line": 1,
             "message": "The repository does not explain that recent-change quality findings are delegated into the design-and-implement workflow before re-review."
           }
@@ -156,7 +157,7 @@
         "blockingFindings": [
           {
             "severity": "mid",
-            "file": "examples/README.md",
+            "file": "README.md",
             "line": 1,
             "message": "The repository does not explain that recent-change quality findings are delegated into the design-and-implement workflow before re-review.",
             "recommendedFix": "Update the workflow definition and repository-facing docs so blocking findings are delegated through design-and-implement-review-loop."
@@ -164,7 +165,7 @@
         ],
         "recommendedFixPlan": [
           "Replace the local fixer step with a delegated workflow handoff.",
-          "Document the delegated-review behavior in examples/README.md."
+          "Document the delegated-review behavior in README and .divedra/README."
         ],
         "verificationSuggestions": [
           "task divedra-design-loop-validate",
@@ -218,7 +219,7 @@
       "issueReference": "recent-change-quality-loop#delegated-review",
       "designDocPaths": [],
       "codexAgentReferences": [],
-      "referenceBehaviorMapping": [],
+      "cursorCliBehaviorMapping": [],
       "designSummary": "Clarified that recent-change-quality-loop delegates blocking findings into design-and-implement-review-loop and then re-runs the review pass.",
       "decisions": [
         "Use a cross-workflow transition from recent-change-quality-loop into design-and-implement-review-loop."
@@ -302,8 +303,9 @@
     "payload": {
       "issueReference": "recent-change-quality-loop#delegated-review",
       "changedFiles": [
-        "examples/README.md",
-        "examples/recent-change-quality-loop/workflow.json"
+        "README.md",
+        ".divedra/README.md",
+        ".divedra/workflows/recent-change-quality-loop/workflow.json"
       ],
       "implementationSummary": "Delegated the recent-change blocking findings into design-and-implement-review-loop, updated the workflow and repository-facing guidance, and reran validation.",
       "implPlanPaths": [],
@@ -338,7 +340,8 @@
     "payload": {
       "workflowMode": "issue-resolution",
       "documentationFiles": [
-        "examples/README.md"
+        "README.md",
+        ".divedra/README.md"
       ],
       "skillFiles": [
       ],
@@ -359,56 +362,27 @@
       "workflowMode": "issue-resolution",
       "commitMessage": "feat: delegate recent-change findings into design workflow",
       "committedFiles": [
-        "examples/README.md",
-        "examples/recent-change-quality-loop/workflow.json"
+        "README.md",
+        ".divedra/README.md",
+        ".divedra/workflows/recent-change-quality-loop/workflow.json"
       ],
       "changeSummary": "Accepted delegated-fix workflow changes and refreshed repository-facing documentation.",
       "residualRisks": []
     }
   },
-  "step10-git-commit": {
+  "step10-commit-push": {
     "provider": "scenario-mock",
-    "model": "divedra/git-commit@1",
+    "model": "command/commit-and-push",
     "when": {
       "always": true
     },
     "payload": {
+      "workflowMode": "issue-resolution",
       "commitMessage": "feat: delegate recent-change findings into design workflow",
-      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
-      "commitStatus": "committed",
-      "committedFiles": [
-        "examples/README.md",
-        "examples/recent-change-quality-loop/workflow.json"
-      ],
-      "git": {
-        "status": "committed",
-        "commitMessage": "feat: delegate recent-change findings into design workflow",
-        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
-        "committedFiles": [
-          "examples/README.md",
-          "examples/recent-change-quality-loop/workflow.json"
-        ]
-      },
-      "residualRisks": []
-    }
-  },
-  "step11-git-push": {
-    "provider": "scenario-mock",
-    "model": "divedra/git-push@1",
-    "when": {
-      "always": true
-    },
-    "payload": {
       "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
       "pushedRemote": "origin",
       "pushedBranch": "main",
       "pushStatus": "pushed",
-      "git": {
-        "status": "pushed",
-        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
-        "pushedRemote": "origin",
-        "pushedBranch": "main"
-      },
       "residualRisks": []
     }
   },
@@ -427,8 +401,9 @@
         "designDocPaths": [],
         "implPlanPaths": [],
         "changedFiles": [
-          "examples/README.md",
-          "examples/recent-change-quality-loop/workflow.json"
+          "README.md",
+          ".divedra/README.md",
+          ".divedra/workflows/recent-change-quality-loop/workflow.json"
         ],
         "designReviewSummary": "Design accepted with the delegated workflow-call pattern.",
         "implPlanReviewSummary": "Implementation planning accepted with delegated validation tasks.",
@@ -468,8 +443,9 @@
           }
         ],
         "changedFiles": [
-          "examples/README.md",
-          "examples/recent-change-quality-loop/workflow.json"
+          "README.md",
+          ".divedra/README.md",
+          ".divedra/workflows/recent-change-quality-loop/workflow.json"
         ],
         "verification": [
           "task divedra-design-loop-validate",
@@ -496,8 +472,9 @@
       "delegatedStatus": "accepted",
       "delegatedIssueReference": "recent-change-quality-loop#delegated-review",
       "delegatedChangedFiles": [
-        "examples/README.md",
-        "examples/recent-change-quality-loop/workflow.json"
+        "README.md",
+        ".divedra/README.md",
+        ".divedra/workflows/recent-change-quality-loop/workflow.json"
       ],
       "delegatedVerification": [
         "task divedra-design-loop-validate",

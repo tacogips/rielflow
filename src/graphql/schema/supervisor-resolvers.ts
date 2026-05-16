@@ -7,8 +7,6 @@ import type {
   ExternalEventEnvelope,
 } from "../../events/types";
 import { assertSupervisedBindingGraphqlPolicy } from "../../events/validate";
-import type { WorkflowSessionState } from "../../workflow/session";
-import { loadSession, saveSession } from "../../workflow/session-store";
 import { createWorkflowSupervisorClient } from "../../workflow/supervisor-client";
 import { createWorkflowSupervisorDispatchClient } from "../../workflow/supervisor-dispatch-client";
 import { createSupervisorRunnerPool } from "../../workflow/supervisor-runner-pool";
@@ -22,12 +20,16 @@ import type {
   DispatchSupervisorConversationPayload,
   EventSupervisorCommandInput,
   GraphqlRequestContext,
+  GraphqlSchemaDependencies,
   SupervisedWorkflowGraphqlPayload,
   SupervisedWorkflowLookupGraphqlInput,
   SupervisorDispatchConversationGraphqlPayload,
   SupervisorDispatchConversationLookupGraphqlInput,
 } from "../types";
-import { nowIso } from "./llm-run-overrides";
+import {
+  nowIso,
+  resolveWorkflowControlPlaneService,
+} from "./llm-run-overrides";
 import {
   SUPERVISOR_ACTION_SET_FOR_GRAPHQL,
   assertJsonObjectForSupervisor,
@@ -611,35 +613,39 @@ export async function dispatchSupervisorChatMutation(
 export async function cancelWorkflowExecutionMutation(
   input: CancelWorkflowExecutionInput,
   context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
 ): Promise<CancelWorkflowExecutionPayload> {
-  const loaded = await loadSession(input.workflowExecutionId, context);
-  if (!loaded.ok) {
-    throw new Error(loaded.error.message);
+  const controlPlane = resolveWorkflowControlPlaneService(deps);
+  const loaded = await controlPlane.loadSession(
+    input.workflowExecutionId,
+    context,
+  );
+  if (loaded === null) {
+    throw new Error(
+      `workflow execution '${input.workflowExecutionId}' was not found`,
+    );
   }
 
   if (
-    loaded.value.status === "completed" ||
-    loaded.value.status === "failed" ||
-    loaded.value.status === "cancelled"
+    loaded.status === "completed" ||
+    loaded.status === "failed" ||
+    loaded.status === "cancelled"
   ) {
     return {
       accepted: false,
-      workflowExecutionId: loaded.value.sessionId,
-      sessionId: loaded.value.sessionId,
-      status: loaded.value.status,
+      workflowExecutionId: loaded.sessionId,
+      sessionId: loaded.sessionId,
+      status: loaded.status,
     };
   }
 
-  const cancelled: WorkflowSessionState = {
-    ...loaded.value,
-    status: "cancelled",
+  const cancelled = {
+    ...loaded,
+    status: "cancelled" as const,
     endedAt: nowIso(),
     lastError: "cancelled by GraphQL mutation",
   };
-  const saved = await saveSession(cancelled, context);
-  if (!saved.ok) {
-    throw new Error(saved.error.message);
-  }
+  await controlPlane.saveSession(cancelled, context);
   return {
     accepted: true,
     workflowExecutionId: cancelled.sessionId,

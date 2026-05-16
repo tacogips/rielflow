@@ -19,6 +19,7 @@ import {
   PROCESS_LOG_MESSAGE_TEXT_LIMIT,
   toRuntimeEventReceiptIndexRecord,
   withDatabase,
+  withEventRuntimeDatabase,
 } from "./schema-and-record-types";
 
 export function toRuntimeEventReplyDispatchRecord(row: {
@@ -175,7 +176,7 @@ export async function saveHookEventToRuntimeDb(
   row: RuntimeHookEventSaveInput,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     const stmt = db.prepare(`
       INSERT INTO hook_events (
         hook_event_id, workflow_id, workflow_execution_id, node_id,
@@ -234,7 +235,7 @@ export async function listRuntimeHookEvents(
   workflowExecutionId: string,
   options: LoadOptions = {},
 ): Promise<readonly RuntimeHookEventRecord[]> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const rows = db
       .query(
         `SELECT
@@ -257,7 +258,7 @@ export async function saveEventReceiptToRuntimeDb(
   row: RuntimeEventReceiptSaveInput,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     const stmt = db.prepare(`
       INSERT INTO event_receipts (
         receipt_id, source_id, binding_id, dedupe_key, status, workflow_name,
@@ -309,7 +310,7 @@ export async function findEventReceiptByDedupeKey(
   },
   options: LoadOptions = {},
 ): Promise<RuntimeEventReceiptIndexRecord | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -339,7 +340,7 @@ export async function loadEventReceiptFromRuntimeDb(
   receiptId: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventReceiptIndexRecord | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -365,7 +366,7 @@ export async function listEventReceiptsFromRuntimeDb(
   } = {},
   options: LoadOptions = {},
 ): Promise<readonly RuntimeEventReceiptIndexRecord[]> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const rows = db
       .query(
         `SELECT
@@ -393,7 +394,7 @@ export async function saveEventReplyDispatchToRuntimeDb(
   row: RuntimeEventReplyDispatchSaveInput,
   options: LoadOptions = {},
 ): Promise<void> {
-  await withDatabase(options, (db) => {
+  await withEventRuntimeDatabase(options, (db) => {
     const existing = db
       .query(
         "SELECT created_at FROM event_reply_dispatches WHERE idempotency_key = ? LIMIT 1",
@@ -454,7 +455,7 @@ export async function loadEventReplyDispatchByIdempotencyKey(
   idempotencyKey: string,
   options: LoadOptions = {},
 ): Promise<RuntimeEventReplyDispatchRecord | null> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const row = db
       .query(
         `SELECT
@@ -481,7 +482,7 @@ export async function listEventReplyDispatchesFromRuntimeDb(
   } = {},
   options: LoadOptions = {},
 ): Promise<readonly RuntimeEventReplyDispatchRecord[]> {
-  return withDatabase(options, (db) => {
+  return withEventRuntimeDatabase(options, (db) => {
     const rows = db
       .query(
         `SELECT

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-15T01:05:00.000+09:00",
+  "lastUpdated": "2026-05-16T16:44:00.000+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -503,6 +503,12 @@
       "status": "COMPLETED"
     },
     "168": {
+      "status": "COMPLETED"
+    },
+    "169": {
+      "status": "COMPLETED"
+    },
+    "170": {
       "status": "COMPLETED"
     }
   },
@@ -5860,6 +5866,85 @@
             "TASK-002",
             "TASK-003",
             "TASK-004"
+          ]
+        }
+      }
+    },
+    "refactoring-package-source-ownership": {
+      "phase": 170,
+      "status": "Completed",
+      "path": "impl-plans/active/refactoring-package-source-ownership.md",
+      "designReference": "design-docs/specs/architecture.md#package-boundary-architecture",
+      "tasks": {
+        "REF-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "REF-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "REF-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-001"
+          ]
+        },
+        "REF-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "REF-001"
+          ]
+        },
+        "REF-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-001"
+          ]
+        },
+        "REF-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-003",
+            "REF-005"
+          ]
+        },
+        "REF-007": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "REF-001"
+          ]
+        },
+        "REF-008": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-007"
+          ]
+        },
+        "REF-009": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-007"
+          ]
+        },
+        "REF-010": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-003",
+            "REF-004",
+            "REF-006",
+            "REF-008",
+            "REF-009"
           ]
         }
       }

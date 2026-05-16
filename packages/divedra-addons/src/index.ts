@@ -1,11 +1,14 @@
+// Add-ons package contract: own add-on resolution and expose native execution
+// compatibility until native executor internals move behind this package.
+export * from "./node-addons";
+export * from "./local-node-addons";
+export * from "./addon-source-summary";
+export * from "./mailbox-prompt-guidance";
 export {
-  createAsyncNodeAddonPayloadResolver,
-  createAsyncNodeAddonRegistry,
-  createNodeAddonPayloadResolver,
-  createNodeAddonRegistry,
-} from "../../../src/workflow/node-addons";
-export * from "../../../src/workflow/node-addons";
+  isGatewayReadinessAddon,
+  type GatewayReadinessAddon,
+} from "./runtime-readiness";
 export {
   executeAddonNode,
   executeNativeNode,
-} from "../../../src/workflow/native-node-executor";
+} from "./native-node-executor/git-and-addon-execution";

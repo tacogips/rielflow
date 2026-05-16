@@ -695,3 +695,53 @@ export function resolveCalleeWorkflowEntry(input: {
   }
   return { ok: true, entry };
 }
+
+export function resolveCalleeWorkflowEntryByIdSync(input: {
+  readonly workflowRoot: string;
+  readonly workflowId: string;
+}): { ok: true; entry: string } | { ok: false; message: string } {
+  const resolvedWorkflow = resolveCalleeWorkflowJsonByIdSync(input);
+  if (!resolvedWorkflow.ok) {
+    return { ok: false, message: resolvedWorkflow.message };
+  }
+
+  const inferred = inferSingleManagerStepIdFromRawSync({
+    raw: resolvedWorkflow.raw,
+    workflowDirectory: resolvedWorkflow.workflowDirectory,
+  });
+  if (!inferred.ok) {
+    return { ok: false, message: inferred.message };
+  }
+
+  return resolveCalleeWorkflowEntry({
+    raw: resolvedWorkflow.raw,
+    ...(inferred.managerStepId === undefined
+      ? {}
+      : { inferredManagerStepId: inferred.managerStepId }),
+  });
+}
+
+export async function resolveCalleeWorkflowEntryByIdAsync(input: {
+  readonly workflowRoot: string;
+  readonly workflowId: string;
+}): Promise<{ ok: true; entry: string } | { ok: false; message: string }> {
+  const resolvedWorkflow = await resolveCalleeWorkflowJsonByIdAsync(input);
+  if (!resolvedWorkflow.ok) {
+    return { ok: false, message: resolvedWorkflow.message };
+  }
+
+  const inferred = await inferSingleManagerStepIdFromRawAsync({
+    raw: resolvedWorkflow.raw,
+    workflowDirectory: resolvedWorkflow.workflowDirectory,
+  });
+  if (!inferred.ok) {
+    return { ok: false, message: inferred.message };
+  }
+
+  return resolveCalleeWorkflowEntry({
+    raw: resolvedWorkflow.raw,
+    ...(inferred.managerStepId === undefined
+      ? {}
+      : { inferredManagerStepId: inferred.managerStepId }),
+  });
+}

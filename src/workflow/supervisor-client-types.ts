@@ -1,11 +1,77 @@
 import type { MockNodeScenario } from "./scenario-adapter";
 import type { WorkflowSessionState } from "./session";
 import type { LoadOptions } from "./types";
-import type {
-  EventBinding,
-  EventSupervisedRunRecord,
-  EventSupervisorCommand,
-} from "../events/types";
+
+export type WorkflowSupervisorAction =
+  | "start"
+  | "status"
+  | "progress"
+  | "inbox"
+  | "read"
+  | "logs"
+  | "export"
+  | "stop"
+  | "cancel"
+  | "restart"
+  | "rerun"
+  | "input"
+  | "submit"
+  | "resume";
+
+export interface WorkflowSupervisorBinding {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly workflowName?: string;
+  readonly inputMapping?: unknown;
+  readonly execution?: {
+    readonly supervisorWorkflowName?: string;
+    readonly maxRestartsOnFailure?: number;
+    readonly autoImprove?: boolean | { readonly enabled?: boolean };
+    readonly control?: Readonly<Record<string, unknown>>;
+    readonly async?: boolean;
+  };
+}
+
+export type SupervisedWorkflowStatus =
+  | "starting"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "restarting"
+  | "completed"
+  | "failed";
+
+export interface SupervisedWorkflowRunRecord {
+  readonly supervisedRunId: string;
+  readonly sourceId: string;
+  readonly bindingId: string;
+  readonly correlationKey: string;
+  readonly supervisorWorkflowName: string;
+  readonly supervisorExecutionId?: string;
+  readonly targetWorkflowName: string;
+  readonly activeTargetExecutionId?: string;
+  readonly status: SupervisedWorkflowStatus;
+  readonly restartCount: number;
+  readonly maxRestartsOnFailure: number;
+  readonly autoImproveEnabled: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface WorkflowSupervisorCommand {
+  readonly commandId: string;
+  readonly sourceId: string;
+  readonly bindingId: string;
+  readonly correlationKey: string;
+  readonly action: WorkflowSupervisorAction;
+  readonly args?: readonly string[];
+  readonly targetWorkflowName: string;
+  readonly supervisedRunId?: string;
+  readonly targetWorkflowExecutionId?: string;
+  readonly runtimeVariables?: Readonly<Record<string, unknown>>;
+  readonly reason?: string;
+  readonly receivedEventReceiptId: string;
+}
 
 export type SupervisorEngineOverrides = {
   readonly mockScenario?: MockNodeScenario;
@@ -63,7 +129,7 @@ export type SupervisedWorkflowCommandResult =
     };
 
 export interface SupervisedWorkflowView {
-  readonly supervisedRun: EventSupervisedRunRecord;
+  readonly supervisedRun: SupervisedWorkflowRunRecord;
   readonly activeTargetStatus?: WorkflowSessionState["status"];
   readonly commandResult?: SupervisedWorkflowCommandResult;
 }
@@ -75,7 +141,7 @@ export interface StartSupervisedWorkflowInput extends LoadOptions {
   readonly targetWorkflowName: string;
   readonly idempotencyKey?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
-  readonly bindingSnapshot: EventBinding;
+  readonly bindingSnapshot: WorkflowSupervisorBinding;
   readonly mockScenario?: MockNodeScenario;
   readonly dryRun?: boolean;
   readonly maxSteps?: number;
@@ -136,7 +202,7 @@ export interface SubmitSupervisedWorkflowInput extends LoadOptions {
   readonly bindingId?: string;
   readonly correlationKey?: string;
   readonly targetWorkflowName?: string;
-  readonly bindingSnapshot?: EventBinding;
+  readonly bindingSnapshot?: WorkflowSupervisorBinding;
   readonly idempotencyKey?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
@@ -148,8 +214,8 @@ export interface SubmitSupervisedWorkflowInput extends LoadOptions {
 
 export interface WorkflowSupervisorClient {
   dispatchCommand(input: {
-    readonly command: EventSupervisorCommand;
-    readonly binding: EventBinding;
+    readonly command: WorkflowSupervisorCommand;
+    readonly binding: WorkflowSupervisorBinding;
     readonly runtimeVariables: Readonly<Record<string, unknown>>;
     readonly engine?: SupervisorEngineOverrides;
   }): Promise<SupervisedWorkflowView>;

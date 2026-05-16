@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT } from "divedra-core/runtime-prompt-assets";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import { buildPromptTemplateVariables } from "./prompt-template-context";
 import { renderPromptTemplate } from "./render";
@@ -27,12 +27,6 @@ export interface ComposedExecutionPrompts {
   readonly systemPromptText?: string;
   readonly promptText: string;
 }
-
-/** Default manager system guidance (single path; structural alternate prompt removed). */
-const DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT = readFileSync(
-  new URL("./prompts/divedra-role-system-prompt.md", import.meta.url),
-  "utf8",
-).trim();
 
 function buildPromptVariables(
   input: PromptCompositionInput,

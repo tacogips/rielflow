@@ -58,10 +58,12 @@ describe("checkSourceFilenames", () => {
     await writeFixture(root, "src/nested/part-01.ts");
     await writeFixture(root, "src/components/part-1.tsx");
     await writeFixture(root, "src/components/part-01.tsx");
+    await writeFixture(root, "packages/example/src/part-1.ts");
 
     const result = await checkSourceFilenames(root);
 
     expect(result.violations).toEqual([
+      { path: "packages/example/src/part-1.ts", basename: "part-1.ts" },
       { path: "src/components/part-01.tsx", basename: "part-01.tsx" },
       { path: "src/components/part-1.tsx", basename: "part-1.tsx" },
       { path: "src/nested/part-01.ts", basename: "part-01.ts" },
@@ -75,6 +77,7 @@ describe("checkSourceFilenames", () => {
     await writeFixture(root, "src/node-output-contract.ts");
     await writeFixture(root, "src/session-partition.ts");
     await writeFixture(root, "src/feature-part-1.ts");
+    await writeFixture(root, "packages/example/src/workflow-loader.ts");
     await writeFixture(root, "docs/part-1.ts");
 
     const result = await checkSourceFilenames(root);

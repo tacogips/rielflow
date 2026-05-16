@@ -247,7 +247,8 @@ export async function buildInspectionSummary(
   const workflow = loaded.bundle.workflow;
   const stepIds = workflow.steps.map((step) => step.id);
   const nodeRegistryIds = workflow.nodeRegistry.map((node) => node.id);
-  const hasManagerNode = workflow.hasManagerNode !== false;
+  const hasManagerNode =
+    workflow.hasManagerNode ?? workflow.managerStepId !== undefined;
   const nodeRegistryCount = workflow.nodeRegistry.length;
   const stepCount = workflow.steps.length;
   const crossWorkflowDispatches = effectiveCrossWorkflowDispatches(workflow);
