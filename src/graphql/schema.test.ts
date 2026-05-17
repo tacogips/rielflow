@@ -697,6 +697,56 @@ describe("createGraphqlSchema", () => {
     expect(missing).toBeNull();
   });
 
+  test("workflowCatalogOverview and workflowStatusOverview expose only loadable active sessions", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const created = await createWorkflowTemplate("demo", options);
+    expect(created.ok).toBe(true);
+    const sessionId = "gql-active-session";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "main-worker",
+          runtimeVariables: {},
+        }),
+        status: "paused",
+        currentNodeId: "main-worker",
+        queue: ["main-worker"],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+
+    const catalog = await schema.query.workflowCatalogOverview({}, options);
+    const demoRow = catalog.workflows.find(
+      (row) => row.workflowName === "demo",
+    );
+    expect(demoRow).toMatchObject({
+      aggregateStatus: "paused",
+      activeExecutionCount: 1,
+      latestExecution: { sessionId },
+    });
+
+    const statusOverview = await schema.query.workflowStatusOverview(
+      { workflowName: "demo" },
+      options,
+    );
+    expect(statusOverview).toMatchObject({
+      aggregateStatus: "paused",
+      newestActiveExecution: { sessionId },
+      recentExecutions: [expect.objectContaining({ sessionId })],
+    });
+  });
+
   test("fixed resolved workflow source pins scoped duplicate overview rows", async () => {
     const base = await makeTempDir();
     const workspace = path.join(base, "projtree");

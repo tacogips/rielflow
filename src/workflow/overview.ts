@@ -110,11 +110,17 @@ export function countActiveWorkflowExecutions(
 ): number {
   let n = 0;
   for (const e of executions) {
-    if (e.status === "running" || e.status === "paused") {
+    if (isWorkflowExecutionSummaryActive(e)) {
       n += 1;
     }
   }
   return n;
+}
+
+export function isWorkflowExecutionSummaryActive(
+  summary: WorkflowExecutionCompactSummary,
+): boolean {
+  return summary.status === "running" || summary.status === "paused";
 }
 
 /**
@@ -123,9 +129,7 @@ export function countActiveWorkflowExecutions(
 export function pickNewestActiveExecution(
   executions: readonly WorkflowExecutionCompactSummary[],
 ): WorkflowExecutionCompactSummary | null {
-  const actives = executions.filter(
-    (e) => e.status === "running" || e.status === "paused",
-  );
+  const actives = executions.filter(isWorkflowExecutionSummaryActive);
   if (actives.length === 0) {
     return null;
   }

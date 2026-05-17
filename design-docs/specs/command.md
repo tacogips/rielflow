@@ -72,6 +72,8 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `cli workflow status <name>`
   - Show the selected workflow's compact human-facing status overview rather than raw execution detail.
   - Output includes the resolved source scope, workflow directory, aggregate workflow status, active execution count, latest execution summary, and recent execution summaries.
+  - Any execution reported as active (`running` or `paused`) must be loadable by `session status <workflow-execution-id>`, `session progress <workflow-execution-id>`, and `session step-runs <workflow-execution-id>` under the same runtime storage context. `workflow status` must not report stale active rows that exist only in a derived runtime database snapshot, cached overview record, or mismatched storage root.
+  - Local status resolution and local session commands must share the same session-store context rules: explicit storage overrides first, then scoped project/user runtime data roots, then direct-root inference only when a direct workflow root is under a recognized scope root.
   - Bare names resolve project scope before user scope in `auto`; use `--scope project|user` to inspect a shadowed workflow explicitly.
   - In direct `--workflow-definition-dir` mode, resolve only within that definition directory and label the source scope as `direct`.
   - Supports `--limit <n>` and `--output table|json`; default `--output text` matches `--output table` for this command (compact human lines).
@@ -95,8 +97,13 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Local, endpoint-backed, GraphQL, and library start helpers must apply the same default-supervised decision. If no explicit `--auto-improve` policy is supplied, the effective start is supervisor-backed; if `--no-auto-improve` is present, the effective start is still supervisor-backed but lifecycle-only.
 - `session progress <session-id>`
   - Show queue, execution counts, and per-step restart/execution summary.
+  - For a session id reported by `workflow status` as active in the same storage context, this command must load the session instead of returning `session not found`.
 - `session status <session-id>`
   - Show the persisted workflow-session snapshot.
+  - This command is the minimum loadability check for active execution ids surfaced by workflow overview/status commands.
+- `session step-runs <session-id>`
+  - Show merged step-run history for the workflow execution.
+  - For a session id reported by `workflow status` as active in the same storage context, this command must resolve the owning session before listing merged rows.
 - `session inbox <session-id>`
   - Planned operator/runner-pool inspection surface for mailbox input/output artifacts associated with the active execution. Event-source supervisor commands use this or equivalent artifact inspection to answer inbox requests without invoking target workflow code.
 - `session logs <session-id>`

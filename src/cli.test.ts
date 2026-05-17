@@ -17,7 +17,10 @@ import {
 } from "./workflow/runtime-db";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
-import { computeProjectScopedRootDataDir } from "./workflow/paths";
+import {
+  computeProjectScopedRootDataDir,
+  computeProjectScopedRootDataDirForScopeRoot,
+} from "./workflow/paths";
 
 const tempDirs: string[] = [];
 
@@ -1330,6 +1333,164 @@ describe("runCli", () => {
       missingCapture.io,
     );
     expect(missingCode).toBe(2);
+  });
+
+  test("workflow status and session commands share project-scoped storage inferred from workflow-definition-dir", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "workspace");
+    const projectScopeRoot = path.join(workspaceRoot, ".divedra");
+    const workflowRoot = path.join(projectScopeRoot, "workflows");
+    const userRoot = path.join(root, "home", ".divedra");
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot,
+    });
+    expect(created.ok).toBe(true);
+    const rootDataDir = computeProjectScopedRootDataDirForScopeRoot({
+      scopeRoot: projectScopeRoot,
+      userRoot,
+    });
+    const sessionId = "sess-issue-23-active";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "worker-node",
+          runtimeVariables: {},
+        }),
+        status: "running",
+        currentNodeId: "worker-node",
+        queue: ["worker-node"],
+        nodeExecutionCounter: 1,
+        nodeExecutionCounts: {
+          "worker-node": 1,
+        },
+        nodeExecutions: [
+          {
+            nodeId: "worker-node",
+            stepId: "worker-step",
+            nodeRegistryId: "worker-node",
+            nodeExecId: "exec-worker-1",
+            mailboxInstanceId: "exec-worker-1",
+            status: "succeeded",
+            artifactDir: path.join(
+              rootDataDir,
+              "workflow",
+              "demo",
+              sessionId,
+              "worker-node",
+              "exec-worker-1",
+            ),
+            startedAt: "2026-05-17T10:00:00.000Z",
+            endedAt: "2026-05-17T10:00:03.000Z",
+          },
+        ],
+      },
+      { rootDataDir },
+    );
+    expect(saved.ok).toBe(true);
+
+    const sharedArgs = [
+      "--workflow-definition-dir",
+      workflowRoot,
+      "--user-root",
+      userRoot,
+      "--output",
+      "json",
+    ] as const;
+    const cliDeps = createCliDeps({ env: {} });
+
+    const listCapture = createIoCapture();
+    const listCode = await runCli(
+      ["workflow", "list", ...sharedArgs],
+      listCapture.io,
+      cliDeps,
+    );
+    expect(listCode).toBe(0);
+    const listPayload = JSON.parse(listCapture.stdout.join("\n")) as {
+      workflows: ReadonlyArray<{
+        workflowName: string;
+        aggregateStatus: string;
+        activeExecutionCount: number;
+        latestExecution: { sessionId: string } | null;
+      }>;
+    };
+    const listRow = listPayload.workflows.find(
+      (row) => row.workflowName === "demo",
+    );
+    expect(listRow).toMatchObject({
+      aggregateStatus: "running",
+      activeExecutionCount: 1,
+      latestExecution: { sessionId },
+    });
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      ["workflow", "status", "demo", ...sharedArgs],
+      statusCapture.io,
+      cliDeps,
+    );
+    expect(statusCode).toBe(0);
+    const statusPayload = JSON.parse(statusCapture.stdout.join("\n")) as {
+      aggregateStatus: string;
+      newestActiveExecution: { sessionId: string } | null;
+    };
+    expect(statusPayload.aggregateStatus).toBe("running");
+    expect(statusPayload.newestActiveExecution?.sessionId).toBe(sessionId);
+
+    const sessionStatusCapture = createIoCapture();
+    const sessionStatusCode = await runCli(
+      ["session", "status", sessionId, ...sharedArgs],
+      sessionStatusCapture.io,
+      cliDeps,
+    );
+    expect(sessionStatusCode).toBe(0);
+    const sessionStatusPayload = JSON.parse(
+      sessionStatusCapture.stdout.join("\n"),
+    ) as { sessionId: string; status: string; currentStepId: string | null };
+    expect(sessionStatusPayload).toMatchObject({
+      sessionId,
+      status: "running",
+      currentStepId: "worker-step",
+    });
+
+    const progressCapture = createIoCapture();
+    const progressCode = await runCli(
+      ["session", "progress", sessionId, ...sharedArgs],
+      progressCapture.io,
+      cliDeps,
+    );
+    expect(progressCode).toBe(0);
+    const progressPayload = JSON.parse(progressCapture.stdout.join("\n")) as {
+      sessionId: string;
+      status: string;
+      currentStepId: string | null;
+    };
+    expect(progressPayload).toMatchObject({
+      sessionId,
+      status: "running",
+      currentStepId: "worker-step",
+    });
+
+    const stepRunsCapture = createIoCapture();
+    const stepRunsCode = await runCli(
+      ["session", "step-runs", sessionId, ...sharedArgs],
+      stepRunsCapture.io,
+      cliDeps,
+    );
+    expect(stepRunsCode).toBe(0);
+    const stepRunsPayload = JSON.parse(stepRunsCapture.stdout.join("\n")) as {
+      workflowExecutionId: string;
+      stepRuns: ReadonlyArray<{ stepRunId: string; stepId: string }>;
+    };
+    expect(stepRunsPayload.workflowExecutionId).toBe(sessionId);
+    expect(stepRunsPayload.stepRuns).toContainEqual(
+      expect.objectContaining({
+        stepRunId: "exec-worker-1",
+        stepId: "worker-step",
+      }),
+    );
   });
 
   test("workflow list uses DIVEDRA_WORKFLOW_DEFINITION_DIR as direct definition directory", async () => {

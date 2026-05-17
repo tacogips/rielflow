@@ -23,7 +23,10 @@ import {
   buildWorkflowUsageCatalog,
   buildWorkflowUsageSummary,
 } from "../../../../src/workflow/usage";
-import type { RunCliScopeContext } from "./storage-and-options";
+import {
+  resolveWorkflowOverviewStorageOptions,
+  type RunCliScopeContext,
+} from "./storage-and-options";
 import {
   buildRemoteExecutionInput,
   buildSupervisorProgressEventSink,
@@ -175,6 +178,8 @@ export async function runCliWorkflowScope(
         return 1;
       }
     }
+    const overviewStorageOptions =
+      await resolveWorkflowOverviewStorageOptions(sharedOptions);
     const built = await buildWorkflowCatalogOverview(
       {
         ...(parsed.options.workflowScope === undefined
@@ -185,13 +190,13 @@ export async function runCliWorkflowScope(
           ? {}
           : { limit: parsed.options.limit }),
       },
-      sharedOptions,
+      overviewStorageOptions,
     );
     if (!built.ok) {
       io.stderr(built.error.message);
       return 1;
     }
-    await emitLocalWorkflowCatalogWarnings(io, sharedOptions);
+    await emitLocalWorkflowCatalogWarnings(io, overviewStorageOptions);
     if (parsed.options.output === "json") {
       emitJson(io, built.value);
     } else {
@@ -265,6 +270,8 @@ export async function runCliWorkflowScope(
         return 1;
       }
     }
+    const overviewStorageOptions =
+      await resolveWorkflowOverviewStorageOptions(sharedOptions);
     const built = await buildWorkflowStatusOverview(
       {
         workflowName: target,
@@ -275,7 +282,7 @@ export async function runCliWorkflowScope(
           ? {}
           : { limit: parsed.options.limit }),
       },
-      sharedOptions,
+      overviewStorageOptions,
     );
     if (!built.ok) {
       const code = built.error.code;

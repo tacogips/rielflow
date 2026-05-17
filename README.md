@@ -176,6 +176,16 @@ Use `workflow status` for recent execution status for one workflow:
 bun run src/main.ts workflow status <workflow-name> --workflow-definition-dir ./examples
 ```
 
+`workflow list` and `workflow status` report active executions only when those
+`running` or `paused` session ids are loadable from the same runtime storage
+context used by session commands. If a local `--workflow-definition-dir` points
+at a recognized scoped catalog such as `<project>/.divedra/workflows`,
+workflow overview commands infer that project-scoped runtime data root so the
+reported `sessionId` can be passed directly to `session status`,
+`session progress`, and `session step-runs`. Explicit storage overrides such as
+`--session-store`, `--artifact-root`, `DIVEDRA_SESSION_STORE`, and
+`DIVEDRA_ARTIFACT_ROOT` still take precedence.
+
 Use `workflow inspect <workflow-name> --structure` only after you have selected
 a workflow and need a compact human-facing structure view. The structure view
 prints each step id on its own line, followed by the step description or `-` on
@@ -355,6 +365,16 @@ Show progress:
 ```bash
 bun run src/main.ts session progress <session-id>
 ```
+
+List merged step-run history for the same workflow execution:
+
+```bash
+bun run src/main.ts session step-runs <session-id> --output json
+```
+
+For any active `sessionId` reported by local `workflow status` in the same
+storage context, `session status`, `session progress`, and `session step-runs`
+should load that session instead of returning `session not found`.
 
 Resume a paused or resumable execution:
 

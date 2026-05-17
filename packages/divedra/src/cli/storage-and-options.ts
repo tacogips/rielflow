@@ -199,6 +199,23 @@ export function hasExplicitSessionStorageOverride(
     env["DIVEDRA_SESSION_STORE"] !== undefined
   );
 }
+function storageOptionsForProjectScopeRoot(
+  options: CliStorageOptions,
+  projectScopeRoot: string,
+): CliStorageOptions {
+  const env = options.env ?? process.env;
+  return {
+    ...options,
+    rootDataDir: computeProjectScopedRootDataDirForScopeRoot({
+      scopeRoot: projectScopeRoot,
+      ...(options.userRoot !== undefined
+        ? { userRoot: options.userRoot }
+        : env["DIVEDRA_USER_ROOT"] === undefined
+          ? {}
+          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
+    }),
+  };
+}
 export async function resolveSessionCommandStorageOptions(
   options: CliStorageOptions,
 ): Promise<CliStorageOptions> {
@@ -212,18 +229,33 @@ export async function resolveSessionCommandStorageOptions(
     return options;
   }
 
+  return storageOptionsForProjectScopeRoot(options, projectScopeRoot);
+}
+
+export async function resolveWorkflowOverviewStorageOptions(
+  options: CliStorageOptions,
+): Promise<CliStorageOptions> {
+  if (hasExplicitSessionStorageOverride(options)) {
+    return options;
+  }
+
   const env = options.env ?? process.env;
-  return {
-    ...options,
-    rootDataDir: computeProjectScopedRootDataDirForScopeRoot({
-      scopeRoot: projectScopeRoot,
-      ...(options.userRoot !== undefined
-        ? { userRoot: options.userRoot }
-        : env["DIVEDRA_USER_ROOT"] === undefined
-          ? {}
-          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
-    }),
-  };
+  const configuredWorkflowRoot =
+    options.workflowRoot ?? env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+  if (
+    configuredWorkflowRoot !== undefined &&
+    configuredWorkflowRoot.length > 0
+  ) {
+    const projectScopeRoot = await resolveProjectScopeRootFromWorkflowRoot(
+      configuredWorkflowRoot,
+      process.cwd(),
+    );
+    return projectScopeRoot === undefined
+      ? options
+      : storageOptionsForProjectScopeRoot(options, projectScopeRoot);
+  }
+
+  return options;
 }
 export interface WorkflowSourceOutput {
   readonly scope: ResolvedWorkflowSource["scope"];

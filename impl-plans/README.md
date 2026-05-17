@@ -24,7 +24,9 @@ impl-plans/
 
 ## Active Plans
 
-No active implementation plans remain.
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
+| `workflow-status-active-session-loadability` | In Progress | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
 
 ## Recently Completed
 
@@ -355,6 +357,7 @@ No active implementation plans remain.
 | 153   | COMPLETED | Phase 152                                    |
 | 154   | COMPLETED | Phase 153                                    |
 | 155   | COMPLETED | Phase 154                                    |
+| 173   | READY     | -                                            |
 
 ### Phase to Plans Mapping
 
@@ -497,5 +500,6 @@ PHASE_TO_PLANS = {
   153: ["impl-plans/completed/workflow-overview-status-surface.md"],
   154: ["impl-plans/completed/step-run-history-rerun-foundation.md"],
   155: ["impl-plans/completed/step-run-history-rerun-runtime.md"],
+  173: ["impl-plans/workflow-status-active-session-loadability.md"],
 }
 ```

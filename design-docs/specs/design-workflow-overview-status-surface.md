@@ -32,6 +32,10 @@ as `workflowExecutionOverview`, `workflowExecutions`, `nodeExecution`, or
   out of the default human overview.
 - Use GraphQL summary queries for the overview instead of having browser or CLI
   clients stitch together low-level detail queries.
+- Treat loadability by session commands as part of the active-execution
+  contract: a `running` or `paused` execution shown by workflow status must be
+  loadable from the same runtime storage context by `session status`,
+  `session progress`, and session step-run inspection.
 
 ## Goals
 
@@ -76,6 +80,10 @@ Aggregate workflow status:
 Active execution count:
 
 - Count executions in non-terminal states: `running` and `paused`.
+- Count only active executions that are inspectable from the runtime session
+  store used by the selected workflow source. Runtime database snapshots may
+  enrich summaries, but they must not create active overview rows that cannot be
+  loaded by the session inspection surfaces.
 
 Recent execution order:
 
@@ -209,6 +217,8 @@ execution status rows.
 Purpose:
 
 - show a compact status summary for one workflow
+- provide session ids that can be used directly with session inspection
+  commands under the same storage context
 
 Behavior:
 
@@ -219,6 +229,14 @@ Behavior:
   source scope as `direct`
 - prints the resolved source scope and workflow directory
 - shows workflow-level aggregate status plus a short recent execution list
+- reports `newestActiveExecution`, `activeExecutionCount`, and active
+  `recentExecutions` only from persisted workflow sessions that can be loaded by
+  the same session store context used for `session status`, `session progress`,
+  and `session step-runs`
+- ignores or demotes stale active candidates that exist only in secondary
+  indexes, cached overview state, runtime database snapshots, or old storage
+  roots when the primary session file cannot be loaded from the selected
+  context
 - does not print node logs, communication details, mailbox payloads, hook
   events, or reply dispatches by default
 
@@ -261,6 +279,40 @@ separately so operators can see which run produced the displayed timestamp.
 
 This preserves the runtime vocabulary instead of inventing a separate status
 taxonomy for humans.
+
+### Active Execution Loadability Contract
+
+Workflow status and session inspection share one operator-facing invariant:
+
+- any non-terminal execution exposed as active by `workflow list`,
+  `workflow status`, browser overview, or GraphQL `workflowStatusOverview` must
+  be loadable as a workflow session from the same resolved runtime storage
+  context
+- the `sessionId` and `workflowExecutionId` fields in compact summaries remain
+  aliases for the same workflow execution id during this migration period
+- `session status <session-id> --output json` is the minimum loadability check
+  for active entries; `session progress <session-id>` and
+  `session step-runs <session-id>` must then resolve against the same persisted
+  session identity
+
+The primary source of truth for active overview rows is the persisted
+`WorkflowSessionState` file loaded through the session store. A runtime database
+snapshot or other derived index can provide ordering, counters, or dashboard
+optimization only after it has been reconciled with a loadable session. If a
+candidate active row cannot be loaded from the selected context, the overview
+must not count it as active or surface it as `newestActiveExecution`.
+
+The preferred fix for a mismatch is shared storage-context resolution, not
+papering over an incorrect root by filtering. Local `workflow status` and local
+session commands should derive their session-store options through the same
+project/user/direct scope rules, explicit storage overrides, and environment
+variables. Filtering stale rows is still required as a defensive boundary for
+deleted session files or obsolete runtime database rows.
+
+Session inspection commands remain the detailed diagnostic surface. They may
+add clear storage-context diagnostics when a session id is not found, but they
+must not silently search unrelated project/user roots because that can attach an
+operator command to the wrong workflow execution.
 
 ## GraphQL Design
 
@@ -329,6 +381,12 @@ summary fields where possible:
 - ended at
 - node execution counter
 
+For active rows, these summary fields carry a loadability guarantee. The server
+resolver must build them from the same storage context that backs session
+inspection for that request. Endpoint-backed CLI calls inherit the remote
+server's storage context; local CLI calls inherit local scope and storage
+options.
+
 ### JSON Output Contract
 
 CLI `--output json` should map directly to the summary GraphQL shape. JSON
@@ -352,6 +410,12 @@ Detailed queries remain available for AI and advanced tooling:
 
 The browser overview and default CLI commands should not automatically call the
 detailed queries.
+
+Detailed session queries may use richer runtime database data, but they must
+begin from a loadable workflow session or return an explicit not-found result.
+They must not treat a derived snapshot row as a full replacement for the
+session file unless the corresponding command contract is intentionally expanded
+to support that fallback for all affected session subcommands.
 
 ## Data Resolution Rules
 
@@ -383,6 +447,29 @@ When the browser view or CLI status command targets one workflow:
 - direct workflow-definition-dir mode bypasses project/user scope lookup
 - the rendered result always prints the resolved source scope
 
+### Runtime Storage Resolution
+
+Workflow overview resolution has two linked parts:
+
+- workflow bundle resolution selects the authored workflow source
+- runtime storage resolution selects the session store, artifact root, runtime
+  database, and derived indexes for that source
+
+Those parts must stay coupled for status surfaces. Once a workflow source is
+resolved, overview builders and session commands should use a common
+storage-context helper so `workflow status <name>` and
+`session status <session-id>` do not diverge between project scope, user scope,
+direct workflow roots, `DIVEDRA_ARTIFACT_DIR`, `DIVEDRA_ARTIFACT_ROOT`, or
+`DIVEDRA_SESSION_STORE`.
+
+Explicit storage overrides win. When an operator provides an explicit session
+store or artifact/data root, workflow status and session commands must respect
+that same override rather than recomputing a scoped default. In scoped catalog
+mode without overrides, project/user source scope determines the default runtime
+data root. In direct workflow-definition-dir mode, a direct root under
+`<scope-root>/workflows` may infer that scope root; otherwise the operator must
+use explicit storage options to inspect runs from a nonstandard direct root.
+
 ### Fixed Workflow Serve Mode
 
 When `divedra serve [workflow-name]` constrains access to one workflow:
@@ -405,6 +492,15 @@ Workflow exists but has never run:
 - show active execution count `0`
 - show no latest execution
 - show no recent executions
+
+Active candidate is not loadable:
+
+- do not report it as active in aggregate status, active execution count, or
+  `newestActiveExecution`
+- omit it from active recent-execution rows or show it only as a non-active
+  stale diagnostic if a future explicit diagnostic mode is added
+- keep default `workflow status` output focused on actionable, inspectable
+  sessions
 
 Selection target not found:
 
@@ -430,6 +526,11 @@ The first implementation slice is complete when:
 - default human surfaces omit node logs, communication payloads, hook events,
   mailbox payloads, and reply dispatch detail
 - JSON output includes enough source metadata to distinguish duplicate names
+- active execution ids reported by workflow status are loadable by
+  `session status`, `session progress`, and `session step-runs` under the same
+  runtime storage context
+- stale runtime database or cached active records cannot make a workflow appear
+  running when the corresponding persisted session is unavailable
 
 ## Why This Split
 

@@ -8,6 +8,7 @@ import {
   compareWorkflowExecutionsNewestFirst,
   countActiveWorkflowExecutions,
   deriveWorkflowOverviewStatus,
+  isWorkflowExecutionSummaryActive,
   parseWorkflowOverviewAggregateStatusFilter,
   pickNewestActiveExecution,
   selectDefaultWorkflowOverviewRow,
@@ -148,6 +149,31 @@ describe("countActiveWorkflowExecutions", () => {
         }),
       ]),
     ).toBe(2);
+  });
+});
+
+describe("isWorkflowExecutionSummaryActive", () => {
+  it("matches the workflow overview active statuses", () => {
+    expect(
+      isWorkflowExecutionSummaryActive(
+        compact({
+          workflowExecutionId: "run",
+          workflowName: "w",
+          status: "running",
+          startedAt: "2026-05-01T10:00:00.000Z",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isWorkflowExecutionSummaryActive(
+        compact({
+          workflowExecutionId: "done",
+          workflowName: "w",
+          status: "completed",
+          startedAt: "2026-05-01T10:00:00.000Z",
+        }),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -422,6 +448,56 @@ describe("buildWorkflowCatalogOverview", () => {
       (entry) => entry.workflowName === "beta",
     );
     expect(betaRow?.aggregateStatus).toBe("never-run");
+  });
+
+  it("ignores unloadable session files when computing active catalog rows", async () => {
+    const root = await overviewMakeTempDir();
+    const workflowName = "alpha";
+    await overviewWriteBundle({
+      workflowDirectory: path.join(root, workflowName),
+      workflowId: "alpha-id",
+      description: "",
+    });
+    const sessionStoreRoot = path.join(root, "sessions");
+    await mkdir(sessionStoreRoot, { recursive: true });
+    await writeFile(
+      path.join(sessionStoreRoot, "sess-corrupt-running.json"),
+      "{ not valid json",
+      "utf8",
+    );
+    await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-completed",
+          workflowName,
+          workflowId: "alpha-id",
+          initialNodeId: "n",
+          runtimeVariables: {},
+        }),
+        status: "completed",
+        endedAt: "2026-05-01T12:00:00.000Z",
+      },
+      {
+        workflowRoot: root,
+        sessionStoreRoot,
+        cwd: root,
+      },
+    );
+
+    const catalog = await buildWorkflowCatalogOverview(
+      {},
+      { workflowRoot: root, sessionStoreRoot, cwd: root },
+    );
+    expect(catalog.ok).toBe(true);
+    if (!catalog.ok) {
+      return;
+    }
+    const alphaRow = catalog.value.workflows.find(
+      (entry) => entry.workflowName === workflowName,
+    );
+    expect(alphaRow?.aggregateStatus).toBe("completed");
+    expect(alphaRow?.activeExecutionCount).toBe(0);
+    expect(alphaRow?.latestExecution?.sessionId).toBe("sess-completed");
   });
 
   it("lists duplicate workflow names across project and user scopes separately", async () => {
