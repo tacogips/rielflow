@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-16T16:44:00.000+09:00",
+  "lastUpdated": "2026-05-17T04:10:03.000+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -510,6 +510,9 @@
     },
     "170": {
       "status": "COMPLETED"
+    },
+    "171": {
+      "status": "READY"
     }
   },
   "plans": {
@@ -5945,6 +5948,122 @@
             "REF-006",
             "REF-008",
             "REF-009"
+          ]
+        }
+      }
+    },
+    "workflow-node-executability-validation": {
+      "phase": 171,
+      "status": "Ready",
+      "path": "impl-plans/active/workflow-node-executability-validation.md",
+      "designReference": "design-docs/specs/design-workflow-node-executability-validation.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "NOT_STARTED",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "NOT_STARTED",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "NOT_STARTED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "NOT_STARTED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-005": {
+          "status": "NOT_STARTED",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "NOT_STARTED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-002",
+            "TASK-003"
+          ]
+        },
+        "TASK-007": {
+          "status": "NOT_STARTED",
+          "parallelizable": true,
+          "deps": [
+            "TASK-004"
+          ]
+        },
+        "TASK-008": {
+          "status": "NOT_STARTED",
+          "parallelizable": false,
+          "deps": [
+            "TASK-005",
+            "TASK-006",
+            "TASK-007"
+          ]
+        }
+      }
+    },
+    "loaded-workflow-addon-validation-results": {
+      "phase": 171,
+      "status": "Completed",
+      "path": "impl-plans/completed/loaded-workflow-addon-validation-results.md",
+      "designReference": "design-docs/specs/design-workflow-node-executability-validation.md#loaded-workflow-result-consistency",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-004",
+            "TASK-005"
           ]
         }
       }

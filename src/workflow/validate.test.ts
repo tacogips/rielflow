@@ -12,6 +12,7 @@ import {
   validateWorkflowBundle,
   validateWorkflowBundleAsync,
   validateWorkflowBundleDetailed,
+  validateWorkflowBundleDetailedAsync,
   validatePureWorkflowBundle,
 } from "./validate";
 import {
@@ -21,7 +22,10 @@ import {
   DEFAULT_NODE_TIMEOUT_MS,
   resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerStepId,
+  type AsyncNodeAddonPayloadResolver,
   type WorkflowJson,
+  type NodeAddonDefinition,
+  type NodeAddonResolveResult,
 } from "./types";
 
 const tempDirs: string[] = [];
@@ -43,6 +47,11 @@ function makeTempDir(): string {
 function writeJson(filePath: string, payload: unknown): void {
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+function writeExecutable(filePath: string, body: string): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${body}\n`, { encoding: "utf8", mode: 0o755 });
 }
 
 function makeStepAddressedRaw(): {
@@ -1082,5 +1091,273 @@ describe("validateWorkflowBundle", () => {
       workflowRoot,
     });
     expect(asyncResult.ok).toBe(true);
+  });
+
+  test("detailed validation reports passive node executability with all referencing step ids", async () => {
+    const raw = makeStepAddressedRaw();
+    raw.workflow["nodes"] = [
+      { id: "worker", nodeFile: "nodes/node-worker.json" },
+    ];
+    raw.workflow["managerStepId"] = undefined;
+    raw.workflow["entryStepId"] = "worker-a";
+    raw.workflow["steps"] = [
+      { id: "worker-a", nodeId: "worker", role: "worker" },
+      { id: "worker-b", nodeId: "worker", role: "worker" },
+    ];
+    raw.nodePayloads = {
+      "nodes/node-worker.json": {
+        id: "worker",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "worker",
+        variables: {},
+      },
+    };
+
+    const result = await validateWorkflowBundleDetailedAsync(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const backendResult = result.value.nodeValidationResults.find(
+      (entry) => entry.source === "agent-backend",
+    );
+    expect(backendResult?.status).toBe("unknown");
+    expect(backendResult?.nodeId).toBe("worker");
+    expect(backendResult?.stepIds).toEqual(["worker-a", "worker-b"]);
+  });
+
+  test("third-party add-on validate hook contributes one shared node result", async () => {
+    const addonDefinition: NodeAddonDefinition = {
+      name: "acme/validator",
+      version: "1",
+      resolve: async (input) => ({
+        payload: {
+          id: input.nodeId,
+          executionBackend: "official/openai-sdk",
+          model: "gpt-5-nano",
+          promptTemplate: "addon",
+          variables: {},
+        },
+      }),
+      validate: (input) => ({
+        status: "warning",
+        message: `validated ${input.addon.name}`,
+        nodeId: input.nodeId,
+        source: "addon",
+        path: input.path,
+        addonName: input.addon.name,
+      }),
+    };
+    const raw = {
+      workflow: {
+        workflowId: "addon-validate",
+        description: "addon validate",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "addon-step",
+        nodes: [
+          {
+            id: "addon-node",
+            addon: { name: "acme/validator", version: "1" },
+          },
+        ],
+        steps: [{ id: "addon-step", nodeId: "addon-node", role: "worker" }],
+      },
+      nodePayloads: {},
+    };
+
+    const result = await validateWorkflowBundleDetailedAsync(raw, {
+      nodeAddons: [addonDefinition],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const addonResults = result.value.nodeValidationResults.filter(
+      (entry) => entry.source === "addon",
+    );
+    expect(addonResults).toHaveLength(1);
+    expect(addonResults[0]).toMatchObject({
+      status: "warning",
+      message: "validated acme/validator",
+      nodeId: "addon-node",
+      stepIds: ["addon-step"],
+      addonName: "acme/validator",
+    });
+  });
+
+  test("async third-party add-on resolver failures become validation issues", async () => {
+    const raw = {
+      workflow: {
+        workflowId: "addon-throws",
+        description: "addon throws",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "addon-step",
+        nodes: [
+          {
+            id: "addon-node",
+            addon: { name: "acme/throws", version: "1" },
+          },
+        ],
+        steps: [{ id: "addon-step", nodeId: "addon-node", role: "worker" }],
+      },
+      nodePayloads: {},
+    };
+    const resolver: AsyncNodeAddonPayloadResolver = async () => {
+      throw new Error("boom");
+    };
+
+    const result = await validateWorkflowBundleDetailedAsync(raw, {
+      asyncNodeAddonResolvers: [resolver],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContainEqual({
+      severity: "error",
+      path: "workflow.nodes[0].addon",
+      message:
+        "third-party node add-on resolver failed for 'acme/throws': boom",
+    });
+  });
+
+  test("malformed async third-party add-on resolver output becomes a validation issue", async () => {
+    const raw = {
+      workflow: {
+        workflowId: "addon-malformed",
+        description: "addon malformed",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "addon-step",
+        nodes: [
+          {
+            id: "addon-node",
+            addon: { name: "acme/malformed", version: "1" },
+          },
+        ],
+        steps: [{ id: "addon-step", nodeId: "addon-node", role: "worker" }],
+      },
+      nodePayloads: {},
+    };
+    const resolver: AsyncNodeAddonPayloadResolver = async () =>
+      ({ issues: "not-an-array" }) as unknown as NodeAddonResolveResult;
+
+    const result = await validateWorkflowBundleDetailedAsync(raw, {
+      asyncNodeAddonResolvers: [resolver],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContainEqual({
+      severity: "error",
+      path: "workflow.nodes[0].addon.resolverResult.issues",
+      message:
+        "third-party node add-on resolver for 'acme/malformed' must return issues as an array",
+    });
+  });
+
+  test("async third-party add-on resolver node validation results are preserved", async () => {
+    const raw = {
+      workflow: {
+        workflowId: "addon-node-results",
+        description: "addon node results",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "addon-step",
+        nodes: [
+          {
+            id: "addon-node",
+            addon: { name: "acme/results", version: "1" },
+          },
+        ],
+        steps: [{ id: "addon-step", nodeId: "addon-node", role: "worker" }],
+      },
+      nodePayloads: {},
+    };
+    const resolver: AsyncNodeAddonPayloadResolver = async (input) => ({
+      payload: {
+        id: input.nodeId,
+        executionBackend: "official/openai-sdk",
+        model: "gpt-5-nano",
+        promptTemplate: "addon",
+        variables: {},
+      },
+      nodeValidationResults: [
+        {
+          status: "warning",
+          message: "resolver metadata preserved",
+          nodeId: input.nodeId,
+          source: "addon",
+          path: input.path,
+          addonName: input.addon.name,
+        },
+      ],
+    });
+
+    const result = await validateWorkflowBundleDetailedAsync(raw, {
+      asyncNodeAddonResolvers: [resolver],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(
+      result.value.nodeValidationResults.some(
+        (entry) =>
+          entry.source === "addon" &&
+          entry.status === "warning" &&
+          entry.message === "resolver metadata preserved" &&
+          entry.nodeId === "addon-node" &&
+          entry.path === "workflow.nodes[0].addon" &&
+          entry.addonName === "acme/results" &&
+          entry.stepIds?.[0] === "addon-step",
+      ),
+    ).toBe(true);
+  });
+
+  test("active codex-agent preflight reports authentication failures as node validation results", async () => {
+    const root = makeTempDir();
+    const bin = path.join(root, "bin");
+    writeExecutable(
+      path.join(bin, "codex"),
+      [
+        "#!/usr/bin/env bash",
+        'if [ "$1" = "--version" ]; then echo \'codex 1.0.0\'; exit 0; fi',
+        'if [ "$1" = "login" ]; then echo \'not logged in\' >&2; exit 1; fi',
+        "exit 1",
+      ].join("\n"),
+    );
+    writeExecutable(
+      path.join(bin, "git"),
+      "#!/usr/bin/env bash\necho 'git 2.0'",
+    );
+    writeExecutable(
+      path.join(root, "node_modules", ".bin", "codex-agent"),
+      "#!/usr/bin/env bash\necho '{\"available\":true}'",
+    );
+
+    const result = await validateWorkflowBundleDetailedAsync(
+      makeStepAddressedRaw(),
+      {
+        executablePreflight: true,
+        cwd: root,
+        env: { PATH: `${bin}:${process.env["PATH"] ?? ""}` },
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(
+      result.value.nodeValidationResults.some(
+        (entry) =>
+          entry.status === "invalid" &&
+          entry.backend === "codex-agent" &&
+          entry.message.includes("authentication"),
+      ),
+    ).toBe(true);
   });
 });

@@ -89,6 +89,13 @@ export async function runCli(
     ...(parsed.options.sessionStoreRoot === undefined
       ? {}
       : { sessionStoreRoot: parsed.options.sessionStoreRoot }),
+    ...(deps.nodeAddons === undefined ? {} : { nodeAddons: deps.nodeAddons }),
+    ...(deps.asyncNodeAddonResolvers === undefined
+      ? {}
+      : { asyncNodeAddonResolvers: deps.asyncNodeAddonResolvers }),
+    ...(deps.nodeAddonResolvers === undefined
+      ? {}
+      : { nodeAddonResolvers: deps.nodeAddonResolvers }),
     env,
   };
   const graphqlCliTransport = resolveGraphqlCliTransport(

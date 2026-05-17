@@ -372,8 +372,41 @@ Resolver rules:
   this phase; it requires a separate executor registration and provenance model
 - resolver output must not return runtime add-on metadata; the host resolver
   boundary maps third-party references to ordinary node execution only
-- resolver errors and malformed resolver results are converted into validation
-  issues rather than crashing workflow validation
+- resolver errors and malformed resolver results are converted into
+  `ValidationIssue` records rather than crashing workflow validation
+- synchronous and asynchronous third-party resolver entry points must use the
+  same package-boundary normalization contract; async resolver callbacks must
+  not be invoked in a pre-normalization loop that lets thrown errors or malformed
+  results escape `validateWorkflowBundleDetailedAsync`
+- resolver-provided `nodeValidationResults` are additive metadata on a handled
+  result and must be preserved exactly when resolver errors, malformed outputs,
+  or payload validation failures are converted to structural validation issues
+
+### Add-on Executability Validation
+
+Add-on descriptors and host resolvers may contribute node executability results
+through the shared validation model in
+`design-docs/specs/design-workflow-node-executability-validation.md`.
+
+Rules:
+
+- add-on validation returns `NodeValidationResult(status,message)` records
+  rather than transport-specific CLI or GraphQL payloads
+- built-in `divedra/*` descriptors may provide bounded, side-effect-free
+  `validate` hooks
+- host-code resolvers may return validation results with the resolved payload
+  when the host owns the add-on implementation
+- local manifest/template add-ons remain schema-only in this phase; manifest
+  validation may produce node results, but loading a manifest must not execute
+  arbitrary JavaScript, TypeScript, shell, or package lifecycle code
+- validation results must be attributed to the authored add-on node id and the
+  step ids that use that registry node
+- add-on validation must feed the same detailed validation output used by CLI,
+  GraphQL, library callers, and runtime readiness
+
+This keeps add-on executability DRY: the add-on descriptor owns its reusable
+validation logic, while workflow validation owns result aggregation and
+transport formatting.
 
 ## Loader and Validation Flow
 
@@ -387,7 +420,11 @@ normalization:
    `divedra/*`, from scoped local add-on roots for manifest/template add-ons, or
    from host-provided third-party resolvers for other namespaces.
 4. Validate `addon.config`, `addon.env`, and `addon.inputs` through the
-   descriptor or resolver.
+   descriptor or resolver. Resolver invocation is a validation boundary:
+   thrown resolver errors, rejected async resolver promises, and malformed
+   resolver return values become `ValidationIssue` records with the authored
+   add-on path; they do not escape library, CLI, GraphQL, or readiness
+   validation calls as uncaught exceptions.
 5. For local manifests and third-party resolvers, normalize the returned payload
    through ordinary node payload validation and reject runtime-owned add-on
    execution metadata.

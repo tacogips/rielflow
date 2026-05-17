@@ -7,6 +7,7 @@ import {
   isSafeWorkflowRelativePath,
 } from "../prompt-template-file";
 import type { Result } from "../result";
+import type { NodeValidationResult } from "./node-validation-result";
 import {
   DEFAULT_CONTAINER_RUNNER_KIND,
   type CommandExecution,
@@ -48,6 +49,7 @@ export interface WorkflowValidationOptions
     | "nodeAddonResolvers"
   > {
   readonly allowResolvedStepFileFields?: boolean;
+  readonly executablePreflight?: boolean;
 }
 export function isStrictWorkflowAuthorshipValidation(
   _options: WorkflowValidationOptions,
@@ -62,6 +64,7 @@ export type ValidationResult = Result<
 export interface ValidationSuccessDetails {
   readonly bundle: NormalizedWorkflowBundle;
   readonly issues: readonly ValidationIssue[];
+  readonly nodeValidationResults: readonly NodeValidationResult[];
 }
 export function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);

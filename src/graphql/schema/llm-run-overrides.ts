@@ -53,7 +53,10 @@ import type {
   NodeExecutionRecord,
   WorkflowSessionState,
 } from "../../workflow/session";
-import { validateWorkflowBundleDetailedAsync } from "../../workflow/validate";
+import {
+  hasInvalidNodeValidationResult,
+  validateWorkflowBundleDetailedAsync,
+} from "../../workflow/validate";
 import { deriveWorkflowVisualization } from "../../workflow/visualization";
 import { parseWorkflowBundleInput } from "../../workflow/workflow-bundle-input";
 import { normalizeWorkflowWorkingDirectoryOverride } from "../../workflow/working-directory";
@@ -596,7 +599,10 @@ export async function validateWorkflowDefinitionMutation(
         workflow: parsedBundle.value.workflow,
         nodePayloads: parsedBundle.value.nodePayloads,
       },
-      context,
+      {
+        ...context,
+        executablePreflight: input.executablePreflight === true,
+      },
     );
     if (!validation.ok) {
       return {
@@ -604,14 +610,18 @@ export async function validateWorkflowDefinitionMutation(
         issues: validation.error,
       } satisfies ValidationResponse;
     }
+    const executableInvalid =
+      input.executablePreflight === true &&
+      hasInvalidNodeValidationResult(validation.value.nodeValidationResults);
     const addonSources = await collectWorkflowAddonSourceSummaries({
       workflow: validation.value.bundle.workflow,
       options: context,
     });
     return {
-      valid: true,
+      valid: !executableInvalid,
       workflowId: validation.value.bundle.workflow.workflowId,
       addonSources,
+      nodeValidationResults: validation.value.nodeValidationResults,
       warnings: validation.value.issues.filter(
         (issue) => issue.severity === "warning",
       ),
@@ -620,7 +630,14 @@ export async function validateWorkflowDefinitionMutation(
   }
 
   assertWorkflowDefinitionAccess(input.workflowName, context);
-  const loaded = await loadWorkflowFromCatalog(input.workflowName, context);
+  const validationContext = {
+    ...context,
+    executablePreflight: input.executablePreflight === true,
+  };
+  const loaded = await loadWorkflowFromCatalog(
+    input.workflowName,
+    validationContext,
+  );
   if (!loaded.ok) {
     return {
       valid: false,
@@ -628,9 +645,16 @@ export async function validateWorkflowDefinitionMutation(
       issues: loaded.error.issues ?? [],
     } satisfies ValidationResponse;
   }
-  const workflowContext = optionsForLoadedWorkflow(loaded.value, context);
+  const workflowContext = optionsForLoadedWorkflow(
+    loaded.value,
+    validationContext,
+  );
+  const nodeValidationResults = loaded.value.nodeValidationResults;
+  const executableInvalid =
+    input.executablePreflight === true &&
+    hasInvalidNodeValidationResult(nodeValidationResults);
   return {
-    valid: true,
+    valid: !executableInvalid,
     workflowId: loaded.value.bundle.workflow.workflowId,
     addonSources: await collectWorkflowAddonSourceSummaries({
       workflow: loaded.value.bundle.workflow,
@@ -639,7 +663,11 @@ export async function validateWorkflowDefinitionMutation(
         ? {}
         : { workflowSource: loaded.value.source }),
     }),
-    warnings: [],
+    nodeValidationResults,
+    warnings: loaded.value.validationIssues.filter(
+      (issue) => issue.severity === "warning",
+    ),
+    issues: loaded.value.validationIssues,
   } satisfies ValidationResponse;
 }
 export async function authenticateManagerScope(

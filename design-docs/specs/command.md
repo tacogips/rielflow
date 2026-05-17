@@ -21,6 +21,18 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `cli workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.
+  - By default, validation is structural/passive and does not spawn agent CLIs
+    or probe model reachability.
+  - `--executable` enables active node executability preflight and reports
+    `NodeValidationResult` records for node payloads, add-ons, and backend
+    adapters including `codex-agent`, `claude-code-agent`, and
+    `cursor-cli-agent`.
+  - `--output json` includes `nodeValidationResults`; text output summarizes
+    invalid and warning node results after ordinary validation issues.
+  - JSON validation output for both direct-directory and scoped-catalog loaded
+    workflows must preserve add-on `validate` hook `nodeValidationResults`
+    from detailed workflow validation before adding any active backend preflight
+    results.
 - `cli workflow list`
   - List catalog-visible workflows for human inspection without entering the TUI.
   - Show only compact overview data: workflow name, resolved source scope, description, aggregate workflow status, active execution count, and latest run summary.
@@ -139,6 +151,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | ------------------------------------------------- | ------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--worker-only`                                   | boolean       | `false`                                             | For `workflow create`: scaffold a manager-less starter whose explicit `entryStepId` is `main-worker`                                                                                                                      |
 | `--structure`                                     | boolean       | `false`                                             | For `workflow inspect`: render a compact indented text structure with each step id on its own line and the description on the next line one indent deeper                                                                 |
+| `--executable`                                    | boolean       | `false`                                             | For `workflow validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                                                       |
 | `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `divedra graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |
 | `--workflow-definition-dir`                       | string (path) | scoped catalog lookup                               | Direct directory containing `<workflow-name>/workflow.json` definition bundles; when supplied, bypasses project/user scope catalog lookup and does not control logs, sessions, or artifacts                               |
 | `--scope`                                         | string        | `auto`                                              | Workflow scope selector for read/write commands: `auto`, `project`, or `user`                                                                                                                                             |

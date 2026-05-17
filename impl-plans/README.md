@@ -32,6 +32,8 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `loaded-workflow-addon-validation-results` | 2026-05-17 | `design-workflow-node-executability-validation#loaded-workflow-result-consistency`, `command` |
+| `workflow-node-executability-validation` | 2026-05-17 | `design-workflow-node-executability-validation` |
 | `refactoring-runtime-boundaries` | 2026-05-16 | `refactoring-divide-and-conquer slice reviews` |
 | `chat-event-sources-review-improvements` | 2026-05-15 | `design-event-listener-workflow-trigger`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources` |
 | `chat-sdk-event-sources` | 2026-05-15 | `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-chat-sdk-event-sources`, `design-event-listener-workflow-trigger` |

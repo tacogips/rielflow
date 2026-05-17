@@ -695,6 +695,14 @@ Important validation facts:
 - node payloads distinguish `executionBackend` from `model`; model names are not used as backend selectors in newly authored workflow bundles
 - step-addressed bundles reject dedicated legacy graph-control fields such as `edges`, `loops`, `branching`, and structural sub-workflow metadata
 - cross-scope routing must still target the owning manager boundary
+- executable node validation is an additive workflow validation layer described
+  in `design-docs/specs/design-workflow-node-executability-validation.md`;
+  it returns `NodeValidationResult(status,message)` records for resolved nodes,
+  add-on validation hooks, and adapter-owned backend preflight without
+  replacing structural `ValidationIssue` output
+- active backend preflight is explicit and bounded; ordinary validation remains
+  passive so structural checks do not spawn agent CLIs, consume model quota, or
+  mutate workflow state
 
 ### Node Add-on Catalog
 
@@ -737,7 +745,19 @@ workflow load, validation, save, and execution options to materialize
 third-party add-on references into ordinary node payloads. The package root
 exports the library API from `src/lib.ts` rather than the CLI entrypoint so
 third-party add-on packages can type resolver exports from `divedra` without
-deep imports.
+deep imports. Third-party resolver calls are package-boundary validation
+boundaries: both synchronous and asynchronous resolver paths must normalize
+handled, unhandled, malformed, and throwing resolver outcomes into ordinary
+validation results. A throwing async resolver must return `ValidationIssue`
+output from `validateWorkflowBundleDetailedAsync` instead of escaping as an
+uncaught exception, and any resolver-provided `nodeValidationResults` on valid
+handled results must remain intact.
+
+Add-on descriptors may also provide side-effect-free validation hooks that
+return `NodeValidationResult` records. These hooks are part of the shared
+workflow validation pipeline, so CLI, GraphQL, library validation, and runtime
+readiness surfaces all consume the same add-on result instead of duplicating
+transport-specific checks.
 
 ### Prompt and Input Assembly
 

@@ -3,6 +3,7 @@ import type {
   AsyncNodeAddonPayloadResolver,
   ChatReplyWorkerConfig,
   NodeAddonDefinition,
+  NodeAddonValidateResult,
   NodeAddonPayloadResolver,
   NodeAddonResolveResult,
   NodeOutputContract,
@@ -12,6 +13,7 @@ import type {
   XGatewayAddonConfig,
   XGatewayReadAddonConfig,
 } from "../../../divedra-core/src/index";
+import { NodeValidationResult } from "../../../divedra-core/src/index";
 
 export const CHAT_REPLY_WORKER_ADDON_NAME = "divedra/chat-reply-worker";
 export const CHAT_REPLY_WORKER_ADDON_VERSION = "1";
@@ -277,9 +279,125 @@ export function normalizeThirdPartyResolverResult(input: {
   }
 
   const payload = input.value["payload"];
+  const nodeValidationResultsRaw = input.value["nodeValidationResults"] ?? [];
+  if (!Array.isArray(nodeValidationResultsRaw)) {
+    return {
+      issues: [
+        makeIssue(
+          `${input.path}.resolverResult.nodeValidationResults`,
+          `third-party node add-on resolver for '${input.addonName}' must return nodeValidationResults as an array`,
+        ),
+      ],
+    };
+  }
+  const nodeValidationResults: NodeValidationResult[] = [];
+  for (const [index, result] of nodeValidationResultsRaw.entries()) {
+    if (isNodeValidationResultLike(result)) {
+      nodeValidationResults.push(new NodeValidationResult(result));
+      continue;
+    }
+    return {
+      issues: [
+        makeIssue(
+          `${input.path}.resolverResult.nodeValidationResults[${index}]`,
+          "must contain node validation results with status and message",
+        ),
+      ],
+    };
+  }
   return {
     issues,
     ...(payload === undefined ? {} : { payload: payload as NodePayload }),
+    ...(nodeValidationResults.length === 0 ? {} : { nodeValidationResults }),
+  };
+}
+
+function isNodeValidationResultLike(
+  value: unknown,
+): value is ConstructorParameters<typeof NodeValidationResult>[0] {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const status = value["status"];
+  return (
+    (status === "valid" ||
+      status === "warning" ||
+      status === "invalid" ||
+      status === "unknown") &&
+    typeof value["message"] === "string" &&
+    value["message"].length > 0
+  );
+}
+
+function normalizeAddonValidateResult(
+  value: NodeAddonValidateResult,
+): readonly NodeValidationResult[] {
+  const entries = Array.isArray(value) ? value : [value];
+  return entries.map((entry) => new NodeValidationResult(entry));
+}
+
+function attachSyncValidateResult(input: {
+  readonly definition: NodeAddonDefinition;
+  readonly resolverInput: Parameters<NodeAddonPayloadResolver>[0];
+  readonly resolved: NodeAddonResolveResult;
+}): NodeAddonResolveResult {
+  if (input.definition.validate === undefined) {
+    return input.resolved;
+  }
+  const validation = input.definition.validate({
+    nodeId: input.resolverInput.nodeId,
+    addon: input.resolverInput.addon,
+    ...(input.resolved.payload === undefined
+      ? {}
+      : { resolvedPayload: input.resolved.payload }),
+    path: input.resolverInput.path,
+    executablePreflight: input.resolverInput.executablePreflight === true,
+  });
+  if (isPromiseLike(validation)) {
+    void Promise.resolve(validation).catch(() => undefined);
+    return {
+      ...input.resolved,
+      issues: [
+        ...(input.resolved.issues ?? []),
+        makeIssue(
+          input.resolverInput.path,
+          `third-party node add-on '${input.resolverInput.addon.name}' uses an async validate hook; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`,
+        ),
+      ],
+    };
+  }
+  return {
+    ...input.resolved,
+    nodeValidationResults: [
+      ...(input.resolved.nodeValidationResults ?? []),
+      ...normalizeAddonValidateResult(validation),
+    ],
+  };
+}
+
+async function attachAsyncValidateResult(input: {
+  readonly definition: NodeAddonDefinition;
+  readonly resolverInput: Parameters<NodeAddonPayloadResolver>[0];
+  readonly resolved: NodeAddonResolveResult;
+}): Promise<NodeAddonResolveResult> {
+  if (input.definition.validate === undefined) {
+    return input.resolved;
+  }
+  const validation = await input.definition.validate({
+    nodeId: input.resolverInput.nodeId,
+    addon: input.resolverInput.addon,
+    ...(input.resolved.payload === undefined
+      ? {}
+      : { resolvedPayload: input.resolved.payload }),
+    path: input.resolverInput.path,
+    executablePreflight: input.resolverInput.executablePreflight === true,
+  });
+  return {
+    ...input.resolved,
+    nodeValidationResults: [
+      ...(input.resolved.nodeValidationResults ?? []),
+      ...normalizeAddonValidateResult(validation),
+    ],
   };
 }
 export function definitionVersionMatches(
@@ -376,7 +494,11 @@ export function createNodeAddonRegistry(
         ],
       };
     }
-    return resolved;
+    return attachSyncValidateResult({
+      definition: selection.definition,
+      resolverInput: input,
+      resolved,
+    });
   };
 }
 export function createNodeAddonPayloadResolver(
@@ -400,7 +522,12 @@ export function createAsyncNodeAddonRegistry(
     if (selection.kind === "issues") {
       return { issues: selection.issues };
     }
-    return await selection.definition.resolve(input);
+    const resolved = await selection.definition.resolve(input);
+    return await attachAsyncValidateResult({
+      definition: selection.definition,
+      resolverInput: input,
+      resolved,
+    });
   };
 }
 export function createAsyncNodeAddonPayloadResolver(

@@ -8,6 +8,10 @@ import {
 } from "../../../../src/workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../../../src/workflow/load";
 import {
+  hasInvalidNodeValidationResult,
+  type NodeValidationResult,
+} from "../../../../src/workflow/validate";
+import {
   buildWorkflowCatalogOverview,
   buildWorkflowStatusOverview,
   parseWorkflowOverviewAggregateStatusFilter,
@@ -67,6 +71,20 @@ function renderWorkflowStructureLines(
     `${options.indentUnit.repeat(row.indent)}${row.stepId}`,
     `${options.indentUnit.repeat(row.indent + 1)}${row.description}`,
   ]);
+}
+
+function renderNodeValidationSummaryLines(
+  results: readonly NodeValidationResult[],
+): readonly string[] {
+  return results
+    .filter(
+      (result) => result.status === "invalid" || result.status === "warning",
+    )
+    .map((result) => {
+      const nodeLabel =
+        result.nodeId === undefined ? "workflow.nodes" : result.nodeId;
+      return `nodeValidation: [${result.status}] ${nodeLabel}: ${result.message}`;
+    });
 }
 
 export async function runCliWorkflowScope(
@@ -381,7 +399,14 @@ export async function runCliWorkflowScope(
   }
 
   if (command === "validate") {
-    const loaded = await loadWorkflowFromCatalog(workflowTarget, sharedOptions);
+    const validationLoadOptions = {
+      ...sharedOptions,
+      executablePreflight: parsed.options.executablePreflight,
+    };
+    const loaded = await loadWorkflowFromCatalog(
+      workflowTarget,
+      validationLoadOptions,
+    );
     if (!loaded.ok) {
       if (parsed.options.output === "json") {
         emitJson(io, loaded.error);
@@ -399,8 +424,12 @@ export async function runCliWorkflowScope(
     }
     const loadedWorkflowOptions = optionsForLoadedWorkflow(
       loaded.value,
-      sharedOptions,
+      validationLoadOptions,
     );
+    const nodeValidationResults = loaded.value.nodeValidationResults;
+    const executableInvalid =
+      parsed.options.executablePreflight &&
+      hasInvalidNodeValidationResult(nodeValidationResults);
     const addonSources = await collectWorkflowAddonSourceSummaries({
       workflow: loaded.value.bundle.workflow,
       options: loadedWorkflowOptions,
@@ -414,10 +443,13 @@ export async function runCliWorkflowScope(
         workflowId: loaded.value.bundle.workflow.workflowId,
         source: workflowSourceJson(loaded.value.source),
         addonSources,
-        valid: true,
+        nodeValidationResults,
+        valid: !executableInvalid,
       });
     } else {
-      io.stdout(`workflow '${loaded.value.workflowName}' is valid`);
+      io.stdout(
+        `workflow '${loaded.value.workflowName}' is ${executableInvalid ? "not executable" : "valid"}`,
+      );
       const sourceLine = formatWorkflowSource(loaded.value.source);
       if (sourceLine !== undefined) {
         io.stdout(`source: ${sourceLine}`);
@@ -425,8 +457,13 @@ export async function runCliWorkflowScope(
       for (const addonSource of addonSources) {
         io.stdout(`addonSource: ${formatAddonSource(addonSource)}`);
       }
+      for (const line of renderNodeValidationSummaryLines(
+        nodeValidationResults,
+      )) {
+        io.stdout(line);
+      }
     }
-    return 0;
+    return executableInvalid ? 2 : 0;
   }
 
   if (command === "inspect") {

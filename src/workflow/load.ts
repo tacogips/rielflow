@@ -17,7 +17,10 @@ import {
   resolveEffectiveRoots,
   resolveWorkflowScopedPath,
 } from "./paths";
-import { validateWorkflowBundleAsync } from "./validate";
+import {
+  validateWorkflowBundleDetailedAsync,
+  type NodeValidationResult,
+} from "./validate";
 import {
   resolveWorkflowSource,
   withResolvedWorkflowSourceOptions,
@@ -66,6 +69,8 @@ export interface LoadedWorkflow {
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
   readonly bundle: NormalizedWorkflowBundle;
+  readonly validationIssues: readonly ValidationIssue[];
+  readonly nodeValidationResults: readonly NodeValidationResult[];
   readonly source?: ResolvedWorkflowSource;
 }
 
@@ -419,7 +424,7 @@ export async function loadWorkflowFromDisk(
     nodePayloads[nodeFile] = resolvedNodeRaw.value;
   }
 
-  const validation = await validateWorkflowBundleAsync(
+  const validation = await validateWorkflowBundleDetailedAsync(
     {
       workflow: resolvedWorkflow.value,
       nodePayloads,
@@ -440,7 +445,7 @@ export async function loadWorkflowFromDisk(
 
   const artifactWorkflowRoot = resolveWorkflowScopedPath(
     roots.artifactRoot,
-    validation.value.workflow.workflowId,
+    validation.value.bundle.workflow.workflowId,
   );
   if (artifactWorkflowRoot === undefined) {
     return err({
@@ -461,7 +466,9 @@ export async function loadWorkflowFromDisk(
     workflowName,
     workflowDirectory,
     artifactWorkflowRoot,
-    bundle: validation.value,
+    bundle: validation.value.bundle,
+    validationIssues: validation.value.issues,
+    nodeValidationResults: validation.value.nodeValidationResults,
   });
 }
 

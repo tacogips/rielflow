@@ -31,6 +31,9 @@ import {
   type WorkflowSessionState,
 } from "../../../../src/workflow/session";
 import type {
+  AsyncNodeAddonPayloadResolver,
+  NodeAddonDefinition,
+  NodeAddonPayloadResolver,
   ResolvedWorkflowSource,
   WorkflowScopeSelector,
 } from "../../../../src/workflow/types";
@@ -75,6 +78,9 @@ export interface CliDependencies {
   readonly fetchImpl?: typeof fetch;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly readStdin?: () => Promise<string>;
+  readonly nodeAddons?: readonly NodeAddonDefinition[];
+  readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
+  readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
 }
 export interface CliStorageOptions {
   readonly workflowRoot?: string;
@@ -86,6 +92,9 @@ export interface CliStorageOptions {
   readonly rootDataDir?: string;
   readonly sessionStoreRoot?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly nodeAddons?: readonly NodeAddonDefinition[];
+  readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
+  readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
 }
 export interface RunCliSharedOptions extends CliStorageOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -247,6 +256,7 @@ export interface ParsedOptions {
   readonly workerOnly: boolean;
   readonly output: "text" | "json" | "table";
   readonly structure: boolean;
+  readonly executablePreflight: boolean;
   readonly format?: "text" | "json" | "jsonl";
   readonly variablesPath?: string;
   readonly mockScenarioPath?: string;

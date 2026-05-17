@@ -441,9 +441,21 @@ export const GRAPHQL_SCHEMA_TEXT = `
     valid: Boolean!
     workflowId: String
     addonSources: [WorkflowAddonSource!]
+    nodeValidationResults: [NodeValidationResult!]
     warnings: JSON
     issues: JSON
     error: String
+  }
+
+  type NodeValidationResult {
+    status: String!
+    message: String!
+    nodeId: String
+    stepIds: [String!]
+    source: String
+    path: String
+    backend: String
+    addonName: String
   }
 
   type ExecuteWorkflowPayload {
@@ -611,6 +623,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
   input ValidateWorkflowDefinitionInput {
     workflowName: String!
     bundle: JSON
+    executablePreflight: Boolean
   }
 
   input ResumeWorkflowExecutionInput {

@@ -120,6 +120,9 @@ export function printHelp(io: CliIo): void {
     "  workflow inspect <name> --structure  Show compact indented step ids with description lines",
   );
   io.stdout(
+    "  workflow validate <name> --executable  Run active node executability preflight",
+  );
+  io.stdout(
     "  workflow run <name> --variables <json|@file|file>  Runtime variables as inline JSON object, explicit @file, or bare JSON file path",
   );
   io.stdout(

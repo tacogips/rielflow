@@ -98,6 +98,14 @@ function createAsyncThirdPartyAddonDefinition(): NodeAddonDefinition {
         variables: input.addon.inputs ?? {},
       },
     }),
+    validate: (input) => ({
+      status: "warning",
+      message: `validated ${input.addon.name}`,
+      nodeId: input.nodeId,
+      source: "addon",
+      path: input.path,
+      addonName: input.addon.name,
+    }),
   };
 }
 
@@ -2426,9 +2434,73 @@ describe("createGraphqlSchema", () => {
     );
 
     expect(validation.valid).toBe(true);
+    expect(validation.nodeValidationResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "warning",
+          message: "validated acme/echo-worker",
+          nodeId: "addon-worker",
+          stepIds: ["addon-worker"],
+          source: "addon",
+          addonName: "acme/echo-worker",
+        }),
+      ]),
+    );
     expect(
       validation.issues?.some((issue) => issue.severity === "error") ?? false,
     ).toBe(false);
+  });
+
+  test("validateWorkflowDefinition preserves async add-on node validation results for named workflow validation", async () => {
+    const root = await makeTempDir();
+    const workflowName = "third-party-addon";
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(createThirdPartyAddonBundle().workflow, null, 2)}\n`,
+      "utf8",
+    );
+
+    const schema = createGraphqlSchema();
+    const options: GraphqlRequestContext = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+      nodeAddons: [createAsyncThirdPartyAddonDefinition()],
+    };
+
+    const bundleValidation = await schema.mutation.validateWorkflowDefinition(
+      {
+        workflowName,
+        bundle: createThirdPartyAddonBundle(),
+      },
+      options,
+    );
+    const namedValidation = await schema.mutation.validateWorkflowDefinition(
+      { workflowName },
+      options,
+    );
+    const bundleAddonResults = (
+      bundleValidation.nodeValidationResults ?? []
+    ).filter((entry) => entry.source === "addon");
+    const namedAddonResults = (
+      namedValidation.nodeValidationResults ?? []
+    ).filter((entry) => entry.source === "addon");
+
+    expect(namedValidation.valid).toBe(true);
+    expect(namedAddonResults).toEqual(bundleAddonResults);
+    expect(namedAddonResults).toEqual([
+      expect.objectContaining({
+        status: "warning",
+        message: "validated acme/echo-worker",
+        nodeId: "addon-worker",
+        stepIds: ["addon-worker"],
+        source: "addon",
+        addonName: "acme/echo-worker",
+      }),
+    ]);
   });
 
   test("reports scoped local add-on sources through GraphQL validation and inspection", async () => {

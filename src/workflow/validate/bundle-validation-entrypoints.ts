@@ -29,6 +29,11 @@ import {
   normalizeNodePayload,
 } from "./node-payload-validation";
 import {
+  collectNodeExecutabilityValidation,
+  collectPassiveNodeExecutabilityValidation,
+} from "./node-executability-validation";
+import type { NodeValidationResult } from "./node-validation-result";
+import {
   applyStepPromptVariant,
   resolveAsyncNodeAddonResolvers,
   resolveSyncNodeAddonResolvers,
@@ -44,6 +49,7 @@ export function buildStepAddressedNodePayloadsSync(input: {
   readonly issues: ValidationIssue[];
   readonly options: WorkflowValidationOptions;
   readonly nodeAddonResolvers: readonly NodeAddonPayloadResolver[] | undefined;
+  readonly addonValidationResults: NodeValidationResult[];
 }): Record<string, NodePayload> {
   const nodePayloads: Record<string, NodePayload> = {};
   const nodeRegistry = input.workflow.nodeRegistry ?? [];
@@ -58,6 +64,7 @@ export function buildStepAddressedNodePayloadsSync(input: {
         nodeId: node.id,
         addon: node.addon,
         path: `workflow.nodes[${index}].addon`,
+        executablePreflight: input.options.executablePreflight === true,
         ...(input.options.resolvedWorkflowSource === undefined
           ? {}
           : { workflowSource: input.options.resolvedWorkflowSource }),
@@ -67,6 +74,9 @@ export function buildStepAddressedNodePayloadsSync(input: {
           : { thirdPartyResolvers: input.nodeAddonResolvers }),
       });
       input.issues.push(...(resolved.issues ?? []));
+      input.addonValidationResults.push(
+        ...(resolved.nodeValidationResults ?? []),
+      );
       if (
         resolved.payload !== undefined &&
         validateResolvedAddonPayload({
@@ -149,6 +159,7 @@ export async function buildStepAddressedNodePayloadsAsync(input: {
   readonly nodeAddonResolvers:
     | readonly AsyncNodeAddonPayloadResolver[]
     | undefined;
+  readonly addonValidationResults: NodeValidationResult[];
 }): Promise<Record<string, NodePayload>> {
   const nodePayloads: Record<string, NodePayload> = {};
   const nodeRegistry = input.workflow.nodeRegistry ?? [];
@@ -163,6 +174,7 @@ export async function buildStepAddressedNodePayloadsAsync(input: {
         nodeId: node.id,
         addon: node.addon,
         path: `workflow.nodes[${index}].addon`,
+        executablePreflight: input.options.executablePreflight === true,
         ...(input.options.resolvedWorkflowSource === undefined
           ? {}
           : { workflowSource: input.options.resolvedWorkflowSource }),
@@ -172,6 +184,9 @@ export async function buildStepAddressedNodePayloadsAsync(input: {
           : { thirdPartyResolvers: input.nodeAddonResolvers }),
       });
       input.issues.push(...(resolved.issues ?? []));
+      input.addonValidationResults.push(
+        ...(resolved.nodeValidationResults ?? []),
+      );
       if (
         resolved.payload !== undefined &&
         validateResolvedAddonPayload({
@@ -268,6 +283,7 @@ export function validateWorkflowBundleDetailed(
     : normalizeWorkflow(raw.workflow, issues, options);
 
   const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
+  const addonValidationResults: NodeValidationResult[] = [];
 
   let nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null && workflow.nodeRegistry !== undefined) {
@@ -277,6 +293,7 @@ export function validateWorkflowBundleDetailed(
       issues,
       options,
       nodeAddonResolvers,
+      addonValidationResults,
     });
   } else if (workflow !== null) {
     workflow.nodes.forEach((node, index) => {
@@ -285,6 +302,7 @@ export function validateWorkflowBundleDetailed(
           nodeId: node.id,
           addon: node.addon,
           path: `workflow.nodes[${index}].addon`,
+          executablePreflight: options.executablePreflight === true,
           ...(options.resolvedWorkflowSource === undefined
             ? {}
             : { workflowSource: options.resolvedWorkflowSource }),
@@ -294,6 +312,7 @@ export function validateWorkflowBundleDetailed(
             : { thirdPartyResolvers: nodeAddonResolvers }),
         });
         issues.push(...(resolved.issues ?? []));
+        addonValidationResults.push(...(resolved.nodeValidationResults ?? []));
         if (
           resolved.payload !== undefined &&
           validateResolvedAddonPayload({
@@ -357,12 +376,17 @@ export function validateWorkflowBundleDetailed(
 
   runSemanticValidation(bundle, issues);
   validateCrossWorkflowCalleeEntryAlignmentSync(bundle, options, issues);
+  const nodeValidationResults = collectPassiveNodeExecutabilityValidation({
+    bundle,
+    options,
+    addonValidationResults,
+  });
   const allErrors = issues.filter((entry) => entry.severity === "error");
   if (allErrors.length > 0) {
     return err(issues);
   }
 
-  return ok({ bundle, issues });
+  return ok({ bundle, issues, nodeValidationResults });
 }
 export async function validateWorkflowBundleDetailedAsync(
   raw: RawBundle,
@@ -385,6 +409,7 @@ export async function validateWorkflowBundleDetailedAsync(
     ? pureValidation.value.workflow
     : normalizeWorkflow(raw.workflow, issues, options);
   const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
+  const addonValidationResults: NodeValidationResult[] = [];
 
   let nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null && workflow.nodeRegistry !== undefined) {
@@ -394,6 +419,7 @@ export async function validateWorkflowBundleDetailedAsync(
       issues,
       options,
       nodeAddonResolvers,
+      addonValidationResults,
     });
   } else if (workflow !== null) {
     for (const [index, node] of workflow.nodes.entries()) {
@@ -402,6 +428,7 @@ export async function validateWorkflowBundleDetailedAsync(
           nodeId: node.id,
           addon: node.addon,
           path: `workflow.nodes[${index}].addon`,
+          executablePreflight: options.executablePreflight === true,
           ...(options.resolvedWorkflowSource === undefined
             ? {}
             : { workflowSource: options.resolvedWorkflowSource }),
@@ -411,6 +438,7 @@ export async function validateWorkflowBundleDetailedAsync(
             : { thirdPartyResolvers: nodeAddonResolvers }),
         });
         issues.push(...(resolved.issues ?? []));
+        addonValidationResults.push(...(resolved.nodeValidationResults ?? []));
         if (
           resolved.payload !== undefined &&
           validateResolvedAddonPayload({
@@ -474,12 +502,17 @@ export async function validateWorkflowBundleDetailedAsync(
 
   runSemanticValidation(bundle, issues);
   await validateCrossWorkflowCalleeEntryAlignment(bundle, options, issues);
+  const nodeValidationResults = await collectNodeExecutabilityValidation({
+    bundle,
+    options,
+    addonValidationResults,
+  });
   const allErrors = issues.filter((entry) => entry.severity === "error");
   if (allErrors.length > 0) {
     return err(issues);
   }
 
-  return ok({ bundle, issues });
+  return ok({ bundle, issues, nodeValidationResults });
 }
 export function validateWorkflowBundle(
   raw: RawBundle,

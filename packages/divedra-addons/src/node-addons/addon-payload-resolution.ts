@@ -18,6 +18,7 @@ import type {
   ValidationIssue,
   WorkflowNodeAddonRef,
 } from "../../../divedra-core/src/index";
+import { NodeValidationResult } from "../../../divedra-core/src/index";
 import {
   CHAT_REPLY_WORKER_ADDON_NAME,
   CHAT_REPLY_WORKER_ADDON_VERSION,
@@ -275,6 +276,32 @@ export function resolveBuiltinNodeAddonPayload(
 export function isBuiltinAddonNamespace(name: string): boolean {
   return name.startsWith("divedra/");
 }
+
+function withDefaultAddonValidation(input: {
+  readonly nodeId: string;
+  readonly addon: WorkflowNodeAddonRef;
+  readonly path: string;
+  readonly resolved: NodeAddonResolveResult;
+}): NodeAddonResolveResult {
+  if (input.resolved.payload === undefined) {
+    return input.resolved;
+  }
+  return {
+    ...input.resolved,
+    nodeValidationResults: [
+      ...(input.resolved.nodeValidationResults ?? []),
+      new NodeValidationResult({
+        status: "valid",
+        message: `node add-on '${input.addon.name}' resolved to an executable payload`,
+        nodeId: input.nodeId,
+        source: "addon",
+        path: input.path,
+        addonName: input.addon.name,
+      }),
+    ],
+  };
+}
+
 export function resolveNodeAddonPayload(input: {
   readonly nodeId: string;
   readonly addon: WorkflowNodeAddonRef;
@@ -284,7 +311,12 @@ export function resolveNodeAddonPayload(input: {
   readonly thirdPartyResolvers?: readonly NodeAddonPayloadResolver[];
 }): NodeAddonResolveResult {
   if (isBuiltinAddonNamespace(input.addon.name)) {
-    return resolveBuiltinNodeAddonPayload(input);
+    return withDefaultAddonValidation({
+      nodeId: input.nodeId,
+      addon: input.addon,
+      path: input.path,
+      resolved: resolveBuiltinNodeAddonPayload(input),
+    });
   }
 
   for (const resolver of input.thirdPartyResolvers ?? []) {
@@ -357,7 +389,12 @@ export async function resolveNodeAddonPayloadAsync(input: {
   readonly thirdPartyResolvers?: readonly AsyncNodeAddonPayloadResolver[];
 }): Promise<NodeAddonResolveResult> {
   if (isBuiltinAddonNamespace(input.addon.name)) {
-    return resolveBuiltinNodeAddonPayload(input);
+    return withDefaultAddonValidation({
+      nodeId: input.nodeId,
+      addon: input.addon,
+      path: input.path,
+      resolved: resolveBuiltinNodeAddonPayload(input),
+    });
   }
 
   let deferredLocalIssue: ValidationIssue | undefined;
@@ -369,11 +406,16 @@ export async function resolveNodeAddonPayloadAsync(input: {
     ...(input.options === undefined ? {} : { options: input.options }),
   });
   if (localSource.ok) {
-    return await resolveLocalNodeAddonPayload({
+    return withDefaultAddonValidation({
       nodeId: input.nodeId,
       addon: input.addon,
       path: input.path,
-      source: localSource.value,
+      resolved: await resolveLocalNodeAddonPayload({
+        nodeId: input.nodeId,
+        addon: input.addon,
+        path: input.path,
+        source: localSource.value,
+      }),
     });
   }
   if (localSource.error.code !== "NOT_FOUND") {

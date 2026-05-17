@@ -117,6 +117,7 @@ const TEMPORARY_COMPATIBILITY_ROOT_IMPORTS = {
     "../../../../src/workflow/overview",
     "../../../../src/workflow/scenario-adapter",
     "../../../../src/workflow/usage",
+    "../../../../src/workflow/validate",
   ],
   "packages/divedra/src/cli/workflow-graphql-formatters.ts": [
     "../../../../src/shared/ui-contract",
@@ -179,6 +180,7 @@ const TEMPORARY_COMPATIBILITY_ROOT_IMPORTS = {
     "../../../src/workflow/supervisor-runner-pool",
     "../../../src/workflow/types",
     "../../../src/workflow/usage",
+    "../../../src/workflow/validate/node-validation-result",
     "../../../src/workflow/visualization",
     "../../../src/workflow/working-directory",
   ],
@@ -955,6 +957,32 @@ describe("package boundaries", () => {
     expect(leakedSourceImports).toEqual([]);
   });
 
+  test("core async add-on boundary delegates third-party resolver normalization to add-ons package", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "src/workflow/addon-package-boundary.ts"),
+      "utf8",
+    );
+    const asyncBoundaryStart = source.indexOf(
+      "export async function resolveBoundaryNodeAddonPayloadAsync",
+    );
+    const syncBoundaryStart = source.indexOf(
+      "export function resolveBoundaryNodeAddonPayloadSync",
+    );
+
+    expect(asyncBoundaryStart).toBeGreaterThanOrEqual(0);
+    expect(syncBoundaryStart).toBeGreaterThan(asyncBoundaryStart);
+
+    const asyncBoundarySource = source.slice(
+      asyncBoundaryStart,
+      syncBoundaryStart,
+    );
+    expect(asyncBoundarySource).toContain("loadBoundaryAddonPackage");
+    expect(asyncBoundarySource).toContain("resolveNodeAddonPayloadAsync");
+    expect(asyncBoundarySource).not.toContain(
+      "for (const resolver of input.thirdPartyResolvers",
+    );
+  });
+
   test("adapters package dist declarations resolve package-owned references", async () => {
     const { files: declarationFiles, missingReferences } =
       await collectReachableDeclarationFiles(
@@ -1058,6 +1086,7 @@ describe("package boundaries", () => {
     expect(sortedExportKeys(core)).toEqual([
       "AdapterExecutionError",
       "NODE_TEMPLATE_FIELD_SPECS",
+      "NodeValidationResult",
       "SUPERVISION_STALL_ERROR_PREFIX",
       "atomicWriteJsonFile",
       "atomicWriteTextFile",
@@ -1087,6 +1116,7 @@ describe("package boundaries", () => {
       "getEngineSupervisionPatcherId",
       "getSuperviserControlAddonProviderOperationId",
       "getSupervisionSummary",
+      "hasInvalidNodeValidationResult",
       "hashManagerAuthToken",
       "isSuperviserControlAddonName",
       "isSupervisionStallLastError",

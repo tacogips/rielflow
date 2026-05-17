@@ -7,7 +7,10 @@ import { createWorkflowTemplate } from "./workflow/create";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
 import { ok } from "./workflow/result";
-import type { ResolvedWorkflowSource } from "./workflow/types";
+import type {
+  NodeAddonDefinition,
+  ResolvedWorkflowSource,
+} from "./workflow/types";
 import {
   saveEventReplyDispatchToRuntimeDb,
   saveNodeExecutionToRuntimeDb,
@@ -121,6 +124,11 @@ async function writeRuntimeVariablesFile(
 
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+async function writeExecutable(filePath: string, body: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${body}\n`, { mode: 0o755 });
 }
 
 async function writeLocalAddonManifest(input: {
@@ -684,6 +692,27 @@ describe("runCli", () => {
     expect(validateCode).toBe(0);
     expect(validateCapture.stdout.join("\n")).toContain("is valid");
 
+    const jsonValidateCapture = createIoCapture();
+    const jsonValidateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        "demo",
+        "--workflow-definition-dir",
+        root,
+        "--output",
+        "json",
+      ],
+      jsonValidateCapture.io,
+    );
+    expect(jsonValidateCode).toBe(0);
+    const validationPayload = JSON.parse(
+      jsonValidateCapture.stdout.join("\n"),
+    ) as {
+      nodeValidationResults: readonly { status: string; message: string }[];
+    };
+    expect(validationPayload.nodeValidationResults.length).toBeGreaterThan(0);
+
     const inspectCapture = createIoCapture();
     const inspectCode = await runCli(
       [
@@ -749,6 +778,153 @@ describe("runCli", () => {
     );
     expect(inspectTextCapture.stdout.join("\n")).toMatch(
       /steps: 2, nodeRegistry: 2, crossWorkflowDispatches: 0/,
+    );
+  });
+
+  test("workflow validate --executable returns invalid node validation results", async () => {
+    const root = await makeTempDir();
+    const bin = path.join(root, "bin");
+    await writeExecutable(
+      path.join(bin, "codex"),
+      [
+        "#!/usr/bin/env bash",
+        'if [ "$1" = "--version" ]; then echo \'codex 1.0.0\'; exit 0; fi',
+        'if [ "$1" = "login" ]; then echo \'not logged in\' >&2; exit 1; fi',
+        "exit 1",
+      ].join("\n"),
+    );
+    await writeExecutable(
+      path.join(bin, "git"),
+      "#!/usr/bin/env bash\necho 'git 2.0'",
+    );
+    await writeExecutable(
+      path.join(root, "node_modules", ".bin", "codex-agent"),
+      "#!/usr/bin/env bash\necho '{\"available\":true}'",
+    );
+
+    const createCapture = createIoCapture();
+    expect(
+      await runCli(
+        ["workflow", "create", "demo", "--workflow-definition-dir", root],
+        createCapture.io,
+      ),
+    ).toBe(0);
+
+    const validateCapture = createIoCapture();
+    const validateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        "demo",
+        "--workflow-definition-dir",
+        root,
+        "--executable",
+        "--output",
+        "json",
+      ],
+      validateCapture.io,
+      createCliDeps({
+        env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}` },
+      }),
+    );
+    expect(validateCode).toBe(2);
+    const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
+      valid: boolean;
+      nodeValidationResults: readonly {
+        status: string;
+        backend?: string;
+        message: string;
+      }[];
+    };
+    expect(validation.valid).toBe(false);
+    expect(
+      validation.nodeValidationResults.some(
+        (entry) =>
+          entry.status === "invalid" &&
+          entry.backend === "codex-agent" &&
+          entry.message.includes("authentication"),
+      ),
+    ).toBe(true);
+  });
+
+  test("workflow validate preserves loaded add-on node validation results", async () => {
+    const root = await makeTempDir();
+    const workflowName = "addon-validator";
+    const addonDefinition: NodeAddonDefinition = {
+      name: "acme/validator",
+      version: "1",
+      resolve: async (input) => ({
+        payload: {
+          id: input.nodeId,
+          executionBackend: "official/openai-sdk",
+          model: "gpt-5-nano",
+          promptTemplate: "validated add-on",
+          variables: {},
+        },
+      }),
+      validate: (input) => ({
+        status: "warning",
+        message: `validated ${input.addon.name}`,
+        nodeId: input.nodeId,
+        source: "addon",
+        path: input.path,
+        addonName: input.addon.name,
+      }),
+    };
+    const workflowDirectory = path.join(root, workflowName);
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: workflowName,
+      description: "third-party add-on validation fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "addon-worker",
+      nodes: [
+        {
+          id: "addon-worker",
+          addon: {
+            name: "acme/validator",
+            version: "1",
+          },
+        },
+      ],
+      steps: [{ id: "addon-worker", nodeId: "addon-worker", role: "worker" }],
+    });
+
+    const validateCapture = createIoCapture();
+    const validateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        workflowName,
+        "--workflow-definition-dir",
+        root,
+        "--output",
+        "json",
+      ],
+      validateCapture.io,
+      createCliDeps({ nodeAddons: [addonDefinition] }),
+    );
+
+    expect(validateCode).toBe(0);
+    const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
+      nodeValidationResults: ReadonlyArray<{
+        readonly status: string;
+        readonly message: string;
+        readonly nodeId?: string;
+        readonly source?: string;
+        readonly addonName?: string;
+      }>;
+    };
+    expect(validation.nodeValidationResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "warning",
+          message: "validated acme/validator",
+          nodeId: "addon-worker",
+          source: "addon",
+          addonName: "acme/validator",
+        }),
+      ]),
     );
   });
 
@@ -1162,7 +1338,6 @@ describe("runCli", () => {
           ),
         }),
       ]);
-
       const inspectCapture = createIoCapture();
       const inspectCode = await runCli(
         [

@@ -4,6 +4,7 @@ import type {
   NormalizedWorkflowBundle,
   ValidationIssue,
 } from "../workflow/types";
+import type { NodeValidationResult } from "../workflow/validate";
 import type { DerivedVisNode } from "../workflow/visualization";
 
 export type SessionStatus = WorkflowSessionState["status"];
@@ -51,6 +52,7 @@ export interface ValidationResponse {
   readonly valid: boolean;
   readonly workflowId?: string;
   readonly addonSources?: readonly WorkflowAddonSourceSummary[];
+  readonly nodeValidationResults?: readonly NodeValidationResult[];
   readonly warnings?: readonly ValidationIssue[];
   readonly issues?: readonly ValidationIssue[];
   readonly error?: string;
