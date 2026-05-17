@@ -15,6 +15,15 @@ export {
   mergeLoadOptionsForSessionMutableBundle,
 } from "../../../src/workflow/load";
 export {
+  applyWorkflowNodePatch,
+  applyWorkflowNodePatchToRawPayloads,
+  normalizeWorkflowNodePatchMap,
+  readWorkflowNodePatch,
+  type ApplyWorkflowNodePatchInput,
+  type ApplyWorkflowNodePatchToRawPayloadsInput,
+  type ParseWorkflowNodePatchInput,
+} from "../../../src/workflow/node-patches";
+export {
   listWorkflowCatalogSources,
   resolveAddonSource,
   resolveWorkflowCreateSource,
@@ -142,6 +151,8 @@ export type {
   WorkflowJson,
   WorkflowNodeAddonRef,
   WorkflowNodeAddonEnvBinding,
+  WorkflowNodePatch,
+  WorkflowNodePatchMap,
   WorkflowScopeSelector,
   WorkflowSourceScope,
   XGatewayAddonConfig,

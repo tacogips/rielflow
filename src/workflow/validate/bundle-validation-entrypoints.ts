@@ -32,6 +32,7 @@ import {
   collectNodeExecutabilityValidation,
   collectPassiveNodeExecutabilityValidation,
 } from "./node-executability-validation";
+import { applyWorkflowNodePatchToRawPayloads } from "../node-patches";
 import type { NodeValidationResult } from "./node-validation-result";
 import {
   applyStepPromptVariant,
@@ -273,7 +274,7 @@ export function validateWorkflowBundleDetailed(
   const issues: ValidationIssue[] = pureValidation.ok
     ? [...pureValidation.value.issues]
     : [...pureValidation.error];
-  const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
+  let nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
     raw.workflow,
     raw.nodePayloads,
   );
@@ -284,6 +285,20 @@ export function validateWorkflowBundleDetailed(
 
   const nodeAddonResolvers = resolveSyncNodeAddonResolvers(options, issues);
   const addonValidationResults: NodeValidationResult[] = [];
+
+  if (workflow !== null && options.nodePatch !== undefined) {
+    const patched = applyWorkflowNodePatchToRawPayloads({
+      workflow,
+      nodePayloadsRaw,
+      patch: options.nodePatch,
+      sourceLabel: "nodePatch",
+    });
+    if (patched.ok) {
+      nodePayloadsRaw = patched.value;
+    } else {
+      issues.push(...patched.error);
+    }
+  }
 
   let nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null && workflow.nodeRegistry !== undefined) {
@@ -400,7 +415,7 @@ export async function validateWorkflowBundleDetailedAsync(
   const issues: ValidationIssue[] = pureValidation.ok
     ? [...pureValidation.value.issues]
     : [...pureValidation.error];
-  const nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
+  let nodePayloadsRaw = remapAuthoredNodePayloadsByNodeFile(
     raw.workflow,
     raw.nodePayloads,
   );
@@ -410,6 +425,20 @@ export async function validateWorkflowBundleDetailedAsync(
     : normalizeWorkflow(raw.workflow, issues, options);
   const nodeAddonResolvers = resolveAsyncNodeAddonResolvers(options);
   const addonValidationResults: NodeValidationResult[] = [];
+
+  if (workflow !== null && options.nodePatch !== undefined) {
+    const patched = applyWorkflowNodePatchToRawPayloads({
+      workflow,
+      nodePayloadsRaw,
+      patch: options.nodePatch,
+      sourceLabel: "nodePatch",
+    });
+    if (patched.ok) {
+      nodePayloadsRaw = patched.value;
+    } else {
+      issues.push(...patched.error);
+    }
+  }
 
   let nodePayloads: Record<string, NodePayload> = {};
   if (workflow !== null && workflow.nodeRegistry !== undefined) {

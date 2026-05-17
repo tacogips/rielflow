@@ -107,6 +107,7 @@ export interface WorkflowExecutionClientRequest {
   readonly input?: Readonly<Record<string, unknown>>;
   readonly workingDirectory?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
+  readonly nodePatch?: ExecuteWorkflowInput["nodePatch"];
   readonly mockScenario?: MockNodeScenario;
   readonly async?: boolean;
   readonly dryRun?: boolean;
@@ -208,6 +209,7 @@ async function executeWorkflowThroughGraphqlClient(
     throw new Error("endpoint is required for GraphQL execution");
   }
   const runtimeVariables = resolveRuntimeVariables(request);
+  const nodePatch = request?.nodePatch ?? options.nodePatch;
   const workingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     request?.workingDirectory,
   );
@@ -228,6 +230,7 @@ async function executeWorkflowThroughGraphqlClient(
       input: {
         workflowName: options.workflowName,
         ...(runtimeVariables === undefined ? {} : { runtimeVariables }),
+        ...(nodePatch === undefined ? {} : { nodePatch }),
         ...(workingDirectory === undefined ? {} : { workingDirectory }),
         ...(request?.mockScenario === undefined
           ? {}
@@ -293,6 +296,7 @@ async function executeWorkflowThroughLibraryClient(
   request: WorkflowExecutionClientRequest | undefined,
 ): Promise<WorkflowExecutionClientResult> {
   const runtimeVariables = resolveRuntimeVariables(request);
+  const nodePatch = request?.nodePatch ?? options.nodePatch;
   const workingDirectory = normalizeWorkflowWorkingDirectoryOverride(
     request?.workingDirectory,
   );
@@ -306,6 +310,7 @@ async function executeWorkflowThroughLibraryClient(
       {
         workflowName: options.workflowName,
         ...(runtimeVariables === undefined ? {} : { runtimeVariables }),
+        ...(nodePatch === undefined ? {} : { nodePatch }),
         ...(workingDirectory === undefined ? {} : { workingDirectory }),
         ...(request.mockScenario === undefined
           ? {}
@@ -341,6 +346,7 @@ async function executeWorkflowThroughLibraryClient(
       ? {}
       : { workflowWorkingDirectory: workingDirectory }),
     ...(runtimeVariables === undefined ? {} : { runtimeVariables }),
+    ...(nodePatch === undefined ? {} : { nodePatch }),
     ...(request?.mockScenario === undefined
       ? {}
       : { mockScenario: request.mockScenario }),

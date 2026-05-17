@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -8,6 +14,10 @@ import {
   type RejectedAuthoredStepAddressedTopLevelField,
 } from "./authored-workflow";
 import { loadWorkflowByIdFromDisk, loadWorkflowFromDisk } from "./load";
+import {
+  normalizeWorkflowNodePatchMap,
+  readWorkflowNodePatch,
+} from "./node-patches";
 import {
   getStructuralEdges,
   resolveWorkflowEntryRuntimeId,
@@ -123,6 +133,149 @@ describe("loadWorkflowFromDisk", () => {
     expect(getStructuralEdges(result.value.bundle.workflow)).toEqual([
       { from: "manager", to: "worker", when: "always" },
     ]);
+  });
+
+  test("applies node patches without writing workflow bundle files", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
+    const workflowPath = path.join(workflowRoot, "demo", "workflow.json");
+    const workerPath = path.join(
+      workflowRoot,
+      "demo",
+      "nodes",
+      "node-worker.json",
+    );
+    const workflowBefore = readFileSync(workflowPath, "utf8");
+    const workerBefore = readFileSync(workerPath, "utf8");
+
+    const result = await loadWorkflowFromDisk("demo", {
+      workflowRoot,
+      nodePatch: {
+        worker: {
+          executionBackend: "cursor-cli-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "cursor-cli-agent",
+      model: "claude-sonnet-4-5",
+    });
+    expect(readFileSync(workflowPath, "utf8")).toBe(workflowBefore);
+    expect(readFileSync(workerPath, "utf8")).toBe(workerBefore);
+  });
+
+  test("rejects unknown node ids and unsupported effort in node patches", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
+
+    const result = await loadWorkflowFromDisk("demo", {
+      workflowRoot,
+      nodePatch: {
+        missing: { model: "gpt-5.5" },
+        worker: { effort: "high" },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "nodePatch.missing",
+          message: expect.stringContaining("unknown workflow node id"),
+        }),
+        expect.objectContaining({
+          path: "nodePatch.worker.effort",
+          message: expect.stringContaining("is not supported"),
+        }),
+      ]),
+    );
+  });
+
+  test("preserves prototype-like node patch ids as own keys", async () => {
+    const normalized = normalizeWorkflowNodePatchMap(
+      JSON.parse('{"__proto__":{"model":"gpt-5.5"}}') as unknown,
+    );
+    expect(normalized.ok).toBe(true);
+    if (!normalized.ok) {
+      return;
+    }
+
+    expect(Object.getPrototypeOf(normalized.value)).toBeNull();
+    expect(Object.hasOwn(normalized.value, "__proto__")).toBe(true);
+    expect(Object.entries(normalized.value)).toEqual([
+      ["__proto__", { model: "gpt-5.5" }],
+    ]);
+
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
+    const result = await loadWorkflowFromDisk("demo", {
+      workflowRoot,
+      nodePatch: normalized.value,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "nodePatch.__proto__",
+          message: expect.stringContaining("unknown workflow node id"),
+        }),
+      ]),
+    );
+  });
+
+  test("reads node patches from inline JSON, explicit files, and bare file paths", async () => {
+    const root = makeTempDir();
+    const patchPath = path.join(root, "patch.json");
+    writeJson(patchPath, {
+      worker: { executionBackend: "cursor-cli-agent", model: "gpt-5.5" },
+    });
+
+    await expect(
+      readWorkflowNodePatch({
+        value: '{"worker":{"model":"gpt-5.5"}}',
+        invocationCwd: root,
+        optionName: "--node-patch",
+      }),
+    ).resolves.toEqual({ worker: { model: "gpt-5.5" } });
+    await expect(
+      readWorkflowNodePatch({
+        value: `@${patchPath}`,
+        invocationCwd: root,
+        optionName: "--node-patch",
+      }),
+    ).resolves.toEqual({
+      worker: { executionBackend: "cursor-cli-agent", model: "gpt-5.5" },
+    });
+    await expect(
+      readWorkflowNodePatch({
+        value: patchPath,
+        invocationCwd: root,
+        optionName: "--node-patch",
+      }),
+    ).resolves.toEqual({
+      worker: { executionBackend: "cursor-cli-agent", model: "gpt-5.5" },
+    });
+    await expect(
+      readWorkflowNodePatch({
+        value: '{"worker":{"temperature":0.2}}',
+        invocationCwd: root,
+        optionName: "--node-patch",
+      }),
+    ).rejects.toThrow("accepted fields are executionBackend, model, effort");
   });
 
   test("reports workflow-relative stepFile path diagnostics with the stepFile field name", async () => {

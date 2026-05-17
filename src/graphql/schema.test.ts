@@ -1638,6 +1638,160 @@ describe("createGraphqlSchema", () => {
     );
   });
 
+  test("executeWorkflow forwards nodePatch to runWorkflow", async () => {
+    const root = await makeTempDir();
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-schema-node-patch",
+              workflowName: "demo",
+              workflowId: "demo",
+              initialNodeId: "worker",
+              runtimeVariables: {},
+            }),
+            status: "completed" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const schema = createGraphqlSchema();
+    await schema.mutation.executeWorkflow(
+      {
+        workflowName: "demo",
+        nodePatch: {
+          worker: {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      },
+      options,
+    );
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        nodePatch: {
+          worker: {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      }),
+    );
+  });
+
+  test("executeWorkflow rejects invalid async nodePatch before dispatch", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const runWorkflowSpy = vi.spyOn(workflowEngine, "runWorkflow");
+
+    const schema = createGraphqlSchema();
+    await expect(
+      schema.mutation.executeWorkflow(
+        {
+          workflowName: "demo",
+          async: true,
+          nodePatch: {
+            missing: { model: "gpt-5.5" },
+          },
+        },
+        options,
+      ),
+    ).rejects.toThrow("unknown workflow node id 'missing'");
+
+    expect(runWorkflowSpy).not.toHaveBeenCalled();
+  });
+
+  test("executeWorkflow forwards valid async nodePatch to background run", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const options = {
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-schema-node-patch-async",
+              workflowName: "demo",
+              workflowId: "demo",
+              initialNodeId: "main-worker",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const schema = createGraphqlSchema();
+    const payload = await schema.mutation.executeWorkflow(
+      {
+        workflowName: "demo",
+        async: true,
+        nodePatch: {
+          "main-worker": {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      },
+      options,
+    );
+
+    expect(payload.accepted).toBe(true);
+    expect(payload.status).toBe("running");
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        nodePatch: {
+          "main-worker": {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      }),
+    );
+  });
+
   test("executeWorkflow allows nested-superviser through default auto-improve policy", async () => {
     const root = await makeTempDir();
     const options = {
@@ -2283,6 +2437,48 @@ describe("createGraphqlSchema", () => {
       "input.bundle.nodePayloads must be an object",
     );
     expect(malformedValidation.issues).toEqual([]);
+
+    const patchedValidation = await schema.mutation.validateWorkflowDefinition(
+      {
+        workflowName: "demo",
+        nodePatch: {
+          "main-worker": {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      },
+      options,
+    );
+    expect(patchedValidation.valid).toBe(true);
+    expect(patchedValidation.nodeValidationResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "main-worker",
+          backend: "cursor-cli-agent",
+        }),
+      ]),
+    );
+
+    const invalidPatchValidation =
+      await schema.mutation.validateWorkflowDefinition(
+        {
+          workflowName: "demo",
+          nodePatch: {
+            missing: { model: "gpt-5.5" },
+          },
+        },
+        options,
+      );
+    expect(invalidPatchValidation.valid).toBe(false);
+    expect(invalidPatchValidation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "nodePatch.missing",
+          message: expect.stringContaining("unknown workflow node id"),
+        }),
+      ]),
+    );
 
     const malformedSave = await schema.mutation.saveWorkflowDefinition(
       {

@@ -514,6 +514,96 @@ describe("library api", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test("rejects invalid async nodePatch before library client dispatch", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const runWorkflowSpy = vi.spyOn(workflowEngine, "runWorkflow");
+    const client = createWorkflowExecutionClient({
+      workflowName: "demo",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      cwd: root,
+    });
+
+    await expect(
+      client.execute({
+        async: true,
+        nodePatch: {
+          missing: { model: "gpt-5.5" },
+        },
+      }),
+    ).rejects.toThrow("unknown workflow node id 'missing'");
+
+    expect(runWorkflowSpy).not.toHaveBeenCalled();
+  });
+
+  test("forwards valid async nodePatch through the library client", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-lib-node-patch-async",
+              workflowName: "demo",
+              workflowId: "demo",
+              initialNodeId: "main-worker",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+    const client = createWorkflowExecutionClient({
+      workflowName: "demo",
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      cwd: root,
+    });
+
+    const result = await client.execute({
+      async: true,
+      nodePatch: {
+        "main-worker": {
+          executionBackend: "cursor-cli-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.status).toBe("running");
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        nodePatch: {
+          "main-worker": {
+            executionBackend: "cursor-cli-agent",
+            model: "claude-sonnet-4-5",
+          },
+        },
+      }),
+    );
+  });
+
   test("passes third-party add-on resolvers through execution wrappers", async () => {
     const root = await makeTempDir();
     await createThirdPartyAddonWorkflowFixture({

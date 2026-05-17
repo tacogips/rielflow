@@ -259,6 +259,7 @@ export interface ParsedOptions {
   readonly executablePreflight: boolean;
   readonly format?: "text" | "json" | "jsonl";
   readonly variablesPath?: string;
+  readonly nodePatchPath?: string;
   readonly mockScenarioPath?: string;
   readonly dryRun: boolean;
   readonly verbose: boolean;

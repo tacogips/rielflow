@@ -47,6 +47,7 @@ export interface WorkflowValidationOptions
     | "nodeAddons"
     | "asyncNodeAddonResolvers"
     | "nodeAddonResolvers"
+    | "nodePatch"
   > {
   readonly allowResolvedStepFileFields?: boolean;
   readonly executablePreflight?: boolean;

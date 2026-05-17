@@ -261,6 +261,27 @@ bun run src/main.ts workflow run <workflow-name> \
   --output json
 ```
 
+Patch node settings for a single validation or run without editing workflow
+files:
+
+```bash
+bun run src/main.ts workflow validate <workflow-name> \
+  --workflow-definition-dir ./examples \
+  --node-patch '{"worker":{"executionBackend":"cursor-cli-agent","model":"claude-sonnet-4-5"}}'
+
+bun run src/main.ts workflow run <workflow-name> \
+  --workflow-definition-dir ./examples \
+  --node-patch @./node-patch.json \
+  --output json
+```
+
+`--node-patch` accepts the same inline JSON, `@file`, and bare file path forms
+as `--variables`. The patch object is keyed by reusable workflow node id, not
+step id, so every step that references the node sees the same invocation-local
+settings. Patch values may contain only `executionBackend`, `model`, and
+`effort`; unsupported effort values and invalid backend/model combinations fail
+validation against the patched workflow state.
+
 Run with a deterministic mock scenario:
 
 ```bash
@@ -398,7 +419,9 @@ bun run src/main.ts workflow run <workflow-name> \
 Endpoint-backed `workflow run` uses the same default supervised recovery policy
 as local execution. Pass `--no-auto-improve` when the remote GraphQL
 `executeWorkflow` start must receive lifecycle-only supervision
-(`maxWorkflowPatches: 0`).
+(`maxWorkflowPatches: 0`). `--node-patch` is forwarded to endpoint-backed
+`executeWorkflow` starts and validated by the remote server against the patched
+workflow state.
 
 GraphQL supervised dispatch returns `runnerPoolRunId` on
 `dispatchSupervisedWorkflowCommand`. Use that id with
@@ -537,6 +560,9 @@ Supported vendors:
 - `--working-directory <path>`: run workflow work relative to a specific directory.
 - `--variables <json|@file|file>`: load runtime variables from an inline JSON
   object, explicit `@file`, or a JSON object file path.
+- `--node-patch <json|@file|file>`: apply invocation-local workflow node
+  settings for `workflow validate` and `workflow run` without rewriting the
+  workflow bundle.
 - `--mock-scenario <path>`: use deterministic mock backend responses.
 - `--output json`: emit structured output.
 - `--dry-run`: plan/check without normal execution where supported.
@@ -667,6 +693,11 @@ console.log(runtime.session.status);
 
 Use `createWorkflowExecutionClient()` when the same integration should work
 locally or through a GraphQL endpoint.
+
+Programmatic `executeWorkflow`, `createWorkflowExecutionClient`, GraphQL
+`executeWorkflow`, and GraphQL `validateWorkflowDefinition` accept `nodePatch`
+with the same node-id keyed `executionBackend`/`model`/`effort` shape used by
+the CLI.
 
 The core supervision surface is exported from both `divedra` and
 `divedra-core`. `createSupervisorRunnerPool()` provides `dispatch`, `lookup`,

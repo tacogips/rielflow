@@ -569,6 +569,7 @@ Current backend values:
 
 - `codex-agent`
 - `claude-code-agent`
+- `cursor-cli-agent`
 - `official/openai-sdk`
 - `official/anthropic-sdk`
 

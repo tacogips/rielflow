@@ -1,4 +1,5 @@
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
+import type { WorkflowNodePatchMap } from "../workflow/types";
 import type { AutoImprovePolicyInput } from "../workflow/auto-improve-policy";
 import type { CreateWorkflowTemplateMode } from "../workflow/create";
 import type { WorkflowExecutionSummary } from "../shared/ui-contract";
@@ -235,6 +236,7 @@ export interface ManagerSessionView {
 export interface ExecuteWorkflowInput {
   readonly workflowName: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
+  readonly nodePatch?: WorkflowNodePatchMap;
   readonly autoImprove?: AutoImprovePolicyInput;
   readonly nestedSuperviser?: boolean;
   readonly workingDirectory?: string;
@@ -275,6 +277,7 @@ export interface ValidateWorkflowDefinitionInput {
   readonly workflowName: string;
   readonly bundle?: GraphqlWorkflowBundleInput;
   readonly executablePreflight?: boolean;
+  readonly nodePatch?: WorkflowNodePatchMap;
 }
 
 export interface GraphqlWorkflowBundleInput {

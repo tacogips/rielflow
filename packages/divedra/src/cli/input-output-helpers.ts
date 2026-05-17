@@ -12,6 +12,10 @@ import {
 import { createCommunicationService } from "../../../../src/workflow/communication-service";
 import type { WorkflowRunOptions } from "../../../../src/workflow/engine";
 import {
+  readWorkflowNodePatch,
+  type WorkflowNodePatchMap,
+} from "../../../../src/workflow/node-patches";
+import {
   listRuntimeHookEvents,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
@@ -124,6 +128,9 @@ export function printHelp(io: CliIo): void {
   );
   io.stdout(
     "  workflow run <name> --variables <json|@file|file>  Runtime variables as inline JSON object, explicit @file, or bare JSON file path",
+  );
+  io.stdout(
+    "  workflow <validate|run> <name> --node-patch <json|@file|file>  Non-persistent node patch keyed by node id with executionBackend/model/effort",
   );
   io.stdout(
     "  workflow run <name> --verbose  Print local step-start progress to stderr",
@@ -288,6 +295,15 @@ export async function readRuntimeVariables(
     throw new Error("--variables must resolve to a JSON object");
   }
   return parsed as Readonly<Record<string, unknown>>;
+}
+export async function readWorkflowNodePatchOption(
+  value: string,
+): Promise<WorkflowNodePatchMap> {
+  return await readWorkflowNodePatch({
+    value,
+    invocationCwd: process.cwd(),
+    optionName: "--node-patch",
+  });
 }
 export async function readGraphqlVariables(
   value: string | undefined,

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-17T04:10:03.000+09:00",
+  "lastUpdated": "2026-05-17T10:34:00.000+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -513,6 +513,9 @@
     },
     "171": {
       "status": "READY"
+    },
+    "172": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -6062,6 +6065,59 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": [
+            "TASK-004",
+            "TASK-005"
+          ]
+        }
+      }
+    },
+    "workflow-node-runtime-patches": {
+      "phase": 172,
+      "status": "Completed",
+      "path": "impl-plans/completed/workflow-node-runtime-patches.md",
+      "designReference": "design-docs/specs/architecture.md#workflow-node-runtime-patches; design-docs/specs/command.md; design-docs/specs/design-workflow-node-executability-validation.md#node-and-add-on-validation-flow; design-docs/specs/design-workflow-json.md#executionbackend",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
             "TASK-004",
             "TASK-005"
           ]

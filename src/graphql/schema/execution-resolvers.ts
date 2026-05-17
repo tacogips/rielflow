@@ -492,6 +492,21 @@ export async function loadScopedCommunicationForManagerMutation(
   );
   return communication as unknown as CommunicationRecord;
 }
+
+function formatWorkflowLoadFailure(error: {
+  readonly message: string;
+  readonly issues?: readonly {
+    readonly path: string;
+    readonly message: string;
+  }[];
+}): string {
+  const firstIssue = error.issues?.[0];
+  if (firstIssue === undefined) {
+    return error.message;
+  }
+  return `${error.message}: ${firstIssue.path}: ${firstIssue.message}`;
+}
+
 export async function executeWorkflowMutation(
   input: ExecuteWorkflowInput,
   context: GraphqlRequestContext,
@@ -506,12 +521,12 @@ export async function executeWorkflowMutation(
     context,
   );
   if (input.async === true) {
-    const loadedWorkflow = await loadWorkflowFromCatalog(
-      input.workflowName,
-      workflowContext,
-    );
+    const loadedWorkflow = await loadWorkflowFromCatalog(input.workflowName, {
+      ...workflowContext,
+      ...workflowRunOverrides.value,
+    });
     if (!loadedWorkflow.ok) {
-      throw new Error(loadedWorkflow.error.message);
+      throw new Error(formatWorkflowLoadFailure(loadedWorkflow.error));
     }
     const workflowExecutionId = createSessionId({
       workflowId: loadedWorkflow.value.bundle.workflow.workflowId,

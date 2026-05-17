@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `completed/workflow-node-runtime-patches` | Completed | `architecture#workflow-node-runtime-patches`, `command`, `design-workflow-node-executability-validation` |
 | `active/package-boundary-architecture` | Completed (Staged Facade Milestone) | `architecture` |
 
 ## Recently Completed

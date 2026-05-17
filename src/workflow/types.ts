@@ -830,6 +830,14 @@ export interface ValidationIssue {
   readonly message: string;
 }
 
+export interface WorkflowNodePatch {
+  readonly executionBackend?: NodeExecutionBackend;
+  readonly model?: string;
+  readonly effort?: string;
+}
+
+export type WorkflowNodePatchMap = Readonly<Record<string, WorkflowNodePatch>>;
+
 export interface NormalizedWorkflowBundle {
   readonly workflow: WorkflowJson;
   readonly nodePayloads: Readonly<Record<string, NodePayload>>;
@@ -877,6 +885,7 @@ export interface LoadOptions {
   readonly asyncNodeAddonResolvers?: readonly AsyncNodeAddonPayloadResolver[];
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
   readonly executablePreflight?: boolean;
+  readonly nodePatch?: WorkflowNodePatchMap;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";

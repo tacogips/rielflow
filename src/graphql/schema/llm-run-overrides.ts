@@ -151,6 +151,7 @@ export function selectGraphqlLlmSessionMessages(
   return ordered.slice(0, limit);
 }
 export interface GraphqlWorkflowRunOverridesInput {
+  readonly nodePatch?: ExecuteWorkflowInput["nodePatch"];
   readonly autoImprove?: ExecuteWorkflowInput["autoImprove"];
   readonly nestedSuperviser?: boolean;
   readonly workingDirectory?: string;
@@ -167,6 +168,7 @@ export function buildGraphqlWorkflowRunOverrides(
   Pick<
     WorkflowRunOptions,
     | "autoImprove"
+    | "nodePatch"
     | "nestedSuperviserDriver"
     | "workflowWorkingDirectory"
     | "dryRun"
@@ -200,6 +202,7 @@ export function buildGraphqlWorkflowRunOverrides(
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),
+    ...(input.nodePatch === undefined ? {} : { nodePatch: input.nodePatch }),
     ...(autoImprove === undefined ? {} : { autoImprove }),
     ...(input.nestedSuperviser === true
       ? { nestedSuperviserDriver: true }
@@ -602,6 +605,9 @@ export async function validateWorkflowDefinitionMutation(
       {
         ...context,
         executablePreflight: input.executablePreflight === true,
+        ...(input.nodePatch === undefined
+          ? {}
+          : { nodePatch: input.nodePatch }),
       },
     );
     if (!validation.ok) {
@@ -633,6 +639,7 @@ export async function validateWorkflowDefinitionMutation(
   const validationContext = {
     ...context,
     executablePreflight: input.executablePreflight === true,
+    ...(input.nodePatch === undefined ? {} : { nodePatch: input.nodePatch }),
   };
   const loaded = await loadWorkflowFromCatalog(
     input.workflowName,

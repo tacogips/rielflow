@@ -105,6 +105,8 @@ CLI:
 
 - `divedra workflow validate <name>` remains structural/passive by default
 - `divedra workflow validate <name> --executable` enables active preflight
+- `divedra workflow validate <name> --node-patch <json|@file|file>` applies a
+  non-persistent node patch before both passive validation and active preflight
 - `--output json` includes `nodeValidationResults`
 - text output summarizes invalid and warning node results after existing
   validation issues
@@ -135,13 +137,21 @@ implementation should share probe helpers rather than duplicate backend checks.
 The validation pipeline should use one shared collector:
 
 1. load and normalize the workflow bundle
-2. resolve add-on references into effective node payloads
-3. run structural node payload validation
-4. collect passive node executability results
-5. invoke add-on `validate` hooks for add-on-backed nodes
-6. group agent nodes by backend and model for backend preflight
-7. run active backend checks only when requested
-8. merge results into detailed validation output and runtime readiness surfaces
+2. apply any invocation-scoped node patch overlay to the loaded in-memory node
+   payload map
+3. resolve add-on references into effective node payloads
+4. run structural node payload validation
+5. collect passive node executability results
+6. invoke add-on `validate` hooks for add-on-backed nodes
+7. group agent nodes by backend and model for backend preflight
+8. run active backend checks only when requested
+9. merge results into detailed validation output and runtime readiness surfaces
+
+Node patch validation is part of the same pipeline, not a pre-parser side
+channel. The patch parser may reject invalid JSON, non-object patch payloads,
+unknown node ids, and disallowed fields early, but backend/model/effort
+compatibility must be checked against the patched workflow state so validation,
+runtime readiness, and execution agree on the same effective node settings.
 
 Add-on hooks should be descriptor-owned:
 
@@ -236,8 +246,12 @@ Cursor CLI validation intentionally diverges from Codex validation:
 - Cursor model reachability is optional and only active under executable
   preflight; passive validation reports `unknown`.
 - Cursor effort validation is `not applicable` when no effort is authored and
-  `invalid` for authored effort until the Cursor reference exposes a concrete
-  effort field.
+  `invalid` for authored or patched effort until the Cursor reference exposes a
+  concrete effort field.
+- A node patch may switch an agent node from `codex-agent` to
+  `cursor-cli-agent` by setting `executionBackend` and `model`; after the patch,
+  Cursor validation is authoritative for that node and Codex-specific process
+  options no longer apply.
 - Cursor-specific messages must mention `cursor-cli-agent` or `cursor-agent`
   provenance and must not reuse Codex login wording.
 

@@ -593,6 +593,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
   input ExecuteWorkflowInput {
     workflowName: String!
     runtimeVariables: JSON
+    nodePatch: JSON
     autoImprove: AutoImprovePolicyInput
     nestedSuperviser: Boolean
     workingDirectory: String
@@ -624,6 +625,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
     workflowName: String!
     bundle: JSON
     executablePreflight: Boolean
+    nodePatch: JSON
   }
 
   input ResumeWorkflowExecutionInput {

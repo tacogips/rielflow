@@ -73,6 +73,7 @@ export function buildLibraryWorkflowRunOptions(
     ...(input.nodeAddonResolvers === undefined
       ? {}
       : { nodeAddonResolvers: input.nodeAddonResolvers }),
+    ...(input.nodePatch === undefined ? {} : { nodePatch: input.nodePatch }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),

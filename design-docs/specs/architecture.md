@@ -39,6 +39,73 @@ Current direction:
   `design-docs/specs/design-scheduled-sleep-node-runtime.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 
+### Workflow Node Runtime Patches
+
+Workflow node runtime patches are invocation-scoped overlays applied after a
+workflow bundle is loaded and before validation, readiness checks, or execution.
+They are intended for changing LLM execution settings without editing
+`workflow.json` or `nodes/node-*.json`.
+
+Patch input shape:
+
+```json
+{
+  "worker-node-id": {
+    "executionBackend": "cursor-cli-agent",
+    "model": "gpt-5.5",
+    "effort": "high"
+  }
+}
+```
+
+Rules:
+
+- the top-level patch value must be a JSON object
+- top-level keys are reusable workflow node ids, not step ids
+- each node patch value must be an object
+- the only accepted node patch fields are `executionBackend`, `model`, and
+  `effort`
+- `executionBackend` uses the existing `NodeExecutionBackend` values; it is the
+  canonical workflow field for the user-facing "LLM vendor/backend" setting
+- `model` must remain a backend-specific model name and must not contain CLI
+  wrapper identifiers such as `codex-agent` or `cursor-cli-agent`
+- `effort` is a transient LLM effort override. It is valid only when the
+  selected backend adapter exposes a concrete effort capability; otherwise
+  patched validation returns an invalid `NodeValidationResult`
+- patch application must clone or rebuild the loaded workflow state rather than
+  mutating shared loader output in place
+- patch application must never write authored workflow bundle files
+
+Data flow:
+
+1. CLI, GraphQL, or library entrypoint parses inline JSON, `@file`, or existing
+   file-path patch input into a JSON object.
+2. The workflow loader resolves the selected direct or scoped workflow bundle.
+3. The patch overlay is applied to the loaded in-memory node payload map.
+4. Structural validation and optional executable preflight run against the
+   patched state.
+5. Runtime readiness and workflow execution receive the same patched state that
+   validation accepted.
+
+Unknown node ids, invalid JSON, arrays/scalars, unreadable patch files,
+disallowed fields, invalid backend values, empty model values, and unsupported
+effort values are user errors. Error messages should name the patch source,
+node id, field path, and accepted fields or values.
+
+Because node ids are reusable registry entries, one patch affects every step
+that references that node id. This is an intentional exception to the general
+step-addressed public-control rule: the patch surface changes reusable node
+payload settings, not execution routing or step selection.
+
+Codex-to-Cursor switching is permitted only for loaded agent node payloads whose
+patched `executionBackend` and `model` pass the same structural and executable
+validation used by authored nodes. Cursor-specific behavior, including auth
+uncertainty, model probing, mode mapping, and unsupported effort handling, must
+remain isolated behind the Cursor adapter and runtime-readiness probe modules.
+The Codex adapter remains the behavioral reference for local session/model
+dispatch shape, but Codex-specific process options are not copied into the
+generic patch schema.
+
 The authoritative implementation for those behaviors lives in:
 
 - `src/workflow/engine.ts`

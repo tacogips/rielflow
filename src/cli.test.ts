@@ -847,6 +847,50 @@ describe("runCli", () => {
     ).toBe(true);
   });
 
+  test("workflow validate accepts inline --node-patch and reports patched backend", async () => {
+    const root = await makeTempDir();
+    const createCapture = createIoCapture();
+    expect(
+      await runCli(
+        ["workflow", "create", "demo", "--workflow-definition-dir", root],
+        createCapture.io,
+      ),
+    ).toBe(0);
+
+    const validateCapture = createIoCapture();
+    const validateCode = await runCli(
+      [
+        "workflow",
+        "validate",
+        "demo",
+        "--workflow-definition-dir",
+        root,
+        "--node-patch",
+        '{"main-worker":{"executionBackend":"cursor-cli-agent","model":"claude-sonnet-4-5"}}',
+        "--output",
+        "json",
+      ],
+      validateCapture.io,
+    );
+    expect(validateCode).toBe(0);
+    const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
+      valid: boolean;
+      nodeValidationResults: readonly {
+        nodeId?: string;
+        backend?: string;
+      }[];
+    };
+    expect(validation.valid).toBe(true);
+    expect(validation.nodeValidationResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: "main-worker",
+          backend: "cursor-cli-agent",
+        }),
+      ]),
+    );
+  });
+
   test("workflow validate preserves loaded add-on node validation results", async () => {
     const root = await makeTempDir();
     const workflowName = "addon-validator";
@@ -4014,6 +4058,8 @@ describe("runCli", () => {
         "http://example.test/graphql",
         "--variables",
         '{"humanInput":{"request":"start demo workflow"}}',
+        "--node-patch",
+        '{"worker":{"executionBackend":"cursor-cli-agent","model":"claude-sonnet-4-5"}}',
         "--max-steps",
         "3",
         "--output",
@@ -4078,6 +4124,12 @@ describe("runCli", () => {
           runtimeVariables: {
             humanInput: {
               request: "start demo workflow",
+            },
+          },
+          nodePatch: {
+            worker: {
+              executionBackend: "cursor-cli-agent",
+              model: "claude-sonnet-4-5",
             },
           },
           maxSteps: 3,

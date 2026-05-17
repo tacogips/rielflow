@@ -25,6 +25,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let executablePreflight = false;
   let format: "text" | "json" | "jsonl" | undefined;
   let variablesPath: string | undefined;
+  let nodePatchPath: string | undefined;
   let dryRun = false;
   let verbose = false;
   let debug = false;
@@ -205,6 +206,15 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         }
         variablesPath = parsedString.value;
+        break;
+      }
+      case "--node-patch": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        nodePatchPath = parsedString.value;
         break;
       }
       case "--output": {
@@ -706,6 +716,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       executablePreflight,
       ...(format === undefined ? {} : { format }),
       ...(variablesPath === undefined ? {} : { variablesPath }),
+      ...(nodePatchPath === undefined ? {} : { nodePatchPath }),
       ...(mockScenarioPath === undefined ? {} : { mockScenarioPath }),
       output,
       dryRun,

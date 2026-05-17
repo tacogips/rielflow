@@ -177,6 +177,60 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     expect(requirement.detail).toContain("0.45.0");
   });
 
+  test("runtime readiness observes patched codex-agent to cursor-cli-agent backend", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const workflowDirectory = path.join(workflowRoot, "demo");
+    await writeJson(path.join(workflowDirectory, "workflow.json"), {
+      workflowId: "demo",
+      description: "demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "worker",
+      nodes: [{ id: "worker", nodeFile: "nodes/node-worker.json" }],
+      steps: [{ id: "worker", nodeId: "worker", role: "worker" }],
+    });
+    await writeJson(path.join(workflowDirectory, "nodes", "node-worker.json"), {
+      id: "worker",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "worker",
+      variables: {},
+    });
+    await writeExecutable(
+      path.join(root, "node_modules", ".bin", "cursor-cli-agent"),
+      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"1.0.0","tools":{"cursor-agent":{"version":"0.45.0","error":null}}}\nEOF',
+    );
+
+    const loaded = await loadWorkflowFromDisk("demo", {
+      workflowRoot,
+      cwd: root,
+      nodePatch: {
+        worker: {
+          executionBackend: "cursor-cli-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      return;
+    }
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      loaded.value.bundle,
+      { cwd: root },
+    );
+
+    const requirement = findRequirement(
+      readiness.requirements,
+      "agent-backend:cursor-cli-agent",
+    );
+    expect(requirement).toMatchObject({
+      kind: "agent-backend",
+      status: "available",
+      sourceStepIds: expect.arrayContaining(["worker"]),
+    });
+  });
+
   test("marks cursor-cli-agent backend unavailable when cursor-agent tool reports error", async () => {
     const root = await makeTempDir();
     const cursorCliAgentBin = path.join(
