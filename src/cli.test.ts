@@ -14,6 +14,7 @@ import type {
 import {
   saveEventReplyDispatchToRuntimeDb,
   saveNodeExecutionToRuntimeDb,
+  saveSessionSnapshotToRuntimeDb,
 } from "./workflow/runtime-db";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
@@ -1491,6 +1492,186 @@ describe("runCli", () => {
         stepId: "worker-step",
       }),
     );
+  });
+
+  test("workflow status and session commands share direct workflow-definition storage outside project scopes", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "divedra-workflows");
+    const userRoot = path.join(root, "home", ".divedra");
+    const workflowName = "design-and-implement-review-loop";
+    const created = await createWorkflowTemplate(workflowName, {
+      workflowRoot,
+    });
+    expect(created.ok).toBe(true);
+    const rootDataDir = path.join(userRoot, "artifacts");
+    const sessionId =
+      "div-design-and-implement-review-loop-1777861733-fe70502e";
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId,
+          workflowName,
+          workflowId: workflowName,
+          initialNodeId: "step6-implement",
+          runtimeVariables: {},
+        }),
+        status: "running",
+        currentNodeId: "step6-implement",
+        queue: ["step6-implement"],
+        startedAt: "2026-05-17T10:00:00.000Z",
+      },
+      { rootDataDir },
+    );
+    expect(saved.ok).toBe(true);
+
+    const sharedArgs = [
+      "--workflow-definition-dir",
+      workflowRoot,
+      "--user-root",
+      userRoot,
+      "--output",
+      "json",
+    ] as const;
+    const cliDeps = createCliDeps({ env: {} });
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      ["workflow", "status", workflowName, ...sharedArgs],
+      statusCapture.io,
+      cliDeps,
+    );
+    expect(statusCode).toBe(0);
+    const statusPayload = JSON.parse(statusCapture.stdout.join("\n")) as {
+      aggregateStatus: string;
+      activeExecutionCount: number;
+      newestActiveExecution: { sessionId: string } | null;
+    };
+    expect(statusPayload.aggregateStatus).toBe("running");
+    expect(statusPayload.activeExecutionCount).toBe(1);
+    expect(statusPayload.newestActiveExecution?.sessionId).toBe(sessionId);
+
+    const sessionStatusCapture = createIoCapture();
+    const sessionStatusCode = await runCli(
+      ["session", "status", sessionId, ...sharedArgs],
+      sessionStatusCapture.io,
+      cliDeps,
+    );
+    expect(sessionStatusCode).toBe(0);
+    const sessionStatusPayload = JSON.parse(
+      sessionStatusCapture.stdout.join("\n"),
+    ) as { sessionId: string; status: string; currentNodeId: string | null };
+    expect(sessionStatusPayload).toMatchObject({
+      sessionId,
+      status: "running",
+      currentNodeId: "step6-implement",
+    });
+  });
+
+  test("workflow status excludes unloadable runtime-db active sessions in project-scoped workflow-definition context", async () => {
+    const root = await makeTempDir();
+    const workspaceRoot = path.join(root, "workspace");
+    const projectScopeRoot = path.join(workspaceRoot, ".divedra");
+    const workflowRoot = path.join(projectScopeRoot, "workflows");
+    const userRoot = path.join(root, "home", ".divedra");
+    const workflowName = "design-and-implement-review-loop";
+    const created = await createWorkflowTemplate(workflowName, {
+      workflowRoot,
+    });
+    expect(created.ok).toBe(true);
+    const rootDataDir = computeProjectScopedRootDataDirForScopeRoot({
+      scopeRoot: projectScopeRoot,
+      userRoot,
+    });
+    const staleSessionIds = [
+      "div-design-and-implement-review-loop-1777861733-fe70502e",
+      "div-design-and-implement-review-loop-1777861657-715d97aa",
+      "div-design-and-implement-review-loop-1777861530-89aee9e0",
+      "div-design-and-implement-review-loop-1777859505-fdeb86d3",
+    ] as const;
+
+    for (const [index, sessionId] of staleSessionIds.entries()) {
+      await saveSessionSnapshotToRuntimeDb(
+        {
+          ...createSessionState({
+            sessionId,
+            workflowName,
+            workflowId: workflowName,
+            initialNodeId: "step6-implement",
+            runtimeVariables: {},
+          }),
+          status: index === 1 ? "paused" : "running",
+          currentNodeId: "step6-implement",
+          queue: ["step6-implement"],
+          startedAt: new Date(Date.UTC(2026, 4, 17, 10, index)).toISOString(),
+        },
+        { rootDataDir },
+      );
+    }
+
+    const sharedArgs = [
+      "--workflow-definition-dir",
+      workflowRoot,
+      "--user-root",
+      userRoot,
+      "--output",
+      "json",
+    ] as const;
+    const cliDeps = createCliDeps({ env: {} });
+
+    const listCapture = createIoCapture();
+    const listCode = await runCli(
+      ["workflow", "list", ...sharedArgs],
+      listCapture.io,
+      cliDeps,
+    );
+    expect(listCode).toBe(0);
+    const listPayload = JSON.parse(listCapture.stdout.join("\n")) as {
+      workflows: ReadonlyArray<{
+        workflowName: string;
+        aggregateStatus: string;
+        activeExecutionCount: number;
+        latestExecution: { sessionId: string } | null;
+      }>;
+    };
+    const listRow = listPayload.workflows.find(
+      (row) => row.workflowName === workflowName,
+    );
+    expect(listRow).toMatchObject({
+      aggregateStatus: "never-run",
+      activeExecutionCount: 0,
+      latestExecution: null,
+    });
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      ["workflow", "status", workflowName, ...sharedArgs],
+      statusCapture.io,
+      cliDeps,
+    );
+    expect(statusCode).toBe(0);
+    const statusPayload = JSON.parse(statusCapture.stdout.join("\n")) as {
+      aggregateStatus: string;
+      activeExecutionCount: number;
+      newestActiveExecution: { sessionId: string } | null;
+      recentExecutions: ReadonlyArray<{ sessionId: string; status: string }>;
+    };
+    expect(statusPayload.aggregateStatus).toBe("never-run");
+    expect(statusPayload.activeExecutionCount).toBe(0);
+    expect(statusPayload.newestActiveExecution).toBeNull();
+    expect(statusPayload.recentExecutions).toEqual([]);
+
+    for (const sessionId of staleSessionIds) {
+      const sessionStatusCapture = createIoCapture();
+      const sessionStatusCode = await runCli(
+        ["session", "status", sessionId, ...sharedArgs],
+        sessionStatusCapture.io,
+        cliDeps,
+      );
+      expect(sessionStatusCode).toBe(1);
+      expect(sessionStatusCapture.stderr.join("\n")).toContain(
+        `session not found: ${sessionId}`,
+      );
+    }
   });
 
   test("workflow list uses DIVEDRA_WORKFLOW_DEFINITION_DIR as direct definition directory", async () => {

@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/workflow-status-active-session-loadability-issue-25` | Completed | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
 | `workflow-status-active-session-loadability` | In Progress | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
 
 ## Recently Completed

@@ -168,9 +168,7 @@ export async function resolveProjectScopeRootForSessionCommand(
       configuredWorkflowRoot,
       cwd,
     );
-    if (scopeRoot !== undefined) {
-      return scopeRoot;
-    }
+    return scopeRoot;
   }
 
   let current = path.resolve(cwd);

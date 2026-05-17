@@ -14,6 +14,7 @@ import {
   saveEventReplyDispatchToRuntimeDb,
   saveHookEventToRuntimeDb,
   saveNodeExecutionToRuntimeDb,
+  saveSessionSnapshotToRuntimeDb,
   type RuntimeLlmSessionMessageRecord,
 } from "../workflow/runtime-db";
 import { createSessionState } from "../workflow/session";
@@ -708,6 +709,22 @@ describe("createGraphqlSchema", () => {
     };
     const created = await createWorkflowTemplate("demo", options);
     expect(created.ok).toBe(true);
+    await saveSessionSnapshotToRuntimeDb(
+      {
+        ...createSessionState({
+          sessionId: "gql-stale-runtime-active",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "main-worker",
+          runtimeVariables: {},
+        }),
+        status: "running",
+        currentNodeId: "main-worker",
+        queue: ["main-worker"],
+        startedAt: "2026-05-18T10:00:00.000Z",
+      },
+      options,
+    );
     const sessionId = "gql-active-session";
     const saved = await saveSession(
       {
@@ -735,6 +752,9 @@ describe("createGraphqlSchema", () => {
       activeExecutionCount: 1,
       latestExecution: { sessionId },
     });
+    expect(demoRow?.latestExecution?.sessionId).not.toBe(
+      "gql-stale-runtime-active",
+    );
 
     const statusOverview = await schema.query.workflowStatusOverview(
       { workflowName: "demo" },
@@ -745,6 +765,9 @@ describe("createGraphqlSchema", () => {
       newestActiveExecution: { sessionId },
       recentExecutions: [expect.objectContaining({ sessionId })],
     });
+    expect(statusOverview?.recentExecutions).not.toContainEqual(
+      expect.objectContaining({ sessionId: "gql-stale-runtime-active" }),
+    );
   });
 
   test("fixed resolved workflow source pins scoped duplicate overview rows", async () => {

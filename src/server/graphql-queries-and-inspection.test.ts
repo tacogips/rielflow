@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
+import { saveSessionSnapshotToRuntimeDb } from "../workflow/runtime-db";
 import { createSessionState } from "../workflow/session";
 import { saveSession } from "../workflow/session-store";
 import { handleGraphqlRequest } from "./graphql";
@@ -522,6 +523,23 @@ describe("GraphQL HTTP transport", () => {
       },
     });
 
+    await saveSessionSnapshotToRuntimeDb(
+      {
+        ...createSessionState({
+          sessionId: "server-stale-runtime-active",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "main-worker",
+          runtimeVariables: {},
+        }),
+        status: "running",
+        currentNodeId: "main-worker",
+        queue: ["main-worker"],
+        startedAt: "2026-05-18T10:00:00.000Z",
+      },
+      options,
+    );
+
     const overviewResponse = await handleGraphqlRequest(
       new Request("http://localhost/graphql", {
         method: "POST",
@@ -581,6 +599,10 @@ describe("GraphQL HTTP transport", () => {
                 sourceScope
                 workflowDirectory
                 aggregateStatus
+                activeExecutionCount
+                newestActiveExecution {
+                  sessionId
+                }
                 recentExecutions {
                   workflowExecutionId
                   sessionId
@@ -605,6 +627,8 @@ describe("GraphQL HTTP transport", () => {
           workflowName: "demo",
           sourceScope: "direct",
           aggregateStatus: "completed",
+          activeExecutionCount: 0,
+          newestActiveExecution: null,
           recentExecutions: [
             expect.objectContaining({
               workflowExecutionId: session.sessionId,

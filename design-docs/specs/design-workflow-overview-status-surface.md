@@ -309,6 +309,22 @@ project/user/direct scope rules, explicit storage overrides, and environment
 variables. Filtering stale rows is still required as a defensive boundary for
 deleted session files or obsolete runtime database rows.
 
+Issue `tacogips/divedra#25` extends this contract beyond the issue-23 storage
+alignment case. A stale active candidate that is visible through a workflow
+status source, but fails a direct `session status <id>` lookup with the same
+`--workflow-definition-dir` and storage options, is not an active execution for
+overview purposes. This remains true even when multiple stale candidates would
+otherwise keep `aggregateStatus` at `running`, inflate `activeExecutionCount`,
+or become `newestActiveExecution`.
+
+The overview builder boundary should therefore validate active candidates by
+loading the primary persisted `WorkflowSessionState` for each candidate before
+it contributes to active status. Session-index files, runtime database
+`sessions` rows, cached summaries, or records from a previous storage root are
+secondary inputs only. They may annotate a summary after the primary session
+load succeeds, but they must never be the sole source that marks a workflow as
+`running` or `paused`.
+
 Session inspection commands remain the detailed diagnostic surface. They may
 add clear storage-context diagnostics when a session id is not found, but they
 must not silently search unrelated project/user roots because that can attach an
@@ -501,6 +517,9 @@ Active candidate is not loadable:
   stale diagnostic if a future explicit diagnostic mode is added
 - keep default `workflow status` output focused on actionable, inspectable
   sessions
+- when all non-terminal candidates are unloadable, derive the aggregate status
+  from the remaining loadable terminal history or `never-run`, never from the
+  stale active candidates
 
 Selection target not found:
 
@@ -531,6 +550,9 @@ The first implementation slice is complete when:
   runtime storage context
 - stale runtime database or cached active records cannot make a workflow appear
   running when the corresponding persisted session is unavailable
+- regressions cover missing primary session payloads behind session indexes or
+  runtime database snapshots so issue `tacogips/divedra#25` cannot reintroduce
+  unloadable `newestActiveExecution` or inflated `activeExecutionCount` values
 
 ## Why This Split
 

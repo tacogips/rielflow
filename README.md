@@ -186,6 +186,13 @@ reported `sessionId` can be passed directly to `session status`,
 `--session-store`, `--artifact-root`, `DIVEDRA_SESSION_STORE`, and
 `DIVEDRA_ARTIFACT_ROOT` still take precedence.
 
+Derived runtime database rows, cached summaries, and session-index entries are
+secondary overview inputs. If a `running` or `paused` candidate cannot be loaded
+by `session status <session-id>` with the same `--workflow-definition-dir` and
+storage options, overview commands exclude it from `activeExecutionCount`,
+`newestActiveExecution`, active recent rows, and aggregate `running` or `paused`
+status derivation.
+
 Use `workflow inspect <workflow-name> --structure` only after you have selected
 a workflow and need a compact human-facing structure view. The structure view
 prints each step id on its own line, followed by the step description or `-` on
@@ -375,6 +382,8 @@ bun run src/main.ts session step-runs <session-id> --output json
 For any active `sessionId` reported by local `workflow status` in the same
 storage context, `session status`, `session progress`, and `session step-runs`
 should load that session instead of returning `session not found`.
+If `session status <session-id>` would return `session not found` for that same
+context, the local workflow overview should not report the session as active.
 
 Resume a paused or resumable execution:
 

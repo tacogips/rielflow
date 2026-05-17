@@ -197,6 +197,16 @@ export function deriveWorkflowOverviewStatus(
 
 type OverviewLoadOptions = LoadOptions & SessionStoreOptions;
 
+interface WorkflowOverviewActiveCandidate {
+  readonly sessionId: string;
+  readonly source: "session-store";
+}
+
+interface LoadableWorkflowOverviewSession {
+  readonly session: WorkflowSessionState;
+  readonly summary: WorkflowExecutionCompactSummary;
+}
+
 async function workflowOverviewBundleExists(
   workflowDirectory: string,
 ): Promise<Result<boolean, WorkflowCatalogFailure>> {
@@ -267,6 +277,29 @@ async function readWorkflowOverviewMeta(
   return ok({ workflowId: wfIdRaw, description });
 }
 
+async function loadWorkflowOverviewSessionCandidate(
+  candidate: WorkflowOverviewActiveCandidate,
+  source: ResolvedWorkflowSource,
+  canonicalWorkflowId: string,
+  scopedOptions: OverviewLoadOptions,
+): Promise<LoadableWorkflowOverviewSession | null> {
+  const loaded = await loadSession(candidate.sessionId, scopedOptions);
+  if (!loaded.ok) {
+    return null;
+  }
+  const session = loaded.value;
+  if (
+    session.workflowName !== source.workflowName ||
+    session.workflowId !== canonicalWorkflowId
+  ) {
+    return null;
+  }
+  return {
+    session,
+    summary: workflowExecutionCompactSummaryFromSession(session),
+  };
+}
+
 async function collectCompactSummariesForSource(
   source: ResolvedWorkflowSource,
   canonicalWorkflowId: string,
@@ -281,18 +314,16 @@ async function collectCompactSummariesForSource(
   }
   const summaries: WorkflowExecutionCompactSummary[] = [];
   for (const sessionId of listed.value) {
-    const loaded = await loadSession(sessionId, scoped);
-    if (!loaded.ok) {
+    const loadedCandidate = await loadWorkflowOverviewSessionCandidate(
+      { sessionId, source: "session-store" },
+      source,
+      canonicalWorkflowId,
+      scoped,
+    );
+    if (loadedCandidate === null) {
       continue;
     }
-    const session = loaded.value;
-    if (
-      session.workflowName !== source.workflowName ||
-      session.workflowId !== canonicalWorkflowId
-    ) {
-      continue;
-    }
-    summaries.push(workflowExecutionCompactSummaryFromSession(session));
+    summaries.push(loadedCandidate.summary);
   }
   return ok(sortWorkflowExecutionsNewestFirst(summaries));
 }

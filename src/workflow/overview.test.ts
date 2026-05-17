@@ -18,6 +18,7 @@ import {
 import type { WorkflowExecutionCompactSummary } from "../shared/ui-contract";
 import { createSessionState } from "./session";
 import { saveSession } from "./session-store";
+import { saveSessionSnapshotToRuntimeDb } from "./runtime-db";
 import { withResolvedWorkflowSourceOptions } from "./catalog";
 import type { ResolvedWorkflowSource } from "./types";
 
@@ -498,6 +499,91 @@ describe("buildWorkflowCatalogOverview", () => {
     expect(alphaRow?.aggregateStatus).toBe("completed");
     expect(alphaRow?.activeExecutionCount).toBe(0);
     expect(alphaRow?.latestExecution?.sessionId).toBe("sess-completed");
+  });
+
+  it("ignores stale runtime-db active rows without primary session files", async () => {
+    const root = await overviewMakeTempDir();
+    const workflowName = "alpha";
+    await overviewWriteBundle({
+      workflowDirectory: path.join(root, workflowName),
+      workflowId: "alpha-id",
+      description: "",
+    });
+    const rootDataDir = path.join(root, "data");
+    const sessionStoreRoot = path.join(rootDataDir, "sessions");
+    const baseOptions = { workflowRoot: root, rootDataDir, cwd: root };
+    const staleSessionIds = [
+      "div-alpha-1777861733-fe70502e",
+      "div-alpha-1777861657-715d97aa",
+      "div-alpha-1777861530-89aee9e0",
+      "div-alpha-1777859505-fdeb86d3",
+    ] as const;
+
+    for (const sessionId of staleSessionIds) {
+      await saveSessionSnapshotToRuntimeDb(
+        {
+          ...createSessionState({
+            sessionId,
+            workflowName,
+            workflowId: "alpha-id",
+            initialNodeId: "n",
+            runtimeVariables: {},
+          }),
+          status: "running",
+          startedAt: `2026-05-0${String(staleSessionIds.indexOf(sessionId) + 1)}T12:00:00.000Z`,
+        },
+        baseOptions,
+      );
+    }
+    await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-terminal-loadable",
+          workflowName,
+          workflowId: "alpha-id",
+          initialNodeId: "n",
+          runtimeVariables: {},
+        }),
+        status: "completed",
+        startedAt: "2026-05-10T12:00:00.000Z",
+        endedAt: "2026-05-10T12:05:00.000Z",
+      },
+      baseOptions,
+    );
+
+    const catalog = await buildWorkflowCatalogOverview(
+      {},
+      { workflowRoot: root, sessionStoreRoot, rootDataDir, cwd: root },
+    );
+    expect(catalog.ok).toBe(true);
+    if (!catalog.ok) {
+      return;
+    }
+    const alphaRow = catalog.value.workflows.find(
+      (entry) => entry.workflowName === workflowName,
+    );
+    expect(alphaRow).toMatchObject({
+      aggregateStatus: "completed",
+      activeExecutionCount: 0,
+      latestExecution: { sessionId: "sess-terminal-loadable" },
+    });
+    expect(staleSessionIds).not.toContain(alphaRow?.latestExecution?.sessionId);
+
+    const status = await buildWorkflowStatusOverview(
+      { workflowName },
+      { workflowRoot: root, sessionStoreRoot, rootDataDir, cwd: root },
+    );
+    expect(status.ok).toBe(true);
+    if (!status.ok) {
+      return;
+    }
+    expect(status.value.aggregateStatus).toBe("completed");
+    expect(status.value.activeExecutionCount).toBe(0);
+    expect(status.value.newestActiveExecution).toBeNull();
+    expect(status.value.recentExecutions).toHaveLength(1);
+    expect(status.value.recentExecutions[0]?.sessionId).toBe(
+      "sess-terminal-loadable",
+    );
   });
 
   it("lists duplicate workflow names across project and user scopes separately", async () => {
