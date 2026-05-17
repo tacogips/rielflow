@@ -7,7 +7,7 @@ metadata:
 
 # Divedra Workflow Run
 
-Use this skill for operating existing divedra workflows. For creating or editing workflow bundles, use `divedra-workflow` instead.
+Use this skill for operating existing divedra workflows. For installing GitHub workflow directories with `workflow checkout`, use `divedra-workflow-checkout` instead. For creating or editing workflow bundles, use `divedra-workflow` instead.
 
 ## First Decision
 
