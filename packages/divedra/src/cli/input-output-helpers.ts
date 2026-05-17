@@ -49,7 +49,7 @@ import { HOOK_VENDOR_USAGE } from "./storage-and-options";
 export function printHelp(io: CliIo): void {
   io.stdout("Usage:");
   io.stdout(
-    "  divedra cli workflow <create|validate|inspect|usage|list|status|run> <name?> [options]",
+    "  divedra cli workflow <create|checkout|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
   );
   io.stdout(
     "  divedra session <status|progress|health|resume|continue|rerun|export|logs|step-runs> <workflow-execution-id> [positional-args] [options]",
@@ -89,6 +89,11 @@ export function printHelp(io: CliIo): void {
   io.stdout("");
   io.stdout("Create options:");
   io.stdout("  --worker-only  Scaffold a manager-less starter workflow");
+  io.stdout("");
+  io.stdout("Checkout options:");
+  io.stdout("  workflow checkout <github-url>  Install a GitHub workflow directory into project scope");
+  io.stdout("  --user-scope   Install checkout under the user scope root");
+  io.stdout("  --overwrite    Replace an existing checkout after staged validation");
   io.stdout("");
   io.stdout("Workflow scope options:");
   io.stdout(

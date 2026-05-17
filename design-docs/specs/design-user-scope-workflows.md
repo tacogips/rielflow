@@ -278,9 +278,47 @@ Rules:
 - save/edit APIs must carry the resolved workflow source scope from load time
   and write back to the same scope unless the caller explicitly requests a
   different destination.
+- `workflow checkout <url>` is a command-specific scoped write path. Unlike
+  `workflow create`, checkout defaults to project scope even when no project
+  scope is discovered, creating `<cwd>/.divedra/workflows/<name>` as needed.
+  `--user-scope` selects `<userScopeRoot>/workflows/<name>`.
+- `workflow checkout` rejects `--workflow-definition-dir` as a destination and
+  records checkout provenance under
+  `<userScopeRoot>/workflow-registry/checkouts/<scope>-<workflow-name>.json`.
 
 `--workflow-definition-dir` keeps its existing exact behavior for writes and bypasses
 scope selection.
+
+### Checkout Registry
+
+The checkout registry records where externally sourced workflows came from. It
+is not a remote workflow registry and does not participate in workflow lookup.
+Workflow lookup still reads project and user workflow roots directly.
+
+Registry record path:
+
+```text
+<userScopeRoot>/workflow-registry/checkouts/<scope>-<workflow-name>.json
+```
+
+Minimum record shape:
+
+```json
+{
+  "workflowName": "review-pr",
+  "sourceUrl": "https://github.com/org/repo/tree/main/.divedra/workflows/review-pr",
+  "scope": "project",
+  "checkedOutAt": "2026-05-17T00:00:00.000Z",
+  "destinationDirectory": "/workspace/.divedra/workflows/review-pr"
+}
+```
+
+The registry is written for both project and user checkouts so an operator can
+audit installed remote workflows from the user scope root. Duplicate checkout is
+defined as either an existing destination workflow directory or an existing
+registry record for the same `(scope, workflowName)`. `--overwrite` replaces the
+destination and registry record only after the newly staged remote workflow has
+validated successfully.
 
 ## Runtime Root Defaults
 

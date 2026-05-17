@@ -75,6 +75,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let continuationStartStepId: string | undefined;
   let continuationAfterStepRunId: string | undefined;
   let stepRunsFilterStepId: string | undefined;
+  let userScope = false;
+  let overwrite = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -192,6 +194,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       }
       case "--worker-only":
         workerOnly = true;
+        break;
+      case "--user-scope":
+        userScope = true;
+        break;
+      case "--overwrite":
+        overwrite = true;
         break;
       case "--structure":
         structure = true;
@@ -712,6 +720,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(sessionStoreRoot === undefined ? {} : { sessionStoreRoot }),
       ...(workingDirectory === undefined ? {} : { workingDirectory }),
       workerOnly,
+      userScope,
+      overwrite,
       structure,
       executablePreflight,
       ...(format === undefined ? {} : { format }),

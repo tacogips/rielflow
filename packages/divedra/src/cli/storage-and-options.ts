@@ -254,6 +254,8 @@ export interface ParsedOptions {
   readonly sessionStoreRoot?: string;
   readonly workingDirectory?: string;
   readonly workerOnly: boolean;
+  readonly userScope: boolean;
+  readonly overwrite: boolean;
   readonly output: "text" | "json" | "table";
   readonly structure: boolean;
   readonly executablePreflight: boolean;

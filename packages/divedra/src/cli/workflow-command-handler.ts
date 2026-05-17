@@ -1,4 +1,5 @@
 import { collectWorkflowAddonSourceSummaries } from "../../../../src/workflow/addon-source-summary";
+import { checkoutWorkflow } from "../../../../src/workflow/checkout";
 import { createWorkflowTemplate } from "../../../../src/workflow/create";
 import { runWorkflow } from "../../../../src/workflow/engine";
 import {
@@ -372,6 +373,46 @@ export async function runCliWorkflowScope(
     io.stderr("scope, command, and target are required");
     printHelp(io);
     return 2;
+  }
+
+  if (command === "checkout") {
+    if (positionals.length > 3) {
+      io.stderr("workflow checkout accepts exactly one GitHub directory URL");
+      return 2;
+    }
+    if (parsed.options.workflowRoot !== undefined) {
+      io.stderr(
+        "workflow checkout does not support --workflow-definition-dir; use project scope or --user-scope",
+      );
+      return 2;
+    }
+    if (graphqlCliTransport !== null) {
+      io.stderr("workflow checkout is local-only; omit --endpoint");
+      return 2;
+    }
+
+    const checkedOut = await checkoutWorkflow({
+      ...sharedOptions,
+      sourceUrl: workflowTarget,
+      ...(parsed.options.userScope ? { userScope: true } : {}),
+      ...(parsed.options.overwrite ? { overwrite: true } : {}),
+      ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+    });
+    if (!checkedOut.ok) {
+      io.stderr(`checkout failed: ${checkedOut.error.message}`);
+      return checkedOut.error.code === "IO" || checkedOut.error.code === "FETCH_FAILED"
+        ? 1
+        : 2;
+    }
+    if (parsed.options.output === "json") {
+      emitJson(io, checkedOut.value);
+    } else {
+      io.stdout(`checked out workflow: ${checkedOut.value.workflowName}`);
+      io.stdout(`scope: ${checkedOut.value.scope}`);
+      io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
+      io.stdout(`registry: ${checkedOut.value.registryPath}`);
+    }
+    return 0;
   }
 
   if (command === "create") {

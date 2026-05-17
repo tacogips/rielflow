@@ -112,6 +112,90 @@ function createJsonResponse(payload: unknown): Response {
   });
 }
 
+async function createWorkflowCheckoutFetch(input: {
+  readonly sourceRoot: string;
+  readonly workflowName: string;
+  readonly ref?: string;
+}): Promise<typeof fetch> {
+  const ref = input.ref ?? "main";
+  const workflowDirectory = path.join(input.sourceRoot, input.workflowName);
+  const repoDirectory = `.divedra/workflows/${input.workflowName}`;
+  const files = [
+    "workflow.json",
+    "nodes/node-main-worker.json",
+    "prompts/main-worker.md",
+  ];
+  const fileContents = new Map<string, string>();
+  for (const file of files) {
+    fileContents.set(
+      `${repoDirectory}/${file}`,
+      await readFile(path.join(workflowDirectory, file), "utf8"),
+    );
+  }
+  const directoryEntries = new Map<string, readonly Record<string, string>[]>();
+  directoryEntries.set(repoDirectory, [
+    {
+      type: "file",
+      path: `${repoDirectory}/workflow.json`,
+      download_url: "https://download.local/workflow.json",
+    },
+    { type: "dir", path: `${repoDirectory}/nodes` },
+    { type: "dir", path: `${repoDirectory}/prompts` },
+  ]);
+  directoryEntries.set(`${repoDirectory}/nodes`, [
+    {
+      type: "file",
+      path: `${repoDirectory}/nodes/node-main-worker.json`,
+      download_url: "https://download.local/node-main-worker.json",
+    },
+  ]);
+  directoryEntries.set(`${repoDirectory}/prompts`, [
+    {
+      type: "file",
+      path: `${repoDirectory}/prompts/main-worker.md`,
+      download_url: "https://download.local/main-worker.md",
+    },
+  ]);
+  const downloadMap = new Map([
+    ["workflow.json", fileContents.get(`${repoDirectory}/workflow.json`) ?? ""],
+    [
+      "node-main-worker.json",
+      fileContents.get(`${repoDirectory}/nodes/node-main-worker.json`) ?? "",
+    ],
+    [
+      "main-worker.md",
+      fileContents.get(`${repoDirectory}/prompts/main-worker.md`) ?? "",
+    ],
+  ]);
+
+  return (async (url: string | URL | Request): Promise<Response> => {
+    const urlString =
+      typeof url === "string" || url instanceof URL ? url.toString() : url.url;
+    const parsed = new URL(urlString);
+    if (parsed.hostname === "download.local") {
+      const content = downloadMap.get(parsed.pathname.slice(1));
+      return content === undefined
+        ? new Response("missing", { status: 404 })
+        : new Response(content);
+    }
+    const prefix = "/repos/org/repo/contents/";
+    if (
+      parsed.hostname !== "api.github.com" ||
+      parsed.searchParams.get("ref") !== ref ||
+      !parsed.pathname.startsWith(prefix)
+    ) {
+      return new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
+      });
+    }
+    const repoPath = decodeURIComponent(parsed.pathname.slice(prefix.length));
+    const entries = directoryEntries.get(repoPath);
+    return entries === undefined
+      ? new Response(JSON.stringify({ message: "Not Found" }), { status: 404 })
+      : createJsonResponse(entries);
+  }) as typeof fetch;
+}
+
 async function writeRuntimeVariablesFile(
   root: string,
   fileName: string,
@@ -778,6 +862,133 @@ describe("runCli", () => {
     );
     expect(inspectTextCapture.stdout.join("\n")).toMatch(
       /steps: 2, nodeRegistry: 2, crossWorkflowDispatches: 0/,
+    );
+  });
+
+  test("workflow checkout installs a GitHub workflow directory into project scope", async () => {
+    const root = await makeTempDir();
+    const sourceRoot = path.join(root, "source");
+    const projectRoot = path.join(root, "project");
+    const userRoot = path.join(root, "user", ".divedra");
+    await mkdir(projectRoot, { recursive: true });
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: sourceRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const fetchImpl = await createWorkflowCheckoutFetch({
+      sourceRoot,
+      workflowName: "demo",
+    });
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "checkout",
+        "https://github.com/org/repo/tree/main/.divedra/workflows/demo",
+        "--project-root",
+        path.join(projectRoot, ".divedra"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps({ fetchImpl }),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      workflowName: string;
+      scope: string;
+      destinationDirectory: string;
+      registryPath: string;
+      validationStatus: string;
+      overwritten: boolean;
+    };
+    expect(payload).toMatchObject({
+      workflowName: "demo",
+      scope: "project",
+      destinationDirectory: path.join(
+        projectRoot,
+        ".divedra",
+        "workflows",
+        "demo",
+      ),
+      registryPath: path.join(
+        userRoot,
+        "workflow-registry",
+        "checkouts",
+        "project-demo.json",
+      ),
+      validationStatus: "valid",
+      overwritten: false,
+    });
+    expect(
+      await readFile(
+        path.join(payload.destinationDirectory, "workflow.json"),
+        "utf8",
+      ),
+    ).toContain('"workflowId": "demo"');
+  });
+
+  test("workflow checkout supports user scope and rejects direct definition directories", async () => {
+    const root = await makeTempDir();
+    const sourceRoot = path.join(root, "source");
+    const projectRoot = path.join(root, "project");
+    const userRoot = path.join(root, "user", ".divedra");
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: sourceRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const fetchImpl = await createWorkflowCheckoutFetch({
+      sourceRoot,
+      workflowName: "demo",
+    });
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "checkout",
+        "https://github.com/org/repo/tree/main/.divedra/workflows/demo",
+        "--user-scope",
+        "--project-root",
+        path.join(projectRoot, ".divedra"),
+        "--user-root",
+        userRoot,
+      ],
+      capture.io,
+      createCliDeps({ fetchImpl }),
+    );
+
+    expect(code).toBe(0);
+    expect(capture.stdout.join("\n")).toContain("scope: user");
+    expect(
+      await readFile(
+        path.join(userRoot, "workflows", "demo", "workflow.json"),
+        "utf8",
+      ),
+    ).toContain('"workflowId": "demo"');
+
+    const rejected = createIoCapture();
+    const rejectedCode = await runCli(
+      [
+        "workflow",
+        "checkout",
+        "https://github.com/org/repo/tree/main/.divedra/workflows/demo",
+        "--workflow-definition-dir",
+        path.join(root, "direct"),
+      ],
+      rejected.io,
+      createCliDeps({ fetchImpl }),
+    );
+
+    expect(rejectedCode).toBe(2);
+    expect(rejected.stderr.join("\n")).toContain(
+      "workflow checkout does not support --workflow-definition-dir",
     );
   });
 

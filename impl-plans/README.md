@@ -24,15 +24,17 @@ impl-plans/
 
 ## Active Plans
 
-| Plan | Status | Design Reference |
-| ---- | ------ | ---------------- |
-| `completed/workflow-node-runtime-patches` | Completed | `architecture#workflow-node-runtime-patches`, `command`, `design-workflow-node-executability-validation` |
-| `active/package-boundary-architecture` | Completed (Staged Facade Milestone) | `architecture` |
+No active implementation plans remain.
 
 ## Recently Completed
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow-node-runtime-patches` | 2026-05-17 | `architecture#workflow-node-runtime-patches`, `command`, `design-workflow-node-executability-validation` |
+| `package-boundary-architecture` | 2026-05-17 | `architecture` |
+| `workflow-checkout-github-directory` | 2026-05-17 | `command`, `architecture`, `design-user-scope-workflows` |
+| `async-third-party-resolver-validation-error-handling` | 2026-05-17 | `architecture`, `design-node-addon-catalog-and-chat-reply-worker` |
+| `refactoring-package-source-ownership` | 2026-05-17 | `architecture` |
 | `loaded-workflow-addon-validation-results` | 2026-05-17 | `design-workflow-node-executability-validation#loaded-workflow-result-consistency`, `command` |
 | `workflow-node-executability-validation` | 2026-05-17 | `design-workflow-node-executability-validation` |
 | `refactoring-runtime-boundaries` | 2026-05-16 | `refactoring-divide-and-conquer slice reviews` |

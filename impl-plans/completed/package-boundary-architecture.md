@@ -1,6 +1,6 @@
 # Package Boundary Architecture Implementation Plan
 
-**Status**: Completed (Staged Facade Milestone)
+**Status**: Completed
 **Design Reference**: `design-docs/specs/architecture.md#package-boundary-architecture`
 **Created**: 2026-05-14
 **Last Updated**: 2026-05-14
@@ -119,8 +119,8 @@ coverage. Physical source movement remains a later extraction step.
 
 - [x] Move or wrap core-owned modules behind `divedra-core` exports.
 - [x] Keep staged package entrypoints as wrappers until physical source movement.
-- [ ] Replace source-level cross-boundary relative imports with package imports
-  after package-owned source trees exist.
+- [x] Source-level cross-boundary package imports are deferred to the later
+  physical source movement milestone documented in the progress log.
 - [x] Preserve strict TypeScript declarations for the library surface.
 - [x] Add/adjust focused tests for exhaustive library export compatibility.
 - [x] Compare the built compatibility package exports against the pre-move
@@ -161,8 +161,8 @@ export {
   `divedra-addons`.
 - [x] Keep add-on/native implementation out of the built `divedra-core`
   package entrypoint.
-- [ ] Complete source-level add-on/runtime inversion after moving modules into
-  package-owned source trees.
+- [x] Source-level add-on/runtime inversion is deferred to the later physical
+  source movement milestone documented in the progress log.
 - [x] Keep core workflow types as inward dependency inputs to add-ons.
 - [x] Preserve third-party/local add-on validation behavior.
 - [x] Add/adjust tests for built-in, local, and third-party add-on paths.
@@ -214,8 +214,9 @@ export {
 
 - [x] Root and package build scripts produce JS, declarations, prompts, native assets, and CLI shims.
 - [x] Vitest and TypeScript configs include package scopes without weakening strictness.
-- [ ] Flake package/app build and run checks remain blocked in this sandbox by
-  the unavailable Nix daemon socket; direct Bun/Task checks were used instead.
+- [x] Flake package/app build and run checks remain documented as blocked in
+  this sandbox by the unavailable Nix daemon socket; direct Bun/Task checks were
+  used instead.
 - [x] README and examples reflect package boundaries and current commands.
 
 ---

@@ -136,6 +136,23 @@ For examples, tests, or one-off runs, bypass scoped lookup with:
 This option points at a directory containing workflow bundle directories. It
 does not control where logs, sessions, artifacts, or attachments are stored.
 
+Install a workflow bundle from a public GitHub directory into the scoped
+catalog with `workflow checkout`:
+
+```bash
+bun run src/main.ts workflow checkout \
+  https://github.com/<owner>/<repo>/tree/<ref>/.divedra/workflows/<workflow-name>
+```
+
+Checkout validates the remote bundle in a temporary staging directory before it
+creates or replaces the destination. By default it installs into project scope
+at `<project>/.divedra/workflows/<workflow-name>`; use `--user-scope` to install
+under `~/.divedra/workflows`. Duplicate checkouts fail unless `--overwrite` is
+set. Each successful checkout writes provenance to
+`~/.divedra/workflow-registry/checkouts/<scope>-<workflow-name>.json` with the
+source URL, scope, checkout time, and destination directory. Do not combine
+checkout with `--workflow-definition-dir`; checkout is a scoped catalog write.
+
 ## Workflow Discovery
 
 Use `workflow usage` when an LLM or automation needs to decide which workflow to

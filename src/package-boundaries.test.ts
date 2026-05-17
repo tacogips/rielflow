@@ -111,6 +111,7 @@ const TEMPORARY_COMPATIBILITY_ROOT_IMPORTS = {
   ],
   "packages/divedra/src/cli/workflow-command-handler.ts": [
     "../../../../src/workflow/addon-source-summary",
+    "../../../../src/workflow/checkout",
     "../../../../src/workflow/create",
     "../../../../src/workflow/engine",
     "../../../../src/workflow/inspect",

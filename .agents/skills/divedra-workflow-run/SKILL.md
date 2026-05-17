@@ -44,6 +44,21 @@ divedra <command>
 
 Use `--workflow-definition-dir <path>` when the workflow definition bundles are not coming from scoped project/user lookup. This option points at a directory containing `<workflow-name>/workflow.json` bundles; it does not control logs, sessions, or artifacts. In this repository, examples use `--workflow-definition-dir ./examples`.
 
+Install a public GitHub workflow directory into a scoped catalog with:
+
+```bash
+bun run src/main.ts workflow checkout \
+  https://github.com/<owner>/<repo>/tree/<ref>/.divedra/workflows/<workflow-name>
+```
+
+Checkout defaults to project scope and installs under
+`<project>/.divedra/workflows/<workflow-name>`. Add `--user-scope` to install
+under `~/.divedra/workflows/<workflow-name>`. The command validates the remote
+bundle in staging before writing the destination, rejects duplicates unless
+`--overwrite` is set, and records provenance under
+`~/.divedra/workflow-registry/checkouts/<scope>-<workflow-name>.json`.
+Do not combine checkout with `--workflow-definition-dir`.
+
 ## Standard Run Sequence
 
 For LLM-driven workflow selection, start here:

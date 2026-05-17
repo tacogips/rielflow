@@ -482,6 +482,77 @@ Project scope is searched before user scope for bare workflow names, while
 overrides for examples and automation. Scope resolution is implemented in
 `src/workflow/catalog.ts`.
 
+### Workflow Checkout Boundary
+
+`workflow checkout <url>` adds a GitHub-directory import path without changing
+the authored workflow bundle format or the runtime lookup model. It is a
+scoped catalog write surface layered above the existing loader and validation
+boundary.
+
+Checkout data flow:
+
+1. parse and normalize a supported GitHub directory URL
+2. derive the workflow name from the remote directory basename and reject names
+   that fail the normal safe workflow-name rule
+3. resolve the destination scope and workflow root
+4. fetch the remote directory tree into a temporary staging directory outside
+   the final destination
+5. load and validate the staged workflow bundle through the same authored
+   workflow validation path used by `workflow validate`
+6. fail without touching the destination when validation fails
+7. reject duplicates unless `--overwrite` was supplied
+8. atomically install the staged directory into the destination workflow root
+   where practical for the host filesystem
+9. write checkout registry metadata under the resolved user root
+
+Supported first-iteration URL shape is:
+
+```text
+https://github.com/<owner>/<repo>/tree/<ref>/<workflow-directory-path>
+```
+
+The GitHub fetch adapter should treat branch or tag names containing slashes as
+ambiguous until it has resolved the URL against GitHub directory metadata. It
+must not guess a ref/path split and install a different directory silently.
+Tests should exercise the parser and fetcher through mocked GitHub responses so
+normal verification remains offline.
+
+The destination scope model is intentionally command-specific:
+
+- default checkout destination is project scope, creating
+  `<cwd>/.divedra/workflows` when no project `.divedra` exists
+- `--user-scope` selects `<user-root>/workflows`
+- `--workflow-definition-dir` is rejected for checkout because registry records
+  are keyed by project/user scope, not by arbitrary direct roots
+
+Checkout registry records are operational metadata, not workflow definitions.
+They live under:
+
+```text
+<user-root>/workflow-registry/checkouts/<scope>-<workflow-name>.json
+```
+
+Each record must include:
+
+- `workflowName`
+- `sourceUrl`
+- `scope`
+- `checkedOutAt`
+- `destinationDirectory`
+
+Registry writes should be staged and renamed into place to avoid corrupt JSON on
+interrupted writes. Duplicate detection must consider both the destination
+directory and registry record. With `--overwrite`, the old destination must not
+be removed until the newly staged remote bundle has passed validation; deletion
+must be constrained to the resolved `<scope-root>/workflows/<workflow-name>`
+path.
+
+Checkout is provider-neutral. Agent backends such as `codex-agent`,
+`claude-code-agent`, and `cursor-cli-agent` only appear inside downloaded node
+payloads and remain validated by the existing node/backend validation layers.
+No Cursor-specific or codex-agent-specific checkout behavior should be added to
+the command layer; backend differences stay behind adapter modules.
+
 ### Runtime State Boundary
 
 The runtime persists three distinct forms of state:

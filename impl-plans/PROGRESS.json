@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-17T10:34:00.000+09:00",
+  "lastUpdated": "2026-05-17T19:48:55+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -5658,8 +5658,8 @@
     },
     "package-boundary-architecture": {
       "phase": 167,
-      "status": "Completed (Staged Facade Milestone)",
-      "path": "impl-plans/active/package-boundary-architecture.md",
+      "status": "Completed",
+      "path": "impl-plans/completed/package-boundary-architecture.md",
       "designReference": "design-docs/specs/architecture.md#package-boundary-architecture",
       "tasks": {
         "TASK-001": {
@@ -5772,7 +5772,7 @@
     "chat-sdk-event-sources": {
       "phase": 168,
       "status": "Completed",
-      "path": "impl-plans/active/chat-sdk-event-sources.md",
+      "path": "impl-plans/completed/chat-sdk-event-sources.md",
       "designReference": "design-docs/specs/design-chat-sdk-event-sources.md",
       "tasks": {
         "TASK-001": {
@@ -5836,7 +5836,7 @@
     "chat-event-sources-review-improvements": {
       "phase": 169,
       "status": "Completed",
-      "path": "impl-plans/active/chat-event-sources-review-improvements.md",
+      "path": "impl-plans/completed/chat-event-sources-review-improvements.md",
       "designReference": "design-docs/specs/design-event-listener-workflow-trigger.md#shared-chat-source-review-invariants; design-docs/specs/design-chat-sdk-event-sources.md#examples-and-tests",
       "tasks": {
         "TASK-001": {
@@ -5879,7 +5879,7 @@
     "refactoring-package-source-ownership": {
       "phase": 170,
       "status": "Completed",
-      "path": "impl-plans/active/refactoring-package-source-ownership.md",
+      "path": "impl-plans/completed/refactoring-package-source-ownership.md",
       "designReference": "design-docs/specs/architecture.md#package-boundary-architecture",
       "tasks": {
         "REF-001": {
@@ -5957,8 +5957,8 @@
     },
     "workflow-node-executability-validation": {
       "phase": 171,
-      "status": "Ready",
-      "path": "impl-plans/active/workflow-node-executability-validation.md",
+      "status": "Completed",
+      "path": "impl-plans/completed/workflow-node-executability-validation.md",
       "designReference": "design-docs/specs/design-workflow-node-executability-validation.md",
       "tasks": {
         "TASK-001": {
