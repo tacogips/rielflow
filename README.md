@@ -556,6 +556,17 @@ decisions send chat replies only when the event has a safe reply destination
 and do not persist schedules. Operators can inspect and cancel registered
 schedules from the same artifact root:
 
+Schedule registration treats resolver output as untrusted until runtime
+validation succeeds. When a binding sets `minConfidence`, a ready decision must
+include numeric `confidence`; missing or below-threshold confidence produces
+clarification when a safe reply destination exists and refusal otherwise.
+One-time schedules accept absolute `dueAt` timestamps with `Z` or a numeric UTC
+offset, and also accept offset-less wall-clock timestamps such as
+`2026-05-19T09:00:00` only when `schedule.timezone` is a valid IANA timezone.
+Offset-less values are resolved in that timezone before divedra stores the
+canonical UTC `nextDueAt`; invalid, ambiguous, or unresolvable wall-clock times
+do not persist a schedule.
+
 ```bash
 bun run src/main.ts events schedules list --artifact-root ./tmp/event-source-demo/workflow-artifacts --source chat-sdk-slack --status active
 bun run src/main.ts events schedules inspect <schedule-id> --artifact-root ./tmp/event-source-demo/workflow-artifacts --output json

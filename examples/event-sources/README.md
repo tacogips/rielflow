@@ -116,7 +116,9 @@ divedra events emit chat-sdk-slack \
 The binding `chat-sdk-slack-schedule-registration` demonstrates chat-created
 workflow schedules. It listens only to conversation `schedule-demo`, runs the
 resolver workflow `dispatcher-llm-resolver-stub` at node `resolver-worker`, and
-expects the resolver output to be one of these structured decisions:
+expects the resolver output to be one of these structured decisions. The
+binding sets `minConfidence: 0.8`, so a ready decision must include numeric
+`confidence` at or above that threshold before a schedule can be persisted:
 
 ```json
 {
@@ -136,11 +138,15 @@ expects the resolver output to be one of these structured decisions:
 ```
 
 For recurring schedules, return `"kind": "recurring"` with a five-field
-`cron` string and `timezone`. Return `status: "needs-clarification"` with
-`missing` and `question` when the workflow, time, timezone, recurrence, or
-workflow input is ambiguous; no schedule is persisted for clarification or
-refusal decisions. Clarification replies require a safe chat reply destination;
-without one, the request is refused instead of persisted.
+`cron` string and `timezone`. For one-time schedules, `dueAt` may be an
+absolute timestamp with `Z` or a numeric UTC offset, or an offset-less wall
+clock value such as `2026-05-19T09:00:00` that is resolved using the provided
+IANA `timezone`. Invalid, ambiguous, or unresolvable wall-clock times are not
+persisted. Return `status: "needs-clarification"` with `missing` and `question`
+when the workflow, confidence, time, timezone, recurrence, or workflow input is
+ambiguous; no schedule is persisted for clarification or refusal decisions.
+Clarification replies require a safe chat reply destination; without one, the
+request is refused instead of persisted.
 
 Inspect and cancel persisted schedules with the operator commands:
 

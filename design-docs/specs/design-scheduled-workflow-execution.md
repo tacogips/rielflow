@@ -232,6 +232,34 @@ selected target workflow's configured destinations. It should not assume the
 original chat thread is always the final result destination unless the schedule
 record or binding explicitly carries that destination.
 
+## Schedule Registration Safety Contract
+
+Schedule registration is a trust boundary between resolver output and durable
+runtime state. A `ready` resolver decision is only a proposal until the runtime
+validator proves the workflow, confidence, time, timezone, recurrence, input
+shape, and reply-safety requirements.
+
+When a schedule-registration binding sets `minConfidence`, the resolver decision
+must include a numeric `confidence`. Missing confidence is not equivalent to a
+passing score. If confidence is missing or below the configured threshold, the
+runtime must not persist a schedule. It should ask the smallest workflow
+selection clarification when a safe reply destination exists, and otherwise
+refuse the registration.
+
+One-time `dueAt` validation must be independent of the host process timezone:
+
+- `dueAt` values with `Z` or a numeric UTC offset represent an absolute instant
+  and must keep that instant unchanged.
+- offset-less wall-clock values such as `2026-05-19T09:00:00` are valid only
+  with a valid `schedule.timezone`; the runtime resolves them as local wall time
+  in that IANA timezone before storing canonical UTC `nextDueAt`.
+- invalid, ambiguous, or unresolvable wall-clock values produce clarification
+  when a safe reply destination exists and refusal otherwise.
+
+The persisted schedule should keep the user-facing schedule timezone alongside
+the canonical UTC due/next-due timestamp so later inspection can show both the
+requested local time context and the runtime execution instant.
+
 ## CLI And Operator Surface
 
 The first operator surface should be inspection and cancellation, not a parallel
@@ -256,7 +284,11 @@ Schedule creation fails when:
 
 - the selected workflow cannot be resolved through the catalog
 - the workflow match is ambiguous
+- `minConfidence` is configured and resolver confidence is missing or below the
+  configured threshold
 - the requested due time is local-only and no timezone is known
+- a one-time offset-less due time cannot be resolved in the selected IANA
+  timezone
 - the timezone is invalid
 - a recurring schedule has an invalid five-field cron expression
 - no future occurrence can be computed
@@ -319,10 +351,12 @@ User-facing confirmation items are tracked in
 ```bash
 rg -n "workflow-schedule|workflow.schedule.due|events schedules" design-docs src examples README.md
 bun run typecheck
+bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts
+bun run lint:biome
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
 bun test src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts
 bun test src/events/trigger-runner*.test.ts src/events/*task-planning*.test.ts src/events/*supervisor*.test.ts
 bun test src/cli.test.ts
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
 bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json
 ```
 

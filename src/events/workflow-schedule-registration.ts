@@ -45,6 +45,29 @@ export interface WorkflowScheduleRegistrationValidator {
   ): Promise<WorkflowScheduleRegistrationValidationResult>;
 }
 
+interface OffsetLessDateTimeParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+  readonly millisecond: number;
+}
+
+interface TimeZoneDateTimeParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+}
+
+const EXPLICIT_TIMEZONE_PATTERN = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
+const OFFSET_LESS_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+
 function unwrapDecision(output: unknown): unknown {
   if (isJsonObject(output) && isJsonObject(output["payload"])) {
     return output["payload"];
@@ -241,6 +264,133 @@ function workflowSourceJson(
   };
 }
 
+function parseOffsetLessDateTime(
+  dueAt: string,
+): OffsetLessDateTimeParts | undefined {
+  const match = OFFSET_LESS_DATE_TIME_PATTERN.exec(dueAt.trim());
+  if (match === null) {
+    return undefined;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = match[6] === undefined ? 0 : Number(match[6]);
+  const millisecond =
+    match[7] === undefined ? 0 : Number(match[7].padEnd(3, "0"));
+  const utc = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day ||
+    utc.getUTCHours() !== hour ||
+    utc.getUTCMinutes() !== minute ||
+    utc.getUTCSeconds() !== second
+  ) {
+    return undefined;
+  }
+  return { year, month, day, hour, minute, second, millisecond };
+}
+
+function readTimeZonePart(
+  parts: readonly Intl.DateTimeFormatPart[],
+  type: Intl.DateTimeFormatPartTypes,
+): number {
+  const value = parts.find((part) => part.type === type)?.value;
+  if (value === undefined) {
+    throw new Error(`failed to read ${type} from schedule timezone formatter`);
+  }
+  return Number(value);
+}
+
+function formatTimeZoneDateTimeParts(
+  formatter: Intl.DateTimeFormat,
+  date: Date,
+): TimeZoneDateTimeParts {
+  const parts = formatter.formatToParts(date);
+  return {
+    year: readTimeZonePart(parts, "year"),
+    month: readTimeZonePart(parts, "month"),
+    day: readTimeZonePart(parts, "day"),
+    hour: readTimeZonePart(parts, "hour"),
+    minute: readTimeZonePart(parts, "minute"),
+    second: readTimeZonePart(parts, "second"),
+  };
+}
+
+function offsetLessPartsMatch(
+  expected: OffsetLessDateTimeParts,
+  actual: TimeZoneDateTimeParts,
+): boolean {
+  return (
+    expected.year === actual.year &&
+    expected.month === actual.month &&
+    expected.day === actual.day &&
+    expected.hour === actual.hour &&
+    expected.minute === actual.minute &&
+    expected.second === actual.second
+  );
+}
+
+function resolveOffsetLessDueAt(
+  dueAt: string,
+  timeZone: string,
+): string | undefined {
+  const parts = parseOffsetLessDateTime(dueAt);
+  if (parts === undefined) {
+    return undefined;
+  }
+  const formatter = new Intl.DateTimeFormat("en-US-u-ca-gregory", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const wallClockUtcMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    parts.millisecond,
+  );
+  const matchingInstants = new Set<number>();
+  for (
+    let offsetMinutes = -14 * 60;
+    offsetMinutes <= 14 * 60;
+    offsetMinutes += 1
+  ) {
+    const candidateMs = wallClockUtcMs - offsetMinutes * 60_000;
+    const candidate = new Date(candidateMs);
+    const candidateParts = formatTimeZoneDateTimeParts(formatter, candidate);
+    if (offsetLessPartsMatch(parts, candidateParts)) {
+      matchingInstants.add(candidateMs);
+    }
+  }
+  return matchingInstants.size === 1
+    ? new Date([...matchingInstants][0] ?? Number.NaN).toISOString()
+    : undefined;
+}
+
+function resolveOneTimeDueAt(
+  dueAt: string,
+  timeZone: string,
+): string | undefined {
+  if (EXPLICIT_TIMEZONE_PATTERN.test(dueAt.trim())) {
+    const explicitInstant = new Date(dueAt);
+    return Number.isFinite(explicitInstant.getTime())
+      ? explicitInstant.toISOString()
+      : undefined;
+  }
+  return resolveOffsetLessDueAt(dueAt, timeZone);
+}
+
 export function createWorkflowScheduleRegistrationValidator(): WorkflowScheduleRegistrationValidator {
   return {
     async validate(
@@ -273,6 +423,16 @@ export function createWorkflowScheduleRegistrationValidator(): WorkflowScheduleR
           candidates,
           input.hasSafeReplyDestination,
         );
+      if (
+        input.minConfidence !== undefined &&
+        decision.confidence === undefined
+      ) {
+        return runtimeClarification(
+          ["workflow"],
+          "Which workflow should I schedule?",
+          decision.candidates,
+        );
+      }
       if (
         input.minConfidence !== undefined &&
         decision.confidence !== undefined &&
@@ -318,8 +478,11 @@ export function createWorkflowScheduleRegistrationValidator(): WorkflowScheduleR
         );
       }
       if (decision.schedule.kind === "one-time") {
-        const due = new Date(decision.schedule.dueAt);
-        if (!Number.isFinite(due.getTime())) {
+        const nextDueAt = resolveOneTimeDueAt(
+          decision.schedule.dueAt,
+          decision.schedule.timezone,
+        );
+        if (nextDueAt === undefined) {
           return runtimeClarification(
             ["time"],
             "When should this workflow run?",
@@ -328,7 +491,7 @@ export function createWorkflowScheduleRegistrationValidator(): WorkflowScheduleR
         return {
           status: "ready",
           decision,
-          nextDueAt: due.toISOString(),
+          nextDueAt,
           ...(workflowSourceJson(workflow.source) === undefined
             ? {}
             : { workflowSource: workflowSourceJson(workflow.source) }),

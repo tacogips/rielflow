@@ -491,6 +491,12 @@ bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-sched
 **Blockers**: None.
 **Notes**: Addressed Step 7 mid findings by catching schedule-registration resolver, validation, reply, and persistence exceptions after the event receipt reaches `mapped`, updating the receipt to `failed` instead of leaving it stuck. Runtime-derived schedule clarifications now use the same safe reply destination gate as resolver-authored clarifications and refuse when no safe reply path exists. Added regression coverage for schedule persistence failure receipt status and unsafe runtime clarification refusal. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registration.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
 
+### Session: 2026-05-18 22:50
+**Tasks Completed**: Recent-change blocking fixes for TASK-003 schedule registration validation.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Preserved completed feature history while recording the focused `active/schedule-registration-blocking-fixes` follow-up. Configured `minConfidence` now requires numeric resolver confidence, and offset-less one-time `dueAt` values resolve through `decision.schedule.timezone` instead of host-local `Date` parsing. Verification passed: `bun test src/events/workflow-schedule-registration.test.ts`; `bun run typecheck`; `bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts`; `bun run lint:biome` with only pre-existing warnings in `src/workflow/engine/*`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+
 ## Progress Log Expectations
 
 - Update this log after each implementation session.
