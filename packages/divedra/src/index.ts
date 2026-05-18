@@ -29,6 +29,17 @@ import {
   type AutoImprovePolicyInput,
 } from "divedra-core";
 import {
+  executeWorkflowSelfImprove as executeWorkflowSelfImproveCore,
+  getWorkflowSelfImproveReport as getWorkflowSelfImproveReportCore,
+  listWorkflowSelfImproveReports as listWorkflowSelfImproveReportsCore,
+  type ExecuteWorkflowSelfImproveInput,
+  type WorkflowSelfImproveReport,
+  type WorkflowSelfImproveReportLookupInput,
+  type WorkflowSelfImproveReportListInput,
+  type WorkflowSelfImproveReportSummary,
+  type WorkflowSelfImproveResult,
+} from "divedra-core";
+import {
   loadSession,
   type SessionStoreOptions,
 } from "divedra-core";
@@ -131,6 +142,20 @@ export interface WorkflowExecutionClient {
     request?: WorkflowExecutionClientRequest,
   ): Promise<WorkflowExecutionClientResult>;
 }
+
+interface GraphqlTransportOptions {
+  readonly endpoint?: string;
+  readonly authToken?: string;
+  readonly managerSessionId?: string;
+  readonly fetchImpl?: typeof fetch;
+}
+
+type ExecuteWorkflowSelfImproveLibraryInput =
+  ExecuteWorkflowSelfImproveInput & GraphqlTransportOptions;
+type WorkflowSelfImproveReportLookupLibraryInput =
+  WorkflowSelfImproveReportLookupInput & GraphqlTransportOptions;
+type WorkflowSelfImproveReportListLibraryInput =
+  WorkflowSelfImproveReportListInput & GraphqlTransportOptions;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -510,6 +535,211 @@ export async function rerunWorkflow(input: RerunWorkflowInput): Promise<{
   };
 }
 
+export async function executeWorkflowSelfImprove(
+  input: ExecuteWorkflowSelfImproveLibraryInput,
+): Promise<WorkflowSelfImproveResult> {
+  if (input.endpoint !== undefined) {
+    const { endpoint, authToken, managerSessionId, fetchImpl } = input;
+    const response = await executeGraphqlRequest({
+      endpoint,
+      document: `
+        mutation ExecuteWorkflowSelfImprove($input: ExecuteWorkflowSelfImproveInput!) {
+          executeWorkflowSelfImprove(input: $input) {
+            selfImproveId
+            workflowName
+            workflowId
+            reportPath
+            markdownReportPath
+            inputRunsPath
+            backupPath
+            purposeAchievement
+            patchStatus
+            validationStatus
+            gitCommitStatus
+            gitCommitHash
+            selectedSourceRuns {
+              sessionId
+              workflowId
+              workflowName
+              status
+              startedAt
+              updatedAt
+              artifactDir
+              lastError
+            }
+            findings {
+              severity
+              category
+              message
+              evidenceSessionIds
+              stepIds
+              nodeIds
+            }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          workflowName: input.workflowName,
+          ...(input.mode === undefined ? {} : { mode: input.mode }),
+          ...(input.sourceMode === undefined
+            ? {}
+            : { sourceMode: input.sourceMode }),
+          ...(input.limit === undefined ? {} : { limit: input.limit }),
+          ...(input.sessionIds === undefined
+            ? {}
+            : { sessionIds: input.sessionIds }),
+          ...(input.enableDisabled === undefined
+            ? {}
+            : { enableDisabled: input.enableDisabled }),
+        },
+      },
+      ...(authToken === undefined ? {} : { authToken }),
+      ...(managerSessionId === undefined ? {} : { managerSessionId }),
+      ...(fetchImpl === undefined ? {} : { fetchImpl }),
+    });
+    if (response.errors !== undefined && response.errors.length > 0) {
+      throw new Error(response.errors.map((entry) => entry.message).join("; "));
+    }
+    const data = requireObjectField(response.data, "GraphQL response.data");
+    return requireObjectField(
+      data["executeWorkflowSelfImprove"],
+      "executeWorkflowSelfImprove",
+    ) as unknown as WorkflowSelfImproveResult;
+  }
+  return executeWorkflowSelfImproveCore(input);
+}
+
+export async function getWorkflowSelfImproveReport(
+  input: WorkflowSelfImproveReportLookupLibraryInput,
+): Promise<WorkflowSelfImproveReport> {
+  if (input.endpoint !== undefined) {
+    const { endpoint, authToken, managerSessionId, fetchImpl } = input;
+    const response = await executeGraphqlRequest({
+      endpoint,
+      document: `
+        query WorkflowSelfImproveReport($workflowName: String!, $selfImproveId: String!) {
+          workflowSelfImproveReport(
+            workflowName: $workflowName
+            selfImproveId: $selfImproveId
+          ) {
+            selfImproveId
+            workflowName
+            workflowId
+            workflowDirectory
+            mode
+            sourceMode
+            sourceRuns {
+              sessionId
+              workflowId
+              workflowName
+              status
+              startedAt
+              updatedAt
+              artifactDir
+              lastError
+              nodeExecutions {
+                nodeId
+                stepId
+                nodeExecId
+                status
+                artifactDir
+                startedAt
+                endedAt
+                outputAttemptCount
+                outputValidationErrors
+              }
+            }
+            purposeAchievement
+            findings {
+              severity
+              category
+              message
+              evidenceSessionIds
+              stepIds
+              nodeIds
+            }
+            recommendedActions
+            backup
+            patch
+            gitCommit
+            createdAt
+          }
+        }
+      `,
+      variables: {
+        workflowName: input.workflowName,
+        selfImproveId: input.selfImproveId,
+      },
+      ...(authToken === undefined ? {} : { authToken }),
+      ...(managerSessionId === undefined ? {} : { managerSessionId }),
+      ...(fetchImpl === undefined ? {} : { fetchImpl }),
+    });
+    if (response.errors !== undefined && response.errors.length > 0) {
+      throw new Error(response.errors.map((entry) => entry.message).join("; "));
+    }
+    const data = requireObjectField(response.data, "GraphQL response.data");
+    const report = data["workflowSelfImproveReport"];
+    if (report === null || report === undefined) {
+      throw new Error(
+        `workflow self-improve report '${input.selfImproveId}' was not found`,
+      );
+    }
+    return requireObjectField(
+      report,
+      "workflowSelfImproveReport",
+    ) as unknown as WorkflowSelfImproveReport;
+  }
+  return getWorkflowSelfImproveReportCore(input);
+}
+
+export async function listWorkflowSelfImproveReports(
+  input: WorkflowSelfImproveReportListLibraryInput,
+): Promise<readonly WorkflowSelfImproveReportSummary[]> {
+  if (input.endpoint !== undefined) {
+    const { endpoint, authToken, managerSessionId, fetchImpl } = input;
+    const response = await executeGraphqlRequest({
+      endpoint,
+      document: `
+        query WorkflowSelfImproveReports($workflowName: String!) {
+          workflowSelfImproveReports(workflowName: $workflowName) {
+            items {
+              selfImproveId
+              workflowName
+              workflowId
+              reportPath
+              markdownReportPath
+              createdAt
+              findingCount
+              purposeAchievement
+            }
+            totalCount
+          }
+        }
+      `,
+      variables: { workflowName: input.workflowName },
+      ...(authToken === undefined ? {} : { authToken }),
+      ...(managerSessionId === undefined ? {} : { managerSessionId }),
+      ...(fetchImpl === undefined ? {} : { fetchImpl }),
+    });
+    if (response.errors !== undefined && response.errors.length > 0) {
+      throw new Error(response.errors.map((entry) => entry.message).join("; "));
+    }
+    const data = requireObjectField(response.data, "GraphQL response.data");
+    const connection = requireObjectField(
+      data["workflowSelfImproveReports"],
+      "workflowSelfImproveReports",
+    );
+    if (!Array.isArray(connection["items"])) {
+      throw new Error("workflowSelfImproveReports.items must be an array");
+    }
+    return connection[
+      "items"
+    ] as unknown as readonly WorkflowSelfImproveReportSummary[];
+  }
+  return listWorkflowSelfImproveReportsCore(input);
+}
+
 export {
   continueWorkflowFromHistory,
   type ContinueWorkflowFromHistoryInput,
@@ -609,6 +839,22 @@ export type {
   SupervisionStallWatch,
   SupervisionSummary,
   ValidationIssue,
+  ExecuteWorkflowSelfImproveInput,
+  WorkflowPurposeAchievement,
+  WorkflowSelfImproveReport,
+  WorkflowSelfImproveReportListInput,
+  WorkflowSelfImproveReportLookupInput,
+  WorkflowSelfImproveReportSummary,
+  WorkflowSelfImproveResult,
+  WorkflowSelfImproveBackupResult,
+  WorkflowSelfImproveFinding,
+  WorkflowSelfImproveGitCommitResult,
+  WorkflowSelfImproveMode,
+  WorkflowSelfImprovePatchResult,
+  WorkflowSelfImprovePolicy,
+  WorkflowSelfImproveSourceNodeExecution,
+  WorkflowSelfImproveSourceMode,
+  WorkflowSelfImproveSourceRun,
   WorkflowPatchRevisionInput,
   WorkflowPatchRevisionRecord,
   WorkflowNodeAddonRef,

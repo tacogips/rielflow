@@ -1,4 +1,8 @@
 import type { WorkflowScopeSelector } from "../../../../src/workflow/types";
+import type {
+  WorkflowSelfImproveMode,
+  WorkflowSelfImproveSourceMode,
+} from "../../../../src/workflow/self-improve";
 import type { ParsedArgs } from "./storage-and-options";
 import {
   parseAutoImprovePolicyFromCliFlags,
@@ -77,6 +81,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let stepRunsFilterStepId: string | undefined;
   let userScope = false;
   let overwrite = false;
+  let selfImproveSourceMode: WorkflowSelfImproveSourceMode | undefined;
+  let selfImproveSessions: string[] = [];
+  let selfImproveMode: WorkflowSelfImproveMode | undefined;
+  let selfImproveEnableDisabled = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -645,6 +653,58 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         stepRunsFilterStepId = parsedString.value;
         break;
       }
+      case "--since-last":
+        if (selfImproveSourceMode !== undefined) {
+          parseError = "--since-last cannot be combined with another self-improve source selector";
+          break;
+        }
+        selfImproveSourceMode = "since-last";
+        break;
+      case "--latest":
+        if (selfImproveSourceMode !== undefined) {
+          parseError = "--latest cannot be combined with another self-improve source selector";
+          break;
+        }
+        selfImproveSourceMode = "latest";
+        break;
+      case "--session": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        if (parsedString.value === undefined) {
+          parseError = `${token} requires a value`;
+          break;
+        }
+        if (
+          selfImproveSourceMode !== undefined &&
+          selfImproveSourceMode !== "explicit"
+        ) {
+          parseError = "--session cannot be combined with --since-last or --latest";
+          break;
+        }
+        selfImproveSourceMode = "explicit";
+        selfImproveSessions = [...selfImproveSessions, parsedString.value];
+        break;
+      }
+      case "--mode": {
+        const parsedMode = parseEnumOption(
+          token,
+          readNext(),
+          ["report-only", "report-and-auto-improve"],
+          "report-only or report-and-auto-improve",
+        );
+        if (parsedMode.error !== undefined) {
+          parseError = parsedMode.error;
+          break;
+        }
+        selfImproveMode = parsedMode.value;
+        break;
+      }
+      case "--enable-disabled":
+        selfImproveEnableDisabled = true;
+        break;
       default:
         break;
     }
@@ -774,6 +834,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         ? {}
         : { continuationAfterStepRunId }),
       ...(stepRunsFilterStepId === undefined ? {} : { stepRunsFilterStepId }),
+      ...(selfImproveSourceMode === undefined
+        ? {}
+        : { selfImproveSourceMode }),
+      ...(selfImproveSessions.length === 0 ? {} : { selfImproveSessions }),
+      ...(selfImproveMode === undefined ? {} : { selfImproveMode }),
+      selfImproveEnableDisabled,
     },
     ...(parseError === undefined ? {} : { error: parseError }),
   };

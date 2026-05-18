@@ -36,6 +36,7 @@ import type {
   WorkflowStepRef,
   WorkflowStepSessionPolicy,
   WorkflowStepTransition,
+  WorkflowSelfImproveMode,
   WorkflowSupervisionDefaults,
   WorkflowTimeoutPolicy,
 } from "./workflow-model";
@@ -534,6 +535,78 @@ function normalizeDefaults(
       );
       return containerRuntime === undefined ? {} : { containerRuntime };
     })(),
+    ...(() => {
+      const selfImprove = normalizeWorkflowSelfImproveDefaults(
+        raw["selfImprove"],
+        "workflow.defaults.selfImprove",
+        issues,
+      );
+      return selfImprove === undefined ? {} : { selfImprove };
+    })(),
+  };
+}
+
+function normalizeWorkflowSelfImproveDefaults(
+  raw: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowDefaults["selfImprove"] {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!isRecord(raw)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+  const allowedKeys = new Set(["enabled", "mode", "defaultLogLimit"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported self-improve defaults field",
+        ),
+      );
+    }
+  }
+
+  const enabledRaw = raw["enabled"];
+  let enabled: boolean | undefined;
+  if (enabledRaw !== undefined) {
+    if (typeof enabledRaw === "boolean") {
+      enabled = enabledRaw;
+    } else {
+      issues.push(makeIssue("error", `${path}.enabled`, "must be a boolean"));
+    }
+  }
+
+  const modeRaw = raw["mode"];
+  let mode: WorkflowSelfImproveMode | undefined;
+  if (modeRaw !== undefined) {
+    if (modeRaw === "report-only" || modeRaw === "report-and-auto-improve") {
+      mode = modeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.mode`,
+          "must be report-only or report-and-auto-improve",
+        ),
+      );
+    }
+  }
+
+  const defaultLogLimit =
+    raw["defaultLogLimit"] === undefined
+      ? undefined
+      : readPositiveIntegerField(raw, "defaultLogLimit", path, issues);
+  return {
+    ...(enabled === undefined ? {} : { enabled }),
+    ...(mode === undefined ? {} : { mode }),
+    ...(defaultLogLimit === undefined || defaultLogLimit === null
+      ? {}
+      : { defaultLogLimit }),
   };
 }
 

@@ -12,6 +12,7 @@ import type {
   DispatchSupervisorChatGraphqlInput,
   DispatchSupervisorConversationGraphqlInput,
   ExecuteWorkflowInput,
+  ExecuteWorkflowSelfImproveGraphqlInput,
   GraphqlRequestContext,
   GraphqlSchemaDependencies,
   LlmSessionMessagesSelectionInput,
@@ -28,6 +29,8 @@ import type {
   WorkflowCatalogOverviewGraphqlInput,
   WorkflowExecutionsQueryInput,
   WorkflowStatusOverviewGraphqlInput,
+  WorkflowSelfImproveReportGraphqlInput,
+  WorkflowSelfImproveReportsGraphqlInput,
 } from "../graphql/types";
 import type { WorkflowOverviewStatus } from "../workflow/overview";
 import type { WorkflowScopeSelector } from "../workflow/types";
@@ -299,6 +302,20 @@ export function createExecutableGraphqlSchema(
             context,
           );
         },
+        workflowSelfImproveReport(
+          _parent: unknown,
+          args: WorkflowSelfImproveReportGraphqlInput,
+          context: GraphqlRequestContext,
+        ) {
+          return schema.query.workflowSelfImproveReport(args, context);
+        },
+        workflowSelfImproveReports(
+          _parent: unknown,
+          args: WorkflowSelfImproveReportsGraphqlInput,
+          context: GraphqlRequestContext,
+        ) {
+          return schema.query.workflowSelfImproveReports(args, context);
+        },
       },
       Mutation: {
         createWorkflowDefinition(
@@ -331,6 +348,16 @@ export function createExecutableGraphqlSchema(
           context: GraphqlRequestContext,
         ) {
           return schema.mutation.executeWorkflow(args.input, context);
+        },
+        executeWorkflowSelfImprove(
+          _parent: unknown,
+          args: { readonly input: ExecuteWorkflowSelfImproveGraphqlInput },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.executeWorkflowSelfImprove(
+            args.input,
+            context,
+          );
         },
         resumeWorkflowExecution(
           _parent: unknown,

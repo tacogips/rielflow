@@ -51,6 +51,13 @@ import type {
   ValidationIssue,
   WorkflowScopeSelector,
 } from "../workflow/types";
+import type {
+  WorkflowSelfImproveMode,
+  WorkflowSelfImproveReport,
+  WorkflowSelfImproveReportSummary,
+  WorkflowSelfImproveResult,
+  WorkflowSelfImproveSourceMode,
+} from "../workflow/self-improve";
 import type { CommunicationService } from "../workflow/communication-service";
 import type { EventSupervisedRunRecord } from "../events/types";
 import type {
@@ -78,6 +85,7 @@ export interface GraphqlRequestContext
   readonly fixedResolvedWorkflowSource?: ResolvedWorkflowSource;
   readonly noExec?: boolean;
   readonly eventRoot?: string;
+  readonly selfImproveLogRoot?: string;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
 }
 
@@ -387,6 +395,29 @@ export interface WorkflowExecutionStepRunsPayload {
   readonly stepRuns: readonly WorkflowExecutionStepRunView[];
 }
 
+export interface ExecuteWorkflowSelfImproveGraphqlInput {
+  readonly workflowName: string;
+  readonly mode?: WorkflowSelfImproveMode;
+  readonly sourceMode?: WorkflowSelfImproveSourceMode;
+  readonly limit?: number;
+  readonly sessionIds?: readonly string[];
+  readonly enableDisabled?: boolean;
+}
+
+export interface WorkflowSelfImproveReportGraphqlInput {
+  readonly workflowName: string;
+  readonly selfImproveId: string;
+}
+
+export interface WorkflowSelfImproveReportsGraphqlInput {
+  readonly workflowName: string;
+}
+
+export interface WorkflowSelfImproveReportConnection {
+  readonly items: readonly WorkflowSelfImproveReportSummary[];
+  readonly totalCount: number;
+}
+
 export interface CancelWorkflowExecutionInput {
   readonly workflowExecutionId: string;
 }
@@ -576,6 +607,14 @@ export interface GraphqlQueryRoot {
     input: WorkflowExecutionStepRunsQueryInput,
     context?: GraphqlRequestContext,
   ): Promise<WorkflowExecutionStepRunsPayload>;
+  workflowSelfImproveReport(
+    input: WorkflowSelfImproveReportGraphqlInput,
+    context?: GraphqlRequestContext,
+  ): Promise<WorkflowSelfImproveReport | null>;
+  workflowSelfImproveReports(
+    input: WorkflowSelfImproveReportsGraphqlInput,
+    context?: GraphqlRequestContext,
+  ): Promise<WorkflowSelfImproveReportConnection>;
   workflowExecutions(
     input: WorkflowExecutionsQueryInput,
     context?: GraphqlRequestContext,
@@ -631,6 +670,10 @@ export interface GraphqlMutationRoot {
     input: ExecuteWorkflowInput,
     context?: GraphqlRequestContext,
   ): Promise<ExecuteWorkflowPayload>;
+  executeWorkflowSelfImprove(
+    input: ExecuteWorkflowSelfImproveGraphqlInput,
+    context?: GraphqlRequestContext,
+  ): Promise<WorkflowSelfImproveResult>;
   resumeWorkflowExecution(
     input: ResumeWorkflowExecutionInput,
     context?: GraphqlRequestContext,

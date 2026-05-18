@@ -15,6 +15,14 @@ system-workflow direction but sets automatic improvement off and restarts failed
 targets only up to a finite limit. See
 `design-docs/specs/design-event-supervisor-control.md`.
 
+Dedicated workflow self-improve is also separate from auto improve mode. It is
+a retrospective analysis/reporting service that inspects recent completed or
+failed workflow runs after they exist, writes workflow-structure and prompt
+reports, and may optionally patch the canonical workflow bundle with backups
+and git commits. It does not supervise a live target run and does not replace
+`workflow run --auto-improve`. See
+`design-docs/specs/design-self-improve.md`.
+
 In this mode:
 
 - a target workflow execution is launched

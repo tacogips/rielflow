@@ -346,6 +346,42 @@ Workflow bundles can set supervision defaults in `workflow.defaults.supervision`
 and long-running steps can override stall detection with `steps[].stallTimeoutMs`
 or node payload `stallTimeoutMs`; CLI flags still take precedence.
 
+`workflow self-improve` is a separate retrospective feature. It reads recent
+workflow execution records, writes durable reports about purpose achievement,
+workflow structure, and prompts, and can be explicitly run in report-only or
+report-and-auto-improve mode:
+
+```bash
+bun run src/main.ts workflow self-improve <workflow-name> \
+  --workflow-definition-dir ./examples \
+  --latest \
+  --limit 10 \
+  --mode report-only \
+  --output json
+```
+
+Workflow defaults live under `workflow.defaults.selfImprove` with `enabled`,
+`mode`, and `defaultLogLimit`. Source selection defaults to runs since the last
+successful self-improve marker, or the latest configured limit when no marker
+exists. Use `--since-last`, `--latest`, or repeated `--session <session-id>` to
+choose the source runs explicitly. `DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT` changes
+the global fallback, `--limit` overrides it for one call, and
+`DIVEDRA_SELF_IMPROVE_LOG_ROOT` can move the report store from the default
+`~/.divedra/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
+Disabled workflows reject self-improve unless the caller passes
+`--enable-disabled`.
+
+`report-and-auto-improve` creates a workflow-directory backup before any
+canonical workflow write, validates changes, records patch status, restores the
+backup if validation or patching fails, and creates a local git commit for
+git-managed workflow changes without pushing. The same core service is exposed
+through GraphQL `executeWorkflowSelfImprove` plus
+`workflowSelfImproveReport`/`workflowSelfImproveReports`, and through library
+APIs `executeWorkflowSelfImprove`, `getWorkflowSelfImproveReport`, and
+`listWorkflowSelfImproveReports`. Endpoint-backed CLI calls use the GraphQL
+mutation while `serve --read-only` and `serve --no-exec` reject self-improve
+execution.
+
 Supervised event and GraphQL runs are tracked by a deterministic in-process
 runner pool. Use `runnerPoolRunId`, `supervisedRunId`, or
 `workflowExecutionId` as the strongest identifiers for live wait, cancel, and

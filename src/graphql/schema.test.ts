@@ -70,6 +70,34 @@ function makeDefaultTemplateScenario(): MockNodeScenario {
   };
 }
 
+async function createSelfImproveGraphqlFixture(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: input.workflowName,
+    description: "self improve GraphQL fixture",
+    defaults: {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      selfImprove: { enabled: true, mode: "report-only", defaultLogLimit: 10 },
+    },
+    managerStepId: "manager",
+    entryStepId: "manager",
+    nodes: [{ id: "manager", nodeFile: "nodes/node-manager.json" }],
+    steps: [{ id: "manager", nodeId: "manager", role: "manager" }],
+  });
+  await writeJson(path.join(workflowDirectory, "nodes/node-manager.json"), {
+    id: "manager",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "Inspect the workflow run and return structured JSON.",
+    variables: {},
+  });
+}
+
 function createThirdPartyAddonResolver(): NodeAddonPayloadResolver {
   return (input) =>
     input.addon.name === "acme/echo-worker"
@@ -3985,5 +4013,101 @@ describe("createGraphqlSchema", () => {
 
       resolverSpy.mockRestore();
     });
+  });
+});
+
+describe("workflow self-improve GraphQL schema", () => {
+  test("executes, reads, lists, and validates runtime mode overrides", async () => {
+    const root = await makeTempDir();
+    const sessionStoreRoot = path.join(root, "sessions");
+    await createSelfImproveGraphqlFixture({
+      workflowRoot: root,
+      workflowName: "demo",
+    });
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-gql-self-improve",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager",
+          runtimeVariables: {},
+        }),
+        status: "completed" as const,
+        endedAt: "2026-05-18T04:00:00.000Z",
+        nodeExecutions: [
+          {
+            nodeId: "manager",
+            stepId: "manager",
+            nodeExecId: "exec-manager",
+            status: "succeeded" as const,
+            artifactDir: path.join(root, "artifacts", "exec-manager"),
+            startedAt: "2026-05-18T03:59:00.000Z",
+            endedAt: "2026-05-18T04:00:00.000Z",
+          },
+        ],
+      },
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+    const schema = createGraphqlSchema();
+    const context: GraphqlRequestContext = {
+      workflowRoot: root,
+      sessionStoreRoot,
+      selfImproveLogRoot: path.join(root, "self-improve"),
+    };
+
+    const result = await schema.mutation.executeWorkflowSelfImprove(
+      { workflowName: "demo", sourceMode: "latest" },
+      context,
+    );
+
+    expect(result.purposeAchievement).toBe("achieved");
+    await expect(
+      schema.query.workflowSelfImproveReport(
+        { workflowName: "demo", selfImproveId: result.selfImproveId },
+        context,
+      ),
+    ).resolves.toMatchObject({ selfImproveId: result.selfImproveId });
+    await expect(
+      schema.query.workflowSelfImproveReports(
+        { workflowName: "demo" },
+        context,
+      ),
+    ).resolves.toMatchObject({ totalCount: 1 });
+    await expect(
+      schema.mutation.executeWorkflowSelfImprove(
+        { workflowName: "demo", mode: "invalid" as never },
+        context,
+      ),
+    ).rejects.toThrow("invalid self-improve mode");
+    await expect(
+      schema.mutation.executeWorkflowSelfImprove(
+        { workflowName: "demo", sourceMode: "invalid" as never },
+        context,
+      ),
+    ).rejects.toThrow("invalid self-improve source mode");
+  });
+
+  test("rejects execution in read-only and no-exec contexts", async () => {
+    const root = await makeTempDir();
+    await createSelfImproveGraphqlFixture({
+      workflowRoot: root,
+      workflowName: "demo",
+    });
+    const schema = createGraphqlSchema();
+
+    await expect(
+      schema.mutation.executeWorkflowSelfImprove(
+        { workflowName: "demo" },
+        { workflowRoot: root, readOnly: true },
+      ),
+    ).rejects.toThrow("serve --read-only rejects workflow self-improve");
+    await expect(
+      schema.mutation.executeWorkflowSelfImprove(
+        { workflowName: "demo" },
+        { workflowRoot: root, noExec: true },
+      ),
+    ).rejects.toThrow("serve --no-exec rejects workflow self-improve");
   });
 });

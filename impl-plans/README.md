@@ -26,6 +26,8 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/self-improve` | Completed | `design-self-improve`, `architecture#self-improve`, `command#cli-workflow-self-improve-name`, `design-workflow-json#defaultsselfimprove` |
+| `active/schedule-registration-policy-surface-cleanup` | Completed | `design-scheduled-workflow-execution#event-binding-and-execution` |
 | `active/schedule-registration-safe-reply-gating` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#chat-replies` |
 | `active/schedule-registration-blocking-fixes` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#validation-rules` |
 | `active/workflow-status-active-session-loadability-issue-25` | Completed | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |

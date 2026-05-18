@@ -39,6 +39,21 @@ export interface WorkflowDefaults {
   readonly supervision?: WorkflowSupervisionDefaults;
   readonly timeoutPolicy?: WorkflowTimeoutPolicy;
   readonly containerRuntime?: ContainerRuntimeDefaults;
+  readonly selfImprove?: WorkflowSelfImproveDefaults;
+}
+
+export type WorkflowSelfImproveMode = "report-only" | "report-and-auto-improve";
+
+export interface WorkflowSelfImproveDefaults {
+  readonly enabled?: boolean;
+  readonly mode?: WorkflowSelfImproveMode;
+  readonly defaultLogLimit?: number;
+}
+
+export interface WorkflowSelfImprovePolicy {
+  readonly enabled: boolean;
+  readonly mode: WorkflowSelfImproveMode;
+  readonly defaultLogLimit: number;
 }
 
 export interface WorkflowSupervisionDefaults {

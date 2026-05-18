@@ -91,6 +91,54 @@ async function createWorkerOnlyWorkflowFixture(root: string) {
     },
   };
 }
+
+async function createSelfImproveServerFixture(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+  await writeFile(
+    path.join(workflowDirectory, "workflow.json"),
+    `${JSON.stringify(
+      {
+        workflowId: input.workflowName,
+        description: "self improve server fixture",
+        defaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+          selfImprove: {
+            enabled: true,
+            mode: "report-only",
+            defaultLogLimit: 10,
+          },
+        },
+        managerStepId: "manager",
+        entryStepId: "manager",
+        nodes: [{ id: "manager", nodeFile: "nodes/node-manager.json" }],
+        steps: [{ id: "manager", nodeId: "manager", role: "manager" }],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(workflowDirectory, "nodes/node-manager.json"),
+    `${JSON.stringify(
+      {
+        id: "manager",
+        executionBackend: "codex-agent",
+        model: "gpt-5",
+        promptTemplate: "Inspect the workflow run and return structured JSON.",
+        variables: {},
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+}
 async function createWorkflowCallWorkflowFixture(root: string) {
   const workflowDir = path.join(root, "workflow-calls");
   await mkdir(path.join(workflowDir, "nodes"), { recursive: true });
@@ -781,6 +829,159 @@ describe("GraphQL HTTP transport", () => {
           ],
         },
       },
+    });
+  });
+
+  test("executes workflow self-improve over /graphql and exposes report queries", async () => {
+    const root = await makeTempDir();
+    const sessionStoreRoot = path.join(root, "sessions");
+    await createSelfImproveServerFixture({
+      workflowRoot: root,
+      workflowName: "demo",
+    });
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-http-self-improve",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager",
+          runtimeVariables: {},
+        }),
+        status: "completed" as const,
+        endedAt: "2026-05-18T04:00:00.000Z",
+        nodeExecutions: [
+          {
+            nodeId: "manager",
+            stepId: "manager",
+            nodeExecId: "exec-manager",
+            status: "succeeded" as const,
+            artifactDir: path.join(root, "artifacts", "exec-manager"),
+            startedAt: "2026-05-18T03:59:00.000Z",
+            endedAt: "2026-05-18T04:00:00.000Z",
+          },
+        ],
+      },
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+    const options = {
+      workflowRoot: root,
+      sessionStoreRoot,
+      selfImproveLogRoot: path.join(root, "self-improve"),
+      cwd: root,
+    };
+
+    const executeResponse = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: `
+            mutation SelfImprove($input: ExecuteWorkflowSelfImproveInput!) {
+              executeWorkflowSelfImprove(input: $input) {
+                selfImproveId
+                purposeAchievement
+                selectedSourceRuns { sessionId nodeExecutions { nodeExecId status } }
+              }
+            }
+          `,
+          variables: { input: { workflowName: "demo", sourceMode: "latest" } },
+        }),
+      }),
+      options,
+    );
+
+    expect(executeResponse.status).toBe(200);
+    const executed = (await executeResponse.json()) as {
+      readonly data: {
+        readonly executeWorkflowSelfImprove: {
+          readonly selfImproveId: string;
+          readonly purposeAchievement: string;
+        };
+      };
+    };
+    expect(executed.data.executeWorkflowSelfImprove).toMatchObject({
+      purposeAchievement: "achieved",
+    });
+
+    const listResponse = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: `
+            query SelfImproveReports($workflowName: String!, $selfImproveId: String!) {
+              workflowSelfImproveReports(workflowName: $workflowName) { totalCount }
+              workflowSelfImproveReport(
+                workflowName: $workflowName
+                selfImproveId: $selfImproveId
+              ) { selfImproveId }
+            }
+          `,
+          variables: {
+            workflowName: "demo",
+            selfImproveId:
+              executed.data.executeWorkflowSelfImprove.selfImproveId,
+          },
+        }),
+      }),
+      options,
+    );
+
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toMatchObject({
+      data: {
+        workflowSelfImproveReports: { totalCount: 1 },
+        workflowSelfImproveReport: {
+          selfImproveId: executed.data.executeWorkflowSelfImprove.selfImproveId,
+        },
+      },
+    });
+  });
+
+  test("rejects workflow self-improve over /graphql when read-only or no-exec is active", async () => {
+    const root = await makeTempDir();
+    await createSelfImproveServerFixture({
+      workflowRoot: root,
+      workflowName: "demo",
+    });
+    const request = () =>
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: `
+            mutation SelfImprove($input: ExecuteWorkflowSelfImproveInput!) {
+              executeWorkflowSelfImprove(input: $input) { selfImproveId }
+            }
+          `,
+          variables: { input: { workflowName: "demo" } },
+        }),
+      });
+
+    const readOnlyResponse = await handleGraphqlRequest(request(), {
+      workflowRoot: root,
+      readOnly: true,
+    });
+    const noExecResponse = await handleGraphqlRequest(request(), {
+      workflowRoot: root,
+      noExec: true,
+    });
+
+    expect(readOnlyResponse.status).toBe(200);
+    await expect(readOnlyResponse.json()).resolves.toMatchObject({
+      errors: [
+        {
+          message: "serve --read-only rejects workflow self-improve execution",
+        },
+      ],
+    });
+    expect(noExecResponse.status).toBe(200);
+    await expect(noExecResponse.json()).resolves.toMatchObject({
+      errors: [
+        { message: "serve --no-exec rejects workflow self-improve execution" },
+      ],
     });
   });
 });
