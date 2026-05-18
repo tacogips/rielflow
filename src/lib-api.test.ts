@@ -1189,7 +1189,13 @@ describe("workflow self-improve library API", () => {
         };
         if (payload.query.includes("executeWorkflowSelfImprove")) {
           expect(payload.variables).toMatchObject({
-            input: { workflowName: "demo", mode: "report-only" },
+            input: {
+              workflowName: "demo",
+              mode: "report-only",
+              sourceMode: "explicit",
+              sessionIds: ["sess-remote"],
+              enableDisabled: true,
+            },
           });
           return new Response(
             JSON.stringify({
@@ -1272,6 +1278,9 @@ describe("workflow self-improve library API", () => {
       executeWorkflowSelfImprove({
         workflowName: "demo",
         mode: "report-only",
+        sourceMode: "explicit",
+        sessionIds: ["sess-remote"],
+        enableDisabled: true,
         endpoint: "http://example.test/graphql",
         fetchImpl,
       }),

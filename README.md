@@ -369,18 +369,24 @@ the global fallback, `--limit` overrides it for one call, and
 `DIVEDRA_SELF_IMPROVE_LOG_ROOT` can move the report store from the default
 `~/.divedra/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
 Disabled workflows reject self-improve unless the caller passes
-`--enable-disabled`.
+`--enable-disabled`. Public CLI, GraphQL, and library inputs are validated
+before report creation or workflow writes; explicit session ids must be
+non-empty ids without path separators, and `sourceMode: "explicit"` requires at
+least one session id.
 
 `report-and-auto-improve` creates a workflow-directory backup before any
 canonical workflow write, validates changes, records patch status, restores the
 backup if validation or patching fails, and creates a local git commit for
-git-managed workflow changes without pushing. The same core service is exposed
-through GraphQL `executeWorkflowSelfImprove` plus
+git-managed workflow changes without pushing. Reports are still written for
+failed or reverted patch attempts, but the since-last marker advances only after
+a completed report whose patch and git-commit phases did not fail. The same
+core service is exposed through GraphQL `executeWorkflowSelfImprove` plus
 `workflowSelfImproveReport`/`workflowSelfImproveReports`, and through library
 APIs `executeWorkflowSelfImprove`, `getWorkflowSelfImproveReport`, and
-`listWorkflowSelfImproveReports`. Endpoint-backed CLI calls use the GraphQL
-mutation while `serve --read-only` and `serve --no-exec` reject self-improve
-execution.
+`listWorkflowSelfImproveReports`. Endpoint-backed CLI and library calls use the
+GraphQL mutation and preserve selected source-run node execution evidence in
+the returned report. `serve --read-only` and `serve --no-exec` reject
+self-improve execution.
 
 Supervised event and GraphQL runs are tracked by a deterministic in-process
 runner pool. Use `runnerPoolRunId`, `supervisedRunId`, or

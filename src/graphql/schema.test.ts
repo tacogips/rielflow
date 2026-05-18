@@ -4087,6 +4087,12 @@ describe("workflow self-improve GraphQL schema", () => {
         context,
       ),
     ).rejects.toThrow("invalid self-improve source mode");
+    await expect(
+      schema.mutation.executeWorkflowSelfImprove(
+        { workflowName: "demo", sourceMode: "explicit" },
+        context,
+      ),
+    ).rejects.toThrow("requires at least one session id");
   });
 
   test("rejects execution in read-only and no-exec contexts", async () => {

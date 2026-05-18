@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -76,6 +83,35 @@ describe("applyWorkflowSelfImprovePatch", () => {
     await expect(
       readFile(path.join(workflowDirectory, "generated/new-node.json"), "utf8"),
     ).rejects.toThrow();
+  });
+
+  test("preserves repository metadata while restoring backup", async () => {
+    const root = await makeTempDir();
+    const { workflowDirectory, backupPath } = await createWorkflowFixture(root);
+    await mkdir(path.join(workflowDirectory, ".git"), { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, ".git", "config"),
+      "[core]\n\trepositoryformatversion = 0\n",
+      "utf8",
+    );
+
+    const result = await applyWorkflowSelfImprovePatch({
+      workflowDirectory,
+      backupPath,
+      operations: [
+        {
+          relativePath: "nodes/node-manager.json",
+          content: '{"promptTemplate":"expanded prompt"}\n',
+        },
+      ],
+      validate: async () => false,
+    });
+
+    expect(result.status).toBe("patch-reverted");
+    await expect(
+      readFile(path.join(workflowDirectory, ".git", "config"), "utf8"),
+    ).resolves.toContain("repositoryformatversion");
+    await expect(stat(path.join(backupPath, ".git"))).rejects.toThrow();
   });
 
   test("restores backup when a post-write patch failure is thrown", async () => {

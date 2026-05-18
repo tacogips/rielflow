@@ -6,6 +6,7 @@ import { analyzeWorkflowSelfImprove } from "./analyzer";
 import {
   parseWorkflowSelfImproveSourceMode,
   resolveWorkflowSelfImprovePolicy,
+  validateWorkflowSelfImprovePublicInput,
 } from "./config";
 import { commitWorkflowSelfImproveChanges } from "./git";
 import {
@@ -106,15 +107,28 @@ function createSelfImproveId(now: string): string {
   return `sim-${stamp}-${randomBytes(4).toString("hex")}`;
 }
 
-function sourceModeForInput(
-  input: ExecuteWorkflowSelfImproveInput,
-): WorkflowSelfImproveSourceMode {
+function sourceModeForInput(input: {
+  readonly sourceMode?: WorkflowSelfImproveSourceMode;
+  readonly sessionIds?: readonly string[];
+}): WorkflowSelfImproveSourceMode {
   if (input.sourceMode !== undefined) {
     return parseWorkflowSelfImproveSourceMode(input.sourceMode);
   }
   return input.sessionIds === undefined || input.sessionIds.length === 0
     ? "since-last-or-latest"
     : "explicit";
+}
+
+function shouldCommitPatch(patch: WorkflowSelfImproveReport["patch"]): boolean {
+  return patch.status === "applied" && patch.changedFiles.length > 0;
+}
+
+function shouldAdvanceMarker(report: WorkflowSelfImproveReport): boolean {
+  return (
+    report.patch.status !== "failed" &&
+    report.patch.status !== "patch-reverted" &&
+    report.gitCommit.status !== "failed"
+  );
 }
 
 async function validateLoadedBundle(input: ExecuteWorkflowSelfImproveInput) {
@@ -128,22 +142,26 @@ async function validateLoadedBundle(input: ExecuteWorkflowSelfImproveInput) {
 export async function executeWorkflowSelfImprove(
   input: ExecuteWorkflowSelfImproveInput,
 ): Promise<WorkflowSelfImproveResult> {
-  const loaded = await validateLoadedBundle(input);
+  const publicInput = validateWorkflowSelfImprovePublicInput(input);
+  const loaded = await validateLoadedBundle({
+    ...input,
+    workflowName: publicInput.workflowName,
+  });
   const workflow = loaded.bundle.workflow;
   const policy = resolveWorkflowSelfImprovePolicy({
     ...(workflow.defaults.selfImprove === undefined
       ? {}
       : { defaults: workflow.defaults.selfImprove }),
-    ...(input.mode === undefined ? {} : { mode: input.mode }),
-    ...(input.limit === undefined ? {} : { limit: input.limit }),
-    ...(input.enableDisabled === undefined
+    ...(publicInput.mode === undefined ? {} : { mode: publicInput.mode }),
+    ...(publicInput.limit === undefined ? {} : { limit: publicInput.limit }),
+    ...(publicInput.enableDisabled === undefined
       ? {}
-      : { enableDisabled: input.enableDisabled }),
+      : { enableDisabled: publicInput.enableDisabled }),
     ...(input.env === undefined ? {} : { env: input.env }),
   });
   if (!policy.enabled) {
     throw new Error(
-      `self-improve is disabled for workflow '${input.workflowName}'; pass enableDisabled to run explicitly`,
+      `self-improve is disabled for workflow '${publicInput.workflowName}'; pass enableDisabled to run explicitly`,
     );
   }
 
@@ -155,7 +173,7 @@ export async function executeWorkflowSelfImprove(
     workflowDirectory: loaded.workflowDirectory,
     selfImproveId,
   });
-  const sourceMode = sourceModeForInput(input);
+  const sourceMode = sourceModeForInput(publicInput);
   const marker = await readWorkflowSelfImproveMarker({
     logRoot,
     workflowDirectory: loaded.workflowDirectory,
@@ -172,9 +190,9 @@ export async function executeWorkflowSelfImprove(
     workflowId: workflow.workflowId,
     sourceMode,
     limit: policy.defaultLogLimit,
-    ...(input.sessionIds === undefined
+    ...(publicInput.sessionIds === undefined
       ? {}
-      : { explicitSessionIds: input.sessionIds }),
+      : { explicitSessionIds: publicInput.sessionIds }),
     ...(marker === undefined ? {} : { marker }),
     availableRuns,
   });
@@ -201,7 +219,7 @@ export async function executeWorkflowSelfImprove(
           }),
           validate: async () => {
             const reloaded = await loadWorkflowFromCatalog(
-              input.workflowName,
+              publicInput.workflowName,
               input,
             );
             return reloaded.ok;
@@ -212,12 +230,14 @@ export async function executeWorkflowSelfImprove(
           changedFiles: [],
           validationStatus: "not-run" as const,
         };
-  const gitCommit = await commitWorkflowSelfImproveChanges({
-    workflowDirectory: loaded.workflowDirectory,
-    workflowName: loaded.workflowName,
-    selfImproveId,
-    changedFiles: patch.changedFiles,
-  });
+  const gitCommit = shouldCommitPatch(patch)
+    ? await commitWorkflowSelfImproveChanges({
+        workflowDirectory: loaded.workflowDirectory,
+        workflowName: loaded.workflowName,
+        selfImproveId,
+        changedFiles: patch.changedFiles,
+      })
+    : { status: "not-git-managed" as const };
 
   const report: WorkflowSelfImproveReport = {
     selfImproveId,
@@ -240,18 +260,20 @@ export async function executeWorkflowSelfImprove(
     sourceRuns: selectedSourceRuns,
     report,
   });
-  await writeWorkflowSelfImproveMarker({
-    logRoot,
-    executionDirectory,
-    marker: {
-      selfImproveId,
-      workflowName: loaded.workflowName,
-      workflowId: workflow.workflowId,
-      workflowDirectory: loaded.workflowDirectory,
-      completedAt: now,
-      sourceSessionIds: selectedSourceRuns.map((run) => run.sessionId),
-    },
-  });
+  if (shouldAdvanceMarker(report)) {
+    await writeWorkflowSelfImproveMarker({
+      logRoot,
+      executionDirectory,
+      marker: {
+        selfImproveId,
+        workflowName: loaded.workflowName,
+        workflowId: workflow.workflowId,
+        workflowDirectory: loaded.workflowDirectory,
+        completedAt: now,
+        sourceSessionIds: selectedSourceRuns.map((run) => run.sessionId),
+      },
+    });
+  }
 
   return {
     selfImproveId,

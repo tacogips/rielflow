@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { validatePureWorkflowBundle } from "../validate";
-import { resolveWorkflowSelfImprovePolicy } from "./config";
+import {
+  resolveWorkflowSelfImprovePolicy,
+  validateWorkflowSelfImprovePublicInput,
+} from "./config";
 
 function makeBundle(selfImprove: unknown) {
   return {
@@ -85,5 +88,54 @@ describe("workflow self-improve config", () => {
       mode: "report-and-auto-improve",
       defaultLogLimit: 9,
     });
+  });
+
+  test("normalizes valid command and API overrides before service side effects", () => {
+    expect(
+      validateWorkflowSelfImprovePublicInput({
+        workflowName: " demo ",
+        mode: "report-only",
+        sourceMode: "explicit",
+        limit: 3,
+        sessionIds: [" session-a "],
+        enableDisabled: true,
+      }),
+    ).toEqual({
+      workflowName: "demo",
+      mode: "report-only",
+      sourceMode: "explicit",
+      limit: 3,
+      sessionIds: ["session-a"],
+      enableDisabled: true,
+      commandApiOverrides: [
+        "mode",
+        "sourceMode",
+        "limit",
+        "sessionIds",
+        "enableDisabled",
+      ],
+    });
+  });
+
+  test("rejects invalid public source selectors and session ids", () => {
+    expect(() =>
+      validateWorkflowSelfImprovePublicInput({
+        workflowName: "demo",
+        sourceMode: "explicit",
+      }),
+    ).toThrow("requires at least one session id");
+    expect(() =>
+      validateWorkflowSelfImprovePublicInput({
+        workflowName: "demo",
+        sourceMode: "latest",
+        sessionIds: ["session-a"],
+      }),
+    ).toThrow("require sourceMode 'explicit'");
+    expect(() =>
+      validateWorkflowSelfImprovePublicInput({
+        workflowName: "demo",
+        sessionIds: ["../session-a"],
+      }),
+    ).toThrow("path separators are not allowed");
   });
 });

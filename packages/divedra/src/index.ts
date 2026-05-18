@@ -566,6 +566,17 @@ export async function executeWorkflowSelfImprove(
               updatedAt
               artifactDir
               lastError
+              nodeExecutions {
+                nodeId
+                stepId
+                nodeExecId
+                status
+                artifactDir
+                startedAt
+                endedAt
+                outputAttemptCount
+                outputValidationErrors
+              }
             }
             findings {
               severity

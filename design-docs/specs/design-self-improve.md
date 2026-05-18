@@ -29,6 +29,24 @@ Self-improve:
 - always backs up the pre-change workflow bundle before any canonical workflow modification
 - commits modifications when the workflow directory is inside a git worktree
 
+## Issue-Resolution Hardening Criteria
+
+The feature review for "Review and improve dedicated self-improve feature" should preserve the above boundary while closing integration and safety gaps. Implementation and review should treat the following as acceptance gates:
+
+- every CLI, GraphQL, and library entrypoint must normalize to the same core service input, including workflow resolution, mode, source selection, limits, command/API overrides, disabled-workflow override, log root, and output shape
+- endpoint-backed CLI and library calls must use the typed GraphQL self-improve mutation/query contract rather than manager-message shortcuts
+- `serve --read-only` must allow report listing and reading but reject new self-improve execution because execution writes report artifacts and may mutate workflow files
+- `serve --no-exec` must reject self-improve execution because analysis can invoke agent backends, even in report-only mode
+- runtime validation must reject invalid public `mode`, `sourceMode`, `limit`, and explicit session inputs before any report, backup, patch, marker, or git side effect
+- source-run analysis must include workflow-level status plus node execution and output-validation evidence so the purpose-achievement judgment is tied to concrete run outcomes
+- `since-last-or-latest` must not reanalyze old runs when a successful marker exists but no newer runs are present; it should return an empty selected-run set for that workflow identity
+- explicit source sessions must belong to the resolved workflow identity; cross-workflow analysis remains out of scope until a separate design adds it
+- report-only mode must never create workflow backups, apply patches, or create git commits
+- report-and-auto-improve must create a backup before the first canonical workflow write, restore from that backup after validation failure or patch-time exception, and preserve repository metadata such as `.git`
+- prompt-file workflows must patch workflow-local `promptTemplateFile` targets directly instead of replacing them with large embedded prompt templates
+- git commit logic must stage only files changed by the current self-improve execution, must not push, and must not add automated-assistant attribution or co-authorship trailers
+- marker writes must represent successful self-improve completion for the resolved workflow identity; failed, reverted, or rejected executions must not advance the since-last boundary
+
 ## Workflow Configuration
 
 Workflow bundles may declare self-improve defaults under `workflow.defaults.selfImprove`.

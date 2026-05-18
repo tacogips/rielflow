@@ -7127,6 +7127,7 @@ describe("runCli", () => {
             mode: "report-only",
             sourceMode: "latest",
             limit: 3,
+            enableDisabled: true,
           },
         });
         return createJsonResponse({
@@ -7165,6 +7166,7 @@ describe("runCli", () => {
         "--latest",
         "--limit",
         "3",
+        "--enable-disabled",
         "--output",
         "json",
       ],

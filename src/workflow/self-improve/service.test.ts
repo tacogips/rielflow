@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -258,5 +265,24 @@ describe("executeWorkflowSelfImprove", () => {
         sourceMode: "bogus" as never,
       }),
     ).rejects.toThrow("invalid self-improve source mode");
+  });
+
+  test("rejects invalid explicit source overrides before report side effects", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const logRoot = path.join(root, "self-improve-log");
+    await writeDemoWorkflow(workflowRoot);
+
+    await expect(
+      executeWorkflowSelfImprove({
+        workflowName: "demo",
+        workflowRoot,
+        sessionStoreRoot: path.join(root, "sessions"),
+        selfImproveLogRoot: logRoot,
+        sourceMode: "explicit",
+      }),
+    ).rejects.toThrow("requires at least one session id");
+
+    await expect(readdir(logRoot)).rejects.toThrow();
   });
 });

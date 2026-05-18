@@ -484,7 +484,27 @@ export async function runCliWorkflowScope(
                 validationStatus
                 gitCommitStatus
                 gitCommitHash
-                selectedSourceRuns { sessionId workflowId workflowName status startedAt updatedAt artifactDir }
+                selectedSourceRuns {
+                  sessionId
+                  workflowId
+                  workflowName
+                  status
+                  startedAt
+                  updatedAt
+                  artifactDir
+                  lastError
+                  nodeExecutions {
+                    nodeId
+                    stepId
+                    nodeExecId
+                    status
+                    artifactDir
+                    startedAt
+                    endedAt
+                    outputAttemptCount
+                    outputValidationErrors
+                  }
+                }
                 findings { severity category message evidenceSessionIds stepIds nodeIds }
               }
             }

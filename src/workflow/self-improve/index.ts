@@ -1,6 +1,7 @@
 export {
   DEFAULT_SELF_IMPROVE_LOG_LIMIT,
   resolveWorkflowSelfImprovePolicy,
+  validateWorkflowSelfImprovePublicInput,
 } from "./config";
 export {
   executeWorkflowSelfImprove,
