@@ -26,6 +26,22 @@ export {
   type ScheduledEventManager,
 } from "./scheduled-event-manager";
 export {
+  createWorkflowScheduleRepository,
+  type WorkflowScheduleRepository,
+} from "./workflow-schedule-registry";
+export {
+  buildWorkflowScheduleOccurrenceId,
+  buildWorkflowScheduleScheduledEventId,
+  cancelWorkflowScheduleScheduledEvent,
+  createWorkflowScheduleDispatcher,
+  registerNextWorkflowScheduleDueEvent,
+  type WorkflowScheduleDispatcher,
+} from "./workflow-schedule-dispatch";
+export {
+  createWorkflowScheduleRegistrationValidator,
+  type WorkflowScheduleRegistrationValidator,
+} from "./workflow-schedule-registration";
+export {
   parseSupervisorChatCommandDecision,
   type SupervisorChatDecisionAction,
   type SupervisorChatCommandDecision,

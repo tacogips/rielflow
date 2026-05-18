@@ -138,7 +138,7 @@ function asInputMapping(value: unknown, label: string): EventInputMapping {
       ...(mirrorToHumanInput === undefined ? {} : { mirrorToHumanInput }),
     };
   }
-  if (value["mode"] === "template" && isJsonObject(value["template"])) {
+  if (value["mode"] === "template" && value["template"] !== undefined) {
     const mirrorToHumanInput = readOptionalBoolean(value, "mirrorToHumanInput");
     return {
       mode: "template",
@@ -154,7 +154,10 @@ function asInputMapping(value: unknown, label: string): EventInputMapping {
 function isSupervisorDispatchExecution(
   execution: EventWorkflowExecutionPolicy | undefined,
 ): boolean {
-  return execution?.mode === "supervisor-dispatch";
+  return (
+    execution?.mode === "supervisor-dispatch" ||
+    execution?.mode === "schedule-registration"
+  );
 }
 
 function asBinding(value: unknown, label: string): EventBinding {
@@ -170,7 +173,7 @@ function asBinding(value: unknown, label: string): EventBinding {
   const workflowName = readOptionalString(value, "workflowName");
   if (!isSupervisorDispatchExecution(execution) && workflowName === undefined) {
     throw new Error(
-      `${label} must include non-empty workflowName unless execution.mode is supervisor-dispatch`,
+      `${label} must include non-empty workflowName unless execution.mode is supervisor-dispatch or schedule-registration`,
     );
   }
   const match = value["match"];

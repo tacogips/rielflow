@@ -4,6 +4,8 @@ import {
 } from "../../../../src/events";
 import { emitEventFile } from "../../../../src/events/manual-emit";
 import { listEventReceipts, replayEventReceipt } from "../../../../src/events/receipt-ops";
+import { createWorkflowScheduleRepository } from "../../../../src/events/workflow-schedule-registry";
+import type { WorkflowScheduleStatus } from "../../../../src/events/types";
 import {
   DEFAULT_GRAPHQL_ENDPOINT,
   executeGraphqlRequest,
@@ -33,6 +35,22 @@ import {
   readMockScenarioOption,
 } from "./input-output-helpers";
 import { buildLocalCallStepOverrides } from "./workflow-graphql-formatters";
+
+const WORKFLOW_SCHEDULE_STATUSES = new Set<WorkflowScheduleStatus>([
+  "active",
+  "paused",
+  "completed",
+  "cancelled",
+  "failed",
+]);
+
+function parseWorkflowScheduleStatus(
+  value: string | undefined,
+): WorkflowScheduleStatus | undefined {
+  return value !== undefined && WORKFLOW_SCHEDULE_STATUSES.has(value as WorkflowScheduleStatus)
+    ? (value as WorkflowScheduleStatus)
+    : undefined;
+}
 
 export async function runCliGraphqlScope(
   context: RunCliScopeContext,
@@ -358,6 +376,117 @@ export async function runCliEventsScope(
       io.stderr(`events emit failed: ${message}`);
       return 1;
     }
+  }
+
+  if (command === "schedules") {
+    const schedulesCommand = target;
+    const scheduleId = positionals[3];
+    const repository = createWorkflowScheduleRepository(eventOptions);
+    if (schedulesCommand === "list") {
+      const status = parseWorkflowScheduleStatus(parsed.options.status);
+      if (parsed.options.status !== undefined && status === undefined) {
+        io.stderr(
+          "--status must be one of active, paused, completed, cancelled, or failed",
+        );
+        return 2;
+      }
+      try {
+        const schedules = await repository.list({
+          ...(parsed.options.sourceId === undefined
+            ? {}
+            : { sourceId: parsed.options.sourceId }),
+          ...(status === undefined ? {} : { status }),
+          ...(parsed.options.limit === undefined
+            ? {}
+            : { limit: parsed.options.limit }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, { schedules });
+        } else {
+          for (const schedule of schedules) {
+            io.stdout(
+              [
+                `schedule: ${schedule.scheduleId}`,
+                `source: ${schedule.sourceId}`,
+                `status: ${schedule.status}`,
+                `workflow: ${schedule.workflowName}`,
+                `kind: ${schedule.kind}`,
+                `nextDueAt: ${schedule.nextDueAt}`,
+              ].join(" "),
+            );
+          }
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events schedules list failed: ${message}`);
+        return 1;
+      }
+    }
+    if (schedulesCommand === "inspect") {
+      if (scheduleId === undefined) {
+        io.stderr("schedule id is required");
+        io.stderr("usage: divedra events schedules inspect <schedule-id>");
+        return 2;
+      }
+      try {
+        const schedule = await repository.load(scheduleId);
+        if (schedule === null) {
+          io.stderr(`workflow schedule not found: ${scheduleId}`);
+          return 1;
+        }
+        if (parsed.options.output === "json") {
+          emitJson(io, { schedule });
+        } else {
+          io.stdout(`schedule: ${schedule.scheduleId}`);
+          io.stdout(`status: ${schedule.status}`);
+          io.stdout(`workflow: ${schedule.workflowName}`);
+          io.stdout(`kind: ${schedule.kind}`);
+          io.stdout(`timezone: ${schedule.timezone}`);
+          io.stdout(`nextDueAt: ${schedule.nextDueAt}`);
+          io.stdout(`sourceReceiptId: ${schedule.sourceReceiptId}`);
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events schedules inspect failed: ${message}`);
+        return 1;
+      }
+    }
+    if (schedulesCommand === "cancel") {
+      if (scheduleId === undefined) {
+        io.stderr("schedule id is required");
+        io.stderr(
+          "usage: divedra events schedules cancel <schedule-id> [--reason <text>]",
+        );
+        return 2;
+      }
+      try {
+        const schedule = await repository.cancel({
+          scheduleId,
+          ...(parsed.options.reason === undefined
+            ? {}
+            : { reason: parsed.options.reason }),
+        });
+        if (parsed.options.output === "json") {
+          emitJson(io, { schedule });
+        } else {
+          io.stdout(
+            `schedule: ${schedule.scheduleId} status: ${schedule.status}`,
+          );
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        io.stderr(`events schedules cancel failed: ${message}`);
+        return 1;
+      }
+    }
+    io.stderr("unknown events schedules command");
+    io.stderr(
+      "usage: divedra events schedules <list|inspect|cancel> [schedule-id]",
+    );
+    return 2;
   }
 
   if (command === "list") {

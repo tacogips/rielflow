@@ -113,6 +113,33 @@ describe("scheduled event manager", () => {
     manager.stop();
   });
 
+  test("supports workflow-schedule events in the shared pool", async () => {
+    vi.useFakeTimers();
+    let now = new Date("2026-05-15T00:00:00.000Z");
+    const fired: string[] = [];
+    const manager = createScheduledEventManager({ now: () => now });
+
+    manager.register({
+      id: "workflow-schedule:sched_123",
+      kind: "workflow-schedule",
+      dueAt: "2026-05-15T00:00:01.000Z",
+      dedupeKey: "workflow-schedule:sched_123:occ-1",
+      payload: { scheduleId: "sched_123" },
+      fire: async (event) => {
+        fired.push(event.kind);
+      },
+    });
+
+    now = new Date("2026-05-15T00:00:01.000Z");
+    vi.advanceTimersByTime(1_000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fired).toEqual(["workflow-schedule"]);
+    expect(manager.get("workflow-schedule:sched_123")?.status).toBe("fired");
+    manager.stop();
+  });
+
   test("does not cancel events that are already firing", async () => {
     vi.useFakeTimers();
     let now = new Date("2026-05-15T00:00:00.000Z");

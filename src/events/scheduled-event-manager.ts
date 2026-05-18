@@ -1,4 +1,7 @@
-export type ScheduledEventKind = "cron" | "workflow-sleep";
+export type ScheduledEventKind =
+  | "cron"
+  | "workflow-sleep"
+  | "workflow-schedule";
 
 export type ScheduledEventStatus =
   | "pending"

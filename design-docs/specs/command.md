@@ -155,6 +155,9 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Inject a normalized or raw fixture event for local testing of binding matching, input mapping, dedupe, and workflow dispatch.
 - `events serve [--event-root <path>] [--endpoint <graphql-url>]`
   - Start cron, webhook, Matrix, chat, and web-chat event listeners.
+  - On startup, rehydrate active persisted workflow schedules and enqueue the
+    next due `workflow-schedule` occurrence through the shared scheduled event
+    manager when event listeners are enabled.
   - In local command-dispatch mode, starts workflow execution through `divedra workflow run` with a generated mapped-input JSON file.
   - In local library mode, invokes the library workflow execution client in-process.
   - With `--endpoint`, dispatches workflow execution through GraphQL and can run as a lightweight listener process.
@@ -162,6 +165,14 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - In deterministic supervisor mode, the local control path persists an async command/run record and applies workflow reference, start, status, progress, inbox/read, logs, export, stop/cancel, restart/rerun, and input/submit/resume operations through the in-process runner pool.
 - `events list [--source <id>] [--status <status>] [--limit <n>]`
   - Inspect persisted event receipt records.
+- `events schedules list [--source <id>] [--status <status>] [--limit <n>]`
+  - Inspect persisted chat-created workflow schedules without mutating them.
+- `events schedules inspect <schedule-id> [--output json]`
+  - Show the selected schedule record, next due occurrence, last execution
+    attempt, status, and resolved workflow reference.
+- `events schedules cancel <schedule-id> [--reason <text>]`
+  - Cancel an active or paused workflow schedule and cancel any pending
+    `workflow-schedule` event owned by that schedule.
 - `events replay <receipt-id> [--dry-run] [--reason <text>]`
   - Re-run mapping and dispatch for a persisted normalized event receipt using replay-specific event and dedupe identifiers.
   - `--dry-run` forwards the replay through workflow execution dry-run behavior.

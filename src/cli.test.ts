@@ -16,6 +16,7 @@ import {
   saveNodeExecutionToRuntimeDb,
   saveSessionSnapshotToRuntimeDb,
 } from "./workflow/runtime-db";
+import { createWorkflowScheduleRepository } from "./events/workflow-schedule-registry";
 import { createSessionState } from "./workflow/session";
 import { saveSession } from "./workflow/session-store";
 import {
@@ -6718,6 +6719,105 @@ describe("runCli", () => {
       idempotencyKey: "reply-cli-key",
       workflowExecutionId: "sess-reply-cli",
       providerMessageId: "message-cli",
+    });
+  });
+
+  test("events schedules list inspect and cancel persisted schedules", async () => {
+    const root = await makeTempDir();
+    const artifactRoot = path.join(root, "data", "workflow");
+    const rootDataDir = path.dirname(artifactRoot);
+    const repository = createWorkflowScheduleRepository({ rootDataDir });
+    const schedule = await repository.create({
+      sourceId: "chat",
+      bindingId: "schedule-chat",
+      sourceReceiptId: "evt-schedule-cli",
+      workflowName: "worker-only-single-step",
+      kind: "one-time",
+      timezone: "UTC",
+      dueAt: "2026-05-19T09:00:00.000Z",
+      nextDueAt: "2026-05-19T09:00:00.000Z",
+      workflowInput: { topic: "release" },
+    });
+    const deps = createCliDeps();
+    const listCapture = createIoCapture();
+    const inspectCapture = createIoCapture();
+    const cancelCapture = createIoCapture();
+
+    const listCode = await runCli(
+      [
+        "events",
+        "schedules",
+        "list",
+        "--artifact-root",
+        artifactRoot,
+        "--source",
+        "chat",
+        "--status",
+        "active",
+        "--output",
+        "json",
+      ],
+      listCapture.io,
+      deps,
+    );
+    const inspectCode = await runCli(
+      [
+        "events",
+        "schedules",
+        "inspect",
+        schedule.scheduleId,
+        "--artifact-root",
+        artifactRoot,
+        "--output",
+        "json",
+      ],
+      inspectCapture.io,
+      deps,
+    );
+    const cancelCode = await runCli(
+      [
+        "events",
+        "schedules",
+        "cancel",
+        schedule.scheduleId,
+        "--artifact-root",
+        artifactRoot,
+        "--reason",
+        "operator cleanup",
+        "--output",
+        "json",
+      ],
+      cancelCapture.io,
+      deps,
+    );
+    const listPayload = JSON.parse(listCapture.stdout.join("\n")) as {
+      schedules: readonly { scheduleId: string; status: string }[];
+    };
+    const inspectPayload = JSON.parse(inspectCapture.stdout.join("\n")) as {
+      schedule: { scheduleId: string; workflowName: string };
+    };
+    const cancelPayload = JSON.parse(cancelCapture.stdout.join("\n")) as {
+      schedule: { scheduleId: string; status: string; lastError: string };
+    };
+
+    expect(listCode).toBe(0);
+    expect(inspectCode).toBe(0);
+    expect(cancelCode).toBe(0);
+    expect(listCapture.stderr).toEqual([]);
+    expect(inspectCapture.stderr).toEqual([]);
+    expect(cancelCapture.stderr).toEqual([]);
+    expect(listPayload.schedules[0]).toMatchObject({
+      scheduleId: schedule.scheduleId,
+      status: "active",
+    });
+    expect(inspectPayload.schedule).toMatchObject({
+      scheduleId: schedule.scheduleId,
+      workflowName: "worker-only-single-step",
+    });
+    expect(cancelPayload.schedule).toMatchObject({
+      scheduleId: schedule.scheduleId,
+      status: "cancelled",
+      lastError: "operator cleanup",
     });
   });
 

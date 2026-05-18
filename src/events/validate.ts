@@ -23,6 +23,7 @@ import {
   validateChatSdkBindingCapabilities,
   validateChatSdkSource,
 } from "./validate-source-chat-sdk";
+import { validateScheduleRegistrationBinding } from "./validate-schedule-registration";
 import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
   isValidEventHttpPath,
@@ -785,7 +786,9 @@ function validateBinding(
     destinationsById,
     issues,
   );
-  const isDispatch = binding.execution?.mode === "supervisor-dispatch";
+  const isDispatch =
+    binding.execution?.mode === "supervisor-dispatch" ||
+    binding.execution?.mode === "schedule-registration";
   const workflowName = binding.workflowName?.trim();
   if (workflowName !== undefined && workflowName.length > 0) {
     if (!workflowNames.has(workflowName)) {
@@ -843,6 +846,7 @@ function validateBinding(
     workflowNames,
     issues,
   );
+  validateScheduleRegistrationBinding(binding, workflowNames, issues);
   validateMailboxBridge(binding, issues);
   validateChatSdkBindingCapabilities({ binding, source, issues });
   validateTaskPlanning(binding, issues);

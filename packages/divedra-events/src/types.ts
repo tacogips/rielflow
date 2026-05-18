@@ -200,14 +200,106 @@ export type EventInputMapping =
     }
   | {
       readonly mode: "template";
-      readonly template: JsonObject;
+      readonly template: unknown;
       readonly mirrorToHumanInput?: boolean;
     };
 
 export type EventExecutionMode =
   | "direct"
   | "supervised"
-  | "supervisor-dispatch";
+  | "supervisor-dispatch"
+  | "schedule-registration";
+
+export type WorkflowScheduleKind = "one-time" | "recurring";
+
+export type WorkflowScheduleStatus =
+  | "active"
+  | "paused"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export interface WorkflowScheduleCandidate extends JsonObject {
+  readonly workflowName: string;
+  readonly description?: string;
+  readonly confidence?: number;
+}
+
+export type WorkflowScheduleIntent =
+  | {
+      readonly kind: "one-time";
+      readonly timezone: string;
+      readonly dueAt: string;
+    }
+  | {
+      readonly kind: "recurring";
+      readonly timezone: string;
+      readonly cron: string;
+      readonly nextDueAt?: string;
+    };
+
+export interface WorkflowScheduleReadyDecision extends JsonObject {
+  readonly status: "ready";
+  readonly workflowName: string;
+  readonly confidence?: number;
+  readonly candidates?: readonly WorkflowScheduleCandidate[];
+  readonly schedule: WorkflowScheduleIntent;
+  readonly workflowInput: JsonObject;
+  readonly confirmationText: string;
+}
+
+export interface WorkflowScheduleClarificationDecision extends JsonObject {
+  readonly status: "needs-clarification";
+  readonly missing: readonly string[];
+  readonly candidates?: readonly WorkflowScheduleCandidate[];
+  readonly question: string;
+}
+
+export interface WorkflowScheduleRefusalDecision extends JsonObject {
+  readonly status: "refused";
+  readonly reason: string;
+  readonly message?: string;
+}
+
+export type WorkflowScheduleRegistrationDecision =
+  | WorkflowScheduleReadyDecision
+  | WorkflowScheduleClarificationDecision
+  | WorkflowScheduleRefusalDecision;
+
+export interface WorkflowScheduleRecord extends JsonObject {
+  readonly scheduleId: string;
+  readonly sourceId: string;
+  readonly bindingId: string;
+  readonly sourceReceiptId: string;
+  readonly workflowName: string;
+  readonly workflowSource?: JsonObject;
+  readonly kind: WorkflowScheduleKind;
+  readonly timezone: string;
+  readonly dueAt?: string;
+  readonly cron?: string;
+  readonly nextDueAt: string;
+  readonly status: WorkflowScheduleStatus;
+  readonly workflowInput: JsonObject;
+  readonly conversationId?: string;
+  readonly threadId?: string;
+  readonly actorId?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly lastExecutionId?: string;
+  readonly lastFiredAt?: string;
+  readonly lastOccurrenceId?: string;
+  readonly attemptCount: number;
+  readonly lastError?: string;
+}
+
+export interface EventWorkflowScheduleRegistrationPolicy extends JsonObject {
+  readonly mode: "schedule-registration";
+  readonly resolverWorkflowName: string;
+  readonly resolverNodeId: string;
+  readonly inputPath?: string;
+  readonly minConfidence?: number;
+  readonly timezonePath?: string;
+}
 
 export type EventSupervisorAction =
   | "start"
@@ -280,6 +372,11 @@ export interface EventWorkflowExecutionPolicy extends JsonObject {
    */
   readonly supervisorProfileId?: string;
   readonly supervisorWorkflowName?: string;
+  readonly resolverWorkflowName?: string;
+  readonly resolverNodeId?: string;
+  readonly inputPath?: string;
+  readonly minConfidence?: number;
+  readonly timezonePath?: string;
   readonly maxRestartsOnFailure?: number;
   readonly autoImprove?: boolean | AutoImprovePolicy;
   readonly control?: EventSupervisorControlPolicy;

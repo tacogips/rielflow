@@ -21,6 +21,7 @@ import {
   type EventSourceRateLimiter,
 } from "./source-rate-limit";
 import { createScheduledEventManager } from "./scheduled-event-manager";
+import { createWorkflowScheduleDispatcher } from "./workflow-schedule-dispatch";
 import type {
   EventSourceAdapter,
   EventSourceDiagnostic,
@@ -369,6 +370,12 @@ export function createEventListenerService(
       const routes: EventHttpRoute[] = [];
       let server: EventListenerServer | undefined;
       try {
+        await createWorkflowScheduleDispatcher(
+          triggerOptions,
+        ).rehydrateActiveSchedules({
+          ...triggerOptions,
+          scheduledEventManager,
+        });
         const enabledSources =
           configuration.sources.filter(isEventSourceEnabled);
         for (const source of enabledSources) {

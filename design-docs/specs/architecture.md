@@ -37,6 +37,12 @@ Current direction:
   of blocking the executor, and cron sources register their next occurrence
   through the same manager after each firing. See
   `design-docs/specs/design-scheduled-sleep-node-runtime.md`.
+- chat-created workflow schedules should register durable `workflow-schedule`
+  records through an LLM-driven schedule-registration workflow, then enqueue the
+  next due occurrence through the same scheduled event manager on registration,
+  recurring execution re-arm, and event listener startup. Due occurrences
+  dispatch through the existing event receipt and trigger-runner path. See
+  `design-docs/specs/design-scheduled-workflow-execution.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 
 ### Workflow Node Runtime Patches

@@ -1,0 +1,29 @@
+{
+  "id": "chat-sdk-slack-schedule-registration",
+  "sourceId": "chat-sdk-slack",
+  "outputDestinations": ["chat-sdk-slack-replies"],
+  "match": {
+    "eventType": "chat.message",
+    "conversationId": "schedule-demo"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "provider": "{{event.input.provider}}",
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "mode": "schedule-registration",
+    "resolverWorkflowName": "dispatcher-llm-resolver-stub",
+    "resolverNodeId": "resolver-worker",
+    "minConfidence": 0.8,
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}

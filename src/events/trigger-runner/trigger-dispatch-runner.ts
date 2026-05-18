@@ -1,3 +1,6 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: trigger dispatch modes share receipt and supervisor state.
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { createWorkflowExecutionClient } from "../../lib";
 import { runWorkflow } from "../../workflow/engine";
 import { createWorkflowSupervisorClient } from "../../workflow/supervisor-client";
@@ -45,6 +48,11 @@ import {
 } from "../trigger-runner-replies";
 import type { EventConfiguration, ExternalEventEnvelope } from "../types";
 import type { WorkflowTriggerRunnerOptions } from "../workflow-trigger-runner-options";
+import { createWorkflowScheduleRegistrationValidator } from "../workflow-schedule-registration";
+import {
+  createWorkflowScheduleRepository,
+  type WorkflowScheduleRepository,
+} from "../workflow-schedule-registry";
 import type {
   WorkflowTriggerDispatchInput,
   WorkflowTriggerResult,
@@ -66,11 +74,241 @@ const defaultEventReceiptStore: EventReceiptStore = {
   update: updateEventReceipt,
 };
 
+function hasSafeScheduleReplyDestination(input: {
+  readonly binding: WorkflowTriggerDispatchInput["binding"];
+  readonly event: ExternalEventEnvelope;
+  readonly options: WorkflowTriggerRunnerOptions;
+}): boolean {
+  return (
+    input.options.eventReplyDispatcher !== undefined &&
+    input.event.conversation?.id !== undefined &&
+    input.binding.outputDestinations !== undefined &&
+    input.binding.outputDestinations.length > 0
+  );
+}
+
+async function readResolverWorkflowOutput(input: {
+  readonly workflowName: string;
+  readonly resolverNodeId: string;
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly options: WorkflowTriggerRunnerOptions;
+}): Promise<unknown> {
+  const result = await runWorkflow(input.workflowName, {
+    ...input.options,
+    runtimeVariables: input.runtimeVariables,
+  });
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  const execution = [...result.value.session.nodeExecutions]
+    .reverse()
+    .find(
+      (candidate) =>
+        candidate.status === "succeeded" &&
+        (candidate.nodeId === input.resolverNodeId ||
+          candidate.stepId === input.resolverNodeId),
+    );
+  if (execution === undefined) {
+    throw new Error(
+      `schedule resolver node '${input.resolverNodeId}' did not produce a succeeded output`,
+    );
+  }
+  const outputRaw = await readFile(
+    path.join(execution.artifactDir, "output.json"),
+    "utf8",
+  );
+  return JSON.parse(outputRaw) as unknown;
+}
+
+async function runScheduleRegistrationMode(input: {
+  readonly binding: WorkflowTriggerDispatchInput["binding"];
+  readonly event: ExternalEventEnvelope;
+  readonly receipt: WorkflowTriggerResult["receipt"];
+  readonly artifactDir: string;
+  readonly mapping: ReturnType<typeof mapEventToWorkflowInput>;
+  readonly receiptStore: EventReceiptStore;
+  readonly repository: WorkflowScheduleRepository;
+  readonly options: WorkflowTriggerRunnerOptions;
+}): Promise<WorkflowTriggerResult> {
+  const execution = input.binding.execution;
+  const resolverWorkflowName = execution?.resolverWorkflowName?.trim();
+  const resolverNodeId = execution?.resolverNodeId?.trim();
+  if (
+    resolverWorkflowName === undefined ||
+    resolverWorkflowName.length === 0 ||
+    resolverNodeId === undefined ||
+    resolverNodeId.length === 0
+  ) {
+    const failed = await input.receiptStore.update(
+      {
+        record: input.receipt,
+        artifactDir: input.artifactDir,
+        status: "failed",
+        error:
+          "schedule-registration requires execution.resolverWorkflowName and execution.resolverNodeId",
+      },
+      input.options,
+    );
+    return { receipt: failed, duplicate: false };
+  }
+  try {
+    const resolverOutput = await readResolverWorkflowOutput({
+      workflowName: resolverWorkflowName,
+      resolverNodeId,
+      runtimeVariables: input.mapping.runtimeVariables,
+      options: input.options,
+    });
+    const validation =
+      await createWorkflowScheduleRegistrationValidator().validate({
+        ...input.options,
+        output: resolverOutput,
+        hasSafeReplyDestination: hasSafeScheduleReplyDestination(input),
+        ...(execution?.minConfidence === undefined
+          ? {}
+          : { minConfidence: execution.minConfidence }),
+      });
+    if (validation.status === "needs-clarification") {
+      await dispatchEventTaskPlanningReplyIfConfigured({
+        options: input.options,
+        binding: input.binding,
+        event: input.event,
+        receiptId: input.receipt.receiptId,
+        decision: {
+          status: "needs-clarification",
+          replyKind: "clarification",
+          text: validation.decision.question,
+          missing: validation.decision.missing,
+        },
+      });
+      const skipped = await input.receiptStore.update(
+        {
+          record: input.receipt,
+          artifactDir: input.artifactDir,
+          status: "skipped",
+          error: `schedule clarification required: ${validation.decision.missing.join(", ")}`,
+          dispatchPayload: validation.decision,
+        },
+        input.options,
+      );
+      return { receipt: skipped, duplicate: false };
+    }
+    if (validation.status === "refused") {
+      await dispatchEventTaskPlanningReplyIfConfigured({
+        options: input.options,
+        binding: input.binding,
+        event: input.event,
+        receiptId: input.receipt.receiptId,
+        decision: {
+          status: "needs-clarification",
+          replyKind: "clarification",
+          text: validation.decision.message ?? validation.decision.reason,
+          missing: ["schedule"],
+        },
+      });
+      const skipped = await input.receiptStore.update(
+        {
+          record: input.receipt,
+          artifactDir: input.artifactDir,
+          status: "skipped",
+          error: validation.decision.reason,
+          dispatchPayload: validation.decision,
+        },
+        input.options,
+      );
+      return { receipt: skipped, duplicate: false };
+    }
+    const schedule = await input.repository.create({
+      sourceId: input.event.sourceId,
+      bindingId: input.binding.id,
+      sourceReceiptId: input.receipt.receiptId,
+      workflowName: validation.decision.workflowName,
+      ...(validation.workflowSource === undefined
+        ? {}
+        : { workflowSource: validation.workflowSource }),
+      kind: validation.decision.schedule.kind,
+      timezone: validation.decision.schedule.timezone,
+      ...(validation.decision.schedule.kind === "one-time"
+        ? { dueAt: validation.decision.schedule.dueAt }
+        : { cron: validation.decision.schedule.cron }),
+      nextDueAt: validation.nextDueAt,
+      workflowInput: validation.decision.workflowInput,
+      ...(input.event.conversation?.id === undefined
+        ? {}
+        : { conversationId: input.event.conversation.id }),
+      ...(input.event.conversation?.threadId === undefined
+        ? {}
+        : { threadId: input.event.conversation.threadId }),
+      ...(input.event.actor?.id === undefined
+        ? {}
+        : { actorId: input.event.actor.id }),
+    });
+    if (input.options.scheduledEventManager !== undefined) {
+      const {
+        createWorkflowScheduleDispatcher,
+        registerNextWorkflowScheduleDueEvent,
+      } = await import("../workflow-schedule-dispatch");
+      registerNextWorkflowScheduleDueEvent({
+        scheduledEventManager: input.options.scheduledEventManager,
+        schedule,
+        dispatch: async (dispatchInput) => {
+          await createWorkflowScheduleDispatcher(
+            input.options,
+          ).dispatchDueOccurrence({
+            ...input.options,
+            ...dispatchInput,
+            repository: input.repository,
+          });
+        },
+      });
+    }
+    await dispatchEventTaskPlanningReplyIfConfigured({
+      options: input.options,
+      binding: input.binding,
+      event: input.event,
+      receiptId: input.receipt.receiptId,
+      decision: {
+        status: "ready",
+        replyKind: "plan-or-question",
+        text: validation.decision.confirmationText,
+      },
+    });
+    const dispatched = await input.receiptStore.update(
+      {
+        record: input.receipt,
+        artifactDir: input.artifactDir,
+        status: "dispatched",
+        dispatchPayload: { schedule },
+      },
+      input.options,
+    );
+    return {
+      receipt: dispatched,
+      duplicate: false,
+      workflowName: validation.decision.workflowName,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    const failed = await input.receiptStore.update(
+      {
+        record: input.receipt,
+        artifactDir: input.artifactDir,
+        status: "failed",
+        error: message,
+      },
+      input.options,
+    );
+    return { receipt: failed, duplicate: false };
+  }
+}
+
 export function createWorkflowTriggerRunner(
   options: WorkflowTriggerRunnerOptions = {},
 ): WorkflowTriggerRunner {
   let localSupervisorRunnerPool: SupervisorRunnerPool | undefined;
   const receiptStore = options.eventReceiptStore ?? defaultEventReceiptStore;
+  const workflowScheduleRepository =
+    options.workflowScheduleRepository ??
+    createWorkflowScheduleRepository(options);
 
   function getLocalSupervisorRunnerPool(): SupervisorRunnerPool {
     if (localSupervisorRunnerPool === undefined) {
@@ -283,6 +521,18 @@ export function createWorkflowTriggerRunner(
           ...(input.binding.workflowName === undefined
             ? {}
             : { workflowName: input.binding.workflowName }),
+        });
+      }
+      if (input.binding.execution?.mode === "schedule-registration") {
+        return await runScheduleRegistrationMode({
+          binding: input.binding,
+          event: input.event,
+          receipt,
+          artifactDir: begin.artifactDir,
+          mapping,
+          receiptStore,
+          repository: workflowScheduleRepository,
+          options,
         });
       }
       if (needsFullInputMapping) {

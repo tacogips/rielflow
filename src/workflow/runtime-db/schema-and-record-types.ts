@@ -386,6 +386,35 @@ export function ensureEventRuntimeSchema(db: Database): void {
       ON event_supervised_runs (active_target_execution_id);
     CREATE INDEX IF NOT EXISTS idx_event_supervisor_commands_run
       ON event_supervisor_commands (supervised_run_id, created_at);
+    CREATE TABLE IF NOT EXISTS workflow_schedules (
+      schedule_id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      binding_id TEXT NOT NULL,
+      source_receipt_id TEXT NOT NULL,
+      workflow_name TEXT NOT NULL,
+      workflow_source_json TEXT,
+      kind TEXT NOT NULL,
+      timezone TEXT NOT NULL,
+      due_at TEXT,
+      cron TEXT,
+      next_due_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      workflow_input_json TEXT NOT NULL,
+      conversation_id TEXT,
+      thread_id TEXT,
+      actor_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_execution_id TEXT,
+      last_fired_at TEXT,
+      last_occurrence_id TEXT,
+      attempt_count INTEGER NOT NULL,
+      last_error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_schedules_status_next_due
+      ON workflow_schedules (status, next_due_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_schedules_source
+      ON workflow_schedules (source_id, status, updated_at);
     CREATE TABLE IF NOT EXISTS supervisor_conversations (
       supervisor_conversation_id TEXT PRIMARY KEY,
       supervisor_profile_id TEXT NOT NULL,
@@ -445,6 +474,18 @@ export function ensureEventRuntimeSchema(db: Database): void {
       )
       WHERE run_alias IS NOT NULL;
   `);
+
+  const workflowScheduleColumns = db
+    .query("PRAGMA table_info(workflow_schedules)")
+    .all() as Array<{ name: string }>;
+  const workflowScheduleColumnSet = new Set(
+    workflowScheduleColumns.map((column) => column.name),
+  );
+  if (!workflowScheduleColumnSet.has("last_occurrence_id")) {
+    db.exec(
+      "ALTER TABLE workflow_schedules ADD COLUMN last_occurrence_id TEXT",
+    );
+  }
 
   const receiptColumns = db
     .query("PRAGMA table_info(event_receipts)")

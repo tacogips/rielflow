@@ -79,7 +79,10 @@ export function printHelp(io: CliIo): void {
     "  divedra graphql <graphql-document> [--variables <json|@file>] [--endpoint <url>] [--auth-token <token>]",
   );
   io.stdout(
-    "  divedra events <validate|serve|emit|list|replay|replies> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
+    "  divedra events <validate|serve|emit|list|replay|replies|schedules> [source-id|receipt-id|workflow-execution-id] [--event-root <path>] [--event-file <path>]",
+  );
+  io.stdout(
+    "  divedra events schedules <list|inspect|cancel> [schedule-id] [--source <id>] [--status <status>] [--limit <n>]",
   );
   io.stdout(
     "  divedra call-step <workflow-id> <workflow-run-id> <step-id> [--message-json <json> | --message-file <path>] [--prompt-variant <name>] [--continue-session] [--timeout-ms <ms>] [--resume-step-exec <id>] [options]",

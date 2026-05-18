@@ -26,6 +26,9 @@ Store questions, pending decisions, and items awaiting user approval.
 - `qa-scheduled-sleep-node-runtime.md`: restart recovery, initial sleep schema,
   and cancellation-scope decisions for scheduled sleep and shared cron
   scheduling.
+- `qa-scheduled-workflow-execution.md`: timezone defaults, missed-run policy,
+  schedule CRUD scope, result delivery destination, and startup rehydration
+  scope for chat-created workflow schedules.
 
 ## Adding New Items
 

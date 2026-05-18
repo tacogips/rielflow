@@ -3,6 +3,8 @@ import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import type { ChatReplyDispatcher } from "../workflow/types";
 import type { WorkflowSupervisorClient } from "../workflow/supervisor-client";
 import type { WorkflowSupervisorDispatchClient } from "../workflow/supervisor-dispatch-client";
+import type { ScheduledEventManager } from "./scheduled-event-manager";
+import type { WorkflowScheduleRepository } from "./workflow-schedule-registry";
 import type {
   EventReceiptStore,
   WorkflowTriggerExecutionPort,
@@ -29,4 +31,6 @@ export interface WorkflowTriggerRunnerOptions extends DivedraOptions {
   readonly workflowExecutionPort?: WorkflowTriggerExecutionPort;
   readonly supervisorClient?: WorkflowSupervisorClient;
   readonly supervisorDispatchClient?: WorkflowSupervisorDispatchClient;
+  readonly scheduledEventManager?: ScheduledEventManager;
+  readonly workflowScheduleRepository?: WorkflowScheduleRepository;
 }
