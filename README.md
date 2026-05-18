@@ -558,6 +558,12 @@ schedule without dispatching a chat reply; unsafe clarification or refusal
 decisions do not persist schedules. Operators can inspect and cancel registered
 schedules from the same artifact root:
 
+Schedule-registration bindings use binding `inputMapping` to choose the
+resolver workflow input, including timezone-relevant event fields. The
+schedule-registration execution policy only selects the resolver workflow/node
+and optional confidence threshold; it does not support `execution.inputPath` or
+`execution.timezonePath`.
+
 Schedule registration treats resolver output as untrusted until runtime
 validation succeeds. When a binding sets `minConfidence`, a ready decision must
 include numeric `confidence`; missing or below-threshold confidence produces

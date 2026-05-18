@@ -234,9 +234,7 @@ export interface EventWorkflowScheduleRegistrationPolicy extends JsonObject {
   readonly mode: "schedule-registration";
   readonly resolverWorkflowName: string;
   readonly resolverNodeId: string;
-  readonly inputPath?: string;
   readonly minConfidence?: number;
-  readonly timezonePath?: string;
 }
 
 export type EventExecutionMode =
@@ -249,6 +247,9 @@ export type EventExecutionMode =
 **Checklist**:
 
 - [x] Add validation for `execution.mode = "schedule-registration"`.
+- [x] Keep resolver input and timezone-relevant event fields on binding
+      `inputMapping`; do not expose `execution.inputPath` or
+      `execution.timezonePath` as schedule-registration policy fields.
 - [x] Run the configured resolver workflow and read the configured resolver node `output.json`.
 - [x] Persist schedules only after runtime validation succeeds.
 - [x] Check safe clarification reply destination before persistence: the inbound event must have a usable conversation target and an enabled chat output destination or equivalent explicit destination policy.

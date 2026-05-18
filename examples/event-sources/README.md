@@ -120,6 +120,10 @@ expects the resolver output to be one of these structured decisions. The
 binding sets `minConfidence: 0.8`, so a ready decision must include numeric
 `confidence` at or above that threshold before a schedule can be persisted:
 
+Resolver input, including timezone-relevant chat fields, is selected through
+the binding `inputMapping` block. Do not configure `execution.inputPath` or
+`execution.timezonePath` for schedule-registration bindings.
+
 ```json
 {
   "status": "ready",

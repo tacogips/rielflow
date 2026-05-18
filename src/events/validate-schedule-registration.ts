@@ -41,24 +41,19 @@ export function validateScheduleRegistrationBinding(
       ),
     );
   }
-  if (
-    execution.inputPath !== undefined &&
-    (typeof execution.inputPath !== "string" ||
-      execution.inputPath.trim().length === 0)
-  ) {
+  if (execution.inputPath !== undefined) {
     issues.push(
-      error(`${pathPrefix}.inputPath`, "inputPath must be a non-empty string"),
+      error(
+        `${pathPrefix}.inputPath`,
+        "schedule-registration uses binding inputMapping for resolver input and timezone-relevant values; remove execution.inputPath",
+      ),
     );
   }
-  if (
-    execution.timezonePath !== undefined &&
-    (typeof execution.timezonePath !== "string" ||
-      execution.timezonePath.trim().length === 0)
-  ) {
+  if (execution.timezonePath !== undefined) {
     issues.push(
       error(
         `${pathPrefix}.timezonePath`,
-        "timezonePath must be a non-empty string",
+        "schedule-registration uses binding inputMapping for resolver input and timezone-relevant values; remove execution.timezonePath",
       ),
     );
   }

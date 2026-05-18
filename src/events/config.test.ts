@@ -758,6 +758,98 @@ describe("event configuration", () => {
     );
   });
 
+  test("accepts schedule-registration policy with binding inputMapping", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "resolver", "workflow.json"), {
+      workflowId: "resolver",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat.json"), {
+      id: "chat",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(
+      path.join(eventRoot, "bindings", "register-schedule.json"),
+      {
+        id: "register-schedule",
+        sourceId: "chat",
+        inputMapping: {
+          mode: "template",
+          template: {
+            request: "{{event.input.text}}",
+            timezone: "{{event.input.timezone}}",
+          },
+        },
+        execution: {
+          mode: "schedule-registration",
+          resolverWorkflowName: "resolver",
+          resolverNodeId: "resolver-worker",
+          minConfidence: 0.8,
+        },
+      },
+    );
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test.each([
+    "inputPath",
+    "timezonePath",
+  ] as const)("rejects schedule-registration execution.%s in favor of inputMapping", async (field) => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "resolver", "workflow.json"), {
+      workflowId: "resolver",
+    });
+    await writeJson(path.join(eventRoot, "sources", "chat.json"), {
+      id: "chat",
+      kind: "webhook",
+      path: "/events/chat",
+    });
+    await writeJson(
+      path.join(eventRoot, "bindings", "register-schedule.json"),
+      {
+        id: "register-schedule",
+        sourceId: "chat",
+        inputMapping: {
+          mode: "event-input",
+        },
+        execution: {
+          mode: "schedule-registration",
+          resolverWorkflowName: "resolver",
+          resolverNodeId: "resolver-worker",
+          [field]: "event.input.text",
+        },
+      },
+    );
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        path: `bindings.register-schedule.execution.${field}`,
+        message: expect.stringContaining("inputMapping"),
+      }),
+    );
+  });
+
   test("rejects malformed Matrix source configuration", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");

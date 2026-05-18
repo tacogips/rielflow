@@ -296,9 +296,7 @@ export interface EventWorkflowScheduleRegistrationPolicy extends JsonObject {
   readonly mode: "schedule-registration";
   readonly resolverWorkflowName: string;
   readonly resolverNodeId: string;
-  readonly inputPath?: string;
   readonly minConfidence?: number;
-  readonly timezonePath?: string;
 }
 
 export type EventSupervisorAction =

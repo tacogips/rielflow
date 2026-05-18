@@ -111,6 +111,20 @@ a chat event binding. Its output must be structured. A ready decision includes:
 - workflow runtime input object
 - human-readable confirmation text
 
+The binding-level schedule-registration execution policy is intentionally
+narrow. It identifies the resolver workflow and resolver node, and may set a
+minimum confidence threshold. It must not grow a second path-selection language
+for resolver input or timezone lookup.
+
+Event binding `inputMapping` remains the only operator-authored mechanism for
+selecting which event fields are delivered to the resolver workflow. When an
+operator wants the resolver to see a timezone, channel preference, command
+argument, or nested provider field, that value must be mapped into the resolver
+workflow input through the existing `inputMapping` template or `event-input`
+mode. The resolver decision then carries the selected schedule timezone in its
+structured `schedule.timezone` field, which the runtime validates before
+persistence.
+
 Clarification decisions include:
 
 - missing or ambiguous fields
@@ -218,6 +232,27 @@ may be generated internally from the persisted schedule record, or routed
 through a dedicated scheduler dispatch binding. The implementation plan should
 pick the smaller change that still records normal event receipts.
 
+Schedule-registration bindings must follow the same boundary:
+
+- source event data is first normalized into an event envelope;
+- binding `inputMapping` converts that envelope into resolver
+  `runtimeVariables.workflowInput`;
+- the trigger runner invokes the resolver workflow with that mapped input;
+- the runtime validator consumes only the resolver's structured decision plus
+  binding policy such as `minConfidence`;
+- due scheduled executions use the persisted schedule `workflowInput` through
+  the generated `{{event.input.workflowInput}}` mapping.
+
+`inputPath` and `timezonePath` are not valid schedule-registration policy
+fields. They duplicate `inputMapping`, make configuration appear active even
+when the runtime ignores it, and split timezone ownership between the binding
+and the resolver decision. Implementations should remove these fields from the
+active `EventWorkflowScheduleRegistrationPolicy` surface. If compatibility
+requires accepting older broad policy objects, validation must reject
+`execution.inputPath` and `execution.timezonePath` when
+`execution.mode === "schedule-registration"` with a migration message that
+points operators to `inputMapping`.
+
 ## Chat Replies
 
 Schedule registration replies use the chat task-planning lifecycle:
@@ -308,6 +343,8 @@ Schedule creation fails when:
 - no future occurrence can be computed
 - required workflow input is missing
 - mapped workflow input is not a JSON object
+- a schedule-registration binding sets `execution.inputPath` or
+  `execution.timezonePath` instead of using binding `inputMapping`
 - the chat source lacks a safe reply destination for clarification
 - the runtime is in read-only event mode
 
@@ -339,6 +376,9 @@ Alternative missed-run policies are tracked in user Q&A.
   manager.
 - Do not store schedules under workflow definition directories or authored
   `.divedra-events` config.
+- Do not add or preserve a parallel schedule-registration path policy for
+  resolver input or timezone selection; use event binding `inputMapping`
+  instead.
 - Preserve existing cron source config and receipt behavior.
 - Preserve event replay semantics; replaying a due schedule receipt must not
   mutate the schedule registry unless replay explicitly requests it.
