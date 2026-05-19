@@ -1365,6 +1365,62 @@ describe("runCli", () => {
     expect(missingCode).toBe(2);
   });
 
+  test("local workflow list ignores serve workflow manifest flag and env fallback", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+    const manifestPath = path.join(root, "manifest.json");
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          manifestVersion: 1,
+          workflows: [
+            {
+              id: "served-alias",
+              workflowDirectory: { relative: "./demo" },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "list",
+        "--workflow-definition-dir",
+        root,
+        "--workflow-manifest",
+        manifestPath,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps({
+        env: { DIVEDRA_WORKFLOW_MANIFEST: manifestPath },
+      }),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      workflows: ReadonlyArray<{ workflowName: string; sourceScope: string }>;
+    };
+    expect(payload.workflows.map((row) => row.workflowName)).toContain("demo");
+    expect(payload.workflows.map((row) => row.workflowName)).not.toContain(
+      "served-alias",
+    );
+  });
+
   test("workflow status and session commands share project-scoped storage inferred from workflow-definition-dir", async () => {
     const root = await makeTempDir();
     const workspaceRoot = path.join(root, "workspace");
@@ -6190,6 +6246,73 @@ describe("runCli", () => {
     expect(started[0]?.noExec).toBe(true);
     const payload = JSON.parse(capture.stdout.join("\n")) as { port: number };
     expect(payload.port).toBe(7777);
+  });
+
+  test("serve command accepts workflow manifest and warns when definition dir is also provided", async () => {
+    const root = await makeTempDir();
+    const created = await createWorkflowTemplate("actual", {
+      workflowRoot: root,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error(created.error.message);
+    }
+    const manifestPath = path.join(root, "manifest.json");
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          manifestVersion: 1,
+          workflows: [
+            {
+              id: "served-alias",
+              workflowDirectory: { relative: "./actual" },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const started: Array<{
+      workflowManifestPath?: string;
+      workflowRoot?: string;
+      fixedWorkflowName?: string;
+      fixedResolvedWorkflowSource?: ResolvedWorkflowSource;
+    }> = [];
+
+    const code = await runCli(
+      [
+        "serve",
+        "served-alias",
+        "--workflow-manifest",
+        manifestPath,
+        "--workflow-definition-dir",
+        root,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps({
+        startServe: async (options) => {
+          started.push(options);
+          return { host: "127.0.0.1", port: 7777, stop: () => {} };
+        },
+        waitForServeShutdown: async () => {},
+      }),
+    );
+
+    expect(code).toBe(0);
+    expect(started[0]?.workflowManifestPath).toBe(manifestPath);
+    expect(started[0]?.workflowRoot).toBe(root);
+    expect(started[0]?.fixedWorkflowName).toBe("served-alias");
+    expect(started[0]?.fixedResolvedWorkflowSource?.scope).toBe("manifest");
+    expect(capture.stderr.join("\n")).toContain(
+      "--workflow-definition-dir is ignored",
+    );
   });
 
   test("serve reports the actual bound port returned by the server", async () => {

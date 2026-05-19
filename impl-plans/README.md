@@ -24,7 +24,9 @@ impl-plans/
 
 ## Active Plans
 
-No active implementation plans remain.
+| Plan | Status | Design Reference |
+| ---- | ------ | ---------------- |
+| `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 
 ## Recently Completed
 

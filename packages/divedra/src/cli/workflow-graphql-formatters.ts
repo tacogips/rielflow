@@ -384,6 +384,8 @@ export function workflowOverviewSourceScopeLabel(
       return "user scope";
     case "direct":
       return "direct root";
+    case "manifest":
+      return "manifest";
   }
 }
 export function workflowOverviewDuplicateWarningLines(

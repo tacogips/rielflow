@@ -726,6 +726,63 @@ describe("createGraphqlSchema", () => {
     expect(missing).toBeNull();
   });
 
+  test("manifest workflowCatalogOverview lists only enabled served aliases", async () => {
+    const root = await makeTempDir();
+    const schema = createGraphqlSchema();
+    const actual = await createWorkflowTemplate("actual", {
+      workflowRoot: root,
+    });
+    const hidden = await createWorkflowTemplate("hidden", {
+      workflowRoot: root,
+    });
+    expect(actual.ok).toBe(true);
+    expect(hidden.ok).toBe(true);
+    const manifestPath = path.join(root, "manifest.json");
+    await writeJson(manifestPath, {
+      manifestVersion: 1,
+      workflows: [
+        {
+          id: "served-alias",
+          workflowDirectory: { relative: "./actual" },
+          metadata: { title: "Served alias" },
+        },
+        {
+          id: "hidden-alias",
+          enabled: false,
+          workflowDirectory: { relative: "./hidden" },
+        },
+      ],
+    });
+    const context: GraphqlRequestContext = {
+      workflowManifestPath: manifestPath,
+      enableWorkflowManifestCatalog: true,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+
+    const catalog = await schema.query.workflowCatalogOverview({}, context);
+
+    expect(catalog.workflows.map((row) => row.workflowName)).toEqual([
+      "served-alias",
+    ]);
+    expect(catalog.workflows[0]).toMatchObject({
+      sourceScope: "manifest",
+      authoredWorkflowId: "actual",
+      manifestPath,
+      manifestEntryId: "served-alias",
+      metadata: { title: "Served alias" },
+    });
+    await expect(
+      schema.mutation.executeWorkflow(
+        { workflowName: "hidden-alias" },
+        context,
+      ),
+    ).rejects.toThrow(
+      "workflow 'hidden-alias' was not found in enabled workflow manifest entries",
+    );
+  });
+
   test("workflowCatalogOverview and workflowStatusOverview expose only loadable active sessions", async () => {
     const root = await makeTempDir();
     const schema = createGraphqlSchema();
@@ -1964,6 +2021,102 @@ describe("createGraphqlSchema", () => {
       "invalid autoImprove policy: stallTimeoutMs must be greater than or equal to monitorIntervalMs",
     );
     expect(runWorkflowSpy).not.toHaveBeenCalled();
+  });
+
+  test("executeWorkflow applies manifest defaults and request precedence", async () => {
+    const root = await makeTempDir();
+    const actual = await createWorkflowTemplate("actual", {
+      workflowRoot: root,
+    });
+    expect(actual.ok).toBe(true);
+    if (!actual.ok) {
+      throw new Error(actual.error.message);
+    }
+    const workDir = path.join(root, "work");
+    await mkdir(workDir, { recursive: true });
+    const manifestPath = path.join(root, "manifest.json");
+    await writeJson(manifestPath, {
+      manifestVersion: 1,
+      workflows: [
+        {
+          id: "served-alias",
+          workflowDirectory: { relative: "./actual" },
+          cwd: { relative: "./work" },
+          autoImprove: { mode: "disabled" },
+          defaultVariables: {
+            topic: "manifest",
+            keep: true,
+          },
+        },
+      ],
+    });
+    const context: GraphqlRequestContext = {
+      workflowManifestPath: manifestPath,
+      enableWorkflowManifestCatalog: true,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+      cwd: root,
+    };
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-schema-manifest-defaults",
+              workflowName: "served-alias",
+              workflowId: "served-alias",
+              initialNodeId: "divedra-manager",
+              runtimeVariables: {},
+            }),
+            status: "running" as const,
+          },
+          exitCode: 0,
+        },
+      });
+    const schema = createGraphqlSchema();
+
+    await schema.mutation.executeWorkflow(
+      {
+        workflowName: "served-alias",
+        runtimeVariables: { topic: "request" },
+      },
+      context,
+    );
+
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "served-alias",
+      expect.objectContaining({
+        workflowBundleDirectoryOverride: path.join(root, "actual"),
+        cwd: workDir,
+        runtimeVariables: {
+          topic: "request",
+          keep: true,
+        },
+        autoImprove: expect.objectContaining({
+          enabled: true,
+          maxWorkflowPatches: 0,
+        }),
+      }),
+    );
+
+    await schema.mutation.executeWorkflow(
+      {
+        workflowName: "served-alias",
+        autoImprove: { enabled: true, maxWorkflowPatches: 2 },
+      },
+      context,
+    );
+
+    expect(runWorkflowSpy.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        autoImprove: expect.objectContaining({
+          enabled: true,
+          maxWorkflowPatches: 2,
+        }),
+      }),
+    );
   });
 
   test("resumeWorkflowExecution normalizes auto-improve and nested-superviser into runWorkflow", async () => {

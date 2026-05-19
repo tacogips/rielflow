@@ -10,6 +10,10 @@ import { buildFanoutGroupSummaries } from "../../workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../workflow/load";
 import { assertCommunicationInManagerScope } from "../../workflow/manager-control";
 import {
+  createLifecycleSupervisionPolicyInput,
+  type AutoImprovePolicyInput,
+} from "../../workflow/auto-improve-policy";
+import {
   executeWorkflowSelfImprove,
   getWorkflowSelfImproveReport,
   listWorkflowSelfImproveReports,
@@ -572,10 +576,23 @@ export async function executeWorkflowMutation(
     input.workflowName,
     context,
   );
+  const manifestDefaults = workflowContext.resolvedWorkflowSource;
+  const autoImprove =
+    input.autoImprove === undefined &&
+    manifestDefaults?.manifestAutoImprove?.mode === "disabled"
+      ? createLifecycleSupervisionPolicyInput()
+      : (workflowRunOverrides.value.autoImprove ??
+        ({ enabled: true } satisfies AutoImprovePolicyInput));
+  const runtimeVariables = {
+    ...(manifestDefaults?.defaultVariables ?? {}),
+    ...(input.runtimeVariables ?? {}),
+  };
   if (input.async === true) {
     const loadedWorkflow = await loadWorkflowFromCatalog(input.workflowName, {
       ...workflowContext,
-      ...workflowRunOverrides.value,
+      ...(workflowRunOverrides.value.nodePatch === undefined
+        ? {}
+        : { nodePatch: workflowRunOverrides.value.nodePatch }),
     });
     if (!loadedWorkflow.ok) {
       throw new Error(formatWorkflowLoadFailure(loadedWorkflow.error));
@@ -590,9 +607,8 @@ export async function executeWorkflowMutation(
           ...workflowContext,
           sessionId: workflowExecutionId,
           ...workflowRunOverrides.value,
-          ...(input.runtimeVariables === undefined
-            ? {}
-            : { runtimeVariables: input.runtimeVariables }),
+          autoImprove,
+          runtimeVariables,
           ...(input.mockScenario === undefined
             ? {}
             : { mockScenario: input.mockScenario }),
@@ -612,9 +628,8 @@ export async function executeWorkflowMutation(
     options: {
       ...workflowContext,
       ...workflowRunOverrides.value,
-      ...(input.runtimeVariables === undefined
-        ? {}
-        : { runtimeVariables: input.runtimeVariables }),
+      autoImprove,
+      runtimeVariables,
       ...(input.mockScenario === undefined
         ? {}
         : { mockScenario: input.mockScenario }),

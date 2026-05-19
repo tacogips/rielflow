@@ -3,6 +3,10 @@ import { statSync } from "node:fs";
 import path from "node:path";
 import { err, ok, type Result } from "./result";
 import {
+  loadWorkflowManifest,
+  type ResolvedWorkflowManifestEntry,
+} from "./manifest";
+import {
   computeProjectScopedRootDataDirForScopeRoot,
   inferRootDataDirFromExplicitStorageRoots,
   isSafeWorkflowName,
@@ -101,6 +105,21 @@ function resolveDirectWorkflowRootOverride(
   return resolveConfiguredRootPath(directRoot, options);
 }
 
+function resolveWorkflowManifestPathOverride(
+  options: LoadOptions,
+): string | undefined {
+  if (options.enableWorkflowManifestCatalog !== true) {
+    return undefined;
+  }
+  const env = options.env ?? process.env;
+  const manifestPath =
+    options.workflowManifestPath ?? env["DIVEDRA_WORKFLOW_MANIFEST"];
+  if (manifestPath === undefined || manifestPath.length === 0) {
+    return undefined;
+  }
+  return resolveConfiguredRootPath(manifestPath, options);
+}
+
 function discoverProjectScopeRoot(options: LoadOptions): string | undefined {
   const env = options.env ?? process.env;
   const explicitProjectRoot =
@@ -191,6 +210,43 @@ function createResolvedWorkflowSource(
       ? {}
       : { scopeRoot: candidate.scopeRoot }),
   };
+}
+
+function createManifestWorkflowSource(
+  manifestPath: string,
+  entry: ResolvedWorkflowManifestEntry,
+): ResolvedWorkflowSource {
+  return {
+    scope: "manifest",
+    workflowRoot: path.dirname(entry.workflowDirectory),
+    workflowName: entry.id,
+    workflowDirectory: entry.workflowDirectory,
+    cwd: entry.cwd,
+    manifestPath,
+    manifestEntryId: entry.id,
+    authoredWorkflowId: entry.authoredWorkflowId,
+    metadata: entry.metadata,
+    defaultVariables: entry.defaultVariables,
+    ...(entry.autoImprove === undefined
+      ? {}
+      : { manifestAutoImprove: entry.autoImprove }),
+  };
+}
+
+async function listManifestWorkflowSources(
+  manifestPath: string,
+): Promise<Result<readonly ResolvedWorkflowSource[], WorkflowCatalogFailure>> {
+  const loaded = await loadWorkflowManifest(manifestPath);
+  if (!loaded.ok) {
+    return err({ code: "IO", message: loaded.error.message });
+  }
+  return ok(
+    loaded.value.entries
+      .filter((entry) => entry.enabled)
+      .map((entry) =>
+        createManifestWorkflowSource(loaded.value.manifestPath, entry),
+      ),
+  );
 }
 
 const SAFE_ADDON_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
@@ -423,6 +479,23 @@ export async function resolveWorkflowSource(
     });
   }
 
+  const manifestPath = resolveWorkflowManifestPathOverride(options);
+  if (manifestPath !== undefined) {
+    const sources = await listManifestWorkflowSources(manifestPath);
+    if (!sources.ok) {
+      return sources;
+    }
+    const source = sources.value.find(
+      (candidate) => candidate.workflowName === workflowName,
+    );
+    return source === undefined
+      ? err({
+          code: "NOT_FOUND",
+          message: `workflow '${workflowName}' was not found in enabled workflow manifest entries`,
+        })
+      : ok(source);
+  }
+
   const directRoot = resolveDirectWorkflowRootOverride(options);
   if (directRoot !== undefined) {
     return ok(
@@ -595,6 +668,7 @@ export function withResolvedWorkflowSourceOptions<T extends LoadOptions>(
   options: T,
 ): T & {
   readonly workflowRoot: string;
+  readonly workflowBundleDirectoryOverride?: string;
   readonly resolvedWorkflowSource: ResolvedWorkflowSource;
 } {
   const scopedRootDataDir = scopedRootDataDirForSource(source, options);
@@ -602,6 +676,10 @@ export function withResolvedWorkflowSourceOptions<T extends LoadOptions>(
   return {
     ...options,
     workflowRoot: source.workflowRoot,
+    ...(source.scope === "manifest"
+      ? { workflowBundleDirectoryOverride: source.workflowDirectory }
+      : {}),
+    ...(source.cwd === undefined ? {} : { cwd: source.cwd }),
     resolvedWorkflowSource: source,
     ...(scopedRootDataDir === undefined
       ? {}
@@ -612,6 +690,18 @@ export function withResolvedWorkflowSourceOptions<T extends LoadOptions>(
 export async function listWorkflowCatalogSources(
   options: LoadOptions = {},
 ): Promise<Result<readonly ResolvedWorkflowSource[], WorkflowCatalogFailure>> {
+  const manifestPath = resolveWorkflowManifestPathOverride(options);
+  if (manifestPath !== undefined) {
+    const sources = await listManifestWorkflowSources(manifestPath);
+    return sources.ok
+      ? ok(
+          [...sources.value].sort((left, right) =>
+            left.workflowName.localeCompare(right.workflowName),
+          ),
+        )
+      : sources;
+  }
+
   const sources: ResolvedWorkflowSource[] = [];
   const candidates = await createWorkflowRootCandidates(options);
   if (!candidates.ok) {

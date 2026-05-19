@@ -701,21 +701,42 @@ export async function runCliServeScope(
 
   const serveWorkflowName = command;
   try {
+    const manifestPath =
+      parsed.options.workflowManifestPath ?? env["DIVEDRA_WORKFLOW_MANIFEST"];
+    if (
+      manifestPath !== undefined &&
+      manifestPath.length > 0 &&
+      parsed.options.workflowRoot !== undefined
+    ) {
+      io.stderr(
+        "warning: --workflow-manifest is authoritative; --workflow-definition-dir is ignored for serve catalog selection",
+      );
+    }
+    const serveSharedOptions =
+      manifestPath === undefined || manifestPath.length === 0
+        ? sharedOptions
+        : {
+            ...sharedOptions,
+            enableWorkflowManifestCatalog: true,
+            ...(parsed.options.workflowManifestPath === undefined
+              ? {}
+              : { workflowManifestPath: parsed.options.workflowManifestPath }),
+          };
     let serveContext: LoadOptions & {
       readonly fixedWorkflowName?: string;
       readonly fixedResolvedWorkflowSource?: ResolvedWorkflowSource;
-    } = sharedOptions;
+    } = serveSharedOptions;
     if (serveWorkflowName !== undefined) {
       const resolved = await resolveWorkflowSource(
         serveWorkflowName,
-        sharedOptions,
+        serveSharedOptions,
       );
       if (!resolved.ok) {
         io.stderr(`serve failed: ${resolved.error.message}`);
         return 7;
       }
       serveContext = {
-        ...sharedOptions,
+        ...serveSharedOptions,
         fixedWorkflowName: serveWorkflowName,
         fixedResolvedWorkflowSource: resolved.value,
       };

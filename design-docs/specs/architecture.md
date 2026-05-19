@@ -55,6 +55,11 @@ Current direction:
   `~/.divedra/self-improve-log/`, and may patch/commit workflow bundles only
   through explicit self-improve policy. See
   `design-docs/specs/design-self-improve.md`.
+- server workflow manifests are a serve-time allowlist for publishing multiple
+  explicitly configured workflows from one server process. A manifest-backed
+  server exposes only enabled manifest entries through browser, GraphQL catalog,
+  and server-backed start paths. See
+  `design-docs/specs/design-server-workflow-manifest.md`.
 
 ### Dedicated Workflow Self-Improve
 

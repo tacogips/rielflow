@@ -106,6 +106,9 @@ export function printHelp(io: CliIo): void {
   io.stdout(
     "                                  Does not control logs, sessions, or artifacts",
   );
+  io.stdout(
+    "  --workflow-manifest <path>       Serve-only manifest allowlist; env fallback DIVEDRA_WORKFLOW_MANIFEST",
+  );
   io.stdout("  --scope <scope>         Select auto, project, or user scope");
   io.stdout("  --user-root <path>      Override the user scope root");
   io.stdout("  --project-root <path>   Override the project scope root");
