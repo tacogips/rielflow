@@ -87,6 +87,7 @@ function asSourceConfig(value: unknown, label: string): EventSourceConfig {
     ...value,
     id,
     kind,
+    configFilePath: label,
     ...(readOptionalBoolean(value, "enabled") === undefined
       ? {}
       : { enabled: readOptionalBoolean(value, "enabled") }),

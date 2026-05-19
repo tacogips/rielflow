@@ -40,6 +40,8 @@ Recommended placement:
 - support cron and chat-oriented sources first
 - support repository/object-storage file-created sources such as S3 object
   creation
+- support local filesystem directory change sources for created, modified, and
+  deleted files
 - support webhook-style and provider event-notification sources
 - preserve durable audit records for received events, mapping results, dedupe,
   and workflow execution ids
@@ -58,6 +60,8 @@ Recommended placement:
 - solving distributed, multi-process scheduling in the first iteration
 - downloading or parsing full repository file contents unless a source binding
   explicitly opts into that behavior
+- shipping a cross-machine distributed filesystem watcher or synchronization
+  service
 
 ## Relationship To Existing Runtime
 
@@ -414,6 +418,101 @@ Rules:
 - object-created delivery should be treated as at-least-once; duplicate
   notifications must not start duplicate workflows for the same binding
 
+### Local File Change
+
+Local file change is a filesystem event source for workflows that should react
+when files in an operator-configured directory are created, modified, or
+deleted. The source is local to the `events serve` process and should use the
+same adapter, binding, input mapping, event receipt, dedupe, and workflow
+dispatch contracts as webhook, cron, Matrix, Chat SDK, and S3 sources.
+
+The adapter watches a configured directory and normalizes eligible filesystem
+notifications into `ExternalEventEnvelope` records:
+
+```text
+Local filesystem watcher
+  -> FileChangeEventSourceAdapter
+  -> ExternalEventEnvelope(eventType = file.change.created|modified|deleted)
+  -> EventBinding
+  -> WorkflowTriggerRunner
+  -> divedra workflow run / library client / GraphQL executeWorkflow
+```
+
+Source config:
+
+- `kind: "file-change"`
+- `directory`, resolved from the event source config file location when
+  relative, or accepted as an absolute path for local operator configuration
+- `changeTypes`, a non-empty subset of `create`, `modify`, and `delete`
+- optional `recursive`, defaulting to false
+- optional `filters.suffixes` for simple extension or suffix filtering
+- optional `stabilityWindowMs`, defaulting to a small runtime constant, to
+  coalesce noisy write bursts before dispatching create or modify events
+
+Normalized event types:
+
+- `file.change.created`
+- `file.change.modified`
+- `file.change.deleted`
+
+Normalized input should include:
+
+- change type as `create`, `modify`, or `delete`
+- source id and provider `local-fs`
+- watched directory as an operator-facing configured path label
+- normalized file path relative to the watched directory
+- file name and extension when available
+- current file metadata for create and modify events when available, including
+  size and mtime
+- deletion metadata only when known before the delete notification; missing
+  metadata must not fail the event
+
+Recommended runtime variable shape:
+
+```json
+{
+  "workflowInput": {
+    "change": {
+      "type": "modify"
+    },
+    "file": {
+      "path": "plans/release.md",
+      "name": "release.md",
+      "extension": ".md",
+      "size": 12842,
+      "mtime": "2026-05-19T00:00:00.000Z"
+    },
+    "watch": {
+      "sourceId": "local-docs",
+      "directory": "./watched-docs"
+    }
+  }
+}
+```
+
+Rules:
+
+- file contents are not read or copied by default; the first implementation
+  passes metadata and a safe relative path only
+- every emitted relative path must be non-empty, use forward slashes, and reject
+  absolute paths, backslashes, `.` segments, and `..` segments
+- `changeTypes` controls dispatch after normalization, so disabled change types
+  do not create event receipts or workflow executions
+- default `recursive: false` keeps startup behavior portable; recursive watch
+  support may be added behind the explicit config flag only where the runtime
+  can test it deterministically
+- startup does not emit events for files that already exist; only observed
+  changes after listener start are dispatched
+- create and modify notifications may be duplicated by host filesystem
+  watchers; the adapter should coalesce same-source, same-path, same-change
+  notifications within `stabilityWindowMs`
+- delete notifications may lack file metadata because the path may already be
+  gone; this is expected and should be represented by absent metadata
+- deterministic tests should use an injectable watcher abstraction or fixture
+  event path rather than relying only on host-specific filesystem timing
+- event receipt and dedupe keys should include source id, relative path, change
+  type, and a stable event time or watcher sequence so replay stays auditable
+
 ### Chat SDK
 
 Chat providers should initially be integrated through a Chat SDK adapter where
@@ -714,6 +813,19 @@ source adapter:
   "objectAccess": {
     "mode": "metadata-only"
   },
+  "filters": {
+    "suffixes": [".md", ".json"]
+  }
+}
+```
+
+```json
+{
+  "id": "local-docs",
+  "kind": "file-change",
+  "directory": "./watched-docs",
+  "changeTypes": ["create", "modify", "delete"],
+  "recursive": false,
   "filters": {
     "suffixes": [".md", ".json"]
   }
@@ -1068,6 +1180,19 @@ Event config validation should fail when:
 - a binding references an unknown workflow name
 - a source kind has no registered adapter
 - a provider secret env var name is malformed
+- a file-change source omits `directory`, uses a non-string directory, or
+  resolves to a path that does not exist, is not a directory, or is not readable
+  when `events validate` runs in local mode
+- a file-change source uses empty, unknown, non-string, or duplicate
+  `changeTypes`; allowed values are only `create`, `modify`, and `delete`
+- a file-change source configures malformed `filters.suffixes`, including
+  empty suffixes, non-string suffixes, suffixes containing path separators, or
+  duplicate suffixes
+- a file-change source sets `recursive` to a non-boolean value, or enables
+  recursive watching on a runtime/platform path where recursive watch support
+  cannot be provided deterministically
+- a file-change source sets `stabilityWindowMs` below zero or above the
+  adapter's documented upper bound
 - a cron schedule cannot be parsed
 - an S3 repository source omits bucket, event receiver configuration, or an
   explicit object access policy
@@ -1102,18 +1227,22 @@ Event config validation should fail when:
 3. Generic `EventSourceAdapter` registry and manual `events emit`.
 4. Cron adapter.
 5. S3 repository file-created adapter with metadata-only input.
-6. Generic webhook adapter for local testing.
-7. Matrix adapter for Element/Matrix room receive normalization and chat reply
+6. Local file-change adapter with `file-change` source registration,
+   validation, create/modify/delete dispatch gating, deterministic watcher
+   tests, example source/binding fixtures, and user-facing configuration and
+   run documentation.
+7. Generic webhook adapter for local testing.
+8. Matrix adapter for Element/Matrix room receive normalization and chat reply
    dispatch.
-8. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
+9. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
    GitHub, Linear, WhatsApp, Messenger, and Web.
-9. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
+10. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
    the shared Chat SDK `web` provider boundary.
-10. Optional S3 object download-to-data-root support.
-11. Optional reply publisher after workflow completion.
-12. Signal adapter if operational requirements and dependency choice are
+11. Optional S3 object download-to-data-root support.
+12. Optional reply publisher after workflow completion.
+13. Signal adapter if operational requirements and dependency choice are
     accepted.
-13. Supervised event control path for chat and web app lifecycle commands.
+14. Supervised event control path for chat and web app lifecycle commands.
 
 ## References
 

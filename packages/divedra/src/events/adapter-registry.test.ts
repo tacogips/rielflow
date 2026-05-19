@@ -61,6 +61,7 @@ describe("event source registry", () => {
     expect(registry.list().map((adapter) => adapter.kind)).toEqual([
       "chat-sdk",
       "cron",
+      "file-change",
       "matrix",
       "s3-repository",
       "webhook",
