@@ -165,7 +165,8 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `events emit <source-id> --event-file <path>`
   - Inject a normalized or raw fixture event for local testing of binding matching, input mapping, dedupe, and workflow dispatch.
 - `events serve [--event-root <path>] [--endpoint <graphql-url>]`
-  - Start cron, webhook, Matrix, chat, and web-chat event listeners.
+  - Start cron, webhook, Matrix, chat, web-chat, and local file-change event
+    listeners.
   - On startup, rehydrate active persisted workflow schedules and enqueue the
     next due `workflow-schedule` occurrence through the shared scheduled event
     manager when event listeners are enabled.

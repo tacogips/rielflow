@@ -113,6 +113,32 @@ divedra events emit chat-sdk-slack \
   --output json
 ```
 
+The `local-docs` source demonstrates local filesystem notifications. It
+watches `examples/event-sources/watched-docs` for `create`, `modify`, and
+`delete` changes to `.md` and `.json` files. The source emits
+`file.change.created`, `file.change.modified`, or `file.change.deleted` with
+safe relative file metadata only; file contents are not read.
+
+Serve it and create a matching file:
+
+```bash
+divedra events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+mkdir -p ./examples/event-sources/watched-docs/plans
+printf 'release notes\n' > ./examples/event-sources/watched-docs/plans/release.md
+```
+
+For deterministic local checks without a watcher, emit the fixture payload:
+
+```bash
+divedra events emit local-docs \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.divedra-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/file-change-created.json \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
 The binding `chat-sdk-slack-schedule-registration` demonstrates chat-created
 workflow schedules. It listens only to conversation `schedule-demo`, runs the
 resolver workflow `dispatcher-llm-resolver-stub` at node `resolver-worker`, and

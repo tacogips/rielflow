@@ -9,6 +9,12 @@ metadata:
 
 Use this skill for event-driven workflow usage. For direct workflow execution use `divedra-workflow-run`.
 
+Supported local source kinds include webhook/chat, cron, Matrix, Chat SDK,
+S3 metadata bridge, and file-change directory watchers. `file-change` sources
+run under `events serve`, watch a configured directory, and emit
+`file.change.created`, `file.change.modified`, or `file.change.deleted` for
+enabled `changeTypes`.
+
 ## Common Flow
 
 ```bash

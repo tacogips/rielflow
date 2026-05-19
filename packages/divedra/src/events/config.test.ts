@@ -295,6 +295,77 @@ describe("event configuration", () => {
     );
   });
 
+  test("loads and validates local file change sources", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "local-docs.json"), {
+      id: "local-docs",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["create", "modify", "delete"],
+      recursive: false,
+      filters: { suffixes: [".md", ".json"] },
+      stabilityWindowMs: 25,
+    });
+    await writeJson(path.join(eventRoot, "bindings", "docs-demo.json"), {
+      id: "docs-demo",
+      sourceId: "local-docs",
+      workflowName: "demo",
+      match: { eventType: "file.change.created" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(validation.configuration.sources[0]).toMatchObject({
+      id: "local-docs",
+      kind: "file-change",
+      configFilePath: path.join(eventRoot, "sources", "local-docs.json"),
+    });
+  });
+
+  test("reports invalid file change source options", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(eventRoot, "sources", "bad-files.json"), {
+      id: "bad-files",
+      kind: "file-change",
+      directory: "",
+      changeTypes: ["create", "create", "move"],
+      recursive: "yes",
+      filters: { suffixes: [] },
+      stabilityWindowMs: -1,
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-files.directory",
+        "sources.bad-files.changeTypes[1]",
+        "sources.bad-files.changeTypes[2]",
+        "sources.bad-files.recursive",
+        "sources.bad-files.filters.suffixes",
+        "sources.bad-files.stabilityWindowMs",
+      ]),
+    );
+  });
+
   test("rejects unsafe synchronous S3 event receiver bindings", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".divedra");

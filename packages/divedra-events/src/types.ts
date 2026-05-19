@@ -135,12 +135,26 @@ export interface S3RepositorySourceConfig extends EventSourceConfigBase {
   readonly filters?: { readonly suffixes?: readonly string[] };
 }
 
+export type FileChangeType = "create" | "modify" | "delete";
+
+export interface FileChangeSourceConfig extends EventSourceConfigBase {
+  readonly kind: "file-change";
+  readonly provider?: "local-fs" | string;
+  readonly directory: string;
+  readonly changeTypes: readonly FileChangeType[];
+  readonly recursive?: boolean;
+  readonly filters?: { readonly suffixes?: readonly string[] };
+  readonly stabilityWindowMs?: number;
+  readonly configFilePath?: string;
+}
+
 export type EventSourceConfig =
   | CronSourceConfig
   | ChatSdkSourceConfig
   | MatrixSourceConfig
   | WebhookSourceConfig
   | S3RepositorySourceConfig
+  | FileChangeSourceConfig
   | EventSourceConfigBase;
 
 export interface EventOutputDestinationConfigBase extends JsonObject {

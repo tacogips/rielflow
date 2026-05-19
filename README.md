@@ -628,6 +628,17 @@ the webhook path must remain relative and provider-scoped, such as
 this boundary; direct provider SDK integration remains future scope after
 dependency and credential review.
 
+Local file change sources use `kind: "file-change"` and are served by
+`events serve`. Configure `directory` with an absolute path or a path relative
+to the source JSON file, and set `changeTypes` to the non-empty subset of
+`create`, `modify`, and `delete` that should dispatch events. Created,
+modified, and deleted files normalize to `file.change.created`,
+`file.change.modified`, and `file.change.deleted`; payloads include a safe
+relative `file.path`, file name/extension, metadata for create/modify when
+available, and the configured watch label. File contents are not read. Optional
+`filters.suffixes`, `recursive`, and `stabilityWindowMs` settings constrain
+matching and coalesce noisy create/modify notifications.
+
 Chat event bindings can use `execution.mode: "schedule-registration"` to run a
 resolver workflow that returns a structured schedule decision. Ready decisions
 are validated against the workflow catalog, persisted in the runtime database,

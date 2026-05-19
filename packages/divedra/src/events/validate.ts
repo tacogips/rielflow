@@ -19,6 +19,7 @@ import {
   validateSecretEnvName,
 } from "./validation-utils";
 import { validateMatrixSource } from "./validate-source-matrix";
+import { validateFileChangeSource } from "./validate-source-file-change";
 import {
   validateChatSdkBindingCapabilities,
   validateChatSdkSource,
@@ -51,6 +52,7 @@ import type {
 const SUPPORTED_SOURCE_KINDS = new Set([
   "chat-sdk",
   "cron",
+  "file-change",
   "matrix",
   "webhook",
   "s3-repository",
@@ -164,6 +166,8 @@ function validateSource(
   if (source.kind === "chat-sdk") {
     validateChatSdkSource(source, issues);
   }
+
+  validateFileChangeSource(source, issues);
 
   if (source.kind === "cron") {
     if (!isNonEmptyString(source["schedule"])) {

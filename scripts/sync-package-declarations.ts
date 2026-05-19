@@ -397,6 +397,43 @@ async function copyIfPresent(source: string, target: string): Promise<void> {
   }
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  return (await stat(filePath).catch(() => undefined)) !== undefined;
+}
+
+async function resolveEmittedDeclarationPath(source: string): Promise<string> {
+  const exactPath = path.join(rootDistDir, source);
+  if (await pathExists(exactPath)) {
+    return exactPath;
+  }
+  const packageSourceMatch = /^packages\/([^/]+)\/(.+)$/u.exec(source);
+  if (packageSourceMatch === null) {
+    return exactPath;
+  }
+  const packageName = packageSourceMatch[1];
+  const packageRelativePath = packageSourceMatch[2];
+  if (packageName === undefined || packageRelativePath === undefined) {
+    return exactPath;
+  }
+  const packageRootPath = path.join(
+    rootDistDir,
+    packageName,
+    packageRelativePath,
+  );
+  return (await pathExists(packageRootPath)) ? packageRootPath : exactPath;
+}
+
+async function resolvePackageDeclarationSourceDir(
+  packageName: string,
+): Promise<string> {
+  const exactPath = path.join(rootDistDir, "packages", packageName, "src");
+  if (await pathExists(exactPath)) {
+    return exactPath;
+  }
+  const packageRootPath = path.join(rootDistDir, packageName, "src");
+  return (await pathExists(packageRootPath)) ? packageRootPath : exactPath;
+}
+
 async function copyDeclarationSupport(
   packageName: string,
   packageDistDir: string,
@@ -429,12 +466,8 @@ async function copyDeclarationSupport(
     });
   }
   const sourcePackageName = supportSourcePackageName ?? packageName;
-  const sourcePackageDir = path.join(
-    rootDistDir,
-    "packages",
-    sourcePackageName,
-    "src",
-  );
+  const sourcePackageDir =
+    await resolvePackageDeclarationSourceDir(sourcePackageName);
   for (const dirName of supportDirs) {
     await copyIfPresent(
       path.join(sourcePackageDir, dirName),
@@ -474,7 +507,9 @@ async function copyRewrittenDeclarationSupport(
   supportDeclarations: readonly DeclarationSupportContract[],
 ): Promise<void> {
   for (const supportDeclaration of supportDeclarations) {
-    const sourcePath = path.join(rootDistDir, supportDeclaration.source);
+    const sourcePath = await resolveEmittedDeclarationPath(
+      supportDeclaration.source,
+    );
     const targetPath = path.join(packageDistDir, supportDeclaration.target);
     const sourceStats = await stat(sourcePath).catch(() => undefined);
     if (sourceStats === undefined) {
@@ -539,7 +574,7 @@ for (const contract of packageDeclarationContracts) {
 
   for (const exportedDeclaration of contract.exports) {
     await writeRewrittenDeclaration(
-      path.join(rootDistDir, exportedDeclaration.source),
+      await resolveEmittedDeclarationPath(exportedDeclaration.source),
       path.join(packageDistDir, exportedDeclaration.target),
       exportedDeclaration.rewriteRootSourceImports ?? false,
       exportedDeclaration.rewritePackageSourceImports ?? false,
