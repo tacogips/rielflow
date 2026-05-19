@@ -215,3 +215,56 @@ export interface GraphqlRuntimeEventReplyDispatchRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
 }
+
+export interface WorkflowSelfImproveSourceRunDto {
+  readonly sessionId: string;
+  readonly workflowId: string;
+  readonly workflowName: string;
+  readonly status: string;
+  readonly startedAt?: string;
+  readonly updatedAt?: string;
+  readonly artifactDir?: string;
+  readonly lastError?: string;
+  readonly nodeExecutions?: readonly WorkflowSelfImproveSourceNodeExecutionDto[];
+}
+
+export interface WorkflowSelfImproveSourceNodeExecutionDto {
+  readonly nodeId: string;
+  readonly stepId?: string;
+  readonly nodeExecId: string;
+  readonly status: string;
+  readonly artifactDir: string;
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly outputAttemptCount?: number;
+  readonly outputValidationErrors?: readonly {
+    readonly path: string;
+    readonly message: string;
+  }[];
+}
+
+export interface WorkflowSelfImproveFindingDto {
+  readonly severity: "high" | "mid" | "low";
+  readonly category: "purpose" | "structure" | "prompt" | "runtime";
+  readonly message: string;
+  readonly evidenceSessionIds: readonly string[];
+  readonly stepIds?: readonly string[];
+  readonly nodeIds?: readonly string[];
+}
+
+export interface WorkflowSelfImproveResultDto {
+  readonly selfImproveId: string;
+  readonly workflowName: string;
+  readonly workflowId: string;
+  readonly reportPath: string;
+  readonly markdownReportPath: string;
+  readonly inputRunsPath: string;
+  readonly backupPath?: string;
+  readonly selectedSourceRuns: readonly WorkflowSelfImproveSourceRunDto[];
+  readonly findings: readonly WorkflowSelfImproveFindingDto[];
+  readonly purposeAchievement: string;
+  readonly patchStatus: string;
+  readonly validationStatus: string;
+  readonly gitCommitStatus: string;
+  readonly gitCommitHash?: string;
+}

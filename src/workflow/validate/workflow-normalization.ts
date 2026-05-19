@@ -11,6 +11,7 @@ import {
   type NodePromptVariant,
   type ValidationIssue,
   type WorkflowJson,
+  type WorkflowSelfImproveMode,
   type WorkflowNodeRef,
   type WorkflowNodeRegistryRef,
   type WorkflowPrompts,
@@ -34,6 +35,72 @@ import {
   normalizeWorkflowNodeRegistryRef,
   normalizeWorkflowStepRef,
 } from "./workflow-step-validation";
+
+function normalizeWorkflowSelfImproveDefaults(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): WorkflowJson["defaults"]["selfImprove"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("error", path, "must be an object when provided"));
+    return undefined;
+  }
+
+  const allowedKeys = new Set(["enabled", "mode", "defaultLogLimit"]);
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.${key}`,
+          "uses an unsupported self-improve defaults field",
+        ),
+      );
+    }
+  }
+
+  const enabledRaw = value["enabled"];
+  let enabled: boolean | undefined;
+  if (enabledRaw !== undefined) {
+    if (typeof enabledRaw === "boolean") {
+      enabled = enabledRaw;
+    } else {
+      issues.push(makeIssue("error", `${path}.enabled`, "must be a boolean"));
+    }
+  }
+
+  const modeRaw = value["mode"];
+  let mode: WorkflowSelfImproveMode | undefined;
+  if (modeRaw !== undefined) {
+    if (modeRaw === "report-only" || modeRaw === "report-and-auto-improve") {
+      mode = modeRaw;
+    } else {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.mode`,
+          "must be report-only or report-and-auto-improve",
+        ),
+      );
+    }
+  }
+
+  const defaultLogLimit =
+    value["defaultLogLimit"] === undefined
+      ? undefined
+      : readPositiveIntegerField(value, "defaultLogLimit", path, issues);
+
+  return {
+    ...(enabled === undefined ? {} : { enabled }),
+    ...(mode === undefined ? {} : { mode }),
+    ...(defaultLogLimit === undefined || defaultLogLimit === null
+      ? {}
+      : { defaultLogLimit }),
+  };
+}
 
 export function normalizeStepAddressedWorkflow(
   workflow: UnknownRecord,
@@ -116,6 +183,11 @@ export function normalizeStepAddressedWorkflow(
   const timeoutPolicy = normalizeWorkflowTimeoutPolicy(
     isRecord(defaultsValue) ? defaultsValue["timeoutPolicy"] : undefined,
     "workflow.defaults.timeoutPolicy",
+    issues,
+  );
+  const selfImprove = normalizeWorkflowSelfImproveDefaults(
+    isRecord(defaultsValue) ? defaultsValue["selfImprove"] : undefined,
+    "workflow.defaults.selfImprove",
     issues,
   );
 
@@ -496,6 +568,7 @@ export function normalizeStepAddressedWorkflow(
       ...(supervision === undefined ? {} : { supervision }),
       ...(timeoutPolicy === undefined ? {} : { timeoutPolicy }),
       ...(containerRuntime === undefined ? {} : { containerRuntime }),
+      ...(selfImprove === undefined ? {} : { selfImprove }),
     },
     ...(prompts === undefined ? {} : { prompts }),
     hasManagerNode: managerStepId !== undefined,

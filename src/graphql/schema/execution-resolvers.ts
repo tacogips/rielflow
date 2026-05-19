@@ -6,6 +6,11 @@ import { buildFanoutGroupSummaries } from "../../workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../workflow/load";
 import { assertCommunicationInManagerScope } from "../../workflow/manager-control";
 import {
+  executeWorkflowSelfImprove,
+  getWorkflowSelfImproveReport,
+  listWorkflowSelfImproveReports,
+} from "../../workflow/self-improve";
+import {
   createSessionId,
   resolveCurrentStepId,
   resolveCurrentStepIdFromWorkflow,
@@ -19,6 +24,7 @@ import type {
   CommunicationsQueryInput,
   ContinueWorkflowExecutionInput,
   ContinueWorkflowExecutionPayload,
+  ExecuteWorkflowSelfImproveGraphqlInput,
   ExecuteWorkflowInput,
   ExecuteWorkflowPayload,
   GraphqlManagerScope,
@@ -38,6 +44,9 @@ import type {
   WorkflowExecutionStepRunsQueryInput,
   WorkflowExecutionView,
   WorkflowExecutionsQueryInput,
+  WorkflowSelfImproveReportConnection,
+  WorkflowSelfImproveReportGraphqlInput,
+  WorkflowSelfImproveReportsGraphqlInput,
   WorkflowSessionView,
 } from "../types";
 import { resolveWorkflowControlPlaneService } from "./llm-run-overrides";
@@ -193,6 +202,43 @@ export async function toWorkflowSessionView(
     currentStepId: await resolveSessionCurrentStepId({ session, context }),
     fanoutSummaries: buildFanoutGroupSummaries(toWorkflowSessionState(session)),
   };
+}
+
+export async function executeWorkflowSelfImproveMutation(
+  input: ExecuteWorkflowSelfImproveGraphqlInput,
+  context: GraphqlRequestContext,
+) {
+  if (context.readOnly === true) {
+    throw new Error(
+      "serve --read-only rejects workflow self-improve execution",
+    );
+  }
+  if (context.noExec === true) {
+    throw new Error("serve --no-exec rejects workflow self-improve execution");
+  }
+  return executeWorkflowSelfImprove({ ...context, ...input });
+}
+
+export async function workflowSelfImproveReportQuery(
+  input: WorkflowSelfImproveReportGraphqlInput,
+  context: GraphqlRequestContext,
+) {
+  try {
+    return await getWorkflowSelfImproveReport({ ...context, ...input });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("ENOENT")) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function workflowSelfImproveReportsQuery(
+  input: WorkflowSelfImproveReportsGraphqlInput,
+  context: GraphqlRequestContext,
+): Promise<WorkflowSelfImproveReportConnection> {
+  const items = await listWorkflowSelfImproveReports({ ...context, ...input });
+  return { items, totalCount: items.length };
 }
 export async function buildWorkflowExecutionConnection(
   input: WorkflowExecutionsQueryInput,

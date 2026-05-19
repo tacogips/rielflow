@@ -346,6 +346,54 @@ Workflow bundles can set supervision defaults in `workflow.defaults.supervision`
 and long-running steps can override stall detection with `steps[].stallTimeoutMs`
 or node payload `stallTimeoutMs`; CLI flags still take precedence.
 
+`workflow self-improve` is a separate retrospective feature. It reads recent
+workflow execution records, writes durable reports about purpose achievement,
+workflow structure, and prompts, and can be explicitly run in report-only or
+report-and-auto-improve mode:
+
+```bash
+bun run src/main.ts workflow self-improve <workflow-name> \
+  --workflow-definition-dir ./examples \
+  --latest \
+  --limit 10 \
+  --mode report-only \
+  --output json
+```
+
+Workflow defaults live under `workflow.defaults.selfImprove` with `enabled`,
+`mode`, and `defaultLogLimit`. Source selection defaults to runs since the last
+successful self-improve marker, or the latest configured limit when no marker
+exists. Use `--since-last`, `--latest`, or repeated `--session <session-id>` to
+choose the source runs explicitly. `DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT` changes
+the global fallback, `--limit` overrides it for one call, and
+`DIVEDRA_SELF_IMPROVE_LOG_ROOT` can move the report store from the default
+`~/.divedra/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
+Disabled workflows reject self-improve unless the caller passes
+`--enable-disabled`. Public CLI, GraphQL, and library inputs are validated
+before report creation or workflow writes; explicit session ids must be
+non-empty ids without path separators, and `sourceMode: "explicit"` requires at
+least one session id.
+
+`report-and-auto-improve` creates a workflow-directory backup before any
+canonical workflow write, validates changes, records patch status, restores the
+backup if validation or patching fails, and creates a local git commit for
+git-managed workflow changes without pushing. Reports are still written for
+failed or reverted patch attempts, but the since-last marker advances only after
+a completed report whose patch and git-commit phases did not fail. The same
+patch, report, source-selection, and git paths reuse shared divedra validation
+semantics: prompt files stay workflow-relative, report and marker JSON must be
+objects, source runs are hydrated from file-backed session state even when a
+runtime DB index is present, and commits reject escaped, directory, empty, or
+unexpected pre-staged paths.
+
+The core service is exposed through GraphQL `executeWorkflowSelfImprove` plus
+`workflowSelfImproveReport`/`workflowSelfImproveReports`, and through library
+APIs `executeWorkflowSelfImprove`, `getWorkflowSelfImproveReport`, and
+`listWorkflowSelfImproveReports`. Endpoint-backed CLI and library calls use the
+GraphQL mutation and preserve selected source-run node execution evidence in
+the returned report. `serve --read-only` and `serve --no-exec` reject
+self-improve execution.
+
 Supervised event and GraphQL runs are tracked by a deterministic in-process
 runner pool. Use `runnerPoolRunId`, `supervisedRunId`, or
 `workflowExecutionId` as the strongest identifiers for live wait, cancel, and

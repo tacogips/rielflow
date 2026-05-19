@@ -7,10 +7,13 @@ import {
   createNodeAddonPayloadResolver,
   createWorkflowExecutionClient,
   executeWorkflow,
+  executeWorkflowSelfImprove,
+  getWorkflowSelfImproveReport,
   getRuntimeSessionView,
   getSession,
   inspectWorkflow,
   listSessions,
+  listWorkflowSelfImproveReports,
   rerunWorkflow,
   resumeWorkflow,
 } from "./lib";
@@ -81,6 +84,34 @@ async function createCallStepFixture(
     executionBackend: "codex-agent",
     model: "gpt-5",
     promptTemplate: "writer",
+    variables: {},
+  });
+}
+
+async function createSelfImproveFixture(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: input.workflowName,
+    description: "self improve library fixture",
+    defaults: {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      selfImprove: { enabled: true, mode: "report-only", defaultLogLimit: 10 },
+    },
+    managerStepId: "manager",
+    entryStepId: "manager",
+    nodes: [{ id: "manager", nodeFile: "nodes/node-manager.json" }],
+    steps: [{ id: "manager", nodeId: "manager", role: "manager" }],
+  });
+  await writeJson(path.join(workflowDirectory, "nodes/node-manager.json"), {
+    id: "manager",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "Inspect the workflow run and return structured JSON.",
     variables: {},
   });
 }
@@ -1087,5 +1118,187 @@ describe("library api", () => {
         runtimeVariables: { humanInput: { request: "two" } },
       }),
     ).rejects.toThrow("use only one of input or runtimeVariables");
+  });
+});
+
+describe("workflow self-improve library API", () => {
+  test("executes, reads, and lists reports through the local library API", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const selfImproveLogRoot = path.join(root, "self-improve");
+    await createSelfImproveFixture({ workflowRoot, workflowName: "demo" });
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-self-improve-lib",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager",
+          runtimeVariables: {},
+        }),
+        status: "completed" as const,
+        endedAt: "2026-05-18T04:00:00.000Z",
+        nodeExecutions: [
+          {
+            nodeId: "manager",
+            stepId: "manager",
+            nodeExecId: "exec-manager",
+            status: "succeeded" as const,
+            artifactDir: path.join(root, "artifacts", "exec-manager"),
+            startedAt: "2026-05-18T03:59:00.000Z",
+            endedAt: "2026-05-18T04:00:00.000Z",
+          },
+        ],
+      },
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+
+    const result = await executeWorkflowSelfImprove({
+      workflowName: "demo",
+      workflowRoot,
+      sessionStoreRoot,
+      selfImproveLogRoot,
+    });
+
+    expect(result.purposeAchievement).toBe("achieved");
+    await expect(
+      getWorkflowSelfImproveReport({
+        workflowName: "demo",
+        workflowRoot,
+        selfImproveLogRoot,
+        selfImproveId: result.selfImproveId,
+      }),
+    ).resolves.toMatchObject({ selfImproveId: result.selfImproveId });
+    await expect(
+      listWorkflowSelfImproveReports({
+        workflowName: "demo",
+        workflowRoot,
+        selfImproveLogRoot,
+      }),
+    ).resolves.toHaveLength(1);
+  });
+
+  test("uses endpoint-backed GraphQL transport for self-improve APIs", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          readonly query: string;
+          readonly variables: Record<string, unknown>;
+        };
+        if (payload.query.includes("executeWorkflowSelfImprove")) {
+          expect(payload.variables).toMatchObject({
+            input: {
+              workflowName: "demo",
+              mode: "report-only",
+              sourceMode: "explicit",
+              sessionIds: ["sess-remote"],
+              enableDisabled: true,
+            },
+          });
+          return new Response(
+            JSON.stringify({
+              data: {
+                executeWorkflowSelfImprove: {
+                  selfImproveId: "sim-remote",
+                  workflowName: "demo",
+                  workflowId: "demo",
+                  reportPath: "/reports/report.json",
+                  markdownReportPath: "/reports/report.md",
+                  inputRunsPath: "/reports/input-runs.json",
+                  backupPath: null,
+                  selectedSourceRuns: [],
+                  findings: [],
+                  purposeAchievement: "unknown",
+                  patchStatus: "not-attempted",
+                  validationStatus: "not-run",
+                  gitCommitStatus: "not-git-managed",
+                  gitCommitHash: null,
+                },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (payload.query.includes("workflowSelfImproveReports")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                workflowSelfImproveReports: {
+                  items: [
+                    {
+                      selfImproveId: "sim-remote",
+                      workflowName: "demo",
+                      workflowId: "demo",
+                      reportPath: "/reports/report.json",
+                      markdownReportPath: "/reports/report.md",
+                      createdAt: "2026-05-18T04:00:00.000Z",
+                      findingCount: 0,
+                      purposeAchievement: "unknown",
+                    },
+                  ],
+                  totalCount: 1,
+                },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (payload.query.includes("workflowSelfImproveReport")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                workflowSelfImproveReport: {
+                  selfImproveId: "sim-remote",
+                  workflowName: "demo",
+                  workflowId: "demo",
+                  workflowDirectory: "/workflows/demo",
+                  mode: "report-only",
+                  sourceMode: "latest",
+                  sourceRuns: [],
+                  purposeAchievement: "unknown",
+                  findings: [],
+                  recommendedActions: [],
+                  backup: null,
+                  patch: { status: "not-attempted" },
+                  gitCommit: { status: "not-git-managed" },
+                  createdAt: "2026-05-18T04:00:00.000Z",
+                },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        throw new Error(`unexpected query: ${payload.query}`);
+      },
+    ) as typeof fetch;
+
+    await expect(
+      executeWorkflowSelfImprove({
+        workflowName: "demo",
+        mode: "report-only",
+        sourceMode: "explicit",
+        sessionIds: ["sess-remote"],
+        enableDisabled: true,
+        endpoint: "http://example.test/graphql",
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({ selfImproveId: "sim-remote" });
+    await expect(
+      getWorkflowSelfImproveReport({
+        workflowName: "demo",
+        selfImproveId: "sim-remote",
+        endpoint: "http://example.test/graphql",
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({ selfImproveId: "sim-remote" });
+    await expect(
+      listWorkflowSelfImproveReports({
+        workflowName: "demo",
+        endpoint: "http://example.test/graphql",
+        fetchImpl,
+      }),
+    ).resolves.toHaveLength(1);
   });
 });

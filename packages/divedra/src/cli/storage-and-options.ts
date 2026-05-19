@@ -37,6 +37,10 @@ import type {
   ResolvedWorkflowSource,
   WorkflowScopeSelector,
 } from "../../../../src/workflow/types";
+import type {
+  WorkflowSelfImproveMode,
+  WorkflowSelfImproveSourceMode,
+} from "../../../../src/workflow/self-improve";
 
 export type AutoImproveCliInputs = {
   readonly enabled: boolean;
@@ -334,6 +338,10 @@ export interface ParsedOptions {
   readonly continuationAfterStepRunId?: string;
   /** When set, restricts `session step-runs` to rows whose resolved step id matches. */
   readonly stepRunsFilterStepId?: string;
+  readonly selfImproveSourceMode?: WorkflowSelfImproveSourceMode;
+  readonly selfImproveSessions?: readonly string[];
+  readonly selfImproveMode?: WorkflowSelfImproveMode;
+  readonly selfImproveEnableDisabled: boolean;
 }
 export interface ParsedArgs {
   readonly positionals: string[];

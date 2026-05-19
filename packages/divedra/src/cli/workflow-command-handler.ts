@@ -8,6 +8,7 @@ import {
   type WorkflowStructureRow,
 } from "../../../../src/workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../../../src/workflow/load";
+import { executeWorkflowSelfImprove } from "../../../../src/workflow/self-improve";
 import {
   hasInvalidNodeValidationResult,
   type NodeValidationResult,
@@ -445,6 +446,113 @@ export async function runCliWorkflowScope(
       io.stdout(`created workflow: ${created.value.workflowDirectory}`);
     }
     return 0;
+  }
+
+  if (command === "self-improve") {
+    const input = {
+      workflowName: workflowTarget,
+      ...(parsed.options.selfImproveMode === undefined
+        ? {}
+        : { mode: parsed.options.selfImproveMode }),
+      ...(parsed.options.selfImproveSourceMode === undefined
+        ? {}
+        : { sourceMode: parsed.options.selfImproveSourceMode }),
+      ...(parsed.options.limit === undefined ? {} : { limit: parsed.options.limit }),
+      ...(parsed.options.selfImproveSessions === undefined
+        ? {}
+        : { sessionIds: parsed.options.selfImproveSessions }),
+      ...(parsed.options.selfImproveEnableDisabled
+        ? { enableDisabled: true }
+        : {}),
+    };
+    if (graphqlCliTransport !== null) {
+      try {
+        const data = await executeCliGraphqlOperation({
+          transport: graphqlCliTransport,
+          document: `
+            mutation ExecuteWorkflowSelfImprove($input: ExecuteWorkflowSelfImproveInput!) {
+              executeWorkflowSelfImprove(input: $input) {
+                selfImproveId
+                workflowName
+                workflowId
+                reportPath
+                markdownReportPath
+                inputRunsPath
+                backupPath
+                purposeAchievement
+                patchStatus
+                validationStatus
+                gitCommitStatus
+                gitCommitHash
+                selectedSourceRuns {
+                  sessionId
+                  workflowId
+                  workflowName
+                  status
+                  startedAt
+                  updatedAt
+                  artifactDir
+                  lastError
+                  nodeExecutions {
+                    nodeId
+                    stepId
+                    nodeExecId
+                    status
+                    artifactDir
+                    startedAt
+                    endedAt
+                    outputAttemptCount
+                    outputValidationErrors
+                  }
+                }
+                findings { severity category message evidenceSessionIds stepIds nodeIds }
+              }
+            }
+          `,
+          variables: { input },
+        });
+        const payload = requireObjectField(
+          data["executeWorkflowSelfImprove"],
+          "executeWorkflowSelfImprove",
+        );
+        if (parsed.options.output === "json") {
+          emitJson(io, payload);
+        } else {
+          io.stdout(`selfImproveId: ${String(payload["selfImproveId"])}`);
+          io.stdout(`report: ${String(payload["reportPath"])}`);
+          io.stdout(`purposeAchievement: ${String(payload["purposeAchievement"])}`);
+          io.stdout(`patchStatus: ${String(payload["patchStatus"])}`);
+          io.stdout(`gitCommitStatus: ${String(payload["gitCommitStatus"])}`);
+        }
+        return 0;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "unknown error";
+        io.stderr(`remote self-improve failed: ${message}`);
+        return 1;
+      }
+    }
+
+    try {
+      const result = await executeWorkflowSelfImprove({
+        ...sharedOptions,
+        ...input,
+      });
+      if (parsed.options.output === "json") {
+        emitJson(io, result);
+      } else {
+        io.stdout(`selfImproveId: ${result.selfImproveId}`);
+        io.stdout(`report: ${result.reportPath}`);
+        io.stdout(`purposeAchievement: ${result.purposeAchievement}`);
+        io.stdout(`patchStatus: ${result.patchStatus}`);
+        io.stdout(`gitCommitStatus: ${result.gitCommitStatus}`);
+      }
+      return 0;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      io.stderr(`self-improve failed: ${message}`);
+      return 1;
+    }
   }
 
   if (command === "validate") {

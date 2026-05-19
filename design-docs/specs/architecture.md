@@ -44,6 +44,49 @@ Current direction:
   dispatch through the existing event receipt and trigger-runner path. See
   `design-docs/specs/design-scheduled-workflow-execution.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
+- dedicated workflow self-improve is a separate retrospective analysis and
+  optional canonical workflow-edit service; it reads recent workflow run
+  artifacts after executions complete, writes reports under
+  `~/.divedra/self-improve-log/`, and may patch/commit workflow bundles only
+  through explicit self-improve policy. See
+  `design-docs/specs/design-self-improve.md`.
+
+### Dedicated Workflow Self-Improve
+
+Self-improve is provider-neutral core workflow infrastructure, not a manager
+message and not a live supervision mode. CLI, GraphQL, and library entrypoints
+must call the same core service so source-run discovery, report shape, backup,
+validation, and optional patch behavior stay identical across local and served
+execution.
+
+Core responsibilities:
+
+- resolve the workflow through the normal direct/project/user catalog rules
+- select source runs from the same runtime session/artifact store used by
+  `workflow status`, `session status`, and GraphQL inspection
+- default to runs since the last successful self-improve marker for the
+  workflow directory, or the latest configurable limit when no marker exists
+- assess purpose achievement from workflow descriptions, step/node intent,
+  output contracts, and concrete run evidence
+- write durable `report.json` and `report.md` artifacts under the user-root
+  self-improve log
+- before any canonical workflow edit, back up the full workflow directory under
+  the same self-improve execution directory
+- when the workflow directory is git-managed, create a local commit containing
+  only the workflow files changed by that self-improve execution
+
+The self-improve service must not mutate runtime session artifacts or source
+code. Its write scope is the resolved workflow directory and its own
+`self-improve-log` execution directory. Report-only mode is always valid;
+report-and-auto-improve mode requires workflow config or explicit caller
+authorization and post-patch workflow validation.
+
+Implementation owners should keep the public facade in `src/lib.ts`, expose the
+served contract through GraphQL schema/resolver modules, and keep backend
+transcript parsing behind existing agent adapter/session-history boundaries.
+Codex-agent is a reference for session discovery and transcript/file-change
+summary patterns only; Cursor CLI behavior remains isolated behind adapter
+validation and runtime-readiness probes.
 
 ### Workflow Node Runtime Patches
 

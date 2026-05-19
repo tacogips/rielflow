@@ -511,6 +511,89 @@ export const GRAPHQL_SCHEMA_TEXT = `
     stepRuns: [WorkflowExecutionStepRun!]!
   }
 
+  type WorkflowSelfImproveSourceRun {
+    sessionId: String!
+    workflowId: String!
+    workflowName: String!
+    status: String!
+    startedAt: String
+    updatedAt: String
+    artifactDir: String
+    lastError: String
+    nodeExecutions: [WorkflowSelfImproveSourceNodeExecution!]
+  }
+
+  type WorkflowSelfImproveSourceNodeExecution {
+    nodeId: String!
+    stepId: String
+    nodeExecId: String!
+    status: String!
+    artifactDir: String!
+    startedAt: String!
+    endedAt: String!
+    outputAttemptCount: Int
+    outputValidationErrors: JSON
+  }
+
+  type WorkflowSelfImproveFinding {
+    severity: String!
+    category: String!
+    message: String!
+    evidenceSessionIds: [String!]!
+    stepIds: [String!]
+    nodeIds: [String!]
+  }
+
+  type WorkflowSelfImproveResult {
+    selfImproveId: String!
+    workflowName: String!
+    workflowId: String!
+    reportPath: String!
+    markdownReportPath: String!
+    inputRunsPath: String!
+    backupPath: String
+    selectedSourceRuns: [WorkflowSelfImproveSourceRun!]!
+    findings: [WorkflowSelfImproveFinding!]!
+    purposeAchievement: String!
+    patchStatus: String!
+    validationStatus: String!
+    gitCommitStatus: String!
+    gitCommitHash: String
+  }
+
+  type WorkflowSelfImproveReportSummary {
+    selfImproveId: String!
+    workflowName: String!
+    workflowId: String!
+    reportPath: String!
+    markdownReportPath: String!
+    createdAt: String!
+    findingCount: Int!
+    purposeAchievement: String!
+  }
+
+  type WorkflowSelfImproveReportConnection {
+    items: [WorkflowSelfImproveReportSummary!]!
+    totalCount: Int!
+  }
+
+  type WorkflowSelfImproveReport {
+    selfImproveId: String!
+    workflowName: String!
+    workflowId: String!
+    workflowDirectory: String!
+    mode: String!
+    sourceMode: String!
+    sourceRuns: [WorkflowSelfImproveSourceRun!]!
+    purposeAchievement: String!
+    findings: [WorkflowSelfImproveFinding!]!
+    recommendedActions: [String!]!
+    backup: JSON
+    patch: JSON!
+    gitCommit: JSON!
+    createdAt: String!
+  }
+
   type CancelWorkflowExecutionPayload {
     accepted: Boolean!
     workflowExecutionId: String!
@@ -664,6 +747,15 @@ export const GRAPHQL_SCHEMA_TEXT = `
     maxLoopIterations: Int
     defaultTimeoutMs: Int
     mockScenario: JSON
+  }
+
+  input ExecuteWorkflowSelfImproveInput {
+    workflowName: String!
+    mode: String
+    sourceMode: String
+    limit: Int
+    sessionIds: [String!]
+    enableDisabled: Boolean
   }
 
   input CancelWorkflowExecutionInput {
@@ -824,6 +916,13 @@ export const GRAPHQL_SCHEMA_TEXT = `
       stepId: String
       status: String
     ): WorkflowExecutionStepRunsPayload!
+    workflowSelfImproveReport(
+      workflowName: String!
+      selfImproveId: String!
+    ): WorkflowSelfImproveReport
+    workflowSelfImproveReports(
+      workflowName: String!
+    ): WorkflowSelfImproveReportConnection!
   }
 
   type Mutation {
@@ -831,6 +930,9 @@ export const GRAPHQL_SCHEMA_TEXT = `
     saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): SaveWorkflowDefinitionPayload!
     validateWorkflowDefinition(input: ValidateWorkflowDefinitionInput!): ValidateWorkflowDefinitionPayload!
     executeWorkflow(input: ExecuteWorkflowInput!): ExecuteWorkflowPayload!
+    executeWorkflowSelfImprove(
+      input: ExecuteWorkflowSelfImproveInput!
+    ): WorkflowSelfImproveResult!
     resumeWorkflowExecution(input: ResumeWorkflowExecutionInput!): ResumeWorkflowExecutionPayload!
     rerunWorkflowExecution(input: RerunWorkflowExecutionInput!): RerunWorkflowExecutionPayload!
     continueWorkflowExecution(

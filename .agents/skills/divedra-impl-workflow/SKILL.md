@@ -13,12 +13,18 @@ Use this skill as the default path for implementation work in this repository.
 - adding or changing runtime behavior
 - implementing a feature from a design or implementation plan
 - making a non-trivial refactor that changes implementation behavior
+- reviewing or hardening dedicated `workflow self-improve` implementation
+  behavior, including its CLI, server, library, GraphQL, report, backup, patch,
+  and git-commit integration
 
 ## Do Not Apply This Skill When
 
 - the user explicitly says not to use a workflow
 - the task is documentation-only or planning-only with no implementation
 - the task is specifically to debug or repair `divedra` itself; use `divedra-fix`
+- the task is to operate or troubleshoot live `workflow run --auto-improve`
+  supervision rather than implement repository behavior; use
+  `divedra-auto-improve`
 
 ## Default Workflow
 

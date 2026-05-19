@@ -90,9 +90,12 @@ import {
   buildWorkflowExecutionView,
   continueWorkflowExecutionMutation,
   executeWorkflowMutation,
+  executeWorkflowSelfImproveMutation,
   loadScopedCommunicationForManagerMutation,
   rerunWorkflowExecutionMutation,
   resumeWorkflowExecutionMutation,
+  workflowSelfImproveReportQuery,
+  workflowSelfImproveReportsQuery,
   workflowExecutionStepRunsQuery,
 } from "./execution-resolvers";
 import {
@@ -239,6 +242,14 @@ export function createGraphqlSchema(
       ): Promise<WorkflowExecutionStepRunsPayload> {
         return workflowExecutionStepRunsQuery(input, context, deps);
       },
+
+      async workflowSelfImproveReport(input, context = {}) {
+        return workflowSelfImproveReportQuery(input, context);
+      },
+
+      async workflowSelfImproveReports(input, context = {}) {
+        return workflowSelfImproveReportsQuery(input, context);
+      },
     },
 
     mutation: {
@@ -268,6 +279,10 @@ export function createGraphqlSchema(
         context: GraphqlRequestContext = {},
       ): Promise<ExecuteWorkflowPayload> {
         return executeWorkflowMutation(input, context, deps);
+      },
+
+      async executeWorkflowSelfImprove(input, context = {}) {
+        return executeWorkflowSelfImproveMutation(input, context);
       },
 
       async resumeWorkflowExecution(

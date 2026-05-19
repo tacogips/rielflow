@@ -215,6 +215,34 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+async function writeSelfImproveWorkflowFixture(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  await mkdir(path.join(workflowDirectory, "nodes"), { recursive: true });
+  await writeJson(path.join(workflowDirectory, "workflow.json"), {
+    workflowId: input.workflowName,
+    description: "self improve CLI fixture",
+    defaults: {
+      maxLoopIterations: 3,
+      nodeTimeoutMs: 120000,
+      selfImprove: { enabled: true, mode: "report-only", defaultLogLimit: 10 },
+    },
+    managerStepId: "manager",
+    entryStepId: "manager",
+    nodes: [{ id: "manager", nodeFile: "nodes/node-manager.json" }],
+    steps: [{ id: "manager", nodeId: "manager", role: "manager" }],
+  });
+  await writeJson(path.join(workflowDirectory, "nodes/node-manager.json"), {
+    id: "manager",
+    executionBackend: "codex-agent",
+    model: "gpt-5",
+    promptTemplate: "Inspect the workflow run and return structured JSON.",
+    variables: {},
+  });
+}
+
 async function writeExecutable(filePath: string, body: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${body}\n`, { mode: 0o755 });
@@ -7017,5 +7045,140 @@ describe("runCli", () => {
       "unknown hook subcommand",
       "usage: divedra hook snippet --vendor claude-code|codex|gemini",
     ]);
+  });
+
+  test("workflow self-improve runs locally and emits JSON", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const sessionStoreRoot = path.join(root, "sessions");
+    await writeSelfImproveWorkflowFixture({
+      workflowRoot,
+      workflowName: "demo",
+    });
+    const saved = await saveSession(
+      {
+        ...createSessionState({
+          sessionId: "sess-cli-self-improve",
+          workflowName: "demo",
+          workflowId: "demo",
+          initialNodeId: "manager",
+          runtimeVariables: {},
+        }),
+        status: "completed" as const,
+        endedAt: "2026-05-18T04:00:00.000Z",
+        nodeExecutions: [
+          {
+            nodeId: "manager",
+            stepId: "manager",
+            nodeExecId: "exec-manager",
+            status: "succeeded" as const,
+            artifactDir: path.join(root, "artifacts", "exec-manager"),
+            startedAt: "2026-05-18T03:59:00.000Z",
+            endedAt: "2026-05-18T04:00:00.000Z",
+          },
+        ],
+      },
+      { sessionStoreRoot },
+    );
+    expect(saved.ok).toBe(true);
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "workflow",
+        "self-improve",
+        "demo",
+        "--workflow-definition-dir",
+        workflowRoot,
+        "--session-store",
+        sessionStoreRoot,
+        "--user-root",
+        path.join(root, "user"),
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      readonly selfImproveId: string;
+      readonly purposeAchievement: string;
+    };
+    expect(payload.selfImproveId).toMatch(/^sim-/);
+    expect(payload.purposeAchievement).toBe("achieved");
+    expect(capture.stderr).toEqual([]);
+  });
+
+  test("workflow self-improve uses GraphQL transport when endpoint is set", async () => {
+    const requests: unknown[] = [];
+    const fetchImpl = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          readonly query: string;
+          readonly variables: Record<string, unknown>;
+        };
+        requests.push(payload);
+        expect(payload.query).toContain("executeWorkflowSelfImprove");
+        expect(payload.variables).toMatchObject({
+          input: {
+            workflowName: "demo",
+            mode: "report-only",
+            sourceMode: "latest",
+            limit: 3,
+            enableDisabled: true,
+          },
+        });
+        return createJsonResponse({
+          data: {
+            executeWorkflowSelfImprove: {
+              selfImproveId: "sim-cli-remote",
+              workflowName: "demo",
+              workflowId: "demo",
+              reportPath: "/reports/report.json",
+              markdownReportPath: "/reports/report.md",
+              inputRunsPath: "/reports/input-runs.json",
+              backupPath: null,
+              purposeAchievement: "unknown",
+              patchStatus: "not-attempted",
+              validationStatus: "not-run",
+              gitCommitStatus: "not-git-managed",
+              gitCommitHash: null,
+              selectedSourceRuns: [],
+              findings: [],
+            },
+          },
+        });
+      },
+    ) as typeof fetch;
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "workflow",
+        "self-improve",
+        "demo",
+        "--endpoint",
+        "http://example.test/graphql",
+        "--mode",
+        "report-only",
+        "--latest",
+        "--limit",
+        "3",
+        "--enable-disabled",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps({ fetchImpl }),
+    );
+
+    expect(code).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(JSON.parse(capture.stdout.join("\n"))).toMatchObject({
+      selfImproveId: "sim-cli-remote",
+    });
+    expect(capture.stderr).toEqual([]);
   });
 });
