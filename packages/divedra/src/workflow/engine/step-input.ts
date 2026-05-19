@@ -1,11 +1,31 @@
 import { createScheduledEventManager } from "../../events/scheduled-event-manager";
 import { publishNodeOutputArtifacts } from "../runtime-execution-contracts";
-import { markWorkflowSleepScheduledEventRef } from "../session";
+import {
+  markWorkflowSleepScheduledEventRef,
+  type NodeExecutionRecord,
+  type PendingOptionalNodeDecision,
+  type WorkflowScheduledEventRefStatus,
+  type WorkflowSessionState,
+} from "../session";
+import type { Result } from "../result";
+import type {
+  StepIdentityFields,
+  ResolvedStepExecutionAddress,
+} from "../runtime-addressing";
+import type {
+  LoopRule,
+  NodePayload,
+  SleepNodeConfig,
+  WorkflowEdge,
+  WorkflowJson,
+} from "../types";
+import type {
+  NormalizedWorkflowRunOptions,
+  WorkflowRunFailure,
+  WorkflowRunResult,
+} from "./types-and-session-state";
+import type { LoadedWorkflowSuccess } from "./run-setup";
 import { workflowStepInputPort } from "./workflow-runner-deps";
-
-type LoopRule = any;
-type NodeExecutionRecord = any;
-type WorkflowSessionState = any;
 
 const {
   mkdir,
@@ -35,20 +55,41 @@ const {
 
 const defaultWorkflowSleepScheduledEventManager = createScheduledEventManager();
 
-function resolveSleepDueAt(sleepConfig: any) {
+function resolveSleepDueAt(sleepConfig: SleepNodeConfig): Date {
   if (sleepConfig.until !== undefined) {
     return new Date(sleepConfig.until);
+  }
+  if (sleepConfig.durationMs === undefined) {
+    throw new Error("sleep node requires either until or durationMs");
   }
   return new Date(Date.now() + sleepConfig.durationMs);
 }
 
-function buildWorkflowSleepSchedule(input: any) {
+function buildWorkflowSleepSchedule(input: {
+  readonly session: WorkflowSessionState;
+  readonly nodePayload: Pick<NodePayload, "sleep">;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+}): { readonly eventId: string; readonly dueAt: Date } {
+  if (input.nodePayload.sleep === undefined) {
+    throw new Error("sleep node requires sleep configuration");
+  }
   const eventId = `workflow-sleep:${input.session.sessionId}:${input.nodeId}:${input.nodeExecId}`;
   const dueAt = resolveSleepDueAt(input.nodePayload.sleep);
   return { eventId, dueAt };
 }
 
-async function markWorkflowSleepRef(input: any, status: any) {
+async function markWorkflowSleepRef(
+  input: {
+    readonly sessionId: string;
+    readonly eventId: string;
+    readonly nodeId?: string;
+    readonly nodeExecId?: string;
+    readonly dueAt?: Date;
+    readonly options: NormalizedWorkflowRunOptions;
+  },
+  status: WorkflowScheduledEventRefStatus,
+) {
   const loaded = await loadSession(input.sessionId, input.options);
   if (!loaded.ok) {
     return undefined;
@@ -87,14 +128,14 @@ async function markWorkflowSleepRef(input: any, status: any) {
 }
 
 function ownsPendingWorkflowSleepEvent(
-  session: any,
+  session: WorkflowSessionState,
   eventId: string,
   nodeExecId: string,
-) {
+): boolean {
   return (
     session.status === "paused" &&
     session.scheduledEvents?.some(
-      (entry: any) =>
+      (entry) =>
         entry.kind === "workflow-sleep" &&
         entry.eventId === eventId &&
         entry.nodeExecId === nodeExecId &&
@@ -103,7 +144,17 @@ function ownsPendingWorkflowSleepEvent(
   );
 }
 
-function registerWorkflowSleepResume(input: any) {
+function registerWorkflowSleepResume(input: {
+  readonly workflowName: string;
+  readonly session: WorkflowSessionState;
+  readonly nodePayload: NodePayload;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly stepExecutionAddress: ResolvedStepExecutionAddress;
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly eventId: string;
+  readonly dueAt: Date;
+}) {
   const manager =
     input.options.scheduledEventManager ??
     defaultWorkflowSleepScheduledEventManager;
@@ -168,7 +219,41 @@ function registerWorkflowSleepResume(input: any) {
   });
 }
 
-export async function handlePreparedStepInput(input: any) {
+export type PreparedStepInputResult =
+  | Result<WorkflowRunResult, WorkflowRunFailure>
+  | { readonly kind: "done"; readonly session: WorkflowSessionState }
+  | { readonly kind: "continue" };
+
+export interface PreparedStepInput {
+  readonly nodePayload: NodePayload;
+  readonly baseInputPayload: Readonly<Record<string, unknown>>;
+  readonly artifactDir: string;
+  readonly nodeExecId: string;
+  readonly workflow: WorkflowJson;
+  readonly session: WorkflowSessionState;
+  readonly nodeId: string;
+  readonly assembledPromptText: string;
+  readonly queue: readonly string[];
+  readonly nextExecutionCounter: number;
+  readonly updatedCounts: Readonly<Record<string, number>>;
+  readonly skipOptionalNode: boolean;
+  readonly pendingOptionalDecision: PendingOptionalNodeDecision | undefined;
+  readonly loopRuleByJudgeNodeId: ReadonlyMap<string, LoopRule>;
+  readonly outgoingEdges: ReadonlyMap<string, readonly WorkflowEdge[]>;
+  readonly maxLoopIterations: number;
+  readonly executionNodePayload: NodePayload;
+  readonly stepIdentityFields: StepIdentityFields;
+  readonly mailboxInstanceId: string;
+  readonly stepExecutionAddress: ResolvedStepExecutionAddress;
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly upstreamCommunicationIds: readonly string[];
+  readonly loaded: LoadedWorkflowSuccess;
+  readonly workflowName: string;
+}
+
+export async function handlePreparedStepInput(
+  input: PreparedStepInput,
+): Promise<PreparedStepInputResult> {
   let {
     nodePayload,
     baseInputPayload,
@@ -194,7 +279,6 @@ export async function handlePreparedStepInput(input: any) {
     upstreamCommunicationIds,
     loaded,
     workflowName,
-    outputPayload: _unusedOutputPayload,
   } = input;
   if (nodePayload.nodeType === "sleep") {
     const startedAt = nowIso();
@@ -210,7 +294,7 @@ export async function handlePreparedStepInput(input: any) {
       scheduledAt: startedAt,
       wakeAt: dueAt.toISOString(),
     };
-    const selected = (outgoingEdges.get(nodeId) ?? []).filter((edge: any) =>
+    const selected = (outgoingEdges.get(nodeId) ?? []).filter((edge) =>
       evaluateEdge(edge, outputPayload),
     );
     const inputJson = stableJson({
@@ -246,7 +330,7 @@ export async function handlePreparedStepInput(input: any) {
     const outputRaw = `${outputJson}\n`;
     const inputHash = sha256Hex(inputJson);
     const outputHash = sha256Hex(outputJson);
-    const nextNodes = selected.map((edge: any) => edge.to);
+    const nextNodes = selected.map((edge) => edge.to);
     const metaPayload = {
       nodeId,
       ...stepIdentityFields,
@@ -333,7 +417,7 @@ export async function handlePreparedStepInput(input: any) {
       });
     }
     const transitionCommunications = await Promise.all(
-      selected.map((edge: any, index: number) =>
+      selected.map((edge, index) =>
         persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
@@ -368,7 +452,7 @@ export async function handlePreparedStepInput(input: any) {
       nodeExecutions: [...session.nodeExecutions, nodeExecution],
       transitions: [
         ...session.transitions,
-        ...selected.map((edge: any) => ({
+        ...selected.map((edge) => ({
           from: edge.from,
           to: edge.to,
           when: edge.when,
@@ -382,7 +466,7 @@ export async function handlePreparedStepInput(input: any) {
       ],
       scheduledEvents: [
         ...(session.scheduledEvents ?? []).filter(
-          (entry: any) => entry.eventId !== eventId,
+          (entry) => entry.eventId !== eventId,
         ),
         {
           eventId,
@@ -465,7 +549,7 @@ export async function handlePreparedStepInput(input: any) {
       ),
       activeUserActions: [
         ...(session.activeUserActions ?? []).filter(
-          (entry: any) => entry.nodeId !== nodeId,
+          (entry) => entry.nodeId !== nodeId,
         ),
         {
           nodeId,
@@ -487,7 +571,7 @@ export async function handlePreparedStepInput(input: any) {
       pendingOptionalDecision?.reason,
     );
     const loopRule = loopRuleByJudgeNodeId.get(nodeId);
-    let selected = (outgoingEdges.get(nodeId) ?? []).filter((edge: any) =>
+    let selected = (outgoingEdges.get(nodeId) ?? []).filter((edge) =>
       evaluateEdge(edge, outputPayload),
     );
     let updatedLoopIterationCounts = session.loopIterationCounts ?? {};
@@ -504,7 +588,7 @@ export async function handlePreparedStepInput(input: any) {
       });
       if (transition === "continue") {
         selected = (outgoingEdges.get(nodeId) ?? []).filter(
-          (edge: any) => edge.when === effectiveLoopRule.continueWhen,
+          (edge) => edge.when === effectiveLoopRule.continueWhen,
         );
         updatedLoopIterationCounts = {
           ...(session.loopIterationCounts ?? {}),
@@ -512,7 +596,7 @@ export async function handlePreparedStepInput(input: any) {
         };
       } else if (transition === "exit") {
         selected = (outgoingEdges.get(nodeId) ?? []).filter(
-          (edge: any) => edge.when === effectiveLoopRule.exitWhen,
+          (edge) => edge.when === effectiveLoopRule.exitWhen,
         );
       }
     }
@@ -548,7 +632,7 @@ export async function handlePreparedStepInput(input: any) {
     const outputRaw = `${outputJson}\n`;
     const inputHash = sha256Hex(inputJson);
     const outputHash = sha256Hex(outputJson);
-    const nextNodes = selected.map((edge: any) => edge.to);
+    const nextNodes = selected.map((edge) => edge.to);
     const metaPayload = {
       nodeId,
       ...stepIdentityFields,
@@ -635,7 +719,7 @@ export async function handlePreparedStepInput(input: any) {
     }
     let currentCommunications = consumedCommunicationsResult.value;
     const transitionCommunications = await Promise.all(
-      selected.map((edge: any, index: number) => {
+      selected.map((edge, index) => {
         return persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
@@ -669,7 +753,7 @@ export async function handlePreparedStepInput(input: any) {
       loopIterationCounts: updatedLoopIterationCounts,
       transitions: [
         ...session.transitions,
-        ...selected.map((edge: any) => ({
+        ...selected.map((edge) => ({
           from: edge.from,
           to: edge.to,
           when: edge.when,

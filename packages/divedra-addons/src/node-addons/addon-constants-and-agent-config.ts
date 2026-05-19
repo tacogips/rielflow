@@ -12,8 +12,9 @@ import type {
   WorkflowNodeAddonRef,
   XGatewayAddonConfig,
   XGatewayReadAddonConfig,
+  NodeValidationResult,
+  NodeValidationResultInput,
 } from "../../../divedra-core/src/index";
-import { NodeValidationResult } from "../../../divedra-core/src/index";
 
 export const CHAT_REPLY_WORKER_ADDON_NAME = "divedra/chat-reply-worker";
 export const CHAT_REPLY_WORKER_ADDON_VERSION = "1";
@@ -204,6 +205,20 @@ export const SUPERVISER_CONTROL_ADDON_OUTPUT: NodeOutputContract = {
 export function makeIssue(path: string, message: string): ValidationIssue {
   return { severity: "error", path, message };
 }
+export function makeNodeValidationResult(
+  input: NodeValidationResultInput,
+): NodeValidationResult {
+  return {
+    status: input.status,
+    message: input.message,
+    ...(input.nodeId === undefined ? {} : { nodeId: input.nodeId }),
+    ...(input.stepIds === undefined ? {} : { stepIds: input.stepIds }),
+    ...(input.source === undefined ? {} : { source: input.source }),
+    ...(input.path === undefined ? {} : { path: input.path }),
+    ...(input.backend === undefined ? {} : { backend: input.backend }),
+    ...(input.addonName === undefined ? {} : { addonName: input.addonName }),
+  };
+}
 export function errorMessageFromUnknown(error: unknown): string {
   return error instanceof Error ? error.message : "unknown error";
 }
@@ -293,7 +308,7 @@ export function normalizeThirdPartyResolverResult(input: {
   const nodeValidationResults: NodeValidationResult[] = [];
   for (const [index, result] of nodeValidationResultsRaw.entries()) {
     if (isNodeValidationResultLike(result)) {
-      nodeValidationResults.push(new NodeValidationResult(result));
+      nodeValidationResults.push(makeNodeValidationResult(result));
       continue;
     }
     return {
@@ -314,7 +329,7 @@ export function normalizeThirdPartyResolverResult(input: {
 
 function isNodeValidationResultLike(
   value: unknown,
-): value is ConstructorParameters<typeof NodeValidationResult>[0] {
+): value is NodeValidationResultInput {
   if (!isRecord(value)) {
     return false;
   }
@@ -333,7 +348,7 @@ function normalizeAddonValidateResult(
   value: NodeAddonValidateResult,
 ): readonly NodeValidationResult[] {
   const entries = Array.isArray(value) ? value : [value];
-  return entries.map((entry) => new NodeValidationResult(entry));
+  return entries.map((entry) => makeNodeValidationResult(entry));
 }
 
 function attachSyncValidateResult(input: {

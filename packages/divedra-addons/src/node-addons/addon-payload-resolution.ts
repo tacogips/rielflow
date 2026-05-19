@@ -11,6 +11,7 @@ import type {
   NodeAddonResolveInput,
   NodeAddonResolveResult,
   NodePayload,
+  NodeValidationResultInput,
   ResolvedNodeAddon,
   ResolvedSuperviserControlAddon,
   ResolvedWorkflowSource,
@@ -18,7 +19,6 @@ import type {
   ValidationIssue,
   WorkflowNodeAddonRef,
 } from "../../../divedra-core/src/index";
-import { NodeValidationResult } from "../../../divedra-core/src/index";
 import {
   CHAT_REPLY_WORKER_ADDON_NAME,
   CHAT_REPLY_WORKER_ADDON_VERSION,
@@ -28,6 +28,7 @@ import {
   errorMessageFromUnknown,
   isRecord,
   makeIssue,
+  makeNodeValidationResult,
   normalizeChatReplyWorkerConfig,
   normalizeThirdPartyResolverResult,
 } from "./addon-constants-and-agent-config";
@@ -290,14 +291,14 @@ function withDefaultAddonValidation(input: {
     ...input.resolved,
     nodeValidationResults: [
       ...(input.resolved.nodeValidationResults ?? []),
-      new NodeValidationResult({
+      makeNodeValidationResult({
         status: "valid",
         message: `node add-on '${input.addon.name}' resolved to an executable payload`,
         nodeId: input.nodeId,
         source: "addon",
         path: input.path,
         addonName: input.addon.name,
-      }),
+      } satisfies NodeValidationResultInput),
     ],
   };
 }

@@ -1,13 +1,13 @@
 import {
   normalizeCliAgentBackend as normalizeCoreCliAgentBackend,
   normalizeNodeExecutionBackend as normalizeCoreNodeExecutionBackend,
-} from "../../../divedra-core/src/workflow-model";
+} from "divedra-core/workflow-model";
 export {
   CLI_AGENT_BACKENDS,
   NODE_EXECUTION_BACKEND,
   NODE_EXECUTION_BACKENDS,
   NODE_EXECUTION_BACKEND_LIST_TEXT,
-} from "../../../divedra-core/src/workflow-model";
+} from "divedra-core/workflow-model";
 import type { CliAgentBackend, NodeExecutionBackend } from "./types";
 
 export function normalizeCliAgentBackend(

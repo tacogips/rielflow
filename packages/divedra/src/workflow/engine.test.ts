@@ -10254,6 +10254,95 @@ describe("runWorkflow", () => {
     ).toBe(false);
   });
 
+  test("authored jump timeout policy queues the configured recovery step", async () => {
+    const root = await makeTempDir();
+    const workflowName = "authored-timeout-jump";
+    const sessionId = "sess-authored-timeout-jump";
+    await createWorkflowFixture(root, workflowName, false);
+    const workflow = await loadWorkflowFixture(root, workflowName);
+    await saveWorkflowFixture(root, workflowName, {
+      ...workflow,
+      defaults: {
+        ...workflow.defaults,
+        timeoutPolicy: {
+          onTimeout: "jump-to-step",
+          jumpStepId: "step-2",
+        },
+      },
+      nodes: [
+        ...workflow.nodes,
+        {
+          id: "step-2",
+          nodeFile: "node-step-2.json",
+        },
+      ],
+      steps: [
+        ...workflow.steps,
+        {
+          id: "step-2",
+          nodeId: "step-2",
+        },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "step 2",
+      variables: {},
+    });
+
+    const stuckAdapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "step-1") {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: "ok",
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const options = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const result = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        sessionId,
+        defaultTimeoutMs: 10,
+        stuckRestartBackoffMs: 0,
+      },
+      stuckAdapter,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.session.status).toBe("completed");
+    expect(
+      result.value.session.nodeExecutions
+        .filter(
+          (entry) => entry.nodeId === "step-1" || entry.nodeId === "step-2",
+        )
+        .map((entry) => [entry.nodeId, entry.status]),
+    ).toEqual([
+      ["step-1", "timed_out"],
+      ["step-2", "succeeded"],
+    ]);
+  });
+
   test("fails with timeout when stuck restart budget is exhausted", async () => {
     const root = await makeTempDir();
     await createWorkflowFixture(root, "restart-fail", false);

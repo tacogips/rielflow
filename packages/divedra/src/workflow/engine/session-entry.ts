@@ -1,8 +1,13 @@
 import { cancelPendingWorkflowSleepScheduledEvents } from "../session";
 import { workflowSessionEntryPort } from "./workflow-runner-deps";
-
-type SupervisionRunState = any;
-type WorkflowSessionState = any;
+import type { WorkflowSessionState } from "../session";
+import type { SupervisionRunState } from "../types-supervision";
+import type { PreparedWorkflowRun } from "./run-setup";
+import type {
+  WorkflowRunFailure,
+  WorkflowRunResult,
+} from "./types-and-session-state";
+import type { Result } from "../result";
 
 const {
   loadContinuationRelatedSnapshots,
@@ -23,7 +28,16 @@ const {
   persistExternalMailboxInputCommunication,
 } = workflowSessionEntryPort;
 
-export async function enterWorkflowSession(setup: any) {
+export type EnterWorkflowSessionResult =
+  | {
+      readonly kind: "result";
+      readonly result: Result<WorkflowRunResult, WorkflowRunFailure>;
+    }
+  | { readonly kind: "session"; readonly session: WorkflowSessionState };
+
+export async function enterWorkflowSession(
+  setup: PreparedWorkflowRun,
+): Promise<EnterWorkflowSessionResult> {
   const {
     workflowName,
     options,
@@ -63,7 +77,7 @@ export async function enterWorkflowSession(setup: any) {
     const stepIdSet =
       workflow.steps === undefined
         ? undefined
-        : new Set(workflow.steps.map((st: any) => st.id));
+        : new Set(workflow.steps.map((step) => step.id));
     const rerunIdKnown =
       stepIdSet === undefined
         ? workflowNodes.has(rerunTargetId)
@@ -143,7 +157,7 @@ export async function enterWorkflowSession(setup: any) {
     const stepIdSetContinue =
       workflow.steps === undefined
         ? undefined
-        : new Set(workflow.steps.map((st: any) => st.id));
+        : new Set(workflow.steps.map((step) => step.id));
     const continuationStartKnown =
       stepIdSetContinue === undefined
         ? workflowNodes.has(trimmedStart)

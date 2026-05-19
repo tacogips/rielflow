@@ -1,4 +1,18 @@
 import { runOutputAttempts } from "../output-attempt-runner";
+import type {
+  AdapterAmbientManagerContext,
+  AdapterBackendSessionInput,
+  AdapterLlmSessionMessage,
+  AdapterProcessLog,
+  NodeAdapter,
+} from "../adapter";
+import type { JsonSchemaValidationError } from "../json-schema";
+import type { NodeExecutionMailbox } from "../node-execution-mailbox";
+import type { OutputAttemptRunnerResult } from "../output-attempt-runner";
+import type { NodeExecutionRecord, WorkflowSessionState } from "../session";
+import type { AgentNodePayload, NodePayload, WorkflowJson } from "../types";
+import type { LoadedWorkflowSuccess } from "./run-setup";
+import type { NormalizedWorkflowRunOptions } from "./types-and-session-state";
 import { workflowNodeOutputAttemptPort } from "./workflow-runner-deps";
 
 const {
@@ -9,7 +23,42 @@ const {
   resolveNodeExecutionWorkingDirectory,
 } = workflowNodeOutputAttemptPort;
 
-export async function resolveNodeExecutionOutput(input: any) {
+export interface ResolveNodeExecutionOutputInput {
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly agentNodePayload: AgentNodePayload | null;
+  readonly executionNodePayload: NodePayload;
+  readonly systemPromptText: string | undefined;
+  readonly effectivePromptText: string;
+  readonly outputPayload: Readonly<Record<string, unknown>> | undefined;
+  readonly nodeStatus: NodeExecutionRecord["status"];
+  readonly outputValidationErrors: readonly JsonSchemaValidationError[];
+  readonly outputAttemptCount: number;
+  readonly processLogs: readonly AdapterProcessLog[];
+  readonly llmMessages: readonly AdapterLlmSessionMessage[];
+  readonly backendSessionProvider: string | undefined;
+  readonly backendSession: AdapterBackendSessionInput | undefined;
+  readonly backendSessionId: string | undefined;
+  readonly workflow: WorkflowJson;
+  readonly session: WorkflowSessionState;
+  readonly nodeId: string;
+  readonly nodeExecId: string;
+  readonly artifactDir: string;
+  readonly loaded: LoadedWorkflowSuccess;
+  readonly workflowWorkingDirectory: string;
+  readonly mergedVariables: Readonly<Record<string, unknown>>;
+  readonly assembledArguments: Readonly<Record<string, unknown>> | null;
+  readonly upstreamCommunicationIds: readonly string[];
+  readonly executionMailbox: NodeExecutionMailbox;
+  readonly mailboxDir: string;
+  readonly ambientManagerContext: AdapterAmbientManagerContext | undefined;
+  readonly effectiveAdapter: NodeAdapter;
+  readonly timeoutMs: number;
+  readonly nextCount: number;
+}
+
+export async function resolveNodeExecutionOutput(
+  input: ResolveNodeExecutionOutputInput,
+): Promise<OutputAttemptRunnerResult> {
   let {
     options,
     agentNodePayload,
@@ -22,7 +71,6 @@ export async function resolveNodeExecutionOutput(input: any) {
     outputAttemptCount,
     processLogs,
     llmMessages,
-    finalizedOutput,
     backendSessionProvider,
     backendSession,
     backendSessionId,
@@ -41,10 +89,8 @@ export async function resolveNodeExecutionOutput(input: any) {
     ambientManagerContext,
     effectiveAdapter,
     timeoutMs,
-    assembledPromptText,
     nextCount,
   } = input;
-  void [finalizedOutput, assembledPromptText];
   if (options.dryRun === true) {
     outputPayload = {
       provider: "dry-run",
@@ -177,8 +223,8 @@ export async function resolveNodeExecutionOutput(input: any) {
     outputAttemptCount,
     processLogs,
     llmMessages,
-    backendSessionProvider,
-    backendSession,
-    backendSessionId,
+    ...(backendSessionProvider === undefined ? {} : { backendSessionProvider }),
+    ...(backendSession === undefined ? {} : { backendSession }),
+    ...(backendSessionId === undefined ? {} : { backendSessionId }),
   };
 }

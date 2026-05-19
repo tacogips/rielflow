@@ -1,15 +1,29 @@
 import { workflowNodeExecutionPort } from "./workflow-runner-deps";
 import { resolveNodeExecutionOutput } from "./node-output-attempts";
-import { handlePreparedStepInput } from "./step-input";
+import {
+  handlePreparedStepInput,
+  type PreparedStepInputResult,
+} from "./step-input";
 import { finalizeExecutedNode } from "./step-result-finalization";
-
-type AdapterAmbientManagerContext = any;
-type AdapterLlmSessionMessage = any;
-type AdapterProcessLog = any;
-type JsonSchemaValidationError = any;
-type NodeExecutionRecord = any;
-type WorkflowEdge = any;
-type WorkflowSessionState = any;
+import type {
+  AdapterAmbientManagerContext,
+  AdapterLlmSessionMessage,
+  AdapterProcessLog,
+} from "../adapter";
+import type { JsonSchemaValidationError } from "../json-schema";
+import type { Result } from "../result";
+import type {
+  ConversationTurnRecord,
+  NodeExecutionRecord,
+  WorkflowSessionState,
+} from "../session";
+import type { WorkflowEdge } from "../types";
+import type { PreparedWorkflowRun } from "./run-setup";
+import type { FinalizeExecutedNodeResult } from "./step-result-finalization-types";
+import type {
+  WorkflowRunFailure,
+  WorkflowRunResult,
+} from "./types-and-session-state";
 
 const {
   mkdir,
@@ -60,7 +74,33 @@ const {
   finalizeCompletedWorkflowRun,
 } = workflowNodeExecutionPort;
 
-export async function runWorkflowQueue(input: any) {
+function isResult<T, E>(
+  value: Result<T, E> | { readonly kind: string },
+): value is Result<T, E> {
+  return "ok" in value;
+}
+
+function isPreparedStepControlResult(
+  value: PreparedStepInputResult,
+): value is Exclude<
+  PreparedStepInputResult,
+  Result<WorkflowRunResult, WorkflowRunFailure>
+> {
+  return !isResult(value);
+}
+
+function isFinalizationControlResult(
+  value: FinalizeExecutedNodeResult,
+): value is Exclude<
+  FinalizeExecutedNodeResult,
+  Result<WorkflowRunResult, WorkflowRunFailure>
+> {
+  return !isResult(value);
+}
+
+export async function runWorkflowQueue(
+  input: PreparedWorkflowRun & { readonly session: WorkflowSessionState },
+): Promise<Result<WorkflowRunResult, WorkflowRunFailure>> {
   let {
     session,
     workflow,
@@ -245,16 +285,14 @@ export async function runWorkflowQueue(input: any) {
       options.dryRun === true,
     );
     const agentNodePayload = executableNodePayload;
-    const nativeNodePayload =
+    const isNativeExecutionNode =
       executableNodePayload === null &&
       (nodePayload.nodeType === "command" ||
         nodePayload.nodeType === "container" ||
-        nodePayload.nodeType === "addon")
-        ? nodePayload
-        : null;
+        nodePayload.nodeType === "addon");
     if (
       agentNodePayload === null &&
-      nativeNodePayload === null &&
+      !isNativeExecutionNode &&
       nodePayload.nodeType !== "user-action" &&
       nodePayload.nodeType !== "sleep" &&
       !skipOptionalNode
@@ -414,7 +452,7 @@ export async function runWorkflowQueue(input: any) {
         (entry) => entry.communicationId,
       );
       const transcriptInput = (session.conversationTurns ?? []).map(
-        (turn: any) => ({
+        (turn: ConversationTurnRecord) => ({
           conversationId: turn.conversationId,
           turnIndex: turn.turnIndex,
           fromManagerStepId: turn.fromManagerStepId,
@@ -547,7 +585,7 @@ export async function runWorkflowQueue(input: any) {
           : { restartedFromNodeExecId: previousNodeExecId }),
         dryRun: options.dryRun ?? false,
       };
-      const preparedStepInputResult: any = await handlePreparedStepInput({
+      const preparedStepInputResult = await handlePreparedStepInput({
         nodePayload,
         baseInputPayload,
         artifactDir,
@@ -573,35 +611,12 @@ export async function runWorkflowQueue(input: any) {
         loaded,
         workflowName,
       });
+      if (!isPreparedStepControlResult(preparedStepInputResult)) {
+        return preparedStepInputResult;
+      }
       if (preparedStepInputResult.kind === "done") {
         session = preparedStepInputResult.session;
         break;
-      }
-      if (preparedStepInputResult.kind !== "continue") {
-        return preparedStepInputResult;
-      }
-      if (agentNodePayload === null && nativeNodePayload === null) {
-        const failed: WorkflowSessionState = {
-          ...session,
-          queue,
-          status: "failed",
-          currentNodeId: nodeId,
-          endedAt: nowIso(),
-          lastError: stepAddressedExecution
-            ? `step '${nodeId}' is missing agent execution fields`
-            : `node '${nodeId}' is missing agent execution fields`,
-        };
-        await saveSession(failed, options);
-        return err(
-          workflowRunFailure(
-            1,
-            failed.lastError ??
-              (stepAddressedExecution
-                ? "invalid step execution payload"
-                : "invalid node execution payload"),
-            failed,
-          ),
-        );
       }
       const backendSessionSelection =
         agentNodePayload === null
@@ -767,13 +782,13 @@ export async function runWorkflowQueue(input: any) {
           });
         }
       }
-      let outputPayload: any;
+      let outputPayload: Readonly<Record<string, unknown>> | undefined;
       let nodeStatus: NodeExecutionRecord["status"] = "succeeded";
       let outputValidationErrors: readonly JsonSchemaValidationError[] = [];
       let outputAttemptCount = 1;
       let processLogs: readonly AdapterProcessLog[] = [];
       let llmMessages: readonly AdapterLlmSessionMessage[] = [];
-      const outputResolution: any = await resolveNodeExecutionOutput({
+      const outputResolution = await resolveNodeExecutionOutput({
         options,
         agentNodePayload,
         executionNodePayload,
@@ -785,7 +800,6 @@ export async function runWorkflowQueue(input: any) {
         outputAttemptCount,
         processLogs,
         llmMessages,
-        finalizedOutput: undefined,
         backendSessionProvider,
         backendSession,
         backendSessionId,
@@ -804,7 +818,6 @@ export async function runWorkflowQueue(input: any) {
         ambientManagerContext,
         effectiveAdapter,
         timeoutMs,
-        assembledPromptText,
         nextCount,
       });
       outputPayload = outputResolution.outputPayload;
@@ -816,7 +829,7 @@ export async function runWorkflowQueue(input: any) {
       backendSessionProvider = outputResolution.backendSessionProvider;
       backendSession = outputResolution.backendSession;
       backendSessionId = outputResolution.backendSessionId;
-      const finalization: any = await finalizeExecutedNode({
+      const finalization = await finalizeExecutedNode({
         session,
         options,
         workflow,
@@ -856,6 +869,7 @@ export async function runWorkflowQueue(input: any) {
         guards,
         crossWorkflowInvocationStack,
         workflowName,
+        workflowNodes,
         nodeMap,
         isOptionalExecutionNode,
         inputJson,
@@ -866,6 +880,9 @@ export async function runWorkflowQueue(input: any) {
         processLogs,
         llmMessages,
       });
+      if (!isFinalizationControlResult(finalization)) {
+        return finalization;
+      }
       if (finalization.kind === "restart") {
         session = finalization.session;
         previousNodeExecId = finalization.previousNodeExecId;
@@ -876,7 +893,6 @@ export async function runWorkflowQueue(input: any) {
         session = finalization.session;
         break;
       }
-      return finalization;
     }
   }
   return await finalizeCompletedWorkflowRun({

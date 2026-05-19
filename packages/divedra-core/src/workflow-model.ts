@@ -28,8 +28,9 @@ export const NODE_EXECUTION_BACKENDS = [
   NODE_EXECUTION_BACKEND.OFFICIAL_ANTHROPIC_SDK,
 ] as const satisfies readonly NodeExecutionBackend[];
 
-export const NODE_EXECUTION_BACKEND_LIST_TEXT =
-  "codex-agent, claude-code-agent, cursor-cli-agent, official/openai-sdk, or official/anthropic-sdk";
+export const NODE_EXECUTION_BACKEND_LIST_TEXT = formatDisjunction(
+  NODE_EXECUTION_BACKENDS,
+);
 
 const CLI_AGENT_BACKEND_SET: ReadonlySet<unknown> = new Set(
   CLI_AGENT_BACKENDS,
@@ -56,6 +57,18 @@ export function normalizeNodeExecutionBackend(
   return NODE_EXECUTION_BACKEND_SET.has(value)
     ? (value as NodeExecutionBackend)
     : undefined;
+}
+
+function formatDisjunction(values: readonly string[]): string {
+  const lastValue = values.at(-1);
+  if (lastValue === undefined) {
+    return "";
+  }
+
+  const leadingValues = values.slice(0, -1);
+  return leadingValues.length === 0
+    ? lastValue
+    : `${leadingValues.join(", ")}, or ${lastValue}`;
 }
 
 export type NodeKind =

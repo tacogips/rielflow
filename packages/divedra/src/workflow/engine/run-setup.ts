@@ -1,10 +1,22 @@
 import { workflowRunSetupPort } from "./workflow-runner-deps";
-
-type CancellationProbe = any;
-type LoopRule = any;
-type SupervisionRunState = any;
-type WorkflowRunOptions = any;
-type WorkflowSessionState = any;
+import type { NodeAdapter } from "../adapter";
+import type { LoadedWorkflow } from "../load";
+import type { ManagerSessionStore } from "../manager-session-store";
+import type { Result } from "../result";
+import type { WorkflowSessionState } from "../session";
+import type {
+  LoopRule,
+  NodePayload,
+  WorkflowJson,
+  WorkflowNodeRef,
+} from "../types";
+import type { SupervisionRunState } from "../types-supervision";
+import type {
+  CancellationProbe,
+  EngineExecutionGuards,
+  NormalizedWorkflowRunOptions,
+  WorkflowRunFailure,
+} from "./types-and-session-state";
 
 const {
   DispatchingNodeAdapter,
@@ -22,7 +34,48 @@ const {
   createInitialSupervisionRunState,
 } = workflowRunSetupPort;
 
-export async function prepareWorkflowRun(input: any) {
+export interface PrepareWorkflowRunInput {
+  readonly workflowName: string;
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly adapter: NodeAdapter | undefined;
+  readonly guards: EngineExecutionGuards | undefined;
+  readonly crossWorkflowInvocationStack: readonly string[];
+}
+
+export type LoadedWorkflowSuccess = {
+  readonly ok: true;
+  readonly value: LoadedWorkflow;
+};
+
+export interface PreparedWorkflowRun {
+  readonly workflowName: string;
+  readonly options: NormalizedWorkflowRunOptions;
+  readonly adapter: NodeAdapter | undefined;
+  readonly guards: EngineExecutionGuards | undefined;
+  readonly crossWorkflowInvocationStack: readonly string[];
+  readonly workflowWorkingDirectory: string;
+  readonly resumeRequested: boolean;
+  readonly rerunRequested: boolean;
+  readonly continuationRequested: boolean;
+  readonly isFreshAutoImproveSeed: boolean;
+  readonly preloadedForBundlePath: WorkflowSessionState | undefined;
+  readonly precomputedSupervision: SupervisionRunState | undefined;
+  readonly loaded: LoadedWorkflowSuccess;
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly workflow: WorkflowJson;
+  readonly stepAddressedExecution: true;
+  readonly executionTargetNoun: "step";
+  readonly nodeMap: Readonly<Record<string, NodePayload>>;
+  readonly workflowNodes: ReadonlyMap<string, WorkflowNodeRef>;
+  readonly loopRuleByJudgeNodeId: ReadonlyMap<string, LoopRule>;
+  readonly effectiveAdapter: NodeAdapter;
+  readonly cancellationProbe: CancellationProbe;
+  readonly managerSessionStore: ManagerSessionStore;
+}
+
+export async function prepareWorkflowRun(
+  input: PrepareWorkflowRunInput,
+): Promise<Result<PreparedWorkflowRun, WorkflowRunFailure>> {
   const {
     workflowName,
     options,
@@ -107,7 +160,7 @@ export async function prepareWorkflowRun(input: any) {
   }
   const bundlePathOverrideFromSession =
     preloadedForBundlePath?.supervision?.mutableWorkflowDir;
-  const firstLoadOptions: WorkflowRunOptions = {
+  const firstLoadOptions: NormalizedWorkflowRunOptions = {
     ...options,
     ...(options.workflowBundleDirectoryOverride === undefined &&
     bundlePathOverrideFromSession !== undefined
@@ -233,5 +286,5 @@ export async function prepareWorkflowRun(input: any) {
     effectiveAdapter,
     cancellationProbe,
     managerSessionStore,
-  });
+  } satisfies PreparedWorkflowRun);
 }

@@ -2,11 +2,16 @@ import { workflowStepResultFinalizationPort } from "./workflow-runner-deps";
 
 import { finalizeStepTransitions } from "./step-transition-finalization";
 import { publishNodeOutputArtifacts } from "../runtime-execution-contracts";
-
-type CommunicationRecord = any;
-type LoopRule = any;
-type NodeExecutionRecord = any;
-type WorkflowSessionState = any;
+import type {
+  CommunicationRecord,
+  NodeExecutionRecord,
+  WorkflowSessionState,
+} from "../session";
+import type { LoopRule } from "../types";
+import type {
+  FinalizeExecutedNodeInput,
+  FinalizeExecutedNodeResult,
+} from "./step-result-finalization-types";
 
 const {
   parseManagerControlPayload,
@@ -39,7 +44,9 @@ const {
   readBusinessPayload,
 } = workflowStepResultFinalizationPort;
 
-export async function finalizeExecutedNode(input: any) {
+export async function finalizeExecutedNode(
+  input: FinalizeExecutedNodeInput,
+): Promise<FinalizeExecutedNodeResult> {
   let {
     session,
     options,
@@ -466,9 +473,7 @@ export async function finalizeExecutedNode(input: any) {
     );
   }
   const edges = outgoingEdges.get(nodeId) ?? [];
-  const matched = edges.filter((edge: any) =>
-    evaluateEdge(edge, outputPayload),
-  );
+  const matched = edges.filter((edge) => evaluateEdge(edge, outputPayload));
   const loopIterationCounts = session.loopIterationCounts ?? {};
   let selected = matched;
   let updatedLoopIterationCounts = loopIterationCounts;
@@ -485,7 +490,7 @@ export async function finalizeExecutedNode(input: any) {
     });
     if (transition === "continue") {
       selected = edges.filter(
-        (edge: any) => edge.when === effectiveLoopRule.continueWhen,
+        (edge) => edge.when === effectiveLoopRule.continueWhen,
       );
       updatedLoopIterationCounts = {
         ...loopIterationCounts,
@@ -493,11 +498,11 @@ export async function finalizeExecutedNode(input: any) {
       };
     } else if (transition === "exit") {
       selected = edges.filter(
-        (edge: any) => edge.when === effectiveLoopRule.exitWhen,
+        (edge) => edge.when === effectiveLoopRule.exitWhen,
       );
     } else {
       selected = matched.filter(
-        (edge: any) =>
+        (edge) =>
           edge.when !== effectiveLoopRule.continueWhen &&
           edge.when !== effectiveLoopRule.exitWhen,
       );
@@ -523,13 +528,9 @@ export async function finalizeExecutedNode(input: any) {
       });
     }
   }
-  const localFanoutEdges = selected.filter(
-    (edge: any) => edge.fanout !== undefined,
-  );
-  const regularSelected = selected.filter(
-    (edge: any) => edge.fanout === undefined,
-  );
-  const nextNodes = regularSelected.map((edge: any) => edge.to);
+  const localFanoutEdges = selected.filter((edge) => edge.fanout !== undefined);
+  const regularSelected = selected.filter((edge) => edge.fanout === undefined);
+  const nextNodes = regularSelected.map((edge) => edge.to);
   const outputJson = stableJson(outputPayload);
   const outputRaw = `${outputJson}\n`;
   const metaPayload = {
@@ -872,7 +873,7 @@ export async function finalizeExecutedNode(input: any) {
   }
   currentCommunications = consumedCommunicationsResult.value;
   const transitionCommunications = await Promise.all(
-    regularSelected.map((edge: any, index: number) => {
+    regularSelected.map((edge, index) => {
       return persistCommunicationArtifact({
         artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
         runtimeLogOptions: options,
