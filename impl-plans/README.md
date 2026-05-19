@@ -24,25 +24,25 @@ impl-plans/
 
 ## Active Plans
 
-| Plan | Status | Design Reference |
-| ---- | ------ | ---------------- |
-| `active/self-improve-package-boundary-contract-reconciliation` | Completed | `design-self-improve#public-api-contract`, `architecture#package-boundary-architecture` |
-| `active/duplicate-scavenge-refactoring-workflow-mode` | Completed | `architecture#duplicate-scavenge-refactoring-workflow-mode` |
-| `active/self-improve-shared-function-reuse-audit` | Completed | `design-self-improve#shared-function-reuse-audit` |
-| `active/self-improve-review-hardening` | Completed | `design-self-improve#issue-resolution-hardening-criteria` |
-| `active/self-improve` | Completed | `design-self-improve`, `architecture#self-improve`, `command#cli-workflow-self-improve-name`, `design-workflow-json#defaultsselfimprove` |
-| `active/schedule-registration-policy-surface-cleanup` | Completed | `design-scheduled-workflow-execution#event-binding-and-execution` |
-| `active/schedule-registration-safe-reply-gating` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#chat-replies` |
-| `active/schedule-registration-blocking-fixes` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#validation-rules` |
-| `active/refactoring-event-path-resolution-package-ownership` | Completed | `refactoring-divide-and-conquer event path-resolution package ownership slice reviews` |
-| `active/refactoring-duplicate-scavenge-product-code` | In Progress | `architecture#product-code-duplicate-scavenge-consolidation-boundaries` |
-| `active/workflow-status-active-session-loadability-issue-25` | Completed | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
-| `workflow-status-active-session-loadability` | In Progress | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
+No active implementation plans remain.
 
 ## Recently Completed
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate-scavenge-refactoring-workflow-mode` | 2026-05-19 | `architecture` |
+| `refactoring-duplicate-scavenge-product-code` | 2026-05-19 | `refactoring-divide-and-conquer`, `step3-merge-review-plan`, `architecture` |
+| `refactoring-event-path-resolution-package-ownership` | 2026-05-19 | `refactoring-divide-and-conquer`, `step3-merge-review-plan` |
+| `root-src-removal-cutover-review` | 2026-05-19 | `architecture` |
+| `schedule-registration-blocking-fixes` | 2026-05-19 | `design-scheduled-workflow-execution` |
+| `schedule-registration-policy-surface-cleanup` | 2026-05-19 | `design-scheduled-workflow-execution` |
+| `schedule-registration-safe-reply-gating` | 2026-05-19 | `design-scheduled-workflow-execution` |
+| `scheduled-workflow-execution` | 2026-05-19 | `design-scheduled-workflow-execution` |
+| `self-improve-package-boundary-contract-reconciliation` | 2026-05-19 | `design-self-improve`, `architecture` |
+| `self-improve-review-hardening` | 2026-05-19 | `design-self-improve` |
+| `self-improve-shared-function-reuse-audit` | 2026-05-19 | `design-self-improve` |
+| `self-improve` | 2026-05-19 | `design-self-improve`, `architecture`, `command`, `design-workflow-json`, `design-auto-improve-superviser-mode` |
+| `workflow-status-active-session-loadability-issue-25` | 2026-05-19 | `design-workflow-overview-status-surface`, `command` |
 | `refactoring-workflow-duplicate-guidance-consolidation` | 2026-05-19 | `refactoring-divide-and-conquer duplicate-scavenge slice reviews` |
 | `workflow-node-runtime-patches` | 2026-05-17 | `architecture#workflow-node-runtime-patches`, `command`, `design-workflow-node-executability-validation` |
 | `package-boundary-architecture` | 2026-05-17 | `architecture` |
