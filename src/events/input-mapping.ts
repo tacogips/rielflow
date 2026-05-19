@@ -1,6 +1,7 @@
 import { isJsonObject, type JsonObject } from "../shared/json";
 import { isEventBindingEnabled } from "./config";
 import { resolveEventMailboxBridgePolicy } from "./mailbox-bridge-policy";
+import { renderEventTemplateValue } from "./path-resolution";
 import type {
   EventBinding,
   EventSourceConfig,
@@ -26,77 +27,17 @@ export interface EventMappingResult {
   readonly runtimeVariables: JsonObject;
 }
 
-function readPath(root: unknown, pathSegments: readonly string[]): unknown {
-  let current = root;
-  for (const segment of pathSegments) {
-    if (!isJsonObject(current) && !Array.isArray(current)) {
-      return undefined;
-    }
-    current = (current as Readonly<Record<string, unknown>>)[segment];
-  }
-  return current;
-}
-
-function resolveTemplateReference(
-  expression: string,
-  event: ExternalEventEnvelope,
-  source: EventSourceConfig | undefined,
-): unknown {
-  const trimmed = expression.trim();
-  const segments = trimmed.split(".");
-  const root = segments[0];
-  const rest = segments.slice(1);
-  if (root === "event") {
-    return readPath(event, rest);
-  }
-  if (root === "source") {
-    return source === undefined ? undefined : readPath(source, rest);
-  }
-  return undefined;
-}
-
-function renderStringTemplate(
-  value: string,
-  event: ExternalEventEnvelope,
-  source: EventSourceConfig | undefined,
-): unknown {
-  const exact = value.match(/^\{\{\s*([^}]+?)\s*\}\}$/);
-  if (exact !== null) {
-    return resolveTemplateReference(exact[1] ?? "", event, source);
-  }
-  return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, expression) => {
-    const resolved = resolveTemplateReference(
-      String(expression),
-      event,
-      source,
-    );
-    if (resolved === undefined || resolved === null) {
-      return "";
-    }
-    return typeof resolved === "string" ? resolved : JSON.stringify(resolved);
-  });
-}
-
-function renderTemplateValue(
+function renderWorkflowInputTemplateValue(
   value: unknown,
   event: ExternalEventEnvelope,
   source: EventSourceConfig | undefined,
 ): unknown {
-  if (typeof value === "string") {
-    return renderStringTemplate(value, event, source);
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => renderTemplateValue(entry, event, source));
-  }
-  if (isJsonObject(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        key,
-        renderTemplateValue(entry, event, source),
-      ]),
-    );
-  }
-  return value;
+  return renderEventTemplateValue({
+    value,
+    roots: { event, source },
+    allowedRoots: ["event", "source"],
+    allowArrayTraversal: true,
+  });
 }
 
 export function buildEventRuntimeMetadata(
@@ -138,7 +79,11 @@ export function mapEventToWorkflowInput(
   const workflowInput =
     binding.inputMapping.mode === "event-input"
       ? event.input
-      : renderTemplateValue(binding.inputMapping.template, event, source);
+      : renderWorkflowInputTemplateValue(
+          binding.inputMapping.template,
+          event,
+          source,
+        );
   const normalizedWorkflowInput = isJsonObject(workflowInput)
     ? workflowInput
     : { value: workflowInput };

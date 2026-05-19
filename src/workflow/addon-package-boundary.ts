@@ -4,146 +4,26 @@ import type {
   NodeAddonPayloadResolver,
   NodeAddonResolveInput,
   NodeAddonResolveResult,
-  NodeAddonValidateResult,
 } from "./types";
-import { NodeValidationResult } from "./validate/node-validation-result";
 import {
-  isPromiseLike,
+  createAsyncNodeAddonRegistry,
+  createNodeAddonRegistry,
   makeIssue,
-  selectNodeAddonDefinition,
 } from "./node-addons/addon-constants-and-agent-config";
-
-function normalizeAddonValidateResult(
-  value: NodeAddonValidateResult,
-): readonly NodeValidationResult[] {
-  const entries = Array.isArray(value) ? value : [value];
-  return entries.map((entry) => new NodeValidationResult(entry));
-}
-
-function attachSyncValidateResult(input: {
-  readonly definition: NodeAddonDefinition;
-  readonly resolverInput: NodeAddonResolveInput;
-  readonly resolved: NodeAddonResolveResult;
-}): NodeAddonResolveResult {
-  if (input.definition.validate === undefined) {
-    return input.resolved;
-  }
-  const validation = input.definition.validate({
-    nodeId: input.resolverInput.nodeId,
-    addon: input.resolverInput.addon,
-    ...(input.resolved.payload === undefined
-      ? {}
-      : { resolvedPayload: input.resolved.payload }),
-    path: input.resolverInput.path,
-    executablePreflight: input.resolverInput.executablePreflight === true,
-  });
-  if (isPromiseLike(validation)) {
-    void Promise.resolve(validation).catch(() => undefined);
-    return {
-      ...input.resolved,
-      issues: [
-        ...(input.resolved.issues ?? []),
-        makeIssue(
-          input.resolverInput.path,
-          `third-party node add-on '${input.resolverInput.addon.name}' uses an async validate hook; use validateWorkflowBundleAsync for async add-ons`,
-        ),
-      ],
-    };
-  }
-  return {
-    ...input.resolved,
-    nodeValidationResults: [
-      ...(input.resolved.nodeValidationResults ?? []),
-      ...normalizeAddonValidateResult(validation),
-    ],
-  };
-}
-
-async function attachAsyncValidateResult(input: {
-  readonly definition: NodeAddonDefinition;
-  readonly resolverInput: NodeAddonResolveInput;
-  readonly resolved: NodeAddonResolveResult;
-}): Promise<NodeAddonResolveResult> {
-  if (input.definition.validate === undefined) {
-    return input.resolved;
-  }
-  const validation = await input.definition.validate({
-    nodeId: input.resolverInput.nodeId,
-    addon: input.resolverInput.addon,
-    ...(input.resolved.payload === undefined
-      ? {}
-      : { resolvedPayload: input.resolved.payload }),
-    path: input.resolverInput.path,
-    executablePreflight: input.resolverInput.executablePreflight === true,
-  });
-  return {
-    ...input.resolved,
-    nodeValidationResults: [
-      ...(input.resolved.nodeValidationResults ?? []),
-      ...normalizeAddonValidateResult(validation),
-    ],
-  };
-}
 
 export function createBoundaryNodeAddonRegistry(
   definitions: readonly NodeAddonDefinition[],
 ): NodeAddonPayloadResolver {
-  const registeredDefinitions = [...definitions];
-  return (input) => {
-    const selection = selectNodeAddonDefinition({
-      definitions: registeredDefinitions,
-      addon: input.addon,
-      path: input.path,
-    });
-    if (selection.kind === "missing") {
-      return undefined;
-    }
-    if (selection.kind === "issues") {
-      return { issues: selection.issues };
-    }
-    const resolved = selection.definition.resolve(input);
-    if (isPromiseLike(resolved)) {
-      void Promise.resolve(resolved).catch(() => undefined);
-      return {
-        issues: [
-          makeIssue(
-            input.path,
-            `third-party node add-on '${input.addon.name}' uses an async definition resolver; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`,
-          ),
-        ],
-      };
-    }
-    return attachSyncValidateResult({
-      definition: selection.definition,
-      resolverInput: input,
-      resolved,
-    });
-  };
+  return createNodeAddonRegistry(definitions, {
+    asyncValidateHookMessage: (addonName) =>
+      `third-party node add-on '${addonName}' uses an async validate hook; use validateWorkflowBundleAsync for async add-ons`,
+  });
 }
 
 export function createBoundaryAsyncNodeAddonRegistry(
   definitions: readonly NodeAddonDefinition[],
 ): AsyncNodeAddonPayloadResolver {
-  const registeredDefinitions = [...definitions];
-  return async (input) => {
-    const selection = selectNodeAddonDefinition({
-      definitions: registeredDefinitions,
-      addon: input.addon,
-      path: input.path,
-    });
-    if (selection.kind === "missing") {
-      return undefined;
-    }
-    if (selection.kind === "issues") {
-      return { issues: selection.issues };
-    }
-    const resolved = await selection.definition.resolve(input);
-    return await attachAsyncValidateResult({
-      definition: selection.definition,
-      resolverInput: input,
-      resolved,
-    });
-  };
+  return createAsyncNodeAddonRegistry(definitions);
 }
 
 interface BoundaryNodeAddonResolveInputBase extends NodeAddonResolveInput {

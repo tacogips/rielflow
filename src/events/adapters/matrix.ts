@@ -1,6 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isJsonObject, type JsonObject } from "../../shared/json";
+import {
+  chatReplyDispatchResultFromResponse,
+  readOptionalChatReplyJson,
+} from "./chat-reply-response";
 import type {
   EventSourceDiagnostic,
   EventSourceAdapter,
@@ -322,17 +326,6 @@ async function writeSinceToken(
   );
 }
 
-async function readOptionalJsonObject(
-  response: Response,
-): Promise<JsonObject | undefined> {
-  try {
-    const value = (await response.json()) as unknown;
-    return isJsonObject(value) ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function buildMatrixReplyContent(input: EventSourceChatReplyInput): JsonObject {
   const content: JsonObject = {
     msgtype: "m.text",
@@ -397,13 +390,14 @@ export async function dispatchMatrixChatReply(
       `matrix reply endpoint rejected request with HTTP ${String(response.status)}`,
     );
   }
-  const payload = await readOptionalJsonObject(response);
-  const providerMessageId = optionalString(payload?.["event_id"]);
-  return {
-    status: response.status === 202 ? "queued" : "sent",
+  const payload = await readOptionalChatReplyJson(response);
+  return chatReplyDispatchResultFromResponse({
+    response,
     provider: input.source.provider ?? "matrix",
-    ...(providerMessageId === undefined ? {} : { providerMessageId }),
-  };
+    payload,
+    dispatchIdKeys: [],
+    providerMessageIdKeys: ["event_id"],
+  });
 }
 
 export function createMatrixEventSourceAdapter(): EventSourceAdapter {

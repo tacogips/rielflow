@@ -1,4 +1,5 @@
 import { isJsonObject } from "../shared/json";
+import { resolveEventPathText } from "./path-resolution";
 import {
   defaultSupervisorWorkflowName,
   resolveSupervisedCorrelationKey,
@@ -38,49 +39,20 @@ function normalizeAllowActions(
   return raw;
 }
 
-function readPath(root: unknown, pathSegments: readonly string[]): unknown {
-  let current = root;
-  for (const segment of pathSegments) {
-    if (!isJsonObject(current) && !Array.isArray(current)) {
-      return undefined;
-    }
-    current = (current as Readonly<Record<string, unknown>>)[segment];
-  }
-  return current;
-}
-
 function resolveCommandMapText(
   event: ExternalEventEnvelope,
   source: EventSourceConfig | undefined,
   binding: EventBinding,
   inputPath: string | undefined,
 ): string | undefined {
-  const path = inputPath ?? "event.input.text";
-  const segments = path.split(".").filter((s) => s.length > 0);
-  if (segments.length === 0) {
-    return undefined;
-  }
-  const rootName = segments[0];
-  const rest = segments.slice(1);
-  const root =
-    rootName === "event"
-      ? event
-      : rootName === "source"
-        ? source
-        : rootName === "binding"
-          ? binding
-          : undefined;
-  if (root === undefined) {
-    return undefined;
-  }
-  const value = readPath(root, rest);
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return undefined;
+  return resolveEventPathText({
+    path: inputPath,
+    defaultPath: "event.input.text",
+    roots: { binding, event, source },
+    allowedRoots: ["binding", "event", "source"],
+    allowArrayTraversal: true,
+    filterEmptySegments: true,
+  });
 }
 
 type DeterministicSupervisorIntentMapping =

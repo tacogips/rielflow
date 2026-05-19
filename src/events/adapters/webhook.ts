@@ -1,5 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { isJsonObject, type JsonObject } from "../../shared/json";
+import {
+  chatReplyDispatchResultFromResponse,
+  readOptionalChatReplyJson,
+} from "./chat-reply-response";
 import type { EventSourceAdapter } from "../source-adapter";
 import type { EventSourceChatReplyInput } from "../source-adapter";
 import type {
@@ -126,21 +130,6 @@ function readConversation(value: unknown): EventConversation | undefined {
   };
 }
 
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-async function readOptionalJsonObject(
-  response: Response,
-): Promise<JsonObject | undefined> {
-  try {
-    const value = (await response.json()) as unknown;
-    return isJsonObject(value) ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 async function dispatchWebhookChatReply(
   input: EventSourceChatReplyInput,
 ): Promise<ChatReplyDispatchResult> {
@@ -188,18 +177,12 @@ async function dispatchWebhookChatReply(
     );
   }
 
-  const payload = await readOptionalJsonObject(response);
-  const dispatchId = optionalString(payload?.["dispatchId"]);
-  const providerMessageId =
-    optionalString(payload?.["providerMessageId"]) ??
-    optionalString(payload?.["messageId"]) ??
-    optionalString(payload?.["id"]);
-  return {
-    status: response.status === 202 ? "queued" : "sent",
+  const payload = await readOptionalChatReplyJson(response);
+  return chatReplyDispatchResultFromResponse({
+    response,
     provider: source.provider ?? "webhook",
-    ...(dispatchId === undefined ? {} : { dispatchId }),
-    ...(providerMessageId === undefined ? {} : { providerMessageId }),
-  };
+    payload,
+  });
 }
 
 export function createWebhookEventSourceAdapter(): EventSourceAdapter {

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { runWorkflow } from "../workflow/engine";
 import { loadSession } from "../workflow/session-store";
+import { resolveEventPathText } from "./path-resolution";
 import type { WorkflowTriggerRunnerOptions } from "./trigger-runner";
 import type {
   EventBinding,
@@ -81,47 +82,35 @@ export interface RunSupervisorDispatchLlmResolverInput {
   readonly options: WorkflowTriggerRunnerOptions;
 }
 
+interface ReadResolverWorkflowNodeOutputInput {
+  readonly resolverWorkflowName: string;
+  readonly resolverNodeId: string;
+  readonly resolverVariables: Readonly<Record<string, unknown>>;
+  readonly options: WorkflowTriggerRunnerOptions;
+}
+
+type ReadResolverWorkflowNodeOutputResult =
+  | {
+      readonly ok: true;
+      readonly outputJsonPath: string;
+      readonly rawJson: string;
+    }
+  | { readonly ok: false; readonly error: string };
+
 function readEventPath(
   event: ExternalEventEnvelope,
   source: EventSourceConfig | undefined,
   binding: EventBinding,
   inputPath: string | undefined,
 ): string | undefined {
-  const dotPath = inputPath ?? "event.input.text";
-  const segments = dotPath.split(".").filter((s) => s.length > 0);
-  if (segments.length === 0) {
-    return undefined;
-  }
-  const rootName = segments[0];
-  const rest = segments.slice(1);
-  let root: unknown;
-  if (rootName === "event") {
-    root = event;
-  } else if (rootName === "source") {
-    root = source;
-  } else if (rootName === "binding") {
-    root = binding;
-  } else {
-    return undefined;
-  }
-  let current: unknown = root;
-  for (const segment of rest) {
-    if (
-      current === null ||
-      typeof current !== "object" ||
-      Array.isArray(current)
-    ) {
-      return undefined;
-    }
-    current = (current as Readonly<Record<string, unknown>>)[segment];
-  }
-  if (typeof current === "string") {
-    return current.trim() || undefined;
-  }
-  if (typeof current === "number" || typeof current === "boolean") {
-    return String(current);
-  }
-  return undefined;
+  return resolveEventPathText({
+    path: inputPath,
+    defaultPath: "event.input.text",
+    roots: { binding, event, source },
+    allowedRoots: ["binding", "event", "source"],
+    filterEmptySegments: true,
+    trimString: true,
+  });
 }
 
 function resultForInvalidDispatchResolverOutput(
@@ -147,6 +136,94 @@ function resultForInvalidDispatchResolverOutput(
   };
 }
 
+async function readResolverWorkflowNodeOutput(
+  input: ReadResolverWorkflowNodeOutputInput,
+): Promise<ReadResolverWorkflowNodeOutputResult> {
+  const runResult = await runWorkflow(input.resolverWorkflowName, {
+    ...input.options,
+    runtimeVariables: input.resolverVariables,
+  });
+
+  if (!runResult.ok) {
+    return {
+      ok: false,
+      error: `resolver workflow failed: ${runResult.error.message}`,
+    };
+  }
+
+  const sessionId = runResult.value.session.sessionId;
+  const sessionResult = await loadSession(sessionId, input.options);
+  if (!sessionResult.ok) {
+    return {
+      ok: false,
+      error: `failed to load resolver session '${sessionId}': ${sessionResult.error.message}`,
+    };
+  }
+
+  const executions = sessionResult.value.nodeExecutions;
+  let lastSucceededExec: (typeof executions)[number] | undefined;
+  for (const exec of executions) {
+    if (exec.nodeId === input.resolverNodeId && exec.status === "succeeded") {
+      lastSucceededExec = exec;
+    }
+  }
+
+  if (lastSucceededExec === undefined) {
+    return {
+      ok: false,
+      error: `no succeeded execution found for resolver node '${input.resolverNodeId}' in session '${sessionId}'`,
+    };
+  }
+
+  const outputJsonPath = path.join(
+    lastSucceededExec.artifactDir,
+    "output.json",
+  );
+  try {
+    return {
+      ok: true,
+      outputJsonPath,
+      rawJson: await readFile(outputJsonPath, "utf8"),
+    };
+  } catch {
+    return {
+      ok: false,
+      error: `resolver node output artifact not found at '${outputJsonPath}'`,
+    };
+  }
+}
+
+function parseResolverOutputJson(
+  rawJson: string,
+  outputJsonPath: string,
+):
+  | { readonly ok: true; readonly parsed: unknown }
+  | {
+      readonly ok: false;
+      readonly error: string;
+    } {
+  try {
+    return { ok: true, parsed: JSON.parse(rawJson) as unknown };
+  } catch {
+    return {
+      ok: false,
+      error: `resolver node output.json is not valid JSON at '${outputJsonPath}'`,
+    };
+  }
+}
+
+function extractResolverPayload(parsed: unknown): unknown {
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "payload" in parsed
+  ) {
+    return (parsed as Readonly<Record<string, unknown>>)["payload"];
+  }
+  return parsed;
+}
+
 /**
  * Interprets parsed resolver `output.json` (optionally adapter-wrapped with a
  * `payload` field) into a dispatch proposal, applying the same confidence floor
@@ -159,17 +236,9 @@ export function interpretSupervisorDispatchResolverRootJson(
     readonly invalidOutputBehavior: DispatchResolverInvalidOutputBehavior;
   },
 ): RunSupervisorDispatchLlmResolverResult {
-  let decisionValue: unknown = parsed;
-  if (
-    parsed !== null &&
-    typeof parsed === "object" &&
-    !Array.isArray(parsed) &&
-    "payload" in parsed
-  ) {
-    decisionValue = (parsed as Readonly<Record<string, unknown>>)["payload"];
-  }
-
-  const decision = parseSupervisorDispatchProposal(decisionValue);
+  const decision = parseSupervisorDispatchProposal(
+    extractResolverPayload(parsed),
+  );
   if (!decision.ok) {
     return resultForInvalidDispatchResolverOutput(
       options.invalidOutputBehavior,
@@ -225,67 +294,25 @@ export async function runSupervisorDispatchLlmResolver(
     conversationRevision: input.conversationRevision,
   };
 
-  const runResult = await runWorkflow(input.resolverWorkflowName, {
-    ...input.options,
-    runtimeVariables: resolverVariables,
+  const output = await readResolverWorkflowNodeOutput({
+    resolverWorkflowName: input.resolverWorkflowName,
+    resolverNodeId: input.resolverNodeId,
+    resolverVariables,
+    options: input.options,
   });
-
-  if (!runResult.ok) {
-    return {
-      ok: false,
-      error: `resolver workflow failed: ${runResult.error.message}`,
-    };
+  if (!output.ok) {
+    return output;
   }
 
-  const sessionId = runResult.value.session.sessionId;
-  const sessionResult = await loadSession(sessionId, input.options);
-  if (!sessionResult.ok) {
-    return {
-      ok: false,
-      error: `failed to load resolver session '${sessionId}': ${sessionResult.error.message}`,
-    };
-  }
-
-  const executions = sessionResult.value.nodeExecutions;
-  let lastSucceededExec: (typeof executions)[number] | undefined;
-  for (const exec of executions) {
-    if (exec.nodeId === input.resolverNodeId && exec.status === "succeeded") {
-      lastSucceededExec = exec;
-    }
-  }
-
-  if (lastSucceededExec === undefined) {
-    return {
-      ok: false,
-      error: `no succeeded execution found for resolver node '${input.resolverNodeId}' in session '${sessionId}'`,
-    };
-  }
-
-  const outputJsonPath = path.join(
-    lastSucceededExec.artifactDir,
-    "output.json",
-  );
-  let rawJson: string;
-  try {
-    rawJson = await readFile(outputJsonPath, "utf8");
-  } catch {
-    return {
-      ok: false,
-      error: `resolver node output artifact not found at '${outputJsonPath}'`,
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawJson) as unknown;
-  } catch {
+  const parsed = parseResolverOutputJson(output.rawJson, output.outputJsonPath);
+  if (!parsed.ok) {
     return resultForInvalidDispatchResolverOutput(
       invalidOutputBehavior,
-      `resolver node output.json is not valid JSON at '${outputJsonPath}'`,
+      parsed.error,
     );
   }
 
-  return interpretSupervisorDispatchResolverRootJson(parsed, {
+  return interpretSupervisorDispatchResolverRootJson(parsed.parsed, {
     minConfidence,
     invalidOutputBehavior,
   });
@@ -335,60 +362,18 @@ export async function runSupervisorLlmResolver(
       : {}),
   };
 
-  const runResult = await runWorkflow(input.resolverWorkflowName, {
-    ...input.options,
-    runtimeVariables: resolverVariables,
+  const output = await readResolverWorkflowNodeOutput({
+    resolverWorkflowName: input.resolverWorkflowName,
+    resolverNodeId: input.resolverNodeId,
+    resolverVariables,
+    options: input.options,
   });
-
-  if (!runResult.ok) {
-    return {
-      ok: false,
-      error: `resolver workflow failed: ${runResult.error.message}`,
-    };
+  if (!output.ok) {
+    return output;
   }
 
-  const sessionId = runResult.value.session.sessionId;
-  const sessionResult = await loadSession(sessionId, input.options);
-  if (!sessionResult.ok) {
-    return {
-      ok: false,
-      error: `failed to load resolver session '${sessionId}': ${sessionResult.error.message}`,
-    };
-  }
-
-  const executions = sessionResult.value.nodeExecutions;
-  let lastSucceededExec: (typeof executions)[number] | undefined;
-  for (const exec of executions) {
-    if (exec.nodeId === input.resolverNodeId && exec.status === "succeeded") {
-      lastSucceededExec = exec;
-    }
-  }
-
-  if (lastSucceededExec === undefined) {
-    return {
-      ok: false,
-      error: `no succeeded execution found for resolver node '${input.resolverNodeId}' in session '${sessionId}'`,
-    };
-  }
-
-  const outputJsonPath = path.join(
-    lastSucceededExec.artifactDir,
-    "output.json",
-  );
-  let rawJson: string;
-  try {
-    rawJson = await readFile(outputJsonPath, "utf8");
-  } catch {
-    return {
-      ok: false,
-      error: `resolver node output artifact not found at '${outputJsonPath}'`,
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawJson) as unknown;
-  } catch {
+  const parsed = parseResolverOutputJson(output.rawJson, output.outputJsonPath);
+  if (!parsed.ok) {
     const fb = input.defaultAction;
     const managedWorkflowName = managedWorkflowBindingName;
     if (fb === "ignore") {
@@ -417,23 +402,15 @@ export async function runSupervisorLlmResolver(
     }
     return {
       ok: false,
-      error: `resolver node output.json is not valid JSON at '${outputJsonPath}'`,
+      error: parsed.error,
     };
   }
 
   // The engine writes the full adapter output to output.json; the actual node
   // decision payload is nested under the "payload" key.
-  let decisionValue: unknown = parsed;
-  if (
-    parsed !== null &&
-    typeof parsed === "object" &&
-    !Array.isArray(parsed) &&
-    "payload" in parsed
-  ) {
-    decisionValue = (parsed as Readonly<Record<string, unknown>>)["payload"];
-  }
-
-  const decision = parseSupervisorChatCommandDecision(decisionValue);
+  const decision = parseSupervisorChatCommandDecision(
+    extractResolverPayload(parsed.parsed),
+  );
   if (!decision.ok) {
     const fallback = input.defaultAction;
     const managedWorkflowName = managedWorkflowBindingName;

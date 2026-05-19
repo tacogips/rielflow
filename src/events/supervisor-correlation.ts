@@ -1,4 +1,4 @@
-import { isJsonObject } from "../shared/json";
+import { renderEventStringTemplate } from "./path-resolution";
 import type {
   EventBinding,
   EventSourceConfig,
@@ -11,56 +11,17 @@ export function defaultSupervisorWorkflowName(): string {
   return DEFAULT_SUPERVISOR_WORKFLOW;
 }
 
-function readPath(root: unknown, pathSegments: readonly string[]): unknown {
-  let current = root;
-  for (const segment of pathSegments) {
-    if (!isJsonObject(current) && !Array.isArray(current)) {
-      return undefined;
-    }
-    current = (current as Readonly<Record<string, unknown>>)[segment];
-  }
-  return current;
-}
-
-function resolveTemplateReference(
-  expression: string,
-  event: ExternalEventEnvelope,
-  source: EventSourceConfig | undefined,
-  binding: EventBinding,
-): unknown {
-  const trimmed = expression.trim();
-  const segments = trimmed.split(".");
-  const root = segments[0];
-  const rest = segments.slice(1);
-  if (root === "event") {
-    return readPath(event, rest);
-  }
-  if (root === "source") {
-    return source === undefined ? undefined : readPath(source, rest);
-  }
-  if (root === "binding") {
-    return readPath(binding, rest);
-  }
-  return undefined;
-}
-
 function renderStringTemplate(
   value: string,
   event: ExternalEventEnvelope,
   source: EventSourceConfig | undefined,
   binding: EventBinding,
 ): string {
-  return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, expression) => {
-    const resolved = resolveTemplateReference(
-      String(expression),
-      event,
-      source,
-      binding,
-    );
-    if (resolved === undefined || resolved === null) {
-      return "";
-    }
-    return typeof resolved === "string" ? resolved : JSON.stringify(resolved);
+  return renderEventStringTemplate({
+    template: value,
+    roots: { binding, event, source },
+    allowedRoots: ["binding", "event", "source"],
+    allowArrayTraversal: true,
   });
 }
 

@@ -1,4 +1,7 @@
-import { isJsonObject } from "../shared/json";
+import {
+  renderNamedTemplate,
+  resolveEventPathReference,
+} from "./path-resolution";
 import type { EventBinding } from "./types";
 
 export type EventTaskPlanningDecision =
@@ -19,20 +22,6 @@ interface MissingRequiredInput {
   readonly question: string;
 }
 
-function readPath(
-  value: Readonly<Record<string, unknown>>,
-  path: string,
-): unknown {
-  let current: unknown = value;
-  for (const segment of path.split(".")) {
-    if (!isJsonObject(current)) {
-      return undefined;
-    }
-    current = current[segment];
-  }
-  return current;
-}
-
 function isPresent(value: unknown): boolean {
   if (value === undefined || value === null) {
     return false;
@@ -46,15 +35,6 @@ function isPresent(value: unknown): boolean {
   return true;
 }
 
-function renderTemplate(
-  template: string,
-  values: Readonly<Record<string, string>>,
-): string {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key) => {
-    return values[String(key)] ?? "";
-  });
-}
-
 export function resolveEventTaskPlanningDecision(input: {
   readonly binding: EventBinding;
   readonly workflowInput: Readonly<Record<string, unknown>>;
@@ -65,7 +45,17 @@ export function resolveEventTaskPlanningDecision(input: {
   }
   const required = policy?.requiredInput ?? [];
   const missing: readonly MissingRequiredInput[] = required
-    .filter((entry) => !isPresent(readPath(input.workflowInput, entry.path)))
+    .filter(
+      (entry) =>
+        !isPresent(
+          resolveEventPathReference({
+            expression: `workflowInput.${entry.path}`,
+            roots: { workflowInput: input.workflowInput },
+            allowedRoots: ["workflowInput"],
+            trimExpression: false,
+          }),
+        ),
+    )
     .map((entry) => {
       const label = entry.label ?? entry.path;
       return {
@@ -87,7 +77,7 @@ export function resolveEventTaskPlanningDecision(input: {
       text:
         policy?.clarificationTemplate === undefined
           ? defaultQuestion
-          : renderTemplate(policy.clarificationTemplate, {
+          : renderNamedTemplate(policy.clarificationTemplate, {
               missing: labels.join(", "),
               questions: questions.join(" "),
               workflowName: input.binding.workflowName ?? "selected workflow",
@@ -100,7 +90,7 @@ export function resolveEventTaskPlanningDecision(input: {
     text:
       policy?.planTemplate === undefined
         ? `Plan: run ${input.binding.workflowName ?? "the selected workflow"} for this request.`
-        : renderTemplate(policy.planTemplate, {
+        : renderNamedTemplate(policy.planTemplate, {
             workflowName: input.binding.workflowName ?? "selected workflow",
           }),
   };

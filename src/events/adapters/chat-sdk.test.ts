@@ -233,7 +233,7 @@ describe("Chat SDK event source adapter", () => {
     const fetchImpl = vi.fn(async (_url, init) => {
       calls.push(init ?? {});
       return new Response(JSON.stringify({ providerMessageId: "msg-1" }), {
-        status: 200,
+        status: 202,
         headers: { "content-type": "application/json" },
       });
     }) as typeof fetch;
@@ -265,7 +265,7 @@ describe("Chat SDK event source adapter", () => {
     });
 
     expect(result).toEqual({
-      status: "sent",
+      status: "queued",
       provider: "slack",
       providerMessageId: "msg-1",
     });

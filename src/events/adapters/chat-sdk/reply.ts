@@ -1,22 +1,10 @@
-import { isJsonObject } from "../../../shared/json";
 import type { EventSourceChatReplyInput } from "../../source-adapter";
 import type { ChatSdkSourceConfig } from "../../types";
 import type { ChatReplyDispatchResult } from "../../../workflow/types";
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-async function readOptionalJsonObject(
-  response: Response,
-): Promise<Readonly<Record<string, unknown>> | undefined> {
-  try {
-    const parsed = (await response.json()) as unknown;
-    return isJsonObject(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
+import {
+  chatReplyDispatchResultFromResponse,
+  readOptionalChatReplyJson,
+} from "../chat-reply-response";
 
 function chatSdkSource(input: EventSourceChatReplyInput): ChatSdkSourceConfig {
   if (input.source.kind !== "chat-sdk") {
@@ -77,16 +65,10 @@ export async function dispatchChatSdkReply(
     );
   }
 
-  const payload = await readOptionalJsonObject(response);
-  const dispatchId = optionalString(payload?.["dispatchId"]);
-  const providerMessageId =
-    optionalString(payload?.["providerMessageId"]) ??
-    optionalString(payload?.["messageId"]) ??
-    optionalString(payload?.["id"]);
-  return {
-    status: response.status === 202 ? "queued" : "sent",
+  const payload = await readOptionalChatReplyJson(response);
+  return chatReplyDispatchResultFromResponse({
+    response,
     provider: source.provider,
-    ...(dispatchId === undefined ? {} : { dispatchId }),
-    ...(providerMessageId === undefined ? {} : { providerMessageId }),
-  };
+    payload,
+  });
 }

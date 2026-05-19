@@ -5,23 +5,19 @@ import type {
   ResolvedXGatewayAddon,
   ResolvedXGatewayReadAddon,
 } from "../../divedra-core/src/index";
+import {
+  MAIL_GATEWAY_ADDON_NAME,
+  MAIL_GATEWAY_READ_ADDON_NAME,
+  X_GATEWAY_ADDON_NAME,
+  X_GATEWAY_READ_ADDON_NAME,
+} from "./node-addons/addon-constants-and-agent-config";
 
-function builtinAddonName(parts: readonly string[]): string {
-  return ["divedra", parts.join("-")].join("/");
-}
-
-export const X_GATEWAY_READ_ADDON_NAME = builtinAddonName([
-  "x",
-  "gateway",
-  "read",
-]);
-export const X_GATEWAY_ADDON_NAME = builtinAddonName(["x", "gateway"]);
-export const MAIL_GATEWAY_READ_ADDON_NAME = builtinAddonName([
-  "mail",
-  "gateway",
-  "read",
-]);
-export const MAIL_GATEWAY_ADDON_NAME = builtinAddonName(["mail", "gateway"]);
+export {
+  MAIL_GATEWAY_ADDON_NAME,
+  MAIL_GATEWAY_READ_ADDON_NAME,
+  X_GATEWAY_ADDON_NAME,
+  X_GATEWAY_READ_ADDON_NAME,
+};
 
 export type GatewayReadinessAddon =
   | ResolvedXGatewayReadAddon

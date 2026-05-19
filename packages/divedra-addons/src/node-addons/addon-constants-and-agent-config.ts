@@ -340,6 +340,7 @@ function attachSyncValidateResult(input: {
   readonly definition: NodeAddonDefinition;
   readonly resolverInput: Parameters<NodeAddonPayloadResolver>[0];
   readonly resolved: NodeAddonResolveResult;
+  readonly asyncValidateHookMessage: (addonName: string) => string;
 }): NodeAddonResolveResult {
   if (input.definition.validate === undefined) {
     return input.resolved;
@@ -361,7 +362,7 @@ function attachSyncValidateResult(input: {
         ...(input.resolved.issues ?? []),
         makeIssue(
           input.resolverInput.path,
-          `third-party node add-on '${input.resolverInput.addon.name}' uses an async validate hook; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`,
+          input.asyncValidateHookMessage(input.resolverInput.addon.name),
         ),
       ],
     };
@@ -422,6 +423,16 @@ export type NodeAddonDefinitionSelection =
   | { readonly kind: "missing" }
   | { readonly kind: "issues"; readonly issues: readonly ValidationIssue[] }
   | { readonly kind: "definition"; readonly definition: NodeAddonDefinition };
+export interface NodeAddonRegistryOptions {
+  readonly asyncValidateHookMessage?: (addonName: string) => string;
+  readonly asyncDefinitionResolverMessage?: (addonName: string) => string;
+}
+function defaultAsyncValidateHookMessage(addonName: string): string {
+  return `third-party node add-on '${addonName}' uses an async validate hook; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`;
+}
+function defaultAsyncDefinitionResolverMessage(addonName: string): string {
+  return `third-party node add-on '${addonName}' uses an async definition resolver; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`;
+}
 export function selectNodeAddonDefinition(input: {
   readonly definitions: readonly NodeAddonDefinition[];
   readonly addon: WorkflowNodeAddonRef;
@@ -468,8 +479,14 @@ export function selectNodeAddonDefinition(input: {
 }
 export function createNodeAddonRegistry(
   definitions: readonly NodeAddonDefinition[],
+  options: NodeAddonRegistryOptions = {},
 ): NodeAddonPayloadResolver {
   const registeredDefinitions = [...definitions];
+  const asyncValidateHookMessage =
+    options.asyncValidateHookMessage ?? defaultAsyncValidateHookMessage;
+  const asyncDefinitionResolverMessage =
+    options.asyncDefinitionResolverMessage ??
+    defaultAsyncDefinitionResolverMessage;
   return (input) => {
     const selection = selectNodeAddonDefinition({
       definitions: registeredDefinitions,
@@ -489,7 +506,7 @@ export function createNodeAddonRegistry(
         issues: [
           makeIssue(
             input.path,
-            `third-party node add-on '${input.addon.name}' uses an async definition resolver; use loadWorkflowFromDisk or validateWorkflowBundleAsync for async add-ons`,
+            asyncDefinitionResolverMessage(input.addon.name),
           ),
         ],
       };
@@ -498,6 +515,7 @@ export function createNodeAddonRegistry(
       definition: selection.definition,
       resolverInput: input,
       resolved,
+      asyncValidateHookMessage,
     });
   };
 }
