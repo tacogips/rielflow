@@ -1,6 +1,5 @@
 import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
-import { isGatewayReadinessAddon } from "../../packages/divedra-addons/src/runtime-readiness";
 import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import { loadWorkflowByIdFromDisk } from "./load";
 import {
@@ -84,6 +83,24 @@ interface AddonEnvRequirementCandidate {
   readonly addonEnvNames: readonly string[];
   readonly sourceStepIds: readonly string[];
 }
+
+interface ReadinessAddonEnvBinding {
+  readonly fromEnv: string;
+  readonly required?: boolean | undefined;
+}
+
+interface ReadinessGatewayAddon {
+  readonly name: string;
+  readonly config: {
+    readonly runnerKind?: ContainerRunnerKind | undefined;
+    readonly runnerPath?: string | undefined;
+  };
+  readonly env?: Readonly<Record<string, ReadinessAddonEnvBinding>> | undefined;
+}
+
+const BUILTIN_ADDON_NAMESPACE = "divedra";
+const GATEWAY_ADDON_FAMILIES = ["x", "mail"] as const;
+const GATEWAY_ADDON_SUFFIXES = ["gateway", "gateway-read"] as const;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -268,6 +285,33 @@ function buildContainerRunnerRequirementId(
     candidate.runnerPath ?? "default",
     ...(candidate.dockerCliRequired === true ? ["docker-cli"] : []),
   ].join(":");
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isGatewayReadinessAddonName(name: string): boolean {
+  const [namespace, addonName] = name.split("/");
+  if (namespace !== BUILTIN_ADDON_NAMESPACE || addonName === undefined) {
+    return false;
+  }
+  return GATEWAY_ADDON_FAMILIES.some((family) =>
+    GATEWAY_ADDON_SUFFIXES.some(
+      (suffix) => addonName === `${family}-${suffix}`,
+    ),
+  );
+}
+
+function isGatewayReadinessAddon(
+  addon: unknown,
+): addon is ReadinessGatewayAddon {
+  if (!isRecord(addon) || typeof addon["name"] !== "string") {
+    return false;
+  }
+  return (
+    isGatewayReadinessAddonName(addon["name"]) && isRecord(addon["config"])
+  );
 }
 
 function addContainerRunnerCandidate(

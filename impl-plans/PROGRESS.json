@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-19T12:44:00+09:00",
+  "lastUpdated": "2026-05-19T17:49:33+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -6463,6 +6463,33 @@
             "REF-003",
             "REF-004",
             "REF-005"
+          ]
+        }
+      }
+    },
+    "active/refactoring-event-path-resolution-package-ownership": {
+      "phase": 181,
+      "status": "Completed",
+      "path": "impl-plans/active/refactoring-event-path-resolution-package-ownership.md",
+      "designReference": "refactoring-divide-and-conquer event path-resolution package ownership slice reviews",
+      "tasks": {
+        "REF-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "REF-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-001"
+          ]
+        },
+        "REF-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "REF-001"
           ]
         }
       }

@@ -262,6 +262,11 @@ const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
     supportDirs: [],
     supportDeclarations: [
       {
+        source: "packages/divedra-events/src/path-resolution.d.ts",
+        target: "path-resolution.d.ts",
+        rewritePackageSourceImports: true,
+      },
+      {
         source: "packages/divedra-events/src/runtime-ports.d.ts",
         target: "runtime-ports.d.ts",
         rewritePackageSourceImports: true,

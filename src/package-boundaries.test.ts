@@ -77,7 +77,6 @@ const TEMPORARY_COMPATIBILITY_ROOT_IMPORTS = {
     "../../../../src/events",
     "../../../../src/events/manual-emit",
     "../../../../src/events/receipt-ops",
-    "../../../../src/events/types",
     "../../../../src/events/workflow-schedule-registry",
     "../../../../src/graphql/client",
     "../../../../src/hook/config",
@@ -575,6 +574,7 @@ describe("package boundaries", () => {
     expect(events.dependencies?.["divedra-core"]).toBe("workspace:*");
     expect(Object.keys(events.exports ?? {}).sort()).toEqual([
       ".",
+      "./path-resolution",
       "./runtime-ports",
       "./types",
     ]);
@@ -811,7 +811,12 @@ describe("package boundaries", () => {
       },
       {
         packageName: "divedra-events",
-        declarations: ["index.d.ts", "runtime-ports.d.ts", "types.d.ts"],
+        declarations: [
+          "index.d.ts",
+          "path-resolution.d.ts",
+          "runtime-ports.d.ts",
+          "types.d.ts",
+        ],
       },
       {
         packageName: "divedra-graphql",
@@ -901,6 +906,7 @@ describe("package boundaries", () => {
   test("events and hook packages own contracts without root source imports", async () => {
     const contractFiles = [
       "packages/divedra-events/src/runtime-ports.ts",
+      "packages/divedra-events/src/path-resolution.ts",
       "packages/divedra-events/src/types.ts",
       "packages/divedra-hook/src/config.ts",
       "packages/divedra-hook/src/context.ts",
@@ -1082,6 +1088,16 @@ describe("package boundaries", () => {
     expect(adapters["DispatchingNodeAdapter"]).toBe(
       sourceDispatch["DispatchingNodeAdapter"],
     );
+
+    const events = await importRepositoryModule(
+      "packages/divedra-events/src/index.ts",
+    );
+    const eventPathResolution = await importRepositoryModule(
+      "packages/divedra-events/src/path-resolution.ts",
+    );
+    expect(events["resolveEventPathReference"]).toBe(
+      eventPathResolution["resolveEventPathReference"],
+    );
   });
 
   test("core source facade stays within the core runtime contract", async () => {
@@ -1225,6 +1241,10 @@ describe("package boundaries", () => {
       "divedra-addons",
       "dist/index.js",
     );
+    const events = await importCopiedPackageEntrypoint(
+      "divedra-events",
+      "dist/path-resolution.js",
+    );
     const copiedAdapterInstall = await importCopiedPackageEntrypoints([
       { packageName: "divedra-core", entrypoint: "dist/index.js" },
       { packageName: "divedra-adapters", entrypoint: "dist/index.js" },
@@ -1234,6 +1254,7 @@ describe("package boundaries", () => {
     expect(typeof compat["continueWorkflowFromHistory"]).toBe("function");
     expect(typeof core["runWorkflow"]).toBe("function");
     expect(typeof addons["createNodeAddonRegistry"]).toBe("function");
+    expect(typeof events["resolveEventPathReference"]).toBe("function");
     expect(typeof adapters?.["DispatchingNodeAdapter"]).toBe("function");
   });
 

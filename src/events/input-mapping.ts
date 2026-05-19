@@ -1,7 +1,7 @@
 import { isJsonObject, type JsonObject } from "../shared/json";
 import { isEventBindingEnabled } from "./config";
 import { resolveEventMailboxBridgePolicy } from "./mailbox-bridge-policy";
-import { renderEventTemplateValue } from "./path-resolution";
+import { renderEventTemplateValue } from "divedra-events/path-resolution";
 import type {
   EventBinding,
   EventSourceConfig,

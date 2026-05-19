@@ -1,7 +1,7 @@
 import {
   renderNamedTemplate,
   resolveEventPathReference,
-} from "./path-resolution";
+} from "divedra-events/path-resolution";
 import type { EventBinding } from "./types";
 
 export type EventTaskPlanningDecision =

@@ -5,7 +5,7 @@ import {
 import { emitEventFile } from "../../../../src/events/manual-emit";
 import { listEventReceipts, replayEventReceipt } from "../../../../src/events/receipt-ops";
 import { createWorkflowScheduleRepository } from "../../../../src/events/workflow-schedule-registry";
-import type { WorkflowScheduleStatus } from "../../../../src/events/types";
+import type { WorkflowScheduleStatus } from "divedra-events";
 import {
   DEFAULT_GRAPHQL_ENDPOINT,
   executeGraphqlRequest,

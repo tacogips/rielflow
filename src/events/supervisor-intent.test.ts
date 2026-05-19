@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import { resolveSupervisorIntent } from "./supervisor-intent";
 import type { EventBinding, ExternalEventEnvelope } from "./types";
 
-function buildBinding(): EventBinding {
+function buildBinding(
+  input: { readonly inputPath?: string | undefined } = {},
+): EventBinding {
   return {
     id: "binding-1",
     sourceId: "source-1",
@@ -13,7 +15,9 @@ function buildBinding(): EventBinding {
       control: {
         intentMapping: {
           mode: "command-map",
-          inputPath: "event.input.text",
+          ...(input.inputPath === undefined
+            ? {}
+            : { inputPath: input.inputPath }),
           commands: {
             start: ["start"],
             stop: ["stop", "cancel"],
@@ -48,7 +52,7 @@ function buildEvent(text: string): ExternalEventEnvelope {
 }
 
 describe("resolveSupervisorIntent", () => {
-  test("command-map matches the first token of chat text", () => {
+  test("command-map uses event.input.text as the default input path", () => {
     const result = resolveSupervisorIntent({
       binding: buildBinding(),
       event: buildEvent("start release review"),
@@ -59,6 +63,54 @@ describe("resolveSupervisorIntent", () => {
       action: "start",
       args: ["release", "review"],
       commandText: "start release review",
+    });
+  });
+
+  test("command-map preserves resolved text whitespace while parsing commands", () => {
+    const result = resolveSupervisorIntent({
+      binding: buildBinding(),
+      event: buildEvent("  start padded  "),
+    });
+
+    expect(result).toEqual({
+      outcome: "action",
+      action: "start",
+      args: ["padded"],
+      commandText: "  start padded  ",
+    });
+  });
+
+  test("command-map resolves custom input paths", () => {
+    const result = resolveSupervisorIntent({
+      binding: buildBinding({ inputPath: "event.input.message.body" }),
+      event: {
+        ...buildEvent("ignored default text"),
+        input: { message: { body: "stop now" } },
+      },
+    });
+
+    expect(result).toEqual({
+      outcome: "action",
+      action: "stop",
+      args: ["now"],
+      commandText: "stop now",
+    });
+  });
+
+  test("command-map allows array traversal for configured input paths", () => {
+    const result = resolveSupervisorIntent({
+      binding: buildBinding({ inputPath: "event.input.commands.0" }),
+      event: {
+        ...buildEvent("ignored default text"),
+        input: { commands: ["restart worker"] },
+      },
+    });
+
+    expect(result).toEqual({
+      outcome: "action",
+      action: "restart",
+      args: ["worker"],
+      commandText: "restart worker",
     });
   });
 

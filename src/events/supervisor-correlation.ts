@@ -1,4 +1,4 @@
-import { renderEventStringTemplate } from "./path-resolution";
+import { renderEventStringTemplate } from "divedra-events/path-resolution";
 import type {
   EventBinding,
   EventSourceConfig,

@@ -12,6 +12,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./path-resolution": {
+      "types": "./dist/path-resolution.d.ts",
+      "import": "./dist/path-resolution.js",
+      "default": "./dist/path-resolution.js"
+    },
     "./runtime-ports": {
       "types": "./dist/runtime-ports.d.ts",
       "import": "./dist/runtime-ports.js",

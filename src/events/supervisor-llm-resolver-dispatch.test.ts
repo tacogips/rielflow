@@ -1,5 +1,42 @@
 import { describe, expect, test } from "vitest";
-import { interpretSupervisorDispatchResolverRootJson } from "./supervisor-llm-resolver";
+import {
+  interpretSupervisorDispatchResolverRootJson,
+  resolveSupervisorEventText,
+} from "./supervisor-llm-resolver";
+import type { EventBinding, ExternalEventEnvelope } from "./types";
+
+function buildBinding(): EventBinding {
+  return {
+    id: "binding-1",
+    sourceId: "source-1",
+    workflowName: "workflow-1",
+    inputMapping: { mode: "event-input" },
+    execution: {
+      mode: "supervised",
+      control: {
+        intentMapping: {
+          mode: "llm-command",
+          resolverWorkflowName: "resolver",
+          resolverNodeId: "node",
+        },
+      },
+    },
+  };
+}
+
+function buildEvent(
+  input: Readonly<Record<string, unknown>>,
+): ExternalEventEnvelope {
+  return {
+    sourceId: "source-1",
+    eventId: "evt-1",
+    provider: "webhook",
+    eventType: "chat.message",
+    receivedAt: "2026-04-29T00:00:00.000Z",
+    dedupeKey: "dedupe-1",
+    input,
+  };
+}
 
 describe("interpretSupervisorDispatchResolverRootJson", () => {
   test("unwraps adapter payload and returns parsed proposal", () => {
@@ -78,5 +115,50 @@ describe("interpretSupervisorDispatchResolverRootJson", () => {
     if (r.ok) {
       expect(r.proposal.action).toBe("no-op");
     }
+  });
+});
+
+describe("resolveSupervisorEventText", () => {
+  test("uses event.input.text as the default path and trims LLM resolver text", () => {
+    expect(
+      resolveSupervisorEventText({
+        binding: buildBinding(),
+        event: buildEvent({ text: "  hello resolver  " }),
+        trimString: true,
+      }),
+    ).toBe("hello resolver");
+  });
+
+  test("resolves custom LLM input paths with trimming", () => {
+    expect(
+      resolveSupervisorEventText({
+        binding: buildBinding(),
+        event: buildEvent({ message: { body: "  status please  " } }),
+        inputPath: "event.input.message.body",
+        trimString: true,
+      }),
+    ).toBe("status please");
+  });
+
+  test("does not traverse arrays unless the caller explicitly opts in", () => {
+    const binding = buildBinding();
+    const event = buildEvent({ commands: ["start worker"] });
+
+    expect(
+      resolveSupervisorEventText({
+        binding,
+        event,
+        inputPath: "event.input.commands.0",
+        trimString: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveSupervisorEventText({
+        binding,
+        event,
+        inputPath: "event.input.commands.0",
+        allowArrayTraversal: true,
+      }),
+    ).toBe("start worker");
   });
 });

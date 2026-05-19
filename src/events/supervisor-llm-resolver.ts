@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveEventPathText } from "divedra-events/path-resolution";
 import { runWorkflow } from "../workflow/engine";
 import { loadSession } from "../workflow/session-store";
-import { resolveEventPathText } from "./path-resolution";
 import type { WorkflowTriggerRunnerOptions } from "./trigger-runner";
 import type {
   EventBinding,
@@ -97,19 +97,30 @@ type ReadResolverWorkflowNodeOutputResult =
     }
   | { readonly ok: false; readonly error: string };
 
-function readEventPath(
-  event: ExternalEventEnvelope,
-  source: EventSourceConfig | undefined,
-  binding: EventBinding,
-  inputPath: string | undefined,
+interface ResolveSupervisorEventTextInput {
+  readonly binding: EventBinding;
+  readonly event: ExternalEventEnvelope;
+  readonly source?: EventSourceConfig | undefined;
+  readonly inputPath?: string | undefined;
+  readonly allowArrayTraversal?: boolean | undefined;
+  readonly trimString?: boolean | undefined;
+}
+
+export function resolveSupervisorEventText(
+  input: ResolveSupervisorEventTextInput,
 ): string | undefined {
   return resolveEventPathText({
-    path: inputPath,
+    path: input.inputPath,
     defaultPath: "event.input.text",
-    roots: { binding, event, source },
+    roots: {
+      binding: input.binding,
+      event: input.event,
+      source: input.source,
+    },
     allowedRoots: ["binding", "event", "source"],
+    allowArrayTraversal: input.allowArrayTraversal,
     filterEmptySegments: true,
-    trimString: true,
+    trimString: input.trimString,
   });
 }
 
@@ -270,12 +281,13 @@ export function interpretSupervisorDispatchResolverRootJson(
 export async function runSupervisorDispatchLlmResolver(
   input: RunSupervisorDispatchLlmResolverInput,
 ): Promise<RunSupervisorDispatchLlmResolverResult> {
-  const text = readEventPath(
-    input.event,
-    input.source,
-    input.binding,
-    input.inputPath,
-  );
+  const text = resolveSupervisorEventText({
+    binding: input.binding,
+    event: input.event,
+    source: input.source,
+    inputPath: input.inputPath,
+    trimString: true,
+  });
 
   const minConfidence =
     input.minConfidence ??
@@ -325,12 +337,13 @@ export async function runSupervisorDispatchLlmResolver(
 export async function runSupervisorLlmResolver(
   input: RunSupervisorLlmResolverInput,
 ): Promise<RunSupervisorLlmResolverResult> {
-  const text = readEventPath(
-    input.event,
-    input.source,
-    input.binding,
-    input.inputPath,
-  );
+  const text = resolveSupervisorEventText({
+    binding: input.binding,
+    event: input.event,
+    source: input.source,
+    inputPath: input.inputPath,
+    trimString: true,
+  });
 
   const supervisorWorkflowName =
     input.binding.execution?.supervisorWorkflowName ??

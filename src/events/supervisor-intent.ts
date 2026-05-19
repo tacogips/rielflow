@@ -1,5 +1,4 @@
 import { isJsonObject } from "../shared/json";
-import { resolveEventPathText } from "./path-resolution";
 import {
   defaultSupervisorWorkflowName,
   resolveSupervisedCorrelationKey,
@@ -16,7 +15,10 @@ import type {
   ExternalEventEnvelope,
 } from "./types";
 import type { WorkflowTriggerRunnerOptions } from "./trigger-runner";
-import { runSupervisorLlmResolver } from "./supervisor-llm-resolver";
+import {
+  resolveSupervisorEventText,
+  runSupervisorLlmResolver,
+} from "./supervisor-llm-resolver";
 import {
   EVENT_SUPERVISOR_ACTIONS,
   EVENT_SUPERVISOR_ACTION_SET,
@@ -45,13 +47,13 @@ function resolveCommandMapText(
   binding: EventBinding,
   inputPath: string | undefined,
 ): string | undefined {
-  return resolveEventPathText({
-    path: inputPath,
-    defaultPath: "event.input.text",
-    roots: { binding, event, source },
-    allowedRoots: ["binding", "event", "source"],
+  return resolveSupervisorEventText({
+    binding,
+    event,
+    source,
+    inputPath,
     allowArrayTraversal: true,
-    filterEmptySegments: true,
+    trimString: false,
   });
 }
 
