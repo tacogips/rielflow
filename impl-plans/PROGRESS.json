@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-19T22:30:00+09:00",
+  "lastUpdated": "2026-05-19T23:35:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -6593,22 +6593,22 @@
           "deps": []
         },
         "REF-007": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": true,
           "deps": []
         },
         "REF-008": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": []
         },
         "REF-009": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": true,
           "deps": []
         },
         "REF-010": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "REF-002",
@@ -6616,24 +6616,24 @@
           ]
         },
         "REF-011": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": []
         },
         "REF-012": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "REF-011"
           ]
         },
         "REF-013": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": true,
           "deps": []
         },
         "REF-014": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "REF-013"
@@ -6648,19 +6648,19 @@
           ]
         },
         "REF-016": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": true,
           "deps": []
         },
         "REF-017": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "REF-016"
           ]
         },
         "REF-018": {
-          "status": "Ready",
+          "status": "Completed",
           "parallelizable": false,
           "deps": [
             "REF-011"

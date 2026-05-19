@@ -35,6 +35,7 @@ impl-plans/
 | `active/schedule-registration-safe-reply-gating` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#chat-replies` |
 | `active/schedule-registration-blocking-fixes` | Completed | `design-scheduled-workflow-execution#schedule-registration-safety-contract`, `design-scheduled-workflow-execution#validation-rules` |
 | `active/refactoring-event-path-resolution-package-ownership` | Completed | `refactoring-divide-and-conquer event path-resolution package ownership slice reviews` |
+| `active/refactoring-duplicate-scavenge-product-code` | In Progress | `architecture#product-code-duplicate-scavenge-consolidation-boundaries` |
 | `active/workflow-status-active-session-loadability-issue-25` | Completed | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
 | `workflow-status-active-session-loadability` | In Progress | `design-workflow-overview-status-surface#active-execution-loadability-contract`, `command#cli-workflow-status-name` |
 

@@ -828,9 +828,12 @@ consolidation tasks in
 shared artifact hashing/sanitization, workflow scope and validation helpers,
 communication artifact persistence, node output publication, official SDK and
 local-agent adapter helpers, workflow run option projection, GraphQL response
-handling, and GraphQL DTO projection. `REF-003` and `REF-015` remain documented
-blocked residual risks pending the public add-ons runner predicate and backend
-constant ownership decisions in
+handling, and GraphQL DTO projection. The active plan remains `In Progress`
+because `REF-003` and `REF-015` are still blocked pending explicit owner
+decisions for the public add-ons runner predicate export surface and backend
+constant ownership/normalization contract. A completion request alone does not
+approve those public-surface changes or accept them as residual risks; the
+current blocker questions are recorded in
 `design-docs/user-qa/qa-product-code-duplicate-scavenge-blockers.md`.
 
 Run the local refactoring workflow with project workflow definitions:
@@ -929,3 +932,10 @@ validation evidence. Its required documentation targets are `README.md` and
 LLM-facing workflow skill stay aligned. When implementation changes CLI,
 GraphQL, library, or workflow-operation behavior, the matching user-facing
 workflow skills under `.agents/skills/` should be refreshed in the same step.
+
+For active implementation-plan completion handoffs, this documentation refresh
+should preserve the accepted review decision: unresolved blocker tasks stay
+blocked unless the workflow input includes explicit owner approval or accepted
+residual-risk closure, and `codex-agent` references remain execution-backend and
+adapter-behavior references unless a local or remote Codex source reference is
+provided.

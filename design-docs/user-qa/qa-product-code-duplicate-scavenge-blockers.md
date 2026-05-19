@@ -2,6 +2,9 @@
 
 This document tracks user or owner confirmation needed before implementing
 blocked tasks in `impl-plans/active/refactoring-duplicate-scavenge-product-code.md`.
+During delegated completion reruns, these questions remain unresolved unless an
+owner answer is supplied in the workflow input. A completion request by itself
+does not approve either public-surface change.
 
 ## REF-003: Docker-Compatible Runner Predicate Export
 

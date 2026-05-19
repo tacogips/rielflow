@@ -230,6 +230,15 @@ on the public normalization contract and null-versus-undefined semantics. These
 confirmation items are tracked in
 `design-docs/user-qa/qa-product-code-duplicate-scavenge-blockers.md`.
 
+For delegated completion reruns of the active plan, the blocker state takes
+precedence over any stale plan-level completion marker. Later workflow steps
+should either receive the owner decisions that unblock `REF-003` and `REF-015`
+and then implement them with the focused verification commands in the plan, or
+preserve them as explicitly accepted residual risks and update the plan progress
+log to reconcile the task-level blocker state with the plan-level status. The
+completion path must not infer approval for new public exports or core-owned
+backend normalization from the existence of the completion request alone.
+
 No Codex-reference implementation behavior is required for this active plan.
 The default local reference root `../../codex-agent` was checked for this
 design pass and was unavailable. `codex-agent` remains an execution backend and

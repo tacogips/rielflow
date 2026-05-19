@@ -1,6 +1,6 @@
 # Product Code Duplicate-Scavenge Refactoring Plan
 
-**Status**: Completed
+**Status**: In Progress
 **Design Reference**: Workflow output from `refactoring-divide-and-conquer` step `step3-merge-review-plan`; accepted boundary update in `design-docs/specs/architecture.md#product-code-duplicate-scavenge-consolidation-boundaries`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-19
@@ -22,10 +22,14 @@ Excluded: `.divedra`, `.agents`, `design-docs`, generated `dist`, `node_modules`
 
 ## Implementation Order for Remaining Work
 
-1. Implement unblocked independent helpers first: `REF-007`, `REF-008`, `REF-009`, `REF-011`, `REF-013`, and `REF-016`.
-2. Implement dependent tasks after their prerequisites pass focused verification: `REF-010`, `REF-012`, `REF-014`, `REF-017`, and `REF-018`.
-3. Keep `REF-003` and `REF-015` blocked unless the decisions in `design-docs/user-qa/qa-product-code-duplicate-scavenge-blockers.md` are resolved or explicitly accepted as residual risk.
-4. After each completed task, update that task status and append a progress-log entry with completed files, verification commands, and any residual risk changes.
+1. Treat `REF-007`, `REF-008`, `REF-009`, `REF-010`, `REF-011`, `REF-012`, `REF-013`, `REF-014`, `REF-016`, `REF-017`, and `REF-018` as completed by the 2026-05-19 23:08 and 23:23 JST implementation sessions.
+2. Keep `REF-003` and `REF-015` blocked unless the decisions in `design-docs/user-qa/qa-product-code-duplicate-scavenge-blockers.md` are resolved or explicitly accepted as residual risk by an owner decision.
+3. If owner decisions unblock either blocked task, implement only that task's owned files, preserve the task-specific public-surface semantics, and run its focused verification commands plus `bun run typecheck` and `git diff --check`.
+4. If owner decisions keep either blocked task as accepted residual risk, update that task status, the exit criteria, `impl-plans/PROGRESS.json`, and this progress log before closure.
+
+## Delegated Completion Rerun State
+
+Step 3 of `design-and-implement-review-loop` accepted the design update that reconciles this plan's stale completion markers with current task state. Task-level blocker state now takes precedence over the previous plan-level `Completed` header. This plan remains `In Progress` until `REF-003` and `REF-015` are either unblocked and completed, or explicitly accepted as residual risks by an owner decision recorded in the plan and user-QA blocker document.
 
 ## Duplicate Groups
 
@@ -379,7 +383,7 @@ Excluded: `.divedra`, `.agents`, `design-docs`, generated `dist`, `node_modules`
 ## Exit Criteria
 
 - [x] All Ready high/mid tasks are Completed, or explicitly moved to Blocked with owner, blocker, and residual risk.
-- [x] Blocked tasks REF-003 and REF-015 are either unblocked and completed or accepted as residual risks.
+- [ ] Blocked tasks REF-003 and REF-015 are either unblocked and completed or accepted as residual risks by an explicit owner decision.
 - [x] Accepted low residual risks remain documented above.
 - [x] Focused verification commands pass for every completed task.
 - [x] `bun run typecheck` passes after TypeScript source changes.
@@ -535,3 +539,23 @@ Excluded: `.divedra`, `.agents`, `design-docs`, generated `dist`, `node_modules`
 - `git diff --check` passed.
 
 **Notes**: Completed the self-review finding that all unblocked Ready/In Progress tasks must be finished before independent review. Shared workflow overview status parsing, step-addressed non-add-on payload registration, communication artifact persistence across normal delivery/manager messages/manual replay, node output publication, watched local-agent lifecycle, and GraphQL control-plane session DTO projection mappers. `REF-003` and `REF-015` remain documented blocker residual risks in `design-docs/user-qa/qa-product-code-duplicate-scavenge-blockers.md`.
+
+### Session: 2026-05-19 Step 4 Implementation Plan Reconciliation
+
+**Tasks Completed**: Planning reconciliation only; no TypeScript implementation.
+
+**Verification**:
+- `git diff --check -- impl-plans/active/refactoring-duplicate-scavenge-product-code.md impl-plans/PROGRESS.json impl-plans/README.md` passed.
+
+**Notes**: Reconciled the accepted Step 3 design decision with the active plan. The plan header now remains `In Progress` because `REF-003` and `REF-015` are blocked pending owner decisions, while all other unblocked tasks are recorded as completed in the task DAG and `impl-plans/PROGRESS.json`. The completion request does not infer approval for a new add-ons public export or core-owned backend normalization.
+
+### Session: 2026-05-19 Step 6 Implementation Blocker Recheck
+
+**Tasks Completed**: No additional implementation; all unblocked tasks remain completed.
+
+**Tasks Blocked**: REF-003, REF-015
+
+**Verification**:
+- `git diff --check` passed.
+
+**Notes**: Rechecked the Step 5 accepted plan against the accepted design boundary. No owner decision was present in the workflow input to approve the `packages/divedra-addons/src/index.ts` runner predicate export, approve core-owned backend normalization, or accept either blocked task as residual risk. `REF-003` and `REF-015` therefore remain blocked and no TypeScript files were modified in this implementation step.
