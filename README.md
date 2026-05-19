@@ -7,7 +7,7 @@ afterward.
 
 ```mermaid
 flowchart TD
-  catalog["Workflow catalog<br/>~/.divedra/workflows, project .divedra/workflows, or --workflow-definition-dir"]
+  catalog["Workflow catalog<br/>~/.divedra/workflows, project .divedra/workflows, --workflow-definition-dir, or serve manifest"]
   choose["Choose workflow<br/>workflow usage / workflow list"]
   run["Start execution<br/>workflow run or GraphQL executeWorkflow"]
   session["Workflow execution session<br/>sessionId / workflowExecutionId"]
@@ -151,6 +151,33 @@ For examples, tests, or one-off runs, bypass scoped lookup with:
 
 This option points at a directory containing workflow bundle directories. It
 does not control where logs, sessions, artifacts, or attachments are stored.
+
+`divedra serve` can publish an explicit workflow allowlist from a server
+manifest:
+
+```bash
+bun run packages/divedra/src/bin.ts serve --workflow-manifest ./workflow-manifest.json
+```
+
+`DIVEDRA_WORKFLOW_MANIFEST` is the environment fallback when
+`--workflow-manifest` is omitted. A manifest-backed server exposes only enabled
+manifest entries through the browser overview, GraphQL catalog, and
+server-backed start paths. `serve [workflow-name]` narrows by manifest `id`.
+When a manifest is present, it is authoritative over
+`--workflow-definition-dir`; the direct definition directory is ignored for
+serve catalog selection.
+
+Manifest version `1` uses `workflows[]` entries with stable `id`, optional
+`enabled`, `workflowDirectory.absolute` or `workflowDirectory.relative`,
+optional `cwd.absolute` or `cwd.relative`, optional `autoImprove.mode`
+(`active` or `disabled`), `defaultVariables`, and display `metadata`. Relative
+paths resolve from the manifest file directory, and each path object must use
+exactly one of `absolute` or `relative`. Manifest `defaultVariables` are merged
+before request variables so the request wins. `autoImprove.mode: "disabled"`
+keeps deterministic lifecycle supervision while disabling workflow patching.
+`metadata.allowDuplicateSource` is the only reserved metadata key that affects
+validation; when set to `true`, duplicate enabled workflowDirectory/cwd pairs
+are allowed intentionally.
 
 Install a workflow bundle from a public GitHub directory into the scoped
 catalog with `workflow checkout`:
@@ -716,6 +743,9 @@ Supported vendors:
 ## Common Options
 
 - `--workflow-definition-dir <path>`: directory containing workflow bundles.
+- `--workflow-manifest <path>`: serve-only workflow allowlist manifest. When
+  present, the server exposes enabled manifest entries only and ignores
+  `--workflow-definition-dir` for serve catalog selection.
 - `--scope auto|project|user`: choose scoped catalog lookup.
 - `--user-root <path>`: override the user scope root.
 - `--project-root <path>`: override the project scope root.
@@ -789,6 +819,7 @@ Relocate storage with:
 Workflow and server environment variables:
 
 - `DIVEDRA_WORKFLOW_DEFINITION_DIR`
+- `DIVEDRA_WORKFLOW_MANIFEST`
 - `DIVEDRA_WORKFLOW_SCOPE`
 - `DIVEDRA_USER_ROOT`
 - `DIVEDRA_PROJECT_ROOT`

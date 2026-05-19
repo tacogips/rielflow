@@ -177,6 +177,34 @@ describe("startServe", () => {
       ),
     ).rejects.toThrow("invalid serve port '5173.5'");
   });
+
+  test("validates workflow manifest before binding listener", async () => {
+    const manifestPath = path.join(
+      os.tmpdir(),
+      `divedra-missing-manifest-${Date.now().toString()}.json`,
+    );
+    let serveCalled = false;
+
+    await expect(
+      startServe(
+        {
+          host: "127.0.0.1",
+          workflowManifestPath: manifestPath,
+        },
+        {
+          serve: ({ port }) => {
+            serveCalled = true;
+            return {
+              port,
+              stop: () => {},
+            };
+          },
+        },
+      ),
+    ).rejects.toThrow("failed reading workflow manifest");
+
+    expect(serveCalled).toBe(false);
+  });
 });
 
 describe("handleApiRequest workflow overview routes", () => {

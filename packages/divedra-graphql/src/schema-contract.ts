@@ -381,6 +381,10 @@ export const GRAPHQL_SCHEMA_TEXT = `
     workflowName: String!
     sourceScope: String!
     workflowDirectory: String!
+    authoredWorkflowId: String
+    manifestPath: String
+    manifestEntryId: String
+    metadata: JSON
     description: String!
     aggregateStatus: String!
     activeExecutionCount: Int!
@@ -395,6 +399,10 @@ export const GRAPHQL_SCHEMA_TEXT = `
     workflowName: String!
     sourceScope: String!
     workflowDirectory: String!
+    authoredWorkflowId: String
+    manifestPath: String
+    manifestEntryId: String
+    metadata: JSON
     description: String!
     aggregateStatus: String!
     activeExecutionCount: Int!

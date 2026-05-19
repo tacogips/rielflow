@@ -147,6 +147,8 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `serve [workflow-name]`
   - Start the local HTTP control plane.
   - If `workflow-name` is provided, workflow-definition access is constrained to that workflow.
+  - Accepts `--workflow-manifest <path>` to load an explicit server workflow allowlist. When present, only enabled manifest entries are exposed as startable workflows by browser and GraphQL server surfaces.
+  - With `--workflow-manifest`, optional `workflow-name` narrows by manifest entry id. Existing `--workflow-definition-dir` catalog selection is ignored for served catalog exposure when a manifest is present.
   - Exposes `/graphql` for workflow-definition, execution, communication, and manager-control operations.
   - Human-facing browser mode should default to the overview-only workflow list and selected-workflow status surface described in `design-workflow-overview-status-surface.md`, not to node-level debugging detail.
   - Exposes `/healthz` for liveness checks.
@@ -244,6 +246,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--message-json`                                  | string        | none                                                | Inline JSON payload for `call-step`                                                                                                                                                                                       |
 | `--message-file`                                  | string (path) | none                                                | JSON payload file for `call-step`                                                                                                                                                                                         |
 | `--file`                                          | string (path) | none                                                | Output file path for `export`; when omitted, the export JSON is written to stdout                                                                                                                                         |
+| `--workflow-manifest`                             | string (path) | none                                                | For `serve`: JSON manifest that defines the complete startable workflow allowlist for this server; when present, it takes precedence over direct/scoped catalog exposure                                                   |
 | `--host`                                          | string        | `127.0.0.1`                                         | Bind address for `serve`                                                                                                                                                                                                  |
 | `--port`                                          | number        | `43173`                                             | Listen port for `serve`                                                                                                                                                                                                   |
 | `--read-only`                                     | boolean       | `false`                                             | Disable write/update operations in `serve` mode                                                                                                                                                                           |
@@ -257,6 +260,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | --------------------------------- | --------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DIVEDRA_ARTIFACT_ROOT`           | No              | resolved runtime data root + `/workflow`        | Overrides only the workflow artifact tree root (`.../workflow`)                                                                                               |
 | `DIVEDRA_WORKFLOW_DEFINITION_DIR` | No              | scoped catalog lookup                           | Direct default workflow definition directory; when set, bypasses project/user scope catalog lookup and does not control runtime logs, sessions, or artifacts  |
+| `DIVEDRA_WORKFLOW_MANIFEST`       | No              | none                                            | Default manifest path for `serve`; when present, defines the complete server workflow allowlist and takes precedence over direct/scoped catalog exposure      |
 | `DIVEDRA_WORKFLOW_SCOPE`          | No              | `auto`                                          | Default workflow scope selector: `auto`, `project`, or `user`                                                                                                 |
 | `DIVEDRA_USER_ROOT`               | No              | `~/.divedra`                                    | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                        |
 | `DIVEDRA_PROJECT_ROOT`            | No              | nearest project `.divedra`                      | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`   |
@@ -293,16 +297,21 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 
 Workflow lookup resolution order:
 
-1. `--workflow-definition-dir`
-2. `DIVEDRA_WORKFLOW_DEFINITION_DIR`
-3. `--scope project|user` / `DIVEDRA_WORKFLOW_SCOPE`
-4. project scope `<project-root>/workflows` when scope is `auto` or `project`
-5. user scope `<user-root>/workflows` when scope is `auto` or `user`
+1. `--workflow-manifest` for `serve`
+2. `DIVEDRA_WORKFLOW_MANIFEST` for `serve`
+3. `--workflow-definition-dir`
+4. `DIVEDRA_WORKFLOW_DEFINITION_DIR`
+5. `--scope project|user` / `DIVEDRA_WORKFLOW_SCOPE`
+6. project scope `<project-root>/workflows` when scope is `auto` or `project`
+7. user scope `<user-root>/workflows` when scope is `auto` or `user`
 
 In `auto` mode, project scope is searched before user scope. If the same name
 exists in both scopes, project scope wins for bare workflow names.
 `--workflow-definition-dir` and `DIVEDRA_WORKFLOW_DEFINITION_DIR` are direct
 workflow definition directory overrides and do not use scope catalog lookup.
+For `serve`, `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST` are
+authoritative allowlist inputs and prevent additional direct or scoped catalog
+workflows from being exposed by that server.
 
 Invalid values for `--scope` or `DIVEDRA_WORKFLOW_SCOPE` are usage errors. The
 CLI must fail rather than silently treating the value as `auto`.

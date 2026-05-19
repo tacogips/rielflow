@@ -36,6 +36,10 @@ export interface WorkflowOverviewRow {
   readonly workflowName: string;
   readonly sourceScope: WorkflowOverviewSourceScope;
   readonly workflowDirectory: string;
+  readonly authoredWorkflowId?: string;
+  readonly manifestPath?: string;
+  readonly manifestEntryId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly description: string;
   readonly aggregateStatus: WorkflowOverviewStatus;
   readonly activeExecutionCount: number;
@@ -350,6 +354,16 @@ function buildOverviewRow(
     workflowName: source.workflowName,
     sourceScope: source.scope,
     workflowDirectory: source.workflowDirectory,
+    ...(source.authoredWorkflowId === undefined
+      ? {}
+      : { authoredWorkflowId: source.authoredWorkflowId }),
+    ...(source.manifestPath === undefined
+      ? {}
+      : { manifestPath: source.manifestPath }),
+    ...(source.manifestEntryId === undefined
+      ? {}
+      : { manifestEntryId: source.manifestEntryId }),
+    ...(source.metadata === undefined ? {} : { metadata: source.metadata }),
     description,
     aggregateStatus,
     activeExecutionCount: countActiveWorkflowExecutions(sortedExecutions),
@@ -385,7 +399,7 @@ export async function buildWorkflowCatalogOverview(
     }
     const execs = await collectCompactSummariesForSource(
       source,
-      meta.value.workflowId,
+      source.scope === "manifest" ? source.workflowName : meta.value.workflowId,
       baseOptions,
     );
     if (!execs.ok) {
@@ -434,7 +448,7 @@ export async function buildWorkflowStatusOverview(
   }
   const execs = await collectCompactSummariesForSource(
     source,
-    meta.value.workflowId,
+    source.scope === "manifest" ? source.workflowName : meta.value.workflowId,
     baseOptions,
   );
   if (!execs.ok) {
@@ -485,6 +499,9 @@ export function workflowStatusOverviewInputFromOverviewRow(
   row: WorkflowOverviewRow,
 ): Pick<WorkflowStatusOverviewInput, "workflowName" | "workflowScope"> {
   if (row.sourceScope === "direct") {
+    return { workflowName: row.workflowName };
+  }
+  if (row.sourceScope === "manifest") {
     return { workflowName: row.workflowName };
   }
   return { workflowName: row.workflowName, workflowScope: row.sourceScope };

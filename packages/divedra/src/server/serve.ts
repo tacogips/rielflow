@@ -1,5 +1,6 @@
 import net from "node:net";
 import { handleApiRequest, type ApiContext } from "./api";
+import { loadWorkflowManifest } from "../workflow/manifest";
 
 export interface ServeStartOptions extends ApiContext {
   readonly host?: string;
@@ -86,7 +87,24 @@ export async function startServe(
     throw new Error(`invalid serve port '${String(rawPort)}'`);
   }
 
-  const fetch = (request: Request) => handleApiRequest(request, options);
+  const workflowManifestPath =
+    options.workflowManifestPath ?? options.env?.["DIVEDRA_WORKFLOW_MANIFEST"];
+  const serveOptions =
+    workflowManifestPath === undefined || workflowManifestPath.length === 0
+      ? options
+      : {
+          ...options,
+          enableWorkflowManifestCatalog: true,
+          workflowManifestPath,
+        };
+  if (workflowManifestPath !== undefined && workflowManifestPath.length > 0) {
+    const manifest = await loadWorkflowManifest(workflowManifestPath);
+    if (!manifest.ok) {
+      throw new Error(manifest.error.message);
+    }
+  }
+
+  const fetch = (request: Request) => handleApiRequest(request, serveOptions);
 
   let server:
     | {

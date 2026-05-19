@@ -886,6 +886,8 @@ export interface LoadOptions {
    */
   readonly workflowBundleDirectoryOverride?: string;
   readonly workflowRoot?: string;
+  readonly workflowManifestPath?: string;
+  readonly enableWorkflowManifestCatalog?: boolean;
   readonly workflowScope?: WorkflowScopeSelector;
   readonly userRoot?: string;
   readonly projectRoot?: string;
@@ -904,8 +906,12 @@ export interface LoadOptions {
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";
-export type WorkflowSourceScope = "direct" | "project" | "user";
+export type WorkflowSourceScope = "direct" | "project" | "user" | "manifest";
 export type AddonSourceScope = "direct" | "project" | "user";
+
+export interface WorkflowManifestAutoImprove {
+  readonly mode: "active" | "disabled";
+}
 
 export interface ResolvedWorkflowSource {
   readonly scope: WorkflowSourceScope;
@@ -913,6 +919,13 @@ export interface ResolvedWorkflowSource {
   readonly workflowName: string;
   readonly workflowDirectory: string;
   readonly scopeRoot?: string;
+  readonly cwd?: string;
+  readonly manifestPath?: string;
+  readonly manifestEntryId?: string;
+  readonly authoredWorkflowId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly defaultVariables?: Readonly<Record<string, unknown>>;
+  readonly manifestAutoImprove?: WorkflowManifestAutoImprove;
 }
 
 export interface ResolvedAddonSource {

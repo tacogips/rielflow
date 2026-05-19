@@ -491,12 +491,41 @@ export async function loadWorkflowFromCatalog(
     });
   }
 
-  const loaded = await loadWorkflowFromDisk(
-    workflowName,
-    withResolvedWorkflowSourceOptions(source.value, options),
+  const resolvedOptions = withResolvedWorkflowSourceOptions(
+    source.value,
+    options,
   );
+  const loaded = await loadWorkflowFromDisk(workflowName, resolvedOptions);
   if (!loaded.ok) {
     return loaded;
+  }
+
+  if (source.value.scope === "manifest") {
+    const roots = resolveEffectiveRoots(resolvedOptions);
+    const artifactWorkflowRoot = resolveWorkflowScopedPath(
+      roots.artifactRoot,
+      source.value.workflowName,
+    );
+    if (artifactWorkflowRoot === undefined) {
+      return err({
+        code: "VALIDATION",
+        message: "workflow manifest id is not a valid artifact workflow id",
+      });
+    }
+    return ok({
+      ...loaded.value,
+      workflowName: source.value.workflowName,
+      workflowDirectory: source.value.workflowDirectory,
+      artifactWorkflowRoot,
+      bundle: {
+        ...loaded.value.bundle,
+        workflow: {
+          ...loaded.value.bundle.workflow,
+          workflowId: source.value.workflowName,
+        },
+      },
+      source: source.value,
+    });
   }
 
   return ok({

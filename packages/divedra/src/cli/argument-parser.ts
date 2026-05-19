@@ -16,6 +16,7 @@ import {
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
   let workflowRoot: string | undefined;
+  let workflowManifestPath: string | undefined;
   let workflowScope: WorkflowScopeSelector | undefined;
   let userRoot: string | undefined;
   let projectRoot: string | undefined;
@@ -124,6 +125,16 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
             break;
           }
           workflowRoot = parsedString.value;
+        }
+        break;
+      case "--workflow-manifest":
+        {
+          const parsedString = parseRequiredStringOption(token, readNext());
+          if (parsedString.error !== undefined) {
+            parseError = parsedString.error;
+            break;
+          }
+          workflowManifestPath = parsedString.value;
         }
         break;
       case "--workflow-root":
@@ -775,6 +786,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     positionals,
     options: {
       ...(workflowRoot === undefined ? {} : { workflowRoot }),
+      ...(workflowManifestPath === undefined ? {} : { workflowManifestPath }),
       ...(workflowScope === undefined ? {} : { workflowScope }),
       ...(userRoot === undefined ? {} : { userRoot }),
       ...(projectRoot === undefined ? {} : { projectRoot }),
