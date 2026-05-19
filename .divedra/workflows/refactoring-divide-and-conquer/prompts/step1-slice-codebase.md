@@ -8,6 +8,7 @@ Inputs:
 - `runtimeVariables.workflowInput.targetPaths`: optional paths to prioritize.
 - `runtimeVariables.workflowInput.excludePaths`: optional paths to avoid.
 - `runtimeVariables.workflowInput.maxSlices`: optional cap. Default to 8.
+- `runtimeVariables.workflowInput.refactoringMode`: optional mode such as `duplicate-scavenge`.
 - `runtimeVariables.workflowInput.requestedOutcome`: optional refactoring goal.
 - `runtimeVariables.workflowInput.constraints`: optional operator constraints.
 
@@ -25,6 +26,25 @@ Recommended slicing:
 - Include dependency notes when a slice depends on another slice or when a root
   `src` compatibility shim depends on package-owned source moving first.
 - Keep write scopes disjoint even though Step 2 review is read-only; later plan aggregation depends on clean ownership.
+
+Duplicate-scavenge mode:
+- Activate duplicate-scavenge guidance when `workflowInput.refactoringMode` is
+  `"duplicate-scavenge"` or when `requestedOutcome`, constraints, or equivalent
+  operator text asks to scavenge duplicates, deduplicate custom implementations,
+  or consolidate repeated concepts.
+- Preserve normal package or processing-group slicing first. Then add
+  duplicate-oriented `reviewQuestions`, likely counterpart paths, and search
+  hints to each slice where useful.
+- Search targets include repeated validation, parsing, normalization,
+  serialization, path resolution, retry/idempotency, control-flow,
+  mailbox/output handling, workflow validation/routing, adapter glue, and
+  custom helper logic that appears to implement the same concept in parallel.
+- When counterpart paths are known or likely, include them in `dependencyNotes`,
+  `reviewQuestions`, or a slice-local `duplicateSearchHints` field so reviewers
+  can compare repeated concepts without rediscovering the entire repository.
+- Keep later write-scope ownership disjoint. Duplicate search hints may cross
+  slices, but they are review context, not permission for the child reviewer to
+  edit cross-slice files.
 
 Rules:
 - Do not edit files.
@@ -60,7 +80,12 @@ Return adapter JSON:
         ],
         "reviewQuestions": [
           "Which runtime responsibilities should move behind package-owned exports?",
-          "Which src/workflow imports are temporary compatibility dependencies rather than ownership roots?"
+          "Which src/workflow imports are temporary compatibility dependencies rather than ownership roots?",
+          "In duplicate-scavenge mode, are there duplicate implementations of validation, parsing, normalization, routing, or output handling that should share one existing helper?"
+        ],
+        "duplicateSearchHints": [
+          "Compare validation and routing helper patterns against src/cli, src/graphql, src/server, and packages/*/src.",
+          "Record counterpart paths and behavioral differences before proposing consolidation."
         ],
         "suggestedVerification": ["bun test src/workflow/**/*.test.ts", "bun run build"]
       }

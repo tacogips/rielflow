@@ -1,6 +1,7 @@
 # Expected Results
 
-Stable assertions for deterministic verification with the bundled mock scenario.
+Stable assertions for deterministic verification with the bundled duplicate-scavenge
+mock scenario.
 Ignore `sessionId`, timestamps, and artifact paths.
 
 ## Validate
@@ -47,7 +48,11 @@ Expected final output payload highlights:
   "findings": [
     {
       "severity": "mid",
-      "file": "packages/divedra/src/index.ts"
+      "file": "packages/divedra/src/index.ts",
+      "duplicateScavenge": {
+        "repeatedConcept": "package/root export normalization",
+        "counterpartPaths": ["src/lib.ts"]
+      }
     }
   ],
   "proposedTasks": [

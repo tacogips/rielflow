@@ -31,7 +31,23 @@
           "problem": "Package entrypoints still depend on root src as the source owner.",
           "recommendedRefactor": "Move implementation ownership behind package-local entrypoints while keeping root src as compatibility shims.",
           "risk": "Package contracts can drift from the implementation they are intended to own.",
-          "confidence": "high"
+          "confidence": "high",
+          "duplicateScavenge": {
+            "repeatedConcept": "package/root export normalization",
+            "counterpartPaths": [
+              "src/lib.ts",
+              "packages/divedra-core/src/index.ts",
+              "packages/divedra-addons/src/index.ts"
+            ],
+            "behavioralDifferences": [
+              "Root src remains the compatibility API while package entrypoints become ownership roots."
+            ],
+            "consolidationTarget": "Package-owned entrypoint contract with root src compatibility shims.",
+            "verificationSuggestions": [
+              "bun test src/package-boundaries.test.ts",
+              "bun run build"
+            ]
+          }
         }
       ],
       "proposedTasks": [
@@ -52,6 +68,7 @@
         }
       ],
       "conflictNotes": [
+        "Duplicate-scavenge counterpart paths are review context only; cross-slice write ownership must be assigned by the merged plan.",
         "Root src remains a temporary compatibility surface until package-owned entrypoints pass verification.",
         "No provisioning package should be created because no concrete provisioning source surface was identified."
       ],

@@ -11,6 +11,9 @@ Prioritize:
 - behavioral regressions
 - public API changes not authorized by the plan
 - broadened write scope
+- duplicate-scavenge consolidations that collapse intentional behavioral
+  differences, introduce an over-broad abstraction, ignore counterpart paths, or
+  exceed the selected plan task
 - incomplete plan progress updates
 - missing or false verification evidence
 - unsafe edits to unrelated dirty worktree files

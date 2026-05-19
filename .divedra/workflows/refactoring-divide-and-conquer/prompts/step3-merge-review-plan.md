@@ -14,6 +14,20 @@ Plan-only mode:
 
 Aggregation rules:
 - Deduplicate overlapping findings across slices.
+- When duplicate-scavenge intent is present, group duplicate findings across
+  slices before creating tasks. A group should identify the repeated concept,
+  owner paths, counterpart duplicate paths, current behavioral differences, a
+  proposed consolidation target, dependency order, conflicts, confidence, and
+  verification suggestions.
+- Create a ready duplicate-consolidation task only when ownership, migration
+  order, behavior to preserve, known differences not to collapse, write scope,
+  conflicts, and verification commands are explicit.
+- Convert weak or under-owned duplicate findings into blocked or investigation
+  tasks instead of a broad consolidation task.
+- Prefer using an existing helper, API, workflow primitive, add-on, or narrowly
+  owned abstraction when it already matches the repeated concept. Do not invent a
+  shared abstraction when apparent duplicates have intentional domain,
+  lifecycle, error-semantics, performance, or security-boundary differences.
 - Reject weak findings that are cosmetic-only, not actionable, or lack an ownership path.
 - Reject package creation for a named surface when slice review or operator
   constraints say no concrete source surface exists. In particular, do not add a
@@ -54,6 +68,18 @@ Return adapter JSON:
     "hasPlanTasks": true,
     "acceptedFindings": [],
     "rejectedFindings": [],
+    "duplicateGroups": [
+      {
+        "groupId": "DUP-001",
+        "repeatedConcept": "workflow input validation",
+        "ownerPaths": ["src/workflow/example.ts"],
+        "counterpartPaths": ["src/cli/example.ts", "src/graphql/example.ts"],
+        "behaviorToPreserve": ["CLI usage errors", "GraphQL typed errors"],
+        "knownDifferencesNotToCollapse": ["Different external error envelopes."],
+        "consolidationTarget": "Existing validation helper or new narrow workflow-owned helper.",
+        "verificationCommands": ["bun test src/workflow/example.test.ts"]
+      }
+    ],
     "tasks": [
       {
         "taskId": "REF-001",

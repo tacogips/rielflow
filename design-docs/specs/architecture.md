@@ -88,6 +88,92 @@ Codex-agent is a reference for session discovery and transcript/file-change
 summary patterns only; Cursor CLI behavior remains isolated behind adapter
 validation and runtime-readiness probes.
 
+### Duplicate-Scavenge Refactoring Workflow Mode
+
+The existing `.divedra/workflows/refactoring-divide-and-conquer` workflow should
+support duplicate-scavenge refactoring as an operator-selectable mode of the
+same divide-and-conquer flow. It must not become a separate duplicate-only
+workflow. The parent workflow still slices the codebase, fans out read-only
+slice reviews through `.divedra/workflows/refactoring-slice-review`, merges
+findings into one implementation plan, implements one bounded task at a time,
+self-reviews, runs independent post-refactor review, and loops until the plan is
+complete or blocked.
+
+Duplicate-scavenge mode is enabled by workflow input rather than by a separate
+workflow id. Operators may express it through `workflowInput.requestedOutcome`,
+`workflowInput.refactoringMode`, constraints, or equivalent freeform intent in
+the skill example. Prompt guidance should treat the mode as additive: normal
+slice ownership, risk control, and plan-only behavior remain valid, while each
+phase also searches for duplicated or parallel implementations of the same
+concept.
+
+Mode-specific search targets include:
+
+- duplicate implementations of one behavior across packages, commands, server
+  handlers, GraphQL resolvers, event sources, workflow helpers, tests, or skills
+- repeated parsing, validation, normalization, serialization, path resolution,
+  retry/idempotency, control-flow, or mailbox/output handling logic
+- custom local implementations that should be replaced by an existing shared
+  helper, core API, add-on, workflow primitive, or well-known dependency already
+  accepted by the repository
+- near-duplicate abstractions whose naming differs but whose inputs, failure
+  behavior, and verification needs are equivalent enough to evaluate together
+
+Data flow through the existing workflow:
+
+1. `step1-slice-codebase` preserves ordinary package or processing-group
+   slicing, then adds duplicate-oriented review questions to each slice when
+   duplicate-scavenge intent is present. Slices should include likely
+   cross-slice counterpart paths and search hints instead of requiring every
+   reviewer to rediscover the entire repository.
+2. Each child `refactoring-slice-review` run remains read-only. Reviewers
+   report candidate duplicates, counterpart paths, the repeated concept,
+   current behavioral differences, proposed consolidation target, risk,
+   confidence, and verification suggestions. They may recommend no abstraction
+   when apparent duplication has intentional domain differences.
+3. `step3-merge-review-plan` groups duplicate findings across slices before
+   creating tasks. The merged plan should prefer shared helpers, APIs, or
+   workflow primitives only when a clear owner, migration order, conflict notes,
+   and verification path exist. Findings that need more discovery should remain
+   blocked or investigation tasks rather than implementation-ready tasks.
+4. `step4-implement-next-task` implements exactly one ready consolidation task
+   per pass. It must keep behavior preservation explicit, avoid broad unrelated
+   cleanups, preserve dirty worktree changes, and update the active plan with
+   progress and residual risk.
+5. `step5-self-review` and `step6-post-refactor-review` verify that the latest
+   consolidation did not change external behavior and did not create a broader
+   abstraction than the plan authorized. High or mid findings route back through
+   the existing implementation loop.
+
+The implementation plan produced by duplicate-scavenge mode must make ownership
+and verification explicit for every task:
+
+- owner paths and counterpart duplicate paths
+- behavior to preserve and known differences not to collapse
+- selected consolidation target, or the reason to defer consolidation
+- dependency and conflict notes for other plan tasks
+- narrow verification commands, plus any workflow validation required for
+  changed workflow bundles
+
+Rollout is prompt/config focused. The expected changed surfaces are
+`.divedra/workflows/refactoring-divide-and-conquer/workflow.json`, the parent
+workflow prompts, `.divedra/workflows/refactoring-slice-review/workflow.json`,
+the child slice-review prompt, and
+`.agents/skills/divedra-refactoring-workflow/SKILL.md`. Runtime TypeScript code
+is not required unless validation proves the current workflow input or fanout
+contracts cannot carry the mode guidance.
+
+Validation must include both changed workflow bundles:
+
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+
+Codex-agent remains only the execution backend for relevant worker nodes in
+this issue. No Codex-reference behavior was provided for duplicate-scavenge
+refactoring, and the default local reference root `../../codex-agent` was not
+available during intake. The design therefore introduces no Cursor-specific
+mapping and no intentional divergence from Codex behavior.
+
 ### Workflow Node Runtime Patches
 
 Workflow node runtime patches are invocation-scoped overlays applied after a

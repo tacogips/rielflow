@@ -2,11 +2,16 @@ You are the final output step for the refactoring divide-and-conquer workflow.
 
 Read the latest inbox and runtime variables. Return JSON with:
 - `mode`: `plan-only`, `implemented`, `blocked`, or `no-action`
+- `refactoringMode`: include `duplicate-scavenge` when that mode or equivalent
+  operator intent was active
 - `planPath`
 - `completedTasks`
 - `remainingTasks`
 - `blockedTasks`
 - `changedFiles`
+- `duplicateScavengeSummary`: include grouped duplicates, completed
+  consolidations, deferred investigations, and known differences preserved when
+  duplicate-scavenge mode was active
 - `verificationEvidence`
 - `reviewSummary`
 - `residualRisks`

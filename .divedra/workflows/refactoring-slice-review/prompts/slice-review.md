@@ -14,6 +14,22 @@ Rules:
 - Severity must be `high`, `mid`, or `low`.
 - High and mid findings should be actionable and testable.
 
+Duplicate-scavenge review:
+- When `workflowInput.refactoringMode`, `workflowInput.requestedOutcome`,
+  constraints, or the slice's `reviewQuestions` / `duplicateSearchHints`
+  indicate duplicate-scavenge intent, explicitly search for duplicate
+  implementations, parallel custom implementations of the same concept, repeated
+  validation/parsing/normalization/serialization/control-flow logic, and
+  reusable abstraction opportunities.
+- Keep the review read-only. You may inspect counterpart paths needed to compare
+  behavior, but treat cross-slice edits as conflict notes and proposed plan
+  inputs, not implementation instructions.
+- Duplicate findings must name counterpart paths, the repeated concept, current
+  behavioral differences, proposed consolidation target, risk, confidence, and
+  verification suggestions.
+- Recommend no abstraction when apparent duplicates intentionally differ by
+  domain, lifecycle, error semantics, performance needs, or security boundary.
+
 Return adapter JSON:
 
 ```json
@@ -34,7 +50,14 @@ Return adapter JSON:
         "problem": "Implementation and validation ownership are mixed.",
         "recommendedRefactor": "Extract validation-only helpers behind a narrow interface.",
         "risk": "Behavior drift if runtime callers depend on implicit mutation.",
-        "confidence": "medium"
+        "confidence": "medium",
+        "duplicateScavenge": {
+          "repeatedConcept": "workflow input validation",
+          "counterpartPaths": ["src/cli/example.ts", "src/graphql/example.ts"],
+          "behavioralDifferences": ["CLI reports usage errors; GraphQL returns typed errors."],
+          "consolidationTarget": "Existing validation helper or a new narrow helper owned by src/workflow.",
+          "verificationSuggestions": ["bun test src/workflow/example.test.ts"]
+        }
       }
     ],
     "proposedTasks": [

@@ -781,6 +781,37 @@ Recommended starting points:
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
 - `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
 
+## Repository Workflows
+
+Repository-local workflow bundles live under `.divedra/workflows/` and are
+intended for maintaining this repository.
+
+Use `refactoring-divide-and-conquer` for bounded maintainability refactors. It
+slices the codebase, fans out read-only `refactoring-slice-review` child runs,
+merges findings into an implementation plan, implements one ready task at a
+time, self-reviews, independently post-reviews, and loops until the plan is
+complete or only accepted residual risks remain.
+
+Duplicate-scavenge refactoring is an additive mode of the same workflow, not a
+separate workflow. Request it with `workflowInput.refactoringMode: "duplicate-scavenge"`
+or equivalent `requestedOutcome` / constraint text when you want the workflow
+to search for duplicate implementations, parallel custom implementations of the
+same concept, repeated validation/parsing/normalization or control-flow
+logic, and code that can safely move behind an existing helper, API, workflow
+primitive, add-on, or narrow abstraction. Slice reviews stay read-only, and
+plan merge should create consolidation tasks only when owned paths, counterpart
+paths, behavioral differences, conflict notes, risks, and verification commands
+are explicit.
+
+Run the local refactoring workflow with project workflow definitions:
+
+```bash
+bun run src/main.ts workflow run refactoring-divide-and-conquer \
+  --workflow-definition-dir .divedra/workflows \
+  --variables '{"workflowInput":{"requestedOutcome":"Run duplicate-scavenge refactoring: find duplicate implementations and consolidate safe candidates behind shared helpers or APIs.","refactoringMode":"duplicate-scavenge","targetPaths":["src","packages",".divedra/workflows"],"excludePaths":["dist","node_modules","impl-plans/completed"],"maxSlices":8,"constraints":["Do not stage, commit, or push unless explicitly requested.","Do not revert unrelated dirty worktree changes.","Preserve public behavior and public APIs unless the plan explicitly authorizes a change.","Record duplicate evidence, chosen consolidation target, behavioral differences, risks, and verification commands."],"verificationPreferences":["Run focused tests for each consolidated behavior.","Run workflow validate when workflow bundles change.","Run git diff --check before completion."]}}' \
+  --output json --verbose --no-auto-improve
+```
+
 ## Library API
 
 The package root (`import ... from "divedra"`) exposes programmatic workflow

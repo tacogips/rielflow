@@ -7,6 +7,7 @@
     },
     "payload": {
       "mode": "plan-only",
+      "refactoringMode": "duplicate-scavenge",
       "targetPaths": [
         "src",
         "packages",
@@ -20,11 +21,13 @@
       ],
       "constraints": [
         "Do not stage, commit, or push.",
+        "Scavenge duplicate validation, parsing, normalization, routing, mailbox/output, and workflow helper implementations.",
+        "Preserve intentional domain, lifecycle, error-semantics, performance, and security-boundary differences.",
         "No literal src/provision or provision module was found; do not create a provisioning package without a concrete source surface.",
         "Treat root src as a temporary compatibility surface while package-owned entrypoints are introduced."
       ],
       "notes": [
-        "Start package-first divide-and-conquer refactoring planning."
+        "Start package-first divide-and-conquer refactoring planning with duplicate-scavenge review enabled."
       ]
     }
   },
@@ -63,10 +66,15 @@
             "Package roots are the primary ownership targets.",
             "Root src remains a compatibility dependency until package source ownership lands."
           ],
-          "reviewQuestions": [
-            "Which exports must remain stable while packages become source owners?",
-            "Do build scripts and declaration sync enforce package-owned source boundaries?"
-          ],
+        "reviewQuestions": [
+          "Which exports must remain stable while packages become source owners?",
+          "Do build scripts and declaration sync enforce package-owned source boundaries?",
+          "Do package entrypoints duplicate root src validation, declaration sync, or export normalization logic?"
+        ],
+        "duplicateSearchHints": [
+          "Compare packages/*/src entrypoints with src/lib.ts and scripts/sync-package-declarations.ts.",
+          "Record counterpart paths and behavioral differences before recommending shared helpers."
+        ],
           "suggestedVerification": [
             "bun run build",
             "bun test src/package-boundaries.test.ts"
@@ -93,10 +101,15 @@
             "Root src files should become shims over package-owned implementations.",
             "No provisioning source surface was identified under src."
           ],
-          "reviewQuestions": [
-            "Which root src modules should remain compatibility facades?",
-            "Where do CLI, workflow, server/graphql, events/hooks, and shared surfaces need package-owned contracts?"
-          ],
+        "reviewQuestions": [
+          "Which root src modules should remain compatibility facades?",
+          "Where do CLI, workflow, server/graphql, events/hooks, and shared surfaces need package-owned contracts?",
+          "Which validation, parsing, normalization, routing, mailbox/output, or workflow-helper implementations repeat across root src areas?"
+        ],
+        "duplicateSearchHints": [
+          "Compare src/cli, src/workflow, src/graphql, src/server, src/events, and src/shared for parallel helper implementations.",
+          "Preserve public API and error-envelope differences while identifying consolidation targets."
+        ],
           "suggestedVerification": [
             "bun run typecheck",
             "bun run test"
@@ -142,7 +155,23 @@
             "problem": "Package entrypoints still depend on root src as the implementation owner.",
             "recommendedRefactor": "Move source ownership behind package-local entrypoints while keeping root src as compatibility shims.",
             "risk": "Package contracts can drift from the implementation they are intended to own.",
-            "confidence": "high"
+            "confidence": "high",
+            "duplicateScavenge": {
+              "repeatedConcept": "package/root export normalization",
+              "counterpartPaths": [
+                "src/lib.ts",
+                "packages/divedra-core/src/index.ts",
+                "packages/divedra-addons/src/index.ts"
+              ],
+              "behavioralDifferences": [
+                "Root src remains the compatibility API while package entrypoints become ownership roots."
+              ],
+              "consolidationTarget": "Package-owned entrypoint contract with root src compatibility shims.",
+              "verificationSuggestions": [
+                "bun test src/package-boundaries.test.ts",
+                "bun run build"
+              ]
+            }
           }
         ],
         "proposedTasks": [
@@ -207,7 +236,23 @@
             "problem": "Root public API still acts as the implementation center for package consumers.",
             "recommendedRefactor": "Split CLI, workflow runtime, add-ons, server/graphql, events/hooks, and shared contracts into package-owned surfaces before narrowing root src.",
             "risk": "Later package movement may unintentionally change public API behavior.",
-            "confidence": "medium"
+            "confidence": "medium",
+            "duplicateScavenge": {
+              "repeatedConcept": "root src compatibility and package facade exports",
+              "counterpartPaths": [
+                "packages/divedra/src/index.ts",
+                "packages/divedra-core/src/index.ts",
+                "packages/divedra-addons/src/index.ts"
+              ],
+              "behavioralDifferences": [
+                "Root src is the public compatibility facade; packages are future ownership roots."
+              ],
+              "consolidationTarget": "Package-owned contracts with root facade compatibility.",
+              "verificationSuggestions": [
+                "bun run typecheck",
+                "bun run test"
+              ]
+            }
           }
         ],
         "proposedTasks": [
@@ -265,6 +310,31 @@
       "acceptedFindings": [
         "package-contracts-build-tooling:package-entrypoint-ownership",
         "src-compatibility-surfaces:root-src-public-api-center"
+      ],
+      "duplicateGroups": [
+        {
+          "groupId": "DUP-001",
+          "repeatedConcept": "package/root export normalization",
+          "ownerPaths": [
+            "packages/divedra/src",
+            "packages/divedra-core/src",
+            "packages/divedra-addons/src"
+          ],
+          "counterpartPaths": [
+            "src/lib.ts"
+          ],
+          "behaviorToPreserve": [
+            "Root src remains the compatibility API until package entrypoints pass build and API checks."
+          ],
+          "knownDifferencesNotToCollapse": [
+            "Package entrypoints own source boundaries; root src owns compatibility."
+          ],
+          "consolidationTarget": "Package-owned entrypoint contract with root compatibility shims.",
+          "verificationCommands": [
+            "bun test src/package-boundaries.test.ts",
+            "bun run build"
+          ]
+        }
       ],
       "rejectedFindings": [
         {
@@ -333,6 +403,7 @@
     },
     "payload": {
       "mode": "plan-only",
+      "refactoringMode": "duplicate-scavenge",
       "planPath": "impl-plans/active/refactoring-package-source-ownership.md",
       "completedTasks": [],
       "remainingTasks": [
@@ -348,6 +419,16 @@
         }
       ],
       "changedFiles": [],
+      "duplicateScavengeSummary": {
+        "groupedDuplicates": [
+          "DUP-001 package/root export normalization"
+        ],
+        "completedConsolidations": [],
+        "deferredInvestigations": [],
+        "knownDifferencesPreserved": [
+          "Root src remains the compatibility API until package entrypoints pass build and API checks."
+        ]
+      },
       "verificationEvidence": [
         {
           "command": "mock fanout package-first plan-only run",

@@ -6,6 +6,9 @@ Review against:
 - the Step 5 self-review
 - repository diff and verification evidence
 - remaining plan tasks
+- duplicate-scavenge constraints when the selected task consolidates duplicate
+  implementations, including counterpart paths, preserved behavior, known
+  differences, consolidation target, and verification coverage
 
 Decisions:
 - Set `needs_revision` true only when high or mid findings require another pass on the current task.
@@ -13,6 +16,9 @@ Decisions:
 - Set `workflow_complete` true when the current task is accepted and no ready plan tasks remain.
 - If all remaining work is blocked, set `workflow_complete` true and list blockers.
 - Low findings should not force a loop unless they expose a high/mid risk.
+- Treat behavior drift, unauthorized API changes, over-broad abstraction,
+  missing counterpart coverage, or incomplete verification for a duplicate
+  consolidation as high or mid findings when they put correctness at risk.
 - Exactly one of `needs_revision`, `plan_remaining`, or `workflow_complete` should normally be true.
 
 Return adapter JSON:

@@ -1,6 +1,6 @@
 ---
 name: divedra-refactoring-workflow
-description: Use when planning, running, monitoring, or troubleshooting the project-local divedra divide-and-conquer refactoring workflow. Applies to `.divedra/workflows/refactoring-divide-and-conquer`, concurrent slice review via `refactoring-slice-review`, generated refactoring implementation plans, implementation/review loop handling, blocked verification, dependency-owned agent mocks, and final plan archival.
+description: Use when planning, running, monitoring, or troubleshooting the project-local divedra divide-and-conquer refactoring workflow. Applies to `.divedra/workflows/refactoring-divide-and-conquer`, duplicate-scavenge refactoring, concurrent slice review via `refactoring-slice-review`, generated refactoring implementation plans, implementation/review loop handling, blocked verification, dependency-owned agent mocks, and final plan archival.
 ---
 
 # Divedra Refactoring Workflow
@@ -26,6 +26,50 @@ bun run src/main.ts workflow run refactoring-divide-and-conquer \
 ```
 
 Adjust `requestedOutcome`, `targetPaths`, `excludePaths`, and `constraints` to the user's request. Keep the constraints explicit so worker nodes preserve unrelated worktree changes and do not stage/commit/push during refactoring.
+
+## Duplicate-Scavenge Mode
+
+Use duplicate-scavenge mode when the user asks to find duplicated implementations,
+parallel custom implementations of the same concept, or code that should be
+unified behind one helper, API, or abstraction.
+
+Keep this as a mode of `refactoring-divide-and-conquer`; do not create or run a
+separate duplicate-only workflow. Set the requested outcome and constraints so
+Step 1 forms slices that can compare counterpart paths, the slice-review child
+records duplicate candidates and behavioral differences, and Step 3 groups those
+findings into bounded consolidation tasks only when ownership and verification
+are clear.
+
+Example input:
+
+```json
+{
+  "workflowInput": {
+    "requestedOutcome": "Run duplicate-scavenge refactoring: find duplicate implementations and consolidate safe candidates behind shared helpers or APIs.",
+    "refactoringMode": "duplicate-scavenge",
+    "targetPaths": ["src", "packages", ".divedra/workflows"],
+    "excludePaths": ["dist", "node_modules", "impl-plans/completed"],
+    "maxSlices": 8,
+    "constraints": [
+      "Do not stage, commit, or push unless the user explicitly asks.",
+      "Do not revert unrelated dirty worktree changes.",
+      "Preserve public behavior and public APIs unless the plan explicitly authorizes a change.",
+      "Prefer consolidation only when counterpart implementations have matching semantics or documented differences.",
+      "Record duplicate evidence, chosen consolidation target, behavioral differences, risks, and verification commands."
+    ],
+    "verificationPreferences": [
+      "Run focused tests for each consolidated behavior.",
+      "Run workflow validate when workflow bundles change.",
+      "Run git diff --check before completion."
+    ]
+  }
+}
+```
+
+When reviewing results, reject broad abstractions that only remove superficial
+similarity. Accepted duplicate-scavenge tasks should name owned paths,
+counterpart paths, the consolidation target, compatibility risks, and narrow
+verification commands.
 
 ## Monitoring
 

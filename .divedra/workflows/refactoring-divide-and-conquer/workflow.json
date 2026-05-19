@@ -1,6 +1,6 @@
 {
   "workflowId": "refactoring-divide-and-conquer",
-  "description": "Divide the codebase into package or related processing-group slices, review slices concurrently, merge findings into a refactoring plan, implement one bounded task at a time, self-review, independently post-review, and loop until the plan is complete or only accepted residual risks remain.",
+  "description": "Divide the codebase into package or related processing-group slices, review slices concurrently, merge findings into a refactoring plan, implement one bounded task at a time, self-review, independently post-review, and loop until the plan is complete or only accepted residual risks remain. The same workflow also supports duplicate-scavenge refactoring when operator input asks to find duplicate implementations or parallel custom implementations of the same concept.",
   "defaults": {
     "fanoutConcurrency": 8,
     "maxLoopIterations": 60,
@@ -11,7 +11,7 @@
     }
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start by slicing the codebase. Dispatch read-only slice reviews through bounded fanout. Merge review results into a deduplicated refactoring plan. If workflowInput.executionMode requests plan-only, finish after plan creation. Otherwise implement exactly one ready plan task per implementation pass, self-review it, then run an independent post-refactor review. Route back to implementation when high or mid findings remain. If the task is accepted and the plan still has ready tasks, continue with the next task. Finish only when the plan is complete, blocked, or only accepted low residual risks remain. Do not stage, commit, push, or revert unrelated dirty worktree changes.",
+    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start by slicing the codebase. Dispatch read-only slice reviews through bounded fanout. Merge review results into a deduplicated refactoring plan. If workflowInput.refactoringMode or freeform requestedOutcome/constraints indicate duplicate-scavenge, keep the normal divide-and-conquer flow while asking every phase to look for duplicate implementations, parallel custom implementations, repeated validation/parsing/normalization/control-flow logic, and safe consolidation targets. If workflowInput.executionMode requests plan-only, finish after plan creation. Otherwise implement exactly one ready plan task per implementation pass, self-review it, then run an independent post-refactor review. Route back to implementation when high or mid findings remain. If the task is accepted and the plan still has ready tasks, continue with the next task. Finish only when the plan is complete, blocked, or only accepted low residual risks remain. Do not stage, commit, push, or revert unrelated dirty worktree changes.",
     "workerSystemPromptTemplate": "Return concise business JSON only. Keep slice ids, plan ids, task ids, changed files, verification commands, review findings, routing flags, blockers, and residual risks explicit."
   },
   "managerStepId": "divedra-manager",

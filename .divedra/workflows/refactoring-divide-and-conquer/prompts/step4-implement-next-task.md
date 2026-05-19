@@ -8,6 +8,13 @@ Inputs:
 Rules:
 - Implement one task only.
 - Keep behavior and public APIs stable unless the plan explicitly authorizes a behavior change.
+- For duplicate-scavenge consolidation tasks, consolidate only the repeated concept
+  named by the selected ready task. Preserve every listed behavioral difference
+  and do not widen the abstraction beyond the plan-authorized owner paths,
+  counterpart paths, and consolidation target.
+- Prefer adapting callers to an existing helper, API, workflow primitive, add-on,
+  or narrow owned abstraction when the plan identifies one. Do not create a new
+  shared abstraction solely because two code blocks look similar.
 - Do not stage, commit, push, or revert unrelated dirty worktree changes.
 - Do not broaden the refactor beyond the task's owned paths unless a dependency is unavoidable and documented.
 - Update the plan progress log immediately after the task iteration.
@@ -26,6 +33,7 @@ Return JSON with:
 - `changedFiles`
 - `implementationSummary`
 - `planUpdates`
+- `duplicateScavenge`
 - `verificationCommands`
 - `blocked`
 - `blockers`
