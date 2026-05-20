@@ -87,7 +87,7 @@ describe("loadWorkflowManifest", () => {
     });
   });
 
-  test("rejects malformed path objects and duplicate ids", async () => {
+  test("rejects malformed path objects before duplicate id validation", async () => {
     const root = makeTempDir();
     writeWorkflowBundle(root, "bundle");
     const manifestPath = path.join(root, "manifest.json");
@@ -114,9 +114,39 @@ describe("loadWorkflowManifest", () => {
     if (result.ok) {
       return;
     }
+    expect(result.error.code).toBe("INVALID_PATH");
     expect(result.error.message).toContain(
       "workflowDirectory must contain exactly one of absolute or relative",
     );
+  });
+
+  test("rejects duplicate manifest ids after entries resolve", async () => {
+    const root = makeTempDir();
+    writeWorkflowBundle(root, "first-bundle");
+    writeWorkflowBundle(root, "second-bundle");
+    const manifestPath = path.join(root, "manifest.json");
+    writeJson(manifestPath, {
+      manifestVersion: 1,
+      workflows: [
+        {
+          id: "dup",
+          workflowDirectory: { relative: "./first-bundle" },
+        },
+        {
+          id: "dup",
+          workflowDirectory: { relative: "./second-bundle" },
+        },
+      ],
+    });
+
+    const result = await loadWorkflowManifest(manifestPath);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("DUPLICATE_ID");
+    expect(result.error.message).toContain("duplicate workflow manifest id");
   });
 
   test("rejects duplicate enabled sources unless reserved metadata allows them", async () => {

@@ -1,11 +1,31 @@
 import { isJsonObject } from "../shared/json";
 import {
+  FILE_CHANGE_STABILITY_WINDOW_ERROR_MESSAGE,
+  isValidFileChangeStabilityWindowMs,
+  validateFileChangeSuffixes,
+} from "./file-change-constraints";
+import {
   eventConfigError as error,
   isNonEmptyString,
 } from "./validation-utils";
 import type { EventConfigValidationIssue, EventSourceConfig } from "./types";
 
 const FILE_CHANGE_TYPES = new Set(["create", "modify", "delete"]);
+
+function addFileChangeSuffixIssues(
+  source: EventSourceConfig,
+  suffixes: unknown,
+  issues: EventConfigValidationIssue[],
+): void {
+  const suffixIssues = validateFileChangeSuffixes(suffixes);
+  for (const suffixIssue of suffixIssues) {
+    const suffixPath =
+      suffixIssue.index === undefined
+        ? `sources.${source.id}.filters.suffixes`
+        : `sources.${source.id}.filters.suffixes[${String(suffixIssue.index)}]`;
+    issues.push(error(suffixPath, suffixIssue.message));
+  }
+}
 
 export function validateFileChangeSource(
   source: EventSourceConfig,
@@ -64,14 +84,12 @@ export function validateFileChangeSource(
   const stabilityWindowMs = source["stabilityWindowMs"];
   if (
     stabilityWindowMs !== undefined &&
-    (typeof stabilityWindowMs !== "number" ||
-      !Number.isInteger(stabilityWindowMs) ||
-      stabilityWindowMs < 0)
+    !isValidFileChangeStabilityWindowMs(stabilityWindowMs)
   ) {
     issues.push(
       error(
         `sources.${source.id}.stabilityWindowMs`,
-        "stabilityWindowMs must be a non-negative integer",
+        FILE_CHANGE_STABILITY_WINDOW_ERROR_MESSAGE,
       ),
     );
   }
@@ -86,17 +104,5 @@ export function validateFileChangeSource(
     return;
   }
   const suffixes = filters["suffixes"];
-  if (
-    suffixes !== undefined &&
-    (!Array.isArray(suffixes) ||
-      suffixes.length === 0 ||
-      !suffixes.every((entry) => typeof entry === "string" && entry.length > 0))
-  ) {
-    issues.push(
-      error(
-        `sources.${source.id}.filters.suffixes`,
-        "suffixes must be a non-empty string array when set",
-      ),
-    );
-  }
+  addFileChangeSuffixIssues(source, suffixes, issues);
 }

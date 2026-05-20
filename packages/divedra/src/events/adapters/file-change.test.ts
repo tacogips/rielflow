@@ -1,5 +1,6 @@
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
+import { FILE_CHANGE_MAX_STABILITY_WINDOW_MS } from "../file-change-constraints";
 import { createFileChangeEventSourceAdapter } from "./file-change";
 import type { EventSourceStartInput } from "../source-adapter";
 import type { ExternalEventEnvelope, FileChangeSourceConfig } from "../types";
@@ -220,5 +221,92 @@ describe("file change event source adapter", () => {
       },
       watch: { sourceId: "local-docs", directory: "./watched-docs" },
     });
+  });
+
+  test("applies suffix filters when normalizing manual file-change fixtures", async () => {
+    const adapter = createFileChangeEventSourceAdapter();
+
+    await expect(
+      adapter.normalize({
+        sourceId: "local-docs",
+        source: source({
+          filters: { suffixes: [".md"] },
+        }),
+        receivedAt: "2026-05-19T00:00:00.000Z",
+        body: {
+          changeType: "create",
+          path: "plans/release.txt",
+        },
+      }),
+    ).rejects.toThrow("does not match source filters");
+  });
+
+  test("rejects stability windows above the documented runtime bound", async () => {
+    const directory = path.join("/repo/.divedra-events/sources/watched-docs");
+    const watcher = createRuntime({ directory, files: new Map() });
+    const adapter = createFileChangeEventSourceAdapter(watcher.runtime);
+
+    await expect(
+      adapter.start({
+        source: source({
+          stabilityWindowMs: FILE_CHANGE_MAX_STABILITY_WINDOW_MS + 1,
+        }),
+        dispatch: async () => {},
+        signal: new AbortController().signal,
+        now: () => new Date("2026-05-19T00:00:01.000Z"),
+      } satisfies EventSourceStartInput),
+    ).rejects.toThrow(String(FILE_CHANGE_MAX_STABILITY_WINDOW_MS));
+  });
+
+  test("accepts the documented maximum stability window", async () => {
+    const directory = path.join("/repo/.divedra-events/sources/watched-docs");
+    const watcher = createRuntime({ directory, files: new Map() });
+    const adapter = createFileChangeEventSourceAdapter(watcher.runtime);
+
+    const handle = await adapter.start({
+      source: source({
+        stabilityWindowMs: FILE_CHANGE_MAX_STABILITY_WINDOW_MS,
+      }),
+      dispatch: async () => {},
+      signal: new AbortController().signal,
+      now: () => new Date("2026-05-19T00:00:01.000Z"),
+    } satisfies EventSourceStartInput);
+
+    await handle.stop();
+  });
+
+  test("rejects unsafe suffix filters at runtime", async () => {
+    const directory = path.join("/repo/.divedra-events/sources/watched-docs");
+    const watcher = createRuntime({ directory, files: new Map() });
+    const adapter = createFileChangeEventSourceAdapter(watcher.runtime);
+
+    await expect(
+      adapter.start({
+        source: source({
+          filters: { suffixes: ["docs/.md"] },
+        }),
+        dispatch: async () => {},
+        signal: new AbortController().signal,
+        now: () => new Date("2026-05-19T00:00:01.000Z"),
+      } satisfies EventSourceStartInput),
+    ).rejects.toThrow("suffix must not contain path separators");
+  });
+
+  test("rejects unsafe suffix filters while normalizing manual events", async () => {
+    const adapter = createFileChangeEventSourceAdapter();
+
+    await expect(
+      adapter.normalize({
+        sourceId: "local-docs",
+        source: source({
+          filters: { suffixes: ["docs/.md"] },
+        }),
+        receivedAt: "2026-05-19T00:00:00.000Z",
+        body: {
+          changeType: "create",
+          path: "plans/release.md",
+        },
+      }),
+    ).rejects.toThrow("suffix must not contain path separators");
   });
 });

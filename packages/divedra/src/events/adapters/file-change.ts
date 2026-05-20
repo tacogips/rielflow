@@ -3,6 +3,10 @@ import { watch, type FSWatcher, type Stats } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { isJsonObject } from "../../shared/json";
+import {
+  resolveFileChangeStabilityWindowMs,
+  resolveFileChangeSuffixes,
+} from "../file-change-constraints";
 import type {
   EventSourceAdapter,
   EventSourceHandle,
@@ -14,7 +18,6 @@ import type {
   FileChangeType,
 } from "../types";
 
-const DEFAULT_STABILITY_WINDOW_MS = 200;
 const FILE_CHANGE_EVENT_TYPES: Record<FileChangeType, string> = {
   create: "file.change.created",
   modify: "file.change.modified",
@@ -119,14 +122,18 @@ function toSafeRelativePath(input: {
   return relativePath;
 }
 
-function matchesSuffixFilter(
+function resolveSuffixFilters(
   source: FileChangeSourceConfig,
+): readonly string[] | undefined {
+  return resolveFileChangeSuffixes(source.filters?.suffixes);
+}
+
+function matchesSuffixFilter(
+  suffixes: readonly string[] | undefined,
   relativePath: string,
 ): boolean {
-  const suffixes = source.filters?.suffixes;
   return (
     suffixes === undefined ||
-    suffixes.length === 0 ||
     suffixes.some((suffix) => relativePath.endsWith(suffix))
   );
 }
@@ -276,12 +283,13 @@ function rawBodyToFileChange(input: RawExternalEvent): {
 
 function shouldEmitChange(
   source: FileChangeSourceConfig,
+  suffixes: readonly string[] | undefined,
   changeType: FileChangeType,
   relativePath: string,
 ): boolean {
   return (
     source.changeTypes.includes(changeType) &&
-    matchesSuffixFilter(source, relativePath)
+    matchesSuffixFilter(suffixes, relativePath)
   );
 }
 
@@ -304,8 +312,10 @@ export function createFileChangeEventSourceAdapter(
       const source = input.source;
       const directory = resolveConfiguredDirectory(source);
       const recursive = source.recursive ?? false;
-      const stabilityWindowMs =
-        source.stabilityWindowMs ?? DEFAULT_STABILITY_WINDOW_MS;
+      const stabilityWindowMs = resolveFileChangeStabilityWindowMs(
+        source.stabilityWindowMs,
+      );
+      const suffixes = resolveSuffixFilters(source);
       let sequence = 0;
       const knownFiles = new Set(
         (await runtime.listFiles(directory, recursive)).map((filePath) =>
@@ -400,7 +410,7 @@ export function createFileChangeEventSourceAdapter(
         if (!existed && changeType === "delete") {
           return;
         }
-        if (!shouldEmitChange(source, changeType, relativePath)) {
+        if (!shouldEmitChange(source, suffixes, changeType, relativePath)) {
           return;
         }
         scheduleEmit({ changeType, relativePath, filePath });
@@ -441,7 +451,15 @@ export function createFileChangeEventSourceAdapter(
             changeTypes: ["create", "modify", "delete"],
           } satisfies FileChangeSourceConfig);
       const change = rawBodyToFileChange(raw);
-      if (!shouldEmitChange(source, change.changeType, change.relativePath)) {
+      const suffixes = resolveSuffixFilters(source);
+      if (
+        !shouldEmitChange(
+          source,
+          suffixes,
+          change.changeType,
+          change.relativePath,
+        )
+      ) {
         throw new Error("file-change event does not match source filters");
       }
       return buildFileChangeEnvelope({

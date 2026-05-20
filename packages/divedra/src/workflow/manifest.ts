@@ -65,16 +65,35 @@ function entryLabel(index: number, id: unknown): string {
     : `workflow entry ${String(index)}`;
 }
 
-function invalidEntry(
+function manifestFailure(
+  code: "INVALID_ENTRY" | "INVALID_PATH",
   manifestPath: string,
   index: number,
   id: unknown,
   message: string,
 ): WorkflowManifestLoadFailure {
   return {
-    code: "INVALID_ENTRY",
+    code,
     message: `${manifestPath}: ${entryLabel(index, id)}: ${message}`,
   };
+}
+
+function invalidEntry(
+  manifestPath: string,
+  index: number,
+  id: unknown,
+  message: string,
+): WorkflowManifestLoadFailure {
+  return manifestFailure("INVALID_ENTRY", manifestPath, index, id, message);
+}
+
+function invalidPath(
+  manifestPath: string,
+  index: number,
+  id: unknown,
+  message: string,
+): WorkflowManifestLoadFailure {
+  return manifestFailure("INVALID_PATH", manifestPath, index, id, message);
 }
 
 function validateJsonObjectField(
@@ -130,7 +149,7 @@ function resolveManifestPathObject(input: {
   const hasRelative = relative !== undefined;
   if (hasAbsolute === hasRelative) {
     return err(
-      invalidEntry(
+      invalidPath(
         input.manifestPath,
         input.index,
         input.id,
@@ -142,7 +161,7 @@ function resolveManifestPathObject(input: {
   if (hasAbsolute) {
     if (typeof absolute !== "string" || absolute.length === 0) {
       return err(
-        invalidEntry(
+        invalidPath(
           input.manifestPath,
           input.index,
           input.id,
@@ -152,7 +171,7 @@ function resolveManifestPathObject(input: {
     }
     if (!path.isAbsolute(absolute)) {
       return err(
-        invalidEntry(
+        invalidPath(
           input.manifestPath,
           input.index,
           input.id,
@@ -164,7 +183,7 @@ function resolveManifestPathObject(input: {
   }
   if (typeof relative !== "string" || relative.length === 0) {
     return err(
-      invalidEntry(
+      invalidPath(
         input.manifestPath,
         input.index,
         input.id,
@@ -174,7 +193,7 @@ function resolveManifestPathObject(input: {
   }
   if (path.isAbsolute(relative)) {
     return err(
-      invalidEntry(
+      invalidPath(
         input.manifestPath,
         input.index,
         input.id,

@@ -445,9 +445,11 @@ Source config:
   relative, or accepted as an absolute path for local operator configuration
 - `changeTypes`, a non-empty subset of `create`, `modify`, and `delete`
 - optional `recursive`, defaulting to false
-- optional `filters.suffixes` for simple extension or suffix filtering
+- optional `filters.suffixes` for simple extension or filename suffix
+  filtering; entries must not contain path separators
 - optional `stabilityWindowMs`, defaulting to a small runtime constant, to
-  coalesce noisy write bursts before dispatching create or modify events
+  coalesce noisy write bursts before dispatching create or modify events. The
+  supported range is `0` through `60000` milliseconds.
 
 Normalized event types:
 

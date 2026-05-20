@@ -664,7 +664,9 @@ modified, and deleted files normalize to `file.change.created`,
 relative `file.path`, file name/extension, metadata for create/modify when
 available, and the configured watch label. File contents are not read. Optional
 `filters.suffixes`, `recursive`, and `stabilityWindowMs` settings constrain
-matching and coalesce noisy create/modify notifications.
+matching and coalesce noisy create/modify notifications. Suffix filters match
+the normalized relative path by filename suffix and must not contain path
+separators. `stabilityWindowMs` must be an integer from `0` through `60000`.
 
 Chat event bindings can use `execution.mode: "schedule-registration"` to run a
 resolver workflow that returns a structured schedule decision. Ready decisions

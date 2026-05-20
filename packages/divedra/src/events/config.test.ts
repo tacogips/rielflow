@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { loadEventConfiguration, resolveEventRoot } from "./config";
+import { FILE_CHANGE_MAX_STABILITY_WINDOW_MS } from "./file-change-constraints";
 import { loadAndValidateEventConfiguration } from "./validate";
 
 const tempDirs: string[] = [];
@@ -362,6 +363,80 @@ describe("event configuration", () => {
         "sources.bad-files.recursive",
         "sources.bad-files.filters.suffixes",
         "sources.bad-files.stabilityWindowMs",
+      ]),
+    );
+  });
+
+  test("reports unsafe and duplicate file change suffix filters", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(eventRoot, "sources", "bad-suffixes.json"), {
+      id: "bad-suffixes",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["create"],
+      filters: {
+        suffixes: ["docs/.md", "notes\\.txt", ".md", ".md", ""],
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-suffixes.filters.suffixes[0]",
+        "sources.bad-suffixes.filters.suffixes[1]",
+        "sources.bad-suffixes.filters.suffixes[3]",
+        "sources.bad-suffixes.filters.suffixes[4]",
+      ]),
+    );
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.bad-suffixes.filters.suffixes[0]",
+          message: "suffix must not contain path separators",
+        }),
+        expect.objectContaining({
+          path: "sources.bad-suffixes.filters.suffixes[3]",
+          message: "duplicate suffix '.md'",
+        }),
+      ]),
+    );
+  });
+
+  test("reports file change stability windows above the documented bound", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".divedra");
+    const eventRoot = path.join(root, ".divedra-events");
+    await writeJson(path.join(eventRoot, "sources", "slow-files.json"), {
+      id: "slow-files",
+      kind: "file-change",
+      directory: "./watched-docs",
+      changeTypes: ["modify"],
+      stabilityWindowMs: FILE_CHANGE_MAX_STABILITY_WINDOW_MS + 1,
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "sources.slow-files.stabilityWindowMs",
+          message: expect.stringContaining(
+            String(FILE_CHANGE_MAX_STABILITY_WINDOW_MS),
+          ),
+        }),
       ]),
     );
   });
