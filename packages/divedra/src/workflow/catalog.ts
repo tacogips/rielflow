@@ -5,6 +5,7 @@ import { err, ok, type Result } from "./result";
 import {
   loadWorkflowManifest,
   type ResolvedWorkflowManifestEntry,
+  type WorkflowManifestLoadOptions,
 } from "./manifest";
 import {
   computeProjectScopedRootDataDirForScopeRoot,
@@ -118,6 +119,18 @@ function resolveWorkflowManifestPathOverride(
     return undefined;
   }
   return resolveConfiguredRootPath(manifestPath, options);
+}
+
+function workflowManifestLoadOptions(
+  options: LoadOptions,
+): WorkflowManifestLoadOptions {
+  return {
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.workflowManifestRoot === undefined
+      ? {}
+      : { relativePathRoot: options.workflowManifestRoot }),
+  };
 }
 
 function discoverProjectScopeRoot(options: LoadOptions): string | undefined {
@@ -235,8 +248,12 @@ function createManifestWorkflowSource(
 
 async function listManifestWorkflowSources(
   manifestPath: string,
+  options: LoadOptions,
 ): Promise<Result<readonly ResolvedWorkflowSource[], WorkflowCatalogFailure>> {
-  const loaded = await loadWorkflowManifest(manifestPath);
+  const loaded = await loadWorkflowManifest(
+    manifestPath,
+    workflowManifestLoadOptions(options),
+  );
   if (!loaded.ok) {
     return err({ code: "IO", message: loaded.error.message });
   }
@@ -481,7 +498,7 @@ export async function resolveWorkflowSource(
 
   const manifestPath = resolveWorkflowManifestPathOverride(options);
   if (manifestPath !== undefined) {
-    const sources = await listManifestWorkflowSources(manifestPath);
+    const sources = await listManifestWorkflowSources(manifestPath, options);
     if (!sources.ok) {
       return sources;
     }
@@ -692,7 +709,7 @@ export async function listWorkflowCatalogSources(
 ): Promise<Result<readonly ResolvedWorkflowSource[], WorkflowCatalogFailure>> {
   const manifestPath = resolveWorkflowManifestPathOverride(options);
   if (manifestPath !== undefined) {
-    const sources = await listManifestWorkflowSources(manifestPath);
+    const sources = await listManifestWorkflowSources(manifestPath, options);
     return sources.ok
       ? ok(
           [...sources.value].sort((left, right) =>

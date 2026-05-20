@@ -65,6 +65,10 @@ import {
   workflowSourceJson,
   workflowStatusOverviewFromGraphqlJson,
 } from "./workflow-graphql-formatters";
+import {
+  renderWorkflowManifestValidationLines,
+  validateWorkflowManifestForCli,
+} from "./workflow-manifest-validation";
 
 function renderWorkflowStructureLines(
   rows: readonly WorkflowStructureRow[],
@@ -118,6 +122,55 @@ export async function runCliWorkflowScope(
   void graphqlCliTransport;
   void deps;
   void io;
+
+  if (command === "manifest") {
+    if (target !== "validate") {
+      io.stderr("workflow manifest command must be 'validate'");
+      return 2;
+    }
+    const manifestPath =
+      positionals[3] ??
+      parsed.options.workflowManifestPath ??
+      env["DIVEDRA_WORKFLOW_MANIFEST"];
+    if (manifestPath === undefined || manifestPath.length === 0) {
+      io.stderr(
+        "workflow manifest validate requires a manifest path, --workflow-manifest, or DIVEDRA_WORKFLOW_MANIFEST",
+      );
+      return 2;
+    }
+    if (positionals.length > 4) {
+      io.stderr("workflow manifest validate accepts at most one manifest path");
+      return 2;
+    }
+
+    const validation = await validateWorkflowManifestForCli({
+      manifestPath,
+      options: sharedOptions,
+      executablePreflight: parsed.options.executablePreflight,
+    });
+    if (!validation.ok) {
+      if (parsed.options.output === "json") {
+        emitJson(io, {
+          manifestPath,
+          valid: false,
+          error: validation.message,
+        });
+      } else {
+        io.stderr(`workflow manifest validation failed: ${validation.message}`);
+      }
+      return validation.code;
+    }
+    if (parsed.options.output === "json") {
+      emitJson(io, validation.value);
+    } else {
+      for (const line of renderWorkflowManifestValidationLines(
+        validation.value,
+      )) {
+        io.stdout(line);
+      }
+    }
+    return validation.value.valid ? 0 : 2;
+  }
 
   if (command === "list") {
     const statusParsed = parseWorkflowOverviewAggregateStatusFilter(

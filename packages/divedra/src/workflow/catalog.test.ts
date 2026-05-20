@@ -78,6 +78,7 @@ describe("manifest workflow catalog", () => {
     const result = await listWorkflowCatalogSources({
       workflowManifestPath: manifestPath,
       enableWorkflowManifestCatalog: true,
+      cwd: root,
     });
 
     expect(result.ok).toBe(true);
@@ -115,6 +116,7 @@ describe("manifest workflow catalog", () => {
     const source = await resolveWorkflowSource("served-alias", {
       workflowManifestPath: manifestPath,
       enableWorkflowManifestCatalog: true,
+      cwd: root,
     });
     expect(source.ok).toBe(true);
     if (!source.ok) {
@@ -123,6 +125,7 @@ describe("manifest workflow catalog", () => {
     const scoped = withResolvedWorkflowSourceOptions(source.value, {
       workflowManifestPath: manifestPath,
       enableWorkflowManifestCatalog: true,
+      cwd: root,
     });
     expect(scoped.workflowBundleDirectoryOverride).toBe(
       path.join(root, "actual"),
@@ -149,6 +152,7 @@ describe("manifest workflow catalog", () => {
     const result = await resolveWorkflowSource("actual", {
       workflowManifestPath: manifestPath,
       enableWorkflowManifestCatalog: true,
+      cwd: root,
     });
 
     expect(result.ok).toBe(false);

@@ -887,6 +887,7 @@ export interface LoadOptions {
   readonly workflowBundleDirectoryOverride?: string;
   readonly workflowRoot?: string;
   readonly workflowManifestPath?: string;
+  readonly workflowManifestRoot?: string;
   readonly enableWorkflowManifestCatalog?: boolean;
   readonly workflowScope?: WorkflowScopeSelector;
   readonly userRoot?: string;

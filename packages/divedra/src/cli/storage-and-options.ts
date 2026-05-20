@@ -92,6 +92,7 @@ export interface CliDependencies {
 export interface CliStorageOptions {
   readonly workflowRoot?: string;
   readonly workflowManifestPath?: string;
+  readonly workflowManifestRoot?: string;
   readonly enableWorkflowManifestCatalog?: boolean;
   readonly workflowScope?: WorkflowScopeSelector;
   readonly userRoot?: string;

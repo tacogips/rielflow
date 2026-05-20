@@ -46,6 +46,25 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
     workflows must preserve add-on `validate` hook `nodeValidationResults`
     from detailed workflow validation before adding any active backend preflight
     results.
+- `cli workflow manifest validate [<manifest-path>]`
+  - Validate a workflow allowlist manifest without starting `divedra serve`.
+  - The manifest path can come from the positional argument,
+    `--workflow-manifest`, or `DIVEDRA_WORKFLOW_MANIFEST`; the positional
+    argument is preferred when supplied.
+  - The command checks manifest shape, path-object rules, duplicate manifest id
+    and duplicate source/cwd constraints, manifest path resolution, and every
+    referenced workflow bundle.
+  - Relative `workflowDirectory` and `cwd` path fields resolve from the command
+    invocation directory by default. `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overrides
+    that root for both fields.
+  - Disabled manifest entries are validated so re-enabling a row does not hide
+    latent workflow bundle failures.
+  - By default, referenced workflow validation is structural/passive. Passing
+    `--executable` includes active node executability preflight using the same
+    adapter-backed validation surface as `workflow validate --executable`.
+  - Text output reports the resolved manifest path, relative path root, and
+    each manifest entry's validation status. `--output json` emits the same
+    machine-readable fields and per-entry errors.
 - `cli workflow list`
   - List catalog-visible workflows for human inspection without entering the TUI.
   - Show only compact overview data: workflow name, resolved source scope, description, aggregate workflow status, active execution count, and latest run summary.
@@ -201,7 +220,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--user-scope`                                    | boolean       | `false`                                             | For `workflow checkout`: install into the resolved user scope workflow root instead of the default project scope destination                                                                                               |
 | `--overwrite`                                     | boolean       | `false`                                             | For `workflow checkout`: after staged remote validation succeeds, remove the existing destination workflow directory and replace its checkout registry record                                                               |
 | `--structure`                                     | boolean       | `false`                                             | For `workflow inspect`: render a compact indented text structure with each step id on its own line and the description on the next line one indent deeper                                                                 |
-| `--executable`                                    | boolean       | `false`                                             | For `workflow validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                                                       |
+| `--executable`                                    | boolean       | `false`                                             | For `workflow validate` and `workflow manifest validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                     |
 | `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `divedra graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |
 | `--node-patch`                                    | string        | none                                                | For `workflow validate` and `workflow run`: non-persistent node settings patch as inline JSON object, existing file path, or `@path/to/patch.json`; patch keys are node ids and values allow only `executionBackend`, `model`, and `effort` |
 | `--workflow-definition-dir`                       | string (path) | scoped catalog lookup                               | Direct directory containing `<workflow-name>/workflow.json` definition bundles; when supplied, bypasses project/user scope catalog lookup and does not control logs, sessions, or artifacts                               |
@@ -247,7 +266,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `--message-json`                                  | string        | none                                                | Inline JSON payload for `call-step`                                                                                                                                                                                       |
 | `--message-file`                                  | string (path) | none                                                | JSON payload file for `call-step`                                                                                                                                                                                         |
 | `--file`                                          | string (path) | none                                                | Output file path for `export`; when omitted, the export JSON is written to stdout                                                                                                                                         |
-| `--workflow-manifest`                             | string (path) | none                                                | For `serve`: JSON manifest that defines the complete startable workflow allowlist for this server; when present, it takes precedence over direct/scoped catalog exposure                                                   |
+| `--workflow-manifest`                             | string (path) | none                                                | JSON manifest for `serve` allowlist selection or `workflow manifest validate`; in serve mode, it takes precedence over direct/scoped catalog exposure                                                                         |
 | `--host`                                          | string        | `127.0.0.1`                                         | Bind address for `serve`                                                                                                                                                                                                  |
 | `--port`                                          | number        | `43173`                                             | Listen port for `serve`                                                                                                                                                                                                   |
 | `--read-only`                                     | boolean       | `false`                                             | Disable write/update operations in `serve` mode                                                                                                                                                                           |
@@ -262,6 +281,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 | `DIVEDRA_ARTIFACT_ROOT`           | No              | resolved runtime data root + `/workflow`        | Overrides only the workflow artifact tree root (`.../workflow`)                                                                                               |
 | `DIVEDRA_WORKFLOW_DEFINITION_DIR` | No              | scoped catalog lookup                           | Direct default workflow definition directory; when set, bypasses project/user scope catalog lookup and does not control runtime logs, sessions, or artifacts  |
 | `DIVEDRA_WORKFLOW_MANIFEST`       | No              | none                                            | Default manifest path for `serve`; when present, defines the complete server workflow allowlist and takes precedence over direct/scoped catalog exposure      |
+| `DIVEDRA_WORKFLOW_MANIFEST_ROOT`  | No              | current directory                               | Root directory for relative `workflowDirectory` and `cwd` paths inside workflow manifests                                                                    |
 | `DIVEDRA_WORKFLOW_SCOPE`          | No              | `auto`                                          | Default workflow scope selector: `auto`, `project`, or `user`                                                                                                 |
 | `DIVEDRA_USER_ROOT`               | No              | `~/.divedra`                                    | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                        |
 | `DIVEDRA_PROJECT_ROOT`            | No              | nearest project `.divedra`                      | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`   |
@@ -313,6 +333,10 @@ workflow definition directory overrides and do not use scope catalog lookup.
 For `serve`, `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST` are
 authoritative allowlist inputs and prevent additional direct or scoped catalog
 workflows from being exposed by that server.
+For manifest path fields, `relative` resolves from the current directory unless
+`DIVEDRA_WORKFLOW_MANIFEST_ROOT` supplies an explicit root. Use
+`workflow manifest validate <manifest-path>` to validate manifest shape, path
+resolution, duplicate constraints, and every referenced workflow bundle.
 
 Invalid values for `--scope` or `DIVEDRA_WORKFLOW_SCOPE` are usage errors. The
 CLI must fail rather than silently treating the value as `auto`.

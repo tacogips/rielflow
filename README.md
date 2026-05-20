@@ -171,10 +171,20 @@ Manifest version `1` uses `workflows[]` entries with stable `id`, optional
 `enabled`, `workflowDirectory.absolute` or `workflowDirectory.relative`,
 optional `cwd.absolute` or `cwd.relative`, optional `autoImprove.mode`
 (`active` or `disabled`), `defaultVariables`, and display `metadata`. Relative
-paths resolve from the manifest file directory, and each path object must use
-exactly one of `absolute` or `relative`. Manifest `defaultVariables` are merged
-before request variables so the request wins. `autoImprove.mode: "disabled"`
-keeps deterministic lifecycle supervision while disabling workflow patching.
+paths resolve from the current directory by default. Set
+`DIVEDRA_WORKFLOW_MANIFEST_ROOT` to make relative manifest paths resolve from a
+specific root instead. Each path object must use exactly one of `absolute` or
+`relative`. Validate a manifest and every referenced workflow bundle with:
+
+```bash
+bun run packages/divedra/src/bin.ts workflow manifest validate ./workflow-manifest.json
+```
+
+The manifest path can also come from `--workflow-manifest` or
+`DIVEDRA_WORKFLOW_MANIFEST`. Add `--executable` to include active node
+executability preflight. Manifest `defaultVariables` are merged before request
+variables so the request wins. `autoImprove.mode: "disabled"` keeps
+deterministic lifecycle supervision while disabling workflow patching.
 `metadata.allowDuplicateSource` is the only reserved metadata key that affects
 validation; when set to `true`, duplicate enabled workflowDirectory/cwd pairs
 are allowed intentionally.
@@ -756,9 +766,10 @@ Supported vendors:
 ## Common Options
 
 - `--workflow-definition-dir <path>`: directory containing workflow bundles.
-- `--workflow-manifest <path>`: serve-only workflow allowlist manifest. When
-  present, the server exposes enabled manifest entries only and ignores
-  `--workflow-definition-dir` for serve catalog selection.
+- `--workflow-manifest <path>`: workflow allowlist manifest for `serve` and
+  `workflow manifest validate`. In serve mode, the server exposes enabled
+  manifest entries only and ignores `--workflow-definition-dir` for catalog
+  selection.
 - `--scope auto|project|user`: choose scoped catalog lookup.
 - `--user-root <path>`: override the user scope root.
 - `--project-root <path>`: override the project scope root.
@@ -833,6 +844,7 @@ Workflow and server environment variables:
 
 - `DIVEDRA_WORKFLOW_DEFINITION_DIR`
 - `DIVEDRA_WORKFLOW_MANIFEST`
+- `DIVEDRA_WORKFLOW_MANIFEST_ROOT`
 - `DIVEDRA_WORKFLOW_SCOPE`
 - `DIVEDRA_USER_ROOT`
 - `DIVEDRA_PROJECT_ROOT`

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-20T08:04:00+09:00",
+  "lastUpdated": "2026-05-20T19:55:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -547,7 +547,7 @@
       "phase": 183,
       "status": "Completed",
       "path": "impl-plans/active/server-workflow-manifest.md",
-      "designReference": "design-docs/specs/design-server-workflow-manifest.md",
+      "designReference": "design-docs/specs/design-server-workflow-manifest.md; design-docs/specs/command.md#subcommands",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
@@ -600,6 +600,25 @@
             "TASK-004",
             "TASK-005",
             "TASK-006"
+          ]
+        },
+        "TASK-008": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-009": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-008"
+          ]
+        },
+        "TASK-010": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-009"
           ]
         }
       }

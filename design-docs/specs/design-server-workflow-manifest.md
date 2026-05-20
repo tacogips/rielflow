@@ -72,8 +72,9 @@ Workflow entry fields:
 Path object rules:
 
 - `absolute` must be an absolute filesystem path.
-- `relative` must be a relative path and resolves from the manifest file's
-  containing directory.
+- `relative` must be a relative path and resolves from the current directory by
+  default. `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overrides that base directory for
+  manifest `workflowDirectory` and `cwd` relative paths.
 - A path object must not contain both `absolute` and `relative`.
 - Resolved workflow directories must contain `workflow.json`.
 - Resolved paths are normalized for validation and duplicate detection, but the
@@ -107,7 +108,8 @@ does not become a latent broken deployment when re-enabled.
 ## Startup Precedence
 
 `divedra serve` accepts `--workflow-manifest <path>`. The environment fallback is
-`DIVEDRA_WORKFLOW_MANIFEST`.
+`DIVEDRA_WORKFLOW_MANIFEST`. Relative path fields inside the manifest resolve
+from the current directory unless `DIVEDRA_WORKFLOW_MANIFEST_ROOT` is set.
 
 Startup resolution order for server workflow catalog selection:
 
@@ -176,9 +178,10 @@ GraphQL catalog rows for manifest-backed servers should include:
 - `metadata`: manifest entry metadata
 
 Existing local CLI commands that do not target a server endpoint continue to use
-the current scoped and direct-directory lookup rules unless they explicitly gain
-a manifest flag in a later design. The first implementation target is
-`divedra serve` and endpoint-backed operations against that server.
+the current scoped and direct-directory lookup rules unless they explicitly use
+the manifest validation surface. `workflow manifest validate` is a local
+preflight command; it validates the manifest and referenced workflow bundles
+without making manifest entries visible to ordinary local workflow lookup.
 
 ## Validation and Errors
 
@@ -198,6 +201,15 @@ fails with actionable errors for:
 Errors should identify the manifest path and workflow entry index or id. They
 must not expose environment secrets or redactable runtime variables.
 
+`workflow manifest validate <manifest-path>` uses the same manifest loader and
+workflow bundle validation rules as server startup, but runs without opening an
+HTTP listener. The command should accept the manifest path positionally, through
+`--workflow-manifest`, or through `DIVEDRA_WORKFLOW_MANIFEST`. The validation
+report must include the resolved manifest path, the relative path root, each
+entry id, resolved workflow directory, enabled state, authored workflow id when
+available, and per-entry validation errors. `--executable` extends each
+referenced workflow bundle check with active node executability preflight.
+
 ## Rollout Constraints
 
 The manifest loader should be a shared workflow module so CLI parsing, server
@@ -209,9 +221,11 @@ not part of the manifest contract.
 Tests should cover:
 
 - valid manifest resolution with absolute and relative path fields
+- `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overriding the relative path root
 - disabled entries hidden and not startable
 - manifest allowlist enforced by GraphQL start paths
 - precedence against `--workflow-definition-dir`
+- `workflow manifest validate` success and referenced workflow bundle failure
 - default variable merge order
 - auto-improve `active` and `disabled` policy mapping
 - duplicate id and duplicate source validation errors

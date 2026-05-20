@@ -98,7 +98,13 @@ export async function startServe(
           workflowManifestPath,
         };
   if (workflowManifestPath !== undefined && workflowManifestPath.length > 0) {
-    const manifest = await loadWorkflowManifest(workflowManifestPath);
+    const manifest = await loadWorkflowManifest(workflowManifestPath, {
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.workflowManifestRoot === undefined
+        ? {}
+        : { relativePathRoot: options.workflowManifestRoot }),
+    });
     if (!manifest.ok) {
       throw new Error(manifest.error.message);
     }

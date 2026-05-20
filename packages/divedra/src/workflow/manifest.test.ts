@@ -47,14 +47,14 @@ function writeWorkflowBundle(
 }
 
 describe("loadWorkflowManifest", () => {
-  test("resolves relative workflowDirectory and cwd from the manifest directory", async () => {
+  test("resolves relative workflowDirectory and cwd from the current directory by default", async () => {
     const root = makeTempDir();
     const workflowDirectory = writeWorkflowBundle(
       root,
       "bundle",
       "authored-id",
     );
-    const manifestPath = path.join(root, "manifest.json");
+    const manifestPath = path.join(root, "config", "manifest.json");
     writeJson(manifestPath, {
       manifestVersion: 1,
       workflows: [
@@ -69,7 +69,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -85,6 +85,35 @@ describe("loadWorkflowManifest", () => {
       defaultVariables: { a: 1 },
       metadata: { title: "Served" },
     });
+    expect(result.value.relativePathRoot).toBe(root);
+  });
+
+  test("resolves relative workflowDirectory from DIVEDRA_WORKFLOW_MANIFEST_ROOT", async () => {
+    const root = makeTempDir();
+    const manifestRoot = path.join(root, "workflow-root");
+    const workflowDirectory = writeWorkflowBundle(manifestRoot, "bundle");
+    const manifestPath = path.join(root, "config", "manifest.json");
+    writeJson(manifestPath, {
+      manifestVersion: 1,
+      workflows: [
+        {
+          id: "served-id",
+          workflowDirectory: { relative: "./bundle" },
+        },
+      ],
+    });
+
+    const result = await loadWorkflowManifest(manifestPath, {
+      cwd: root,
+      env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: manifestRoot },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.relativePathRoot).toBe(manifestRoot);
+    expect(result.value.entries[0]?.workflowDirectory).toBe(workflowDirectory);
   });
 
   test("rejects malformed path objects before duplicate id validation", async () => {
@@ -108,7 +137,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -139,7 +168,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -165,7 +194,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(true);
     if (!result.ok) {
@@ -195,7 +224,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(false);
     if (result.ok) {
@@ -218,7 +247,7 @@ describe("loadWorkflowManifest", () => {
       ],
     });
 
-    const result = await loadWorkflowManifest(manifestPath);
+    const result = await loadWorkflowManifest(manifestPath, { cwd: root });
 
     expect(result.ok).toBe(false);
     if (result.ok) {

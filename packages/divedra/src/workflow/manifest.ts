@@ -1,8 +1,10 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { isSafeWorkflowName } from "./paths";
+import { isSafeWorkflowName, resolveConfiguredRootPath } from "./paths";
 import { err, ok, type Result } from "./result";
 import type { WorkflowManifestAutoImprove } from "./types";
+
+export const WORKFLOW_MANIFEST_ROOT_ENV = "DIVEDRA_WORKFLOW_MANIFEST_ROOT";
 
 export type WorkflowManifestVersion = 1;
 
@@ -40,7 +42,14 @@ export interface ResolvedWorkflowManifestEntry {
 
 export interface ResolvedWorkflowManifest {
   readonly manifestPath: string;
+  readonly relativePathRoot: string;
   readonly entries: readonly ResolvedWorkflowManifestEntry[];
+}
+
+export interface WorkflowManifestLoadOptions {
+  readonly cwd?: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly relativePathRoot?: string;
 }
 
 export interface WorkflowManifestLoadFailure {
@@ -115,6 +124,7 @@ function validateJsonObjectField(
 
 function resolveManifestPathObject(input: {
   readonly manifestPath: string;
+  readonly relativePathRoot: string;
   readonly index: number;
   readonly id: unknown;
   readonly fieldName: string;
@@ -157,7 +167,6 @@ function resolveManifestPathObject(input: {
       ),
     );
   }
-  const manifestDir = path.dirname(input.manifestPath);
   if (hasAbsolute) {
     if (typeof absolute !== "string" || absolute.length === 0) {
       return err(
@@ -201,7 +210,19 @@ function resolveManifestPathObject(input: {
       ),
     );
   }
-  return ok(path.resolve(manifestDir, relative));
+  return ok(path.resolve(input.relativePathRoot, relative));
+}
+
+function resolveManifestRelativePathRoot(
+  options: WorkflowManifestLoadOptions,
+): string {
+  const env = options.env ?? process.env;
+  const configuredRoot =
+    options.relativePathRoot ?? env[WORKFLOW_MANIFEST_ROOT_ENV];
+  if (configuredRoot !== undefined && configuredRoot.length > 0) {
+    return resolveConfiguredRootPath(configuredRoot, options);
+  }
+  return path.resolve(options.cwd ?? process.cwd());
 }
 
 async function readWorkflowId(input: {
@@ -281,6 +302,7 @@ function validateAutoImprove(
 
 async function resolveEntry(input: {
   readonly manifestPath: string;
+  readonly relativePathRoot: string;
   readonly index: number;
   readonly value: unknown;
 }): Promise<
@@ -325,6 +347,7 @@ async function resolveEntry(input: {
   }
   const workflowDirectory = resolveManifestPathObject({
     manifestPath: input.manifestPath,
+    relativePathRoot: input.relativePathRoot,
     index: input.index,
     id,
     fieldName: "workflowDirectory",
@@ -346,6 +369,7 @@ async function resolveEntry(input: {
   }
   const cwd = resolveManifestPathObject({
     manifestPath: input.manifestPath,
+    relativePathRoot: input.relativePathRoot,
     index: input.index,
     id,
     fieldName: "cwd",
@@ -473,8 +497,10 @@ function validateResolvedEntries(
 
 export async function loadWorkflowManifest(
   manifestPath: string,
+  options: WorkflowManifestLoadOptions = {},
 ): Promise<Result<ResolvedWorkflowManifest, WorkflowManifestLoadFailure>> {
-  const resolvedManifestPath = path.resolve(manifestPath);
+  const resolvedManifestPath = resolveConfiguredRootPath(manifestPath, options);
+  const relativePathRoot = resolveManifestRelativePathRoot(options);
   let raw: string;
   try {
     raw = await readFile(resolvedManifestPath, "utf8");
@@ -518,6 +544,7 @@ export async function loadWorkflowManifest(
   for (const [index, entry] of workflows.entries()) {
     const resolved = await resolveEntry({
       manifestPath: resolvedManifestPath,
+      relativePathRoot,
       index,
       value: entry,
     });
@@ -530,5 +557,9 @@ export async function loadWorkflowManifest(
   if (!validated.ok) {
     return validated;
   }
-  return ok({ manifestPath: resolvedManifestPath, entries: validated.value });
+  return ok({
+    manifestPath: resolvedManifestPath,
+    relativePathRoot,
+    entries: validated.value,
+  });
 }

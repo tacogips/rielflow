@@ -1,7 +1,7 @@
 # Server Workflow Manifest Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-server-workflow-manifest.md
+**Design Reference**: design-docs/specs/design-server-workflow-manifest.md; design-docs/specs/command.md#subcommands
 **Created**: 2026-05-20
 **Last Updated**: 2026-05-20
 
@@ -13,18 +13,22 @@
 
 ### Summary
 
-Implement `divedra serve` workflow manifest support. A manifest-backed server
-loads a JSON allowlist of workflow entries, exposes only enabled manifest ids in
-server catalog surfaces, and enforces the same allowlist for every
-server-backed start path.
+Implement and review `divedra serve` workflow manifest support plus the
+`workflow manifest validate` preflight surface. A manifest-backed server loads a
+JSON allowlist of workflow entries, exposes only enabled manifest ids in server
+catalog surfaces, and enforces the same allowlist for every server-backed start
+path. The current follow-up reviews the uncommitted relative path root and
+manifest validation CLI changes against the accepted design.
 
 ### Scope
 
 **Included**: manifest JSON schema and loader, absolute/relative path
-resolution, manifest id identity, enabled filtering, duplicate validation,
-server startup precedence, CLI flag and environment fallback, GraphQL/catalog
-allowlist enforcement, request/default variable merge, per-workflow
-auto-improve defaults, browser overview rows, tests, and README documentation.
+resolution from the current directory with `DIVEDRA_WORKFLOW_MANIFEST_ROOT`
+override support, manifest id identity, enabled filtering, duplicate validation,
+server startup precedence, CLI flag and environment fallback, `workflow manifest
+validate`, GraphQL/catalog allowlist enforcement, request/default variable
+merge, per-workflow auto-improve defaults, browser overview rows, tests, and
+README documentation.
 
 **Excluded**: adding manifest support to non-server local workflow commands,
 changing workflow bundle authoring format, backend-adapter behavior changes,
@@ -32,11 +36,18 @@ and Cursor-specific readiness behavior.
 
 ### Accepted Review Feedback
 
-Step 3 accepted the design with one low finding: `metadata.allowDuplicateSource`
-is operational while `metadata` is otherwise display-oriented. Implementation
-will preserve the accepted design and document `metadata.allowDuplicateSource`
-as the only reserved metadata key that affects validation; all other metadata
-remains display-only and non-semantic.
+Step 3 accepted the current design with one low finding:
+`design-docs/specs/command.md` line 49 uses
+`cli workflow manifest validate <manifest-path>` even though the manifest path
+can also come from `--workflow-manifest` or `DIVEDRA_WORKFLOW_MANIFEST`.
+Implementation may either update the synopsis to
+`cli workflow manifest validate [<manifest-path>]` during the documentation
+refresh step or leave it documented through the following bullets; this is not a
+blocking design issue.
+
+Historical design review also accepted `metadata.allowDuplicateSource` as the
+only reserved metadata key that affects validation; all other metadata remains
+display-only and non-semantic.
 
 ---
 
@@ -89,11 +100,13 @@ interface ResolvedWorkflowManifestEntry {
 
 interface ResolvedWorkflowManifest {
   readonly manifestPath: string;
+  readonly relativePathRoot: string;
   readonly entries: readonly ResolvedWorkflowManifestEntry[];
 }
 
 async function loadWorkflowManifest(
   manifestPath: string,
+  options?: WorkflowManifestLoadOptions,
 ): Promise<Result<ResolvedWorkflowManifest, WorkflowManifestLoadFailure>>;
 ```
 
@@ -102,7 +115,8 @@ async function loadWorkflowManifest(
 - [x] Parse and validate manifest JSON without leaking environment secrets.
 - [x] Support manifest version `1` only.
 - [x] Enforce exactly one of `absolute` or `relative` for path objects.
-- [x] Resolve relative paths from the manifest file directory.
+- [x] Resolve relative paths from current directory by default, with
+      `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override support.
 - [x] Validate workflow directories by loading or reading `workflow.json`.
 - [x] Reject unsafe or duplicate ids.
 - [x] Reject duplicate enabled workflowDirectory/cwd pairs unless
@@ -331,7 +345,7 @@ interface ManifestFixture {
 **Completion Criteria**:
 
 - [x] Manifest version, entry shape, path object, enabled/default values, metadata, and autoImprove mode validation implemented.
-- [x] Path resolution is deterministic and relative paths resolve from the manifest directory.
+- [x] Path resolution is deterministic and relative paths resolve from the current directory by default, with `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override support.
 - [x] Duplicate id/source validation emits actionable errors.
 - [x] `metadata.allowDuplicateSource` is documented in tests as the only reserved operational metadata key.
 
@@ -430,6 +444,74 @@ interface ManifestFixture {
 - [x] `git diff --check` passes.
 - [x] Progress log records commands run and any residual risks.
 
+### TASK-008: Review Manifest Loader Relative Root Semantics
+
+**Status**: COMPLETED
+**Parallelizable**: No
+**Deliverables**: `packages/divedra/src/workflow/manifest.ts`,
+`packages/divedra/src/workflow/types.ts`,
+`packages/divedra/src/workflow/manifest.test.ts`
+**Dependencies**: Accepted current design review
+
+**Completion Criteria**:
+
+- [x] Confirm manifest `relative` path fields resolve from the process current directory by default, not the manifest file directory.
+- [x] Confirm `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overrides the base directory for both `workflowDirectory.relative` and `cwd.relative`.
+- [x] Confirm absolute path fields remain absolute and bypass the relative root.
+- [x] Confirm validation diagnostics and JSON output expose the resolved manifest path and effective relative path root without leaking unrelated environment values.
+- [x] Confirm disabled entries are still validated for path and referenced workflow correctness.
+- [x] Add or adjust focused manifest tests for cwd default, env-root override, disabled entry validation, duplicate source/cwd behavior, and invalid path-object failures.
+
+### TASK-009: Review Workflow Manifest Validate CLI and Server Wiring
+
+**Status**: COMPLETED
+**Parallelizable**: No
+**Deliverables**: `packages/divedra/src/cli/workflow-command-handler.ts`,
+`packages/divedra/src/cli/storage-and-options.ts`,
+`packages/divedra/src/cli/input-output-helpers.ts`,
+`packages/divedra/src/cli/workflow-manifest-validation.ts`,
+`packages/divedra/src/cli.test.ts`,
+`packages/divedra/src/server/serve.ts`,
+`packages/divedra/src/workflow/catalog.ts`,
+`packages/divedra/src/workflow/catalog.test.ts`,
+`packages/divedra/src/server/serve.test.ts`
+**Dependencies**: TASK-008
+
+**Completion Criteria**:
+
+- [x] Confirm path source precedence is positional argument, `--workflow-manifest`, then `DIVEDRA_WORKFLOW_MANIFEST`.
+- [x] Confirm missing manifest path is a usage error and malformed/unreadable manifests produce actionable failures.
+- [x] Confirm `workflow manifest validate` validates manifest shape, path resolution, duplicate constraints, disabled entries, and every referenced workflow bundle.
+- [x] Confirm `--executable` extends referenced workflow validation through the same node executability preflight surface as `workflow validate --executable`.
+- [x] Confirm text and JSON outputs include resolved manifest path, relative path root, entry ids, enabled state, resolved workflow directories, authored workflow ids when available, and per-entry errors.
+- [x] Confirm ordinary local commands do not treat manifest entries as local catalog rows unless they explicitly use the manifest validation or server surfaces.
+- [x] Confirm server startup passes the same manifest root semantics into the shared manifest loader as CLI validation.
+- [x] Confirm manifest mode remains authoritative for `serve` while preserving direct/project/user lookup when no manifest is present.
+- [x] Confirm `serve [workflow-name]` continues to narrow only by enabled manifest id in manifest mode.
+- [x] Confirm server and catalog tests cover current-directory root, `DIVEDRA_WORKFLOW_MANIFEST_ROOT`, disabled/unlisted rejection, and no-manifest fallback behavior.
+
+### TASK-010: Documentation, Progress, and Final Verification
+
+**Status**: COMPLETED
+**Parallelizable**: No
+**Deliverables**: `README.md`,
+`design-docs/specs/command.md`,
+`design-docs/specs/design-server-workflow-manifest.md`,
+`impl-plans/active/server-workflow-manifest.md`, focused verification results
+**Dependencies**: TASK-009
+
+**Completion Criteria**:
+
+- [x] Keep README aligned with `DIVEDRA_WORKFLOW_MANIFEST_ROOT`, current-directory default relative root, and `workflow manifest validate` usage.
+- [x] Address the accepted low Step 3 feedback by updating or intentionally retaining the command synopsis with surrounding bullets.
+- [x] Ensure design docs and implementation plan agree on path precedence, validation scope, disabled entry validation, and `--executable` behavior.
+- [x] Record implementation-step progress and verification results in this plan after code review and fixes.
+- [x] Focused manifest, catalog, CLI, and server tests pass.
+- [x] `bun run typecheck` passes.
+- [x] `bun run lint:biome` passes.
+- [x] `git diff --check` passes.
+- [x] Any implementation review findings are either fixed or recorded with explicit residual risk.
+
 ## Dependencies
 
 | Feature | Depends On | Status |
@@ -441,6 +523,9 @@ interface ManifestFixture {
 | TASK-005 Manifest execution defaults | TASK-002 | COMPLETED |
 | TASK-006 Browser overview and user documentation | TASK-002 | COMPLETED |
 | TASK-007 End-to-end verification pass | TASK-001 through TASK-006 | COMPLETED |
+| TASK-008 Review manifest loader relative root semantics | Accepted current design review | COMPLETED |
+| TASK-009 Review workflow manifest validate CLI and server wiring | TASK-008 | COMPLETED |
+| TASK-010 Documentation, progress, and final verification | TASK-009 | COMPLETED |
 
 ## Parallelizable Tasks
 
@@ -450,15 +535,20 @@ interface ManifestFixture {
   scopes are runtime defaults versus browser/docs surfaces.
 - TASK-004 and TASK-007 are not parallelizable because they integrate and verify
   behavior across the prior work.
+- The current follow-up tasks are intentionally sequential: TASK-008 establishes
+  loader semantics, TASK-009 reviews each consumer of those semantics, and
+  TASK-010 verifies and records the integrated result.
 
 ## Verification Plan
 
 - `bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts packages/divedra/src/workflow/overview.test.ts`
-- `bun test packages/divedra/src/cli.test.ts -t "serve"`
-- `bun test packages/divedra/src/server/serve.test.ts packages/divedra/src/server/api.test.ts`
+- `bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`
+- `bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`
+- `bun test packages/divedra/src/server/api.test.ts`
 - `bun test packages/divedra/src/graphql/schema.test.ts packages/divedra/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`
 - `bun test packages/divedra/src/workflow/auto-improve-policy.test.ts packages/divedra/src/workflow/working-directory.test.ts`
 - `bun run typecheck`
+- `bun run lint:biome`
 - `git diff --check`
 
 ## Completion Criteria
@@ -468,11 +558,22 @@ interface ManifestFixture {
 - [x] Manifest mode exposes only enabled manifest ids in browser and GraphQL catalog surfaces.
 - [x] Direct server-backed starts reject ids outside the enabled manifest allowlist.
 - [x] Manifest entries preserve separate absolute/relative authored fields and deterministic resolved paths.
+- [x] `workflow manifest validate` checks manifest shape, path resolution, and
+      each referenced workflow bundle.
 - [x] Manifest `cwd`, `defaultVariables`, and `autoImprove` defaults apply with documented request override precedence.
 - [x] Duplicate id, unsafe id, invalid path, unsupported version, malformed JSON, and duplicate source errors are tested.
 - [x] Existing no-manifest `--workflow-definition-dir` and scoped lookup behavior remains covered.
 - [x] README and schema-facing documentation are updated.
 - [x] Targeted tests, typecheck, and whitespace checks pass.
+- [x] Current review confirms or fixes manifest relative root behavior:
+      current directory by default and `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override.
+- [x] Current review confirms or fixes `workflow manifest validate` path
+      precedence, referenced workflow validation, disabled entry validation,
+      JSON/text report fields, and `--executable` behavior.
+- [x] Current review confirms ordinary local workflow lookup does not consume
+      manifest entries outside explicit manifest validation and server surfaces.
+- [x] Current review runs the requested focused tests, typecheck, Biome lint,
+      and whitespace checks.
 
 ## Progress Log
 
@@ -536,6 +637,68 @@ disabled/request override mapping. Re-ran verification:
 `bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
 `bun run typecheck`; `bun run lint:biome`; `jq empty impl-plans/PROGRESS.json`;
 `git diff --check`.
+
+### Session: 2026-05-20 19:30
+
+**Tasks Completed**: Manifest relative-path root revision and CLI validation
+follow-up for TASK-001, TASK-003, and TASK-007.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Changed manifest `relative` path fields to resolve from the current
+directory by default, added `DIVEDRA_WORKFLOW_MANIFEST_ROOT` for explicit
+relative-root selection, and added `workflow manifest validate` to validate the
+manifest plus every referenced workflow bundle. Documentation and focused
+manifest/CLI tests were updated for the new behavior. Verification passed:
+`bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts`;
+`bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
+`bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
+`bun run typecheck`; `bun run lint:biome`; `git diff --check`.
+
+### Session: 2026-05-20 19:46
+
+**Tasks Completed**: Step 4 implementation-plan revision for current manifest
+relative-root and validation CLI review.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Reopened the active plan as ready follow-up work while preserving the
+completed baseline implementation history. Added TASK-008 through TASK-010 for
+reviewing manifest loader root semantics, `workflow manifest validate`, server
+and catalog root wiring, documentation alignment, and final verification.
+Explicitly tracked Step 3's accepted low command-synopsis feedback for the
+documentation refresh step.
+
+### Session: 2026-05-20 19:55
+
+**Tasks Completed**: Step 4 self-review plan cleanup.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Consolidated follow-up tasks so the plan remains within the
+implementation-plan task limit while retaining explicit deliverables,
+dependencies, completion criteria, progress tracking, and verification
+commands.
+
+### Session: 2026-05-20 10:07
+
+**Tasks Completed**: TASK-008, TASK-009, TASK-010.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Reviewed the uncommitted manifest relative-root and
+`workflow manifest validate` implementation against the accepted design and
+plan. Confirmed current-directory default resolution, the
+`DIVEDRA_WORKFLOW_MANIFEST_ROOT` override, disabled-entry validation, ordinary
+local catalog isolation, manifest-backed serve narrowing, and referenced
+workflow bundle validation. Addressed the accepted low Step 3 documentation
+finding by changing the command synopsis to
+`workflow manifest validate [<manifest-path>]` and aligning CLI help and README
+usage with `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST`. Verification
+passed: `bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts packages/divedra/src/workflow/overview.test.ts`;
+`bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
+`bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
+`bun test packages/divedra/src/server/api.test.ts`;
+`bun test packages/divedra/src/graphql/schema.test.ts packages/divedra/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`;
+`bun test packages/divedra/src/workflow/auto-improve-policy.test.ts packages/divedra/src/workflow/working-directory.test.ts`;
+`bun run typecheck`; `bun run lint:biome`; `git diff --check`.
+Residual risk: none identified in this implementation step.
 
 ## Related Plans
 

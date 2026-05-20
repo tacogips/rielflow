@@ -49,6 +49,9 @@ export function printHelp(io: CliIo): void {
     "  divedra cli workflow <create|checkout|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
   );
   io.stdout(
+    "  divedra cli workflow manifest validate [<manifest-path>] [--workflow-manifest <path>] [--executable] [--output json|text]",
+  );
+  io.stdout(
     "  divedra session <status|progress|health|resume|continue|rerun|export|logs|step-runs> <workflow-execution-id> [positional-args] [options]",
   );
   io.stdout(
@@ -107,7 +110,10 @@ export function printHelp(io: CliIo): void {
     "                                  Does not control logs, sessions, or artifacts",
   );
   io.stdout(
-    "  --workflow-manifest <path>       Serve-only manifest allowlist; env fallback DIVEDRA_WORKFLOW_MANIFEST",
+    "  --workflow-manifest <path>       Manifest allowlist path for serve or workflow manifest validate; env fallback DIVEDRA_WORKFLOW_MANIFEST",
+  );
+  io.stdout(
+    "  DIVEDRA_WORKFLOW_MANIFEST_ROOT   Root for relative manifest workflowDirectory/cwd paths; defaults to current directory",
   );
   io.stdout("  --scope <scope>         Select auto, project, or user scope");
   io.stdout("  --user-root <path>      Override the user scope root");

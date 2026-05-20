@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -1418,6 +1425,145 @@ describe("runCli", () => {
     expect(payload.workflows.map((row) => row.workflowName)).toContain("demo");
     expect(payload.workflows.map((row) => row.workflowName)).not.toContain(
       "served-alias",
+    );
+  });
+
+  test("workflow manifest validate resolves relative entries from current directory", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "workflows");
+    const created = await createWorkflowTemplate("demo", {
+      workflowRoot,
+    });
+    expect(created.ok).toBe(true);
+    const manifestPath = path.join(root, "config", "manifest.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          manifestVersion: 1,
+          workflows: [
+            {
+              id: "served-demo",
+              workflowDirectory: { relative: "./workflows/demo" },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const previousCwd = process.cwd();
+    process.chdir(root);
+    try {
+      const resolvedRoot = await realpath(root);
+      const resolvedWorkflowRoot = await realpath(workflowRoot);
+      const capture = createIoCapture();
+      const code = await runCli(
+        [
+          "workflow",
+          "manifest",
+          "validate",
+          "config/manifest.json",
+          "--output",
+          "json",
+        ],
+        capture.io,
+      );
+
+      expect(code).toBe(0);
+      const payload = JSON.parse(capture.stdout.join("\n")) as {
+        relativePathRoot: string;
+        valid: boolean;
+        workflows: ReadonlyArray<{
+          id: string;
+          workflowDirectory: string;
+          valid: boolean;
+        }>;
+      };
+      expect(payload.relativePathRoot).toBe(resolvedRoot);
+      expect(payload.valid).toBe(true);
+      expect(payload.workflows[0]).toMatchObject({
+        id: "served-demo",
+        workflowDirectory: path.join(resolvedWorkflowRoot, "demo"),
+        valid: true,
+      });
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  test("workflow manifest validate uses DIVEDRA_WORKFLOW_MANIFEST_ROOT and catches invalid bundles", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, "manifest-root");
+    const workflowDirectory = path.join(workflowRoot, "broken");
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "broken",
+          description: "broken",
+          defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+          managerStepId: "manager",
+          entryStepId: "manager",
+          nodes: [{ id: "manager", nodeFile: "nodes/missing.json" }],
+          steps: [{ id: "manager", nodeId: "manager", role: "manager" }],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const manifestPath = path.join(root, "config", "manifest.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          manifestVersion: 1,
+          workflows: [
+            {
+              id: "broken",
+              workflowDirectory: { relative: "./broken" },
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      ["workflow", "manifest", "validate", manifestPath, "--output", "json"],
+      capture.io,
+      createCliDeps({
+        env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: workflowRoot },
+      }),
+    );
+
+    expect(code).toBe(2);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      relativePathRoot: string;
+      valid: boolean;
+      workflows: ReadonlyArray<{
+        workflowDirectory: string;
+        valid: boolean;
+        error: string;
+      }>;
+    };
+    expect(payload.relativePathRoot).toBe(workflowRoot);
+    expect(payload.valid).toBe(false);
+    expect(payload.workflows[0]).toMatchObject({
+      workflowDirectory,
+      valid: false,
+    });
+    expect(payload.workflows[0]?.error).toContain(
+      "required file was not found",
     );
   });
 
@@ -6297,6 +6443,7 @@ describe("runCli", () => {
       ],
       capture.io,
       createCliDeps({
+        env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: root },
         startServe: async (options) => {
           started.push(options);
           return { host: "127.0.0.1", port: 7777, stop: () => {} };
