@@ -24,6 +24,27 @@ tasks:
     cmds:
       - bun run build
 
+  build:homebrew:
+    desc: Build a standalone Homebrew release archive for the current platform, or pass targets after --
+    cmds:
+      - scripts/build-homebrew-release.sh {{.CLI_ARGS}}
+
+  homebrew:formula:
+    desc: Render Formula/divedra.rb from dist/homebrew checksums (pass the version after --)
+    cmds:
+      - scripts/render-homebrew-formula.sh {{.CLI_ARGS}}
+
+  homebrew:tap-formula:
+    desc: Render divedra into the sibling tacogips/homebrew-tap repository (pass version after --)
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "{{.CLI_ARGS}}" ]; then
+          echo "usage: task homebrew:tap-formula -- <version>" >&2
+          exit 2
+        fi
+        scripts/render-homebrew-formula.sh "{{.CLI_ARGS}}" ../homebrew-tap/Formula/divedra.rb
+
   start:
     desc: Run the application
     cmds:

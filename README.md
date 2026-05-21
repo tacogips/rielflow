@@ -40,6 +40,20 @@ flowchart TD
 
 ## Install
 
+Install with Homebrew after publishing the release archives and formula to a
+tap:
+
+```bash
+brew tap tacogips/tap
+brew install divedra
+```
+
+Homebrew release archives are standalone `bun build --compile` executables, so
+the installed `divedra` binary embeds the Bun runtime and does not require Bun
+as a runtime dependency. See `packaging/homebrew/README.md` for the release
+archive and formula generation workflow. The formula is published from the
+existing `tacogips/homebrew-tap` repository under `Formula/divedra.rb`.
+
 Install dependencies for local development:
 
 ```bash

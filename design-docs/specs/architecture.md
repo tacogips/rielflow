@@ -1620,6 +1620,81 @@ Compatibility validation for the package split:
 - `nix build .#default`
 - `nix run . -- workflow list --workflow-definition-dir ./examples`
 
+### Homebrew Release Packaging
+
+Homebrew installation should be supported through standalone release archives
+that contain a compiled `divedra` executable. The release path is additive to
+the current source-run and Nix-flake paths: it must not replace `bun run
+packages/divedra/src/bin.ts`, `nix run`, or the package-local build outputs used
+by development and tests.
+
+The packaging boundary is a release artifact builder plus a Homebrew formula
+template. Runtime behavior stays in the existing CLI entrypoint under
+`packages/divedra/src/bin.ts`; packaging code must not introduce a second CLI
+dispatcher or change workflow/session storage defaults. The compiled binary
+should be produced with Bun's standalone compile flow so Homebrew users do not
+need Bun installed at runtime. The archive should install only the executable
+and required static runtime assets, such as bundled prompt assets when the
+compiled binary cannot embed or locate them reliably.
+
+Release artifact data flow:
+
+1. build the normal package outputs so declarations and copied prompt assets
+   remain synchronized with the workspace build contract
+2. compile the package-local CLI entrypoint into platform-specific executable
+   outputs
+3. stage each artifact under a deterministic directory containing `bin/divedra`,
+   `README.md`, `LICENSE` when present, and any required runtime assets
+4. create compressed archives with names that include package version, target
+   operating system, and architecture
+5. compute SHA-256 checksums for every archive
+6. render or update the Homebrew formula from the selected release URL,
+   artifact matrix, version, and checksums
+7. verify the staged archive by extracting it and running executable smoke tests
+
+Artifact names should be stable enough for release automation and formula
+updates, for example `divedra-<version>-darwin-arm64.tar.gz` and
+`divedra-<version>-darwin-x64.tar.gz`. Linux archive support may use the same
+builder shape for Linuxbrew, but Homebrew-on-macOS support is the required first
+slice. When cross-compilation is unavailable or unreliable, the builder should
+fail with a clear unsupported-target message rather than producing a mislabeled
+archive.
+
+The Homebrew formula should live in a repository-owned Homebrew surface, such as
+`Formula/divedra.rb`, so it can be copied into a tap or published from the same
+repository when the release hosting decision is resolved. The formula installs
+from prebuilt release archives, selects the correct archive for supported OS and
+CPU combinations, installs `bin/divedra`, and runs a formula `test do` smoke
+check. The formula is not intended for Homebrew core submission unless later
+policy work replaces binary-only installation with a source build acceptable to
+Homebrew core.
+
+Validation rules:
+
+- the release builder must refuse dirty or missing version metadata only when
+  the release mode requires a publishable artifact; local dry-run builds may use
+  the current package version
+- every generated archive must have a checksum record
+- the formula must not contain placeholder URLs or placeholder SHA values in
+  publish mode
+- formula tests must run `divedra --help`; `divedra --version` should be added
+  to the release smoke test after the CLI exposes a stable version command
+- local verification should install from the generated formula or extracted
+  archive where Homebrew is available, otherwise it should perform archive
+  extraction plus binary smoke tests
+
+Rollout is documentation and packaging focused. Expected implementation
+surfaces are `scripts/`, `package.json`, `Taskfile.yml`, `Formula/divedra.rb`,
+`README.md`, and release-related tests or shell checks. TypeScript runtime code
+is only required if smoke testing proves the CLI lacks a stable `--version`
+surface or the compiled binary cannot locate required runtime assets.
+
+Codex-agent is not a release-packaging reference for this issue. It remains an
+execution backend dependency bundled or resolved according to the existing
+adapter/package boundary. Cursor CLI behavior, if present, remains isolated in
+the Cursor adapter and must not influence release artifact layout or Homebrew
+formula behavior.
+
 ## Current Limitations
 
 - the main runtime remains queue-based; the local `call-step` path is not the whole orchestration model

@@ -32,6 +32,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `homebrew-deployment-support` | 2026-05-20 | `architecture`, `command` |
 | `duplicate-scavenge-refactoring-workflow-mode` | 2026-05-19 | `architecture` |
 | `refactoring-duplicate-scavenge-product-code` | 2026-05-19 | `refactoring-divide-and-conquer`, `step3-merge-review-plan`, `architecture` |
 | `refactoring-event-path-resolution-package-ownership` | 2026-05-19 | `refactoring-divide-and-conquer`, `step3-merge-review-plan` |

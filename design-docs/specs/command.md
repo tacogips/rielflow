@@ -212,6 +212,51 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - `--reason` records operator intent in the replay receipt raw artifact.
   - Local event dispatch commands accept `--mock-scenario <path>` and reject combining it with `--endpoint`.
 
+### Release Packaging Commands
+
+Release packaging is driven by repository automation rather than by a new
+runtime CLI subcommand. The user-facing `divedra` command should remain focused
+on workflow, session, GraphQL, server, hook, and event operations.
+
+The packaging command surface should include:
+
+- `scripts/build-homebrew-release.sh`: build standalone Bun-compiled release
+  archives for the current host target by default, with optional supported
+  target arguments when the build environment can produce them.
+- `scripts/render-homebrew-formula.sh`: render or update the Homebrew formula
+  from a release version, archive URL base, and SHA-256 checksum manifest.
+- `task build:homebrew`: Taskfile wrapper around the archive builder.
+- `task homebrew:formula`: Taskfile wrapper around formula rendering.
+- `task homebrew:tap-formula`: render the formula into the sibling
+  `../homebrew-tap/Formula/divedra.rb` checkout used by `tacogips/tap`.
+
+Default local verification commands for this issue:
+
+```bash
+scripts/build-homebrew-release.sh
+tmp_dir="$(mktemp -d)"
+tar -C "$tmp_dir" -xzf dist/homebrew/divedra-<version>-<target>.tar.gz
+"$tmp_dir/bin/divedra" --help
+brew tap-new local/divedra-test
+tap_root="$(brew --repository local/divedra-test)"
+DIVEDRA_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
+  scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/divedra.rb"
+brew install local/divedra-test/divedra
+brew test local/divedra-test/divedra
+brew uninstall divedra
+brew untap local/divedra-test
+```
+
+`--version` is part of the preferred release smoke test after the CLI exposes a
+stable version surface. The first Homebrew slice may use `--help` only when
+runtime code changes are intentionally deferred.
+
+The Homebrew formula should install from generated release archives, not from
+source checkout plus `bun install`. Formula variables must make the release URL,
+version, target archive names, and checksums explicit. Publish-mode formula
+generation must reject placeholder URLs or checksums; local verification mode
+may generate a file URL or locally patched formula for smoke testing.
+
 ### Flags and Options
 
 | Flag                                              | Type          | Default                                             | Description                                                                                                                                                                                                               |

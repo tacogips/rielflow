@@ -23,6 +23,9 @@ Store questions, pending decisions, and items awaiting user approval.
   Element/Matrix event sources.
 - `qa-chat-sdk-event-sources.md`: direct Chat SDK dependency policy, provider
   rollout depth, web provider scope, and rich interaction normalization.
+- `qa-homebrew-deployment-support.md`: Homebrew tap ownership, release URL
+  pattern, target matrix, and version smoke-test decisions for standalone
+  release archives.
 - `qa-scheduled-sleep-node-runtime.md`: restart recovery, initial sleep schema,
   and cancellation-scope decisions for scheduled sleep and shared cron
   scheduling.
