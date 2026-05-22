@@ -64,6 +64,7 @@ describe("event source registry", () => {
       "file-change",
       "matrix",
       "s3-repository",
+      "sequential-list",
       "webhook",
     ]);
     expect(registry.get("chat-sdk")?.capabilities.chatReply).toBe(true);

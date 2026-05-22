@@ -148,6 +148,21 @@ export interface FileChangeSourceConfig extends EventSourceConfigBase {
   readonly configFilePath?: string;
 }
 
+export interface SequentialListEntry extends JsonObject {
+  readonly id: string;
+  readonly prompt: string;
+  readonly metadata?: JsonObject;
+}
+
+export interface SequentialListSourceConfig extends EventSourceConfigBase {
+  readonly kind: "sequential-list";
+  readonly provider?: "divedra" | string;
+  readonly entries: readonly SequentialListEntry[];
+  readonly startPolicy?: "on-serve-start";
+  readonly onItemFailure?: "stop" | "continue";
+  readonly configFilePath?: string;
+}
+
 export type EventSourceConfig =
   | CronSourceConfig
   | ChatSdkSourceConfig
@@ -155,6 +170,7 @@ export type EventSourceConfig =
   | WebhookSourceConfig
   | S3RepositorySourceConfig
   | FileChangeSourceConfig
+  | SequentialListSourceConfig
   | EventSourceConfigBase;
 
 export interface EventOutputDestinationConfigBase extends JsonObject {

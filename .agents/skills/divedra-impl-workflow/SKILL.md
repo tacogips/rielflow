@@ -81,7 +81,9 @@ The workflow is responsible for:
 8. implementation work
 9. implementation self-review
 10. implementation review
-11. user-facing documentation refresh (`README.md` and exposed workflow skill docs)
+11. user-facing documentation refresh (`README.md`, mandatory workflow skill
+    docs, and any directly affected user-facing skills such as event-source
+    runbooks)
 12. staged secret scan with `gitleaks git --pre-commit --redact --staged --verbose`
 13. commit-message generation
 14. built-in git commit and git push add-on steps

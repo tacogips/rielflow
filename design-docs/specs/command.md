@@ -186,18 +186,24 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `events emit <source-id> --event-file <path>`
   - Inject a normalized or raw fixture event for local testing of binding matching, input mapping, dedupe, and workflow dispatch.
 - `events serve [--event-root <path>] [--endpoint <graphql-url>]`
-  - Start cron, webhook, Matrix, chat, web-chat, and local file-change event
-    listeners.
+  - Start cron, webhook, Matrix, chat, web-chat, local file-change, and
+    sequential-list event listeners.
   - On startup, rehydrate active persisted workflow schedules and enqueue the
     next due `workflow-schedule` occurrence through the shared scheduled event
     manager when event listeners are enabled.
+  - For `sequential-list` sources, resume the durable sequence cursor for the
+    current source/config revision and dispatch only the next pending list item;
+    the listener must wait for the prior workflow execution or supervised run to
+    reach a terminal state before dispatching another item from the same
+    sequence.
   - In local command-dispatch mode, starts workflow execution through `divedra workflow run` with a generated mapped-input JSON file.
   - In local library mode, invokes the library workflow execution client in-process.
   - With `--endpoint`, dispatches workflow execution through GraphQL and can run as a lightweight listener process.
   - For bindings configured with `execution.mode = "supervised"`, dispatches events to the workflow supervisor control path so the same event source conversation can start, stop, restart, and inspect the active workflow.
   - In deterministic supervisor mode, the local control path persists an async command/run record and applies workflow reference, start, status, progress, inbox/read, logs, export, stop/cancel, restart/rerun, and input/submit/resume operations through the in-process runner pool.
 - `events list [--source <id>] [--status <status>] [--limit <n>]`
-  - Inspect persisted event receipt records.
+  - Inspect persisted event receipt records, including sequence metadata for
+    `sequential-list` items when present.
 - `events schedules list [--source <id>] [--status <status>] [--limit <n>]`
   - Inspect persisted chat-created workflow schedules without mutating them.
 - `events schedules inspect <schedule-id> [--output json]`
@@ -208,6 +214,9 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
     `workflow-schedule` event owned by that schedule.
 - `events replay <receipt-id> [--dry-run] [--reason <text>]`
   - Re-run mapping and dispatch for a persisted normalized event receipt using replay-specific event and dedupe identifiers.
+  - Replaying a `sequential-list` item targets that one receipt/item; it must
+    not reset or re-enqueue the entire configured prompt list unless a future
+    explicit sequence-reset command is added.
   - `--dry-run` forwards the replay through workflow execution dry-run behavior.
   - `--reason` records operator intent in the replay receipt raw artifact.
   - Local event dispatch commands accept `--mock-scenario <path>` and reject combining it with `--endpoint`.

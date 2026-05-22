@@ -48,6 +48,13 @@ Current direction:
   recurring execution re-arm, and event listener startup. Due occurrences
   dispatch through the existing event receipt and trigger-runner path. See
   `design-docs/specs/design-scheduled-workflow-execution.md`.
+- sequential prompt lists are event sources, not workflow control-flow
+  primitives. A `sequential-list` source drains a configured ordered prompt
+  list through the event binding and trigger-runner path one item at a time,
+  waiting for the prior workflow execution or supervised run to reach a
+  terminal state before dispatching the next item. Sequence cursor state lives
+  with event runtime state and receipts, not in workflow bundles. See
+  `design-docs/specs/design-event-listener-workflow-trigger.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 - dedicated workflow self-improve is a separate retrospective analysis and
   optional canonical workflow-edit service; it reads recent workflow run

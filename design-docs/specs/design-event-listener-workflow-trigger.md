@@ -42,6 +42,8 @@ Recommended placement:
   creation
 - support local filesystem directory change sources for created, modified, and
   deleted files
+- support ordered prompt-list sources that dispatch configured instructions one
+  workflow execution at a time
 - support webhook-style and provider event-notification sources
 - preserve durable audit records for received events, mapping results, dedupe,
   and workflow execution ids
@@ -62,6 +64,9 @@ Recommended placement:
   explicitly opts into that behavior
 - shipping a cross-machine distributed filesystem watcher or synchronization
   service
+- introducing workflow-engine branches or loops to model event-source list
+  sequencing
+- starting concurrent workflow executions for one ordered prompt list
 
 ## Relationship To Existing Runtime
 
@@ -328,6 +333,132 @@ Scheduled cron behavior:
   through the same manager
 - the cron adapter preserves existing config, binding, input mapping, dedupe,
   and event receipt behavior
+
+### Sequential List
+
+Sequential list is a local event source for operators who want to preconfigure
+an ordered set of instruction prompts and have divedra dispatch each prompt as
+one workflow input only after the previous workflow execution has completed.
+The source is served by `events serve` and uses the same adapter, binding, input
+mapping, receipt, dedupe, replay, sticky-session, and supervised execution
+contracts as other event sources.
+
+The source does not add list semantics to workflow JSON. It turns each list
+entry into a normalized event:
+
+```text
+Configured prompt list
+  -> SequentialListEventSourceAdapter
+  -> ExternalEventEnvelope(eventType = sequential-list.item.ready)
+  -> EventBinding
+  -> WorkflowTriggerRunner
+  -> divedra workflow run / library client / GraphQL executeWorkflow / supervisor control
+  -> completion observer
+  -> next list item
+```
+
+Source config:
+
+- `kind: "sequential-list"`
+- `entries`, a non-empty ordered array of prompt entries
+- each entry has a unique `id` and a non-empty `prompt`
+- optional entry `metadata`, limited to JSON-serializable operator context
+- optional `startPolicy`, defaulting to `on-serve-start`
+- optional `onItemFailure`, defaulting to `stop`; `continue` may be supported
+  only when failures are recorded before the next dispatch
+
+Recommended source shape:
+
+```json
+{
+  "id": "nightly-instruction-list",
+  "kind": "sequential-list",
+  "entries": [
+    {
+      "id": "summarize-backlog",
+      "prompt": "Summarize the current backlog and identify blockers."
+    },
+    {
+      "id": "draft-plan",
+      "prompt": "Draft the next implementation plan from the summary."
+    }
+  ]
+}
+```
+
+Normalized event type:
+
+- `sequential-list.item.ready`
+
+Normalized input should include:
+
+- sequence source id
+- stable config revision id
+- sequence run id
+- zero-based item index and total item count
+- item id
+- prompt text
+- item metadata when configured
+- prior item receipt id and workflow execution id when available
+
+Recommended runtime variable shape after a binding maps the event:
+
+```json
+{
+  "workflowInput": {
+    "instruction": "Summarize the current backlog and identify blockers.",
+    "sequence": {
+      "sourceId": "nightly-instruction-list",
+      "runId": "seq_20260522_001",
+      "itemId": "summarize-backlog",
+      "index": 0,
+      "total": 2
+    }
+  }
+}
+```
+
+State and completion rules:
+
+- The event runtime owns a durable sequence state record under the event data
+  root. It stores source id, config revision id, sequence run id, current item
+  index, item statuses, active receipt id, active workflow execution id or
+  supervised run id, timestamps, and last error.
+- A served source resumes the current sequence for the same source/config
+  revision. Completed items are not dispatched again on listener restart.
+- The next item is eligible only after the previous item reaches a terminal
+  workflow state: completed, failed, or cancelled. Paused, running, pending
+  user-action, and unknown states are not complete.
+- With `onItemFailure: "stop"`, failed or cancelled item execution marks the
+  sequence failed and leaves later items pending. With `continue`, the failure
+  is recorded and the next item may dispatch after terminal failure is observed.
+- If the runtime cannot observe completion for the selected dispatch mode, it
+  must fail the active item and stop the sequence rather than start the next
+  item concurrently.
+- Direct local execution can observe completion by awaiting or polling the
+  workflow session. Endpoint-backed or supervisor-backed dispatch must poll the
+  GraphQL/session or supervised-run status surface until terminal state.
+- Sticky session reuse remains binding-local. If a binding continues an
+  event-processing node session, the sequence still waits for that continued
+  workflow execution/session to become terminal before dispatching the next
+  item.
+
+Receipt, dedupe, and replay rules:
+
+- Each item creates one normal event receipt. The normalized event, workflow
+  input artifact, and dispatch artifact include sequence source id, run id,
+  item id, item index, total count, and config revision id.
+- Dedupe keys include source id, config revision id, sequence run id, item id,
+  item index, and binding id. Changing the authored entry id or prompt changes
+  the config revision and starts a distinct sequence run.
+- `events list` should expose sequence metadata so operators can inspect which
+  item is active, completed, skipped, failed, or pending.
+- `events replay <receipt-id>` replays one persisted item receipt. It must not
+  reset the sequence cursor or enqueue later items unless an explicit future
+  sequence reset/resume command is added.
+- Read-only mode validates and records receipts/state transitions that do not
+  dispatch workflow execution; it must not advance the durable cursor past an
+  item that was not actually dispatched.
 
 ### S3 Repository File Creation
 
@@ -1039,6 +1170,10 @@ Concurrency rules:
 - default concurrency key is the dedupe key
 - chat bindings should usually use conversation/thread id as the concurrency key
 - cron bindings should usually use source id plus scheduled time
+- sequential-list bindings should use source id plus sequence run id, item id,
+  and item index; the sequence controller, not only the generic per-key
+  concurrency limit, is responsible for waiting on workflow completion before
+  releasing the next item
 - S3 repository bindings should usually use bucket plus object key, or bucket
   plus object key plus version id when parallel versions should run separately
 - first iteration may reject or queue new events when `maxConcurrentPerKey` is
@@ -1195,6 +1330,14 @@ Event config validation should fail when:
   cannot be provided deterministically
 - a file-change source sets `stabilityWindowMs` below zero or above the
   adapter's documented upper bound
+- a sequential-list source omits `entries`, configures an empty entries array,
+  or uses non-object entries
+- a sequential-list entry omits `id`, uses an empty or duplicate `id`, or uses
+  an id that is not safe for receipt/state display
+- a sequential-list entry omits `prompt` or uses an empty/non-string prompt
+- a sequential-list entry sets non-object `metadata`
+- a sequential-list source sets unknown `startPolicy` or `onItemFailure`
+  values
 - a cron schedule cannot be parsed
 - an S3 repository source omits bucket, event receiver configuration, or an
   explicit object access policy
@@ -1233,18 +1376,22 @@ Event config validation should fail when:
    validation, create/modify/delete dispatch gating, deterministic watcher
    tests, example source/binding fixtures, and user-facing configuration and
    run documentation.
-7. Generic webhook adapter for local testing.
-8. Matrix adapter for Element/Matrix room receive normalization and chat reply
+7. Sequential-list adapter with source registration, validation, durable
+   sequence state, terminal-completion observation, no-concurrent-dispatch
+   tests, event receipt/list/replay coverage, example source/binding fixtures,
+   and user-facing configuration and run documentation.
+8. Generic webhook adapter for local testing.
+9. Matrix adapter for Element/Matrix room receive normalization and chat reply
    dispatch.
-9. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
+10. Chat SDK adapter family for Slack, Teams, Google Chat, Discord, Telegram,
    GitHub, Linear, WhatsApp, Messenger, and Web.
-10. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
+11. Optional dedicated web chat UI adapter when browser UX needs behavior beyond
    the shared Chat SDK `web` provider boundary.
-11. Optional S3 object download-to-data-root support.
-12. Optional reply publisher after workflow completion.
-13. Signal adapter if operational requirements and dependency choice are
+12. Optional S3 object download-to-data-root support.
+13. Optional reply publisher after workflow completion.
+14. Signal adapter if operational requirements and dependency choice are
     accepted.
-14. Supervised event control path for chat and web app lifecycle commands.
+15. Supervised event control path for chat and web app lifecycle commands.
 
 ## References
 
