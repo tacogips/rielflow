@@ -6,7 +6,7 @@
       "name": "divedra-workspace",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
-        "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
+        "claude-code-agent": "github:tacogips/claude-code-agent#6dfbf30d0369d18e72c8c81a6143385f5bb68426",
         "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
         "graphql": "16.13.1",
@@ -265,7 +265,7 @@
 
     "check-error": ["check-error@2.1.3", "", {}, "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA=="],
 
-    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#12f3af4", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-12f3af4"],
+    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#6dfbf30", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-6dfbf30"],
 
     "codex-agent": ["codex-agent@github:tacogips/codex-agent#05f4e9d", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./src/bin.ts" } }, "tacogips-codex-agent-05f4e9d"],
 
@@ -410,6 +410,8 @@
     "@vitest/snapshot/@vitest/pretty-format": ["@vitest/pretty-format@2.1.8", "", { "dependencies": { "tinyrainbow": "^1.2.0" } }, "sha512-9HiSZ9zpqNLKlbIDRWOnAWqgcA7xu+8YxXSekhr0Ykab7PAYFkhkwoqVArPOtJhPmYeE2YHgKZlj3CP36z2AJQ=="],
 
     "@vitest/utils/@vitest/pretty-format": ["@vitest/pretty-format@2.1.8", "", { "dependencies": { "tinyrainbow": "^1.2.0" } }, "sha512-9HiSZ9zpqNLKlbIDRWOnAWqgcA7xu+8YxXSekhr0Ykab7PAYFkhkwoqVArPOtJhPmYeE2YHgKZlj3CP36z2AJQ=="],
+
+    "divedra-adapters/claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#12f3af4", { "dependencies": { "commander": "14.0.2", "consola": "3.4.2", "graphql": "16.13.1", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-12f3af4"],
 
     "postcss/nanoid": ["nanoid@3.3.11", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w=="],
   }

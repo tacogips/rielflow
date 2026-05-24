@@ -9,6 +9,7 @@ import {
   type WorkflowNodeRegistryRef,
 } from "../types";
 import {
+  probeAgentBackendAuthReadiness,
   probeAgentBackendNodeExecutability,
   type AgentBackendPreflightCandidate,
 } from "../runtime-readiness-agent-probes";
@@ -85,7 +86,7 @@ function passiveNodeResult(
       status: executablePreflight ? "valid" : "unknown",
       message: executablePreflight
         ? `${backend} node payload is structurally valid; active backend preflight results are reported separately`
-        : `${backend} backend executability for model '${agentNode.model}' was not actively probed; pass executablePreflight/--executable to check local readiness`,
+        : `${backend} backend tool availability and model reachability were not fully probed; pass executablePreflight/--executable for complete preflight. Authentication readiness is validated when the backend exposes a local auth check`,
       nodeId: candidate.nodeId,
       stepIds: candidate.stepIds,
       source: "agent-backend",
@@ -183,6 +184,11 @@ export async function collectNodeExecutabilityValidation(
   ];
 
   if (input.options.executablePreflight !== true) {
+    for (const candidate of buildAgentBackendCandidates(candidates)) {
+      results.push(
+        ...(await probeAgentBackendAuthReadiness(candidate, input.options)),
+      );
+    }
     return results;
   }
 
@@ -222,7 +228,7 @@ export function collectBlockingNodeValidationIssues(
       makeIssue(
         "error",
         result.path ?? "workflow.nodes",
-        `executable validation failed: ${result.message}`,
+        `node validation failed: ${result.message}`,
       ),
     );
 }

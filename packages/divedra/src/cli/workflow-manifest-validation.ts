@@ -89,9 +89,9 @@ export async function validateWorkflowManifestForCli(input: {
       continue;
     }
 
-    const executableInvalid =
-      input.executablePreflight &&
-      hasInvalidNodeValidationResult(loaded.value.nodeValidationResults);
+    const nodeValidationInvalid = hasInvalidNodeValidationResult(
+      loaded.value.nodeValidationResults,
+    );
     workflows.push({
       id: entry.id,
       enabled: entry.enabled,
@@ -99,9 +99,9 @@ export async function validateWorkflowManifestForCli(input: {
       cwd: entry.cwd,
       authoredWorkflowId: entry.authoredWorkflowId,
       workflowId: loaded.value.bundle.workflow.workflowId,
-      valid: !executableInvalid,
-      ...(executableInvalid
-        ? { error: "workflow has invalid node executable preflight results" }
+      valid: !nodeValidationInvalid,
+      ...(nodeValidationInvalid
+        ? { error: "workflow has invalid node validation results" }
         : {}),
       nodeValidationResults: loaded.value.nodeValidationResults,
     });

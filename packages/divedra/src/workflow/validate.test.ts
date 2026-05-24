@@ -49,11 +49,6 @@ function writeJson(filePath: string, payload: unknown): void {
   writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-function writeExecutable(filePath: string, body: string): void {
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, `${body}\n`, { encoding: "utf8", mode: 0o755 });
-}
-
 function makeStepAddressedRaw(): {
   workflow: Record<string, unknown>;
   nodePayloads: Record<string, unknown>;
@@ -1314,49 +1309,6 @@ describe("validateWorkflowBundle", () => {
           entry.path === "workflow.nodes[0].addon" &&
           entry.addonName === "acme/results" &&
           entry.stepIds?.[0] === "addon-step",
-      ),
-    ).toBe(true);
-  });
-
-  test("active codex-agent preflight reports authentication failures as node validation results", async () => {
-    const root = makeTempDir();
-    const bin = path.join(root, "bin");
-    writeExecutable(
-      path.join(bin, "codex"),
-      [
-        "#!/usr/bin/env bash",
-        'if [ "$1" = "--version" ]; then echo \'codex 1.0.0\'; exit 0; fi',
-        'if [ "$1" = "login" ]; then echo \'not logged in\' >&2; exit 1; fi',
-        "exit 1",
-      ].join("\n"),
-    );
-    writeExecutable(
-      path.join(bin, "git"),
-      "#!/usr/bin/env bash\necho 'git 2.0'",
-    );
-    writeExecutable(
-      path.join(root, "node_modules", ".bin", "codex-agent"),
-      "#!/usr/bin/env bash\necho '{\"available\":true}'",
-    );
-
-    const result = await validateWorkflowBundleDetailedAsync(
-      makeStepAddressedRaw(),
-      {
-        executablePreflight: true,
-        cwd: root,
-        env: { PATH: `${bin}:${process.env["PATH"] ?? ""}` },
-      },
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) {
-      return;
-    }
-    expect(
-      result.value.nodeValidationResults.some(
-        (entry) =>
-          entry.status === "invalid" &&
-          entry.backend === "codex-agent" &&
-          entry.message.includes("authentication"),
       ),
     ).toBe(true);
   });

@@ -1,15 +1,17 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   inspectWorkflowRuntimeReadiness,
   type WorkflowRuntimeRequirement,
 } from "./runtime-readiness";
 import { loadWorkflowFromDisk } from "./load";
 import type { NormalizedWorkflowBundle, NodePayload } from "./types";
+import { mockAgentCliCommands } from "./runtime-readiness-agent-probes-test-helpers";
 
 const tempDirs: string[] = [];
+const agentCliMocks: Array<{ restore: () => void }> = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
@@ -130,6 +132,10 @@ function findRequirement(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+  for (const mock of agentCliMocks.splice(0)) {
+    mock.restore();
+  }
   await Promise.all(
     tempDirs
       .splice(0)
@@ -139,16 +145,19 @@ afterEach(async () => {
 
 describe("inspectWorkflowRuntimeReadiness", () => {
   test("marks cursor-cli-agent backend available when cursor-cli-agent wrapper reports cursor-agent available", async () => {
-    const root = await makeTempDir();
-    const cursorCliAgentBin = path.join(
-      root,
-      "node_modules",
-      ".bin",
-      "cursor-cli-agent",
-    );
-    await writeExecutable(
-      cursorCliAgentBin,
-      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"1.0.0","tools":{"cursor-agent":{"version":"0.45.0","error":null}}}\nEOF',
+    agentCliMocks.push(
+      mockAgentCliCommands({
+        "cursor-cli-agent": () => ({
+          ok: true,
+          stdout: JSON.stringify({
+            agent: "1.0.0",
+            tools: {
+              "cursor-agent": { version: "0.45.0", error: null },
+            },
+          }),
+          stderr: "",
+        }),
+      }),
     );
 
     const readiness = await inspectWorkflowRuntimeReadiness(
@@ -161,7 +170,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           variables: {},
         },
       }),
-      { cwd: root },
+      {},
     );
 
     const requirement = findRequirement(
@@ -196,9 +205,19 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       promptTemplate: "worker",
       variables: {},
     });
-    await writeExecutable(
-      path.join(root, "node_modules", ".bin", "cursor-cli-agent"),
-      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"1.0.0","tools":{"cursor-agent":{"version":"0.45.0","error":null}}}\nEOF',
+    agentCliMocks.push(
+      mockAgentCliCommands({
+        "cursor-cli-agent": () => ({
+          ok: true,
+          stdout: JSON.stringify({
+            agent: "1.0.0",
+            tools: {
+              "cursor-agent": { version: "0.45.0", error: null },
+            },
+          }),
+          stderr: "",
+        }),
+      }),
     );
 
     const loaded = await loadWorkflowFromDisk("demo", {
@@ -232,16 +251,22 @@ describe("inspectWorkflowRuntimeReadiness", () => {
   });
 
   test("marks cursor-cli-agent backend unavailable when cursor-agent tool reports error", async () => {
-    const root = await makeTempDir();
-    const cursorCliAgentBin = path.join(
-      root,
-      "node_modules",
-      ".bin",
-      "cursor-cli-agent",
-    );
-    await writeExecutable(
-      cursorCliAgentBin,
-      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"1.0.0","tools":{"cursor-agent":{"version":null,"error":"cursor binary not found"}}}\nEOF',
+    agentCliMocks.push(
+      mockAgentCliCommands({
+        "cursor-cli-agent": () => ({
+          ok: true,
+          stdout: JSON.stringify({
+            agent: "1.0.0",
+            tools: {
+              "cursor-agent": {
+                version: null,
+                error: "cursor binary not found",
+              },
+            },
+          }),
+          stderr: "",
+        }),
+      }),
     );
 
     const readiness = await inspectWorkflowRuntimeReadiness(
@@ -254,7 +279,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           variables: {},
         },
       }),
-      { cwd: root },
+      {},
     );
 
     const requirement = findRequirement(
@@ -269,20 +294,31 @@ describe("inspectWorkflowRuntimeReadiness", () => {
   });
 
   test("marks codex-agent and claude-code-agent backends available when local tools are runnable", async () => {
-    const root = await makeTempDir();
-    const binDir = path.join(root, "bin");
-    await mkdir(binDir, { recursive: true });
-    await writeExecutable(
-      path.join(binDir, "codex"),
-      "#!/usr/bin/env bash\necho 'codex-cli 0.116.0'",
-    );
-    await writeExecutable(
-      path.join(binDir, "git"),
-      "#!/usr/bin/env bash\necho 'git version 2.53.0'",
-    );
-    await writeExecutable(
-      path.join(root, "node_modules", ".bin", "claude-code-agent"),
-      '#!/usr/bin/env bash\ncat <<\'EOF\'\n{"agent":"0.1.0","tools":{"claude":{"version":"2.1.86","error":null},"codex":{"version":"0.116.0","error":null},"git":{"version":"2.53.0","error":null}}}\nEOF',
+    agentCliMocks.push(
+      mockAgentCliCommands({
+        codex: () => ({
+          ok: true,
+          stdout: "codex-cli 0.116.0",
+          stderr: "",
+        }),
+        git: () => ({
+          ok: true,
+          stdout: "git version 2.53.0",
+          stderr: "",
+        }),
+        "claude-code-agent": () => ({
+          ok: true,
+          stdout: JSON.stringify({
+            agent: "0.1.0",
+            tools: {
+              claude: { version: "2.1.86", error: null },
+              codex: { version: "0.116.0", error: null },
+              git: { version: "2.53.0", error: null },
+            },
+          }),
+          stderr: "",
+        }),
+      }),
     );
 
     const readiness = await inspectWorkflowRuntimeReadiness(
@@ -302,12 +338,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
           variables: {},
         },
       }),
-      {
-        cwd: root,
-        env: {
-          PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
-        },
-      },
+      {},
     );
 
     expect(readiness.ready).toBe(true);

@@ -616,15 +616,15 @@ export async function validateWorkflowDefinitionMutation(
         issues: validation.error,
       } satisfies ValidationResponse;
     }
-    const executableInvalid =
-      input.executablePreflight === true &&
-      hasInvalidNodeValidationResult(validation.value.nodeValidationResults);
+    const nodeValidationInvalid = hasInvalidNodeValidationResult(
+      validation.value.nodeValidationResults,
+    );
     const addonSources = await collectWorkflowAddonSourceSummaries({
       workflow: validation.value.bundle.workflow,
       options: context,
     });
     return {
-      valid: !executableInvalid,
+      valid: !nodeValidationInvalid,
       workflowId: validation.value.bundle.workflow.workflowId,
       addonSources,
       nodeValidationResults: validation.value.nodeValidationResults,
@@ -657,11 +657,11 @@ export async function validateWorkflowDefinitionMutation(
     validationContext,
   );
   const nodeValidationResults = loaded.value.nodeValidationResults;
-  const executableInvalid =
-    input.executablePreflight === true &&
-    hasInvalidNodeValidationResult(nodeValidationResults);
+  const nodeValidationInvalid = hasInvalidNodeValidationResult(
+    nodeValidationResults,
+  );
   return {
-    valid: !executableInvalid,
+    valid: !nodeValidationInvalid,
     workflowId: loaded.value.bundle.workflow.workflowId,
     addonSources: await collectWorkflowAddonSourceSummaries({
       workflow: loaded.value.bundle.workflow,

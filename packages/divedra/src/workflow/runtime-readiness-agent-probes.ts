@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
-import path from "node:path";
 import type { NodeExecutionBackend, LoadOptions } from "./types";
 import type { WorkflowRuntimeRequirement } from "./runtime-readiness";
+import type { AgentCliCommandResult } from "./agent-cli-command-result";
+import { parseAgentToolVersionsOutput } from "./agent-tool-versions-parse";
+import { parseClaudeAuthVerifyOutput } from "./claude-auth-verify-parse";
+import {
+  buildCodexModelCheckFailureMessage,
+  parseCodexLoginStatus,
+} from "./codex-auth-verify-parse";
+import { compactAgentCliMessage } from "./agent-cli-parse-utils";
 import { NodeValidationResult } from "./validate/node-validation-result";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 5_000;
@@ -20,12 +27,7 @@ export interface AgentBackendPreflightCandidate {
   readonly stepIds: readonly string[];
 }
 
-interface CommandExecutionResult {
-  readonly ok: boolean;
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly message?: string;
-}
+interface CommandExecutionResult extends AgentCliCommandResult {}
 
 function toSortedArray(values: Iterable<string>): readonly string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -35,20 +37,15 @@ function resolveProbeCwd(cwd: string | undefined): string {
   return cwd ?? process.cwd();
 }
 
-function commandCandidatesFor(
-  binaryName: "claude-code-agent" | "cursor-cli-agent",
-  options: Pick<LoadOptions, "cwd">,
-): readonly string[] {
-  return toSortedArray([
-    path.join(resolveProbeCwd(options.cwd), "node_modules", ".bin", binaryName),
-    path.join(process.cwd(), "node_modules", ".bin", binaryName),
-    binaryName,
-  ]);
-}
+type AgentCliBinaryName =
+  | "claude-code-agent"
+  | "cursor-cli-agent"
+  | "codex-agent";
 
-function compactMessage(message: string | undefined, fallback: string): string {
-  const raw = message ?? fallback;
-  return raw.replace(/\s+/g, " ").trim().slice(0, 500);
+function commandCandidatesFor(
+  binaryName: AgentCliBinaryName,
+): readonly [AgentCliBinaryName] {
+  return [binaryName];
 }
 
 function hasAuthLikeFailure(value: string): boolean {
@@ -112,7 +109,7 @@ function buildProcessEnv(
   };
 }
 
-export async function runCommand(
+async function runCommandImpl(
   command: string,
   args: readonly string[],
   options: Pick<LoadOptions, "cwd" | "env">,
@@ -194,6 +191,29 @@ export async function runCommand(
   });
 }
 
+type ExecuteAgentCliCommand = typeof runCommandImpl;
+
+let executeAgentCliCommand: ExecuteAgentCliCommand = runCommandImpl;
+
+export async function runCommand(
+  command: string,
+  args: readonly string[],
+  options: Pick<LoadOptions, "cwd" | "env">,
+  timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS,
+): Promise<CommandExecutionResult> {
+  return await executeAgentCliCommand(command, args, options, timeoutMs);
+}
+
+export function setExecuteAgentCliCommandForTests(
+  runner: ExecuteAgentCliCommand,
+): void {
+  executeAgentCliCommand = runner;
+}
+
+export function resetExecuteAgentCliCommandForTests(): void {
+  executeAgentCliCommand = runCommandImpl;
+}
+
 export async function probeCodexBackend(
   candidate: AgentBackendRequirementCandidate,
   options: Pick<LoadOptions, "cwd" | "env">,
@@ -226,16 +246,7 @@ export async function probeCursorBackend(
   candidate: AgentBackendRequirementCandidate,
   options: Pick<LoadOptions, "cwd" | "env">,
 ): Promise<WorkflowRuntimeRequirement> {
-  const commandCandidates = toSortedArray([
-    path.join(
-      resolveProbeCwd(options.cwd),
-      "node_modules",
-      ".bin",
-      "cursor-cli-agent",
-    ),
-    path.join(process.cwd(), "node_modules", ".bin", "cursor-cli-agent"),
-    "cursor-cli-agent",
-  ]);
+  const commandCandidates = commandCandidatesFor("cursor-cli-agent");
 
   let commandSummary = "cursor-cli-agent version probe unavailable";
   let cursorAvailable = false;
@@ -256,32 +267,13 @@ export async function probeCursorBackend(
         result.message ?? "cursor-cli-agent version probe failed";
       break;
     }
-    try {
-      const parsed = JSON.parse(result.stdout) as {
-        readonly agent?: string;
-        readonly tools?: Readonly<
-          Record<string, { version: string | null; error: string | null }>
-        >;
-      };
-      const cursorAgentTool = parsed.tools?.["cursor-agent"];
-      cursorAvailable =
-        cursorAgentTool?.version !== null &&
-        cursorAgentTool?.version !== undefined;
-      const toolSummary = Object.entries(parsed.tools ?? {})
-        .map(([name, value]) =>
-          value.version === null
-            ? `${name}=${value.error ?? "unavailable"}`
-            : `${name}=${value.version}`,
-        )
-        .join(", ");
-      commandSummary =
-        `agent=${parsed.agent ?? "unknown"}` +
-        (toolSummary.length === 0 ? "" : `, ${toolSummary}`);
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "unknown JSON parse error";
-      commandSummary = `cursor-cli-agent version output was invalid JSON: ${message}`;
-    }
+    const parsed = parseAgentToolVersionsOutput({
+      stdout: result.stdout,
+      requiredTool: "cursor-agent",
+      agentLabel: "cursor-cli-agent",
+    });
+    cursorAvailable = parsed.available;
+    commandSummary = parsed.commandSummary;
     break;
   }
 
@@ -301,7 +293,7 @@ export async function probeClaudeBackend(
   candidate: AgentBackendRequirementCandidate,
   options: Pick<LoadOptions, "cwd" | "env">,
 ): Promise<WorkflowRuntimeRequirement> {
-  const commandCandidates = commandCandidatesFor("claude-code-agent", options);
+  const commandCandidates = commandCandidatesFor("claude-code-agent");
 
   let commandSummary = "claude-code-agent version probe unavailable";
   let claudeAvailable = false;
@@ -318,31 +310,13 @@ export async function probeClaudeBackend(
         result.message ?? "claude-code-agent version probe failed";
       break;
     }
-    try {
-      const parsed = JSON.parse(result.stdout) as {
-        readonly agent?: string;
-        readonly tools?: Readonly<
-          Record<string, { version: string | null; error: string | null }>
-        >;
-      };
-      claudeAvailable =
-        parsed.tools?.["claude"]?.version !== null &&
-        parsed.tools?.["claude"]?.version !== undefined;
-      const toolSummary = Object.entries(parsed.tools ?? {})
-        .map(([name, value]) =>
-          value.version === null
-            ? `${name}=${value.error ?? "unavailable"}`
-            : `${name}=${value.version}`,
-        )
-        .join(", ");
-      commandSummary =
-        `agent=${parsed.agent ?? "unknown"}` +
-        (toolSummary.length === 0 ? "" : `, ${toolSummary}`);
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "unknown JSON parse error";
-      commandSummary = `claude-code-agent version output was invalid JSON: ${message}`;
-    }
+    const parsed = parseAgentToolVersionsOutput({
+      stdout: result.stdout,
+      requiredTool: "claude",
+      agentLabel: "claude-code-agent",
+    });
+    claudeAvailable = parsed.available;
+    commandSummary = parsed.commandSummary;
     break;
   }
 
@@ -364,9 +338,7 @@ async function checkCodexModel(input: {
   readonly options: Pick<LoadOptions, "cwd" | "env">;
 }): Promise<NodeValidationResult> {
   const result = await runFirstAvailableCommand(
-    commandCandidatesFor("cursor-cli-agent", input.options).map((command) =>
-      command.replace(/cursor-cli-agent$/u, "codex-agent"),
-    ),
+    commandCandidatesFor("codex-agent"),
     ["model", "check", "--model", input.model, "--json"],
     input.options,
     MODEL_CHECK_COMMAND_TIMEOUT_MS,
@@ -375,7 +347,11 @@ async function checkCodexModel(input: {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
-      message: `codex-agent model '${input.model}' is not reachable: ${compactMessage(result.message, "model check failed")}`,
+      message: buildCodexModelCheckFailureMessage({
+        model: input.model,
+        result,
+        accountReadiness: false,
+      }),
     });
   }
   return resultForCandidate({
@@ -385,13 +361,48 @@ async function checkCodexModel(input: {
   });
 }
 
+async function checkCodexAccountReadiness(
+  candidate: AgentBackendPreflightCandidate,
+  options: Pick<LoadOptions, "cwd" | "env">,
+): Promise<NodeValidationResult> {
+  const firstModel = toSortedArray(candidate.models)[0];
+  if (firstModel === undefined) {
+    return unknownResult(
+      candidate,
+      "codex-agent account readiness could not be verified because no model is authored",
+    );
+  }
+  const result = await runFirstAvailableCommand(
+    commandCandidatesFor("codex-agent"),
+    ["model", "check", "--model", firstModel, "--json"],
+    options,
+    MODEL_CHECK_COMMAND_TIMEOUT_MS,
+  );
+  if (!result.ok) {
+    return resultForCandidate({
+      candidate,
+      status: "invalid",
+      message: buildCodexModelCheckFailureMessage({
+        model: firstModel,
+        result,
+        accountReadiness: true,
+      }),
+    });
+  }
+  return resultForCandidate({
+    candidate,
+    status: "valid",
+    message: `codex-agent account readiness is valid for model '${firstModel}'`,
+  });
+}
+
 async function checkCursorModel(input: {
   readonly candidate: AgentBackendPreflightCandidate;
   readonly model: string;
   readonly options: Pick<LoadOptions, "cwd" | "env">;
 }): Promise<NodeValidationResult> {
   const result = await runFirstAvailableCommand(
-    commandCandidatesFor("cursor-cli-agent", input.options),
+    commandCandidatesFor("cursor-cli-agent"),
     ["model", "check", "--model", input.model, "--json"],
     input.options,
     MODEL_CHECK_COMMAND_TIMEOUT_MS,
@@ -401,14 +412,14 @@ async function checkCursorModel(input: {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
-      message: `cursor-cli-agent model '${input.model}' probe reported an authentication failure: ${compactMessage(result.message, "auth failure")}`,
+      message: `cursor-cli-agent model '${input.model}' probe reported an authentication failure: ${compactAgentCliMessage(result.message, "auth failure")}`,
     });
   }
   if (!result.ok) {
     return resultForCandidate({
       candidate: input.candidate,
       status: "invalid",
-      message: `cursor-cli-agent model '${input.model}' is not reachable: ${compactMessage(result.message, "model check failed")}`,
+      message: `cursor-cli-agent model '${input.model}' is not reachable: ${compactAgentCliMessage(result.message, "model check failed")}`,
     });
   }
   return resultForCandidate({
@@ -423,16 +434,17 @@ async function checkClaudeAuth(
   options: Pick<LoadOptions, "cwd" | "env">,
 ): Promise<NodeValidationResult> {
   const result = await runFirstAvailableCommand(
-    commandCandidatesFor("claude-code-agent", options),
-    ["auth", "status", "--json"],
+    commandCandidatesFor("claude-code-agent"),
+    ["auth", "verify", "--json"],
     options,
   );
+  const parsed = parseClaudeAuthVerifyOutput(result);
   return resultForCandidate({
     candidate,
-    status: result.ok ? "valid" : "invalid",
-    message: result.ok
-      ? "claude-code-agent authentication status is valid"
-      : `claude-code-agent authentication is unavailable: ${compactMessage(result.message, "auth status failed")}`,
+    status: parsed.ok ? "valid" : "invalid",
+    message: parsed.ok
+      ? parsed.message
+      : `claude-code-agent authentication is unavailable: ${compactAgentCliMessage(parsed.message, "auth verify failed")}`,
   });
 }
 
@@ -441,12 +453,13 @@ async function checkCodexAuth(
   options: Pick<LoadOptions, "cwd" | "env">,
 ): Promise<NodeValidationResult> {
   const result = await runCommand("codex", ["login", "status"], options);
+  const parsed = parseCodexLoginStatus(result);
   return resultForCandidate({
     candidate,
-    status: result.ok ? "valid" : "invalid",
-    message: result.ok
+    status: parsed.ok ? "valid" : "invalid",
+    message: parsed.ok
       ? "codex-agent authentication status is valid"
-      : `codex-agent authentication is unavailable: ${compactMessage(result.message, "codex login status failed")}`,
+      : `codex-agent authentication is unavailable: ${compactAgentCliMessage(parsed.message, "codex login status failed")}`,
   });
 }
 
@@ -587,6 +600,33 @@ async function probeCursorNodeExecutability(
     results.push(await checkCursorModel({ candidate, model, options }));
   }
   return results;
+}
+
+async function probeCodexAuthReadiness(
+  candidate: AgentBackendPreflightCandidate,
+  options: Pick<LoadOptions, "cwd" | "env">,
+): Promise<readonly NodeValidationResult[]> {
+  const authResult = await checkCodexAuth(candidate, options);
+  if (authResult.status !== "valid") {
+    return [authResult];
+  }
+  return [authResult, await checkCodexAccountReadiness(candidate, options)];
+}
+
+export async function probeAgentBackendAuthReadiness(
+  candidate: AgentBackendPreflightCandidate,
+  options: Pick<LoadOptions, "cwd" | "env">,
+): Promise<readonly NodeValidationResult[]> {
+  switch (candidate.backend) {
+    case "codex-agent":
+      return await probeCodexAuthReadiness(candidate, options);
+    case "claude-code-agent":
+      return [await checkClaudeAuth(candidate, options)];
+    case "cursor-cli-agent":
+    case "official/openai-sdk":
+    case "official/anthropic-sdk":
+      return [];
+  }
 }
 
 export async function probeAgentBackendNodeExecutability(

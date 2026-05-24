@@ -656,9 +656,9 @@ export async function runCliWorkflowScope(
       validationLoadOptions,
     );
     const nodeValidationResults = loaded.value.nodeValidationResults;
-    const executableInvalid =
-      parsed.options.executablePreflight &&
-      hasInvalidNodeValidationResult(nodeValidationResults);
+    const nodeValidationInvalid = hasInvalidNodeValidationResult(
+      nodeValidationResults,
+    );
     const addonSources = await collectWorkflowAddonSourceSummaries({
       workflow: loaded.value.bundle.workflow,
       options: loadedWorkflowOptions,
@@ -673,11 +673,11 @@ export async function runCliWorkflowScope(
         source: workflowSourceJson(loaded.value.source),
         addonSources,
         nodeValidationResults,
-        valid: !executableInvalid,
+        valid: !nodeValidationInvalid,
       });
     } else {
       io.stdout(
-        `workflow '${loaded.value.workflowName}' is ${executableInvalid ? "not executable" : "valid"}`,
+        `workflow '${loaded.value.workflowName}' is ${nodeValidationInvalid ? "not executable" : "valid"}`,
       );
       const sourceLine = formatWorkflowSource(loaded.value.source);
       if (sourceLine !== undefined) {
@@ -692,7 +692,7 @@ export async function runCliWorkflowScope(
         io.stdout(line);
       }
     }
-    return executableInvalid ? 2 : 0;
+    return nodeValidationInvalid ? 2 : 0;
   }
 
   if (command === "inspect") {

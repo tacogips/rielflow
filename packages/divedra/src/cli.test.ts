@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { runCli, type CliDependencies } from "./cli";
 import { createWorkflowTemplate } from "./workflow/create";
+import { mockAgentCliCommands } from "./workflow/runtime-readiness-agent-probes-test-helpers";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
 import { ok } from "./workflow/result";
@@ -32,6 +33,7 @@ import {
 } from "./workflow/paths";
 
 const tempDirs: string[] = [];
+const agentCliMocks: Array<{ restore: () => void }> = [];
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "divedra-cli-test-"));
@@ -58,6 +60,9 @@ async function withLegacyWorkflowAuthorshipForCli<T>(
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  for (const mock of agentCliMocks.splice(0)) {
+    mock.restore();
+  }
   await Promise.all(
     tempDirs
       .splice(0)
@@ -248,11 +253,6 @@ async function writeSelfImproveWorkflowFixture(input: {
     promptTemplate: "Inspect the workflow run and return structured JSON.",
     variables: {},
   });
-}
-
-async function writeExecutable(filePath: string, body: string): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${body}\n`, { mode: 0o755 });
 }
 
 async function writeLocalAddonManifest(input: {
@@ -1034,23 +1034,34 @@ describe("runCli", () => {
 
   test("workflow validate --executable returns invalid node validation results", async () => {
     const root = await makeTempDir();
-    const bin = path.join(root, "bin");
-    await writeExecutable(
-      path.join(bin, "codex"),
-      [
-        "#!/usr/bin/env bash",
-        'if [ "$1" = "--version" ]; then echo \'codex 1.0.0\'; exit 0; fi',
-        'if [ "$1" = "login" ]; then echo \'not logged in\' >&2; exit 1; fi',
-        "exit 1",
-      ].join("\n"),
-    );
-    await writeExecutable(
-      path.join(bin, "git"),
-      "#!/usr/bin/env bash\necho 'git 2.0'",
-    );
-    await writeExecutable(
-      path.join(root, "node_modules", ".bin", "codex-agent"),
-      "#!/usr/bin/env bash\necho '{\"available\":true}'",
+    agentCliMocks.push(
+      mockAgentCliCommands({
+        codex: (args) => {
+          if (args[0] === "--version") {
+            return { ok: true, stdout: "codex 1.0.0", stderr: "" };
+          }
+          if (args[0] === "login" && args[1] === "status") {
+            return {
+              ok: false,
+              stdout: "",
+              stderr: "not logged in",
+              message: "not logged in",
+            };
+          }
+          return {
+            ok: false,
+            stdout: "",
+            stderr: "",
+            message: `unexpected codex args: ${args.join(" ")}`,
+          };
+        },
+        git: () => ({ ok: true, stdout: "git 2.0", stderr: "" }),
+        "codex-agent": () => ({
+          ok: true,
+          stdout: '{"available":true}',
+          stderr: "",
+        }),
+      }),
     );
 
     const createCapture = createIoCapture();
@@ -1074,9 +1085,7 @@ describe("runCli", () => {
         "json",
       ],
       validateCapture.io,
-      createCliDeps({
-        env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}` },
-      }),
+      createCliDeps(),
     );
     expect(validateCode).toBe(2);
     const validation = JSON.parse(validateCapture.stdout.join("\n")) as {
