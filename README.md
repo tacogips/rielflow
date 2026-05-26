@@ -692,6 +692,22 @@ matching and coalesce noisy create/modify notifications. Suffix filters match
 the normalized relative path by filename suffix and must not contain path
 separators. `stabilityWindowMs` must be an integer from `0` through `60000`.
 
+Sequential instruction lists use `kind: "sequential-list"` and are served by
+`events serve`. Configure a non-empty ordered `entries` array where each entry
+has a unique safe `id`, a non-empty `prompt`, and optional JSON-object
+`metadata`. Each entry normalizes to one `sequential-list.item.ready` event;
+the event input includes `prompt`, optional `metadata`, and `sequence`
+metadata with source id, config revision id, run id, item id, index, total,
+and prior receipt or workflow execution references. The adapter persists
+sequence state under the runtime data root and dispatches the next entry only
+after the previous workflow execution or supervised run reaches a terminal
+state. `events list` shows the normal receipts, and the normalized receipt
+artifact contains the sequence metadata for inspection. `events replay
+<receipt-id>` replays only that persisted item with a replay-specific event id
+and does not reset the sequence cursor. In read-only mode, divedra records a
+skipped receipt and state for the current item without dispatching and without
+advancing the durable cursor.
+
 Chat event bindings can use `execution.mode: "schedule-registration"` to run a
 resolver workflow that returns a structured schedule decision. Ready decisions
 are validated against the workflow catalog, persisted in the runtime database,

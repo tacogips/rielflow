@@ -20,6 +20,7 @@ import {
 } from "./validation-utils";
 import { validateMatrixSource } from "./validate-source-matrix";
 import { validateFileChangeSource } from "./validate-source-file-change";
+import { validateSequentialListSource } from "./validate-source-sequential-list";
 import {
   validateChatSdkBindingCapabilities,
   validateChatSdkSource,
@@ -56,6 +57,7 @@ const SUPPORTED_SOURCE_KINDS = new Set([
   "matrix",
   "webhook",
   "s3-repository",
+  "sequential-list",
 ]);
 
 function validateUniqueIds(
@@ -168,6 +170,7 @@ function validateSource(
   }
 
   validateFileChangeSource(source, issues);
+  validateSequentialListSource(source, issues);
 
   if (source.kind === "cron") {
     if (!isNonEmptyString(source["schedule"])) {

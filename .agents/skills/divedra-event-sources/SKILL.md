@@ -1,6 +1,6 @@
 ---
 name: divedra-event-sources
-description: Use when configuring, validating, emitting, serving, listing, replaying, or troubleshooting divedra external event sources. Applies to .divedra-events, events validate/emit/serve/list/replay, webhook/chat/cron bindings, event-to-workflow input mapping, supervised event execution, mock scenarios for events, and event receipt inspection.
+description: Use when configuring, validating, emitting, serving, listing, replaying, or troubleshooting divedra external event sources. Applies to .divedra-events, events validate/emit/serve/list/replay, webhook/chat/cron/sequential-list bindings, event-to-workflow input mapping, supervised event execution, mock scenarios for events, ordered prompt dispatch, and event receipt inspection.
 metadata:
   short-description: Use divedra event sources
 ---
@@ -10,10 +10,13 @@ metadata:
 Use this skill for event-driven workflow usage. For direct workflow execution use `divedra-workflow-run`.
 
 Supported local source kinds include webhook/chat, cron, Matrix, Chat SDK,
-S3 metadata bridge, and file-change directory watchers. `file-change` sources
-run under `events serve`, watch a configured directory, and emit
-`file.change.created`, `file.change.modified`, or `file.change.deleted` for
-enabled `changeTypes`.
+S3 metadata bridge, file-change directory watchers, and sequential instruction
+lists. `file-change` sources run under `events serve`, watch a configured
+directory, and emit `file.change.created`, `file.change.modified`, or
+`file.change.deleted` for enabled `changeTypes`. `sequential-list` sources run
+under `events serve`, emit one configured prompt entry at a time, and wait for
+the previous workflow execution or supervised run to reach a terminal state
+before dispatching the next entry.
 
 ## Common Flow
 
@@ -42,3 +45,4 @@ Read `references/events-runbook.md` for event roots, local fixtures, receipts, a
 - Do not combine local mock scenarios with remote `--endpoint`.
 - Use `DIVEDRA_EVENTS_READ_ONLY=true` or `--read-only` to validate and persist receipts without dispatch.
 - Use `events list` and `events replay` for operator receipt workflows.
+- For `sequential-list`, inspect sequence metadata in normalized receipts; `events replay <receipt-id>` replays one persisted item and does not reset the sequence cursor.

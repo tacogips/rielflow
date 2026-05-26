@@ -139,6 +139,52 @@ divedra events emit local-docs \
   --output json
 ```
 
+The `nightly-instruction-list` source demonstrates ordered prompt dispatch
+with `kind: "sequential-list"`. The source stores an ordered `entries` array;
+each entry has a stable `id`, a non-empty `prompt`, and optional JSON-object
+`metadata`. `events serve` emits one `sequential-list.item.ready` event for the
+first pending entry, waits until that item's workflow or supervised run reaches
+a terminal state, then emits the next entry. Restarting `events serve` resumes
+from the persisted cursor for the same source/config revision and does not
+rerun completed entries.
+
+```bash
+divedra events validate \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.divedra-events
+
+divedra events serve \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.divedra-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts
+```
+
+The binding `sequential-list-to-arithmetic` maps `event.input.prompt` into the
+workflow input and also passes `event.input.sequence`, which contains the
+source id, config revision id, run id, item id, index, total, and prior item
+references when available. Receipts are normal event receipts; inspect them
+with `events list` and replay one stored item without resetting the whole
+sequence:
+
+```bash
+divedra events list \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --source nightly-instruction-list \
+  --output json
+
+divedra events replay <receipt-id> \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.divedra-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --reason "replay one sequential-list item" \
+  --output json
+```
+
+Use `--read-only` or `DIVEDRA_EVENTS_READ_ONLY=true` with `events serve` to
+persist skipped receipts and sequence state without dispatching workflow
+executions. The durable cursor remains on the undispatched item so a later
+non-read-only serve can process it.
+
 The binding `chat-sdk-slack-schedule-registration` demonstrates chat-created
 workflow schedules. It listens only to conversation `schedule-demo`, runs the
 resolver workflow `dispatcher-llm-resolver-stub` at node `resolver-worker`, and

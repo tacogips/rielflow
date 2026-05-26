@@ -8,6 +8,40 @@ import type {
   ExternalEventEnvelope,
 } from "./types";
 import type { ScheduledEventManager } from "./scheduled-event-manager";
+import type { WorkflowTriggerResult } from "./trigger-runner";
+
+export interface EventSourceDispatchOutcome {
+  readonly receipts: readonly WorkflowTriggerResult[];
+}
+
+export type SequentialListTerminalStatus =
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "skipped";
+
+export interface SequentialListCompletionInput {
+  readonly sourceId: string;
+  readonly itemId: string;
+  readonly workflowExecutionId?: string;
+  readonly supervisedRunId?: string;
+  readonly supervisorExecutionId?: string;
+  readonly signal: AbortSignal;
+}
+
+export interface SequentialListTerminalResult {
+  readonly status: SequentialListTerminalStatus;
+  readonly workflowExecutionId?: string;
+  readonly supervisedRunId?: string;
+  readonly supervisorExecutionId?: string;
+  readonly error?: string;
+}
+
+export interface SequentialListCompletionObserver {
+  waitForTerminal(
+    input: SequentialListCompletionInput,
+  ): Promise<SequentialListTerminalResult>;
+}
 
 export interface RawExternalEvent {
   readonly sourceId: string;
@@ -30,13 +64,16 @@ export interface EventSourceStartInput {
   readonly dispatch: (
     event: ExternalEventEnvelope,
     raw?: unknown,
-  ) => Promise<void>;
+  ) => Promise<EventSourceDispatchOutcome> | Promise<void>;
   readonly signal: AbortSignal;
   readonly now: () => Date;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly fetchImpl?: typeof fetch;
   readonly diagnosticSink?: EventSourceDiagnosticSink;
   readonly scheduledEventManager?: ScheduledEventManager;
+  readonly eventDataRoot?: string;
+  readonly readOnly?: boolean;
+  readonly sequentialListCompletionObserver?: SequentialListCompletionObserver;
 }
 
 export interface EventSourceHandle {

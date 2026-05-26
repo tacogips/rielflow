@@ -21,7 +21,9 @@ import {
   type EventSourceRateLimiter,
 } from "./source-rate-limit";
 import { createScheduledEventManager } from "./scheduled-event-manager";
+import { createSequentialListCompletionObserver } from "./sequential-list-completion";
 import { createWorkflowScheduleDispatcher } from "./workflow-schedule-dispatch";
+import { resolveRootDataDir } from "../workflow/paths";
 import type {
   EventSourceAdapter,
   EventSourceDiagnostic,
@@ -366,6 +368,8 @@ export function createEventListenerService(
         scheduledEventManager,
       };
       const runner = createWorkflowTriggerRunner(triggerOptions);
+      const sequentialListCompletionObserver =
+        createSequentialListCompletionObserver(triggerOptions);
       const handles: Awaited<ReturnType<EventSourceAdapter["start"]>>[] = [];
       const routes: EventHttpRoute[] = [];
       let server: EventListenerServer | undefined;
@@ -401,8 +405,11 @@ export function createEventListenerService(
                   : { fetchImpl: options.fetchImpl }),
                 diagnosticSink: writeEventSourceDiagnostic,
                 scheduledEventManager,
+                eventDataRoot: resolveRootDataDir(options),
+                readOnly: options.readOnly === true,
+                sequentialListCompletionObserver,
                 dispatch: async (event, raw) => {
-                  await dispatchEventToMatchingBindings(
+                  const receipts = await dispatchEventToMatchingBindings(
                     {
                       configuration,
                       event,
@@ -411,6 +418,7 @@ export function createEventListenerService(
                     },
                     triggerOptions,
                   );
+                  return { receipts };
                 },
               }),
             );

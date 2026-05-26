@@ -3,6 +3,7 @@ import { createChatSdkEventSourceAdapter } from "./adapters/chat-sdk";
 import { createFileChangeEventSourceAdapter } from "./adapters/file-change";
 import { createMatrixEventSourceAdapter } from "./adapters/matrix";
 import { createS3RepositoryEventSourceAdapter } from "./adapters/s3-repository";
+import { createSequentialListEventSourceAdapter } from "./adapters/sequential-list";
 import { createWebhookEventSourceAdapter } from "./adapters/webhook";
 import type { EventSourceAdapter } from "./source-adapter";
 
@@ -44,6 +45,7 @@ export function createDefaultEventSourceRegistry(): EventSourceRegistry {
   registry.register(createCronEventSourceAdapter());
   registry.register(createFileChangeEventSourceAdapter());
   registry.register(createMatrixEventSourceAdapter());
+  registry.register(createSequentialListEventSourceAdapter());
   registry.register(createWebhookEventSourceAdapter());
   registry.register(createS3RepositoryEventSourceAdapter());
   return registry;
