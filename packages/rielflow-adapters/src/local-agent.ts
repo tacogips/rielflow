@@ -153,6 +153,7 @@ export function buildLocalAdapterOutput(
     return {
       provider: options.provider,
       model: input.node.model,
+      ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
       promptText: options.promptText,
       completionPassed: true,
       when: ALWAYS_TRUE_WHEN,
@@ -178,6 +179,7 @@ export function buildLocalAdapterOutput(
   return {
     provider: options.provider,
     model: input.node.model,
+    ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
     promptText: options.promptText,
     completionPassed: normalizedPayload.completionPassed,
     when: normalizedPayload.when,

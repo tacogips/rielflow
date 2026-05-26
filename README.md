@@ -396,6 +396,10 @@ step id, so every step that references the node sees the same invocation-local
 settings. Patch values may contain only `executionBackend`, `model`, and
 `effort`; unsupported effort values and invalid backend/model combinations fail
 validation against the patched workflow state.
+For `codex-agent` nodes, authored or patched `effort` values of `low`,
+`medium`, `high`, or `xhigh` are mapped to Codex
+`model_reasoning_effort` config overrides and are reported with the effective
+model in runtime output artifacts.
 
 Run with a deterministic mock scenario:
 

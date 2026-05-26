@@ -118,6 +118,7 @@ export interface AdapterOutputPublicationPolicy {
 export interface AdapterExecutionOutput {
   readonly provider: string;
   readonly model: string;
+  readonly effort?: string;
   readonly promptText: string;
   readonly completionPassed: boolean;
   readonly when: Readonly<Record<string, boolean>>;

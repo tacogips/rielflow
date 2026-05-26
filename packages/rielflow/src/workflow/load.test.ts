@@ -170,6 +170,27 @@ describe("loadWorkflowFromDisk", () => {
     expect(readFileSync(workerPath, "utf8")).toBe(workerBefore);
   });
 
+  test("applies codex effort in node patches", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
+
+    const result = await loadWorkflowFromDisk("demo", {
+      workflowRoot,
+      nodePatch: {
+        worker: { effort: "high" },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "codex-agent",
+      effort: "high",
+    });
+  });
+
   test("rejects unknown node ids and unsupported effort in node patches", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
@@ -178,7 +199,7 @@ describe("loadWorkflowFromDisk", () => {
       workflowRoot,
       nodePatch: {
         missing: { model: "gpt-5.5" },
-        worker: { effort: "high" },
+        worker: { executionBackend: "cursor-cli-agent", effort: "high" },
       },
     });
     expect(result.ok).toBe(false);

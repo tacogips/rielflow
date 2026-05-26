@@ -8,6 +8,14 @@ export type NodeExecutionBackend =
   | "official/openai-sdk"
   | "official/anthropic-sdk";
 
+export const NODE_REASONING_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+export type NodeReasoningEffort = (typeof NODE_REASONING_EFFORTS)[number];
+
 export const NODE_EXECUTION_BACKEND = {
   CODEX_AGENT: "codex-agent",
   CLAUDE_CODE_AGENT: "claude-code-agent",
@@ -495,6 +503,7 @@ export interface NodePayload {
   readonly workingDirectory?: string;
   readonly model?: string;
   readonly executionBackend?: NodeExecutionBackend;
+  readonly effort?: NodeReasoningEffort;
   readonly sessionPolicy?: NodeSessionPolicy;
   readonly systemPromptTemplate?: string;
   readonly systemPromptTemplateFile?: string;

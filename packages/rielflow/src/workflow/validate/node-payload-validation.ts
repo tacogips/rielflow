@@ -3,11 +3,13 @@ import {
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
 } from "../backend";
+import { NODE_REASONING_EFFORTS } from "../types";
 import type {
   ArgumentBinding,
   NodeExecutionBackend,
   NodePayload,
   NodePromptVariant,
+  NodeReasoningEffort,
   NodeRole,
   NodeSessionPolicy,
   NodeType,
@@ -34,6 +36,7 @@ import {
   readStringField,
   requiresSeparatedModel,
 } from "./validation-types-and-runtime-options";
+
 import {
   normalizeContainerExecution,
   normalizeNodeDurability,
@@ -42,6 +45,10 @@ import {
   normalizeNodePromptVariants,
   normalizeNodeTemplateFields,
 } from "./workflow-normalization";
+
+const NODE_REASONING_EFFORT_SET: ReadonlySet<string> = new Set(
+  NODE_REASONING_EFFORTS,
+);
 import {
   normalizeNodeInputContract,
   normalizeNodeOutputContract,
@@ -113,6 +120,14 @@ function normalizeSleepNodeConfig(
     ...(durationMs === undefined ? {} : { durationMs }),
     ...(until === undefined ? {} : { until }),
   };
+}
+
+function normalizeReasoningEffort(
+  value: string,
+): NodeReasoningEffort | undefined {
+  return NODE_REASONING_EFFORT_SET.has(value)
+    ? (value as NodeReasoningEffort)
+    : undefined;
 }
 
 export function normalizeNodePayload(input: {
@@ -259,6 +274,33 @@ export function normalizeNodePayload(input: {
         `${path}.model`,
         `must be a provider or backend-specific model name when executionBackend is '${executionBackend}', not a tacogips CLI-wrapper identifier`,
       ),
+    );
+  }
+
+  const effortRaw = payload["effort"];
+  let effort: NodeReasoningEffort | undefined;
+  if (typeof effortRaw === "string" && effortRaw.length > 0) {
+    effort = normalizeReasoningEffort(effortRaw);
+    if (effort === undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.effort`,
+          `must be one of ${NODE_REASONING_EFFORTS.join(", ")}`,
+        ),
+      );
+    } else if (executionBackend !== "codex-agent") {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.effort`,
+          `is not supported for executionBackend '${executionBackend ?? "unknown"}'`,
+        ),
+      );
+    }
+  } else if (effortRaw !== undefined) {
+    issues.push(
+      makeIssue("error", `${path}.effort`, "must be a non-empty string"),
     );
   }
 
@@ -728,6 +770,7 @@ export function normalizeNodePayload(input: {
     ...(workingDirectory === undefined ? {} : { workingDirectory }),
     ...(model === undefined ? {} : { model }),
     ...(executionBackend === undefined ? {} : { executionBackend }),
+    ...(effort === undefined ? {} : { effort }),
     ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
     ...(systemPromptTemplate === undefined ? {} : { systemPromptTemplate }),
     ...(systemPromptTemplateFile === undefined

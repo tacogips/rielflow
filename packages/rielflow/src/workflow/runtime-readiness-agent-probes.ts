@@ -508,10 +508,12 @@ async function probeCodexNodeExecutability(
       candidate,
       "codex-agent plan mode is not applicable unless a backend-specific plan field is authored",
     ),
-    notApplicableResult(
+    resultForCandidate({
       candidate,
-      "codex-agent reasoning effort is not applicable because the inspected adapter exposes no effort field",
-    ),
+      status: "valid",
+      message:
+        "codex-agent reasoning effort is supported through model_reasoning_effort config overrides",
+    }),
     notApplicableResult(
       candidate,
       "codex-agent mode options use adapter configuration; no per-node mode field is authored",

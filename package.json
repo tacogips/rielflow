@@ -48,7 +48,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
     "claude-code-agent": "github:tacogips/claude-code-agent#6dfbf30d0369d18e72c8c81a6143385f5bb68426",
-    "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
+    "codex-agent": "github:tacogips/codex-agent#f92afce1a1b691d45bb3fa05c476e744efa84d8f",
     "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",

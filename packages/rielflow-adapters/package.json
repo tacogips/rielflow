@@ -20,10 +20,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
     "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
-    "codex-agent": "github:tacogips/codex-agent#05f4e9d7f316f29e7cdf148ce3cbd970ab9fb1f7",
+    "codex-agent": "github:tacogips/codex-agent#f92afce1a1b691d45bb3fa05c476e744efa84d8f",
     "cursor-cli-agent": "github:tacogips/cursor-cli-agent#ba633b0081f8889c8727e324e5beb28e37966fe0",
-    "rielflow-core": "workspace:*",
-    "openai": "6.27.0"
+    "openai": "6.27.0",
+    "rielflow-core": "workspace:*"
   },
   "license": "MIT"
 }
