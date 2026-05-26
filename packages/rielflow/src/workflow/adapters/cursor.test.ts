@@ -184,6 +184,33 @@ describe("CursorCliAgentAdapter", () => {
     expect(createRunner).toHaveBeenCalledTimes(1);
   });
 
+  test("forwards node effort to the Cursor runner", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          model: "gpt-5.3-codex",
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(output.effort).toBe("high");
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-5.3-codex",
+        effort: "high",
+      }),
+    );
+  });
+
   test("falls back to rawText when displayText is empty", async () => {
     const sessionId = "cursor-session-raw";
     const startSession = makeMockCursorSession({

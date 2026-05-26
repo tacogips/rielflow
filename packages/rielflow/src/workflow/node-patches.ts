@@ -305,7 +305,11 @@ function normalizeReasoningEffort(
 }
 
 function supportsReasoningEffort(backend: string | undefined): boolean {
-  return backend === "codex-agent";
+  return (
+    backend === "codex-agent" ||
+    backend === "claude-code-agent" ||
+    backend === "cursor-cli-agent"
+  );
 }
 
 export function applyWorkflowNodePatchToRawPayloads(

@@ -191,7 +191,7 @@ describe("loadWorkflowFromDisk", () => {
     });
   });
 
-  test("rejects unknown node ids and unsupported effort in node patches", async () => {
+  test("rejects unknown node ids and unsupported SDK effort in node patches", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
 
@@ -199,7 +199,7 @@ describe("loadWorkflowFromDisk", () => {
       workflowRoot,
       nodePatch: {
         missing: { model: "gpt-5.5" },
-        worker: { executionBackend: "cursor-cli-agent", effort: "high" },
+        worker: { executionBackend: "official/openai-sdk", effort: "high" },
       },
     });
     expect(result.ok).toBe(false);

@@ -289,7 +289,11 @@ export function normalizeNodePayload(input: {
           `must be one of ${NODE_REASONING_EFFORTS.join(", ")}`,
         ),
       );
-    } else if (executionBackend !== "codex-agent") {
+    } else if (
+      executionBackend !== "codex-agent" &&
+      executionBackend !== "claude-code-agent" &&
+      executionBackend !== "cursor-cli-agent"
+    ) {
       issues.push(
         makeIssue(
           "error",
