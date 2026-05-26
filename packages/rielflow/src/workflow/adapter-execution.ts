@@ -11,6 +11,7 @@ import type { NodeExecutionMailbox } from "./node-execution-mailbox";
 import { loadRuntimeSessionSummary } from "./runtime-db";
 import { err, ok, type Result } from "./result";
 import { formatSupervisionStallError } from "./superviser";
+import { withTelemetryResultSpan } from "../telemetry";
 import type {
   ChatReplyDispatcher,
   NodePayload,
@@ -328,6 +329,34 @@ export async function executeAdapterWithTimeout(
   timeoutMs: number,
   supervisionStall?: SupervisionStallWatch,
 ): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
+  return await withTelemetryResultSpan(
+    "rielflow.adapter.execute",
+    {
+      "workflow.id": input.workflowId,
+      "workflow.execution.id": input.workflowExecutionId,
+      "node.id": input.nodeId,
+      "node.exec.id": input.nodeExecId,
+      "agent.backend": input.node.executionBackend,
+      "agent.model": input.node.model,
+      "agent.backend.session.mode": input.backendSession?.mode,
+      "agent.backend.session.id": input.backendSession?.sessionId,
+    },
+    async () =>
+      await executeAdapterWithTimeoutInternal(
+        adapter,
+        input,
+        timeoutMs,
+        supervisionStall,
+      ),
+  );
+}
+
+async function executeAdapterWithTimeoutInternal(
+  adapter: NodeAdapter,
+  input: AdapterExecutionInput,
+  timeoutMs: number,
+  supervisionStall?: SupervisionStallWatch,
+): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
   const timeoutMessage = "adapter execution timed out";
   const timeout = createRejectingExecutionTimeout({
     timeoutMs,
@@ -362,6 +391,26 @@ export async function executeAdapterWithTimeout(
 }
 
 export async function executePackageNodeWithTimeout(
+  input: PackageNodeExecutionInput & {
+    readonly timeoutMs: number;
+    readonly supervisionStall?: SupervisionStallWatch;
+  },
+  dependencies: PackageNodeExecutionDependencies = {},
+): Promise<Result<AdapterExecutionOutput, AdapterExecutionFailure>> {
+  return await withTelemetryResultSpan(
+    "rielflow.native_node.execute",
+    {
+      "workflow.id": input.workflowId,
+      "workflow.execution.id": input.workflowExecutionId,
+      "node.id": input.nodeId,
+      "node.exec.id": input.nodeExecId,
+      "node.type": input.node.nodeType ?? "agent",
+    },
+    async () => await executePackageNodeWithTimeoutInternal(input, dependencies),
+  );
+}
+
+async function executePackageNodeWithTimeoutInternal(
   input: PackageNodeExecutionInput & {
     readonly timeoutMs: number;
     readonly supervisionStall?: SupervisionStallWatch;

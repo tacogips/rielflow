@@ -24,6 +24,7 @@ import { createScheduledEventManager } from "./scheduled-event-manager";
 import { createSequentialListCompletionObserver } from "./sequential-list-completion";
 import { createWorkflowScheduleDispatcher } from "./workflow-schedule-dispatch";
 import { resolveRootDataDir } from "../workflow/paths";
+import type { WorkflowTelemetryOptions } from "../telemetry";
 import type {
   EventSourceAdapter,
   EventSourceDiagnostic,
@@ -41,6 +42,7 @@ export interface EventListenerServeOptions
     WorkflowTriggerRunnerOptions {
   readonly host?: string;
   readonly port?: number;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface EventListenerHandle {
@@ -213,6 +215,29 @@ export async function handleEventHttpRequest(
     readonly now: () => Date;
   },
 ): Promise<Response> {
+  const { withTelemetrySpan } = await import("../telemetry");
+  return await withTelemetrySpan(
+    "rielflow.events.http",
+    {
+      "http.method": request.method,
+      "http.route": new URL(request.url).pathname,
+    },
+    async () => await handleEventHttpRequestInternal(request, input),
+  );
+}
+
+async function handleEventHttpRequestInternal(
+  request: Request,
+  input: {
+    readonly configuration: EventConfiguration;
+    readonly routes: readonly EventHttpRoute[];
+    readonly triggerOptions: WorkflowTriggerRunnerOptions;
+    readonly registry?: EventSourceRegistry;
+    readonly rateLimiter?: EventSourceRateLimiter;
+    readonly env: Readonly<Record<string, string | undefined>>;
+    readonly now: () => Date;
+  },
+): Promise<Response> {
   if (request.method !== "POST") {
     return json({ error: "event endpoint only supports POST" }, 405);
   }
@@ -333,6 +358,32 @@ export function createEventListenerService(
     async start(
       options: EventListenerServeOptions,
     ): Promise<EventListenerHandle> {
+      const { initializeWorkflowTelemetry, withTelemetrySpan } = await import(
+        "../telemetry"
+      );
+      initializeWorkflowTelemetry({
+        ...(options.telemetry === undefined
+          ? {}
+          : { options: options.telemetry }),
+        ...(options.env === undefined ? {} : { env: options.env }),
+      });
+      return await withTelemetrySpan(
+        "rielflow.events.serve.start",
+        {
+          "events.host": options.host,
+          "events.port": options.port,
+        },
+        async () => await startEventListener(options, registry, runtime),
+      );
+    },
+  };
+}
+
+async function startEventListener(
+  options: EventListenerServeOptions,
+  registry: EventSourceRegistry,
+  runtime: EventListenerRuntime,
+): Promise<EventListenerHandle> {
       const validation = await loadAndValidateEventConfiguration(options);
       if (!validation.valid) {
         throw new Error(
@@ -473,6 +524,4 @@ export function createEventListenerService(
         }).catch(() => {});
         throw error;
       }
-    },
-  };
 }

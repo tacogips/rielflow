@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ScheduledEventManager } from "../../events/scheduled-event-manager";
+import type { WorkflowTelemetryOptions } from "../../telemetry";
 import type { AutoImprovePolicyInput } from "../auto-improve-policy";
 import type { FanoutStepBudget } from "../engine-fanout";
 import { err, ok, type Result } from "../result";
@@ -127,6 +128,8 @@ export interface WorkflowRunOptions
   readonly fanoutStepBudget?: FanoutStepBudget;
   /** Best-effort local progress notifications for explicit debug consumers. */
   readonly onProgress?: (event: WorkflowRunProgressEvent) => void;
+  /** Process startup telemetry controls; message export defaults to false. */
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 export type NormalizedWorkflowRunOptions = Omit<
   WorkflowRunOptions,

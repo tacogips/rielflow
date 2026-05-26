@@ -5,6 +5,7 @@ import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type { ChatReplyDispatcher, LoadOptions } from "rielflow-core";
 import { normalizeWorkflowWorkingDirectoryOverride } from "rielflow-core";
 import { createLifecycleSupervisionPolicyInput } from "./workflow/auto-improve-policy";
+import type { WorkflowTelemetryOptions } from "./telemetry";
 
 export interface LibraryWorkflowRunOptionsInput
   extends LoadOptions,
@@ -18,6 +19,7 @@ export interface LibraryWorkflowRunOptionsInput
   readonly dryRun?: boolean;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
   readonly nestedSuperviserDriver?: boolean;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface BuildLibraryWorkflowRunOptionsConfig {
@@ -252,5 +254,6 @@ export function buildLibraryWorkflowRunOptions(
     ...(input.nestedSuperviserDriver === true
       ? { nestedSuperviserDriver: true as const }
       : {}),
+    ...(input.telemetry === undefined ? {} : { telemetry: input.telemetry }),
   };
 }

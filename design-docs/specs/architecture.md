@@ -1757,6 +1757,104 @@ adapter/package boundary. Cursor CLI behavior, if present, remains isolated in
 the Cursor adapter and must not influence release artifact layout or Homebrew
 formula behavior.
 
+### OpenTelemetry Runtime Instrumentation
+
+Rielflow should support coarse OpenTelemetry tracing for workflow execution,
+server/control-plane entrypoints, backend adapter calls, and mailbox handoff
+without making tracing a required runtime dependency for ordinary local use.
+The tracing boundary is lifecycle visibility, not instruction-level or
+template-level debugging. Instrumentation should describe when a workflow,
+step, node execution, backend invocation, communication delivery, replay, or
+GraphQL/server operation starts and ends, plus stable identifiers needed to
+correlate runtime artifacts.
+
+The first implementation slice should use standard OpenTelemetry environment
+configuration for exporter behavior and add only Rielflow-specific privacy
+configuration where the generic OpenTelemetry surface has no product semantics.
+Telemetry startup is process-wide and should be initialized once by CLI,
+library, and server entrypoints before workflow execution begins. If telemetry
+is disabled or no exporter endpoint is configured, runtime wrappers should be
+cheap no-ops and must not affect workflow outcomes.
+
+Required coarse span boundaries:
+
+- `workflow run` / `executeWorkflow` / `runWorkflow`: one root span per workflow
+  execution attempt with `workflowId`, `workflowExecutionId`, resolved workflow
+  source, and terminal status attributes
+- `session resume`, `session rerun`, `call-step`, and GraphQL mutations such as
+  `executeWorkflow` and `rerunWorkflowExecution`: entrypoint spans that link to
+  the workflow execution span when the execution id is known
+- step/node execution in `packages/rielflow/src/workflow/engine/` and
+  `packages/rielflow/src/workflow/call-step-impl/`: one span per executable
+  step invocation with `stepId`, reusable `nodeId`, `nodeExecId`,
+  `mailboxInstanceId`, backend name, status, retry/resume flags when present,
+  and duration
+- backend adapter execution under `packages/rielflow/src/workflow/adapters/`:
+  one child span per adapter call with backend, model, command/session metadata
+  safe for export, and error status
+- communication and mailbox handoff in
+  `packages/rielflow/src/workflow/communication-service.ts`,
+  `packages/rielflow/src/workflow/communication-artifact-persistence.ts`, and
+  `packages/rielflow/src/workflow/node-execution-mailbox.ts`: spans or span
+  events for communication creation, delivery, replay, retry, consumption, and
+  execution-local mailbox preparation
+- server and GraphQL control-plane handling in `packages/rielflow-server/src/`
+  and `packages/rielflow-graphql/src/`: request spans with operation names,
+  workflow/session identifiers when available, and no raw GraphQL variables by
+  default
+
+Privacy is part of the telemetry contract. By default, spans must not export
+raw inbox/outbox message content, prompt text, model output, manager messages,
+GraphQL variables, attachment content, file contents, secrets, tokens,
+authorization headers, or command stdout/stderr. The default attribute set is
+metadata-only: ids, statuses, timestamps/durations, counts, byte lengths,
+artifact-relative paths, backend/model names, and sanitized error classes or
+messages. The library option `WorkflowTelemetryOptions.exportMessages` and the
+process environment variable `RIELFLOW_OTEL_EXPORT_MESSAGES` may explicitly opt
+into exporting inbox/outbox message bodies for trusted local debugging. The
+legacy alias `DIVEDRA_OTEL_EXPORT_MESSAGES` may be accepted during the product
+rename transition. Even when message export is enabled, secret redaction must
+still run before attributes are emitted, and large payloads should be
+size-limited.
+
+Data flow:
+
+1. Entry points parse telemetry configuration from the process environment and
+   optional library/server options.
+2. A shared telemetry module owns tracer/provider setup, shutdown, attribute
+   redaction, and no-op fallback behavior.
+3. Runtime services receive the shared telemetry context through existing
+   execution options or module-level helpers, then create spans only at coarse
+   lifecycle boundaries.
+4. Mailbox and communication instrumentation records payload metadata by
+   default and includes message content only when the explicit startup opt-in is
+   true.
+5. Jaeger verification uses Docker Compose to start a local collector/UI and an
+   OTLP endpoint. A sample workflow run should create traces visible in Jaeger
+   without changing the workflow bundle.
+
+The local Jaeger setup is a development verification aid, not a production
+runtime requirement. The repository-owned `docker-compose.jaeger.yml` file
+should define a `jaeger` service exposing the Jaeger UI and OTLP collector
+ports. Verification commands should start Jaeger with
+`docker compose -f docker-compose.jaeger.yml up -d`, run a workflow with
+`OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the local collector, inspect service
+status with `docker compose -f docker-compose.jaeger.yml ps`, and confirm
+traces through the UI or Jaeger API where practical before cleanup with
+`docker compose -f docker-compose.jaeger.yml down`.
+
+Codex-agent reference mapping: Step 1 inspected
+`/Users/taco/gits/tacogips/codex-agent` and
+`/Users/taco/gits/tacogips/worktrees/codex-agent` for OpenTelemetry, OTEL,
+telemetry, trace, and Jaeger behavior. No relevant implementation was found in
+either reference root. The relative default `../../codex-agent` is not the
+effective reference root for this worktree; later planning should use the
+absolute paths above when citing the Codex-agent audit trail. Codex-agent
+therefore remains only the worker backend identity included in telemetry
+attributes such as `agent.backend = "codex-agent"`. No Codex-reference behavior
+is being copied, and Cursor CLI behavior remains isolated behind any existing
+Cursor adapter.
+
 ## Current Limitations
 
 - the main runtime remains queue-based; the local `call-step` path is not the whole orchestration model

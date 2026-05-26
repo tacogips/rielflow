@@ -44,6 +44,7 @@ import { loadSession, type SessionStoreOptions } from "rielflow-core";
 import type { WorkflowSessionState } from "rielflow-core";
 import type { MockNodeScenario } from "./workflow/scenario-adapter";
 import type { ChatReplyDispatcher, LoadOptions } from "rielflow-core";
+import type { WorkflowTelemetryOptions } from "./telemetry";
 import {
   buildLibraryWorkflowRunOptions,
   buildLocalWorkflowExecutionRequestProjection,
@@ -77,6 +78,7 @@ export interface ExecuteWorkflowInput extends RielflowOptions {
    * `--superviser-workflow` / `--nested-superviser`).
    */
   readonly nestedSuperviserDriver?: boolean;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface ResumeWorkflowInput extends RielflowOptions {
@@ -90,6 +92,7 @@ export interface ResumeWorkflowInput extends RielflowOptions {
    * nested superviser workflow (requires the same `autoImprove` policy shape as the original run).
    */
   readonly nestedSuperviserDriver?: boolean;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface RerunWorkflowInput extends RielflowOptions {
@@ -104,6 +107,7 @@ export interface RerunWorkflowInput extends RielflowOptions {
   readonly defaultTimeoutMs?: number;
   readonly dryRun?: boolean;
   readonly autoImprove?: AutoImprovePolicyInput;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface WorkflowExecutionClientOptions extends RielflowOptions {
@@ -113,6 +117,7 @@ export interface WorkflowExecutionClientOptions extends RielflowOptions {
   readonly managerSessionId?: string;
   readonly fetchImpl?: typeof fetch;
   readonly eventReplyDispatcher?: ChatReplyDispatcher;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export interface WorkflowExecutionClientRequest {
@@ -733,6 +738,13 @@ export { runCli } from "./cli";
 export { startServe } from "./server/serve";
 export { handleApiRequest } from "./server/api";
 export { handleGraphqlRequest, executeGraphqlDocument } from "./server/graphql";
+export {
+  getWorkflowTelemetry,
+  initializeWorkflowTelemetry,
+  resolveWorkflowTelemetryConfig,
+  type ResolvedWorkflowTelemetryConfig,
+  type WorkflowTelemetryOptions,
+} from "./telemetry";
 export { createGraphqlSchema, executeGraphqlRequest };
 export {
   resolveRuntimeDbPath,

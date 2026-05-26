@@ -1,6 +1,7 @@
 import net from "node:net";
 import { handleApiRequest, type ApiContext } from "./api";
 import { loadWorkflowManifest } from "../workflow/manifest";
+import { initializeWorkflowTelemetry, withTelemetrySpan } from "../telemetry";
 
 export interface ServeStartOptions extends ApiContext {
   readonly host?: string;
@@ -74,6 +75,21 @@ async function reserveEphemeralPort(host: string): Promise<number> {
 }
 
 export async function startServe(
+  options: ServeStartOptions = {},
+  runtime: ServeRuntime = DEFAULT_RUNTIME,
+): Promise<StartedServe> {
+  initializeWorkflowTelemetry({
+    ...(options.telemetry === undefined ? {} : { options: options.telemetry }),
+    ...(options.env === undefined ? {} : { env: options.env }),
+  });
+  return await withTelemetrySpan(
+    "rielflow.server.start",
+    { "server.kind": "serve", "server.host": options.host, "server.port": options.port },
+    async () => await startServeInternal(options, runtime),
+  );
+}
+
+async function startServeInternal(
   options: ServeStartOptions = {},
   runtime: ServeRuntime = DEFAULT_RUNTIME,
 ): Promise<StartedServe> {

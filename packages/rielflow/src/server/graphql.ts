@@ -4,6 +4,7 @@ import type {
   GraphqlSchemaDependencies,
 } from "../graphql/types";
 import { GRAPHQL_MANAGER_SESSION_HEADER } from "../graphql/transport";
+import { withTelemetrySpan } from "../telemetry";
 import { stripAmbientManagerExecutionContext } from "../workflow/manager-session-store";
 import { createExecutableGraphqlSchema } from "./graphql-executable-schema";
 
@@ -192,32 +193,57 @@ export async function executeGraphqlDocument(
     readonly deps?: GraphqlSchemaDependencies;
   } = {},
 ): Promise<unknown> {
-  const request = createGraphqlPostRequest("http://127.0.0.1/graphql", {
-    query: document,
-    variables: options.variables ?? {},
-    ...(options.operationName === undefined
-      ? {}
-      : { operationName: options.operationName }),
-  });
-  const response = await createGraphqlYogaServer(options.deps).fetch(
-    request,
-    context,
-  );
-  const payload = parseGraphqlExecutionResult(
-    (await response.json()) as unknown,
-  );
+  return await withTelemetrySpan(
+    "rielflow.graphql.execute",
+    {
+      "graphql.operation.name": options.operationName ?? "anonymous",
+      "workflow.name": context.fixedWorkflowName,
+      "graphql.variables.count": Object.keys(options.variables ?? {}).length,
+    },
+    async () => {
+      const request = createGraphqlPostRequest("http://127.0.0.1/graphql", {
+        query: document,
+        variables: options.variables ?? {},
+        ...(options.operationName === undefined
+          ? {}
+          : { operationName: options.operationName }),
+      });
+      const response = await createGraphqlYogaServer(options.deps).fetch(
+        request,
+        context,
+      );
+      const payload = parseGraphqlExecutionResult(
+        (await response.json()) as unknown,
+      );
 
-  if (payload.errors !== undefined && payload.errors.length > 0) {
-    const [firstError] = payload.errors;
-    if (firstError !== undefined) {
-      throw new Error(firstError.message);
-    }
-  }
+      if (payload.errors !== undefined && payload.errors.length > 0) {
+        const [firstError] = payload.errors;
+        if (firstError !== undefined) {
+          throw new Error(firstError.message);
+        }
+      }
 
-  return payload.data ?? null;
+      return payload.data ?? null;
+    },
+  );
 }
 
 export async function handleGraphqlRequest(
+  request: Request,
+  context: GraphqlRequestContext,
+  deps: GraphqlSchemaDependencies = {},
+): Promise<Response> {
+  return await withTelemetrySpan(
+    "rielflow.graphql.http",
+    {
+      "http.method": request.method,
+      "workflow.name": context.fixedWorkflowName,
+    },
+    async () => await handleGraphqlRequestInternal(request, context, deps),
+  );
+}
+
+async function handleGraphqlRequestInternal(
   request: Request,
   context: GraphqlRequestContext,
   deps: GraphqlSchemaDependencies = {},

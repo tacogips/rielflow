@@ -272,21 +272,42 @@ export interface CreateCommunicationInput {
 export async function persistCommunicationArtifact(
   input: CreateCommunicationInput,
 ): Promise<CommunicationRecord> {
-  const persisted = await persistDeliveredCommunicationArtifacts({
-    artifactWorkflowRoot: input.artifactWorkflowRoot,
-    workflowId: input.workflowId,
-    workflowExecutionId: input.workflowExecutionId,
-    communicationCounter: input.communicationCounter,
-    fromNodeId: input.fromNodeId,
-    toNodeId: input.toNodeId,
-    routingScope: input.routingScope,
-    sourceNodeExecId: input.sourceNodeExecId,
-    deliveryKind: input.deliveryKind,
-    payloadRef: input.payloadRef,
-    outputRaw: input.outputRaw,
-    deliveredByNodeId: input.deliveredByNodeId,
-    createdAt: input.createdAt,
-  });
+  const { getWorkflowTelemetry, messagePayloadTelemetryAttributes } =
+    await import("../../telemetry");
+  const telemetry = getWorkflowTelemetry();
+  const persisted = await telemetry.startSpan(
+    "rielflow.communication.deliver",
+    {
+      "workflow.id": input.workflowId,
+      "workflow.execution.id": input.workflowExecutionId,
+      "communication.from_node.id": input.fromNodeId,
+      "communication.to_node.id": input.toNodeId,
+      "communication.routing_scope": input.routingScope,
+      "communication.delivery_kind": input.deliveryKind,
+      "communication.source_node_exec.id": input.sourceNodeExecId,
+      ...messagePayloadTelemetryAttributes({
+        key: "communication.output",
+        value: input.outputRaw,
+        exportMessages: telemetry.config.exportMessages,
+      }),
+    },
+    async () =>
+      await persistDeliveredCommunicationArtifacts({
+        artifactWorkflowRoot: input.artifactWorkflowRoot,
+        workflowId: input.workflowId,
+        workflowExecutionId: input.workflowExecutionId,
+        communicationCounter: input.communicationCounter,
+        fromNodeId: input.fromNodeId,
+        toNodeId: input.toNodeId,
+        routingScope: input.routingScope,
+        sourceNodeExecId: input.sourceNodeExecId,
+        deliveryKind: input.deliveryKind,
+        payloadRef: input.payloadRef,
+        outputRaw: input.outputRaw,
+        deliveredByNodeId: input.deliveredByNodeId,
+        createdAt: input.createdAt,
+      }),
+  );
 
   const communication: CommunicationRecord = {
     workflowId: input.workflowId,

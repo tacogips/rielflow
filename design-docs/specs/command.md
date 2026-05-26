@@ -396,8 +396,51 @@ may generate a file URL or locally patched formula for smoke testing.
 | `RIEL_EVENTS_PORT`             | No              | `43174` for `events serve`                      | Listen port for event listener HTTP routes                                                                                                                    |
 | `RIEL_EVENTS_ENABLED`          | No              | `false` for `serve`, `true` for `events serve`  | Enables event listener routes and schedulers                                                                                                                  |
 | `RIEL_EVENTS_READ_ONLY`        | No              | `false`                                         | Validates and records incoming events without dispatching workflow execution                                                                                  |
+| `OTEL_SDK_DISABLED`               | No              | OpenTelemetry SDK default                       | Standard OpenTelemetry switch for disabling telemetry setup in supported entrypoints                                                                          |
+| `OTEL_SERVICE_NAME`               | No              | `rielflow`                                      | Standard OpenTelemetry service name used for Rielflow process traces                                                                                          |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`     | No              | none                                            | Standard OTLP collector endpoint; local Jaeger verification should point this at the Docker Compose Jaeger collector                                           |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | No           | none                                            | Standard trace-specific OTLP collector endpoint; preferred over `OTEL_EXPORTER_OTLP_ENDPOINT` when both are set                                               |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`     | No              | SDK/exporter default                            | Standard OTLP protocol selector when the selected exporter package supports it                                                                                 |
+| `RIELFLOW_OTEL_ENABLED`           | No              | inferred from OTLP endpoint                     | Rielflow-specific override for enabling or disabling workflow telemetry setup                                                                                  |
+| `RIELFLOW_OTEL_SERVICE_NAME`      | No              | `rielflow`                                      | Rielflow-specific fallback service name when `OTEL_SERVICE_NAME` is unset                                                                                     |
+| `RIELFLOW_OTEL_EXPORT_MESSAGES`   | No              | `false`                                        | Rielflow-specific privacy opt-in; when `true`, inbox/outbox message bodies may be exported after redaction and size limits; when unset or `false`, only metadata is exported |
+| `DIVEDRA_OTEL_ENABLED`            | No              | inferred from OTLP endpoint                     | Legacy product-name alias for `RIELFLOW_OTEL_ENABLED` during the rename transition                                                                            |
+| `DIVEDRA_OTEL_EXPORT_MESSAGES`    | No              | `false`                                        | Legacy product-name alias for `RIELFLOW_OTEL_EXPORT_MESSAGES` during the rename transition                                                                    |
 | `RIEL_MATRIX_HOMESERVER_URL`   | Source-specific | none                                            | Example Matrix homeserver URL env var referenced by `kind: "matrix"` source config; operators may choose another env var name per source                      |
 | `RIEL_MATRIX_ACCESS_TOKEN`     | Source-specific | none                                            | Example Matrix bot access token env var referenced by `kind: "matrix"` source config; token values must not appear in authored config or runtime artifacts    |
+
+### Telemetry and Jaeger Verification
+
+Telemetry startup applies to `workflow run`, `session resume`, `session rerun`,
+`call-step`, `serve`, `events serve`, GraphQL execution, and library execution
+helpers. Operators should use standard OpenTelemetry environment variables for
+exporter selection and Rielflow-specific variables only for privacy behavior.
+No CLI command should require telemetry configuration to run.
+
+The first local verification path should be:
+
+1. start Jaeger with Docker Compose:
+   `docker compose -f docker-compose.jaeger.yml up -d`
+2. run a workflow with `OTEL_SERVICE_NAME=rielflow` and
+   `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the Compose Jaeger collector
+3. keep `RIELFLOW_OTEL_EXPORT_MESSAGES` unset for the default
+   privacy-preserving smoke test
+4. optionally rerun with `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only
+   against a trusted fixture whose inbox/outbox content is intentionally safe
+5. inspect Jaeger for workflow, step/node, adapter, GraphQL/server, and mailbox
+   handoff spans
+
+Verification commands for the implementation plan should include:
+
+- `bun run typecheck`
+- focused `bun test` targets for telemetry configuration, redaction, workflow
+  execution instrumentation, mailbox/communication instrumentation, and CLI or
+  library option propagation
+- `docker compose -f docker-compose.jaeger.yml up -d`
+- `docker compose -f docker-compose.jaeger.yml ps`
+- an example `bun run packages/rielflow/src/bin.ts workflow run ...` invocation
+  with `OTEL_EXPORTER_OTLP_ENDPOINT` configured
+- `docker compose -f docker-compose.jaeger.yml down`
 
 Workflow lookup resolution order:
 

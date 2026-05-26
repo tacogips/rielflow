@@ -18,6 +18,7 @@ import {
   initialDeliveryAttemptId,
   nextDeliveryAttemptId,
 } from "./runtime-execution-contracts";
+import { getWorkflowTelemetry } from "../telemetry";
 
 export interface CommunicationLookupInput {
   readonly workflowId: string;
@@ -263,7 +264,15 @@ export function createCommunicationService(
 ): CommunicationService {
   return {
     async getCommunication(input, options = {}) {
-      const loaded = await loadSession(input.workflowExecutionId, options);
+      return await getWorkflowTelemetry().startSpan(
+        "rielflow.communication.get",
+        {
+          "workflow.id": input.workflowId,
+          "workflow.execution.id": input.workflowExecutionId,
+          "communication.id": input.communicationId,
+        },
+        async () => {
+          const loaded = await loadSession(input.workflowExecutionId, options);
       if (!loaded.ok) {
         return null;
       }
@@ -283,8 +292,18 @@ export function createCommunicationService(
         ),
         artifactSnapshot: await loadCommunicationSnapshot(communication),
       };
+        },
+      );
     },
     async replayCommunication(input, options = {}) {
+      return await getWorkflowTelemetry().startSpan(
+        "rielflow.communication.replay",
+        {
+          "workflow.id": input.workflowId,
+          "workflow.execution.id": input.workflowExecutionId,
+          "communication.id": input.communicationId,
+        },
+        async () => {
       const now = deps.now?.() ?? new Date().toISOString();
       return await runIdempotentMutation({
         mutationName: "replayCommunication",
@@ -391,8 +410,18 @@ export function createCommunicationService(
           } satisfies ReplayCommunicationResult;
         },
       });
+        },
+      );
     },
     async retryCommunicationDelivery(input, options = {}) {
+      return await getWorkflowTelemetry().startSpan(
+        "rielflow.communication.retry_delivery",
+        {
+          "workflow.id": input.workflowId,
+          "workflow.execution.id": input.workflowExecutionId,
+          "communication.id": input.communicationId,
+        },
+        async () => {
       const now = deps.now?.() ?? new Date().toISOString();
       return await runIdempotentMutation({
         mutationName: "retryCommunicationDelivery",
@@ -519,6 +548,8 @@ export function createCommunicationService(
           } satisfies RetryCommunicationDeliveryResult;
         },
       });
+        },
+      );
     },
   };
 }
