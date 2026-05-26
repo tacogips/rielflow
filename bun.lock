@@ -22,7 +22,7 @@
     },
     "packages/rielflow": {
       "name": "rielflow",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "rielflow": "dist/main.js",
       },
@@ -37,7 +37,7 @@
     },
     "packages/rielflow-adapters": {
       "name": "rielflow-adapters",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "claude-code-agent": "github:tacogips/claude-code-agent#12f3af429c3230b5bc38136ef3420d7dd7c521d4",
@@ -49,39 +49,39 @@
     },
     "packages/rielflow-addons": {
       "name": "rielflow-addons",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-core": {
       "name": "rielflow-core",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
     "packages/rielflow-events": {
       "name": "rielflow-events",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-graphql": {
       "name": "rielflow-graphql",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "graphql": "16.13.1",
       },
     },
     "packages/rielflow-hook": {
       "name": "rielflow-hook",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-server": {
       "name": "rielflow-server",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
   },
   "packages": {

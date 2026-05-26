@@ -1,6 +1,6 @@
 {
   "name": "rielflow-addons",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Built-in node add-on registry and native add-on helpers for Rielflow",
   "type": "module",
   "main": "dist/index.js",
