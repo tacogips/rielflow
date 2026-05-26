@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/product-rename-rielflow` | Completed | `architecture#product-rename-to-rielflow`, `command#product-rename-command-surface` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 
@@ -178,7 +179,7 @@ impl-plans/
 | `workflow-tui-resume-decoupling`                         | 2026-02-25 | `design-tui`                                                                                                                                  |
 | `node-execution-backend-selection`                       | 2026-03-07 | `architecture`                                                                                                                                |
 | `node-output-contract-and-validation`                    | 2026-03-07 | `design-node-output-contract`, `design-data-model`, `architecture`                                                                            |
-| `divedra-manager-prompt-contract`                        | 2026-03-07 | `architecture`, `notes`                                                                                                                       |
+| `rielflow-manager-prompt-contract`                        | 2026-03-07 | `architecture`, `notes`                                                                                                                       |
 | `node-session-reuse`                                     | 2026-03-07 | `design-node-session-reuse`, `architecture`, `design-data-model`                                                                              |
 | `node-backend-model-separation`                          | 2026-03-07 | `design-data-model`, `design-workflow-json`, `architecture`, `notes`                                                                          |
 | `runtime-owned-external-output-publication`              | 2026-03-08 | `architecture`, `design-node-output-contract`, `notes`                                                                                        |
@@ -393,7 +394,7 @@ PHASE_TO_PLANS = {
   12: ["impl-plans/node-execution-backend-selection.md"],
   13: ["impl-plans/node-output-contract-and-validation.md"],
   14: ["impl-plans/workflow-web-editor-execution.md"],
-  15: ["impl-plans/divedra-manager-prompt-contract.md"],
+  15: ["impl-plans/rielflow-manager-prompt-contract.md"],
   16: ["impl-plans/node-session-reuse.md"],
   17: ["impl-plans/node-backend-model-separation.md"],
   18: ["impl-plans/runtime-owned-external-output-publication.md"],

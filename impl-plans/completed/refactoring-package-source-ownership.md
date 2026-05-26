@@ -8,8 +8,8 @@
 
 ## Purpose
 
-Move divedra from a root `src`-centered implementation toward package-owned
-source surfaces while preserving the current `divedra` public API, CLI behavior,
+Move rielflow from a root `src`-centered implementation toward package-owned
+source surfaces while preserving the current `rielflow` public API, CLI behavior,
 build outputs, and workflow compatibility. Root `src` files remain compatibility
 shims until package-owned entrypoints, declarations, tests, and CLI/library
 checks pass.
@@ -72,7 +72,7 @@ checks pass.
 | --- | --- | --- | --- | --- |
 | `REF-001` | Establish package source boundary contracts | Completed | No | none |
 | `REF-002` | Make refactoring workflow package-first | Completed | Yes | none |
-| `REF-003` | Move add-ons and native executor ownership to `divedra-addons` | Completed | No | `REF-001` |
+| `REF-003` | Move add-ons and native executor ownership to `rielflow-addons` | Completed | No | `REF-001` |
 | `REF-004` | Extract adapter ownership behind dispatch registry | Completed | Yes | `REF-001` |
 | `REF-005` | Extract schema-only workflow model ownership | Completed | No | `REF-001` |
 | `REF-006` | Split pure validation and runtime prompt ownership | Completed | No | `REF-003`, `REF-005` |
@@ -135,16 +135,16 @@ checks pass.
 **Status**: Completed
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/**/runtime`
+- `.rielflow/workflows/**/runtime`
 - `dist`
 - `node_modules`
 - `/tmp`
@@ -160,20 +160,20 @@ checks pass.
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 
 **Residual Risk Notes**:
 
 - Mock `workflow run` checks may remain expensive or backend-dependent; validation is the minimum required gate.
 
-### REF-003: Move add-ons and native executor ownership to `divedra-addons`
+### REF-003: Move add-ons and native executor ownership to `rielflow-addons`
 
 **Status**: Completed
 **Owned Files/Directories**:
 
-- `packages/divedra-addons/src`
-- `packages/divedra-addons/package.json`
+- `packages/rielflow-addons/src`
+- `packages/rielflow-addons/package.json`
 - `src/workflow/node-addons.ts`
 - `src/workflow/node-addons`
 - `src/workflow/native-node-executor.ts`
@@ -218,9 +218,9 @@ checks pass.
 
 - `src/workflow/adapters`
 - `src/workflow/adapter-execution.ts`
-- `packages/divedra-adapters/src`
-- `packages/divedra-adapters/package.json`
-- `packages/divedra-core/src`
+- `packages/rielflow-adapters/src`
+- `packages/rielflow-adapters/package.json`
+- `packages/rielflow-core/src`
 
 **Excluded Files/Directories**:
 
@@ -245,8 +245,8 @@ checks pass.
 
 **Residual Risk Notes**:
 
-- `packages/divedra-adapters` uses the expected workspace naming and depends on
-  `divedra-core`; package publishing metadata can still be revisited before a
+- `packages/rielflow-adapters` uses the expected workspace naming and depends on
+  `rielflow-core`; package publishing metadata can still be revisited before a
   release.
 
 ### REF-005: Extract schema-only workflow model ownership
@@ -254,7 +254,7 @@ checks pass.
 **Status**: Completed
 **Owned Files/Directories**:
 
-- `packages/divedra-core/src`
+- `packages/rielflow-core/src`
 - `src/workflow/types.ts`
 - `src/workflow/authored-node.ts`
 - `src/workflow/authored-workflow.ts`
@@ -305,7 +305,7 @@ checks pass.
 - `src/workflow/render.ts`
 - `src/workflow/prompt-template-context.ts`
 - `src/workflow/prompts`
-- `packages/divedra-core/src`
+- `packages/rielflow-core/src`
 
 **Excluded Files/Directories**:
 
@@ -393,13 +393,13 @@ checks pass.
 
 - `src/events`
 - `src/hook`
-- `packages/divedra/package.json`
+- `packages/rielflow/package.json`
 - `bun.lock`
 - `src/package-boundaries.test.ts`
-- `packages/divedra-events/src`
-- `packages/divedra-events/package.json`
-- `packages/divedra-hook/src`
-- `packages/divedra-hook/package.json`
+- `packages/rielflow-events/src`
+- `packages/rielflow-events/package.json`
+- `packages/rielflow-hook/src`
+- `packages/rielflow-hook/package.json`
 
 **Excluded Files/Directories**:
 
@@ -432,10 +432,10 @@ checks pass.
 
 **Residual Risk Notes**:
 
-- `divedra-events` currently owns type-only event contracts and runtime port
+- `rielflow-events` currently owns type-only event contracts and runtime port
   contracts; broader event implementation movement can continue after the
   server/graphql boundary task.
-- `divedra-hook` owns pure hook parsing/vendor/handler source while root
+- `rielflow-hook` owns pure hook parsing/vendor/handler source while root
   `src/hook/index.ts` and `src/hook/recorder.ts` remain runtime/CLI
   compatibility orchestration.
 
@@ -446,10 +446,10 @@ checks pass.
 
 - `src/graphql`
 - `src/server`
-- `packages/divedra-graphql/src`
-- `packages/divedra-server/src`
-- `packages/divedra-graphql/package.json`
-- `packages/divedra-server/package.json`
+- `packages/rielflow-graphql/src`
+- `packages/rielflow-server/src`
+- `packages/rielflow-graphql/package.json`
+- `packages/rielflow-server/package.json`
 
 **Excluded Files/Directories**:
 
@@ -492,8 +492,8 @@ checks pass.
 - `src/lib-sessions.ts`
 - `src/lib-step-runs.ts`
 - `src/lib-workflow-run-options.ts`
-- `packages/divedra/src`
-- `packages/divedra/package.json`
+- `packages/rielflow/src`
+- `packages/rielflow/package.json`
 - `scripts/sync-package-declarations.ts`
 
 **Excluded Files/Directories**:
@@ -509,7 +509,7 @@ checks pass.
 
 - [x] `src/lib.ts` is a compatibility facade over package-owned public contracts.
 - [x] `src/cli.ts` exports an explicit CLI contract rather than wildcard command internals.
-- [x] CLI entrypoints route through the package-owned `divedra` facade and package-boundary tests document remaining temporary compatibility imports for server/graphql, events, and runtime internals.
+- [x] CLI entrypoints route through the package-owned `rielflow` facade and package-boundary tests document remaining temporary compatibility imports for server/graphql, events, and runtime internals.
 - [x] Package declarations and build outputs match the package-owned source layout.
 - [x] Root `src` library/CLI facades remain as compatibility surfaces after package-focused tests pass.
 
@@ -538,8 +538,8 @@ Run narrow task-specific tests first, then full compatibility gates:
 
 Workflow bundle changes must additionally run:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 
 ## Conflict Notes
 
@@ -637,12 +637,12 @@ Workflow bundle changes must additionally run:
 
 **Verification**:
 
-- `jq empty .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json .divedra/workflows/refactoring-slice-review/mock-scenario.json` passed.
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json` passed.
-- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --variables '{"workflowInput":{"executionMode":"plan-only"}}' --output json` passed.
-- `git diff --check -- .divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json .divedra/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md .divedra/workflows/refactoring-slice-review/mock-scenario.json .divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md` passed.
+- `jq empty .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json .rielflow/workflows/refactoring-slice-review/mock-scenario.json` passed.
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json` passed.
+- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --variables '{"workflowInput":{"executionMode":"plan-only"}}' --output json` passed.
+- `git diff --check -- .rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json .rielflow/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md .rielflow/workflows/refactoring-slice-review/mock-scenario.json .rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md` passed.
 
 **Notes**:
 
@@ -660,17 +660,17 @@ Workflow bundle changes must additionally run:
 
 **Verification**:
 
-- `jq empty .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json .divedra/workflows/refactoring-slice-review/mock-scenario.json impl-plans/PROGRESS.json` passed.
-- `rg -n '"ownedPaths": \["src/workflow"\]|Extract runtime validation boundary|"workflow-runtime"' .divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md` returned no matches.
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json` passed.
-- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --variables '{"workflowInput":{"executionMode":"plan-only"}}' --output json` passed.
-- `git diff --check -- .divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
+- `jq empty .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json .rielflow/workflows/refactoring-slice-review/mock-scenario.json impl-plans/PROGRESS.json` passed.
+- `rg -n '"ownedPaths": \["src/workflow"\]|Extract runtime validation boundary|"workflow-runtime"' .rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md` returned no matches.
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json` passed.
+- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --variables '{"workflowInput":{"executionMode":"plan-only"}}' --output json` passed.
+- `git diff --check -- .rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md .rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
 
 **Notes**:
 
-- Step 1 adapter JSON example now models `packages/divedra-core` as the owned
+- Step 1 adapter JSON example now models `packages/rielflow-core` as the owned
   workflow runtime source root and documents root `src/workflow` as a temporary
   compatibility dependency.
 - Step 3 adapter JSON example now emits a package-owned implementation task with
@@ -692,7 +692,7 @@ Workflow bundle changes must additionally run:
 
 **Notes**:
 
-- `divedra-addons` now owns package-local add-on registry, payload resolution,
+- `rielflow-addons` now owns package-local add-on registry, payload resolution,
   local add-on manifest resolution, add-on source summaries, and mailbox prompt
   guidance source.
 - Root `src/workflow/node-addons*`, local add-on, add-on summary, and mailbox
@@ -740,7 +740,7 @@ Workflow bundle changes must additionally run:
 - `bun run build` passed.
 - `bun dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
 - `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
-- `bun packages/divedra/dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
+- `bun packages/rielflow/dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
 - `bun run typecheck` passed.
 - `bun run lint:biome` passed.
 - `bun test src/workflow/native-node-executor-addons-commands.test.ts src/workflow/addon-package-boundary.test.ts src/package-boundaries.test.ts` passed.
@@ -769,17 +769,17 @@ Workflow bundle changes must additionally run:
 - `bun run lint:biome` passed.
 - `bun run build` passed.
 - `bun dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
-- `bun packages/divedra/dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
+- `bun packages/rielflow/dist/main.js workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
 - `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir examples --output json` passed.
 - `git diff --check` passed.
 
 **Notes**:
 
 - Moved native executor implementation files into
-  `packages/divedra-addons/src/native-node-executor` and left root
+  `packages/rielflow-addons/src/native-node-executor` and left root
   `src/workflow/native-node-executor*` files as compatibility shims.
 - Moved built-in gateway add-on readiness identifiers and predicate into
-  `packages/divedra-addons/src/runtime-readiness`, with root runtime readiness
+  `packages/rielflow-addons/src/runtime-readiness`, with root runtime readiness
   inspection consuming the package-owned predicate.
 - Expanded the core package source facade only for runtime primitives needed by
   package-owned native executor source.
@@ -792,7 +792,7 @@ Workflow bundle changes must additionally run:
 
 - `bun run build` passed.
 - `bun test src/package-boundaries.test.ts` passed.
-- `test -f packages/divedra-addons/dist/node-addons.d.ts; test -f packages/divedra-addons/dist/local-node-addons.d.ts; test -f packages/divedra-addons/dist/native-node-executor/git-and-addon-execution.d.ts; test -f packages/divedra-addons/dist/runtime-readiness.d.ts` passed.
+- `test -f packages/rielflow-addons/dist/node-addons.d.ts; test -f packages/rielflow-addons/dist/local-node-addons.d.ts; test -f packages/rielflow-addons/dist/native-node-executor/git-and-addon-execution.d.ts; test -f packages/rielflow-addons/dist/runtime-readiness.d.ts` passed.
 - `bun run typecheck` passed.
 - `bun run lint:biome` passed.
 - `git diff --check` passed.
@@ -801,13 +801,13 @@ Workflow bundle changes must additionally run:
 
 - Fixed the add-ons package declaration output by teaching
   `scripts/sync-package-declarations.ts` to copy explicit package-owned
-  declaration support files from `dist/packages/divedra-addons/src` into
-  `packages/divedra-addons/dist`.
+  declaration support files from `dist/packages/rielflow-addons/src` into
+  `packages/rielflow-addons/dist`.
 - Rewrote package-local declaration imports that pointed at
-  `divedra-core/src/index` to the public `divedra-core` package specifier.
+  `rielflow-core/src/index` to the public `rielflow-core` package specifier.
 - Added package-boundary coverage that walks the public
-  `packages/divedra-addons/dist/index.d.ts` declaration graph and fails when a
-  relative declaration target is missing or leaks `divedra-core/src` imports.
+  `packages/rielflow-addons/dist/index.d.ts` declaration graph and fails when a
+  relative declaration target is missing or leaks `rielflow-core/src` imports.
 
 ### Session: 2026-05-16 step4-implement-next-task exec-000024
 
@@ -823,14 +823,14 @@ Workflow bundle changes must additionally run:
 
 **Notes**:
 
-- Created `packages/divedra-adapters` as the package-owned source and build
+- Created `packages/rielflow-adapters` as the package-owned source and build
   surface for agent backend adapters.
 - Replaced root `src/workflow/adapters/*` implementation files with
   compatibility re-export shims that point to package-owned adapter source.
 - Refactored `DispatchingNodeAdapter` to use an injected registry and lazy
   backend factories so dispatch no longer constructs every backend adapter
   eagerly.
-- Added a narrow `divedra-core` adapter-contract source facade so adapter
+- Added a narrow `rielflow-core` adapter-contract source facade so adapter
   package builds do not import the full core runtime bundle or prompt assets.
 
 ### Session: 2026-05-16 step4-implement-next-task exec-000026
@@ -844,7 +844,7 @@ and `SR-REF004-002`
 - `bun run build` passed.
 - `bun test src/package-boundaries.test.ts src/workflow/adapters/dispatch.test.ts`
   passed with 22 tests.
-- `bun -e 'const core = await import("./packages/divedra-core/dist/index.js"); const adapters = await import("./packages/divedra-adapters/dist/index.js"); const normalized = adapters.normalizeAdapterFailure(new Error("x"), "fallback"); console.log(JSON.stringify({instanceofCore: normalized instanceof core.AdapterExecutionError, constructorSame: Object.getPrototypeOf(normalized).constructor === core.AdapterExecutionError}));'`
+- `bun -e 'const core = await import("./packages/rielflow-core/dist/index.js"); const adapters = await import("./packages/rielflow-adapters/dist/index.js"); const normalized = adapters.normalizeAdapterFailure(new Error("x"), "fallback"); console.log(JSON.stringify({instanceofCore: normalized instanceof core.AdapterExecutionError, constructorSame: Object.getPrototypeOf(normalized).constructor === core.AdapterExecutionError}));'`
   printed `{"instanceofCore":true,"constructorSame":true}`.
 - `bun test src/workflow/adapters/codex.test.ts src/workflow/adapters/claude.test.ts src/workflow/adapters/openai-sdk.test.ts src/workflow/adapters/anthropic-sdk.test.ts src/workflow/adapters/dispatch.test.ts src/package-boundaries.test.ts`
   passed with 39 tests.
@@ -857,11 +857,11 @@ and `SR-REF004-002`
 - Updated the Task DAG and `impl-plans/PROGRESS.json` so `REF-004` is
   consistently marked `Completed`.
 - Changed adapter package source to import adapter contracts from the stable
-  `divedra-core` package surface, kept the adapter build externalized from
-  `divedra-core`, and rewrote the built adapter runtime import to the sibling
-  `divedra-core` built entrypoint during declaration/package sync.
-- Added package-boundary coverage proving built `divedra-adapters` and
-  `divedra-core` share the same `AdapterExecutionError` runtime identity.
+  `rielflow-core` package surface, kept the adapter build externalized from
+  `rielflow-core`, and rewrote the built adapter runtime import to the sibling
+  `rielflow-core` built entrypoint during declaration/package sync.
+- Added package-boundary coverage proving built `rielflow-adapters` and
+  `rielflow-core` share the same `AdapterExecutionError` runtime identity.
 
 ### Session: 2026-05-16 step4-implement-next-task exec-000029
 
@@ -869,7 +869,7 @@ and `SR-REF004-002`
 
 **Verification**:
 
-- `bun test src/workflow/types.test.ts src/workflow/authored-workflow.test.ts src/workflow/json-schema.test.ts src/workflow/paths.test.ts src/package-boundaries.test.ts` initially failed because existing `packages/divedra-core/dist` declarations had not yet been regenerated with the new core model subpaths.
+- `bun test src/workflow/types.test.ts src/workflow/authored-workflow.test.ts src/workflow/json-schema.test.ts src/workflow/paths.test.ts src/package-boundaries.test.ts` initially failed because existing `packages/rielflow-core/dist` declarations had not yet been regenerated with the new core model subpaths.
 - `bun run typecheck` passed.
 - `bun run build` passed and regenerated the package-owned core model subpath runtime/declaration outputs.
 - `bun test src/workflow/types.test.ts src/workflow/authored-workflow.test.ts src/workflow/json-schema.test.ts src/workflow/paths.test.ts src/package-boundaries.test.ts` passed with 44 tests after build regeneration.
@@ -877,14 +877,14 @@ and `SR-REF004-002`
 **Notes**:
 
 - Added package-owned workflow model/schema source under
-  `packages/divedra-core/src` for authored workflow helpers, authored node file
+  `packages/rielflow-core/src` for authored workflow helpers, authored node file
   resolution, node template fields, prompt-template path checks, JSON schema
   validation, workflow bundle input parsing, runtime path helpers, and pure
   authored/normalized workflow model contracts.
 - Converted root workflow model helper files to compatibility shims that re-export
-  package-owned `divedra-core/*` subpaths, while leaving broader runtime/add-on
+  package-owned `rielflow-core/*` subpaths, while leaving broader runtime/add-on
   contracts in `src/workflow/types.ts` for later tasks.
-- Added `divedra-core` subpath exports, TypeScript path mapping, build inputs,
+- Added `rielflow-core` subpath exports, TypeScript path mapping, build inputs,
   declaration sync support, and package-boundary coverage proving the
   package-owned model files do not import engine, mailbox, native add-on,
   events/hooks, server, or GraphQL ownership.
@@ -896,8 +896,8 @@ and `SR-REF004-002`
 
 **Verification**:
 
-- `bun test src/workflow/validate.test.ts src/workflow/render.test.ts src/workflow/prompt-composition.test.ts src/package-boundaries.test.ts` initially failed because existing `packages/divedra-core/dist` declarations had not yet been regenerated with the new validation and prompt subpaths.
-- `bun run typecheck` initially failed on an inferred fallback-step type in `packages/divedra-core/src/workflow-validation.ts`, then passed after the type was made explicit.
+- `bun test src/workflow/validate.test.ts src/workflow/render.test.ts src/workflow/prompt-composition.test.ts src/package-boundaries.test.ts` initially failed because existing `packages/rielflow-core/dist` declarations had not yet been regenerated with the new validation and prompt subpaths.
+- `bun run typecheck` initially failed on an inferred fallback-step type in `packages/rielflow-core/src/workflow-validation.ts`, then passed after the type was made explicit.
 - `bun run build` passed and regenerated the package-owned validation and prompt subpath runtime/declaration outputs.
 - `bun test src/workflow/load.test.ts src/workflow/validate.test.ts src/workflow/json-schema.test.ts src/workflow/save.test.ts src/workflow/render.test.ts src/workflow/prompt-composition.test.ts` passed with 70 tests.
 - `bun test src/workflow/addon-package-boundary.test.ts src/package-boundaries.test.ts` passed with 21 tests.
@@ -907,11 +907,11 @@ and `SR-REF004-002`
 
 **Notes**:
 
-- Added package-owned `divedra-core` pure workflow validation that accepts raw
+- Added package-owned `rielflow-core` pure workflow validation that accepts raw
   workflow and node payloads without resolving add-ons, plus a regression test
   proving full runtime validation still layers add-on resolution on top.
 - Moved prompt template rendering, prompt variable context, and default runtime
-  manager prompt asset ownership into `divedra-core` subpaths, leaving root
+  manager prompt asset ownership into `rielflow-core` subpaths, leaving root
   workflow modules as compatibility shims where appropriate.
 - Updated core package exports, build inputs, declaration sync, and boundary
   tests for the new validation and prompt subpaths.
@@ -1115,7 +1115,7 @@ pure validation layering
 **Verification**:
 
 - `bun run typecheck` passed.
-- `bun run build` passed and emitted `divedra-events` and `divedra-hook`
+- `bun run build` passed and emitted `rielflow-events` and `rielflow-hook`
   package runtime/declaration entrypoints.
 - `bun test src/events/config.test.ts src/events/listener-service.test.ts src/events/supervised-runs.test.ts src/events/trigger-runner-supervised.test.ts` passed as part of a 69-test focused package-boundary/events command.
 - `bun test src/events/trigger-runner-supervisor-dispatch.test.ts src/events/adapters/webhook.test.ts src/events/adapters/cron.test.ts src/events/adapters/matrix.test.ts src/events/adapters/chat-sdk.test.ts` passed with 40 tests.
@@ -1123,15 +1123,15 @@ pure validation layering
 - `bun test src/package-boundaries.test.ts` passed with 19 tests.
 - `bun run lint:biome` exited 0; the only diagnostics were the accepted
   explicit-`any` warnings in REF-007 engine compatibility boundary files.
-- `bun -e 'const hook = await import("./packages/divedra-hook/dist/index.js"); const events = await import("./packages/divedra-events/dist/index.js"); const parse = await import("./packages/divedra-hook/dist/parse.js"); console.log(JSON.stringify({hook: Object.keys(hook).length > 0, eventsKeys: Object.keys(events), parse: typeof parse.parseHookPayload}))'` passed with `{"hook":true,"eventsKeys":[],"parse":"function"}`.
-- `git diff --check -- package.json tsconfig.json scripts/sync-package-declarations.ts src/package-boundaries.test.ts src/events/types.ts src/events/workflow-trigger-runner-options.ts src/events/trigger-runner/trigger-dispatch-runner.ts src/hook src/events packages/divedra-events packages/divedra-hook impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
+- `bun -e 'const hook = await import("./packages/rielflow-hook/dist/index.js"); const events = await import("./packages/rielflow-events/dist/index.js"); const parse = await import("./packages/rielflow-hook/dist/parse.js"); console.log(JSON.stringify({hook: Object.keys(hook).length > 0, eventsKeys: Object.keys(events), parse: typeof parse.parseHookPayload}))'` passed with `{"hook":true,"eventsKeys":[],"parse":"function"}`.
+- `git diff --check -- package.json tsconfig.json scripts/sync-package-declarations.ts src/package-boundaries.test.ts src/events/types.ts src/events/workflow-trigger-runner-options.ts src/events/trigger-runner/trigger-dispatch-runner.ts src/hook src/events packages/rielflow-events packages/rielflow-hook impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
 
 **Notes**:
 
-- Added `packages/divedra-events` for package-owned event contracts and runtime
+- Added `packages/rielflow-events` for package-owned event contracts and runtime
   ports, with root `src/events/types.ts` preserved as a compatibility type
   facade.
-- Added `packages/divedra-hook` for pure hook configuration, context, vendor
+- Added `packages/rielflow-hook` for pure hook configuration, context, vendor
   detection, dispatch, handler, parsing, redaction, and type contracts; root
   pure hook modules now re-export the package-owned source.
 - Added trigger runner ports for receipt storage, direct workflow execution,
@@ -1152,21 +1152,21 @@ pure validation layering
 - `bun test src/package-boundaries.test.ts` passed with 21 tests, including
   lock/workspace alignment and declaration dependency manifest coverage.
 - `bun test src/events/config.test.ts src/events/trigger-runner-supervised.test.ts src/hook/index.test.ts src/hook/config.test.ts` passed with 57 tests.
-- `rg -n 'divedra-events|divedra-hook|divedra-adapters' bun.lock packages/divedra/package.json` passed and confirmed package metadata references.
+- `rg -n 'rielflow-events|rielflow-hook|rielflow-adapters' bun.lock packages/rielflow/package.json` passed and confirmed package metadata references.
 - `bun run typecheck` passed.
 - `bun run build` passed.
 - `bun run lint:biome` exited 0 with the previously accepted REF-007
   explicit-`any` warnings only.
-- `git diff --check -- bun.lock packages/divedra/package.json src/package-boundaries.test.ts` passed.
+- `git diff --check -- bun.lock packages/rielflow/package.json src/package-boundaries.test.ts` passed.
 
 **Notes**:
 
-- Declared `divedra-events` and `divedra-hook` as workspace dependencies of
-  the compatibility `divedra` package because built `divedra` declarations
+- Declared `rielflow-events` and `rielflow-hook` as workspace dependencies of
+  the compatibility `rielflow` package because built `rielflow` declarations
   reference those package contracts.
 - Regenerated `bun.lock` in frozen lockfile mode with `TMPDIR=/private/tmp` so
-  the lock now includes all workspace packages, including `divedra-adapters`,
-  `divedra-events`, and `divedra-hook`.
+  the lock now includes all workspace packages, including `rielflow-adapters`,
+  `rielflow-events`, and `rielflow-hook`.
 - Added package-boundary coverage that compares `packages/*/package.json`
   manifests with lockfile workspace entries and verifies built declaration
   references to workspace packages are backed by declared dependencies.
@@ -1178,26 +1178,26 @@ pure validation layering
 **Verification**:
 
 - `bun run typecheck` passed.
-- `bun run build` passed and emitted package-owned `divedra-graphql`
-  `schema-contract` and `divedra-server` `browser-overview` runtime/declaration
+- `bun run build` passed and emitted package-owned `rielflow-graphql`
+  `schema-contract` and `rielflow-server` `browser-overview` runtime/declaration
   entrypoints.
 - `bun test src/graphql/schema.test.ts src/server/graphql-auth.test.ts src/server/graphql-supervision-and-resume.test.ts src/server/serve.test.ts src/server/api.test.ts src/server/graphql-queries-and-inspection.test.ts` passed with 90 tests.
 - `bun test src/package-boundaries.test.ts` passed with 21 tests after build
   regenerated package declarations.
 - `bun run lint:biome` exited 0 with the previously accepted REF-007
   explicit-`any` warnings only.
-- `git diff --check -- bun.lock packages/divedra-graphql packages/divedra-server src/graphql/schema/execution-resolvers.ts src/graphql/schema/schema-factory.ts src/graphql/schema/supervisor-resolvers.ts src/server/browser-overview.ts src/server/graphql-executable-schema.ts src/server/graphql-schema-text.ts package.json scripts/sync-package-declarations.ts src/package-boundaries.test.ts impl-plans/active/refactoring-package-source-ownership.md` passed.
+- `git diff --check -- bun.lock packages/rielflow-graphql packages/rielflow-server src/graphql/schema/execution-resolvers.ts src/graphql/schema/schema-factory.ts src/graphql/schema/supervisor-resolvers.ts src/server/browser-overview.ts src/server/graphql-executable-schema.ts src/server/graphql-schema-text.ts package.json scripts/sync-package-declarations.ts src/package-boundaries.test.ts impl-plans/active/refactoring-package-source-ownership.md` passed.
 
 **Notes**:
 
 - Moved the authoritative GraphQL SDL and JSON scalar factory into
-  `packages/divedra-graphql/src/schema-contract.ts`, leaving
+  `packages/rielflow-graphql/src/schema-contract.ts`, leaving
   `src/server/graphql-schema-text.ts` as a compatibility re-export.
 - Threaded `GraphqlSchemaDependencies.workflowControlPlaneService` through
   execution, rerun/resume/continue, communication-scope, step-run, and cancel
   resolver paths so runtime IO is reached through the control-plane facade.
 - Added package-owned browser overview HTML rendering under
-  `packages/divedra-server/src/browser-overview.ts`; root
+  `packages/rielflow-server/src/browser-overview.ts`; root
   `src/server/browser-overview.ts` now owns workflow overview queries and view
   model assembly.
 - Updated package exports, declaration sync, build entries, package-boundary
@@ -1219,18 +1219,18 @@ pure validation layering
 - `bun test src/cli.test.ts src/lib-api.test.ts src/lib-supervision.test.ts src/package-boundaries.test.ts` passed with 161 tests.
 - `bun run src/main.ts --help` passed and prints CLI usage with exit code 0.
 - `bun run src/main.ts workflow list --output json` passed and returned workflow catalog JSON.
-- `bun run build` passed and regenerated package-owned `divedra` runtime and declaration outputs.
+- `bun run build` passed and regenerated package-owned `rielflow` runtime and declaration outputs.
 - `bun run lint:biome` exited 0 with the previously accepted REF-007 explicit-`any` warnings only.
-- `git diff --check -- packages/divedra/src/index.ts packages/divedra/src/cli.ts packages/divedra/src/lib-continuation.ts packages/divedra/src/lib-sessions.ts packages/divedra/src/lib-step-runs.ts packages/divedra/src/lib-workflow-run-options.ts packages/divedra-core/src/index.ts src/lib.ts src/cli.ts src/lib-continuation.ts src/lib-sessions.ts src/lib-step-runs.ts src/lib-workflow-run-options.ts src/main.ts src/cli/run-cli.ts scripts/sync-package-declarations.ts src/package-boundaries.test.ts tsconfig.json impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
+- `git diff --check -- packages/rielflow/src/index.ts packages/rielflow/src/cli.ts packages/rielflow/src/lib-continuation.ts packages/rielflow/src/lib-sessions.ts packages/rielflow/src/lib-step-runs.ts packages/rielflow/src/lib-workflow-run-options.ts packages/rielflow-core/src/index.ts src/lib.ts src/cli.ts src/lib-continuation.ts src/lib-sessions.ts src/lib-step-runs.ts src/lib-workflow-run-options.ts src/main.ts src/cli/run-cli.ts scripts/sync-package-declarations.ts src/package-boundaries.test.ts tsconfig.json impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
 - `bun run test` was attempted after focused tests passed but failed in `src/workflow/superviser-runtime-control-impl.test.ts` with three unrelated strict-validation fixture failures: `workflow validation failed`; direct reproduction showed `nodePayloads.nodes/node-manager.json.managerType` reports `managerType is valid only for manager-role nodes` for the test fixture.
 
 **Notes**:
 
-- Moved the public library implementation into `packages/divedra/src/index.ts` and left `src/lib.ts` as a compatibility re-export.
-- Added package-owned library helper modules under `packages/divedra/src/lib-*.ts`; root `src/lib-*.ts` files now re-export the package-owned source.
-- Replaced the root CLI wildcard barrel with an explicit `runCli`, `CliDependencies`, and `CliIo` contract backed by `packages/divedra/src/cli.ts`; `src/main.ts` now invokes the package-owned CLI entrypoint.
-- Extended `divedra-core` exports for the runtime/session types and helpers needed by the package-owned public facade.
-- Updated declaration sync and package-boundary tests so package declarations are generated from package-owned `divedra` source files.
+- Moved the public library implementation into `packages/rielflow/src/index.ts` and left `src/lib.ts` as a compatibility re-export.
+- Added package-owned library helper modules under `packages/rielflow/src/lib-*.ts`; root `src/lib-*.ts` files now re-export the package-owned source.
+- Replaced the root CLI wildcard barrel with an explicit `runCli`, `CliDependencies`, and `CliIo` contract backed by `packages/rielflow/src/cli.ts`; `src/main.ts` now invokes the package-owned CLI entrypoint.
+- Extended `rielflow-core` exports for the runtime/session types and helpers needed by the package-owned public facade.
+- Updated declaration sync and package-boundary tests so package declarations are generated from package-owned `rielflow` source files.
 - No provisioning package was created.
 
 ### Session: 2026-05-16 16:44 +0900 step4-implement-next-task exec-000062
@@ -1246,10 +1246,10 @@ pure validation layering
 - `bun test src/cli.test.ts src/lib-api.test.ts src/lib-supervision.test.ts src/package-boundaries.test.ts` passed with 161 tests.
 - `bun run src/main.ts --help` passed and printed CLI usage with exit code 0.
 - `bun run src/main.ts workflow list --output json` passed and returned workflow catalog JSON.
-- `bun run build` passed and regenerated package-owned `divedra` runtime and declaration outputs.
+- `bun run build` passed and regenerated package-owned `rielflow` runtime and declaration outputs.
 - `bun run lint:biome` exited 0 with the previously accepted REF-007
   explicit-`any` warnings only.
-- `git diff --check -- packages/divedra/src/cli.ts packages/divedra/src/cli src/cli src/package-boundaries.test.ts scripts/sync-package-declarations.ts impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
+- `git diff --check -- packages/rielflow/src/cli.ts packages/rielflow/src/cli src/cli src/package-boundaries.test.ts scripts/sync-package-declarations.ts impl-plans/active/refactoring-package-source-ownership.md impl-plans/PROGRESS.json` passed.
 - `bun run test` was attempted and failed only in
   `src/workflow/superviser-runtime-control-impl.test.ts`: 1121 tests passed
   and 3 tests failed for `rerunTargetWorkflow`, `loadWorkflowDefinition`, and
@@ -1258,8 +1258,8 @@ pure validation layering
 
 **Notes**:
 
-- Moved CLI implementation ownership into `packages/divedra/src/cli/*` and
-  changed `packages/divedra/src/cli.ts` to import the package-local
+- Moved CLI implementation ownership into `packages/rielflow/src/cli/*` and
+  changed `packages/rielflow/src/cli.ts` to import the package-local
   implementation rather than root `src/cli/*`.
 - Converted root `src/cli/*` implementation files into compatibility
   re-export shims over the package-owned CLI modules.

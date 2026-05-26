@@ -12,7 +12,7 @@ unblock `REF-003` and `REF-015`.
 Resolved question:
 
 - Is exporting a Docker-compatible runner predicate from
-  `packages/divedra-addons/src/index.ts` an acceptable public package surface?
+  `packages/rielflow-addons/src/index.ts` an acceptable public package surface?
 
 Owner decision:
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Workflow"
+  short_description: "Create step-addressed rielflow workflows"
+  default_prompt: "Use $rielflow-workflow to create a portable rielflow workflow bundle from this process description."

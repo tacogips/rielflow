@@ -24,7 +24,7 @@ as `workflowExecutionOverview`, `workflowExecutions`, `nodeExecution`, or
 
 - Add `workflow list` for catalog discovery.
 - Add `workflow status <name>` for compact selected-workflow status.
-- Make `divedra serve` browser mode default to the same overview-only model.
+- Make `rielflow serve` browser mode default to the same overview-only model.
 - Add workflow-level aggregate status `never-run` alongside existing runtime
   execution statuses.
 - Keep duplicate workflow names visible by source scope in human-facing lists.
@@ -109,7 +109,7 @@ This keeps the human surface focused on "what is happening?" rather than
 ### Browser Overview
 
 The primary human surface should be a simple read-only browser page served by
-`divedra serve`.
+`rielflow serve`.
 
 Layout:
 
@@ -142,7 +142,7 @@ Selected workflow status fields:
 
 Default selection:
 
-- If `divedra serve [workflow-name]` constrains access to one workflow, open
+- If `rielflow serve [workflow-name]` constrains access to one workflow, open
   with that workflow selected.
 - Otherwise, select the first `running` workflow when present.
 - If no workflow is running, select the workflow with the newest execution.
@@ -309,7 +309,7 @@ project/user/direct scope rules, explicit storage overrides, and environment
 variables. Filtering stale rows is still required as a defensive boundary for
 deleted session files or obsolete runtime database rows.
 
-Issue `tacogips/divedra#25` extends this contract beyond the issue-23 storage
+Issue `tacogips/rielflow#25` extends this contract beyond the issue-23 storage
 alignment case. A stale active candidate that is visible through a workflow
 status source, but fails a direct `session status <id>` lookup with the same
 `--workflow-definition-dir` and storage options, is not an active execution for
@@ -488,7 +488,7 @@ use explicit storage options to inspect runs from a nonstandard direct root.
 
 ### Fixed Workflow Serve Mode
 
-When `divedra serve [workflow-name]` constrains access to one workflow:
+When `rielflow serve [workflow-name]` constrains access to one workflow:
 
 - the overview page should open with that workflow preselected
 - the workflow list may collapse to a single visible row
@@ -551,7 +551,7 @@ The first implementation slice is complete when:
 - stale runtime database or cached active records cannot make a workflow appear
   running when the corresponding persisted session is unavailable
 - regressions cover missing primary session payloads behind session indexes or
-  runtime database snapshots so issue `tacogips/divedra#25` cannot reintroduce
+  runtime database snapshots so issue `tacogips/rielflow#25` cannot reintroduce
   unloadable `newestActiveExecution` or inflated `activeExecutionCount` values
 
 ## Why This Split

@@ -8,7 +8,7 @@
 ## Design Summary
 
 Persist outbound chat reply dispatch attempts in the runtime database so
-`divedra/chat-reply-worker` replies have an audit trail and can reuse successful
+`rielflow/chat-reply-worker` replies have an audit trail and can reuse successful
 idempotent results beyond a single in-process dispatcher instance.
 
 ## Modules

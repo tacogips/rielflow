@@ -6,7 +6,7 @@ and invoke the right workflow.
 
 ## Overview
 
-`divedra` already has two workflow discovery surfaces:
+`rielflow` already has two workflow discovery surfaces:
 
 - `workflow list` for compact human overview
 - `workflow inspect <name>` for authored structure and runtime readiness
@@ -147,7 +147,7 @@ Per workflow:
   },
   "description": "Resolve a GitHub issue through design, planning, implementation, and review loops.",
   "callable": {
-    "stepId": "divedra-manager",
+    "stepId": "rielflow-manager",
     "role": "manager",
     "input": {
       "description": "Issue reference and repository context.",
@@ -200,7 +200,7 @@ inspection payload, while text output may summarize or render it for humans.
 
 ## Skill Guidance
 
-The divedra workflow-run skill should instruct LLMs to:
+The rielflow workflow-run skill should instruct LLMs to:
 
 1. run `workflow usage --output json` first when choosing a workflow
 2. inspect the listed description, callable input/output contract, and compact

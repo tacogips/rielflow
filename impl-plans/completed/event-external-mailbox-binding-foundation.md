@@ -396,7 +396,7 @@ bun test
 Use the following prompt as the handoff input for Cursor Compose:
 
 ```text
-You are continuing implementation in the divedra repository.
+You are continuing implementation in the rielflow repository.
 
 Read and follow these files first:
 - AGENTS.md

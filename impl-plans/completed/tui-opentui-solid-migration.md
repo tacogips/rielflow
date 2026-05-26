@@ -11,7 +11,7 @@
 
 ### Summary
 
-Replace the current imperative `@opentui/core` TUI screen implementation with an `@opentui/solid` implementation while preserving the existing `divedra tui` behavior contract: screen model, focus rules, keybindings, resume/fallback semantics, runtime-variable editing, and CLI integration.
+Replace the current imperative `@opentui/core` TUI screen implementation with an `@opentui/solid` implementation while preserving the existing `rielflow tui` behavior contract: screen model, focus rules, keybindings, resume/fallback semantics, runtime-variable editing, and CLI integration.
 
 This plan treats `@opentui/solid` as a view-layer refactor on top of the existing OpenTUI renderer, not as a product-scope expansion and not as a browser-UI reintroduction.
 
@@ -452,7 +452,7 @@ export interface TuiVerificationCommandSet {
 **Tasks Completed**: Post-completion storage-root alignment fix and regression coverage
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Re-reviewed the completed Solid/OpenTUI migration against the full repository test run and found a remaining runtime-boundary bug: explicit `--artifact-root` and `--session-store` paths did not also realign `rootDataDir`, so `divedra.db` could still drift to an ambient `DIVEDRA_ARTIFACT_DIR` during CLI/TUI/API execution. Added shared inference for explicit storage roots, wired the CLI and API entrypoints to use it, documented the corrected architecture, and added regression coverage so full-suite verification no longer depends on the ambient dev-shell runtime-data path.
+**Notes**: Re-reviewed the completed Solid/OpenTUI migration against the full repository test run and found a remaining runtime-boundary bug: explicit `--artifact-root` and `--session-store` paths did not also realign `rootDataDir`, so `rielflow.db` could still drift to an ambient `DIVEDRA_ARTIFACT_DIR` during CLI/TUI/API execution. Added shared inference for explicit storage roots, wired the CLI and API entrypoints to use it, documented the corrected architecture, and added regression coverage so full-suite verification no longer depends on the ambient dev-shell runtime-data path.
 
 ### Session: 2026-03-26 10:30
 
@@ -466,7 +466,7 @@ export interface TuiVerificationCommandSet {
 **Tasks Completed**: TASK-004 unified-entry cleanup, TASK-006 repo/doc alignment follow-up
 **Tasks In Progress**: TASK-002, TASK-006
 **Blockers**: `src/tui/opentui-screen.ts` still contains host-local presentation/data-loading glue beyond the intended thin-host boundary; manual interactive smoke coverage remains outside the current automated slice
-**Notes**: Re-reviewed the post-cutover architecture and found that the CLI/runtime contract still carried an obsolete selector-only OpenTUI entry path even though interactive `divedra tui` already launches the unified workspace/history/run app. Removed that dead selector surface from the runtime/CLI contract, deleted the unused selector Solid view and selector layout test coverage, added a CLI regression test that asserts the unified app is the interactive entrypoint, and updated README/design/architecture/plan text so the repository now documents the real state: Solid is the active TUI view layer, readline remains only as the unavailable-OpenTUI fallback, and the remaining migration work is host-thinning rather than another surface-level cutover. Verified with `bun run typecheck`, `bun test src/tui/opentui-screen.test.ts`, `bun test src/tui/runtime.test.ts`, and `bun test src/cli.test.ts`.
+**Notes**: Re-reviewed the post-cutover architecture and found that the CLI/runtime contract still carried an obsolete selector-only OpenTUI entry path even though interactive `rielflow tui` already launches the unified workspace/history/run app. Removed that dead selector surface from the runtime/CLI contract, deleted the unused selector Solid view and selector layout test coverage, added a CLI regression test that asserts the unified app is the interactive entrypoint, and updated README/design/architecture/plan text so the repository now documents the real state: Solid is the active TUI view layer, readline remains only as the unavailable-OpenTUI fallback, and the remaining migration work is host-thinning rather than another surface-level cutover. Verified with `bun run typecheck`, `bun test src/tui/opentui-screen.test.ts`, `bun test src/tui/runtime.test.ts`, and `bun test src/cli.test.ts`.
 
 ### Session: 2026-03-26 00:00
 

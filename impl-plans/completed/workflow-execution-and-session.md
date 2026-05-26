@@ -14,7 +14,7 @@
 - `design-docs/specs/command.md`
 
 ### Summary
-Implemented CLI execution/session MVP with deterministic graph traversal, artifact writes, resumable local-file session state, and centralized stuck detection with bounded restart policy in the divedra engine.
+Implemented CLI execution/session MVP with deterministic graph traversal, artifact writes, resumable local-file session state, and centralized stuck detection with bounded restart policy in the rielflow engine.
 
 ### Scope
 **Included**:
@@ -90,7 +90,7 @@ Implemented CLI execution/session MVP with deterministic graph traversal, artifa
 **Dependencies**: TASK-005
 
 **Completion Criteria**:
-- [x] Divedra engine detects stuck node execution via timeout watchdog
+- [x] Rielflow engine detects stuck node execution via timeout watchdog
 - [x] Engine applies bounded restart attempts with configurable backoff
 - [x] Restart attempts and reasons persisted in session state and artifact metadata
 - [x] Retry budget exhaustion returns timeout failure deterministically

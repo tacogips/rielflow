@@ -38,7 +38,7 @@ design.
   fallback.
 - Protection against inspection commands replacing async live handles.
 - Public supervision export parity between `src/lib.ts` and
-  `packages/divedra-core/src/index.ts`.
+  `packages/rielflow-core/src/index.ts`.
 - GraphQL/event/CLI translation paths that call core supervisor-client or
   runner-pool operations without owning independent runner-pool state.
 - Focused regression coverage for concurrent active runs and package exports.
@@ -63,16 +63,16 @@ design.
   caller-facing async runner API shape.
 - `../../codex-agent/src/sdk/mock-session-runner.ts`: behavioral reference for
   deterministic async runner tests.
-- `../../codex-agent/src/process/manager.ts`: negative reference only; divedra
+- `../../codex-agent/src/process/manager.ts`: negative reference only; rielflow
   must not model supervisor workflow control as local binary process spawning.
 - `../../codex-agent/impl-plans/issue6-stable-runner-api.md`: unavailable local
   planning reference; use only if a later step gains access.
 
 Intentional divergences:
 
-- Divedra manages in-process workflow executions and durable supervised-run
+- Rielflow manages in-process workflow executions and durable supervised-run
   records rather than Codex subprocesses.
-- Runner-pool ids and workflow session ids are divedra runtime identities, not
+- Runner-pool ids and workflow session ids are rielflow runtime identities, not
   codex-agent session ids.
 - Cursor/Codex/backend-specific behavior stays behind adapter modules.
 
@@ -196,10 +196,10 @@ interface SupervisorRunnerPool {
 ### 4. Package Boundary and Public API Compatibility
 
 #### `src/lib.ts`
-#### `packages/divedra-core/src/index.ts`
-#### `packages/divedra/src/cli.ts`
-#### `packages/divedra-core/package.json`
-#### `packages/divedra/package.json`
+#### `packages/rielflow-core/src/index.ts`
+#### `packages/rielflow/src/cli.ts`
+#### `packages/rielflow-core/package.json`
+#### `packages/rielflow/package.json`
 #### `src/lib-supervision.test.ts`
 
 **Status**: COMPLETED
@@ -207,19 +207,19 @@ interface SupervisorRunnerPool {
 **Deliverables**:
 
 - Keep runner-pool lifecycle types, client request/response shapes, and
-  deterministic in-process implementation owned by `divedra-core`.
-- Keep `divedra` as a compatibility facade and CLI package; it may re-export
+  deterministic in-process implementation owned by `rielflow-core`.
+- Keep `rielflow` as a compatibility facade and CLI package; it may re-export
   core APIs but must not own independent runner-pool state.
 - Preserve existing successful public API call shapes while adding clearer
   failure modes and exported types when needed.
-- Verify `src/lib.ts` and `packages/divedra-core/src/index.ts` expose the same
+- Verify `src/lib.ts` and `packages/rielflow-core/src/index.ts` expose the same
   stable supervision client surface needed by embedders.
 
 **Checklist**:
 
 - [x] Public supervision exports remain available from `src/lib.ts`.
 - [x] Matching public supervision exports remain available from
-      `packages/divedra-core/src/index.ts`.
+      `packages/rielflow-core/src/index.ts`.
 - [x] Compatibility facade does not introduce independent runner-pool state.
 - [x] Package manifests expose stable entrypoints only.
 - [x] Export parity tests cover newly needed types/results.
@@ -257,7 +257,7 @@ interface SupervisorRunnerPool {
 | Runner-pool target indexing and ambiguity | `src/workflow/supervisor-runner-pool.ts` | COMPLETED | `src/workflow/supervisor-runner-pool.test.ts` |
 | Cancellation and wait semantics | `src/workflow/supervisor-runner-pool.ts`, `src/workflow/supervisor-client.ts` | COMPLETED | `src/workflow/supervisor-client.test.ts` |
 | Durable status and transport surfaces | `src/events/`, `src/graphql/schema/supervisor-resolvers.ts` | COMPLETED | `src/server/graphql-supervision-and-resume.test.ts`, `src/graphql/schema.test.ts` |
-| Package boundary and public API | `src/lib.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/cli.ts` | COMPLETED | `src/lib-supervision.test.ts` |
+| Package boundary and public API | `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/cli.ts` | COMPLETED | `src/lib-supervision.test.ts` |
 | Regression verification and docs | tests plus docs if needed | COMPLETED | focused suite, Biome, typecheck, full test |
 
 ## Dependencies
@@ -291,7 +291,7 @@ bun run typecheck
 Use these inspection commands during implementation:
 
 ```bash
-rg -n "runnerPoolRunId|supervisedRunId|workflowExecutionId|workflowKey|correlationKey|cancel\\(|wait\\(" src/workflow src/events src/graphql packages/divedra-core/src/index.ts src/lib.ts
+rg -n "runnerPoolRunId|supervisedRunId|workflowExecutionId|workflowKey|correlationKey|cancel\\(|wait\\(" src/workflow src/events src/graphql packages/rielflow-core/src/index.ts src/lib.ts
 rg -n "createSupervisorRunnerPool|SupervisorRunnerPool|SupervisedWorkflowLookup" src packages
 ```
 
@@ -307,8 +307,8 @@ rg -n "createSupervisorRunnerPool|SupervisorRunnerPool|SupervisedWorkflowLookup"
       status/progress inspection.
 - [x] Inspection commands do not replace existing active async handles.
 - [x] Core-owned supervisor APIs remain exported from `src/lib.ts` and
-      `packages/divedra-core/src/index.ts`.
-- [x] `divedra` remains a compatibility facade and does not own independent
+      `packages/rielflow-core/src/index.ts`.
+- [x] `rielflow` remains a compatibility facade and does not own independent
       runner-pool state.
 - [x] Focused supervisor, GraphQL, and public API tests pass.
 - [x] `bun run typecheck` passes.
@@ -373,7 +373,7 @@ design.
   workflow execution id for status/transport lookup while preserving existing
   terminal reconciliation behavior.
 - Public API compatibility is preserved by adding methods/fields without
-  removing existing call shapes; the compatibility `divedra` package continues
+  removing existing call shapes; the compatibility `rielflow` package continues
   to re-export root `src/lib.ts`.
 
 **Residual Risks**:

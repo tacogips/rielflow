@@ -13,7 +13,7 @@
 
 ### Summary
 
-Finish GitHub issue `tacogips/divedra#5` by completing the GraphQL
+Finish GitHub issue `tacogips/rielflow#5` by completing the GraphQL
 `llmMessages` field selection surface for persisted LLM session messages.
 Persisted adapter/runtime message capture already exists locally; this plan
 targets the remaining public GraphQL selection gap.
@@ -41,7 +41,7 @@ Codex-reference behavior is accepted as diagnostic guidance only:
 - `<reference-repository-root>/src/session/search.ts`: uses bounded
   message retrieval windows.
 
-Divedra intentionally diverges by serving provider-neutral runtime DB records
+Rielflow intentionally diverges by serving provider-neutral runtime DB records
 through GraphQL field resolvers instead of reading Codex rollout files directly.
 
 ---
@@ -225,4 +225,4 @@ direct schema defaults at latest-one behavior, and verified with focused tests,
 typecheck, and diff whitespace checks. Optional full `bun test` was also
 attempted and failed outside this GraphQL slice with existing environment /
 runtime-root issues: readonly runtime DB writes, hook artifact writes under
-`$HOME/.divedra`, one timeout, and ambient workflow environment leakage.
+`$HOME/.rielflow`, one timeout, and ambient workflow environment leakage.

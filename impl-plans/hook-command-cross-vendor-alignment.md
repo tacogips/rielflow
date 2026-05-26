@@ -13,7 +13,7 @@
 
 ### Summary
 
-Correct the first `divedra hook` slice so its transport contract genuinely works for both Claude Code and Codex. The review found that the current implementation treated Codex-documented fields as if they were shared across vendors and relied on a stale Codex-specific detection hint that is not part of the current documented common payload.
+Correct the first `rielflow hook` slice so its transport contract genuinely works for both Claude Code and Codex. The review found that the current implementation treated Codex-documented fields as if they were shared across vendors and relied on a stale Codex-specific detection hint that is not part of the current documented common payload.
 
 ### Scope
 
@@ -128,7 +128,7 @@ declare function parseHookPayload(rawStdin: string): {
 **Tasks Completed**: Design correction, follow-up plan creation, hook transport fix, regression updates
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Review of the uncommitted `divedra hook` work found a cross-vendor contract bug. The implementation and design treated `transcript_path` as universally required and still mentioned a `permission_mode` SessionStart hint, but current official Codex docs document `transcript_path` and `model` as Codex common fields while current Claude Code docs only rely on shared fields such as `session_id`, `cwd`, and `hook_event_name`. This follow-up narrows the required contract to the truly shared fields and updates detection/tests accordingly.
+**Notes**: Review of the uncommitted `rielflow hook` work found a cross-vendor contract bug. The implementation and design treated `transcript_path` as universally required and still mentioned a `permission_mode` SessionStart hint, but current official Codex docs document `transcript_path` and `model` as Codex common fields while current Claude Code docs only rely on shared fields such as `session_id`, `cwd`, and `hook_event_name`. This follow-up narrows the required contract to the truly shared fields and updates detection/tests accordingly.
 
 ## Related Plans
 

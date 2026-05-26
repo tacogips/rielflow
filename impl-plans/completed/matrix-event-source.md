@@ -160,9 +160,9 @@ function dispatchMatrixChatReply(
 **Status**: Completed
 **Parallelizable**: Yes, after TASK-001
 **Dependencies**: TASK-001
-**Deliverables**: `examples/event-sources/.divedra-events/sources/team-matrix.json`,
-`examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`,
-`examples/event-sources/.divedra-events/destinations/release-matrix-chat.json`,
+**Deliverables**: `examples/event-sources/.rielflow-events/sources/team-matrix.json`,
+`examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`,
+`examples/event-sources/.rielflow-events/destinations/release-matrix-chat.json`,
 `examples/event-sources/payloads/matrix-room-message.json`,
 `examples/event-sources/README.md`, `README.md`
 
@@ -199,7 +199,7 @@ function dispatchMatrixChatReply(
 | Matrix receive adapter       | `src/events/adapters/matrix.ts`, `src/events/source-adapter.ts`, `src/events/listener-service.ts` | COMPLETED | `src/events/adapters/matrix.test.ts`                                                                                 |
 | Matrix reply dispatch        | `src/events/adapters/matrix.ts`                                                                   | COMPLETED | `src/events/adapters/matrix.test.ts`, `src/events/reply-dispatcher.test.ts`                                          |
 | Registry/runtime integration | `src/events/adapter-registry.ts`, `src/events/listener-service.ts`, `src/events/manual-emit.ts`   | COMPLETED | `src/events/adapter-registry.test.ts`, `src/events/listener-service.test.ts`, `src/events/manual-emit.test.ts`       |
-| Examples and docs            | `examples/event-sources/**`, `README.md`                                                          | COMPLETED | `divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events` |
+| Examples and docs            | `examples/event-sources/**`, `README.md`                                                          | COMPLETED | `rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events` |
 
 ## Dependencies
 
@@ -229,7 +229,7 @@ bun test src/events/reply-dispatcher.test.ts src/events/listener-service.test.ts
 bun test src/events/adapters/webhook.test.ts src/events/adapters/cron.test.ts src/events/adapters/s3-repository.test.ts
 bun test src/events/chat-reply-example.test.ts src/events/external-output.test.ts
 bun run tsc --noEmit
-divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 rg -n "kind: \"matrix\"|DIVEDRA_MATRIX|m\\.room\\.message|dispatchChatReply|matrix-release-chat" src/events examples/event-sources README.md -S
 ```
 

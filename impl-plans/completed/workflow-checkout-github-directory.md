@@ -19,7 +19,7 @@
 
 ### Summary
 
-Implement `divedra workflow checkout <url>` for installing a valid workflow
+Implement `rielflow workflow checkout <url>` for installing a valid workflow
 bundle from a GitHub directory URL into the scoped workflow catalog. The command
 stages the remote directory, validates it before destination changes, installs
 into project scope by default or user scope with `--user-scope`, rejects
@@ -153,8 +153,8 @@ export function resolveWorkflowCheckoutDestination(
 
 **Deliverables**:
 
-- Resolve project default to discovered project `.divedra`, or
-  `<cwd>/.divedra` when none exists.
+- Resolve project default to discovered project `.rielflow`, or
+  `<cwd>/.rielflow` when none exists.
 - Resolve `--user-scope` to `<user-root>/workflows/<workflow-name>`.
 - Reject direct root checkout destinations from `--workflow-definition-dir`.
 - Build registry path as
@@ -163,8 +163,8 @@ export function resolveWorkflowCheckoutDestination(
 
 **Checklist**:
 
-- [x] Project checkout creates or targets `<project-root>/.divedra/workflows/<name>`.
-- [x] No discovered project scope falls back to `<cwd>/.divedra/workflows/<name>`.
+- [x] Project checkout creates or targets `<project-root>/.rielflow/workflows/<name>`.
+- [x] No discovered project scope falls back to `<cwd>/.rielflow/workflows/<name>`.
 - [x] User checkout targets `<user-root>/workflows/<name>`.
 - [x] Registry file names include scope and workflow name.
 - [x] Registry record includes workflowName, sourceUrl, scope, checkedOutAt, and destinationDirectory.
@@ -226,10 +226,10 @@ export async function checkoutWorkflow(
 
 ### 4. CLI Integration
 
-#### `packages/divedra/src/cli/argument-parser.ts`
-#### `packages/divedra/src/cli/storage-and-options.ts`
-#### `packages/divedra/src/cli/workflow-command-handler.ts`
-#### `packages/divedra/src/cli/input-output-helpers.ts`
+#### `packages/rielflow/src/cli/argument-parser.ts`
+#### `packages/rielflow/src/cli/storage-and-options.ts`
+#### `packages/rielflow/src/cli/workflow-command-handler.ts`
+#### `packages/rielflow/src/cli/input-output-helpers.ts`
 
 **Status**: COMPLETED
 
@@ -256,7 +256,7 @@ export interface ParsedOptions {
 
 **Checklist**:
 
-- [x] `divedra workflow checkout <url>` routes to checkout service.
+- [x] `rielflow workflow checkout <url>` routes to checkout service.
 - [x] `--user-scope` and `--overwrite` parse and reach the service.
 - [x] `--workflow-definition-dir` with checkout exits as usage error.
 - [x] Text and JSON output expose explicit destination and registry fields.
@@ -281,7 +281,7 @@ export interface ParsedOptions {
 
 **Checklist**:
 
-- [x] Project checkout installs under `.divedra/workflows/<workflow-name>`.
+- [x] Project checkout installs under `.rielflow/workflows/<workflow-name>`.
 - [x] User checkout installs under `<user-root>/workflows/<workflow-name>`.
 - [x] Invalid remote JSON fails before destination changes.
 - [x] Duplicate checkout fails without `--overwrite`.
@@ -291,7 +291,7 @@ export interface ParsedOptions {
 ### 6. User-facing Documentation and Progress Log
 
 #### `README.md`
-#### `.agents/skills/divedra-workflow-run/SKILL.md`
+#### `.agents/skills/rielflow-workflow-run/SKILL.md`
 #### `impl-plans/active/workflow-checkout-github-directory.md`
 
 **Status**: COMPLETED
@@ -319,7 +319,7 @@ export interface ParsedOptions {
 | TASK-002 | Destination and registry helpers | `src/workflow/checkout/registry.ts`, scoped helper exports in `src/workflow/catalog.ts` / `src/workflow/paths.ts`, registry tests | Accepted Step 3 design review | Yes |
 | TASK-003 | Checkout install service | `src/workflow/checkout/index.ts`, install/overwrite/validation tests | TASK-001, TASK-002 | No |
 | TASK-004 | CLI command integration | CLI parser/types/help/handler files, CLI tests | TASK-003 | No |
-| TASK-005 | Documentation refresh | `README.md`, `.agents/skills/divedra-workflow-run/SKILL.md` | TASK-004 behavior and output names | No |
+| TASK-005 | Documentation refresh | `README.md`, `.agents/skills/rielflow-workflow-run/SKILL.md` | TASK-004 behavior and output names | No |
 | TASK-006 | Verification and progress update | This plan file | TASK-001 through TASK-005 | No |
 
 ## Dependencies
@@ -352,9 +352,9 @@ Run after implementation:
 
 Focused behavioral checks:
 
-- `divedra workflow checkout <mocked-github-url>` installs a valid staged bundle
+- `rielflow workflow checkout <mocked-github-url>` installs a valid staged bundle
   into project scope and writes a project registry record.
-- `divedra workflow checkout <mocked-github-url> --user-scope` installs into
+- `rielflow workflow checkout <mocked-github-url> --user-scope` installs into
   user scope and writes a user registry record.
 - Invalid remote JSON or missing workflow-local files fail before destination or
   registry changes.
@@ -365,7 +365,7 @@ Focused behavioral checks:
 
 ## Completion Criteria
 
-- [x] `divedra workflow checkout <url>` accepts supported GitHub directory URLs and rejects unsupported inputs.
+- [x] `rielflow workflow checkout <url>` accepts supported GitHub directory URLs and rejects unsupported inputs.
 - [x] Remote workflow bundles are fetched into staging and validated before destination mutation.
 - [x] Project-scope default and `--user-scope` destination behavior match the accepted design.
 - [x] Duplicate checkout and `--overwrite` behavior match the accepted design.

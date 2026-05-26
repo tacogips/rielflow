@@ -35,7 +35,7 @@ resolved.
 ### Resolved Decisions
 
 - Default event root resolves from `--event-root`, `DIVEDRA_EVENT_ROOT`, or
-  `.divedra-events` next to the workflow root.
+  `.rielflow-events` next to the workflow root.
 - Runtime variables expose canonical `workflowInput`, event metadata under
   `event`, and optional compatibility `humanInput`.
 - First provider-neutral slice supports manual emit, cron, generic webhook, and
@@ -84,8 +84,8 @@ interface EventBinding {
 
 - [x] Define provider-neutral event, source, binding, match, mapping, and
       execution policy types
-- [x] Load `.divedra-events/sources/*.json` and
-      `.divedra-events/bindings/*.json`
+- [x] Load `.rielflow-events/sources/*.json` and
+      `.rielflow-events/bindings/*.json`
 - [x] Resolve `--event-root` and `DIVEDRA_EVENT_ROOT`
 - [x] Unit tests for missing, malformed, disabled, and duplicate config
 
@@ -175,7 +175,7 @@ interface WorkflowTriggerDispatchInput {
 - [x] Implement static JSON template mapping without JavaScript evaluation
 - [x] Build `workflowInput`, `event`, and optional `humanInput`
       runtime variables
-- [x] Dispatch through `divedra workflow run`,
+- [x] Dispatch through `rielflow workflow run`,
       `createWorkflowExecutionClient()`, or GraphQL endpoint
 
 ### 5. CLI Surface
@@ -222,8 +222,8 @@ execution policy types, plus event-root resolution and JSON config loading.
 **Completion Criteria**:
 
 - [x] Canonical event and binding types are exported from `src/events/`
-- [x] `.divedra-events/sources/*.json` and
-      `.divedra-events/bindings/*.json` load deterministically
+- [x] `.rielflow-events/sources/*.json` and
+      `.rielflow-events/bindings/*.json` load deterministically
 - [x] `--event-root`, `DIVEDRA_EVENT_ROOT`, and default root resolution are covered
 - [x] Missing, malformed, disabled, and duplicate config tests pass
 
@@ -279,7 +279,7 @@ existing library or GraphQL workflow execution boundary.
 - [x] `mode: "event-input"` mapping is implemented
 - [x] Static JSON template mapping works without JavaScript evaluation
 - [x] Runtime variables include `workflowInput`, `event`, and optional `humanInput`
-- [x] Dispatch works through `divedra workflow run`,
+- [x] Dispatch works through `rielflow workflow run`,
       `createWorkflowExecutionClient()`, or GraphQL
 
 ### TASK-005: CLI Surface

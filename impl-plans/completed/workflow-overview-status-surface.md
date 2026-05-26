@@ -365,7 +365,7 @@ export function selectDefaultWorkflowOverviewRow(
 
 **Completion Criteria**:
 
-- [x] `divedra serve` exposes a root overview entrypoint backed by overview-only data
+- [x] `rielflow serve` exposes a root overview entrypoint backed by overview-only data
 - [x] Default selection follows fixed workflow, running workflow, newest execution, stable catalog order
 - [x] Empty and missing-workflow states are explicit
 - [x] Default page omits node/runtime detail surfaces

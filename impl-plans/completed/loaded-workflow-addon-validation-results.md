@@ -25,7 +25,7 @@ or duplicating add-on source records.
 **Included**:
 
 - CLI loaded workflow validation in
-  `packages/divedra/src/cli/workflow-command-handler.ts`.
+  `packages/rielflow/src/cli/workflow-command-handler.ts`.
 - GraphQL `validateWorkflowDefinition` with `workflowName` and no submitted
   bundle in `src/graphql/schema/llm-run-overrides.ts`.
 - Shared validation helper changes if needed under `src/workflow/validate/`.
@@ -52,7 +52,7 @@ or duplicating add-on source records.
 - Issue title: Fix inconsistent add-on nodeValidationResults in loaded workflow
   validation
 - Blocking findings:
-  - `packages/divedra/src/cli/workflow-command-handler.ts:423`: CLI loaded
+  - `packages/rielflow/src/cli/workflow-command-handler.ts:423`: CLI loaded
     workflow validation omits add-on validate hook `nodeValidationResults`.
   - `src/graphql/schema/llm-run-overrides.ts:643`: GraphQL named workflow
     validation omits add-on validate hook `nodeValidationResults`.
@@ -123,7 +123,7 @@ interface LoadedWorkflowNodeValidationOutput {
 
 ### 2. CLI Loaded Workflow Validation
 
-#### `packages/divedra/src/cli/workflow-command-handler.ts`
+#### `packages/rielflow/src/cli/workflow-command-handler.ts`
 
 **Status**: COMPLETED
 
@@ -138,7 +138,7 @@ interface LoadedWorkflowNodeValidationOutput {
 
 **Checklist**:
 
-- [x] `divedra workflow validate <name> --output json` includes add-on validate
+- [x] `rielflow workflow validate <name> --output json` includes add-on validate
       hook results for direct-directory loaded workflows.
 - [x] Scoped catalog validation uses the same result preservation behavior.
 - [x] `--executable` still returns nonzero when merged node results include
@@ -211,7 +211,7 @@ interface LoadedWorkflowNodeValidationOutput {
 
 #### `README.md`
 #### `design-docs/specs/command.md`
-#### `.agents/skills/divedra-workflow-run/SKILL.md`
+#### `.agents/skills/rielflow-workflow-run/SKILL.md`
 
 **Status**: COMPLETED
 
@@ -234,11 +234,11 @@ interface LoadedWorkflowNodeValidationOutput {
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
 | Loaded detailed-result path | `src/workflow/validate/**` | COMPLETED | `src/workflow/validate.test.ts` if helper behavior is extracted |
-| CLI loaded validation | `packages/divedra/src/cli/workflow-command-handler.ts` | COMPLETED | `src/cli.test.ts` |
+| CLI loaded validation | `packages/rielflow/src/cli/workflow-command-handler.ts` | COMPLETED | `src/cli.test.ts` |
 | GraphQL named validation | `src/graphql/schema/llm-run-overrides.ts` | COMPLETED | `src/graphql/schema.test.ts` |
 | CLI regression | `src/cli.test.ts` | COMPLETED | Focused CLI command test |
 | GraphQL regression | `src/graphql/schema.test.ts` | COMPLETED | Focused GraphQL mutation test |
-| Docs assessment | `README.md`, `design-docs/specs/command.md`, `.agents/skills/divedra-workflow-run/SKILL.md` | COMPLETED | Review |
+| Docs assessment | `README.md`, `design-docs/specs/command.md`, `.agents/skills/rielflow-workflow-run/SKILL.md` | COMPLETED | Review |
 
 ---
 
@@ -269,7 +269,7 @@ interface LoadedWorkflowNodeValidationOutput {
 **Parallelizable**: No
 **Deliverables**:
 
-- `packages/divedra/src/cli/workflow-command-handler.ts`
+- `packages/rielflow/src/cli/workflow-command-handler.ts`
 
 **Dependencies**: TASK-001
 
@@ -404,7 +404,7 @@ Manual/parity checks to keep explicit:
 ## Completion Criteria
 
 - [x] Both recent-change mid findings are fixed:
-  - [x] `packages/divedra/src/cli/workflow-command-handler.ts:423`
+  - [x] `packages/rielflow/src/cli/workflow-command-handler.ts:423`
   - [x] `src/graphql/schema/llm-run-overrides.ts:643`
 - [x] CLI, GraphQL named workflow validation, GraphQL bundle validation, and
       library detailed validation preserve add-on validate hook

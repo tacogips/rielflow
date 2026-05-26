@@ -1,7 +1,7 @@
 # Server Workflow Bundle Parsing Refactoring Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-refactoring-server-workflow-bundle-parsing.md, design-docs/specs/architecture.md#local-http-server-divedra-serve
+**Design Reference**: design-docs/specs/design-refactoring-server-workflow-bundle-parsing.md, design-docs/specs/architecture.md#local-http-server-rielflow-serve
 **Created**: 2026-03-09
 **Last Updated**: 2026-03-09
 

@@ -34,7 +34,7 @@ Review and harden the existing dedicated workflow self-improve implementation wh
 - Scheduled/background self-improve execution.
 - Cross-workflow explicit session analysis.
 - Git push from runtime self-improve.
-- Copying Codex rollout storage formats into divedra.
+- Copying Codex rollout storage formats into rielflow.
 
 ### Codex Reference Trace
 
@@ -47,7 +47,7 @@ Review and harden the existing dedicated workflow self-improve implementation wh
 - `/Users/taco/gits/tacogips/codex-agent/src/queue/runner.ts`: queued prompt execution and durable progress reference.
 - `/Users/taco/gits/tacogips/codex-agent/src/main.ts`: library facade export reference.
 
-Codex-agent references are structural only. Divedra source runs remain in divedra runtime session/artifact stores, and backend-specific transcript behavior remains behind existing adapters.
+Codex-agent references are structural only. Rielflow source runs remain in rielflow runtime session/artifact stores, and backend-specific transcript behavior remains behind existing adapters.
 
 ---
 
@@ -151,7 +151,7 @@ interface WorkflowSelfImproveMutationSafetyResult {
 
 ### 5. CLI, Library, GraphQL, and Server Parity
 
-#### `src/lib.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/index.ts`, `packages/divedra-graphql/src/schema-contract.ts`, `packages/divedra-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`
+#### `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/index.ts`, `packages/rielflow-graphql/src/schema-contract.ts`, `packages/rielflow-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`
 
 **Status**: COMPLETED
 
@@ -168,8 +168,8 @@ interface WorkflowSelfImproveTransportParity {
 **Checklist**:
 
 - [x] Normalize CLI, GraphQL, and library entrypoints to the same core service input and output shape.
-- [x] Verify `src/lib.ts`, `packages/divedra-core/src/index.ts`, and `packages/divedra/src/index.ts` export the public self-improve execution, report lookup, and report listing APIs with aligned types.
-- [x] Propagate command/API override inputs through `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra-graphql/src/schema-contract.ts`, `packages/divedra-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, and `src/lib.ts`.
+- [x] Verify `src/lib.ts`, `packages/rielflow-core/src/index.ts`, and `packages/rielflow/src/index.ts` export the public self-improve execution, report lookup, and report listing APIs with aligned types.
+- [x] Propagate command/API override inputs through `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow-graphql/src/schema-contract.ts`, `packages/rielflow-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, and `src/lib.ts`.
 - [x] Use typed GraphQL self-improve mutation/query contracts for endpoint-backed CLI and library calls.
 - [x] Reject self-improve execution under `serve --read-only` and `serve --no-exec`.
 - [x] Allow report read/list behavior only where server mode allows safe reads.
@@ -207,7 +207,7 @@ interface WorkflowSelfImproveDocumentationCoverage {
 | Core validation and source selection | `src/workflow/self-improve/config.ts`, `source-selection.ts`, `marker-store.ts`, `service.ts` | COMPLETED | `src/workflow/self-improve/config.test.ts`, `source-selection.test.ts`, `service.test.ts` |
 | Run evidence and reports | `src/workflow/self-improve/analyzer.ts`, `report.ts`, `types.ts`, `service.ts` | COMPLETED | `src/workflow/self-improve/service.test.ts` |
 | Backup, patch, and git safety | `src/workflow/self-improve/backup.ts`, `patcher.ts`, `git.ts` | COMPLETED | `src/workflow/self-improve/patcher.test.ts`, `backup-git.test.ts` |
-| Transport and server parity | `src/lib.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/**/*.ts`, `packages/divedra-graphql/src/*.ts`, `src/graphql/**/*.ts`, `src/server/**/*.ts` | COMPLETED | `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts` |
+| Transport and server parity | `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/**/*.ts`, `packages/rielflow-graphql/src/*.ts`, `src/graphql/**/*.ts`, `src/server/**/*.ts` | COMPLETED | `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts` |
 | Documentation and verification | `README.md`, `impl-plans/README.md`, `impl-plans/PROGRESS.json` | COMPLETED | `bun run typecheck`, `bun run lint:biome`, `bun run build`, `git diff --check` |
 
 ## Task Breakdown
@@ -285,7 +285,7 @@ Verify and correct backup-before-write, rollback, prompt file patching, and git 
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `src/lib.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/index.ts`, `packages/divedra-graphql/src/schema-contract.ts`, `packages/divedra-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
+**Deliverables**: `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/index.ts`, `packages/rielflow-graphql/src/schema-contract.ts`, `packages/rielflow-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
 **Dependencies**: TASK-002, TASK-003
 
 **Description**:
@@ -294,7 +294,7 @@ Ensure CLI, library, GraphQL, and server paths share typed contracts and enforce
 **Completion Criteria**:
 
 - [x] Local CLI and local library execution normalize through the same core service input.
-- [x] `src/lib.ts`, `packages/divedra-core/src/index.ts`, and `packages/divedra/src/index.ts` expose aligned public self-improve APIs and types.
+- [x] `src/lib.ts`, `packages/rielflow-core/src/index.ts`, and `packages/rielflow/src/index.ts` expose aligned public self-improve APIs and types.
 - [x] Command/API override inputs are parsed, typed, transported, and propagated to the core service through CLI, GraphQL, library, and server paths.
 - [x] Endpoint-backed CLI and library calls use typed GraphQL self-improve operations.
 - [x] `serve --read-only` and `serve --no-exec` reject execution.
@@ -372,7 +372,7 @@ Update user-facing documentation and implementation tracking after the code hard
 **Tasks Completed**: Step 5 plan-review feedback addressed.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Added `src/lib.ts` and `packages/divedra-core/src/index.ts` to TASK-005 module and deliverable scope, and added explicit public library/core export parity completion criteria while keeping `src/lib-api.test.ts` in the verification plan.
+**Notes**: Added `src/lib.ts` and `packages/rielflow-core/src/index.ts` to TASK-005 module and deliverable scope, and added explicit public library/core export parity completion criteria while keeping `src/lib-api.test.ts` in the verification plan.
 **Verification**: `git diff --check -- impl-plans/active/self-improve-review-hardening.md impl-plans/README.md impl-plans/PROGRESS.json`; `git diff --no-index --check /dev/null impl-plans/active/self-improve-review-hardening.md`; `jq '.' impl-plans/PROGRESS.json >/dev/null`.
 
 ### Session: 2026-05-18 22:10
@@ -396,7 +396,7 @@ Update user-facing documentation and implementation tracking after the code hard
 - Low: Backup restore behavior preserved `.git`, but regression coverage did not prove repository metadata stayed outside backups and survived rollback. Remediated in TASK-004 with focused patcher coverage.
 
 **Notes**: No codex-agent implementation code was copied. Codex-agent references remained structural only for discovery/report facade patterns. Existing README self-improve documentation already covered CLI, GraphQL, library, backup, git, and server-mode semantics, so TASK-006 refreshed plan tracking rather than changing README.
-**Verification**: `bun test src/workflow/self-improve/config.test.ts src/workflow/self-improve/source-selection.test.ts src/workflow/self-improve/service.test.ts src/workflow/self-improve/patcher.test.ts src/workflow/self-improve/backup-git.test.ts`; `bun test src/lib-api.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql-queries-and-inspection.test.ts`; `bun run typecheck`; `bun run build`; `bunx biome check src/workflow/self-improve/config.ts src/workflow/self-improve/service.ts src/workflow/self-improve/index.ts src/workflow/self-improve/config.test.ts src/workflow/self-improve/service.test.ts src/workflow/self-improve/patcher.test.ts packages/divedra/src/cli/workflow-command-handler.ts packages/divedra/src/index.ts src/cli.test.ts src/lib-api.test.ts src/graphql/schema.test.ts --diagnostic-level=warn`; `git diff --check`; `jq '.' impl-plans/PROGRESS.json >/dev/null`.
+**Verification**: `bun test src/workflow/self-improve/config.test.ts src/workflow/self-improve/source-selection.test.ts src/workflow/self-improve/service.test.ts src/workflow/self-improve/patcher.test.ts src/workflow/self-improve/backup-git.test.ts`; `bun test src/lib-api.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql-queries-and-inspection.test.ts`; `bun run typecheck`; `bun run build`; `bunx biome check src/workflow/self-improve/config.ts src/workflow/self-improve/service.ts src/workflow/self-improve/index.ts src/workflow/self-improve/config.test.ts src/workflow/self-improve/service.test.ts src/workflow/self-improve/patcher.test.ts packages/rielflow/src/cli/workflow-command-handler.ts packages/rielflow/src/index.ts src/cli.test.ts src/lib-api.test.ts src/graphql/schema.test.ts --diagnostic-level=warn`; `git diff --check`; `jq '.' impl-plans/PROGRESS.json >/dev/null`.
 **Verification Exception**: `bun run lint:biome` remains blocked by pre-existing unrelated `noExplicitAny` warnings in `src/workflow/engine/node-execution.ts`, `src/workflow/engine/node-output-attempts.ts`, `src/workflow/engine/run-setup.ts`, and `src/workflow/engine/session-entry.ts`; touched-file Biome passed.
 
 ## Related Plans

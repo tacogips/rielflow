@@ -13,7 +13,7 @@
 
 ### Summary
 
-Resolve issue `tacogips/divedra#23`: `workflow status` and workflow catalog/list overview surfaces must not report a `running` or `paused` execution whose `sessionId` cannot be loaded by `session status`, `session progress`, and `session step-runs` under the same runtime storage context. The primary fix is shared local storage-context resolution, with defensive filtering for stale derived/indexed active candidates.
+Resolve issue `tacogips/rielflow#23`: `workflow status` and workflow catalog/list overview surfaces must not report a `running` or `paused` execution whose `sessionId` cannot be loaded by `session status`, `session progress`, and `session step-runs` under the same runtime storage context. The primary fix is shared local storage-context resolution, with defensive filtering for stale derived/indexed active candidates.
 
 ### Scope
 
@@ -32,7 +32,7 @@ Resolve issue `tacogips/divedra#23`: `workflow status` and workflow catalog/list
 
 ### Codex Reference Trace
 
-- `https://github.com/tacogips/divedra/issues/23`: source behavior report and acceptance signal.
+- `https://github.com/tacogips/rielflow/issues/23`: source behavior report and acceptance signal.
 - `../../codex-agent`: unavailable locally and intentionally unused; this plan does not copy implementation behavior from `codex-agent`.
 
 ---
@@ -41,7 +41,7 @@ Resolve issue `tacogips/divedra#23`: `workflow status` and workflow catalog/list
 
 ### 1. CLI Runtime Storage Context
 
-#### `packages/divedra/src/cli/storage-and-options.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`
+#### `packages/rielflow/src/cli/storage-and-options.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`
 
 **Status**: COMPLETED
 
@@ -116,21 +116,21 @@ export async function buildWorkflowStatusOverview(
 
 ### 3. Session Inspection Loadability
 
-#### `packages/divedra/src/cli/session-command-handler.ts`, `packages/divedra/src/lib-sessions.ts`, `packages/divedra/src/lib-step-runs.ts`
+#### `packages/rielflow/src/cli/session-command-handler.ts`, `packages/rielflow/src/lib-sessions.ts`, `packages/rielflow/src/lib-step-runs.ts`
 
 **Status**: COMPLETED
 
 ```ts
-export type DivedraSessionOptions = LoadOptions & SessionStoreOptions;
+export type RielflowSessionOptions = LoadOptions & SessionStoreOptions;
 
-export type DivedraStepRunOptions = LoadOptions & SessionStoreOptions;
+export type RielflowStepRunOptions = LoadOptions & SessionStoreOptions;
 
 export async function listMergedWorkflowExecutionStepRuns(
   input: {
     readonly workflowExecutionId: string;
     readonly filterStepId?: string;
     readonly filterStatus?: NodeExecutionRecord["status"];
-  } & DivedraStepRunOptions,
+  } & RielflowStepRunOptions,
 ): Promise<{
   readonly workflowExecutionId: string;
   readonly workflowId: string;
@@ -226,9 +226,9 @@ interface VerificationCommandResult {
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| CLI runtime storage context | `packages/divedra/src/cli/storage-and-options.ts`, `packages/divedra/src/cli/workflow-command-handler.ts` | COMPLETED | `src/cli.test.ts` |
+| CLI runtime storage context | `packages/rielflow/src/cli/storage-and-options.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts` | COMPLETED | `src/cli.test.ts` |
 | Active overview loadability | `src/workflow/overview.ts` | COMPLETED | `src/workflow/overview.test.ts` |
-| Session inspection loadability | `packages/divedra/src/cli/session-command-handler.ts`, `packages/divedra/src/lib-sessions.ts`, `packages/divedra/src/lib-step-runs.ts` | COMPLETED | `src/cli.test.ts` |
+| Session inspection loadability | `packages/rielflow/src/cli/session-command-handler.ts`, `packages/rielflow/src/lib-sessions.ts`, `packages/rielflow/src/lib-step-runs.ts` | COMPLETED | `src/cli.test.ts` |
 | GraphQL/browser parity | `src/graphql/schema/llm-run-overrides.ts`, `src/server/browser-overview.ts` | COMPLETED | `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts` |
 | CLI regression coverage | `src/cli.test.ts` | COMPLETED | `src/cli.test.ts` |
 | Documentation and plan tracking | `README.md`, `design-docs/specs/command.md`, `impl-plans/workflow-status-active-session-loadability.md`, `impl-plans/PROGRESS.json`, `impl-plans/README.md` | COMPLETED | - |
@@ -239,7 +239,7 @@ interface VerificationCommandResult {
 
 **Status**: Completed
 **Parallelizable**: Yes
-**Deliverables**: `packages/divedra/src/cli/storage-and-options.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`
+**Deliverables**: `packages/rielflow/src/cli/storage-and-options.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`
 **Dependencies**: None
 
 **Description**:
@@ -272,7 +272,7 @@ Ensure catalog active counts, status active counts, and newest-active summaries 
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/cli/session-command-handler.ts`, `packages/divedra/src/lib-sessions.ts`, `packages/divedra/src/lib-step-runs.ts`
+**Deliverables**: `packages/rielflow/src/cli/session-command-handler.ts`, `packages/rielflow/src/lib-sessions.ts`, `packages/rielflow/src/lib-step-runs.ts`
 **Dependencies**: TASK-001
 
 **Description**:
@@ -389,7 +389,7 @@ Run verification, update progress metadata, and prepare review handoff without c
 **Tasks Completed**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006
 **Tasks In Progress**: Step 7 implementation review pending
 **Blockers**: `bun run test` has pre-existing environment/build failures unrelated to issue 23: missing `packages/*/dist` artifacts, local agent-readiness timeouts, and step-derived cross-workflow readiness timeouts. Targeted issue-23 verification and `bun run typecheck` passed.
-**Notes**: Implemented `resolveWorkflowOverviewStorageOptions` so local `workflow list` and `workflow status` infer project-scoped runtime storage from recognized `.divedra/workflows` roots while preserving explicit storage overrides and ordinary direct workflow roots. Added CLI regression coverage linking reported active `sessionId` values to `session status`, `session progress`, and `session step-runs`; added overview and GraphQL active-loadability tests. No codex-agent implementation code was used.
+**Notes**: Implemented `resolveWorkflowOverviewStorageOptions` so local `workflow list` and `workflow status` infer project-scoped runtime storage from recognized `.rielflow/workflows` roots while preserving explicit storage overrides and ordinary direct workflow roots. Added CLI regression coverage linking reported active `sessionId` values to `session status`, `session progress`, and `session step-runs`; added overview and GraphQL active-loadability tests. No codex-agent implementation code was used.
 
 ## Related Plans
 

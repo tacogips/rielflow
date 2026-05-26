@@ -39,7 +39,7 @@ forbidden fixture files under source paths.
 ### Codex-Agent References
 
 No codex-agent reference repository, source path, or issue reference was
-provided. This plan follows the accepted local divedra design only. There are no
+provided. This plan follows the accepted local rielflow design only. There are no
 intentional divergences from external Codex-reference behavior.
 
 ---

@@ -287,7 +287,7 @@ Codex-reference mapping:
   describes Codex rollout/session audit records and
   `<reference-repository-root>/src/sdk/session-runner.ts` exposes
   `SessionConfig`, `RunningSession`, and streamed rollout messages
-- intentional divedra boundary: divedra keeps workflow mailbox, validation,
+- intentional rielflow boundary: rielflow keeps workflow mailbox, validation,
   routing, and final publication runtime-owned; `codex-agent` is used as a
   backend session/process adapter and as an auditability reference, not as the
   workflow mailbox or session store

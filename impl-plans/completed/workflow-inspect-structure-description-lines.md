@@ -43,7 +43,7 @@ porting.
 ### Codex-Agent References
 
 No codex-agent reference repository, source path, or issue reference was
-provided. This plan follows the accepted local divedra design only. There are no
+provided. This plan follows the accepted local rielflow design only. There are no
 intentional divergences from external Codex-reference behavior.
 
 ---
@@ -248,8 +248,8 @@ Completion criteria:
 - `bun test src/cli.test.ts -t "workflow inspect --structure"`
 - `bun test src/workflow/inspect.test.ts`
 - `bun run tsc --noEmit`
-- `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure`
-- `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure --output json`
+- `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure`
+- `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure --output json`
 - `git diff --check -- src/cli.ts src/cli.test.ts README.md impl-plans/active/workflow-inspect-structure-description-lines.md`
 
 ## Completion Criteria
@@ -294,6 +294,6 @@ because empty strings are rejected by workflow validation before CLI rendering.
 - `bun test src/workflow/inspect.test.ts`: passed.
 - `bun run typecheck`: passed.
 - `bun run lint:biome`: passed with pre-existing warnings outside touched code.
-- `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure`: passed and showed two-line compact rows.
-- `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure --output json`: passed and emitted full inspection JSON.
+- `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure`: passed and showed two-line compact rows.
+- `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure --output json`: passed and emitted full inspection JSON.
 - `git diff --check -- src/cli.ts src/cli.test.ts README.md impl-plans/active/workflow-inspect-structure-description-lines.md`: passed.

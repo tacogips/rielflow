@@ -2,7 +2,7 @@
 
 This sample receives text messages from an Element/Matrix room through the
 `matrix` event source and sends a reply back to Matrix with
-`divedra/chat-reply-worker`.
+`rielflow/chat-reply-worker`.
 
 Run the live local Synapse verification:
 
@@ -11,8 +11,8 @@ Run the live local Synapse verification:
 ```
 
 The script starts Synapse with Docker Compose, creates two local users, creates
-a room, starts `divedra events serve`, sends an Alice message, and waits until
-the divedra bot reply appears in the room.
+a room, starts `rielflow events serve`, sends an Alice message, and waits until
+the rielflow bot reply appears in the room.
 
 Stop the local homeserver when finished:
 

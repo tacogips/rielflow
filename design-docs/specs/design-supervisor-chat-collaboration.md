@@ -146,27 +146,27 @@ Implementation should add these example paths:
 - `examples/supervisor-chat-collaboration/EXPECTED_RESULTS.md`
 - `examples/supervisor-chat-collaboration/mock-scenario.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-a/workflow.json`
-- `examples/supervisor-chat-collaboration/workflows/workflow-a/nodes/node-divedra-manager.json`
+- `examples/supervisor-chat-collaboration/workflows/workflow-a/nodes/node-rielflow-manager.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-a/nodes/node-brainstorm.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-a/nodes/node-output.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-a/prompts/brainstorm.md`
 - `examples/supervisor-chat-collaboration/workflows/workflow-b/workflow.json`
-- `examples/supervisor-chat-collaboration/workflows/workflow-b/nodes/node-divedra-manager.json`
+- `examples/supervisor-chat-collaboration/workflows/workflow-b/nodes/node-rielflow-manager.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-b/nodes/node-brainstorm.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-b/nodes/node-output.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-b/prompts/brainstorm.md`
 - `examples/supervisor-chat-collaboration/workflows/workflow-c/workflow.json`
-- `examples/supervisor-chat-collaboration/workflows/workflow-c/nodes/node-divedra-manager.json`
+- `examples/supervisor-chat-collaboration/workflows/workflow-c/nodes/node-rielflow-manager.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-c/nodes/node-synthesize.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-c/nodes/node-review-request.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-c/nodes/node-output.json`
 - `examples/supervisor-chat-collaboration/workflows/workflow-c/prompts/synthesize.md`
-- `examples/supervisor-chat-collaboration/.divedra-events/bindings/chat-task-to-supervisors.json`
-- `examples/supervisor-chat-collaboration/.divedra-events/bindings/discussion-to-coordinator.json`
-- `examples/supervisor-chat-collaboration/.divedra-events/destinations/supervisor-a-chat.json`
-- `examples/supervisor-chat-collaboration/.divedra-events/destinations/supervisor-b-chat.json`
-- `examples/supervisor-chat-collaboration/.divedra-events/destinations/supervisor-discussion-chat.json`
-- `examples/supervisor-chat-collaboration/.divedra-events/destinations/coordinator-chat.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/bindings/chat-task-to-supervisors.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/bindings/discussion-to-coordinator.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/destinations/supervisor-a-chat.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/destinations/supervisor-b-chat.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/destinations/supervisor-discussion-chat.json`
+- `examples/supervisor-chat-collaboration/.rielflow-events/destinations/coordinator-chat.json`
 
 The workflows should use `promptTemplateFile` for long prompts and keep
 `workflow.json` focused on graph shape, defaults, and node ordering.

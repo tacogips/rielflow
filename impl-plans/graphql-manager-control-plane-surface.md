@@ -21,7 +21,7 @@ This plan layers the executable manager control-plane surface on top of the comp
 - transport-neutral manager-message application services
 - manager-message provenance preparation for future mailbox-send actions
 - GraphQL/domain schema and transport integration
-- `divedra gql` CLI client and manager tool contract
+- `rielflow gql` CLI client and manager tool contract
 - documentation and library consolidation
 
 ### Scope
@@ -31,7 +31,7 @@ This plan layers the executable manager control-plane surface on top of the comp
 - manager-message validation/materialization services
 - queue-only and replay-based manager actions on the current runtime model
 - GraphQL schema/types/server modules once the service layer is stable
-- `divedra gql` transport client and variable loading
+- `rielflow gql` transport client and variable loading
 - docs updates for canonical GraphQL control-plane behavior
 
 **Excluded**:
@@ -161,7 +161,7 @@ export interface GraphqlControlPlaneServices {
 - [x] `/graphql` handler is available from `serve`
 - [x] GraphQL auth context is derived from bearer tokens
 - [x] data-root-relative attachment paths resolve safely
-- [x] `divedra gql` exists with inline JSON and `@file.json` variables
+- [x] `rielflow gql` exists with inline JSON and `@file.json` variables
 - [x] ambient manager auth context is used by default
 
 ## Module Status
@@ -272,13 +272,13 @@ export interface GraphqlControlPlaneServices {
 - `src/graphql/client.ts`
 - `src/cli.ts`
 - `src/cli.test.ts`
-- `src/workflow/prompts/divedra-role-system-prompt.md` (default manager system guidance; structural `divedra-system-prompt.md` removed as unused)
+- `src/workflow/prompts/rielflow-role-system-prompt.md` (default manager system guidance; structural `rielflow-system-prompt.md` removed as unused)
 
 **Completion Criteria**:
 
 - [x] `/graphql` is served
 - [x] auth context and file-reference resolution are enforced
-- [x] `divedra gql` sends documents and variables
+- [x] `rielflow gql` sends documents and variables
 - [x] bearer-token auth is used automatically when available
 
 ### TASK-005: Documentation Consolidation
@@ -311,7 +311,7 @@ export interface GraphqlControlPlaneServices {
 - [x] manager-message service exists and is tested
 - [x] manager-authored mailbox-send provenance is designed and implemented
 - [x] `/graphql` exists and is tested
-- [x] `divedra gql` works end-to-end
+- [x] `rielflow gql` works end-to-end
 - [x] manager auth/idempotency behavior is enforced through the GraphQL surface
 - [x] docs reflect the implemented migration state
 
@@ -364,11 +364,11 @@ export interface GraphqlControlPlaneServices {
 **Tasks Completed**: TASK-003
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added a transport-neutral GraphQL schema layer under `src/graphql/` with typed query/mutation contracts, communication/node/session inspection views, manager-session-authenticated manager mutations, and targeted tests. TASK-004 is now the next unblocked slice for `/graphql` transport wiring and the `divedra gql` client.
+**Notes**: Added a transport-neutral GraphQL schema layer under `src/graphql/` with typed query/mutation contracts, communication/node/session inspection views, manager-session-authenticated manager mutations, and targeted tests. TASK-004 is now the next unblocked slice for `/graphql` transport wiring and the `rielflow gql` client.
 
 ### Session: 2026-03-15 8
 
 **Tasks Completed**: TASK-004, TASK-005
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added `/graphql` transport handling to the shared server router, implemented a minimal GraphQL document executor plus HTTP client, wired `divedra gql` with inline and `@file` variable loading plus ambient bearer-token auth, exported the GraphQL surface from `src/lib.ts`, and aligned the README and design docs with the implemented transport and default endpoint behavior.
+**Notes**: Added `/graphql` transport handling to the shared server router, implemented a minimal GraphQL document executor plus HTTP client, wired `rielflow gql` with inline and `@file` variable loading plus ambient bearer-token auth, exported the GraphQL surface from `src/lib.ts`, and aligned the README and design docs with the implemented transport and default endpoint behavior.

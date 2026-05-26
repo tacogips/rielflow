@@ -1,14 +1,14 @@
-# Design: `divedra hook` Command
+# Design: `rielflow hook` Command
 
-Receive Claude Code, Codex CLI, and Gemini CLI hook payloads via stdin, determine vendor and event type, associate the backend session with the active divedra workflow execution when ambient divedra environment is present, record the hook event, and dispatch to policy handlers.
+Receive Claude Code, Codex CLI, and Gemini CLI hook payloads via stdin, determine vendor and event type, associate the backend session with the active rielflow workflow execution when ambient rielflow environment is present, record the hook event, and dispatch to policy handlers.
 
 ## Overview
 
-Agent backends (Claude Code, Codex CLI, Gemini CLI) support lifecycle hooks -- shell commands invoked at specific points during agent execution. `divedra hook` acts as a unified entry point that these backends can call. It reads a JSON payload from stdin, identifies which vendor sent it and which event fired, resolves any divedra workflow context from environment variables, dispatches to the matching policy handler, then records the hook event and handler result when it can be associated with a workflow execution.
+Agent backends (Claude Code, Codex CLI, Gemini CLI) support lifecycle hooks -- shell commands invoked at specific points during agent execution. `rielflow hook` acts as a unified entry point that these backends can call. It reads a JSON payload from stdin, identifies which vendor sent it and which event fired, resolves any rielflow workflow context from environment variables, dispatches to the matching policy handler, then records the hook event and handler result when it can be associated with a workflow execution.
 
 The command validates only the stable shared transport fields it depends on (`session_id`, `hook_event_name`, `cwd`) and preserves the remaining vendor-specific fields as raw JSON. Current Codex docs also document `transcript_path` and `model` as common fields, but Claude Code payloads should not be forced to provide Codex-specific fields. External hook protocols evolve independently, so the local TypeScript model should stay open to future fields rather than claiming exhaustive coverage before real handlers need it.
 
-Recording is automatic and pass-through by default. A globally configured Claude/Codex/Gemini hook may run outside divedra; in that case the command returns the normal hook response but does not persist a divedra event because the required workflow execution context is absent.
+Recording is automatic and pass-through by default. A globally configured Claude/Codex/Gemini hook may run outside rielflow; in that case the command returns the normal hook response but does not persist a rielflow event because the required workflow execution context is absent.
 
 ## Data Flow
 
@@ -17,22 +17,22 @@ Agent Backend (Claude Code / Codex CLI / Gemini CLI)
   |
   |  stdin: JSON payload
   v
-divedra hook
+rielflow hook
   |
   +-- parse JSON from stdin
   +-- detect vendor (claude-code | codex | gemini)
   +-- extract event name
-  +-- resolve divedra hook context from environment
+  +-- resolve rielflow hook context from environment
   |      |
   |      +-- workflowExecutionId from DIVEDRA_WORKFLOW_EXECUTION_ID
   |      +-- agentSessionId from payload.session_id
   |      +-- managerSessionId from DIVEDRA_MANAGER_SESSION_ID, when present
   |
-  +-- dispatch to handler(vendor, event, payload, divedraContext)
+  +-- dispatch to handler(vendor, event, payload, rielflowContext)
   |      |
   |      +-- handler returns HookResponse
   |
-  +-- record hook event and handler result when divedraContext is present
+  +-- record hook event and handler result when rielflowContext is present
   |
   +-- serialize HookResponse to stdout JSON
   +-- exit with appropriate code
@@ -42,33 +42,33 @@ divedra hook
 
 Claude Code, Codex, and Gemini send a `hook_event_name` field in their stdin payload. The event name sets overlap significantly. Detection uses a two-step strategy:
 
-1. **Explicit `--vendor` flag** (authoritative when present): `divedra hook --vendor claude-code`, `divedra hook --vendor codex`, or `divedra hook --vendor gemini`.
+1. **Explicit `--vendor` flag** (authoritative when present): `rielflow hook --vendor claude-code`, `rielflow hook --vendor codex`, or `rielflow hook --vendor gemini`.
 2. **Heuristic field probe** (fallback when `--vendor` is omitted): Gemini has Gemini-only events (`BeforeTool`, `AfterTool`, `BeforeAgent`, etc.) and documents `timestamp` in the common payload; Codex payloads document `turn_id` on turn-scoped events plus common `transcript_path` and `model` fields; Claude Code payloads may carry `agent_id` or additional events (`SubagentStart`, etc.) that the other vendors do not define. The detector checks for these discriminating fields.
 
-The generated snippet configuration uses the vendor-detecting `divedra hook` command. Users can still pass `--vendor` manually when they need deterministic override behavior for a custom hook shape.
+The generated snippet configuration uses the vendor-detecting `rielflow hook` command. Users can still pass `--vendor` manually when they need deterministic override behavior for a custom hook shape.
 
 ## CLI Interface
 
 ```
-divedra hook [--vendor claude-code|codex|gemini]
+rielflow hook [--vendor claude-code|codex|gemini]
 ```
 
 Stdin: JSON payload from the hook caller.
 Stdout: JSON response (when exit 0).
 Stderr: error/block reason text (when exit 2).
 
-`divedra hook` is a machine-facing command and always writes JSON on success. It does not participate in the human-oriented CLI `--output` presentation mode.
+`rielflow hook` is a machine-facing command and always writes JSON on success. It does not participate in the human-oriented CLI `--output` presentation mode.
 
-The command has no required workflow flags. Workflow association is resolved from ambient environment variables injected into divedra-launched agent processes.
+The command has no required workflow flags. Workflow association is resolved from ambient environment variables injected into rielflow-launched agent processes.
 
 ### Ambient Workflow Context
 
-Divedra-launched Claude Code, Codex, and Gemini processes must receive a generic hook-recording context in their process environment:
+Rielflow-launched Claude Code, Codex, and Gemini processes must receive a generic hook-recording context in their process environment:
 
 | Variable | Required For Recording | Meaning |
 | -------- | ---------------------- | ------- |
 | `DIVEDRA_WORKFLOW_ID` | Yes | Workflow definition id. |
-| `DIVEDRA_WORKFLOW_EXECUTION_ID` | Yes | Divedra workflow run id. This is the same identifier used as the persisted workflow session id. |
+| `DIVEDRA_WORKFLOW_EXECUTION_ID` | Yes | Rielflow workflow run id. This is the same identifier used as the persisted workflow session id. |
 | `DIVEDRA_NODE_ID` | Yes | Workflow node currently executing the backend session. |
 | `DIVEDRA_NODE_EXEC_ID` | Yes | Runtime node execution id for this backend invocation. |
 | `DIVEDRA_AGENT_BACKEND` | No | Backend name such as `codex-agent` or `claude-code-agent`; useful for diagnostics. |
@@ -76,7 +76,7 @@ Divedra-launched Claude Code, Codex, and Gemini processes must receive a generic
 | `DIVEDRA_MANAGER_STEP_ID` | No | Manager-specific step id. Used only when `DIVEDRA_NODE_ID` is absent. |
 | `DIVEDRA_MANAGER_NODE_EXEC_ID` | No | Backward-compatible manager-specific node execution id. Used only when `DIVEDRA_NODE_EXEC_ID` is absent. |
 
-The backend hook payload supplies `session_id`; divedra records that value as `agentSessionId`. The core association is:
+The backend hook payload supplies `session_id`; rielflow records that value as `agentSessionId`. The core association is:
 
 ```
 DIVEDRA_WORKFLOW_EXECUTION_ID + payload.session_id
@@ -89,7 +89,7 @@ When `DIVEDRA_MANAGER_SESSION_ID` is present, records also link the backend hook
 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
-| `DIVEDRA_HOOK_RECORDING` | `auto` | `auto` records only when required divedra context is present; `off` disables persistence; `required` treats missing context as a hook error. |
+| `DIVEDRA_HOOK_RECORDING` | `auto` | `auto` records only when required rielflow context is present; `off` disables persistence; `required` treats missing context as a hook error. |
 | `DIVEDRA_HOOK_STRICT` | `false` | When `true`, persistence failures become hook errors. When `false`, persistence failures are logged to stderr and the hook remains pass-through. |
 | `DIVEDRA_HOOK_CAPTURE_RAW` | `redacted` | `redacted` writes a redacted payload artifact; `metadata-only` stores no raw payload artifact; `full` stores the full payload and should be used only in trusted environments. |
 
@@ -217,14 +217,14 @@ interface ParsedHookContext {
   readonly eventName: HookEventName;
   readonly rawEventName: string;
   readonly payload: HookInputPayload;
-  readonly divedra?: DivedraHookContext;
+  readonly rielflow?: RielflowHookContext;
 }
 ```
 
-### Divedra Hook Context
+### Rielflow Hook Context
 
 ```typescript
-interface DivedraHookContext {
+interface RielflowHookContext {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
@@ -235,7 +235,7 @@ interface DivedraHookContext {
 }
 ```
 
-`workflowExecutionId` comes from `DIVEDRA_WORKFLOW_EXECUTION_ID`; `agentSessionId` comes from the hook payload `session_id`. The context is absent when the hook is invoked outside a divedra-launched agent process or when recording has been disabled.
+`workflowExecutionId` comes from `DIVEDRA_WORKFLOW_EXECUTION_ID`; `agentSessionId` comes from the hook payload `session_id`. The context is absent when the hook is invoked outside a rielflow-launched agent process or when recording has been disabled.
 
 ## Dispatch Architecture
 
@@ -249,7 +249,7 @@ interface HookHandler {
 
 ### Dispatch Table
 
-The dispatcher maps `(vendor, eventName)` pairs to handler implementations. A recording wrapper runs for every parsed hook before returning the final response. Policy handlers may still be noop, but recording is part of the default pipeline whenever `ctx.divedra` is present.
+The dispatcher maps `(vendor, eventName)` pairs to handler implementations. A recording wrapper runs for every parsed hook before returning the final response. Policy handlers may still be noop, but recording is part of the default pipeline whenever `ctx.rielflow` is present.
 
 ```typescript
 // Conceptual structure -- not literal code
@@ -281,7 +281,7 @@ class RecordingHookHandler implements HookHandler {
 }
 ```
 
-The default policy handler may return `{}`. The recorder must still write a hook event record when divedra context is available.
+The default policy handler may return `{}`. The recorder must still write a hook event record when rielflow context is available.
 
 ## Hook Event Recording
 
@@ -315,7 +315,7 @@ interface HookEventRecord {
 }
 ```
 
-`hookEventId` is generated by divedra, for example `hook-<timestamp>-<short-uuid>`. The `payloadHash` is computed over the original parsed JSON payload before redaction so that repeated hook calls can be compared without storing full sensitive content.
+`hookEventId` is generated by rielflow, for example `hook-<timestamp>-<short-uuid>`. The `payloadHash` is computed over the original parsed JSON payload before redaction so that repeated hook calls can be compared without storing full sensitive content.
 
 ### Storage
 
@@ -368,22 +368,22 @@ The artifact path is stored as `payloadRef`. The raw payload artifact is redacte
 
 The recorder must treat identifiers as distinct:
 
-- `workflowExecutionId`: divedra workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
-- `managerSessionId`: divedra manager control-plane id from `DIVEDRA_MANAGER_SESSION_ID`.
+- `workflowExecutionId`: rielflow workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
+- `managerSessionId`: rielflow manager control-plane id from `DIVEDRA_MANAGER_SESSION_ID`.
 - `agentSessionId`: backend agent session id from hook payload `session_id`.
-- `nodeExecId`: divedra node execution that launched the backend process.
+- `nodeExecId`: rielflow node execution that launched the backend process.
 
 The same `agentSessionId` may appear in multiple events and may be reused across node executions when backend session reuse is enabled. The timeline query should therefore filter by both `workflowExecutionId` and `agentSessionId`, and use `nodeExecId` to disambiguate node-level ownership.
 
 ### Missing Context
 
-If `DIVEDRA_HOOK_RECORDING=auto` and the required divedra variables are missing, the hook command:
+If `DIVEDRA_HOOK_RECORDING=auto` and the required rielflow variables are missing, the hook command:
 
 - does not write a hook event record
-- still runs the policy handler with `ctx.divedra` omitted
+- still runs the policy handler with `ctx.rielflow` omitted
 - returns the normal response
 
-If `DIVEDRA_HOOK_RECORDING=required`, missing required context is an error because the hook was expected to run inside a divedra-managed process.
+If `DIVEDRA_HOOK_RECORDING=required`, missing required context is an error because the hook was expected to run inside a rielflow-managed process.
 
 ## Processing Pipeline
 
@@ -392,10 +392,10 @@ If `DIVEDRA_HOOK_RECORDING=required`, missing required context is an error becau
 3. **Validate transport fields** -- confirm the shared `session_id`, `hook_event_name`, and `cwd` fields have the expected shape. Validate vendor-specific detection hints only when they are present (`transcript_path` as `string | null`, `model` as `string`). On failure, exit 1.
 4. **Detect vendor** -- use `--vendor` flag or heuristic probe on the parsed object.
 5. **Resolve event name** -- map the `hook_event_name` string to `HookEventName` when it is currently modeled. Unknown values map to a fallback path, but the raw event string is preserved.
-6. **Resolve divedra context** -- read the ambient variables listed above. When recording is `auto`, omit divedra context if required values are missing. When recording is `required`, fail on missing required values.
-7. **Build `ParsedHookContext`** -- assemble vendor, normalized event, raw event name, validated payload, and optional divedra context.
+6. **Resolve rielflow context** -- read the ambient variables listed above. When recording is `auto`, omit rielflow context if required values are missing. When recording is `required`, fail on missing required values.
+7. **Build `ParsedHookContext`** -- assemble vendor, normalized event, raw event name, validated payload, and optional rielflow context.
 8. **Dispatch** -- look up handler from registry, call `handle(ctx)`.
-9. **Record event** -- if `ctx.divedra` is present, persist the hook event with the handler response. If the handler throws, best-effort record a `handler_failed` event before returning the protocol error. If a handler blocks, persist `blocked`.
+9. **Record event** -- if `ctx.rielflow` is present, persist the hook event with the handler response. If the handler throws, best-effort record a `handler_failed` event before returning the protocol error. If a handler blocks, persist `blocked`.
 10. **Respond** -- serialize the returned `HookResponse` to stdout as JSON. If the response contains `decision: "block"`, exit with code 0 (the JSON itself carries the block semantic). Handlers that want the exit-2 protocol may throw a `HookBlockError` that the pipeline catches, records, writes `reason` to stderr, and exits 2.
 
 ## Vendor Heuristic Detection
@@ -427,7 +427,7 @@ else
 src/
   hook/
     types.ts           # Stable hook enums and payload/response contracts
-    context.ts         # Divedra env context resolution and recording controls
+    context.ts         # Rielflow env context resolution and recording controls
     detect-vendor.ts   # Vendor detection logic
     parse.ts           # stdin reading, JSON parsing, payload validation
     dispatch.ts        # Handler registry and dispatch table
@@ -441,20 +441,20 @@ The CLI entry in `src/cli.ts` adds a `scope === "hook"` branch that calls the pi
 
 ## Agent Backend Hook Configuration
 
-The recommended configuration is to install `divedra hook` in Claude Code, Codex, and Gemini for lifecycle events that define session start, user input or agent turn boundaries, tool execution, and termination. The same command can be configured globally because recording activates only when divedra ambient context exists.
+The recommended configuration is to install `rielflow hook` in Claude Code, Codex, and Gemini for lifecycle events that define session start, user input or agent turn boundaries, tool execution, and termination. The same command can be configured globally because recording activates only when rielflow ambient context exists.
 
 Users can generate a paste-ready configuration block instead of copying the examples manually:
 
 ```bash
-divedra hook snippet --vendor claude-code
-divedra hook snippet --vendor codex
-divedra hook snippet --vendor gemini
+rielflow hook snippet --vendor claude-code
+rielflow hook snippet --vendor codex
+rielflow hook snippet --vendor gemini
 ```
 
 The snippet command prints JSON only. It intentionally does not edit user-level or project-level hook configuration files because those files may contain existing user policies, local paths, or secrets. The generated snippets use the vendor-detecting machine-facing endpoint:
 
 ```bash
-divedra hook
+rielflow hook
 ```
 
 Users may still add `--vendor claude-code` or `--vendor codex` manually when they want an explicit override.
@@ -468,7 +468,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -476,7 +476,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -484,7 +484,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -492,7 +492,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -500,7 +500,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ]
@@ -517,7 +517,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -525,7 +525,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -533,7 +533,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -541,7 +541,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -549,7 +549,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ]
@@ -566,7 +566,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "startup",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -574,7 +574,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -582,7 +582,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -590,7 +590,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -598,7 +598,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ],
@@ -606,7 +606,7 @@ Users may still add `--vendor claude-code` or `--vendor codex` manually when the
       {
         "matcher": "exit",
         "hooks": [
-          { "type": "command", "command": "divedra hook" }
+          { "type": "command", "command": "rielflow hook" }
         ]
       }
     ]

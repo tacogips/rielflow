@@ -13,8 +13,8 @@
 
 ### Summary
 
-Split the current single `divedra` TypeScript/Bun package into staged workspace
-package boundaries while preserving the existing `import "divedra"` library
+Split the current single `rielflow` TypeScript/Bun package into staged workspace
+package boundaries while preserving the existing `import "rielflow"` library
 surface, `./cli` export, CLI binary behavior, examples, and root build/test
 commands. This completed milestone establishes package roots, package manifests,
 package-local entrypoints, generated package-local declarations, and build/test
@@ -25,9 +25,9 @@ coverage. Physical source movement remains a later extraction step.
 **Included**:
 
 - Bun workspace metadata and root orchestration updates.
-- Required packages: `divedra-core`, `divedra-addons`, and compatibility facade `divedra`.
-- Evaluation and implementation decisions for candidate packages `divedra-cli`,
-  `divedra-graphql`, `divedra-events`, and `divedra-server`.
+- Required packages: `rielflow-core`, `rielflow-addons`, and compatibility facade `rielflow`.
+- Evaluation and implementation decisions for candidate packages `rielflow-cli`,
+  `rielflow-graphql`, `rielflow-events`, and `rielflow-server`.
 - Staged import boundary cleanup, package exports, declarations, prompt/native
   asset build handling, examples alignment, documentation refresh, and available
   verification.
@@ -57,9 +57,9 @@ coverage. Physical source movement remains a later extraction step.
 ### 1. Workspace Metadata and Package Roots
 
 #### `package.json`
-#### `packages/divedra-core/package.json`
-#### `packages/divedra-addons/package.json`
-#### `packages/divedra/package.json`
+#### `packages/rielflow-core/package.json`
+#### `packages/rielflow-addons/package.json`
+#### `packages/rielflow/package.json`
 #### optional candidate package manifests under `packages/`
 
 **Status**: COMPLETED
@@ -69,7 +69,7 @@ coverage. Physical source movement remains a later extraction step.
 - Root Bun workspace configuration that includes `packages/*`.
 - Package-local manifests with `type`, `main`, `module`, `types`, `exports`, and
   script entries aligned with root orchestration.
-- Compatibility package named `divedra` preserving current `dist/lib.js`,
+- Compatibility package named `rielflow` preserving current `dist/lib.js`,
   `dist/main.js`, root export, and `./cli` export behavior.
 - Candidate split decision notes recorded in this plan progress log before moving
   CLI, GraphQL, events, or server code.
@@ -77,14 +77,14 @@ coverage. Physical source movement remains a later extraction step.
 **Checklist**:
 
 - [x] Root package metadata declares workspaces without changing dependency pins.
-- [x] `divedra-core` manifest exposes stable runtime/library entrypoints.
-- [x] `divedra-addons` manifest exposes add-on registry and native add-on entrypoints.
-- [x] Compatibility `divedra` manifest preserves current package consumer contract.
+- [x] `rielflow-core` manifest exposes stable runtime/library entrypoints.
+- [x] `rielflow-addons` manifest exposes add-on registry and native add-on entrypoints.
+- [x] Compatibility `rielflow` manifest preserves current package consumer contract.
 - [x] Candidate packages are either created with rationale or explicitly deferred.
 
 ### 2. Core Runtime Package
 
-#### `packages/divedra-core/src/index.ts`
+#### `packages/rielflow-core/src/index.ts`
 #### moved runtime/library modules from `src/workflow/`, `src/shared/`, and public API helpers
 #### `src/lib.ts` compatibility re-export adjustments
 
@@ -99,8 +99,8 @@ coverage. Physical source movement remains a later extraction step.
   workflow execution APIs, session APIs, CLI/server/GraphQL exports, runtime DB
   helpers, supervisor/client APIs, add-on registry APIs, event dispatch exports,
   workflow inspection/usage types, and supporting public types.
-- Implementation may move ownership into `divedra-core`, `divedra-addons`, or
-  an approved candidate package, but the compatibility `divedra` package must
+- Implementation may move ownership into `rielflow-core`, `rielflow-addons`, or
+  an approved candidate package, but the compatibility `rielflow` package must
   continue to expose the same public library names unless a later design revision
   explicitly removes them.
 
@@ -110,14 +110,14 @@ coverage. Physical source movement remains a later extraction step.
   DB/session artifacts, mailbox contracts, supervisor primitives, adapter
   dispatch contracts, and stable public library API currently exported by
   `src/lib.ts` through the staged package entrypoint.
-- The built `divedra-core` entrypoint does not inline add-on/native
+- The built `rielflow-core` entrypoint does not inline add-on/native
   implementation ownership; full source-level import inversion is deferred to
   the physical source movement stage.
-- Existing public API exports remain available through `divedra`.
+- Existing public API exports remain available through `rielflow`.
 
 **Checklist**:
 
-- [x] Move or wrap core-owned modules behind `divedra-core` exports.
+- [x] Move or wrap core-owned modules behind `rielflow-core` exports.
 - [x] Keep staged package entrypoints as wrappers until physical source movement.
 - [x] Source-level cross-boundary package imports are deferred to the later
   physical source movement milestone documented in the progress log.
@@ -128,7 +128,7 @@ coverage. Physical source movement remains a later extraction step.
 
 ### 3. Add-ons Package
 
-#### `packages/divedra-addons/src/index.ts`
+#### `packages/rielflow-addons/src/index.ts`
 #### moved modules from `src/workflow/node-addons*`
 #### moved native add-on execution helpers from `src/workflow/native-node-executor*`
 
@@ -158,8 +158,8 @@ export {
 **Checklist**:
 
 - [x] Publish add-on definitions and native execution helpers from
-  `divedra-addons`.
-- [x] Keep add-on/native implementation out of the built `divedra-core`
+  `rielflow-addons`.
+- [x] Keep add-on/native implementation out of the built `rielflow-core`
   package entrypoint.
 - [x] Source-level add-on/runtime inversion is deferred to the later physical
   source movement milestone documented in the progress log.
@@ -179,10 +179,10 @@ export {
 **Deliverables**:
 
 - Evaluate each candidate against the design split criteria before movement:
-  `divedra-cli`, `divedra-graphql`, `divedra-events`, and `divedra-server`.
-- Create packages only when dependency direction stays inward to `divedra-core`
+  `rielflow-cli`, `rielflow-graphql`, `rielflow-events`, and `rielflow-server`.
+- Create packages only when dependency direction stays inward to `rielflow-core`
   without reverse imports or deep internal imports.
-- Keep compatibility shims in `divedra` for CLI and library consumers.
+- Keep compatibility shims in `rielflow` for CLI and library consumers.
 
 **Checklist**:
 
@@ -226,9 +226,9 @@ export {
 | Task | Scope | Deliverables | Dependencies | Parallelizable |
 | ---- | ----- | ------------ | ------------ | -------------- |
 | TASK-001 | Workspace foundation | Root workspaces, package directories, package manifests, root script shape | Accepted design | No |
-| TASK-002 | Core exports and movement | Exhaustive `src/lib.ts` export inventory, `divedra-core` runtime/library exports, and compatibility facade re-exports | TASK-001 | No |
-| TASK-003 | Add-ons package | `divedra-addons` exports, registry boundary, native add-on asset/build handling | TASK-001, core type exports from TASK-002 | No |
-| TASK-004 | Candidate package evaluation | Decision log and optional `divedra-cli`, `divedra-graphql`, `divedra-events`, `divedra-server` packages | TASK-001, TASK-002 | No |
+| TASK-002 | Core exports and movement | Exhaustive `src/lib.ts` export inventory, `rielflow-core` runtime/library exports, and compatibility facade re-exports | TASK-001 | No |
+| TASK-003 | Add-ons package | `rielflow-addons` exports, registry boundary, native add-on asset/build handling | TASK-001, core type exports from TASK-002 | No |
+| TASK-004 | Candidate package evaluation | Decision log and optional `rielflow-cli`, `rielflow-graphql`, `rielflow-events`, `rielflow-server` packages | TASK-001, TASK-002 | No |
 | TASK-005 | Import boundary enforcement | Replace cross-boundary relative imports, remove deep internal package imports, keep adapter isolation | TASK-002, TASK-003, TASK-004 | No |
 | TASK-006 | Build/test configuration | Root/package TypeScript, Vitest, Bun build, Taskfile, flake packaging | TASK-002, TASK-003, TASK-004 | No |
 | TASK-007 | Examples and docs | Example command validation, README/package architecture docs | TASK-006 | Yes, after code movement is stable |
@@ -271,21 +271,21 @@ Targeted compatibility checks:
 
 - Create a pre-move export inventory with `rg -n "^export " src/lib.ts` and
   compare it against the built compatibility package declarations/exports so
-  every current public `src/lib.ts` export remains available from `divedra`.
+  every current public `src/lib.ts` export remains available from `rielflow`.
 - Execute the built `./cli` export/bin path and verify `workflow list
   --workflow-definition-dir ./examples` behavior.
-- Search package sources for disallowed reverse imports from `divedra-core` into
+- Search package sources for disallowed reverse imports from `rielflow-core` into
   CLI, server, GraphQL endpoint, events, or add-on implementation packages.
 - Search for deep package-internal imports across `packages/*/src` that bypass
   package exports.
 
 ## Completion Criteria
 
-- [x] `divedra-core`, `divedra-addons`, and compatibility `divedra` package
+- [x] `rielflow-core`, `rielflow-addons`, and compatibility `rielflow` package
   boundaries exist and match the accepted design.
 - [x] CLI and library consumers retain current entrypoints and behavior.
 - [x] Every current public export in `src/lib.ts` is inventoried before movement
-  and preserved by the built compatibility `divedra` package unless a later
+  and preserved by the built compatibility `rielflow` package unless a later
   design revision explicitly removes it.
 - [x] Candidate package decisions are implemented or documented with rationale.
 - [x] `codex-agent` adapter behavior remains isolated in the Codex adapter path;
@@ -323,12 +323,12 @@ TASK-006, TASK-007, TASK-008.
 **Tasks In Progress**: None.
 **Blockers**: None.
 **Notes**: Implemented a staged Bun workspace split. The root package is now the
-private `divedra-workspace` orchestrator with `packages/*` workspaces. Added
-`packages/divedra-core`, `packages/divedra-addons`, and compatibility
-`packages/divedra` manifests and source entrypoints. The compatibility package
-preserves `import "divedra"` through `dist/lib.js`, preserves `./cli` through
-`dist/main.js`, and exposes the `divedra` bin. `divedra-core` wraps core
-workflow/runtime/session/supervisor/catalog/shared exports; `divedra-addons`
+private `rielflow-workspace` orchestrator with `packages/*` workspaces. Added
+`packages/rielflow-core`, `packages/rielflow-addons`, and compatibility
+`packages/rielflow` manifests and source entrypoints. The compatibility package
+preserves `import "rielflow"` through `dist/lib.js`, preserves `./cli` through
+`dist/main.js`, and exposes the `rielflow` bin. `rielflow-core` wraps core
+workflow/runtime/session/supervisor/catalog/shared exports; `rielflow-addons`
 wraps node add-on registry and native add-on execution exports.
 
 Public export inventory locator: `rg -n "^export |export \\{" src/lib.ts`.
@@ -337,16 +337,16 @@ The inventory covers direct exported interfaces/functions at lines 40, 42, 69,
 multiline export blocks at lines 716, 720, 730-735, 742, 753, 767, 774, 781,
 789, 815, 821, 826, 832, 849, 856, 866, 871, 882, 887, 893, 903-904, 910-912,
 919, 931, 932, and 936. Built package smoke checks confirmed representative
-compatibility exports from `packages/divedra/dist/lib.js`, core exports from
-`packages/divedra-core/dist/index.js`, and add-on exports from
-`packages/divedra-addons/dist/index.js`.
+compatibility exports from `packages/rielflow/dist/lib.js`, core exports from
+`packages/rielflow-core/dist/index.js`, and add-on exports from
+`packages/rielflow-addons/dist/index.js`.
 
-Candidate package decisions: `divedra-cli`, `divedra-graphql`, `divedra-events`,
-and `divedra-server` are explicitly deferred for this implementation stage.
-They remain behind the compatibility `divedra` facade because command dispatch,
+Candidate package decisions: `rielflow-cli`, `rielflow-graphql`, `rielflow-events`,
+and `rielflow-server` are explicitly deferred for this implementation stage.
+They remain behind the compatibility `rielflow` facade because command dispatch,
 GraphQL/server transport wiring, and event listener behavior still share public
 library and runtime wiring. They can be split after those imports depend only on
-`divedra-core` contracts without facade internals or reverse imports.
+`rielflow-core` contracts without facade internals or reverse imports.
 
 Verification results: `bun run lint:biome`, `bun run typecheck`, `bun run test`
 (1011 pass, 0 fail), `bun run build`, `task test` (1011 pass, 0 fail),
@@ -366,13 +366,13 @@ TASK-008.
 **Blockers**: None.
 **Notes**: Added `scripts/sync-package-declarations.ts` and wired
 `bun run build` to publish package-local declaration trees for
-`packages/divedra`, `packages/divedra-core`, and `packages/divedra-addons`.
+`packages/rielflow`, `packages/rielflow-core`, and `packages/rielflow-addons`.
 The package entry declarations now import package-local declaration support
 files instead of `../../../src/*`. Verification included `bun run build`,
 `rg -n "\\.\\./\\.\\./\\.\\./src|from \\\"../../../src"
 packages/*/dist/*.d.ts packages/*/dist/**/*.d.ts`, and a standalone temporary
-consumer `tsc -p /tmp/divedra-package-type-smoke/tsconfig.json --noEmit` check
-covering imports from `divedra`, `divedra-core`, and `divedra-addons`.
+consumer `tsc -p /tmp/rielflow-package-type-smoke/tsconfig.json --noEmit` check
+covering imports from `rielflow`, `rielflow-core`, and `rielflow-addons`.
 
 ### Session: 2026-05-14 10:35
 
@@ -382,11 +382,11 @@ TASK-006, and TASK-008.
 **Blockers**: Full Nix flake verification remains unavailable in this sandbox
 because the Nix daemon socket is not present.
 **Notes**: Updated the build to copy the current `dist/src/lib.d.ts` into
-`packages/divedra/dist/lib.d.ts`, restoring current public declarations such as
+`packages/rielflow/dist/lib.d.ts`, restoring current public declarations such as
 `ContinueWorkflowFromHistoryInput`, `continueWorkflowFromHistory`,
 `listWorkflowUsage`, and `WorkflowUsageCatalog`. Added
-portable package JS output: `divedra` and `divedra-addons` use bundled
-entrypoints, while `divedra-core/dist/index.js` is a package-local shim over the
+portable package JS output: `rielflow` and `rielflow-addons` use bundled
+entrypoints, while `rielflow-core/dist/index.js` is a package-local shim over the
 bundled `core-runtime.js`, so the public core entrypoint no longer inlines
 add-on/native implementation strings. Updated this plan to describe the
 delivered milestone as a staged facade split, with source-level package-owned
@@ -403,9 +403,9 @@ because the Nix daemon socket is not present.
 **Notes**: Restored package runtime portability by building package-contained
 JavaScript entrypoints instead of copying wrappers that import `../../../src/*`.
 The compatibility package and add-ons package now ship bundled dist entrypoints;
-`divedra-core/dist/index.js` is a small package-local export shim over
+`rielflow-core/dist/index.js` is a small package-local export shim over
 `core-runtime.js`. Added an isolated package runtime smoke test that copies
-`packages/divedra`, `packages/divedra-core`, and `packages/divedra-addons` to
+`packages/rielflow`, `packages/rielflow-core`, and `packages/rielflow-addons` to
 temporary directories and imports their built dist entrypoints without the
 repository `src/` tree.
 
@@ -417,9 +417,9 @@ TASK-003, TASK-006, and TASK-008.
 **Blockers**: Full Nix flake verification remains unavailable in this sandbox
 because the Nix daemon socket is not present.
 **Notes**: Updated package-node execution so the core runtime reaches native
-add-on execution through the built `divedra-addons` package at runtime instead
-of statically importing the native executor into `divedra-core`. The
-`divedra-core` package build now emits a minified `core-runtime.js`, and the
+add-on execution through the built `rielflow-addons` package at runtime instead
+of statically importing the native executor into `rielflow-core`. The
+`rielflow-core` package build now emits a minified `core-runtime.js`, and the
 package-boundary regression test inspects both the public shim and actual
 runtime bundle for add-on/native ownership markers. Verification covered
 `bun run build`, `task build`, `bun run lint:biome`, `bun run typecheck`,
@@ -437,7 +437,7 @@ because the Nix daemon socket is not present.
 routing add-on payload resolution through an add-on package boundary helper and
 removing static core imports of the add-on registry modules. Runtime readiness
 keeps add-on name checks without importing add-on implementation modules. The
-package-boundary test now scans `divedra-core`'s actual runtime bundle for both
+package-boundary test now scans `rielflow-core`'s actual runtime bundle for both
 symbol markers and semantic built-in add-on identifiers. Verification covered
 `bun run build`, `task build`, `bun run lint:biome`, `bun run typecheck`,
 targeted boundary/validation/readiness/API tests, semantic bundle `rg`, and
@@ -451,9 +451,9 @@ TASK-004, TASK-006, and TASK-008.
 **Blockers**: Full Nix flake verification remains unavailable in this sandbox
 because the Nix daemon socket is not present.
 **Notes**: Split the compatibility package CLI into an import-safe
-`divedra/cli` module and a separate executable wrapper. The `./cli` package
-export now targets `packages/divedra/dist/cli.js`, while `bin.divedra` remains
-`packages/divedra/dist/main.js`. Added a package-boundary regression test and
+`rielflow/cli` module and a separate executable wrapper. The `./cli` package
+export now targets `packages/rielflow/dist/cli.js`, while `bin.rielflow` remains
+`packages/rielflow/dist/main.js`. Added a package-boundary regression test and
 direct smoke verification that import the built CLI subpath without printing
 usage or mutating `process.exitCode`. Verification covered `bun run build`,
 `task build`, `bun run lint:biome`, `bun run typecheck`,

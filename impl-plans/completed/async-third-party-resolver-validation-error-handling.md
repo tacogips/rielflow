@@ -41,7 +41,7 @@ resolved node payload.
 - Async third-party resolver invocation behavior in
   `src/workflow/addon-package-boundary.ts`.
 - Alignment with the existing normalization and error-handling contract in
-  `packages/divedra-addons/src/node-addons/addon-payload-resolution.ts`.
+  `packages/rielflow-addons/src/node-addons/addon-payload-resolution.ts`.
 - Focused regression coverage for throwing async resolvers, malformed async
   resolver output, and valid `nodeValidationResults` preservation.
 - Verification across workflow validation, CLI, GraphQL, package-boundary tests,
@@ -126,16 +126,16 @@ export async function resolveBoundaryNodeAddonPayloadAsync(
 ### 3. Package Boundary Regression Coverage
 
 #### `src/package-boundaries.test.ts`
-#### `packages/divedra-addons/src/node-addons/addon-payload-resolution.ts`
+#### `packages/rielflow-addons/src/node-addons/addon-payload-resolution.ts`
 
 **Status**: COMPLETED
 
 **Deliverables**:
 
-- Add or adjust package-boundary regression coverage so `divedra-core` does not
+- Add or adjust package-boundary regression coverage so `rielflow-core` does not
   reintroduce an unnormalized async third-party resolver loop outside the
   add-ons package boundary.
-- Keep any `packages/divedra-addons` changes limited to exporting or reusing the
+- Keep any `packages/rielflow-addons` changes limited to exporting or reusing the
   existing normalization/error-handling path if the core boundary needs a helper.
 
 **Checklist**:
@@ -172,7 +172,7 @@ export async function resolveBoundaryNodeAddonPayloadAsync(
 | ---- | ----- | ------------ | ------------ | -------------- |
 | TASK-001 | Async resolver boundary fix | `src/workflow/addon-package-boundary.ts` | Accepted Step 3 design review | No |
 | TASK-002 | Validation regression tests | `src/workflow/validate.test.ts` | TASK-001 behavior target; may be written before fix but shares validation fixtures | No |
-| TASK-003 | Package-boundary regression | `src/package-boundaries.test.ts`, optional helper export reuse in `packages/divedra-addons/src/node-addons/addon-payload-resolution.ts` | TASK-001 | No |
+| TASK-003 | Package-boundary regression | `src/package-boundaries.test.ts`, optional helper export reuse in `packages/rielflow-addons/src/node-addons/addon-payload-resolution.ts` | TASK-001 | No |
 | TASK-004 | Verification and progress log | This plan file | TASK-001, TASK-002, TASK-003 | No |
 
 ## Dependencies
@@ -180,7 +180,7 @@ export async function resolveBoundaryNodeAddonPayloadAsync(
 | Feature | Depends On | Status |
 | ------- | ---------- | ------ |
 | Async resolver error conversion | Accepted design and existing `normalizeThirdPartyResolverResult` contract | READY |
-| Malformed resolver output diagnostics | Existing resolver result normalization in `packages/divedra-addons` | READY |
+| Malformed resolver output diagnostics | Existing resolver result normalization in `packages/rielflow-addons` | READY |
 | `nodeValidationResults` preservation | Existing `NodeValidationResult` aggregation in validation output | READY |
 | CLI/GraphQL validation parity | Shared workflow validation entrypoints | READY |
 

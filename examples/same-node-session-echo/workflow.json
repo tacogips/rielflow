@@ -6,19 +6,19 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice through explicit steps: first echo the normalized request, then answer using that echoed content.",
+    "rielflowPromptTemplate": "Coordinate {{workflowId}} so one reusable worker node is visited twice through explicit steps: first echo the normalized request, then answer using that echoed content.",
     "workerSystemPromptTemplate": "Return concise business JSON only. Preserve upstream data faithfully and do not invent extra workflow control beyond the current node responsibility."
   },
-  "managerStepId": "divedra-manager",
-  "entryStepId": "divedra-manager",
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
   "nodes": [
     {
-      "id": "divedra-manager",
-      "nodeFile": "nodes/node-divedra-manager.json"
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
     },
     {
-      "id": "main-divedra",
-      "nodeFile": "nodes/node-main-divedra.json"
+      "id": "main-rielflow",
+      "nodeFile": "nodes/node-main-rielflow.json"
     },
     {
       "id": "workflow-input",
@@ -35,18 +35,18 @@
   ],
   "steps": [
     {
-      "id": "divedra-manager",
-      "nodeId": "divedra-manager",
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
       "role": "manager",
       "transitions": [
         {
-          "toStepId": "main-divedra"
+          "toStepId": "main-rielflow"
         }
       ]
     },
     {
-      "id": "main-divedra",
-      "nodeId": "main-divedra",
+      "id": "main-rielflow",
+      "nodeId": "main-rielflow",
       "transitions": [
         {
           "toStepId": "workflow-input"

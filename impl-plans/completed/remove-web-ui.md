@@ -85,7 +85,7 @@ Remove the checked-in browser Web UI and its repository tooling while keeping th
 ## Completion Criteria
 
 - [x] Checked-in `ui/` sources and UI-only scripts/tests are removed
-- [x] `divedra serve` no longer serves browser assets or bootstrap config
+- [x] `rielflow serve` no longer serves browser assets or bootstrap config
 - [x] Package/task definitions no longer depend on UI build or Playwright flows
 - [x] Focused typecheck/build/tests for the touched runtime paths pass
 - [x] Top-level docs describe the post-Web-UI repository accurately

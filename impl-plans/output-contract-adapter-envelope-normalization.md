@@ -16,7 +16,7 @@ both inline adapter payloads and reserved candidate-file submissions.
 
 ## Source Trace
 
-- Issue: `tacogips/divedra` / `Route review revisions when output-contract workers return adapter envelopes`
+- Issue: `tacogips/rielflow` / `Route review revisions when output-contract workers return adapter envelopes`
 - Workflow: `design-and-implement-review-loop`
 - Mode: `full-issue-resolution`
 - Accepted design: `step3-design-review` via `comm-000008`, `codex-agent` / `gpt-5.5`

@@ -1,5 +1,5 @@
 {
-  "divedra-manager": {
+  "rielflow-manager": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {
@@ -10,7 +10,7 @@
       "policy": "start-delivery-lane"
     }
   },
-  "main-divedra": {
+  "main-rielflow": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {

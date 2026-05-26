@@ -7,7 +7,7 @@
 
 ## Summary
 
-Allow the root `divedra manager` to opt into event-driven session stickiness using the existing node `sessionPolicy.mode = "reuse"` contract. When a compatible event source carries chat conversation identity, repeated events for the same conversation should resume the previous workflow session and continue the same manager backend session instead of starting a new workflow execution every time.
+Allow the root `rielflow manager` to opt into event-driven session stickiness using the existing node `sessionPolicy.mode = "reuse"` contract. When a compatible event source carries chat conversation identity, repeated events for the same conversation should resume the previous workflow session and continue the same manager backend session instead of starting a new workflow execution every time.
 
 ## Scope
 

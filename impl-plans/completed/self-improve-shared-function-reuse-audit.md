@@ -13,7 +13,7 @@
 
 ### Summary
 
-Audit and harden the existing workflow self-improve implementation so shared divedra behavior is reused where it owns the contract, aligned where self-improve must remain lifecycle-specific, and documented where intentional divergence is required. This plan follows the accepted Step 3 design review for the issue "Audit self-improve implementation for duplicated existing functionality".
+Audit and harden the existing workflow self-improve implementation so shared rielflow behavior is reused where it owns the contract, aligned where self-improve must remain lifecycle-specific, and documented where intentional divergence is required. This plan follows the accepted Step 3 design review for the issue "Audit self-improve implementation for duplicated existing functionality".
 
 ### Scope
 
@@ -40,7 +40,7 @@ Audit and harden the existing workflow self-improve implementation so shared div
 
 - `codex-agent` is an execution backend/reference only for this workflow.
 - `../../codex-agent` was not available in this worktree during Step 1 through Step 3.
-- Accepted design decision: no Codex source behavior is required or copied; divedra source runs come from divedra session/artifact stores and backend-specific transcript details stay behind existing adapters.
+- Accepted design decision: no Codex source behavior is required or copied; rielflow source runs come from rielflow session/artifact stores and backend-specific transcript details stay behind existing adapters.
 
 ---
 
@@ -89,7 +89,7 @@ interface WorkflowSelfImprovePatchPathDecision {
 **Checklist**:
 
 - [x] Replace the local escape-only path resolver with shared workflow-relative validation where it matches the target file class.
-- [x] Use `packages/divedra-core/src/prompt-template-file.ts` rules for prompt-file targets.
+- [x] Use `packages/rielflow-core/src/prompt-template-file.ts` rules for prompt-file targets.
 - [x] Preserve canonical `workflow.json` and node payload writes through loader-compatible validation, not `node-patches.ts` transient override logic.
 - [x] Ensure post-write validation remains through `src/workflow/load.ts` and `src/workflow/json-schema.ts`.
 - [x] Add tests for escaped paths, absolute paths, promptTemplateFile patching, workflow definition patching, rollback, and validation error messages.
@@ -185,7 +185,7 @@ interface WorkflowSelfImproveGitSafetyCheck {
 
 ### 7. Adapter and Public Surface Parity Audit
 
-#### `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
+#### `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
 
 **Status**: COMPLETED
 
@@ -297,7 +297,7 @@ Align canonical patch writes with workflow-relative path validation and loader/s
 **Dependencies**: TASK-001
 
 **Description**:
-Audit backup and self-improve log pathing against existing divedra root/path helpers. Reuse shared helper behavior where it owns path safety or root resolution, and document no-change decisions where self-improve artifacts must remain outside runtime node artifact directories.
+Audit backup and self-improve log pathing against existing rielflow root/path helpers. Reuse shared helper behavior where it owns path safety or root resolution, and document no-change decisions where self-improve artifacts must remain outside runtime node artifact directories.
 
 **Completion Criteria**:
 
@@ -360,7 +360,7 @@ Keep self-improve git orchestration local to self-improve while matching native 
 
 **Status**: Completed
 **Parallelizable**: Yes, after TASK-001
-**Deliverables**: `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
+**Deliverables**: `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts`, `src/cli.test.ts`, `src/lib-api.test.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
 **Dependencies**: TASK-001
 
 **Description**:
@@ -401,7 +401,7 @@ After TASK-001 completes, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, and 
 | JSON marker/report reads | reuse-required | `src/workflow/self-improve/marker-store.ts`, `src/workflow/self-improve/report.ts`, `src/shared/json.ts` | Persisted marker/report reads now use `isJsonObject`; invalid report reads fail and report listing skips invalid entries. |
 | Source selection discovery | align-required | `src/workflow/self-improve/source-selection.ts`, `src/workflow/runtime-db/session-query-records.ts`, `src/workflow/session-store.ts` | Runtime DB summaries are used as an index when a runtime DB root is configured, then selected runs are hydrated through file-backed `loadSession`; file-only fallback remains authoritative. |
 | Git commit safety | align-required | `src/workflow/self-improve/git.ts`, `src/workflow/native-node-executor/git-and-addon-execution.ts` | Self-improve does not call the node add-on executor, but now mirrors its repo-relative normalization, directory/escape rejection, unexpected pre-staged file rejection, and no-empty-commit guard. |
-| CLI/library/GraphQL/server adapters | intentional-divergence | `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts` | Audit confirmed existing entrypoints remain thin adapters over core service or typed GraphQL transport; no duplicate manager-message execution path was found. |
+| CLI/library/GraphQL/server adapters | intentional-divergence | `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/index.ts`, `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/server/graphql-executable-schema.ts` | Audit confirmed existing entrypoints remain thin adapters over core service or typed GraphQL transport; no duplicate manager-message execution path was found. |
 
 ## Verification Plan
 

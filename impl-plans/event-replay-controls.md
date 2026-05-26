@@ -36,7 +36,7 @@ distributed replay approval workflows.
 **Status**: COMPLETED
 
 ```typescript
-interface WorkflowTriggerRunnerOptions extends DivedraOptions {
+interface WorkflowTriggerRunnerOptions extends RielflowOptions {
   readonly dryRun?: boolean;
   readonly maxSteps?: number;
   readonly maxLoopIterations?: number;

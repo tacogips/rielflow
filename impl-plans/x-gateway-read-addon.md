@@ -1,16 +1,16 @@
 # X Gateway Read Add-on Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-divedrax-gateway-read`
+**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-rielflowx-gateway-read`
 **Created**: 2026-04-20
 **Last Updated**: 2026-04-20
 
 ## Design Summary
 
-Add a built-in worker add-on, `divedra/x-gateway-read`, that runs the
+Add a built-in worker add-on, `rielflow/x-gateway-read`, that runs the
 read-only `x-gateway-reader graphql query` surface inside a Docker-compatible
 container runner. The add-on must support explicit environment variable mapping
-from divedra's runtime environment into the add-on container environment so
+from rielflow's runtime environment into the add-on container environment so
 multiple add-on nodes can use different X API credentials without leaking the
 whole host environment.
 
@@ -71,7 +71,7 @@ interface XGatewayReadAddonConfig {
 
 **Checklist**:
 
-- [x] Resolve `divedra/x-gateway-read` version `1`.
+- [x] Resolve `rielflow/x-gateway-read` version `1`.
 - [x] Validate add-on config.
 - [x] Reject author-controlled command overrides.
 - [x] Produce a native add-on payload with output contract.
@@ -93,7 +93,7 @@ async function executeXGatewayReadAddonNode(
 **Checklist**:
 
 - [x] Render `queryTemplate` with normal node template variables.
-- [x] Resolve explicit add-on env bindings from the divedra runtime env.
+- [x] Resolve explicit add-on env bindings from the rielflow runtime env.
 - [x] Run `x-gateway-reader graphql query <query> --json` in a container.
 - [x] Ensure the full `x-gateway` client binary is not author-selectable.
 - [x] Parse JSON stdout into node output.
@@ -135,7 +135,7 @@ async function executeXGatewayReadAddonNode(
 
 ## Completion Criteria
 
-- [x] `divedra/x-gateway-read` add-on validates and resolves.
+- [x] `rielflow/x-gateway-read` add-on validates and resolves.
 - [x] Add-on env mappings pass only configured variables.
 - [x] Missing required mapped env variables fail before container execution.
 - [x] Focused workflow tests pass.
@@ -150,7 +150,7 @@ async function executeXGatewayReadAddonNode(
 **Blockers**: None.
 **Notes**: Inspected `x-gateway` and confirmed the read-only CLI surface is
 `x-gateway-reader graphql query '<query>'`, with credentials/config loaded from
-`X_GW_*` environment variables. Implemented `addon.env`, the `divedra/x-gateway-read` built-in add-on, native container execution, focused tests, and documentation. Verified with `bun test src/workflow/validate.test.ts src/workflow/native-node-executor.test.ts` and `bun run typecheck`.
+`X_GW_*` environment variables. Implemented `addon.env`, the `rielflow/x-gateway-read` built-in add-on, native container execution, focused tests, and documentation. Verified with `bun test src/workflow/validate.test.ts src/workflow/native-node-executor.test.ts` and `bun run typecheck`.
 
 ### Session: 2026-04-20 21:05
 
@@ -158,7 +158,7 @@ async function executeXGatewayReadAddonNode(
 **Tasks In Progress**: None
 **Blockers**: None
 **Notes**: Added the missing detailed design section for
-`divedra/x-gateway-read` and clarified that `addon.env` is accepted only by
+`rielflow/x-gateway-read` and clarified that `addon.env` is accepted only by
 descriptors that consume explicit environment bindings.
 
 ### Session: 2026-04-20 19:40
@@ -166,6 +166,6 @@ descriptors that consume explicit environment bindings.
 **Tasks Completed**: Review follow-up for x-gateway runtime readiness
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Runtime readiness now treats `divedra/x-gateway-read` as a
+**Notes**: Runtime readiness now treats `rielflow/x-gateway-read` as a
 Docker-compatible container runner requirement, including inherited
 workflow-level container runtime defaults.

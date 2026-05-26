@@ -151,7 +151,7 @@ interface NodeExecutionView {
 
 **Tasks Completed**: Created issue #5, attempted `design-and-implement-review-loop`, documented design boundary, started implementation.
 **Tasks In Progress**: Adapter capture, runtime persistence, GraphQL exposure, tests.
-**Blockers**: The divedra workflow run failed at the first manager step because backend output did not satisfy the workflow JSON contract.
+**Blockers**: The rielflow workflow run failed at the first manager step because backend output did not satisfy the workflow JSON contract.
 **Notes**: Continuing implementation manually in the same repository workflow because the requested workflow did not reach design or implementation stages.
 
 ### Session: 2026-05-04 (completion)

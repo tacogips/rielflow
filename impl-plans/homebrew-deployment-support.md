@@ -8,9 +8,9 @@
 ## Design Document Reference
 
 Implement a Homebrew deployment path that installs standalone release archives
-containing a Bun-compiled `divedra` executable. Scope is limited to archive
+containing a Bun-compiled `rielflow` executable. Scope is limited to archive
 build tooling, formula rendering, Taskfile wrappers, and user-facing release
-documentation. It does not add a runtime `divedra --version` command, publish
+documentation. It does not add a runtime `rielflow --version` command, publish
 GitHub release assets, or create a new external tap repository.
 
 ## Modules
@@ -39,8 +39,8 @@ interface HomebrewArchiveBuildInput {
 
 - [x] Detect the local target when no explicit target is passed
 - [x] Validate supported target names
-- [x] Build `packages/divedra/src/bin.ts` with `bun build --compile`
-- [x] Stage `bin/divedra` and documentation into a tar archive
+- [x] Build `packages/rielflow/src/bin.ts` with `bun build --compile`
+- [x] Stage `bin/rielflow` and documentation into a tar archive
 - [x] Emit SHA-256 checksum files for formula rendering
 
 ### 2. Homebrew Formula Renderer
@@ -68,7 +68,7 @@ interface HomebrewFormulaChecksums {
 **Checklist**:
 
 - [x] Read checksums for all supported Homebrew targets
-- [x] Render `Formula/divedra.rb` with platform-specific URLs and SHA values
+- [x] Render `Formula/rielflow.rb` with platform-specific URLs and SHA values
 - [x] Support alternate release hosts through `DIVEDRA_RELEASE_BASE_URL`
 - [x] Fail when required checksum files are missing
 
@@ -78,7 +78,7 @@ interface HomebrewFormulaChecksums {
 
 ```typescript
 interface HomebrewPackagingDocs {
-  readonly installCommand: "brew install divedra";
+  readonly installCommand: "brew install rielflow";
   readonly buildTask: "task build:homebrew";
   readonly formulaTask: "task homebrew:formula";
   readonly tapFormulaTask: "task homebrew:tap-formula";
@@ -101,7 +101,7 @@ interface HomebrewPackagingDocs {
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
 | Release archive builder | `scripts/build-homebrew-release.sh` | Completed | Archive build and extracted binary smoke test |
-| Formula renderer | `scripts/render-homebrew-formula.sh`, `Formula/divedra.rb` | Completed | Formula render and Ruby syntax check |
+| Formula renderer | `scripts/render-homebrew-formula.sh`, `Formula/rielflow.rb` | Completed | Formula render and Ruby syntax check |
 | Documentation and wrappers | `README.md`, `Taskfile.yml`, `packaging/homebrew/README.md` | Completed | Task wrapper checks |
 
 ## Dependencies
@@ -135,7 +135,7 @@ Create standalone Bun-compiled release archives for Homebrew-supported targets.
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `scripts/render-homebrew-formula.sh`, `Formula/divedra.rb`
+**Deliverables**: `scripts/render-homebrew-formula.sh`, `Formula/rielflow.rb`
 **Dependencies**: TASK-001
 
 **Description**:
@@ -145,7 +145,7 @@ Render a tap-ready formula from release archive checksums.
 
 - [x] All target checksums consumed
 - [x] URLs use the configured release base
-- [x] Formula installs `bin/divedra`
+- [x] Formula installs `bin/rielflow`
 - [x] Formula Ruby syntax passes
 
 ### TASK-003: Documentation and Task Wrappers
@@ -169,7 +169,7 @@ Expose the release workflow through repository documentation and task wrappers.
 
 - [x] Standalone macOS arm64 release archive builds locally
 - [x] Cross-target archives build for macOS x64, Linux arm64, and Linux x64
-- [x] Extracted `bin/divedra --help` smoke test passes on the local platform
+- [x] Extracted `bin/rielflow --help` smoke test passes on the local platform
 - [x] Formula renders with non-placeholder SHA-256 values
 - [x] Formula Ruby syntax passes
 - [x] README and packaging docs describe the Homebrew deployment path
@@ -181,11 +181,11 @@ Expose the release workflow through repository documentation and task wrappers.
 **Tasks Completed**: TASK-001, TASK-002, TASK-003
 **Tasks In Progress**: None
 **Blockers**: Homebrew audit is blocked by local Command Line Tools support for macOS 26, not by formula syntax.
-**Notes**: Built archives under ignored `dist/homebrew/`; generated `Formula/divedra.rb` from the archive checksums. The first release slice uses `divedra --help` as the formula test because the CLI does not currently expose `--version`.
+**Notes**: Built archives under ignored `dist/homebrew/`; generated `Formula/rielflow.rb` from the archive checksums. The first release slice uses `rielflow --help` as the formula test because the CLI does not currently expose `--version`.
 
 ### Session: 2026-05-21 00:00
 
 **Tasks Completed**: TASK-003 tap integration follow-up
 **Tasks In Progress**: None
 **Blockers**: Publishing still requires uploading the matching GitHub release archives and committing/pushing the `tacogips/homebrew-tap` formula update.
-**Notes**: Added `task homebrew:tap-formula -- <version>` to render directly into the sibling `../homebrew-tap/Formula/divedra.rb` checkout and updated the tap README to list `divedra` alongside the existing `chilla` cask.
+**Notes**: Added `task homebrew:tap-formula -- <version>` to render directly into the sibling `../homebrew-tap/Formula/rielflow.rb` checkout and updated the tap README to list `rielflow` alongside the existing `chilla` cask.

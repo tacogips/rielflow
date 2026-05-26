@@ -243,7 +243,7 @@ interface EventSourceFixtureScenario {
 
 **Checklist**:
 
-- [x] Add fixture workflow and `.divedra-events` examples for cron and webhook
+- [x] Add fixture workflow and `.rielflow-events` examples for cron and webhook
 - [x] Add S3 metadata-only fixture payloads without real credentials
 - [x] Verify `events serve` dispatches through local and GraphQL trigger modes
 - [x] Verify source adapters do not import `src/workflow/engine.ts`

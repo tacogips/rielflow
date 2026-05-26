@@ -208,4 +208,4 @@ interface SaveWorkflowGraphqlData {
 **Tasks Completed**: TASK-003 verification follow-up
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Re-ran the required verification loop in an environment where the local server and browser daemon were available. Live verification succeeded with `divedra serve --host 127.0.0.1 --port 43173`, `agent-browser open http://127.0.0.1:43173`, `agent-browser snapshot -i`, and `agent-browser screenshot --full`, so the earlier browser-daemon blocker is no longer current.
+**Notes**: Re-ran the required verification loop in an environment where the local server and browser daemon were available. Live verification succeeded with `rielflow serve --host 127.0.0.1 --port 43173`, `agent-browser open http://127.0.0.1:43173`, `agent-browser snapshot -i`, and `agent-browser screenshot --full`, so the earlier browser-daemon blocker is no longer current.

@@ -4,7 +4,7 @@ This document defines the redesign that promotes GraphQL to the canonical contro
 
 ## Overview
 
-The current `divedra` runtime already has strong domain primitives:
+The current `rielflow` runtime already has strong domain primitives:
 
 - workflow definitions and sub-workflow boundaries,
 - workflow-execution/session persistence,
@@ -21,7 +21,7 @@ Today the primary surfaces are:
 
 The requested direction requires:
 
-- a first-class workflow manager interaction surface that `divedra` LLM nodes can call directly,
+- a first-class workflow manager interaction surface that `rielflow` LLM nodes can call directly,
 - communication inspection and replay by `workflowId` + `workflowExecutionId` + `communicationId`,
 - GraphQL as the canonical domain-parameter transport instead of CLI flags or REST route-specific request shapes.
 
@@ -46,21 +46,21 @@ The redesign does conflict with the current surface architecture in these areas:
 2. Browser/server execution APIs historically included REST/JSON route-specific editor flows rather than a single schema-driven control plane.
 3. Manager control is currently expressed as node output content, not as a first-class manager command channel.
 4. There is no stable public concept of a communication query or communication replay API.
-5. The current `divedra` executable is a runtime entrypoint, not a manager-tool client with ambient execution identity.
+5. The current `rielflow` executable is a runtime entrypoint, not a manager-tool client with ambient execution identity.
 
 ### Resolution
 
 The redesign resolves the conflict by changing interface layering, not by replacing the runtime model:
 
 - GraphQL becomes the canonical control-plane API for domain operations.
-- long-term, the CLI becomes a thin GraphQL client; `divedra graphql` is the canonical generic GraphQL command and legacy `gql` compatibility is not retained.
+- long-term, the CLI becomes a thin GraphQL client; `rielflow graphql` is the canonical generic GraphQL command and legacy `gql` compatibility is not retained.
 - manager-output `managerControl.actions` becomes a compatibility mode rather than the long-term primary manager control path.
 - mailbox/session artifacts remain durable runtime state and are not replaced by GraphQL.
 
 ## Design Goals
 
 - Make GraphQL the canonical domain API for workflow execution, communication queries, send/replay, and manager inspection.
-- Allow an `divedra` manager node to call `divedra graphql "<graphql document>"` from inside its LLM/tool environment.
+- Allow an `rielflow` manager node to call `rielflow graphql "<graphql document>"` from inside its LLM/tool environment.
 - Preserve current mailbox and execution auditability.
 - Support communication inspection and communication replay without mutating historical artifacts in place.
 - Keep the existing local-first deployment model.
@@ -74,7 +74,7 @@ The redesign resolves the conflict by changing interface layering, not by replac
 
 ## Canonical API Direction
 
-GraphQL becomes the canonical control-plane endpoint exposed by `divedra serve`:
+GraphQL becomes the canonical control-plane endpoint exposed by `rielflow serve`:
 
 - `POST /graphql`
 - optional GraphQL IDE/introspection only in local development mode
@@ -83,7 +83,7 @@ Rule:
 
 - domain parameters move into GraphQL query/mutation inputs,
 - CLI flags are retained only for transport/bootstrap concerns such as endpoint selection, auth token, output format, and local debug overrides.
-- `divedra graphql` supports GraphQL variables through a single `--variables` option that accepts inline JSON or a file reference syntax such as `@path/to/variables.json`
+- `rielflow graphql` supports GraphQL variables through a single `--variables` option that accepts inline JSON or a file reference syntax such as `@path/to/variables.json`
 - legacy execution commands may gain GraphQL-backed transport one slice at a time; until that migration completes, some local debug-only flags remain local-only and are not forwarded through GraphQL
 - GraphQL is now the canonical execution/communication/manager control surface for served workflow-definition, execution, and session operations; no separate bootstrap REST endpoint remains in the current implementation
 
@@ -117,7 +117,7 @@ GraphQL requests that need to reference images or other local files must not sen
 
 - host absolute paths are not stable across machines
 - host absolute paths are not stable across future containerized node execution
-- Podman or other container runtimes should be able to mount the same Divedra data directory at a different host path while preserving the logical file reference
+- Podman or other container runtimes should be able to mount the same Rielflow data directory at a different host path while preserving the logical file reference
 
 ### Canonical File Reference
 
@@ -130,7 +130,7 @@ GraphQL inputs must use a data-root-relative file reference:
 Recommended layout for user-provided or manager-provided attachments:
 
 ```text
-{divedraRootDataDir}/files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
+{rielflowRootDataDir}/files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
 ```
 
 The GraphQL-visible file reference for that example is:
@@ -142,17 +142,17 @@ files/{workflowId}/{workflowExecutionId}/attachments/{fileName}
 Rules:
 
 - the GraphQL caller passes only the data-root-relative path
-- the runtime resolves the absolute filesystem path from the configured Divedra root data directory
+- the runtime resolves the absolute filesystem path from the configured Rielflow root data directory
 - the GraphQL caller must not pass a host absolute path such as `/home/user/...`
 - the GraphQL caller must not pass `..` path traversal segments
 - the runtime must reject paths that escape the configured root data directory
 - `sendManagerMessage.attachments` must stay within `files/{workflowId}/{workflowExecutionId}/...` for the authenticated manager session's workflow execution
 - manager-scoped attachment references must not read workflow artifacts, session files, or other workflow executions' files elsewhere under the root data directory
-- attachment creation/upload is out of scope for the first iteration; files must already exist under the Divedra root data directory before the GraphQL request is sent
+- attachment creation/upload is out of scope for the first iteration; files must already exist under the Rielflow root data directory before the GraphQL request is sent
 
 ### Configuration
 
-The Divedra root data directory is resolved from environment variable or config.
+The Rielflow root data directory is resolved from environment variable or config.
 
 Design direction:
 
@@ -228,7 +228,7 @@ The redesign introduces a manager control plane distinct from mailbox transport.
 ### Separation of Concerns
 
 - mailbox communication remains runtime-owned node-to-node transport
-- manager send is a control-plane request from an `divedra` manager tool session to the orchestration runtime
+- manager send is a control-plane request from an `rielflow` manager tool session to the orchestration runtime
 - a manager send may result in zero or more mailbox communications, node executions, retries, or planner-state updates
 
 This separation avoids overloading a user- or manager-authored freeform message with the same meaning as a durable mailbox artifact.
@@ -265,14 +265,14 @@ Required ambient identity for LLM-triggered CLI use:
 The explicit command form requested by the user is supported:
 
 ```bash
-divedra graphql "<graphql document>"
+rielflow graphql "<graphql document>"
 ```
 
 Resolution rules:
 
 - workflow/domain identifiers are carried inside the GraphQL document variables/input
 - manager node identity and authorization are resolved from ambient manager-session environment and validated against the presented bearer token
-- for HTTP transport, `divedra graphql` forwards `DIVEDRA_MANAGER_SESSION_ID` in `X-Divedra-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
+- for HTTP transport, `rielflow graphql` forwards `DIVEDRA_MANAGER_SESSION_ID` in `X-Rielflow-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
 - local operator/debug mode may allow explicit overrides, but those are not part of the normal LLM-facing contract
 
 ### Manager Token Contract
@@ -284,7 +284,7 @@ Resolution rules:
   - `managerStepId`
   - `managerNodeExecId`
 - normal GraphQL HTTP transport uses `Authorization: Bearer <token>`
-- normal GraphQL HTTP transport forwards `managerSessionId` in `X-Divedra-Manager-Session-Id`
+- normal GraphQL HTTP transport forwards `managerSessionId` in `X-Rielflow-Manager-Session-Id`
 - `DIVEDRA_MANAGER_AUTH_TOKEN` is the CLI/env injection path used inside manager tool environments, not a separate authentication mechanism
 - the token must expire or be revoked when the manager step completes, fails, or is cancelled
 - worker nodes must never inherit this token
@@ -512,10 +512,10 @@ Normal LLM/tool use omits the manager identity fields because they are resolved 
 For HTTP GraphQL calls, the ambient manager-session context is carried by transport metadata rather than by server-local process state:
 
 - bearer auth stays in `Authorization`
-- `managerSessionId` is forwarded in `X-Divedra-Manager-Session-Id`
+- `managerSessionId` is forwarded in `X-Rielflow-Manager-Session-Id`
 - GraphQL variables keep workflow-domain inputs only
 - the `/graphql` HTTP handler must ignore any server-local `DIVEDRA_MANAGER_*` or `DIVEDRA_WORKFLOW_*` ambient execution variables for request authentication and scope resolution; only request transport metadata may supply manager scope on the HTTP boundary
-- the `/graphql` HTTP handler must also ignore caller-provided in-process auth/session fallback fields when authenticating an HTTP request; `Authorization` and `X-Divedra-Manager-Session-Id` remain the only manager-scope carriers on that boundary
+- the `/graphql` HTTP handler must also ignore caller-provided in-process auth/session fallback fields when authenticating an HTTP request; `Authorization` and `X-Rielflow-Manager-Session-Id` remain the only manager-scope carriers on that boundary
 
 ### Typed Action Envelope
 
@@ -669,7 +669,7 @@ The send mutation must return:
 Two manager-control input modes exist during migration:
 
 1. `managerControl.actions` returned inside node output payload
-2. explicit `sendManagerMessage` via `divedra graphql` control-plane command
+2. explicit `sendManagerMessage` via `rielflow graphql` control-plane command
 
 ### Priority Rule
 
@@ -695,7 +695,7 @@ Payload-embedded `managerControl.actions` remains a compatibility mechanism and 
 
 Canonical CLI command:
 
-- `divedra graphql "<graphql document>"`
+- `rielflow graphql "<graphql document>"`
 
 ### Compatibility Commands
 
@@ -715,7 +715,7 @@ But their implementation direction changes:
 
 ### Local Serve Contract
 
-`divedra serve` continues to host the local control plane.
+`rielflow serve` continues to host the local control plane.
 
 Added responsibilities:
 
@@ -723,7 +723,7 @@ Added responsibilities:
 - expose `/healthz`
 - expose optional GraphQL schema/introspection in local development mode
 - avoid reintroducing parallel workflow/session REST endpoints beside GraphQL
-- allow the generic `divedra graphql` CLI client to target the same local endpoint when remote transport is requested
+- allow the generic `rielflow graphql` CLI client to target the same local endpoint when remote transport is requested
 
 ## Data Model Extensions
 
@@ -785,7 +785,7 @@ Recommended migration order:
 2. Add shared application services for communication inspection/retry/replay and manager messaging.
 3. Add manager-message provenance support for manager-authored mailbox sends.
 4. Add GraphQL schema and server integration on top of those services.
-5. Add the generic `divedra graphql` CLI client.
+5. Add the generic `rielflow graphql` CLI client.
 6. Inject manager-session environment into manager-node executions and update manager prompt guidance.
 7. Keep browser workflow-definition, execution, and session flows aligned on GraphQL now that the REST browser surface has been removed.
 
@@ -802,4 +802,4 @@ Therefore the redesign direction is:
 - make GraphQL canonical,
 - make CLI a generic client over that control plane,
 - add first-class communication inspection and replay,
-- support LLM-triggered `divedra graphql` through ambient manager-session context.
+- support LLM-triggered `rielflow graphql` through ambient manager-session context.

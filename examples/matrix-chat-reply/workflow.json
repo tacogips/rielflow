@@ -1,6 +1,6 @@
 {
   "workflowId": "matrix-chat-reply",
-  "description": "Reply to an Element/Matrix room message with the built-in divedra chat reply worker add-on.",
+  "description": "Reply to an Element/Matrix room message with the built-in rielflow chat reply worker add-on.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -10,7 +10,7 @@
     {
       "id": "reply-to-matrix",
       "addon": {
-        "name": "divedra/chat-reply-worker",
+        "name": "rielflow/chat-reply-worker",
         "version": "1",
         "config": {
           "textTemplate": "Matrix sample received from {{event.actor.displayName}}: {{event.input.text}}",

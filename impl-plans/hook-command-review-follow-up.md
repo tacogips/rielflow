@@ -13,7 +13,7 @@
 
 ### Summary
 
-Apply review-driven follow-up fixes to the new `divedra hook` slice without changing its intended architecture. The command remains a noop-safe cross-vendor hook gateway, but the implementation should reduce duplication, avoid unnecessary hardcoded vendor strings, and cover block-path behavior with direct tests.
+Apply review-driven follow-up fixes to the new `rielflow hook` slice without changing its intended architecture. The command remains a noop-safe cross-vendor hook gateway, but the implementation should reduce duplication, avoid unnecessary hardcoded vendor strings, and cover block-path behavior with direct tests.
 
 ### Scope
 

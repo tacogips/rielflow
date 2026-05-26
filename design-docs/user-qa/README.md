@@ -32,6 +32,9 @@ Store questions, pending decisions, and items awaiting user approval.
 - `qa-scheduled-workflow-execution.md`: timezone defaults, missed-run policy,
   schedule CRUD scope, result delivery destination, and startup rehydration
   scope for chat-created workflow schedules.
+- `qa-product-rename-rielflow.md`: CLI alias, package/release compatibility,
+  historical document rewrite scope, and runtime data migration decisions for
+  the product rename from rielflow to Rielflow.
 
 ## Adding New Items
 

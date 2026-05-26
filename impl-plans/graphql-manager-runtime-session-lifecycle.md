@@ -195,4 +195,4 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
 **Tasks Completed**: TASK-001, TASK-002, TASK-003
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: The GraphQL surface itself was already implemented, but the runtime had not yet minted manager sessions or exposed ambient `divedra gql` context to manager-node adapter executions. This slice closes that lifecycle gap without changing worker-node behavior.
+**Notes**: The GraphQL surface itself was already implemented, but the runtime had not yet minted manager sessions or exposed ambient `rielflow gql` context to manager-node adapter executions. This slice closes that lifecycle gap without changing worker-node behavior.

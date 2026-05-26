@@ -11,7 +11,7 @@
 
 ### Summary
 
-Harden interactive `divedra tui` fallback detection after the OpenTUI Solid migration so the CLI degrades cleanly not only when `@opentui/*` packages are missing, but also when the checked-in `.tsx` renderer cannot load its required `solid-js` runtime modules.
+Harden interactive `rielflow tui` fallback detection after the OpenTUI Solid migration so the CLI degrades cleanly not only when `@opentui/*` packages are missing, but also when the checked-in `.tsx` renderer cannot load its required `solid-js` runtime modules.
 
 ### Scope
 

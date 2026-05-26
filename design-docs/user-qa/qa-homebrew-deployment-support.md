@@ -9,21 +9,21 @@ placeholder values.
 
 1. Which Homebrew tap should own the formula?
    - Decision: use the existing `tacogips/homebrew-tap` repository, with
-     `divedra` stored as `Formula/divedra.rb` alongside the existing `chilla`
+     `rielflow` stored as `Formula/rielflow.rb` alongside the existing `chilla`
      cask.
 
 2. Which release URL pattern should the formula use?
-   - Option A: GitHub Releases under `tacogips/divedra`.
+   - Option A: GitHub Releases under `tacogips/rielflow`.
    - Option B: another artifact host supplied during release.
 
 3. Which target matrix is required for the first Homebrew release?
    - Minimum: `darwin-arm64` and `darwin-x64`.
    - Optional: Linuxbrew targets when a reliable build host is available.
 
-4. Should `divedra --version` be added as a required release smoke-test surface?
+4. Should `rielflow --version` be added as a required release smoke-test surface?
    - Preferred: add it so archive and Homebrew tests can verify both help and
      version output.
-   - Acceptable first slice: use `divedra --help` only if runtime code changes
+   - Acceptable first slice: use `rielflow --help` only if runtime code changes
      are intentionally deferred.
 
 ## Current Assumption

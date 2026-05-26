@@ -38,7 +38,7 @@ Default for the first slice: reply to the inbound event when an event id is
 available, and include Matrix thread relation metadata when the inbound event
 has a thread root.
 
-Open decision: should divedra force all workflow replies into Matrix threads
+Open decision: should rielflow force all workflow replies into Matrix threads
 even when the incoming message was not threaded?
 
 Options:
@@ -51,7 +51,7 @@ Options:
 Default for the first slice: one bot access token and one bot Matrix user id per
 source config.
 
-Open decision: should divedra support appservice tokens, per-room credentials,
+Open decision: should rielflow support appservice tokens, per-room credentials,
 or per-workflow identities?
 
 Options:
@@ -66,7 +66,7 @@ Default for the first slice: persist an optional Matrix `/sync` `next_batch`
 token under the local event runtime state or artifact root for the source.
 
 Open decision: should production listener deployments share sync state across
-multiple divedra listener processes?
+multiple rielflow listener processes?
 
 Options:
 

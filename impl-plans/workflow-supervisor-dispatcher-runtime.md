@@ -120,7 +120,7 @@ export interface DispatchSupervisorConversationPayload {
 
 - [x] Add GraphQL inputs and payloads for dispatch and conversation reads
 - [x] Expose the same dispatcher contract through local and remote clients (`postDispatchSupervisorConversationThroughGraphql`)
-- [x] Package a default dispatcher example with supervisor profile files and managed workflow examples (`examples/default-supervisor-dispatcher/`, `divedra-default-workflow-supervisor`, `dispatcher-llm-resolver-stub`, event fixtures)
+- [x] Package a default dispatcher example with supervisor profile files and managed workflow examples (`examples/default-supervisor-dispatcher/`, `rielflow-default-workflow-supervisor`, `dispatcher-llm-resolver-stub`, event fixtures)
 - [x] Cover direct answer and start managed runs via mock scenarios; ambiguity rejection and replay safety covered in `trigger-runner.test.ts` / contract tests (`switch-workflow` supports `lifecycle.startOnSwitch` without `managedRunId` and `stopOnSwitch` on the prior selection; optional `runAlias`-only switch remains a narrow follow-up).
 
 ## Module Status
@@ -283,7 +283,7 @@ export interface DispatchSupervisorConversationPayload {
 
 ### Session: 2026-05-02 (TASK-007 examples bundle)
 
-**Tasks Completed**: Shipped `examples/default-supervisor-dispatcher/` (README, mock scenarios), workflows `divedra-default-workflow-supervisor` and `dispatcher-llm-resolver-stub`, profile `event-sources/.divedra-events/supervisors/default-chat-dispatcher.json`, binding `webhook-supervisor-dispatch-demo.json`, payloads `chat-supervisor-dispatch*.json`; documented dedupe behavior across sequential emits; validated `events validate` / mock emits end-to-end.
+**Tasks Completed**: Shipped `examples/default-supervisor-dispatcher/` (README, mock scenarios), workflows `rielflow-default-workflow-supervisor` and `dispatcher-llm-resolver-stub`, profile `event-sources/.rielflow-events/supervisors/default-chat-dispatcher.json`, binding `webhook-supervisor-dispatch-demo.json`, payloads `chat-supervisor-dispatch*.json`; documented dedupe behavior across sequential emits; validated `events validate` / mock emits end-to-end.
 **Tasks In Progress**: None.
 **Blockers**: None
 **Notes**: See Session 2026-05-01 (design-aligned switch-workflow) for `startOnSwitch` / `stopOnSwitch` closure.

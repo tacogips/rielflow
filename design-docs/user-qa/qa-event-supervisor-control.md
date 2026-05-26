@@ -36,7 +36,7 @@ items should be confirmed before public APIs are frozen.
    threshold, and allow automatic application only for a single unambiguous
    command whose action, target, and arguments pass deterministic validation.
 
-7. Confirm runner-pool restart semantics: after a divedra process restart,
+7. Confirm runner-pool restart semantics: after a rielflow process restart,
    persisted supervised-run records and session/artifact state remain
    inspectable, but commands that require a live in-process handle are refused
    unless the engine can safely rehydrate or resume the target execution.

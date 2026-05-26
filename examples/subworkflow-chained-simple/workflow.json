@@ -6,15 +6,15 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}} as two sequential grouped lanes. Run alpha first; after alpha-output succeeds, run beta and pass along the prior published result.",
+    "rielflowPromptTemplate": "Coordinate {{workflowId}} as two sequential grouped lanes. Run alpha first; after alpha-output succeeds, run beta and pass along the prior published result.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
   },
-  "managerStepId": "divedra-manager",
-  "entryStepId": "divedra-manager",
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
   "nodes": [
     {
-      "id": "divedra-manager",
-      "nodeFile": "nodes/node-divedra-manager.json"
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
     },
     {
       "id": "alpha-manager",
@@ -51,8 +51,8 @@
   ],
   "steps": [
     {
-      "id": "divedra-manager",
-      "nodeId": "divedra-manager",
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
       "role": "manager",
       "transitions": [
         {

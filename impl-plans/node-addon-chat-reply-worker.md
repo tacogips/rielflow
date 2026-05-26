@@ -7,7 +7,7 @@
 
 ## Design Summary
 
-Implement the first runtime-provided node add-on: `divedra/chat-reply-worker`.
+Implement the first runtime-provided node add-on: `rielflow/chat-reply-worker`.
 Workflow authors can declare `workflow.json.nodes[].addon` instead of a
 workflow-local `nodeFile`, and the loader/validator resolves it into an
 effective executable worker node.
@@ -36,7 +36,7 @@ interface WorkflowNodeAddonRef {
 }
 
 interface ResolvedNodeAddon {
-  readonly name: "divedra/chat-reply-worker";
+  readonly name: "rielflow/chat-reply-worker";
   readonly version: "1";
   readonly config: ChatReplyWorkerConfig;
 }

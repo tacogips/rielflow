@@ -1,7 +1,7 @@
 # Event External Mailbox Binding Design
 
 This document defines the target architecture for integrating external event
-sources with divedra through a runtime-owned external mailbox boundary instead
+sources with rielflow through a runtime-owned external mailbox boundary instead
 of coupling provider adapters directly to workflow execution entrypoints.
 
 ## Overview
@@ -63,7 +63,7 @@ document can guide incremental work without implying a full mailbox rewrite.
   records; the first migration step may keep the existing dispatcher/storage
   shape as long as it consumes provider-neutral external output messages rather
   than adapter-authored reply payloads
-- event binding configuration continues to live under `.divedra-events/`; this
+- event binding configuration continues to live under `.rielflow-events/`; this
   design changes binding semantics, not configuration placement
 
 ## Relationship To Existing Mailbox Model
@@ -118,7 +118,7 @@ runtime-driven.
 
 Examples of coupling pressure:
 
-- provider replies are currently either explicit `divedra/chat-reply-worker`
+- provider replies are currently either explicit `rielflow/chat-reply-worker`
   actions or synthesized supervisor control messages
 - final workflow business output and transport reply semantics are discussed in
   the event layer instead of one runtime-owned publication boundary

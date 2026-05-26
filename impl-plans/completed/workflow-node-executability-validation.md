@@ -89,9 +89,9 @@ Intentional divergences accepted by the design:
 #### `src/workflow/validate/validation-types-and-runtime-options.ts`
 #### `src/workflow/validate.ts`
 #### `src/lib.ts`
-#### `packages/divedra-core/src/workflow-model.ts`
-#### `packages/divedra-core/src/index.ts`
-#### `packages/divedra/src/index.ts`
+#### `packages/rielflow-core/src/workflow-model.ts`
+#### `packages/rielflow-core/src/index.ts`
+#### `packages/rielflow/src/index.ts`
 
 **Status**: Completed
 
@@ -124,8 +124,8 @@ interface ValidationSuccessDetails {
 - [x] Add `executablePreflight?: boolean` to shared workflow validation options.
 - [x] Add `nodeValidationResults` to detailed validation success output.
 - [x] Keep existing structural `ValidationIssue` behavior unchanged.
-- [x] Preserve package facade exports through `src/lib.ts`, `divedra-core`, and
-      `divedra`.
+- [x] Preserve package facade exports through `src/lib.ts`, `rielflow-core`, and
+      `rielflow`.
 
 ### 2. Shared Node Executability Collector
 
@@ -165,10 +165,10 @@ interface AgentBackendPreflightCandidate {
 
 #### `src/workflow/types.ts`
 #### `src/workflow/addon-package-boundary.ts`
-#### `packages/divedra-addons/src/node-addons/addon-constants-and-agent-config.ts`
-#### `packages/divedra-addons/src/node-addons/addon-payload-resolution.ts`
-#### `packages/divedra-addons/src/local-node-addons.ts`
-#### `packages/divedra-addons/src/index.ts`
+#### `packages/rielflow-addons/src/node-addons/addon-constants-and-agent-config.ts`
+#### `packages/rielflow-addons/src/node-addons/addon-payload-resolution.ts`
+#### `packages/rielflow-addons/src/local-node-addons.ts`
+#### `packages/rielflow-addons/src/index.ts`
 
 **Status**: Completed
 
@@ -233,11 +233,11 @@ interface AgentBackendPreflightResult {
 
 ### 5. CLI, GraphQL, and Library Surfaces
 
-#### `packages/divedra/src/cli/input-output-helpers.ts`
-#### `packages/divedra/src/cli/workflow-command-handler.ts`
+#### `packages/rielflow/src/cli/input-output-helpers.ts`
+#### `packages/rielflow/src/cli/workflow-command-handler.ts`
 #### `src/graphql/types.ts`
 #### `src/graphql/schema/llm-run-overrides.ts`
-#### `packages/divedra-graphql/src/schema-contract.ts`
+#### `packages/rielflow-graphql/src/schema-contract.ts`
 #### `src/server/graphql-executable-schema.ts`
 
 **Status**: Completed
@@ -257,7 +257,7 @@ interface AgentBackendPreflightResult {
 
 #### `src/workflow/validate.test.ts`
 #### `src/workflow/runtime-readiness-backends.test.ts`
-#### `packages/divedra-addons/src/**/*.test.ts`
+#### `packages/rielflow-addons/src/**/*.test.ts`
 
 **Status**: Completed
 
@@ -298,7 +298,7 @@ interface AgentBackendPreflightResult {
 #### `src/graphql/schema.test.ts`
 #### `src/server/graphql-execution-overview-and-definitions.test.ts`
 #### `README.md`
-#### `.agents/skills/divedra-workflow-run/SKILL.md`
+#### `.agents/skills/rielflow-workflow-run/SKILL.md`
 
 **Status**: Completed
 
@@ -320,10 +320,10 @@ interface AgentBackendPreflightResult {
 | ------ | --------- | ------ | ----- |
 | Result model and options | `src/workflow/validate/node-validation-result.ts`, `src/workflow/validate/validation-types-and-runtime-options.ts`, package exports | NOT_STARTED | Typecheck, export tests |
 | Shared collector | `src/workflow/validate/node-executability-validation.ts`, `src/workflow/validate/bundle-validation-entrypoints.ts` | NOT_STARTED | `src/workflow/validate.test.ts` |
-| Add-on validate hook | `src/workflow/types.ts`, `src/workflow/addon-package-boundary.ts`, `packages/divedra-addons/src/**` | NOT_STARTED | add-on validation tests |
+| Add-on validate hook | `src/workflow/types.ts`, `src/workflow/addon-package-boundary.ts`, `packages/rielflow-addons/src/**` | NOT_STARTED | add-on validation tests |
 | Backend preflight | `src/workflow/runtime-readiness-agent-probes.ts`, `src/workflow/adapters/{codex,claude,cursor}.ts` | NOT_STARTED | backend probe tests |
-| CLI/GraphQL/library surfaces | `packages/divedra/src/cli/**`, `src/graphql/**`, `packages/divedra-graphql/src/schema-contract.ts` | NOT_STARTED | CLI and GraphQL tests |
-| Documentation | `README.md`, `.agents/skills/divedra-workflow-run/SKILL.md` | NOT_STARTED | Review |
+| CLI/GraphQL/library surfaces | `packages/rielflow/src/cli/**`, `src/graphql/**`, `packages/rielflow-graphql/src/schema-contract.ts` | NOT_STARTED | CLI and GraphQL tests |
+| Documentation | `README.md`, `.agents/skills/rielflow-workflow-run/SKILL.md` | NOT_STARTED | Review |
 
 ---
 
@@ -338,7 +338,7 @@ interface AgentBackendPreflightResult {
 - `src/workflow/validate/node-validation-result.ts`
 - Updated validation option/detail types.
 - Public exports through `src/workflow/validate.ts`, `src/lib.ts`,
-  `packages/divedra-core/src/index.ts`, and `packages/divedra/src/index.ts`.
+  `packages/rielflow-core/src/index.ts`, and `packages/rielflow/src/index.ts`.
 
 **Dependencies**: None
 
@@ -522,8 +522,8 @@ Run full verification before completion:
 ```bash
 bun run typecheck
 bun run test
-bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .divedra/workflows
-bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .divedra/workflows --executable --output json
+bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .rielflow/workflows
+bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .rielflow/workflows --executable --output json
 ```
 
 ---
@@ -570,7 +570,7 @@ Each implementation session must append a dated entry with:
 - `bun test src/package-boundaries.test.ts src/graphql/schema.test.ts src/workflow/superviser-runtime-control-impl.test.ts --timeout 30000` passed.
 - `bun test src/workflow/validate.test.ts src/workflow/runtime-readiness-backends.test.ts src/cli.test.ts --timeout 30000` passed.
 - `bun run test` passed: 1129 tests.
-- `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .divedra/workflows --executable --output json` passed with `valid: true`.
+- `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .rielflow/workflows --executable --output json` passed with `valid: true`.
 
 **Implementation Notes**:
 

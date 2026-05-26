@@ -6,7 +6,7 @@ handling and supervisor collaboration over chat destinations.
 ## Overview
 
 Chat-originated tasks should produce conversational lifecycle replies before a
-workflow starts, while still preserving divedra's runtime-owned event and
+workflow starts, while still preserving rielflow's runtime-owned event and
 workflow-mail boundaries. The runtime or supervisor owns these replies as
 explicit `external-output` publications. Internal workflow output mail remains
 execution data only and is never treated as provider delivery.
@@ -170,7 +170,7 @@ examples/chat-supervisor-collaboration/
     node-workflow-c-spec-and-implementation.json
     node-workflow-c-request-review.json
     node-workflow-output.json
-  .divedra-events/
+  .rielflow-events/
     sources/collaboration-chat.json
     destinations/workflow-a-review-chat.json
     destinations/workflow-b-review-chat.json

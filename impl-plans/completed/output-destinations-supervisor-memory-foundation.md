@@ -24,7 +24,7 @@ Review clarification: this completed plan covers configuration, validation, runt
 - `../../codex-agent/src/queue/runner.ts`: reference for runner-owned deterministic progress emission.
 - `../../codex-agent/design-docs/specs/design-codex-session-management.md`: reference for session event persistence boundaries.
 
-**Intentional Divergence**: divedra keeps outbound delivery in repository-local `src/events` adapters, runtime receipts, and workflow/supervisor contracts instead of copying Codex CLI stream delivery. Chat destinations may use a source adapter as a temporary transport bridge, but destination ids remain outbound routing hints rather than inbound source aliases.
+**Intentional Divergence**: rielflow keeps outbound delivery in repository-local `src/events` adapters, runtime receipts, and workflow/supervisor contracts instead of copying Codex CLI stream delivery. Chat destinations may use a source adapter as a temporary transport bridge, but destination ids remain outbound routing hints rather than inbound source aliases.
 
 ## Modules
 
@@ -120,7 +120,7 @@ function dispatchChatReplyToEventOutputDestination(
 
 ### 4. Tests and Examples
 
-#### `src/events/*.test.ts`, `examples/event-sources/.divedra-events/destinations/*.json`
+#### `src/events/*.test.ts`, `examples/event-sources/.rielflow-events/destinations/*.json`
 
 **Status**: COMPLETED
 
@@ -208,7 +208,7 @@ Carry binding destination ids through runtime variables and external-output path
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `examples/event-sources/.divedra-events/destinations/*.json`, `examples/event-sources/.divedra-events/bindings/webhook-to-chat-reply.json`, `design-docs/specs/design-output-destinations-and-supervisor-memory.md`, `impl-plans/completed/output-destinations-supervisor-memory-foundation.md`
+**Deliverables**: `examples/event-sources/.rielflow-events/destinations/*.json`, `examples/event-sources/.rielflow-events/bindings/webhook-to-chat-reply.json`, `design-docs/specs/design-output-destinations-and-supervisor-memory.md`, `impl-plans/completed/output-destinations-supervisor-memory-foundation.md`
 **Dependencies**: TASK-002, TASK-003, TASK-004
 
 **Description**:
@@ -217,7 +217,7 @@ Document accepted scope, Codex-reference mapping, review decisions, future bound
 **Completion Criteria**:
 
 - [x] Example binding references a chat destination.
-- [x] Example destination config exists under `.divedra-events/destinations/`.
+- [x] Example destination config exists under `.rielflow-events/destinations/`.
 - [x] Design and plan explicitly state that S3 backup delivery, non-chat retry semantics, and durable memory stores are future work.
 - [x] Review decisions and verification commands are documented.
 
@@ -229,7 +229,7 @@ Document accepted scope, Codex-reference mapping, review decisions, future bound
 | Config/validation   | `src/events/config.ts`, `src/events/validate.ts`                                                                                       | COMPLETED | `src/events/config.test.ts`                                                |
 | Dispatch fanout     | `src/events/output-destination.ts`, `src/events/reply-dispatcher.ts`                                                                   | COMPLETED | `src/events/reply-dispatcher.test.ts`                                      |
 | Runtime propagation | `src/events/input-mapping.ts`, `src/events/trigger-runner.ts`, `src/events/external-output.ts`, `src/workflow/native-node-executor.ts` | COMPLETED | `src/events/trigger-runner.test.ts`, `src/events/reply-dispatcher.test.ts` |
-| Examples            | `examples/event-sources/.divedra-events/destinations/*.json`                                                                           | COMPLETED | Event config validation                                                    |
+| Examples            | `examples/event-sources/.rielflow-events/destinations/*.json`                                                                           | COMPLETED | Event config validation                                                    |
 
 ## Dependencies
 
@@ -273,7 +273,7 @@ Document accepted scope, Codex-reference mapping, review decisions, future bound
 - Keep the plan in `impl-plans/completed/` because the requested foundation is implemented and this bounded run is documentation review, not new implementation.
 - Do not widen scope to S3 delivery in this plan; backup destinations are schema and validation foundation only.
 - Keep deterministic supervisor command ownership in `src/events/supervisor-intent.ts` and `src/events/supervisor-command-contract.ts`; LLM resolvers are explicit fallback or async resolver paths.
-- Keep Codex-reference behavior as reference-only. The implementation maps Codex-style normalized event contracts to divedra's event adapter, receipt, and external-output publisher model rather than copying Codex CLI stream handling.
+- Keep Codex-reference behavior as reference-only. The implementation maps Codex-style normalized event contracts to rielflow's event adapter, receipt, and external-output publisher model rather than copying Codex CLI stream handling.
 
 ## Review Verification
 

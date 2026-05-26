@@ -1,7 +1,7 @@
 version: "3"
 
 vars:
-  PROJECT_NAME: divedra
+  PROJECT_NAME: rielflow
 
 tasks:
   default:
@@ -30,12 +30,12 @@ tasks:
       - scripts/build-homebrew-release.sh {{.CLI_ARGS}}
 
   homebrew:formula:
-    desc: Render Formula/divedra.rb from dist/homebrew checksums (pass the version after --)
+    desc: Render Formula/rielflow.rb from dist/homebrew checksums (pass the version after --)
     cmds:
       - scripts/render-homebrew-formula.sh {{.CLI_ARGS}}
 
   homebrew:tap-formula:
-    desc: Render divedra into the sibling tacogips/homebrew-tap repository (pass version after --)
+    desc: Render rielflow into the sibling tacogips/homebrew-tap repository (pass version after --)
     cmds:
       - |
         set -euo pipefail
@@ -43,7 +43,7 @@ tasks:
           echo "usage: task homebrew:tap-formula -- <version>" >&2
           exit 2
         fi
-        scripts/render-homebrew-formula.sh "{{.CLI_ARGS}}" ../homebrew-tap/Formula/divedra.rb
+        scripts/render-homebrew-formula.sh "{{.CLI_ARGS}}" ../homebrew-tap/Formula/rielflow.rb
 
   start:
     desc: Run the application

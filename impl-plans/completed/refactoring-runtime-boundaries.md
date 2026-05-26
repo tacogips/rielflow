@@ -7,11 +7,11 @@
 
 ## Purpose
 
-Improve divedra maintainability across workflow execution, validation IO, session persistence, backend adapters, CLI/library boundaries, packages, and local workflow bundles while preserving public APIs and runtime behavior unless an individual task explicitly justifies a compatible change.
+Improve rielflow maintainability across workflow execution, validation IO, session persistence, backend adapters, CLI/library boundaries, packages, and local workflow bundles while preserving public APIs and runtime behavior unless an individual task explicitly justifies a compatible change.
 
 ## Scope Boundaries
 
-- Target paths: `src/workflow`, `src/cli`, `src/lib.ts`, `packages`, `.divedra/workflows`.
+- Target paths: `src/workflow`, `src/cli`, `src/lib.ts`, `packages`, `.rielflow/workflows`.
 - Excluded paths: `dist`, `node_modules`, `/tmp`, `impl-plans/completed`.
 - Do not stage, commit, push, or revert unrelated dirty worktree changes.
 - Keep each implementation pass to one bounded task and update this plan after each pass.
@@ -35,13 +35,13 @@ Improve divedra maintainability across workflow execution, validation IO, sessio
 | BACKENDS-H01 | workflow-backends-addons-adapters | high | `src/workflow/adapter-execution.ts` | REF-009 |
 | BACKENDS-M01 | workflow-backends-addons-adapters | mid | `src/workflow/addon-package-boundary.ts` | REF-009 |
 | BACKENDS-M02 | workflow-backends-addons-adapters | mid | `src/workflow/native-node-executor/chat-and-gateway-addons.ts` | REF-009 |
-| BACKENDS-M03 | workflow-backends-addons-adapters | mid | `packages/divedra-addons/src/index.ts` | REF-010 |
+| BACKENDS-M03 | workflow-backends-addons-adapters | mid | `packages/rielflow-addons/src/index.ts` | REF-010 |
 | CLI-M01 | cli-lib-public-api | mid | `src/cli/session-command-handler.ts` | REF-010 |
 | CLI-M02 | cli-lib-public-api | mid | `src/lib.ts` | REF-010 |
 | CLI-M03 | cli-lib-public-api | mid | `src/cli/workflow-command-handler.ts` | REF-010 |
-| PKG-M01 | packages-and-local-workflows | mid | `packages/divedra-core/src/index.ts` | REF-010 |
-| PKG-M02 | packages-and-local-workflows | mid | `.divedra/workflows/design-and-implement-review-loop-feature-plan/nodes/node-step2-design-doc-update.json` | REF-010 |
-| PKG-M03 | packages-and-local-workflows | mid | `.divedra/workflows/design-and-implement-review-loop-feature-plan/workflow.json` | REF-010 |
+| PKG-M01 | packages-and-local-workflows | mid | `packages/rielflow-core/src/index.ts` | REF-010 |
+| PKG-M02 | packages-and-local-workflows | mid | `.rielflow/workflows/design-and-implement-review-loop-feature-plan/nodes/node-step2-design-doc-update.json` | REF-010 |
+| PKG-M03 | packages-and-local-workflows | mid | `.rielflow/workflows/design-and-implement-review-loop-feature-plan/workflow.json` | REF-010 |
 
 ## Rejected Findings
 
@@ -234,7 +234,7 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 ### REF-010: Stabilize CLI, library, package, and workflow bundle boundaries
 
 **Status**: Completed
-**Owned Files/Directories**: `src/cli/session-command-handler.ts`, `src/cli/workflow-command-handler.ts`, `src/cli/input-output-helpers.ts`, `src/lib.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra-addons/src/index.ts`, `packages/divedra/src/index.ts`, `.divedra/workflows/design-and-implement-review-loop-feature-plan`, `.divedra/workflows/impl-plan-completion-loop`, `.divedra/workflows/refactoring-slice-review`
+**Owned Files/Directories**: `src/cli/session-command-handler.ts`, `src/cli/workflow-command-handler.ts`, `src/cli/input-output-helpers.ts`, `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow-addons/src/index.ts`, `packages/rielflow/src/index.ts`, `.rielflow/workflows/design-and-implement-review-loop-feature-plan`, `.rielflow/workflows/impl-plan-completion-loop`, `.rielflow/workflows/refactoring-slice-review`
 **Excluded Files**: workflow engine internals except explicit compatibility imports
 **Depends On**: REF-001
 
@@ -249,9 +249,9 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 **Verification Commands**:
 - `bun test src/cli.test.ts src/lib-api.test.ts src/lib-supervision.test.ts src/package-boundaries.test.ts`
 - `bun run build:server`
-- `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
-- `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .divedra/workflows`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows`
+- `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
+- `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .rielflow/workflows`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows`
 - `bun run typecheck:server`
 - `git diff --check`
 
@@ -264,7 +264,7 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 - Runtime DB ownership overlaps session, manager, GraphQL, and event-source query paths; keep changes limited to connection/schema helpers and table ownership boundaries.
 - `src/workflow/adapter-execution.ts` and `src/workflow/addon-package-boundary.ts` are already dirty in the worktree; implementation must not revert unrelated changes.
 - Package export narrowing crosses `src/lib.ts`, package facades, and package-boundary tests; preserve public API compatibility unless a separate task justifies a safe change.
-- The CLI currently requires workflow names for validation; use per-workflow validate commands instead of `workflow validate --workflow-definition-dir .divedra/workflows`.
+- The CLI currently requires workflow names for validation; use per-workflow validate commands instead of `workflow validate --workflow-definition-dir .rielflow/workflows`.
 
 ## Verification Strategy
 
@@ -472,9 +472,9 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 - PASS: `bun test src/lib-api.test.ts src/lib-supervision.test.ts`
 - PASS: `bun run build:server`
 - PASS: `bun test src/package-boundaries.test.ts`
-- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
-- PASS: `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .divedra/workflows`
-- PASS: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows`
+- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
+- PASS: `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .rielflow/workflows`
+- PASS: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows`
 - PASS: `bun run lint:biome`
 - PASS: `git diff --check`
 - BLOCKED: `bun run typecheck`
@@ -530,11 +530,11 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 - PASS: `bun test src/package-boundaries.test.ts`
 - PASS: `bun run build:server`
 - PASS: `bun run lint:biome`
-- PASS: `git diff --check -- packages/divedra-core/src/index.ts packages/divedra-addons/src/index.ts packages/divedra/src/index.ts src/package-boundaries.test.ts`
-- PASS: `rg -n "[ \t]+$" impl-plans/active/refactoring-runtime-boundaries.md packages/divedra-core/src/index.ts packages/divedra-addons/src/index.ts packages/divedra/src/index.ts src/package-boundaries.test.ts` returned no matches
+- PASS: `git diff --check -- packages/rielflow-core/src/index.ts packages/rielflow-addons/src/index.ts packages/rielflow/src/index.ts src/package-boundaries.test.ts`
+- PASS: `rg -n "[ \t]+$" impl-plans/active/refactoring-runtime-boundaries.md packages/rielflow-core/src/index.ts packages/rielflow-addons/src/index.ts packages/rielflow/src/index.ts src/package-boundaries.test.ts` returned no matches
 - BLOCKED: `bun run typecheck:server`
 
-**Notes**: Documented source-level package facade contracts in the `divedra-core`, `divedra-addons`, and compatibility `divedra` source entrypoints. Removed the duplicated explicit add-on registry re-export from `packages/divedra-addons/src/index.ts` so the add-ons package mirrors the source `node-addons` surface once and adds only native add-on execution entrypoints. Added package-boundary regressions that compare compatibility package exports to `src/lib.ts`, compare add-ons exports to `src/workflow/node-addons.ts` plus native execution, and lock the core package to its documented runtime/supervision surface without CLI, server, GraphQL schema, or native add-on exports. REF-010 remains in progress because feature-plan prompt extraction and local workflow scenario coverage criteria are still open.
+**Notes**: Documented source-level package facade contracts in the `rielflow-core`, `rielflow-addons`, and compatibility `rielflow` source entrypoints. Removed the duplicated explicit add-on registry re-export from `packages/rielflow-addons/src/index.ts` so the add-ons package mirrors the source `node-addons` surface once and adds only native add-on execution entrypoints. Added package-boundary regressions that compare compatibility package exports to `src/lib.ts`, compare add-ons exports to `src/workflow/node-addons.ts` plus native execution, and lock the core package to its documented runtime/supervision surface without CLI, server, GraphQL schema, or native add-on exports. REF-010 remains in progress because feature-plan prompt extraction and local workflow scenario coverage criteria are still open.
 
 ### Session: 2026-05-16 REF-010 feature-plan prompt extraction pass
 
@@ -545,12 +545,12 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 **Blockers**: None for this bounded pass. Historical broad typecheck blockers from missing adapter test SDK modules remain unresolved outside this workflow-bundle-only change.
 
 **Verification**:
-- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
-- PASS: `jq empty .divedra/workflows/design-and-implement-review-loop-feature-plan/workflow.json .divedra/workflows/design-and-implement-review-loop-feature-plan/nodes/*.json`
-- PASS: `rg -n '"promptTemplate"' .divedra/workflows/design-and-implement-review-loop-feature-plan` returned no matches
-- PASS: `git diff --check -- .divedra/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
+- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
+- PASS: `jq empty .rielflow/workflows/design-and-implement-review-loop-feature-plan/workflow.json .rielflow/workflows/design-and-implement-review-loop-feature-plan/nodes/*.json`
+- PASS: `rg -n '"promptTemplate"' .rielflow/workflows/design-and-implement-review-loop-feature-plan` returned no matches
+- PASS: `git diff --check -- .rielflow/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
 
-**Notes**: Moved all embedded feature-plan node and prompt-variant prompt text into workflow-local Markdown files under `.divedra/workflows/design-and-implement-review-loop-feature-plan/prompts/`, then rewired the node payloads to use `promptTemplateFile` entries. Prompt text was copied exactly from the prior inline JSON strings. REF-010 remains in progress because minimal deterministic scenario/expected-result coverage for uncovered local workflow bundles is still open.
+**Notes**: Moved all embedded feature-plan node and prompt-variant prompt text into workflow-local Markdown files under `.rielflow/workflows/design-and-implement-review-loop-feature-plan/prompts/`, then rewired the node payloads to use `promptTemplateFile` entries. Prompt text was copied exactly from the prior inline JSON strings. REF-010 remains in progress because minimal deterministic scenario/expected-result coverage for uncovered local workflow bundles is still open.
 
 ### Session: 2026-05-16 REF-010 self-review revision pass
 
@@ -562,10 +562,10 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 
 **Verification**:
 - PASS: `node <<'NODE' ... NODE` exact comparison of prior inline `promptTemplate` strings from `HEAD` to current `promptTemplateFile` contents
-- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
-- PASS: `jq empty .divedra/workflows/design-and-implement-review-loop-feature-plan/workflow.json .divedra/workflows/design-and-implement-review-loop-feature-plan/nodes/*.json`
-- PASS: `rg -n '"promptTemplate"' .divedra/workflows/design-and-implement-review-loop-feature-plan` returned no matches
-- PASS: `git diff --check -- .divedra/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
+- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
+- PASS: `jq empty .rielflow/workflows/design-and-implement-review-loop-feature-plan/workflow.json .rielflow/workflows/design-and-implement-review-loop-feature-plan/nodes/*.json`
+- PASS: `rg -n '"promptTemplate"' .rielflow/workflows/design-and-implement-review-loop-feature-plan` returned no matches
+- PASS: `git diff --check -- .rielflow/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
 
 **Notes**: Addressed self-review finding `SELF-REF010-M01` by removing the added trailing line feed from each extracted feature-plan prompt file. The extracted prompt files now compare byte-for-byte with the prior inline JSON `promptTemplate` strings while preserving the `promptTemplateFile` wiring. REF-010 remains in progress because minimal deterministic scenario/expected-result coverage for uncovered local workflow bundles is still open.
 
@@ -578,21 +578,21 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 **Blockers**: Historical broad typecheck blockers from missing adapter test SDK modules remain unresolved outside this workflow-bundle-only change.
 
 **Verification**:
-- PASS: `jq empty .divedra/workflows/refactoring-slice-review/mock-scenario.json .divedra/workflows/impl-plan-completion-loop/mock-scenario.json .divedra/workflows/design-and-implement-review-loop-feature-plan/mock-scenario.json`
-- PASS: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows`
-- PASS: `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .divedra/workflows`
-- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
-- PASS: `bun run src/main.ts workflow inspect refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- PASS: `bun run src/main.ts workflow inspect impl-plan-completion-loop --workflow-definition-dir .divedra/workflows --output json`
-- PASS: `bun run src/main.ts workflow inspect design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows --output json`
-- PASS: `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
-- PASS: `bun run src/main.ts workflow run impl-plan-completion-loop --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/impl-plan-completion-loop/mock-scenario.json --output json`
-- PASS: `bun run src/main.ts workflow run design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/design-and-implement-review-loop-feature-plan/mock-scenario.json --output json`
-- PASS: `jq '.payload' /tmp/divedra-artifact-dev/workflow/refactoring-slice-review/executions/div-refactoring-slice-review-1778897892-68e7644a/nodes/slice-review/exec-000001/output.json`
-- PASS: `jq '.payload' /tmp/divedra-artifact-dev/workflow/impl-plan-completion-loop/executions/div-impl-plan-completion-loop-1778897892-af27a467/nodes/workflow-output/exec-000004/output.json`
-- PASS: `jq '.payload' /tmp/divedra-artifact-dev/workflow/design-and-implement-review-loop-feature-plan/executions/div-design-and-implement-review-loop-feature-plan-1778897892-6130808f/nodes/workflow-output/exec-000007/output.json`
+- PASS: `jq empty .rielflow/workflows/refactoring-slice-review/mock-scenario.json .rielflow/workflows/impl-plan-completion-loop/mock-scenario.json .rielflow/workflows/design-and-implement-review-loop-feature-plan/mock-scenario.json`
+- PASS: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows`
+- PASS: `bun run src/main.ts workflow validate impl-plan-completion-loop --workflow-definition-dir .rielflow/workflows`
+- PASS: `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
+- PASS: `bun run src/main.ts workflow inspect refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- PASS: `bun run src/main.ts workflow inspect impl-plan-completion-loop --workflow-definition-dir .rielflow/workflows --output json`
+- PASS: `bun run src/main.ts workflow inspect design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows --output json`
+- PASS: `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- PASS: `bun run src/main.ts workflow run impl-plan-completion-loop --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/impl-plan-completion-loop/mock-scenario.json --output json`
+- PASS: `bun run src/main.ts workflow run design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/design-and-implement-review-loop-feature-plan/mock-scenario.json --output json`
+- PASS: `jq '.payload' /tmp/rielflow-artifact-dev/workflow/refactoring-slice-review/executions/div-refactoring-slice-review-1778897892-68e7644a/nodes/slice-review/exec-000001/output.json`
+- PASS: `jq '.payload' /tmp/rielflow-artifact-dev/workflow/impl-plan-completion-loop/executions/div-impl-plan-completion-loop-1778897892-af27a467/nodes/workflow-output/exec-000004/output.json`
+- PASS: `jq '.payload' /tmp/rielflow-artifact-dev/workflow/design-and-implement-review-loop-feature-plan/executions/div-design-and-implement-review-loop-feature-plan-1778897892-6130808f/nodes/workflow-output/exec-000007/output.json`
 - PASS: `bun run build:server`
-- PASS: `git diff --check -- .divedra/workflows/refactoring-slice-review .divedra/workflows/impl-plan-completion-loop .divedra/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
+- PASS: `git diff --check -- .rielflow/workflows/refactoring-slice-review .rielflow/workflows/impl-plan-completion-loop .rielflow/workflows/design-and-implement-review-loop-feature-plan impl-plans/active/refactoring-runtime-boundaries.md`
 - BLOCKED: `bun run typecheck:server`
 
 **Notes**: Added minimal deterministic mock scenarios and expected-result documents for the previously uncovered local workflow bundles `refactoring-slice-review`, `impl-plan-completion-loop`, and `design-and-implement-review-loop-feature-plan`. The scenarios cover read-only slice review, completed-plan assessment/archive routing with command nodes mocked safely, and the accepted feature-local design/plan path. REF-010 is now complete; REF-003 is the only remaining incomplete task in this plan.
@@ -643,4 +643,4 @@ No high or mid findings were rejected. Read-only review limitations and cosmetic
 - PASS: `bun add --dev bun-types@1.1.37`
 - PASS: `bun run typecheck:server`
 
-**Notes**: Refreshing `claude-code-agent` restored its `./sdk/testing` export and the installed `codex-agent` package already exposes `./sdk/testing` at the latest remote pin. divedra continues to use dependency-owned adapter mocks from the agent package test SDK exports and does not define local replacement mocks for those packages. The broad TypeScript verification blocker that kept REF-003 in progress is cleared, so all accepted high and mid findings are now completed or represented by accepted low residual risks.
+**Notes**: Refreshing `claude-code-agent` restored its `./sdk/testing` export and the installed `codex-agent` package already exposes `./sdk/testing` at the latest remote pin. rielflow continues to use dependency-owned adapter mocks from the agent package test SDK exports and does not define local replacement mocks for those packages. The broad TypeScript verification blocker that kept REF-003 in progress is cleared, so all accepted high and mid findings are now completed or represented by accepted low residual risks.

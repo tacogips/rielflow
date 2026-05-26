@@ -23,7 +23,7 @@ when explicit in config; otherwise ask.
 
 ### Missed Recurring Runs
 
-When divedra starts after downtime and a recurring schedule missed multiple
+When rielflow starts after downtime and a recurring schedule missed multiple
 occurrences, what should happen?
 
 Options:
@@ -71,7 +71,7 @@ Options:
 
 - `events serve` owns event-source schedule rehydration in the first slice.
 - Any process that creates an event listener service rehydrates schedules.
-- All divedra server and library starts rehydrate schedules.
+- All rielflow server and library starts rehydrate schedules.
 
 Recommended default: any process that creates an event listener service
 rehydrates schedules; plain control-plane `serve` does not unless event

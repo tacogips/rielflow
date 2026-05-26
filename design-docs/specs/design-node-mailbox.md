@@ -358,8 +358,8 @@ Conceptual example:
   "upstreamCommunications": [
     {
       "communicationId": "comm-000014",
-      "fromNodeId": "parent-divedra",
-      "inboxMessagePath": "{artifact-root}/writing-session/executions/wfexec-000001/communications/comm-000014/inbox/review-sub-divedra/message.json"
+      "fromNodeId": "parent-rielflow",
+      "inboxMessagePath": "{artifact-root}/writing-session/executions/wfexec-000001/communications/comm-000014/inbox/review-sub-rielflow/message.json"
     }
   ]
 }

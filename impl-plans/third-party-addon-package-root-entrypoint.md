@@ -39,13 +39,13 @@ third-party add-on executor registration.
 
 ```typescript
 // Package root resolves to the side-effect-free library entry.
-export * from "divedra";
+export * from "rielflow";
 ```
 
 **Checklist**:
 
 - [x] Point `main`, `module`, and root export metadata at `dist/lib.js`.
-- [x] Keep CLI output addressable separately as `divedra/cli`.
+- [x] Keep CLI output addressable separately as `rielflow/cli`.
 
 ### 2. Build and Type Declarations
 
@@ -94,7 +94,7 @@ export * from "divedra";
 
 ## Completion Criteria
 
-- [x] `import type { NodeAddonPayloadResolver } from "divedra"` resolves to the
+- [x] `import type { NodeAddonPayloadResolver } from "rielflow"` resolves to the
       library declaration surface after build.
 - [x] Importing the package root does not execute the CLI entrypoint.
 - [x] Build includes both CLI and library JavaScript entries.

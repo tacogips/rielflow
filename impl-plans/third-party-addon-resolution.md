@@ -13,7 +13,7 @@
 
 ### Summary
 
-Add a host-provided resolver boundary so non-`divedra/` add-on references can be
+Add a host-provided resolver boundary so non-`rielflow/` add-on references can be
 materialized without embedding third-party package loading or arbitrary code
 execution into workflow JSON.
 
@@ -71,8 +71,8 @@ function resolveNodeAddonPayload(input: {
 
 **Checklist**:
 
-- [x] Reserve `divedra/` for built-in catalog resolution.
-- [x] Invoke third-party resolvers only for non-`divedra/` add-ons.
+- [x] Reserve `rielflow/` for built-in catalog resolution.
+- [x] Invoke third-party resolvers only for non-`rielflow/` add-ons.
 - [x] Reject third-party resolver payloads with mismatched node ids.
 - [x] Reject third-party resolver payloads that use runtime-native add-on
       execution.
@@ -132,8 +132,8 @@ interface WorkflowValidationOptions {
 
 ## Completion Criteria
 
-- [x] Non-`divedra/` add-ons can resolve through explicit host resolvers.
-- [x] Built-in `divedra/*` names remain owned by the runtime catalog.
+- [x] Non-`rielflow/` add-ons can resolve through explicit host resolvers.
+- [x] Built-in `rielflow/*` names remain owned by the runtime catalog.
 - [x] Missing resolvers produce actionable validation errors.
 - [x] Resolver output is constrained to the authored node id and ordinary node
       execution paths.

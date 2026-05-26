@@ -398,7 +398,7 @@ interface VerificationCommandSet {
 
 **Tasks Completed**:
 
-- `src/workflow/prompt-composition.ts`: removed the no-op `resolveDefaultManagerSystemPrompt` wrapper (unused workflow/node parameters after structural `divedra-system-prompt.md` removal); managers always prepend `DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT` directly.
+- `src/workflow/prompt-composition.ts`: removed the no-op `resolveDefaultManagerSystemPrompt` wrapper (unused workflow/node parameters after structural `rielflow-system-prompt.md` removal); managers always prepend `DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT` directly.
 - Review Matrix: architecture action column updated (no longer lists structural root/sub scheduler as open work); output-ref row reflects shared `buildOutputRefForExecution(...)` usage; module 4 status set to In Progress with note on README/design alignment already landed on branch.
 
 **Notes / verification**: `bun test` (1105 pass).
@@ -426,8 +426,8 @@ interface VerificationCommandSet {
 
 **Tasks Completed**:
 
-- Removed `src/workflow/prompts/divedra-system-prompt.md`: `prompt-composition.ts` always loads `divedra-role-system-prompt.md` for managers (`resolveDefaultManagerSystemPrompt` ignored workflow shape), so the structural sub-workflow-oriented file was unreachable dead legacy.
-- `impl-plans/graphql-manager-control-plane-surface.md`: TASK-004 deliverables list now references `divedra-role-system-prompt.md` with a short note superseding the removed path.
+- Removed `src/workflow/prompts/rielflow-system-prompt.md`: `prompt-composition.ts` always loads `rielflow-role-system-prompt.md` for managers (`resolveDefaultManagerSystemPrompt` ignored workflow shape), so the structural sub-workflow-oriented file was unreachable dead legacy.
+- `impl-plans/graphql-manager-control-plane-surface.md`: TASK-004 deliverables list now references `rielflow-role-system-prompt.md` with a short note superseding the removed path.
 
 **Notes / verification**: No TypeScript changes; `bun test` (full suite) expected green after deletion.
 
@@ -511,7 +511,7 @@ interface VerificationCommandSet {
 ### Session: 2026-04-28 (alignment: manager prompt + readiness requirement id)
 
 **Tasks Completed**:
-- `src/workflow/prompts/divedra-role-system-prompt.md`: replaces authored `workflowCalls` wording with cross-workflow dispatch via `steps[].transitions` (`toWorkflowId`).
+- `src/workflow/prompts/rielflow-role-system-prompt.md`: replaces authored `workflowCalls` wording with cross-workflow dispatch via `steps[].transitions` (`toWorkflowId`).
 - `src/workflow/runtime-readiness.ts`: `WORKFLOW_RUNTIME_REQUIREMENT_CROSS_WORKFLOW_DISPATCH_ID` value `workflow-feature:crossWorkflowDispatches` (supersedes `workflow-feature:workflowCalls`; no remaining code references).
 - `impl-plans/workflow-role-unification-structural-cleanup.md`: Summary + module 2 stub aligned with inspection GraphQL/step-derived dispatch semantics.
 
@@ -2415,7 +2415,7 @@ hardens the current phase-2 control path and its tests.
 still larger than this review slice.
 
 **Notes**: Added direct native-executor regression coverage for
-`divedra/start-workflow` and the missing-control rejection path so the nested
+`rielflow/start-workflow` and the missing-control rejection path so the nested
 superviser add-on surface no longer relies only on parser/runtime-control
 tests.
 
@@ -2509,7 +2509,7 @@ tests.
 
 **Blockers**: None.
 
-### Session: 2026-04-26 (nested `divedra/rerun-workflow` without `rerunFromStepId`)
+### Session: 2026-04-26 (nested `rielflow/rerun-workflow` without `rerunFromStepId`)
 
 **Tasks Completed**: Fixed a runtime bug where phase-2 `rerunTargetWorkflow` passed `rerunFromSessionId` to `runWorkflow` without `rerunFromStepId` when the add-on omitted the field (the parser allows omission), but the engine always requires a rerun step id with `rerunFromSessionId`. Added `resolveNestedSuperviserAddonRerunFromStepId` in `src/workflow/superviser.ts` to default omitted reruns to the current session step when resolvable, else the manager/entry anchor. Documented `RerunWorkflowAddonInput.rerunFromStepId` in `src/workflow/types.ts`. Tests in `superviser.test.ts`. `bun run typecheck:server` and full `bun test` green.
 
@@ -2525,7 +2525,7 @@ tests.
 
 ### Session: 2026-04-26 (review slice: phase-2 superviser control cleanup)
 
-**Tasks Completed**: Centralized the phase-2 `divedra/*` superviser-control add-on catalog in `src/workflow/types.ts` so add-on resolution and native execution stop repeating the same hardcoded names/descriptions. Simplified `parseLoadWorkflowDefinitionControlArguments` typing in `src/workflow/superviser-control.ts` by removing an unnecessary cast around the shared mutable-workflow path parser. Added integration-style coverage in `src/workflow/superviser-runtime-control-impl.test.ts` proving `rerunTargetWorkflow()` derives `rerunFromStepId` from persisted target-session state when the nested add-on omits it. Updated `design-docs/specs/architecture.md` to record that duplicate superviser-control catalogs are implementation drift, while the broader architectural mismatch remains the still-live legacy compatibility layer tracked by this plan.
+**Tasks Completed**: Centralized the phase-2 `rielflow/*` superviser-control add-on catalog in `src/workflow/types.ts` so add-on resolution and native execution stop repeating the same hardcoded names/descriptions. Simplified `parseLoadWorkflowDefinitionControlArguments` typing in `src/workflow/superviser-control.ts` by removing an unnecessary cast around the shared mutable-workflow path parser. Added integration-style coverage in `src/workflow/superviser-runtime-control-impl.test.ts` proving `rerunTargetWorkflow()` derives `rerunFromStepId` from persisted target-session state when the nested add-on omits it. Updated `design-docs/specs/architecture.md` to record that duplicate superviser-control catalogs are implementation drift, while the broader architectural mismatch remains the still-live legacy compatibility layer tracked by this plan.
 
 **Tasks In Progress**: Module 1 primary `WorkflowJson` compatibility-field removal; module 2 runtime union cleanup beyond the nested superviser slice; modules 4-5 design-doc/example retirement and closeout.
 
@@ -2541,7 +2541,7 @@ tests.
 
 ### Session: 2026-04-26 (architecture verification + call-node plan supersession)
 
-**Tasks Completed**: Re-checked `impl-plans/PROGRESS.json`: phases 130-132 (auto-improve superviser) remain **Completed**; phase **133** / this plan is the active target. Confirmed `design-auto-improve-superviser-mode.md` phase 1/2 match the tree (`runAutoImproveLoop`, `nestedSuperviserDriver`, `SuperviserRuntimeControl`, step-only `rerunFromStepId` on engine reruns and nested `divedra/rerun-workflow` with `rerunFromNodeId` rejected in `superviser-control.ts`). `design-docs/specs/architecture.md` **Manager Control Architecture** already describes step-only action names and removed structural actions. Full `bun run typecheck:server` and `bun test` (**1043** pass) on the current branch. Added a **Supersession** callout to `impl-plans/manager-driven-call-node-runtime.md` so the completed plan no longer reads as the live public API.
+**Tasks Completed**: Re-checked `impl-plans/PROGRESS.json`: phases 130-132 (auto-improve superviser) remain **Completed**; phase **133** / this plan is the active target. Confirmed `design-auto-improve-superviser-mode.md` phase 1/2 match the tree (`runAutoImproveLoop`, `nestedSuperviserDriver`, `SuperviserRuntimeControl`, step-only `rerunFromStepId` on engine reruns and nested `rielflow/rerun-workflow` with `rerunFromNodeId` rejected in `superviser-control.ts`). `design-docs/specs/architecture.md` **Manager Control Architecture** already describes step-only action names and removed structural actions. Full `bun run typecheck:server` and `bun test` (**1043** pass) on the current branch. Added a **Supersession** callout to `impl-plans/manager-driven-call-node-runtime.md` so the completed plan no longer reads as the live public API.
 
 **Tasks In Progress**: Module 1 primary `WorkflowJson` / validator field removal; module 2 root/sub-workflow union cleanup and `workflowCalls` vs step-transition dispatch; modules 4-5 (fixtures, design-doc retirement, closeout).
 
@@ -2621,7 +2621,7 @@ tests.
 
 ### Session: 2026-04-26 (architecture verification + internal call-node documentation)
 
-**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` phase 1/2 against the tree: `runAutoImproveLoop`, `toStepAddressedWorkflowForSupervision`, nested `SuperviserRuntimeControl`, and step-only `rerunFromStepId` on `WorkflowRunOptions` / nested `divedra/rerun-workflow` (with parse-time rejection of `rerunFromNodeId` on the control add-on). Documented `src/workflow/call-step-impl.ts` (internal `callNode` entry used only from `call-step.ts`) as not a supported user entrypoint. Corrected the 2026-04-25 session log entry below that still described engine `rerunFromNodeId` as a compatibility path after it was removed. `bun run typecheck:server` and `bun test` (1045) pass.
+**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` phase 1/2 against the tree: `runAutoImproveLoop`, `toStepAddressedWorkflowForSupervision`, nested `SuperviserRuntimeControl`, and step-only `rerunFromStepId` on `WorkflowRunOptions` / nested `rielflow/rerun-workflow` (with parse-time rejection of `rerunFromNodeId` on the control add-on). Documented `src/workflow/call-step-impl.ts` (internal `callNode` entry used only from `call-step.ts`) as not a supported user entrypoint. Corrected the 2026-04-25 session log entry below that still described engine `rerunFromNodeId` as a compatibility path after it was removed. `bun run typecheck:server` and `bun test` (1045) pass.
 
 **Tasks In Progress**: Module 1 authored-schema / validator removal; module 2 runtime cleanup (`call-node` merge, structural manager-control deletion); modules 4–5.
 
@@ -2629,7 +2629,7 @@ tests.
 
 ### Session: 2026-04-25 (continuation: diff review + bookkeeping)
 
-**Tasks Completed**: Re-read `design-auto-improve-superviser-mode.md` and `src/workflow/superviser.ts` / `superviser-runtime-control-impl.ts` against the working tree: phase 1 `runAutoImproveLoop`, phase 2 `nestedSuperviserDriver` + `toStepAddressedWorkflowForSupervision` for `rerunTargetWorkflow`, and step-only `rerunFromStepId` on engine reruns and nested `divedra/rerun-workflow` still match the spec. No code defects found in that path on review. Set `impl-plans/PROGRESS.json` phase **133** to `IN_PROGRESS` (active `workflow-legacy-compatibility-removal`). Documented `examples/default-superviser/` in `examples/README.md` and added a short `EXPECTED_RESULTS.md` there so the directory matches the examples index convention. Full `bun run typecheck:server` and `bun test` (1045) verified green on the pre-edit tree.
+**Tasks Completed**: Re-read `design-auto-improve-superviser-mode.md` and `src/workflow/superviser.ts` / `superviser-runtime-control-impl.ts` against the working tree: phase 1 `runAutoImproveLoop`, phase 2 `nestedSuperviserDriver` + `toStepAddressedWorkflowForSupervision` for `rerunTargetWorkflow`, and step-only `rerunFromStepId` on engine reruns and nested `rielflow/rerun-workflow` still match the spec. No code defects found in that path on review. Set `impl-plans/PROGRESS.json` phase **133** to `IN_PROGRESS` (active `workflow-legacy-compatibility-removal`). Documented `examples/default-superviser/` in `examples/README.md` and added a short `EXPECTED_RESULTS.md` there so the directory matches the examples index convention. Full `bun run typecheck:server` and `bun test` (1045) verified green on the pre-edit tree.
 
 **Tasks In Progress**: Module 1 primary `WorkflowJson` / validator legacy field removal; module 2 internal `call-node` path merge and structural manager-control deletion; modules 4–5 as in checklists.
 
@@ -2653,7 +2653,7 @@ tests.
 
 ### Session: 2026-04-25 (design review + public rerun checklist)
 
-**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` and `src/workflow/superviser.ts` against the tree: phase 1/2 (engine `runAutoImproveLoop`, `toStepAddressedWorkflowForSupervision`, phase-2 nested `SuperviserRuntimeControl` with step-only `divedra/rerun-workflow`) match the spec; the remaining broad legacy deletion is **phase 133** (this plan), not additional auto-improve features. Reviewed the working-tree diff: no supervision regressions identified; `bun run typecheck:server`, `bun test` (1045 pass), and `bun run build` are green. Marked module 3 "rerun/resume/public API wording" checklist item **done** for operator-facing surfaces (library + CLI + TUI are step-targeted; engine reruns use `rerunFromStepId` only on `WorkflowRunOptions`, as in `design-auto-improve-superviser-mode.md` and `workflow-legacy-compatibility-removal` follow-up).
+**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` and `src/workflow/superviser.ts` against the tree: phase 1/2 (engine `runAutoImproveLoop`, `toStepAddressedWorkflowForSupervision`, phase-2 nested `SuperviserRuntimeControl` with step-only `rielflow/rerun-workflow`) match the spec; the remaining broad legacy deletion is **phase 133** (this plan), not additional auto-improve features. Reviewed the working-tree diff: no supervision regressions identified; `bun run typecheck:server`, `bun test` (1045 pass), and `bun run build` are green. Marked module 3 "rerun/resume/public API wording" checklist item **done** for operator-facing surfaces (library + CLI + TUI are step-targeted; engine reruns use `rerunFromStepId` only on `WorkflowRunOptions`, as in `design-auto-improve-superviser-mode.md` and `workflow-legacy-compatibility-removal` follow-up).
 
 **Tasks In Progress**: module 1 authored-schema removal; module 2 runtime `call-node` / structural control deletion; module 3 TUI legacy "structural sub-workflow" labels.
 
@@ -2669,7 +2669,7 @@ tests.
 
 ### Session: 2026-04-25 (design alignment + progress bookkeeping)
 
-**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` against the shipped Phase 1/2 implementation (engine loop, nested driver, step-only nested `divedra/rerun-workflow`). Added an explicit subsection documenting how Phase 1 uses `toStepAddressedWorkflowForSupervision` during phase 133 (strict step bundles, rejection of `entryStepId` without steps, legacy node-graph projection) and how Phase 2 rejects `rerunFromNodeId`. Updated this plan's dependency table and `impl-plans/PROGRESS.json` so modules 2–3 reflect **In Progress** parallel slices rather than incorrectly implying they are fully blocked until module 1 finishes.
+**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` against the shipped Phase 1/2 implementation (engine loop, nested driver, step-only nested `rielflow/rerun-workflow`). Added an explicit subsection documenting how Phase 1 uses `toStepAddressedWorkflowForSupervision` during phase 133 (strict step bundles, rejection of `entryStepId` without steps, legacy node-graph projection) and how Phase 2 rejects `rerunFromNodeId`. Updated this plan's dependency table and `impl-plans/PROGRESS.json` so modules 2–3 reflect **In Progress** parallel slices rather than incorrectly implying they are fully blocked until module 1 finishes.
 
 **Tasks In Progress**: TASK-001 module 1 (full removal of authored compatibility fields from `WorkflowJson` / validator); TASK-002/003 bounded cleanup continues per checklist.
 
@@ -2731,7 +2731,7 @@ tests.
 
 ### Session: 2026-04-25 (continuation: design check + child-run strip test)
 
-**Tasks Completed**: Re-read `PROGRESS.json` and `impl-plans/README.md`: auto-improve superviser plans (phases 130-132) remain **Completed**; **phase 133** / `workflow-legacy-compatibility-removal` is the active next target. Confirmed `design-auto-improve-superviser-mode.md` and `architecture.md` still match the implementation (phase-1 loop, phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl`, `nestedSuperviserSessionId`, step-only nested `divedra/rerun-workflow`). Reviewed the working-tree diff: no new defects found; `bun run typecheck:server`, `bun test` (1044 pass), and `bun run build` succeed. Added `workflowRunBaseForSuperviserControl` regression coverage so child superviser control runs do not inherit outer `sessionId` / rerun / nested-driver fields while preserving `workflowRoot` and `runtimeVariables` merge behavior from the prior `startTargetWorkflow` test.
+**Tasks Completed**: Re-read `PROGRESS.json` and `impl-plans/README.md`: auto-improve superviser plans (phases 130-132) remain **Completed**; **phase 133** / `workflow-legacy-compatibility-removal` is the active next target. Confirmed `design-auto-improve-superviser-mode.md` and `architecture.md` still match the implementation (phase-1 loop, phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl`, `nestedSuperviserSessionId`, step-only nested `rielflow/rerun-workflow`). Reviewed the working-tree diff: no new defects found; `bun run typecheck:server`, `bun test` (1044 pass), and `bun run build` succeed. Added `workflowRunBaseForSuperviserControl` regression coverage so child superviser control runs do not inherit outer `sessionId` / rerun / nested-driver fields while preserving `workflowRoot` and `runtimeVariables` merge behavior from the prior `startTargetWorkflow` test.
 
 **Tasks In Progress**: TASK-001 authored schema and validation cutover (module 1) for full legacy field removal; still multi-iteration per plan.
 
@@ -2765,7 +2765,7 @@ tests.
 
 ### Session: 2026-04-25 (iteration 1 baseline hardening)
 
-**Tasks Completed**: Reviewed the in-progress branch diff against the no-backcompat target; confirmed the repository still does not match the intended single-model step-addressed architecture; added a design-note reminder that compatibility paths are removal-only; fixed a nested-superviser control regression where `divedra/start-workflow` dropped authored `runtimeVariables` when resuming the supervised target session; added focused regression coverage for that control-plane merge behavior.
+**Tasks Completed**: Reviewed the in-progress branch diff against the no-backcompat target; confirmed the repository still does not match the intended single-model step-addressed architecture; added a design-note reminder that compatibility paths are removal-only; fixed a nested-superviser control regression where `rielflow/start-workflow` dropped authored `runtimeVariables` when resuming the supervised target session; added focused regression coverage for that control-plane merge behavior.
 
 **Tasks In Progress**: The broad compatibility-removal modules remain open; next iterations should delete legacy surfaces (`call-node`, node-addressed inspection fields, structural sub-workflow projections, and authored compatibility schema branches) rather than continue adding safeguards around them.
 
@@ -2788,7 +2788,7 @@ one change.
 **Notes**: The review found a concrete mismatch with the intended direction:
 an early nested-superviser iteration used a node-worded rerun field. The
 branch now enforces step-only rerun for phase-2 control add-ons (`rerunFromStepId`
-on `divedra/rerun-workflow`), rejects `rerunFromNodeId` in
+on `rielflow/rerun-workflow`), rejects `rerunFromNodeId` in
 `parseRerunTargetWorkflowControlArguments`, and keeps GraphQL `stepId` primary
 for reruns. Broader engine/library `rerunFromNodeId` on `WorkflowRunOptions`
 remains a compatibility path until the full cutover in later modules.
@@ -2812,7 +2812,7 @@ the runtime after cleanup instead of preserving transitional docs indefinitely.
 **Tasks Completed**: Confirmed `design-auto-improve-superviser-mode` phase 1/2
 match the implementation (nested driver, `RerunWorkflowAddonInput.rerunFromStepId`,
 `buildSuperviserRuntimeControl`); added an explicit error when nested superviser
-`divedra/rerun-workflow` arguments still use `rerunFromNodeId` (must use
+`rielflow/rerun-workflow` arguments still use `rerunFromNodeId` (must use
 `rerunFromStepId`); regression test in `superviser-control.test.ts`.
 
 **Tasks In Progress**: TASK-001 (full authored-schema / validation cutover for
@@ -2823,7 +2823,7 @@ GraphQL rerun, and library; all passed.
 
 ### Session: 2026-04-25 (design vs implementation review)
 
-**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` and `architecture.md` against the shipped runtime: phase-1 `runAutoImproveLoop` vs phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl` + `nestedSuperviserSessionId`; `buildSuperviserRuntimeControl.startTargetWorkflow` merge of base and add-on `runtimeVariables` (regression in `superviser-runtime-control-impl.test.ts`); step-only `rerunFromStepId` for nested `divedra/rerun-workflow` with explicit rejection of `rerunFromNodeId`. Full suite: `bun run typecheck:server` and `bun test` (1043 pass). Updated stale default-superviser id notes in `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md` and `auto-improve-superviser-mode.md` progress logs (`divedra-default-superviser`).
+**Tasks Completed**: Re-verified `design-auto-improve-superviser-mode.md` and `architecture.md` against the shipped runtime: phase-1 `runAutoImproveLoop` vs phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl` + `nestedSuperviserSessionId`; `buildSuperviserRuntimeControl.startTargetWorkflow` merge of base and add-on `runtimeVariables` (regression in `superviser-runtime-control-impl.test.ts`); step-only `rerunFromStepId` for nested `rielflow/rerun-workflow` with explicit rejection of `rerunFromNodeId`. Full suite: `bun run typecheck:server` and `bun test` (1043 pass). Updated stale default-superviser id notes in `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md` and `auto-improve-superviser-mode.md` progress logs (`rielflow-default-superviser`).
 
 **Tasks In Progress**: TASK-001 authored schema and validation cutover (module 1) for this plan; not started beyond nested-superviser hardening on this branch.
 
@@ -2876,7 +2876,7 @@ still carry compatibility fields; module 2 checklist items like folding `call-st
 
 ### Session: 2026-04-26 (architecture check + plan sync for completed auto-improve phase 1)
 
-**Tasks Completed**: Re-confirmed `design-auto-improve-superviser-mode.md` and `architecture.md` match the implementation (phase-1 `runAutoImproveLoop`, phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl`, step-only `rerunFromStepId` on engine reruns and nested `divedra/rerun-workflow`). Full verification: `bun run typecheck:server` and `bun test` (1045 pass). Reviewed the working-tree diff: no supervision or nested-driver regressions identified; the large diff is consistent with the phase 133 direction (public step-only surfaces, removed legacy inspect fields, superviser hardening). Updated `impl-plans/completed/auto-improve-superviser-mode.md` so module 3 phase-2 checklist items and dependency/completion text reflect the **Completed** `auto-improve-superviser-workflow-phase-2` work instead of leaving phase 2 marked as TBD.
+**Tasks Completed**: Re-confirmed `design-auto-improve-superviser-mode.md` and `architecture.md` match the implementation (phase-1 `runAutoImproveLoop`, phase-2 `nestedSuperviserDriver` + `SuperviserRuntimeControl`, step-only `rerunFromStepId` on engine reruns and nested `rielflow/rerun-workflow`). Full verification: `bun run typecheck:server` and `bun test` (1045 pass). Reviewed the working-tree diff: no supervision or nested-driver regressions identified; the large diff is consistent with the phase 133 direction (public step-only surfaces, removed legacy inspect fields, superviser hardening). Updated `impl-plans/completed/auto-improve-superviser-mode.md` so module 3 phase-2 checklist items and dependency/completion text reflect the **Completed** `auto-improve-superviser-workflow-phase-2` work instead of leaving phase 2 marked as TBD.
 
 **Tasks In Progress**: Module 1 authored-schema / validator cutover; module 2 internal `call-node` merge and structural manager-control removal; modules 4–5 per checklists.
 
@@ -2917,7 +2917,7 @@ runtime/control cleanup beyond this legacy-target rerun hardening.
 **Blockers**: None.
 
 **Notes**: The intended design still holds: supervision remediation and nested
-`divedra/rerun-workflow` are step-addressed, with legacy node-addressed bundles
+`rielflow/rerun-workflow` are step-addressed, with legacy node-addressed bundles
 projected into that model only as a transitional compatibility path. This pass
 fixed the projection boundary instead of changing the architecture.
 
@@ -2928,7 +2928,7 @@ fixed the projection boundary instead of changing the architecture.
 change was needed: phase-2 control is still intentionally scoped to a single
 target session plus mutable workflow bundle. Hardened
 `src/workflow/superviser-runtime-control-impl.ts` so
-`divedra/start-workflow`, `get-workflow-status`, `get-workflow-execution-details`,
+`rielflow/start-workflow`, `get-workflow-status`, `get-workflow-execution-details`,
 `rerun-workflow`, `load-workflow-definition`, and
 `save-workflow-definition` all verify the persisted target session belongs to
 the expected workflow id before operating. Also removed parser duplication and
@@ -4156,7 +4156,7 @@ Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/des
 - **Production**: Legacy node-graph `normalizeWorkflow` in `src/workflow/validate.ts` now **rejects** any authored top-level `workflow.managerRuntimeId` or `workflow.entryNodeId` (with explicit messages) instead of parsing them into `effectiveManager` / `entry`. Inference-only path: `hasManagerNode` is derived from manager-role nodes or a `root-manager` kind node; `effectiveManager` / entry use role, single `root-manager`, or `inferLegacyNodeGraphGraphEntryNodeId` for manager-less graphs. Early-return and duplicate role-bundle error branches for those keys were removed as redundant.
 - **Semantic validation**: `runSemanticValidation` issues for inferred legacy manager/entry mismatches now use path `workflow` and updated messages (no `workflow.managerRuntimeId` / `workflow.entryNodeId` paths for inference diagnostics).
 - **Types / design**: JSDoc on `AuthoredWorkflowJson` / `WorkflowJson` in `src/workflow/types.ts` and a short note in `design-docs/specs/design-data-model.md` state that top-level `managerRuntimeId` / `entryNodeId` are rejected and not carried on normalized bundles.
-- **Tests**: Migrated `makeValidRaw`, load/save disk fixtures, `engine.test.ts` (including restoring `managerRuntimeId` on `createOrResumeSession` for SQLite only), TUI/manager/prompt/compose/communicate/call-step/runtime-db/trigger/validate/save/load/superviser/runtime-readiness tests to **omit** top-level `managerRuntimeId` / `entryNodeId` from workflow JSON where they were only compatibility; updated expectations for strict step-addressed diagnostics, role-bundle rejection copy, and semantic root-manager errors. Script-assisted removal of duplicate top-level `managerRuntimeId: "divedra-manager"` lines only when the next sibling key is `nodes` / `subWorkflows` / `workflowCalls` (avoids stripping `createOrResumeSession` `managerRuntimeId`).
+- **Tests**: Migrated `makeValidRaw`, load/save disk fixtures, `engine.test.ts` (including restoring `managerRuntimeId` on `createOrResumeSession` for SQLite only), TUI/manager/prompt/compose/communicate/call-step/runtime-db/trigger/validate/save/load/superviser/runtime-readiness tests to **omit** top-level `managerRuntimeId` / `entryNodeId` from workflow JSON where they were only compatibility; updated expectations for strict step-addressed diagnostics, role-bundle rejection copy, and semantic root-manager errors. Script-assisted removal of duplicate top-level `managerRuntimeId: "rielflow-manager"` lines only when the next sibling key is `nodes` / `subWorkflows` / `workflowCalls` (avoids stripping `createOrResumeSession` `managerRuntimeId`).
 
 **Tasks In Progress**:
 - Module 1: any remaining on-disk **examples** or external fixtures outside `src/**` that still author `managerRuntimeId` / `entryNodeId` (examples/ sweep per module 4); residual TUI copy mentioning “legacy manager/entry” in previews if any.
@@ -4425,7 +4425,7 @@ Full-repo `bun test` not re-run this session.
 
 **Tasks Completed**:
 - **Inventory**: `fromSubWorkflowId` / `toSubWorkflowId` remain **absent** from `src/**` (no production code in that cluster in this pass). The highest-value remaining work in the “legacy node-kind / test debt” column was `validate.test.ts`: a dedicated `subworkflow-manager` negative test duplicated the existing `expectInvalidNodeKind` helper and three sibling tests.
-- **Tests (`src/workflow/validate.test.ts`)**: Replaced the four separate invalid-kind tests (including the extra role-authored `subworkflow-manager` block) with a single `test.each` over `["sub-manager", "manager", "sub-divedra-manager", "subworkflow-manager"]`, reusing `expectInvalidNodeKind` (legacy node-graph fixture). Renamed two tests that still referenced `workflow.managerRuntimeId` in their titles even though the fixtures no longer set that field (`rejects manager-role node with task kind; inferred manager must be root-manager`, `rejects additional root-manager nodes when a single manager is already defined`).
+- **Tests (`src/workflow/validate.test.ts`)**: Replaced the four separate invalid-kind tests (including the extra role-authored `subworkflow-manager` block) with a single `test.each` over `["sub-manager", "manager", "sub-rielflow-manager", "subworkflow-manager"]`, reusing `expectInvalidNodeKind` (legacy node-graph fixture). Renamed two tests that still referenced `workflow.managerRuntimeId` in their titles even though the fixtures no longer set that field (`rejects manager-role node with task kind; inferred manager must be root-manager`, `rejects additional root-manager nodes when a single manager is already defined`).
 - **Design / protected specs**: Did **not** modify `design-docs/specs/architecture.md` or `design-docs/specs/design-step-run-history-rerun.md`. Behavior is unchanged: unknown `kind` strings fail `normalizeNodeKind` and surface `must be a valid node kind` at `workflow.nodes[1].kind`.
 
 **Tasks In Progress**:

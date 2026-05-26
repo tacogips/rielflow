@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate subworkflow-chained-simple --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate subworkflow-chained-simple --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -18,21 +18,21 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow inspect subworkflow-chained-simple --workflow-definition-dir ./examples --output json
+bun run packages/rielflow/src/bin.ts workflow inspect subworkflow-chained-simple --workflow-definition-dir ./examples --output json
 ```
 
 Expected stable inspection facts:
 
-- authored `managerStepId` is `divedra-manager`
-- authored `entryStepId` is `divedra-manager`
-- `stepIds` list `divedra-manager`, `alpha-manager`, `alpha-input`, `alpha-worker`, `alpha-output`, `beta-manager`, `beta-input`, `beta-worker`, and `beta-output`
+- authored `managerStepId` is `rielflow-manager`
+- authored `entryStepId` is `rielflow-manager`
+- `stepIds` list `rielflow-manager`, `alpha-manager`, `alpha-input`, `alpha-worker`, `alpha-output`, `beta-manager`, `beta-input`, `beta-worker`, and `beta-output`
 
 ## Run
 
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run subworkflow-chained-simple \
+bun run packages/rielflow/src/bin.ts workflow run subworkflow-chained-simple \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/subworkflow-chained-simple/mock-scenario.json \
   --output json

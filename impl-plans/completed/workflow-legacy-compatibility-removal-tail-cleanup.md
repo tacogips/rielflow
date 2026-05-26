@@ -496,7 +496,7 @@ Expected output after each recursion:
 
 **Blockers**: None
 
-**Notes**: `divedra call-node ...` now reaches generic `unknown scope: call-node` (removed dedicated branch per scope); acceptable per removal-only posture. JSDoc on `buildCrossWorkflowCalleeRuntimeVariables` in `src/workflow/engine.ts` was updated to spell out `runtimeVariables.workflowCall` versus rejected authored `workflow.workflowCalls` (mirrors `architecture.md` / `design-unified-workflow-role-model.md`).
+**Notes**: `rielflow call-node ...` now reaches generic `unknown scope: call-node` (removed dedicated branch per scope); acceptable per removal-only posture. JSDoc on `buildCrossWorkflowCalleeRuntimeVariables` in `src/workflow/engine.ts` was updated to spell out `runtimeVariables.workflowCall` versus rejected authored `workflow.workflowCalls` (mirrors `architecture.md` / `design-unified-workflow-role-model.md`).
 
 ## Related Plans
 

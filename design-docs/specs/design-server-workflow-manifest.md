@@ -1,11 +1,11 @@
 # Server Workflow Manifest
 
-This document defines the server workflow manifest used by `divedra serve` to
+This document defines the server workflow manifest used by `rielflow serve` to
 publish an explicit workflow catalog for one server process.
 
 ## Overview
 
-`divedra serve` can run with a workflow manifest JSON file. When a manifest is
+`rielflow serve` can run with a workflow manifest JSON file. When a manifest is
 present, the server catalog is an allowlist: only enabled workflows listed in
 the manifest are visible through the browser overview, GraphQL catalog queries,
 and server-backed workflow start paths.
@@ -107,7 +107,7 @@ does not become a latent broken deployment when re-enabled.
 
 ## Startup Precedence
 
-`divedra serve` accepts `--workflow-manifest <path>`. The environment fallback is
+`rielflow serve` accepts `--workflow-manifest <path>`. The environment fallback is
 `DIVEDRA_WORKFLOW_MANIFEST`. Relative path fields inside the manifest resolve
 from the current directory unless `DIVEDRA_WORKFLOW_MANIFEST_ROOT` is set.
 

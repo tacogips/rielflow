@@ -11,7 +11,7 @@ const tempDirs: string[] = [];
 
 async function makeTempRepository(): Promise<string> {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), "divedra-source-filename-policy-"),
+    path.join(os.tmpdir(), "rielflow-source-filename-policy-"),
   );
   tempDirs.push(directory);
   await mkdir(path.join(directory, "packages", "example", "src"), {

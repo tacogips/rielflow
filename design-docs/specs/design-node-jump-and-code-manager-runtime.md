@@ -31,7 +31,7 @@ The target architecture is therefore:
 - `code` manager executes those rules deterministically
 - `llm` manager may still propose actions, but only through the same validated control contract
 
-This runtime also forms the execution substrate for `auto improve mode` supervision, where a paired `divedra superviser` workflow monitors failure/stall outcomes and decides rerun versus workflow repair. Supporting design: `design-docs/specs/design-auto-improve-superviser-mode.md`.
+This runtime also forms the execution substrate for `auto improve mode` supervision, where a paired `rielflow superviser` workflow monitors failure/stall outcomes and decides rerun versus workflow repair. Supporting design: `design-docs/specs/design-auto-improve-superviser-mode.md`.
 
 Authored workflow model:
 

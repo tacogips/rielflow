@@ -14,7 +14,7 @@ supervisor runner-pool model.
 Source-of-truth behavior:
 
 - The default supervisor is deterministic and represented by
-  `divedra-default-workflow-supervisor`.
+  `rielflow-default-workflow-supervisor`.
 - Event text is split only on spaces and tabs. A first token maps to a command
   only when it exactly matches a configured command string or alias; remaining
   tokens are preserved as ordered args.
@@ -29,7 +29,7 @@ Source-of-truth behavior:
   event-source correlation.
 - Durable run and command records are persisted before starting or mutating
   target workflow handles. Duplicate command ids replay stored command results.
-- The local deterministic supervisor must not spawn a configured `divedra`
+- The local deterministic supervisor must not spawn a configured `rielflow`
   binary for lifecycle, inspection, or event-source command handling.
 - Auto-improve remains separate: deterministic lifecycle supervision may enforce
   restart budgets, while workflow-definition patching occurs only when
@@ -55,15 +55,15 @@ Use local `../../codex-agent` references as behavior only:
 - `../../codex-agent/src/sdk/mock-session-runner.ts`: deterministic async runner
   tests without real backend execution.
 - `../../codex-agent/src/process/manager.ts`: negative/contrast reference only;
-  do not implement divedra workflow control by spawning a binary.
+  do not implement rielflow workflow control by spawning a binary.
 - `../../codex-agent/impl-plans/issue6-stable-runner-api.md`: stable runner API
   boundary planning.
 
 Intentional divergences:
 
-- Divedra manages in-process workflow executions and supervised event/runtime
+- Rielflow manages in-process workflow executions and supervised event/runtime
   records instead of Codex subprocesses.
-- Divedra persists command correlation in supervised-run records, event
+- Rielflow persists command correlation in supervised-run records, event
   receipts, workflow sessions, and runtime DB rows.
 - Cursor/Codex/backend-specific behavior remains behind existing workflow
   adapter modules.
@@ -222,7 +222,7 @@ Checklist:
 - [x] Share start/status/progress/inbox/logs/export/cancel/restart/rerun/input
       behavior with existing runtime control helpers where practical.
 - [x] Preserve explicit LLM/nested-superviser and auto-improve paths.
-- [x] Ensure deterministic local lifecycle paths do not spawn a `divedra`
+- [x] Ensure deterministic local lifecycle paths do not spawn a `rielflow`
       binary.
 
 ### 5. Event Router And Command-Analysis Fallback
@@ -268,7 +268,7 @@ Checklist:
 
 #### `src/server/api.ts`
 
-#### `examples/divedra-default-workflow-supervisor/`
+#### `examples/rielflow-default-workflow-supervisor/`
 
 #### `examples/default-supervisor-dispatcher/`
 
@@ -303,7 +303,7 @@ Checklist:
 - [x] Run focused parser, router, supervised-run, runner-pool, supervisor-client,
       GraphQL/server, CLI, and engine tests.
 - [x] Run `bun run typecheck`.
-- [x] Run example validation for `examples/divedra-default-workflow-supervisor`
+- [x] Run example validation for `examples/rielflow-default-workflow-supervisor`
       and `examples/default-supervisor-dispatcher`.
 - [x] Run stale-text checks for forbidden process-manager/binary assumptions.
 - [x] Update this plan progress log after each implementation session.
@@ -341,7 +341,7 @@ Parallelizable tasks: TASK-001, TASK-002, TASK-003.
 - `bun test src/workflow/supervisor-runner-pool.test.ts src/workflow/supervisor-client.test.ts src/workflow/engine.test.ts`
 - `bun test src/graphql/schema.test.ts src/server/graphql.test.ts src/server/api.test.ts src/cli.test.ts`
 - `bun run typecheck`
-- `bun run src/main.ts workflow validate --workflow-definition-dir ./examples divedra-default-workflow-supervisor`
+- `bun run src/main.ts workflow validate --workflow-definition-dir ./examples rielflow-default-workflow-supervisor`
 - `bun run src/main.ts events validate --event-root ./examples/default-supervisor-dispatcher`
 - `rg -n "DIVEDRA_BINARY_PATH|child-process manager|supervisor-process-manager|deterministic-process-manager" src examples README.md design-docs/specs`
 
@@ -370,7 +370,7 @@ Parallelizable tasks: TASK-001, TASK-002, TASK-003.
 
 - Step 3 accepted the revised design with no remaining high or mid findings.
 - Step 4 replaces the stale active process-manager plan because the accepted
-  design explicitly rejects `divedra` binary child-process lifecycle control.
+  design explicitly rejects `rielflow` binary child-process lifecycle control.
 - Step 2/3 feedback is carried into TASK-001 and TASK-005: unknown first-token
   text routes to command-analysis by default, while the supervisor remains
   deterministic.
@@ -387,7 +387,7 @@ Parallelizable tasks: TASK-001, TASK-002, TASK-003.
   in runner-pool handles, and pruning terminal or rejected handles.
 - Step 7 mid finding on command-map natural-language fallback is addressed by
   routing unknown first-token text to the default
-  `divedra-default-workflow-supervisor` `command-analysis` node when resolver
+  `rielflow-default-workflow-supervisor` `command-analysis` node when resolver
   settings are omitted.
 - Step 7 follow-up high finding on async cancellation semantics is addressed by
   preserving stopped supervised-run records when background target execution

@@ -18,7 +18,7 @@
 
 This plan closes the remaining transport gap between the GraphQL manager control-plane design and the current implementation:
 
-- `divedra gql` must forward ambient manager-session scope, not only bearer auth
+- `rielflow gql` must forward ambient manager-session scope, not only bearer auth
 - `/graphql` must consume that forwarded session scope before falling back to server-local context
 - tests and docs must prove manager-scoped mutations work without embedding `managerSessionId` in GraphQL variables
 
@@ -48,7 +48,7 @@ This plan closes the remaining transport gap between the GraphQL manager control
 
 ```typescript
 export const GRAPHQL_MANAGER_SESSION_HEADER =
-  "x-divedra-manager-session-id";
+  "x-rielflow-manager-session-id";
 
 export interface GraphqlClientRequest {
   readonly endpoint: string;
@@ -62,7 +62,7 @@ export interface GraphqlClientRequest {
 
 **Checklist**:
 
-- [x] `divedra gql` forwards ambient manager session id when present
+- [x] `rielflow gql` forwards ambient manager session id when present
 - [x] GraphQL HTTP handler resolves forwarded manager session id before server-local fallback
 - [x] manager-scoped GraphQL operations work without `managerSessionId` in GraphQL input
 
@@ -145,4 +145,4 @@ export interface GraphqlClientRequest {
 **Tasks Completed**: TASK-001, TASK-002
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added `X-Divedra-Manager-Session-Id` forwarding so ambient manager sessions survive the HTTP boundary between `divedra gql` and `/graphql`.
+**Notes**: Added `X-Rielflow-Manager-Session-Id` forwarding so ambient manager sessions survive the HTTP boundary between `rielflow gql` and `/graphql`.

@@ -1,6 +1,6 @@
 # Session Health Command
 
-Design for GitHub issue `tacogips/divedra#6`: add an operator-facing session
+Design for GitHub issue `tacogips/rielflow#6`: add an operator-facing session
 health command that summarizes workflow state, stall evidence, recent logs,
 artifact freshness, and optional recent LLM messages.
 
@@ -23,7 +23,7 @@ reported as unknown unless a later adapter-specific live check is added.
 Command:
 
 ```bash
-divedra session health <session-id> [--live] [--output text|json] [--stall-timeout-ms <ms>] [--log-limit <n>] [--include-llm-messages] [--llm-limit <n>]
+rielflow session health <session-id> [--live] [--output text|json] [--stall-timeout-ms <ms>] [--log-limit <n>] [--include-llm-messages] [--llm-limit <n>]
 ```
 
 Behavior:
@@ -202,10 +202,10 @@ behavioral guidance, not copy/paste implementation:
 - `src/server/handlers/health.ts` keeps process health/status output small and
   explicit.
 
-Divedra should use those patterns through its adapter and runtime DB boundaries:
-`codex-agent` normalized events are converted to divedra
+Rielflow should use those patterns through its adapter and runtime DB boundaries:
+`codex-agent` normalized events are converted to rielflow
 `llm_session_messages` by adapter/runtime indexing, and `session health` reads
-the provider-neutral divedra index. It must not read codex-agent private rollout
+the provider-neutral rielflow index. It must not read codex-agent private rollout
 files directly.
 
 ## Rollout Constraints

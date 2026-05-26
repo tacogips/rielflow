@@ -14,7 +14,7 @@
 ### Summary
 
 Implement the issue-resolution slice for runtime-variable input and workflow
-inspect discoverability. `divedra workflow run --variables` must accept the
+inspect discoverability. `rielflow workflow run --variables` must accept the
 historical bare JSON file path, an explicit `@file` reference, and an inline
 JSON object such as `{"hours":48}`. `workflow inspect` text output must show
 copyable `workflow run --variables` examples when the callable step has an
@@ -28,7 +28,7 @@ run behavior, workflow inspect text examples, JSON inspect schema retention
 tests, help/error wording, and focused regression coverage.
 
 **Excluded**: Runtime schema enforcement against `callable.input.jsonSchema`,
-new upload/attachment support, changes to `divedra gql --variables`, and
+new upload/attachment support, changes to `rielflow gql --variables`, and
 changes to workflow usage semantics beyond preserving existing behavior.
 
 ---
@@ -44,7 +44,7 @@ Codex-reference behavior comes from `<reference-repository-root>` (for example
 - `src/cli/graphql.test.ts`: covers inline object variables and JSON file path
   variables.
 
-Intentional divedra divergences accepted by the design:
+Intentional rielflow divergences accepted by the design:
 
 - `workflow run --variables` preserves the existing bare file path behavior but
   parses inline input only when the value is syntactically a JSON object.
@@ -86,7 +86,7 @@ interface RuntimeVariablesSource {
 - [x] Add inline JSON object parsing for values that trim to `{...}`.
 - [x] Reject arrays, scalars, malformed inline JSON, unreadable file inputs,
       and file JSON that is not an object before execution dispatch.
-- [x] Keep `divedra gql --variables` on the existing `readGraphqlVariables`
+- [x] Keep `rielflow gql --variables` on the existing `readGraphqlVariables`
       path unless a later task deliberately refactors shared helpers.
 
 ### 2. Workflow Run Wiring and Error Text
@@ -322,13 +322,13 @@ arrays, scalars, malformed JSON, unreadable files, and non-object files before
 local execution or remote GraphQL transport. Added text `workflow inspect`
 variable examples gated on callable input metadata while leaving JSON inspect
 focused on the existing structured `callable.input` contract. Updated README
-runtime-variable examples. Verification: `DIVEDRA_ARTIFACT_DIR=/private/tmp/divedra-cli-test-artifacts bun test src/cli.test.ts`
+runtime-variable examples. Verification: `DIVEDRA_ARTIFACT_DIR=/private/tmp/rielflow-cli-test-artifacts bun test src/cli.test.ts`
 passed (102 tests), `bun run typecheck` passed, and `git diff --check` passed.
-Manual smoke `DIVEDRA_ARTIFACT_DIR=/private/tmp/divedra-cli-smoke-artifacts bun run src/main.ts workflow run worker-only-single-step --workflow-definition-dir ./examples --variables '{"hours":48}' --dry-run --output json`
+Manual smoke `DIVEDRA_ARTIFACT_DIR=/private/tmp/rielflow-cli-smoke-artifacts bun run src/main.ts workflow run worker-only-single-step --workflow-definition-dir ./examples --variables '{"hours":48}' --dry-run --output json`
 passed, and `bun run src/main.ts workflow inspect worker-only-single-step --workflow-definition-dir ./examples`
 passed.
 An initial `bun test src/cli.test.ts` without `DIVEDRA_ARTIFACT_DIR` failed only
-because the sandbox denied hook recording under `$HOME/.divedra`; rerun
+because the sandbox denied hook recording under `$HOME/.rielflow`; rerun
 with a writable runtime root passed.
 
 ### Session: 2026-05-04 15:18 JST

@@ -20,7 +20,7 @@ Chat event / web chat event / library chat input
   -> external mailbox output reply
 ```
 
-The workflow supervisor is represented as a normal divedra workflow identity,
+The workflow supervisor is represented as a normal rielflow workflow identity,
 but the default dispatcher is deterministic. It parses configured command
 tokens, applies profile validation, and controls target runs through the
 in-process runner pool. A command-analysis LLM node may be invoked only when the
@@ -90,7 +90,7 @@ workflows.
 
 Recommended default supervisor workflow id:
 
-- `divedra-default-workflow-supervisor`
+- `rielflow-default-workflow-supervisor`
 
 Recommended dispatcher steps:
 
@@ -125,7 +125,7 @@ Recommended scoped layout:
 ```text
 <scope-root>/
   workflows/
-    divedra-default-workflow-supervisor/
+    rielflow-default-workflow-supervisor/
     code-review/
     research-summary/
   supervisors/
@@ -136,7 +136,7 @@ For standalone event-root deployments, the same profile shape may also be
 accepted under:
 
 ```text
-.divedra-events/
+.rielflow-events/
   supervisors/
     default-chat-supervisor.json
 ```
@@ -495,7 +495,7 @@ Capability scope rules:
 - the dispatcher cannot target arbitrary workflow ids, step ids, or manager
   sessions outside the managed workflow abstraction.
 
-These capabilities can be exposed as built-in `divedra/*` node add-ons,
+These capabilities can be exposed as built-in `rielflow/*` node add-ons,
 GraphQL mutations used through manager-scoped auth, or direct runtime calls
 inside the packaged default supervisor. The public contract should remain
 profile and conversation oriented.
@@ -592,7 +592,7 @@ mass cancellation or unwanted workflow patching.
 {
   "supervisorProfileId": "default-chat-supervisor",
   "profileRevision": "2026-04-30.default-chat-supervisor.v1",
-  "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+  "supervisorWorkflowName": "rielflow-default-workflow-supervisor",
   "description": "Dispatches team chat requests to allowed project workflows.",
   "directAnswerPolicy": {
     "enabled": true,
@@ -683,7 +683,7 @@ mass cancellation or unwanted workflow patching.
    `profileRevision`, `conversationRevision`, and decision records.
 4. Add compare-and-swap decision application plus source-message idempotency
    for concurrent chat inputs.
-5. Package or extend `divedra-default-workflow-supervisor` with an LLM
+5. Package or extend `rielflow-default-workflow-supervisor` with an LLM
    dispatcher step and strict structured decision output.
 6. Add runtime dispatcher capabilities with profile-scoped authorization.
 7. Route chat/library/GraphQL inputs to dispatcher mode.

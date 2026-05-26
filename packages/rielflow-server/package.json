@@ -1,0 +1,31 @@
+{
+  "name": "rielflow-server",
+  "version": "0.1.0",
+  "description": "HTTP server transport contracts for Rielflow",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js",
+      "default": "./dist/contracts.js"
+    },
+    "./browser-overview": {
+      "types": "./dist/browser-overview.d.ts",
+      "import": "./dist/browser-overview.js",
+      "default": "./dist/browser-overview.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../.. build:server",
+    "typecheck": "bun run --cwd ../.. typecheck"
+  },
+  "license": "MIT"
+}

@@ -1,7 +1,7 @@
 # Web Workflow Viewer Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/architecture.md#local-http-server-divedra-serve`
+**Design Reference**: `design-docs/specs/architecture.md#local-http-server-rielflow-serve`
 **Created**: 2026-04-17
 **Last Updated**: 2026-04-17
 
@@ -11,7 +11,7 @@
 
 ### Summary
 
-Restore a browser-facing, read-only workflow viewer served by the local Bun HTTP server. The viewer uses Solid in the browser and GraphQL-backed data already exposed by `divedra serve` to show workflow node graphs and execution logs.
+Restore a browser-facing, read-only workflow viewer served by the local Bun HTTP server. The viewer uses Solid in the browser and GraphQL-backed data already exposed by `rielflow serve` to show workflow node graphs and execution logs.
 
 ### Scope
 
@@ -20,7 +20,7 @@ Restore a browser-facing, read-only workflow viewer served by the local Bun HTTP
 - read-only Solid browser application for workflow graph inspection
 - workflow execution run list and selected run log display
 - server routes for the viewer HTML and bundled browser asset
-- `divedra web serve` alias for the existing serve backend
+- `rielflow web serve` alias for the existing serve backend
 - targeted server and CLI regression coverage
 
 **Excluded**:
@@ -82,7 +82,7 @@ interface ViewerState {
 **Status**: COMPLETED
 
 ```typescript
-// `divedra web serve [workflow-name]` maps to the existing serve command.
+// `rielflow web serve [workflow-name]` maps to the existing serve command.
 ```
 
 **Checklist**:
@@ -133,8 +133,8 @@ export function isWorkflowViewerDocumentPath(pathname: string): boolean;
 
 ## Completion Criteria
 
-- [x] `divedra serve` serves the read-only workflow viewer
-- [x] `divedra web serve` starts the same viewer
+- [x] `rielflow serve` serves the read-only workflow viewer
+- [x] `rielflow web serve` starts the same viewer
 - [x] Workflow node graph is visible
 - [x] Execution log list is visible
 - [x] Type checking passes

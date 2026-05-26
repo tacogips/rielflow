@@ -13,7 +13,7 @@
 
 ### Summary
 
-Add a small helper CLI command that prints paste-ready Claude Code or Codex hook configuration JSON. The generated snippet registers the existing vendor-detecting `divedra hook` runtime endpoint for the recommended lifecycle events.
+Add a small helper CLI command that prints paste-ready Claude Code or Codex hook configuration JSON. The generated snippet registers the existing vendor-detecting `rielflow hook` runtime endpoint for the recommended lifecycle events.
 
 ### Scope
 
@@ -45,7 +45,7 @@ export function buildHookConfigurationSnippet(
 
 - [x] Generate Claude Code matcher entries
 - [x] Generate Codex matcher entries
-- [x] Keep the generated command string as `divedra hook`
+- [x] Keep the generated command string as `rielflow hook`
 - [x] Unit tests
 
 ### 2. CLI Integration
@@ -55,7 +55,7 @@ export function buildHookConfigurationSnippet(
 **Status**: COMPLETED
 
 ```text
-divedra hook snippet --vendor claude-code|codex
+rielflow hook snippet --vendor claude-code|codex
 ```
 
 **Checklist**:
@@ -63,7 +63,7 @@ divedra hook snippet --vendor claude-code|codex
 - [x] Accept `snippet` as the only hook subcommand
 - [x] Require a valid explicit `--vendor`
 - [x] Print formatted JSON to stdout
-- [x] Preserve existing stdin hook behavior for `divedra hook`
+- [x] Preserve existing stdin hook behavior for `rielflow hook`
 - [x] CLI regression tests
 
 ---
@@ -84,10 +84,10 @@ divedra hook snippet --vendor claude-code|codex
 
 ## Completion Criteria
 
-- [x] `divedra hook snippet --vendor claude-code` prints Claude Code JSON
-- [x] `divedra hook snippet --vendor codex` prints Codex JSON
+- [x] `rielflow hook snippet --vendor claude-code` prints Claude Code JSON
+- [x] `rielflow hook snippet --vendor codex` prints Codex JSON
 - [x] Invalid or missing vendor exits with CLI usage error
-- [x] Existing `divedra hook --vendor ...` stdin behavior remains unchanged
+- [x] Existing `rielflow hook --vendor ...` stdin behavior remains unchanged
 - [x] Focused tests pass
 - [x] Type checking passes
 
@@ -105,7 +105,7 @@ divedra hook snippet --vendor claude-code|codex
 **Tasks Completed**: TASK-001, TASK-002
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added a snippet builder and `divedra hook snippet --vendor ...` CLI integration. Generated snippets install vendor-detecting `divedra hook` commands while keeping `--vendor` available as an explicit runtime override. Focused tests and type checking passed.
+**Notes**: Added a snippet builder and `rielflow hook snippet --vendor ...` CLI integration. Generated snippets install vendor-detecting `rielflow hook` commands while keeping `--vendor` available as an explicit runtime override. Focused tests and type checking passed.
 
 ## Related Plans
 

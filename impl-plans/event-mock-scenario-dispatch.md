@@ -37,7 +37,7 @@ browser/TUI receipt views.
 **Status**: COMPLETED
 
 ```typescript
-interface WorkflowTriggerRunnerOptions extends DivedraOptions {
+interface WorkflowTriggerRunnerOptions extends RielflowOptions {
   readonly mockScenario?: MockNodeScenario;
 }
 ```

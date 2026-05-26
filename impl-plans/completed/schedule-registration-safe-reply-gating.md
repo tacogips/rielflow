@@ -46,7 +46,7 @@ gate every schedule-registration chat reply path.
 
 **Excluded**:
 
-- The non-blocking low finding in `packages/divedra-events/src/types.ts:299`
+- The non-blocking low finding in `packages/rielflow-events/src/types.ts:299`
   about `inputPath` and `timezonePath`.
 - Broad event reply dispatcher, chat adapter, schedule registry, CLI, or docs
   refactors.
@@ -69,7 +69,7 @@ gate every schedule-registration chat reply path.
 
 - `codex-agent` is a backend/workflow-authoring reference only.
 - Accepted Step 3 review decision: no `codex-agent` inspection is required for
-  this issue because schedule-registration reply safety is divedra runtime-owned.
+  this issue because schedule-registration reply safety is rielflow runtime-owned.
 - Intentional divergence: no schedule-registration reply gating behavior is
   copied from `codex-agent`; provider-specific behavior stays behind existing
   adapter modules.

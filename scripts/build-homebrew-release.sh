@@ -75,7 +75,7 @@ package_version() {
 
   (
     cd "$repo_root"
-    bun --print 'JSON.parse(await Bun.file("packages/divedra/package.json").text()).version'
+    bun --print 'JSON.parse(await Bun.file("packages/rielflow/package.json").text()).version'
   )
 }
 
@@ -84,9 +84,9 @@ build_target() {
   version="$1"
   target="$2"
   release_dir="$3"
-  work_dir="$release_dir/work/divedra-$version-$target"
-  archive="$release_dir/divedra-$version-$target.tar.gz"
-  binary="$work_dir/bin/divedra"
+  work_dir="$release_dir/work/rielflow-$version-$target"
+  archive="$release_dir/rielflow-$version-$target.tar.gz"
+  binary="$work_dir/bin/rielflow"
 
   rm -rf "$work_dir" "$archive" "$archive.sha256"
   mkdir -p "$work_dir/bin"
@@ -96,7 +96,7 @@ build_target() {
     bun build \
       --compile \
       --target "bun-$target" \
-      packages/divedra/src/bin.ts \
+      packages/rielflow/src/bin.ts \
       --outfile "$binary"
   )
 

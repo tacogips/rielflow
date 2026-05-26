@@ -52,7 +52,7 @@ Implement chat-created workflow schedules. A chat event starts a schedule-regist
 
 ### Review Feedback Addressed
 
-- Step 3 low finding: verification now consistently uses `events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events` so checked-in example workflows are available during event validation.
+- Step 3 low finding: verification now consistently uses `events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events` so checked-in example workflows are available during event validation.
 - Step 5 mid finding: TASK-005 now picks generated internal scheduler bindings as the concrete due-dispatch route and assigns receipt, dedupe, input mapping, replay/read-only, and recurring re-arm ownership.
 - Step 5 mid finding: TASK-003 and TASK-004 now require safe clarification reply destination validation before schedule persistence.
 - Step 5 low finding: section-level design references are listed above for implementer traceability.
@@ -62,7 +62,7 @@ Implement chat-created workflow schedules. A chat event starts a schedule-regist
 ## Codex And Backend Reference
 
 - `../../codex-agent`: unavailable; `test -d ../../codex-agent` failed in Step 3.
-- Decision: scheduling is provider-neutral divedra event-runtime behavior. `codex-agent` remains only an execution backend for target workflow nodes and is not a source of schedule semantics.
+- Decision: scheduling is provider-neutral rielflow event-runtime behavior. `codex-agent` remains only an execution backend for target workflow nodes and is not a source of schedule semantics.
 - Intentional divergence: no Cursor-specific or Codex-specific schedule parsing, persistence, or execution rules are introduced.
 
 ---
@@ -71,7 +71,7 @@ Implement chat-created workflow schedules. A chat event starts a schedule-regist
 
 ### 1. Schedule Registry And Runtime Types
 
-#### `packages/divedra-events/src/types.ts`
+#### `packages/rielflow-events/src/types.ts`
 #### `src/events/workflow-schedule-registry.ts`
 #### `src/workflow/runtime-db/schema-and-record-types.ts`
 #### `src/workflow/runtime-db/event-records.ts`
@@ -220,7 +220,7 @@ export interface WorkflowScheduleRegistrationValidator {
 
 ### 4. Chat Registration Trigger-Runner Integration
 
-#### `packages/divedra-events/src/types.ts`
+#### `packages/rielflow-events/src/types.ts`
 #### `src/events/trigger-runner/trigger-dispatch-runner.ts`
 #### `src/events/trigger-runner/sticky-dispatch-planning.ts`
 #### `src/events/trigger-runner-replies.ts`
@@ -270,15 +270,15 @@ export type EventExecutionMode =
 
 Use generated internal scheduler bindings. `src/events/workflow-schedule-dispatch.ts` should build an in-memory `EventConfiguration` for each due occurrence with:
 
-- source id `divedra-scheduler`
-- provider `divedra-scheduler`
+- source id `rielflow-scheduler`
+- provider `rielflow-scheduler`
 - event type `workflow.schedule.due`
 - binding id `workflow-schedule:<scheduleId>`
 - `workflowName` from the persisted schedule
 - `inputMapping` that maps the persisted schedule `workflowInput` from the due event input
 - `execution.mode` matching the schedule record's selected dispatch policy, defaulting to direct async workflow execution when no stronger policy is persisted
 
-This is the smaller concrete route because it reuses `dispatchEventToMatchingBindings()` and `createWorkflowTriggerRunner()` without adding a timer-to-engine path or authored `.divedra-events` files.
+This is the smaller concrete route because it reuses `dispatchEventToMatchingBindings()` and `createWorkflowTriggerRunner()` without adding a timer-to-engine path or authored `.rielflow-events` files.
 
 Ownership rules:
 
@@ -308,7 +308,7 @@ export interface WorkflowScheduleDueDispatchResult {
 **Checklist**:
 
 - [x] Rehydrate active schedules when `createEventListenerService().start()` creates the shared scheduled event manager.
-- [x] Build provider `divedra-scheduler`, event type `workflow.schedule.due` envelopes.
+- [x] Build provider `rielflow-scheduler`, event type `workflow.schedule.due` envelopes.
 - [x] Dispatch due occurrences through generated internal scheduler bindings passed to `dispatchEventToMatchingBindings()`.
 - [x] Verify receipt creation, dedupe, and input mapping use the generated binding and due envelope.
 - [x] Reject registry mutation in read-only mode before `markFiring()`.
@@ -318,20 +318,20 @@ export interface WorkflowScheduleDueDispatchResult {
 
 ### 6. Operator CLI
 
-#### `packages/divedra/src/cli/scoped-command-handlers.ts`
-#### `packages/divedra/src/cli/input-output-helpers.ts`
+#### `packages/rielflow/src/cli/scoped-command-handlers.ts`
+#### `packages/rielflow/src/cli/input-output-helpers.ts`
 #### `src/cli.test.ts`
 
 **Status**: COMPLETED
 
 ```typescript
-export interface ListWorkflowSchedulesInput extends DivedraOptions {
+export interface ListWorkflowSchedulesInput extends RielflowOptions {
   readonly sourceId?: string;
   readonly status?: WorkflowScheduleStatus;
   readonly limit?: number;
 }
 
-export interface CancelWorkflowScheduleInput extends DivedraOptions {
+export interface CancelWorkflowScheduleInput extends RielflowOptions {
   readonly scheduleId: string;
   readonly reason?: string;
 }
@@ -348,7 +348,7 @@ export interface CancelWorkflowScheduleInput extends DivedraOptions {
 ### 7. Examples And Documentation
 
 #### `examples/event-sources/README.md`
-#### `examples/event-sources/.divedra-events/**`
+#### `examples/event-sources/.rielflow-events/**`
 #### `README.md`
 #### `design-docs/specs/design-scheduled-workflow-execution.md`
 
@@ -359,8 +359,8 @@ export interface CancelWorkflowScheduleInput extends DivedraOptions {
 - [x] Add a minimal schedule-registration chat binding example.
 - [x] Document the schedule resolver output JSON contract.
 - [x] Document schedule list/inspect/cancel commands.
-- [x] Correct the design verification command to use `events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`.
-- [x] Keep examples runnable with `--event-root ./examples/event-sources/.divedra-events`.
+- [x] Correct the design verification command to use `events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`.
+- [x] Keep examples runnable with `--event-root ./examples/event-sources/.rielflow-events`.
 
 ### 8. Verification And Regression Tests
 
@@ -417,7 +417,7 @@ bun run typecheck
 bun test src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts
 bun test src/events/trigger-runner*.test.ts src/events/*task-planning*.test.ts src/events/*supervisor*.test.ts
 bun test src/cli.test.ts
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json
 ```
 
@@ -460,7 +460,7 @@ bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-sched
 **Tasks Completed**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Implemented durable workflow schedule records, shared `workflow-schedule` event registration, schedule-registration resolver validation, generated internal due dispatch, listener startup rehydration, `events schedules list|inspect|cancel`, example binding/docs, and focused regression coverage. Verification passed: `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun test src/events/supervisor-dispatch-contract.test.ts src/events/trigger-runner-stickiness.test.ts src/events/trigger-runner-supervisor-dispatch.test.ts src/events/supervisor-intent.test.ts src/events/trigger-runner-supervised.test.ts src/events/trigger-runner-options.test.ts src/events/supervisor-control-reply.test.ts src/events/supervisor-llm-batch.test.ts src/events/supervisor-profiles.test.ts src/events/supervisor-conversations.test.ts src/events/supervisor-command-contract.test.ts src/events/supervisor-llm-resolver-dispatch.test.ts src/events/dispatch-supervisor-chat.test.ts src/events/supervisor-llm-intent.test.ts`; `bun test src/cli.test.ts`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json`; `git diff --check`.
+**Notes**: Implemented durable workflow schedule records, shared `workflow-schedule` event registration, schedule-registration resolver validation, generated internal due dispatch, listener startup rehydration, `events schedules list|inspect|cancel`, example binding/docs, and focused regression coverage. Verification passed: `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun test src/events/supervisor-dispatch-contract.test.ts src/events/trigger-runner-stickiness.test.ts src/events/trigger-runner-supervisor-dispatch.test.ts src/events/supervisor-intent.test.ts src/events/trigger-runner-supervised.test.ts src/events/trigger-runner-options.test.ts src/events/supervisor-control-reply.test.ts src/events/supervisor-llm-batch.test.ts src/events/supervisor-profiles.test.ts src/events/supervisor-conversations.test.ts src/events/supervisor-command-contract.test.ts src/events/supervisor-llm-resolver-dispatch.test.ts src/events/dispatch-supervisor-chat.test.ts src/events/supervisor-llm-intent.test.ts`; `bun test src/cli.test.ts`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json`; `git diff --check`.
 
 ### Session: 2026-05-18 20:35
 **Tasks Completed**: TASK-005 self-review fix.
@@ -472,31 +472,31 @@ bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-sched
 **Tasks Completed**: Step 7 review fixes for TASK-003, TASK-005, TASK-007, and TASK-008.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Addressed Step 7 high and mid findings by recording schedule occurrence ids, guarding firing/completion/failure mutations by active status and occurrence identity, ignoring resolver-supplied recurring `nextDueAt` in favor of runtime cron computation, and correcting event validation commands to include `--workflow-definition-dir ./examples`. Added regression coverage for stale recurring due occurrences, cancellation during in-flight completion/failure, and recurring `nextDueAt` computation. Verification passed: `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json`; `git diff --check`.
+**Notes**: Addressed Step 7 high and mid findings by recording schedule occurrence ids, guarding firing/completion/failure mutations by active status and occurrence identity, ignoring resolver-supplied recurring `nextDueAt` in favor of runtime cron computation, and correcting event validation commands to include `--workflow-definition-dir ./examples`. Added regression coverage for stale recurring due occurrences, cancellation during in-flight completion/failure, and recurring `nextDueAt` computation. Verification passed: `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `bun run src/main.ts workflow list --workflow-definition-dir ./examples --output json`; `git diff --check`.
 
 ### Session: 2026-05-18 21:20
 **Tasks Completed**: Step 7 startup rehydration fix for TASK-005.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Addressed Step 7 high finding by normalizing stale active recurring schedules to the next future cron occurrence during startup rehydration before registering `workflow-schedule` timers. The normalized `nextDueAt` is persisted so the registered occurrence identity matches later due dispatch validation and missed recurring runs are not caught up. Added regression coverage for stale recurring startup rehydration. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+**Notes**: Addressed Step 7 high finding by normalizing stale active recurring schedules to the next future cron occurrence during startup rehydration before registering `workflow-schedule` timers. The normalized `nextDueAt` is persisted so the registered occurrence identity matches later due dispatch validation and missed recurring runs are not caught up. Added regression coverage for stale recurring startup rehydration. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `git diff --check`.
 
 ### Session: 2026-05-18 21:35
 **Tasks Completed**: Step 7 due dispatch failure and input mapping fixes for TASK-005.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Addressed Step 7 mid findings by wrapping generated due dispatch in failure handling that marks the occurrence failed and re-arms recurring schedules when dispatch or receipt persistence throws. Generated scheduler bindings now map target workflow input to exactly the persisted `schedule.workflowInput` via a template reference while preserving schedule metadata under runtime event metadata. Added regression coverage for exact target workflow input shape and receipt-store failure after `markFiring()`. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+**Notes**: Addressed Step 7 mid findings by wrapping generated due dispatch in failure handling that marks the occurrence failed and re-arms recurring schedules when dispatch or receipt persistence throws. Generated scheduler bindings now map target workflow input to exactly the persisted `schedule.workflowInput` via a template reference while preserving schedule metadata under runtime event metadata. Added regression coverage for exact target workflow input shape and receipt-store failure after `markFiring()`. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `git diff --check`.
 
 ### Session: 2026-05-18 21:50
 **Tasks Completed**: Step 7 schedule-registration failure and safe-clarification fixes for TASK-003 and TASK-004.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Addressed Step 7 mid findings by catching schedule-registration resolver, validation, reply, and persistence exceptions after the event receipt reaches `mapped`, updating the receipt to `failed` instead of leaving it stuck. Runtime-derived schedule clarifications now use the same safe reply destination gate as resolver-authored clarifications and refuse when no safe reply path exists. Added regression coverage for schedule persistence failure receipt status and unsafe runtime clarification refusal. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registration.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+**Notes**: Addressed Step 7 mid findings by catching schedule-registration resolver, validation, reply, and persistence exceptions after the event receipt reaches `mapped`, updating the receipt to `failed` instead of leaving it stuck. Runtime-derived schedule clarifications now use the same safe reply destination gate as resolver-authored clarifications and refuse when no safe reply path exists. Added regression coverage for schedule persistence failure receipt status and unsafe runtime clarification refusal. Verification passed: `bun test src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registration.test.ts`; `bun test src/events/workflow-schedule-registry.test.ts src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts`; `bun run typecheck`; `bun run lint:biome` (with pre-existing warnings in `src/workflow/engine/*`); `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `git diff --check`.
 
 ### Session: 2026-05-18 22:50
 **Tasks Completed**: Recent-change blocking fixes for TASK-003 schedule registration validation.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Preserved completed feature history while recording the focused `active/schedule-registration-blocking-fixes` follow-up. Configured `minConfidence` now requires numeric resolver confidence, and offset-less one-time `dueAt` values resolve through `decision.schedule.timezone` instead of host-local `Date` parsing. Verification passed: `bun test src/events/workflow-schedule-registration.test.ts`; `bun run typecheck`; `bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts`; `bun run lint:biome` with only pre-existing warnings in `src/workflow/engine/*`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+**Notes**: Preserved completed feature history while recording the focused `active/schedule-registration-blocking-fixes` follow-up. Configured `minConfidence` now requires numeric resolver confidence, and offset-less one-time `dueAt` values resolve through `decision.schedule.timezone` instead of host-local `Date` parsing. Verification passed: `bun test src/events/workflow-schedule-registration.test.ts`; `bun run typecheck`; `bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts`; `bun run lint:biome` with only pre-existing warnings in `src/workflow/engine/*`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `git diff --check`.
 
 ## Progress Log Expectations
 

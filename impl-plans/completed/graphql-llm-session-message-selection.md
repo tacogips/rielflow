@@ -2,7 +2,7 @@
 
 **Status**: Completed
 **Design Reference**: `design-docs/specs/architecture.md#llm-session-message-inspection-boundary`
-**Issue**: `tacogips/divedra#5`
+**Issue**: `tacogips/rielflow#5`
 
 ## Purpose
 

@@ -60,7 +60,7 @@ export type {
 **Status**: Completed
 
 ```typescript
-interface ExecuteWorkflowInput extends DivedraOptions {
+interface ExecuteWorkflowInput extends RielflowOptions {
   readonly nodeAddonResolvers?: readonly NodeAddonPayloadResolver[];
 }
 ```

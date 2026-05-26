@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate same-node-session-echo --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate same-node-session-echo --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -18,7 +18,7 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run same-node-session-echo \
+bun run packages/rielflow/src/bin.ts workflow run same-node-session-echo \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/same-node-session-echo/mock-scenario.json \
   --output json

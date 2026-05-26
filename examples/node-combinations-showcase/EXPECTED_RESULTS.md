@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate node-combinations-showcase --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate node-combinations-showcase --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -18,7 +18,7 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run node-combinations-showcase \
+bun run packages/rielflow/src/bin.ts workflow run node-combinations-showcase \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/node-combinations-showcase/mock-scenario.json \
   --output json

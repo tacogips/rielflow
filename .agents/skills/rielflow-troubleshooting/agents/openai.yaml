@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Troubleshooting"
+  short_description: "Diagnose workflow execution issues"
+  default_prompt: "Use $rielflow-troubleshooting to diagnose this failed rielflow workflow run."
