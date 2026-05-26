@@ -51,7 +51,7 @@ tasks:
       - bun run start
 
   test:
-    desc: Run tests with Vitest
+    desc: Run tests with Bun test (canonical runner; includes bun:sqlite)
     cmds:
       - bun run test
 
@@ -61,14 +61,16 @@ tasks:
       - bun run test:all
 
   test-watch:
-    desc: Run tests in watch mode with Vitest
+    desc: Run tests in watch mode with Bun test
     cmds:
       - bun run test:watch
 
   test-verbose:
-    desc: Run tests with verbose output
+    desc: >-
+      Historical task name; runs the same Bun test suite as task test via scripts/run-bun-tests.sh.
+      Bun does not offer a Vitest-style verbose reporter flag here; use `bun test --help` for runner options.
     cmds:
-      - vitest run --reporter=verbose
+      - bash ./scripts/run-bun-tests.sh
 
   typecheck:
     desc: Run TypeScript type checking

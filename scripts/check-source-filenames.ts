@@ -99,7 +99,15 @@ export async function checkSourceFilenames(
   )
     .flat()
     .sort((a, b) => a.localeCompare(b));
-  const filesInBiomeScope = [...sourceFiles, "vitest.config.ts"];
+  const vitestSupportFiles = await collectSourceFiles(
+    rootDir,
+    "vitest-support",
+  );
+  const filesInBiomeScope = [
+    ...sourceFiles,
+    ...vitestSupportFiles,
+    "vitest.config.ts",
+  ];
   const violations = filesInBiomeScope
     .filter((filePath) =>
       isForbiddenSourcePartBasename(path.posix.basename(filePath)),

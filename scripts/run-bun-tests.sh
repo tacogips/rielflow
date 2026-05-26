@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bun's test runner does not load vitest `env`; keep `vitest.config.ts` in sync when adding test-only env.
+# Bun's test runner does not load vitest config; keep `vitest.config.ts` in sync when adding test-only env or aliases.
 watch_mode="false"
 declare -a passthrough_args=()
 
@@ -14,7 +14,9 @@ for arg in "$@"; do
   passthrough_args+=("$arg")
 done
 
-mapfile -t test_files < <(rg --files scripts packages -g '*.test.ts' -g '*.test.tsx' | sort)
+mapfile -t test_files < <(
+  rg --files scripts packages -g '*.test.ts' -g '*.test.tsx' | sort
+)
 
 if [[ "${#test_files[@]}" -eq 0 ]]; then
   echo "error: no Bun test files were found under scripts/ or packages/" >&2

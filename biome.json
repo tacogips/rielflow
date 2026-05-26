@@ -10,6 +10,7 @@
       "packages/divedra/src/**/*.ts",
       "packages/divedra/src/**/*.tsx",
       "scripts/**/*.ts",
+      "vitest-support/**/*.ts",
       "vitest.config.ts"
     ]
   },

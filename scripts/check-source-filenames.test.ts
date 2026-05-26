@@ -81,6 +81,18 @@ describe("checkSourceFilenames", () => {
     expect(result.rootSourceTreePresent).toBe(false);
   });
 
+  test("reports forbidden filenames under vitest-support", async () => {
+    const root = await makeTempRepository();
+    await writeFixture(root, "vitest-support/part-1.ts");
+
+    const result = await checkSourceFilenames(root);
+
+    expect(result.violations).toEqual([
+      { path: "vitest-support/part-1.ts", basename: "part-1.ts" },
+    ]);
+    expect(result.rootSourceTreePresent).toBe(false);
+  });
+
   test("allows descriptive filenames and non-source substring matches", async () => {
     const root = await makeTempRepository();
     await writeFixture(root, "packages/example/src/workflow-loader.ts");
