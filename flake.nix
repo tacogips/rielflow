@@ -22,7 +22,7 @@
       let
         pkgs = import nixpkgs { inherit system; };
         pkgs-unstable = import nixpkgs-unstable { inherit system; };
-
+        lib = pkgs.lib;
         runtimePackages = with pkgs; [
           # Bun runtime
           pkgs-unstable.bun
@@ -42,6 +42,8 @@
           gnused
           gh
           go-task
+
+        ] ++ lib.optionals pkgs.stdenv.isLinux [
           podman
           podman-compose
 
@@ -147,8 +149,10 @@
             echo "Biome version: $(biome --version 2>/dev/null || echo 'not available')"
             echo "Task version: $(task --version 2>/dev/null || echo 'not available')"
             echo "Gitleaks version: $(gitleaks version 2>/dev/null || echo 'not available')"
+            ${lib.optionalString pkgs.stdenv.isLinux ''
             echo "Podman version: $(podman --version 2>/dev/null || echo 'not available')"
             echo "Podman Compose version: $(podman-compose --version 2>/dev/null || echo 'not available')"
+            ''}
           '';
         };
       }
