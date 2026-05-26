@@ -508,10 +508,12 @@ async function probeCodexNodeExecutability(
       candidate,
       "codex-agent plan mode is not applicable unless a backend-specific plan field is authored",
     ),
-    notApplicableResult(
+    resultForCandidate({
       candidate,
-      "codex-agent reasoning effort is not applicable because the inspected adapter exposes no effort field",
-    ),
+      status: "valid",
+      message:
+        "codex-agent reasoning effort is supported through model_reasoning_effort config overrides",
+    }),
     notApplicableResult(
       candidate,
       "codex-agent mode options use adapter configuration; no per-node mode field is authored",
@@ -550,10 +552,12 @@ async function probeClaudeNodeExecutability(
       candidate,
       "claude-code-agent static plan support maps to PermissionMode 'plan'; no per-node permissionMode field is authored",
     ),
-    notApplicableResult(
+    resultForCandidate({
       candidate,
-      "claude-code-agent reasoning effort is not applicable because the inspected adapter exposes no effort field",
-    ),
+      status: "valid",
+      message:
+        "claude-code-agent reasoning effort is supported through the Claude Code --effort option",
+    }),
     notApplicableResult(
       candidate,
       "claude-code-agent mode options use adapter configuration; no per-node permissionMode field is authored",
@@ -587,10 +591,12 @@ async function probeCursorNodeExecutability(
       candidate,
       "cursor-cli-agent static plan support maps to mode 'plan'; no per-node mode field is authored",
     ),
-    notApplicableResult(
+    resultForCandidate({
       candidate,
-      "cursor-cli-agent reasoning effort is not applicable because the inspected adapter exposes no effort field",
-    ),
+      status: "valid",
+      message:
+        "cursor-cli-agent reasoning effort is supported through Cursor model-id effort selection",
+    }),
     notApplicableResult(
       candidate,
       "cursor-cli-agent mode options use adapter configuration; no per-node mode field is authored",

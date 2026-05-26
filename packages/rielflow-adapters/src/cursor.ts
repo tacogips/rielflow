@@ -34,6 +34,7 @@ interface CursorAgentRequest {
   readonly sessionId?: string;
   readonly cwd?: string;
   readonly model?: string;
+  readonly effort?: string;
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
 }
@@ -189,6 +190,7 @@ function resolveLocalSessionConfig(
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     model: input.node.model,
+    ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
     streamMode,
   };

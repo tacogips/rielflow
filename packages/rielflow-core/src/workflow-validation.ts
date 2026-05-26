@@ -20,6 +20,7 @@ import type {
   NodeOutputContract,
   NodePayload,
   NodePromptVariant,
+  NodeReasoningEffort,
   NodeSessionPolicy,
   SleepNodeConfig,
   UserActionNodeConfig,
@@ -45,8 +46,13 @@ import {
   DEFAULT_NODE_TIMEOUT_MS,
   NODE_ID_PATTERN,
   NODE_EXECUTION_BACKEND_LIST_TEXT,
+  NODE_REASONING_EFFORTS,
   normalizeNodeExecutionBackend,
 } from "./workflow-model";
+
+const NODE_REASONING_EFFORT_SET: ReadonlySet<string> = new Set(
+  NODE_REASONING_EFFORTS,
+);
 
 export interface RawWorkflowBundle {
   readonly workflow: unknown;
@@ -1880,6 +1886,14 @@ function normalizeWorkflow(
   };
 }
 
+function normalizeReasoningEffort(
+  value: string,
+): NodeReasoningEffort | undefined {
+  return NODE_REASONING_EFFORT_SET.has(value)
+    ? (value as NodeReasoningEffort)
+    : undefined;
+}
+
 function normalizeNodePayload(input: {
   readonly nodeId: string;
   readonly raw: unknown;
@@ -1943,6 +1957,36 @@ function normalizeNodePayload(input: {
         `${input.path}.executionBackend`,
         `must be ${NODE_EXECUTION_BACKEND_LIST_TEXT}`,
       ),
+    );
+  }
+  const effortRaw = input.raw["effort"];
+  let effort: NodeReasoningEffort | undefined;
+  if (typeof effortRaw === "string" && effortRaw.length > 0) {
+    effort = normalizeReasoningEffort(effortRaw);
+    if (effort === undefined) {
+      input.issues.push(
+        makeIssue(
+          "error",
+          `${input.path}.effort`,
+          `must be one of ${NODE_REASONING_EFFORTS.join(", ")}`,
+        ),
+      );
+    } else if (
+      executionBackend !== "codex-agent" &&
+      executionBackend !== "claude-code-agent" &&
+      executionBackend !== "cursor-cli-agent"
+    ) {
+      input.issues.push(
+        makeIssue(
+          "error",
+          `${input.path}.effort`,
+          `is not supported for executionBackend '${executionBackend ?? "unknown"}'`,
+        ),
+      );
+    }
+  } else if (effortRaw !== undefined) {
+    input.issues.push(
+      makeIssue("error", `${input.path}.effort`, "must be a non-empty string"),
     );
   }
   const sessionPolicyRaw = input.raw["sessionPolicy"];
@@ -2088,6 +2132,7 @@ function normalizeNodePayload(input: {
       ? { model: input.raw["model"] }
       : {}),
     ...(executionBackend === undefined ? {} : { executionBackend }),
+    ...(effort === undefined ? {} : { effort }),
     ...(sessionPolicy === undefined ? {} : { sessionPolicy }),
     ...(systemPrompt.template === undefined
       ? {}

@@ -205,6 +205,31 @@ describe("CodexAgentAdapter", () => {
     );
   });
 
+  test("forwards node effort as Codex reasoning effort config", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          effort: "high",
+        },
+      },
+      baseContext,
+    );
+
+    expect(output.effort).toBe("high");
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configOverrides: ['model_reasoning_effort="high"'],
+      }),
+    );
+  });
+
   test("reuses backend sessions for local execution", async () => {
     const fixture = makeCodexRunnerFixture({
       sessionId: "backend-codex-1",

@@ -36,6 +36,7 @@ interface ClaudeSessionConfig {
 interface ClaudeSessionRunnerOptions {
   readonly cwd?: string;
   readonly model?: string;
+  readonly effort?: string;
   readonly permissionMode?: PermissionMode;
   readonly additionalArgs?: readonly string[];
   readonly env?: Readonly<Record<string, string>>;
@@ -236,6 +237,7 @@ function resolveLocalSessionConfig(
     runnerOptions: {
       cwd: config.cwd ?? input.workingDirectory,
       model: input.node.model,
+      ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
       ...(config.permissionMode === undefined
         ? {}
         : { permissionMode: config.permissionMode }),

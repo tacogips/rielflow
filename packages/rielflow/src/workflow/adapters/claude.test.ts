@@ -164,6 +164,32 @@ describe("ClaudeCodeAgentAdapter", () => {
     });
   });
 
+  test("forwards node effort to the Claude runner", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          effort: "xhigh",
+        },
+      },
+      baseContext,
+    );
+
+    expect(output.effort).toBe("xhigh");
+    expect(fixture.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "claude-opus-4-1",
+        effort: "xhigh",
+      }),
+    );
+  });
+
   test("reuses backend sessions for local execution", async () => {
     const fixture = makeClaudeRunnerFixture({
       sessionId: "backend-claude-1",

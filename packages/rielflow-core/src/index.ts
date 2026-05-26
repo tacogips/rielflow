@@ -4,6 +4,7 @@ export type * from "./workflow-model";
 export {
   CLI_AGENT_BACKENDS,
   isCliAgentBackend,
+  NODE_REASONING_EFFORTS,
   NODE_EXECUTION_BACKEND,
   NODE_EXECUTION_BACKENDS,
   NODE_EXECUTION_BACKEND_LIST_TEXT,

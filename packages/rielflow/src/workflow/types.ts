@@ -10,6 +10,14 @@ export type NodeExecutionBackend =
   | "official/openai-sdk"
   | "official/anthropic-sdk";
 
+export const NODE_REASONING_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+export type NodeReasoningEffort = (typeof NODE_REASONING_EFFORTS)[number];
+
 export type NodeKind =
   | "task"
   | "branch-judge"
@@ -786,6 +794,7 @@ export interface NodePayload {
   readonly workingDirectory?: string;
   readonly model?: string;
   readonly executionBackend?: NodeExecutionBackend;
+  readonly effort?: NodeReasoningEffort;
   readonly sessionPolicy?: NodeSessionPolicy;
   readonly systemPromptTemplate?: string;
   readonly systemPromptTemplateFile?: string;
@@ -848,7 +857,7 @@ export interface ValidationIssue {
 export interface WorkflowNodePatch {
   readonly executionBackend?: NodeExecutionBackend;
   readonly model?: string;
-  readonly effort?: string;
+  readonly effort?: NodeReasoningEffort;
 }
 
 export type WorkflowNodePatchMap = Readonly<Record<string, WorkflowNodePatch>>;

@@ -396,6 +396,11 @@ step id, so every step that references the node sees the same invocation-local
 settings. Patch values may contain only `executionBackend`, `model`, and
 `effort`; unsupported effort values and invalid backend/model combinations fail
 validation against the patched workflow state.
+For local agent nodes, authored or patched `effort` values of `low`, `medium`,
+`high`, or `xhigh` are passed through using the selected backend's concrete
+control: Codex receives `model_reasoning_effort` config overrides, Claude Code
+receives the native `--effort` option, and Cursor receives SDK-owned model-id
+effort selection. The effective effort is reported in runtime output artifacts.
 
 Run with a deterministic mock scenario:
 

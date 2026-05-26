@@ -7,6 +7,7 @@ import {
 } from "./backend";
 import { err, ok, type Result } from "./result";
 import type {
+  NodeReasoningEffort,
   NodePayload,
   NormalizedWorkflowBundle,
   ValidationIssue,
@@ -15,12 +16,16 @@ import type {
   WorkflowNodePatchMap,
   WorkflowNodeRegistryRef,
 } from "./types";
+import { NODE_REASONING_EFFORTS } from "./types";
 
 export type { WorkflowNodePatch, WorkflowNodePatchMap } from "./types";
 
 const ALLOWED_PATCH_FIELDS = ["executionBackend", "model", "effort"] as const;
 const ALLOWED_PATCH_FIELD_SET: ReadonlySet<string> = new Set(
   ALLOWED_PATCH_FIELDS,
+);
+const NODE_REASONING_EFFORT_SET: ReadonlySet<string> = new Set(
+  NODE_REASONING_EFFORTS,
 );
 
 export interface ParseWorkflowNodePatchInput {
@@ -220,7 +225,17 @@ export function normalizeWorkflowNodePatchMap(
           makeIssue(`${nodePath}.effort`, "must be a non-empty string"),
         );
       } else {
-        Object.assign(normalizedPatch, { effort: effortRaw });
+        const effort = normalizeReasoningEffort(effortRaw);
+        if (effort === undefined) {
+          issues.push(
+            makeIssue(
+              `${nodePath}.effort`,
+              `must be one of ${NODE_REASONING_EFFORTS.join(", ")}`,
+            ),
+          );
+        } else {
+          Object.assign(normalizedPatch, { effort });
+        }
       }
     }
 
@@ -278,6 +293,22 @@ function unsupportedEffortIssue(input: {
     input.backend === undefined
       ? "is not supported because the selected backend does not expose a concrete effort capability"
       : `is not supported for executionBackend '${input.backend}' until that backend exposes a concrete effort capability`,
+  );
+}
+
+function normalizeReasoningEffort(
+  value: string,
+): NodeReasoningEffort | undefined {
+  return NODE_REASONING_EFFORT_SET.has(value)
+    ? (value as NodeReasoningEffort)
+    : undefined;
+}
+
+function supportsReasoningEffort(backend: string | undefined): boolean {
+  return (
+    backend === "codex-agent" ||
+    backend === "claude-code-agent" ||
+    backend === "cursor-cli-agent"
   );
 }
 
@@ -341,6 +372,7 @@ export function applyWorkflowNodePatchToRawPayloads(
         ? {}
         : { executionBackend: patch.executionBackend }),
       ...(patch.model === undefined ? {} : { model: patch.model }),
+      ...(patch.effort === undefined ? {} : { effort: patch.effort }),
     };
     patchedPayloads[node.nodeFile] = patchedPayload;
     patchedPayloads[nodeId] = patchedPayload;
@@ -354,7 +386,9 @@ export function applyWorkflowNodePatchToRawPayloads(
         (typeof payload["executionBackend"] === "string"
           ? payload["executionBackend"]
           : undefined);
-      issues.push(unsupportedEffortIssue({ nodeId, backend }));
+      if (!supportsReasoningEffort(backend)) {
+        issues.push(unsupportedEffortIssue({ nodeId, backend }));
+      }
     }
   }
 
@@ -425,6 +459,7 @@ export function applyWorkflowNodePatch(
         ? {}
         : { executionBackend: patch.executionBackend }),
       ...(patch.model === undefined ? {} : { model: patch.model }),
+      ...(patch.effort === undefined ? {} : { effort: patch.effort }),
     };
     patchedPayloads[nodeId] = patchedPayload;
     if (node.nodeFile !== undefined) {
@@ -435,12 +470,15 @@ export function applyWorkflowNodePatch(
     }
 
     if (patch.effort !== undefined) {
-      issues.push(
-        unsupportedEffortIssue({
-          nodeId,
-          backend: patch.executionBackend ?? payload.executionBackend,
-        }),
-      );
+      const backend = patch.executionBackend ?? payload.executionBackend;
+      if (!supportsReasoningEffort(backend)) {
+        issues.push(
+          unsupportedEffortIssue({
+            nodeId,
+            backend,
+          }),
+        );
+      }
     }
   }
 

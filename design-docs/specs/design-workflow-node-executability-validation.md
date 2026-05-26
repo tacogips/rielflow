@@ -219,9 +219,9 @@ Backend capability matrix:
 
 | Backend | Authentication | Model reachability | Plan executability | Valid mode | Valid effort |
 | ------- | -------------- | ------------------ | ------------------ | ---------- | ------------ |
-| `codex-agent` | Active preflight uses `codex login status` through `<codex-agent-checkout>/src/sdk/model-availability.ts`; unauthenticated is `invalid`. | Active preflight uses `codex-agent model check --model <model> --json` or the SDK `checkCodexModelAvailability`; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate Codex process options against `<codex-agent-checkout>/src/process/types.ts`: sandbox `full`, `network-only`, `none`; approval mode `always`, `unless-allow-listed`, `never`, `on-failure`; stream granularity `event`, `char`. Unsupported authored values are `invalid`. | The inspected Codex reference exposes no reasoning-effort option on `CodexProcessOptions`. With no authored effort, return `valid` and `not applicable`; any authored Codex effort is `invalid` until a concrete Codex reference field exists. |
-| `claude-code-agent` | Active preflight uses `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `<claude-code-agent-checkout>/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | The inspected Claude reference exposes budget and turn limits but no reasoning-effort enum. With no authored effort, return `valid` and `not applicable`; any authored Claude effort is `invalid` until a concrete Claude reference field exists. |
-| `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | The inspected Cursor reference exposes no effort enum. With no authored effort, return `valid` and `not applicable`; any authored Cursor effort is `invalid` until a concrete Cursor reference field exists. |
+| `codex-agent` | Active preflight uses `codex login status` through `<codex-agent-checkout>/src/sdk/model-availability.ts`; unauthenticated is `invalid`. | Active preflight uses `codex-agent model check --model <model> --json` or the SDK `checkCodexModelAvailability`; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate Codex process options against `<codex-agent-checkout>/src/process/types.ts`: sandbox `full`, `network-only`, `none`; approval mode `always`, `unless-allow-listed`, `never`, `on-failure`; stream granularity `event`, `char`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `codex-agent` and map to Codex `model_reasoning_effort` config overrides. |
+| `claude-code-agent` | Active preflight uses `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `<claude-code-agent-checkout>/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `claude-code-agent` and map to Claude Code `--effort`. |
+| `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `cursor-cli-agent` and map through the Cursor SDK's model-id effort selection. |
 
 Rielflow implementation boundary:
 
@@ -245,9 +245,9 @@ Cursor CLI validation intentionally diverges from Codex validation:
   `default`, `plan`, and `ask` modes.
 - Cursor model reachability is optional and only active under executable
   preflight; passive validation reports `unknown`.
-- Cursor effort validation is `not applicable` when no effort is authored and
-  `invalid` for authored or patched effort until the Cursor reference exposes a
-  concrete effort field.
+- Cursor effort validation is `valid` for authored or patched `low`, `medium`,
+  `high`, and `xhigh` values because the dependency-owned SDK maps the common
+  field to Cursor model-id effort selection.
 - A node patch may switch an agent node from `codex-agent` to
   `cursor-cli-agent` by setting `executionBackend` and `model`; after the patch,
   Cursor validation is authoritative for that node and Codex-specific process
@@ -296,18 +296,20 @@ Implementation should cover:
   `--executable`
 - `--executable` returns invalid node results for missing backend tools
 - codex-agent active preflight reports missing auth or unreachable model
-- codex-agent reports plan and effort as `not applicable` when unauthored and
-  rejects authored unsupported plan or effort fields
+- codex-agent reports plan as `not applicable` when unauthored, accepts valid
+  authored or patched effort fields, and rejects unsupported plan or effort
+  values
 - claude-code-agent active preflight reports missing or expired credentials
 - claude-code-agent validates `PermissionMode` values, treats `plan` as the
   supported static plan mode, and reports live plan reachability as `unknown`
   when no bounded proof command exists
-- claude-code-agent reports effort as `not applicable` when unauthored and
-  rejects authored unsupported effort fields
+- claude-code-agent accepts valid authored or patched effort fields and passes
+  them to the SDK-owned Claude Code `--effort` mapping
 - cursor-cli-agent active preflight validates mode and reports auth as unknown
   when no stable auth signal exists
-- cursor-cli-agent validates `default`, `plan`, and `ask`, reports effort as
-  `not applicable` when unauthored, and rejects authored unsupported effort
+- cursor-cli-agent validates `default`, `plan`, and `ask`, accepts valid
+  authored or patched effort fields, and relies on dependency-owned model-id
+  effort mapping
   fields
 - add-on `validate` hooks contribute node results exactly once
 - local manifest add-ons remain schema-only and do not execute code

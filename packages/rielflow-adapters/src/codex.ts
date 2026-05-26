@@ -45,6 +45,7 @@ interface CodexSessionConfig {
   readonly fullAuto?: boolean;
   readonly model?: string;
   readonly additionalArgs?: readonly string[];
+  readonly configOverrides?: readonly string[];
   readonly images?: readonly string[];
   readonly streamGranularity?: "event" | "char";
 }
@@ -109,6 +110,14 @@ export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly createRunner?: CodexRunnerFactory;
 }
 
+function buildCodexReasoningEffortOverride(
+  effort: string | undefined,
+): string | undefined {
+  return effort === undefined
+    ? undefined
+    : `model_reasoning_effort="${effort}"`;
+}
+
 const importUnknownModule = new Function(
   "specifier",
   "return import(specifier);",
@@ -144,6 +153,9 @@ function resolveLocalSessionConfig(
   readonly sessionConfig: CodexSessionConfig;
 } {
   const promptText = buildCombinedPromptText(input);
+  const reasoningEffortOverride = buildCodexReasoningEffortOverride(
+    input.node.effort,
+  );
   return {
     promptText,
     sessionConfig: {
@@ -158,6 +170,9 @@ function resolveLocalSessionConfig(
       ...(config.additionalArgs === undefined
         ? {}
         : { additionalArgs: config.additionalArgs }),
+      ...(reasoningEffortOverride === undefined
+        ? {}
+        : { configOverrides: [reasoningEffortOverride] }),
       streamGranularity: "event",
     },
   };
@@ -183,6 +198,9 @@ function buildResumeSessionOptions(
     ...(sessionConfig.additionalArgs === undefined
       ? {}
       : { additionalArgs: sessionConfig.additionalArgs }),
+    ...(sessionConfig.configOverrides === undefined
+      ? {}
+      : { configOverrides: sessionConfig.configOverrides }),
     ...(sessionConfig.images === undefined
       ? {}
       : { images: sessionConfig.images }),
