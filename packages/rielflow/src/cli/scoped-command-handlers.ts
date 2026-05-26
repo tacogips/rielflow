@@ -97,13 +97,13 @@ export async function runCliGraphqlScope(
 
   const endpoint =
     parsed.options.endpoint ??
-    env["DIVEDRA_GRAPHQL_ENDPOINT"] ??
+    env["RIEL_GRAPHQL_ENDPOINT"] ??
     DEFAULT_GRAPHQL_ENDPOINT;
   const authTokenEnvName =
-    parsed.options.authTokenEnv ?? "DIVEDRA_MANAGER_AUTH_TOKEN";
+    parsed.options.authTokenEnv ?? "RIEL_MANAGER_AUTH_TOKEN";
   const authToken =
     parsed.options.authToken ?? env[authTokenEnvName] ?? undefined;
-  const ambientManagerSessionId = env["DIVEDRA_MANAGER_SESSION_ID"];
+  const ambientManagerSessionId = env["RIEL_MANAGER_SESSION_ID"];
   const managerSessionId =
     typeof ambientManagerSessionId === "string" &&
     ambientManagerSessionId.length > 0
@@ -257,7 +257,7 @@ export async function runCliEventsScope(
 
   const eventsReadOnly =
     parsed.options.readOnly ||
-    parseEnvBooleanFlag(env["DIVEDRA_EVENTS_READ_ONLY"]);
+    parseEnvBooleanFlag(env["RIEL_EVENTS_READ_ONLY"]);
   let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
   if (parsed.options.mockScenarioPath !== undefined) {
     if (parsed.options.endpoint !== undefined) {
@@ -702,7 +702,7 @@ export async function runCliServeScope(
   const serveWorkflowName = command;
   try {
     const manifestPath =
-      parsed.options.workflowManifestPath ?? env["DIVEDRA_WORKFLOW_MANIFEST"];
+      parsed.options.workflowManifestPath ?? env["RIEL_WORKFLOW_MANIFEST"];
     if (
       manifestPath !== undefined &&
       manifestPath.length > 0 &&

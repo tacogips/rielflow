@@ -757,7 +757,7 @@ The scoped model defines:
 - log root: `<scope-root>/logs`
 
 Project scope is searched before user scope for bare workflow names, while
-`--workflow-definition-dir` and `DIVEDRA_WORKFLOW_DEFINITION_DIR` remain direct workflow-definition-dir
+`--workflow-definition-dir` and `RIEL_WORKFLOW_DEFINITION_DIR` remain direct workflow-definition-dir
 overrides for examples and automation. Scope resolution is implemented in
 `packages/rielflow/src/workflow/catalog.ts`.
 
@@ -852,7 +852,7 @@ When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
 artifact and/or session-store roots, they infer `rootDataDir` from those
 explicit storage roots when possible so `rielflow.db` stays co-located with the
 selected runtime tree instead of drifting to an ambient default. An explicit
-`DIVEDRA_ARTIFACT_DIR` remains the canonical root data directory override and is
+`RIEL_ARTIFACT_DIR` remains the canonical root data directory override and is
 not replaced by scoped defaults.
 
 ### LLM Session Message Inspection Boundary

@@ -960,7 +960,7 @@ export const DEFAULT_NODE_TIMEOUT_MS = 60 * 60 * 1000;
 export const DEFAULT_CONTAINER_RUNNER_KIND: ContainerRunnerKind = "docker";
 export const DEFAULT_WORKFLOW_ROOT = "./.rielflow";
 
-/** Subdirectories inside the root data directory (`DIVEDRA_ARTIFACT_DIR` / computed default). */
+/** Subdirectories inside the root data directory (`RIEL_ARTIFACT_DIR` / computed default). */
 export const ROOT_DATA_WORKFLOW_SUBDIR = "workflow";
 export const ROOT_DATA_SESSIONS_SUBDIR = "sessions";
 export const ROOT_DATA_FILES_SUBDIR = "files";

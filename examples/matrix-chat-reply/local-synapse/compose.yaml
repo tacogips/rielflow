@@ -8,9 +8,9 @@ services:
       SYNAPSE_SERVER_NAME: localhost
       SYNAPSE_REPORT_STATS: "no"
     ports:
-      - "${DIVEDRA_MATRIX_SAMPLE_PORT:-18008}:8008"
+      - "${RIEL_MATRIX_SAMPLE_PORT:-18008}:8008"
     volumes:
-      - "${DIVEDRA_MATRIX_SAMPLE_DATA_DIR:-./data}:/data"
+      - "${RIEL_MATRIX_SAMPLE_DATA_DIR:-./data}:/data"
     healthcheck:
       test: ["CMD", "curl", "-fSs", "http://localhost:8008/health"]
       interval: 5s

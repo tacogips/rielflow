@@ -59,7 +59,7 @@ task homebrew:tap-formula -- <version>
 
 For any other tap repository, run the render command from this repository and
 write the generated formula into the tap's `Formula/rielflow.rb`.
-Override `DIVEDRA_RELEASE_BASE_URL` when the archives are hosted somewhere
+Override `RIEL_RELEASE_BASE_URL` when the archives are hosted somewhere
 other than `https://github.com/tacogips/rielflow/releases/download/v<version>`.
 
 Commit and push the tap change:
@@ -84,7 +84,7 @@ uses the local archive directory as its URL base:
 ```bash
 brew tap-new local/rielflow-test
 tap_root="$(brew --repository local/rielflow-test)"
-DIVEDRA_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
+RIEL_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
   scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/rielflow.rb"
 brew install local/rielflow-test/rielflow
 brew test local/rielflow-test/rielflow

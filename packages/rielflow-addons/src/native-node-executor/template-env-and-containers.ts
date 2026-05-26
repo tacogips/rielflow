@@ -103,11 +103,11 @@ export function buildRielflowExecutionEnv(
   input: RielflowExecutionEnvInput,
 ): Readonly<Record<string, string>> {
   return {
-    DIVEDRA_MAILBOX_DIR: input.mailboxDir,
-    DIVEDRA_WORKFLOW_ID: input.workflowId,
-    DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
-    DIVEDRA_NODE_ID: input.nodeId,
-    DIVEDRA_NODE_EXEC_ID: input.nodeExecId,
+    RIEL_MAILBOX_DIR: input.mailboxDir,
+    RIEL_WORKFLOW_ID: input.workflowId,
+    RIEL_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
+    RIEL_NODE_ID: input.nodeId,
+    RIEL_NODE_EXEC_ID: input.nodeExecId,
   };
 }
 export function buildCommandEnv(

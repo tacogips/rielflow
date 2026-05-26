@@ -20,9 +20,9 @@ export function resolveSelfImproveLogRoot(
   const env = options.env ?? process.env;
   const configured =
     options.selfImproveLogRoot ??
-    env["DIVEDRA_SELF_IMPROVE_LOG_ROOT"] ??
+    env["RIEL_SELF_IMPROVE_LOG_ROOT"] ??
     path.join(
-      options.userRoot ?? env["DIVEDRA_USER_ROOT"] ?? "~/.rielflow",
+      options.userRoot ?? env["RIEL_USER_ROOT"] ?? "~/.rielflow",
       "self-improve-log",
     );
   const expanded = expandLeadingHome(configured);

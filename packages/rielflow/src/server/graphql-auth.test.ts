@@ -234,12 +234,12 @@ describe("GraphQL HTTP transport", () => {
       {
         ...options,
         env: {
-          DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-          DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
-          DIVEDRA_WORKFLOW_ID: "demo",
-          DIVEDRA_WORKFLOW_EXECUTION_ID: session.sessionId,
-          DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-          DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+          RIEL_MANAGER_AUTH_TOKEN: "secret",
+          RIEL_MANAGER_SESSION_ID: "mgrsess-000001",
+          RIEL_WORKFLOW_ID: "demo",
+          RIEL_WORKFLOW_EXECUTION_ID: session.sessionId,
+          RIEL_MANAGER_STEP_ID: "rielflow-manager",
+          RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
         },
       },
     );

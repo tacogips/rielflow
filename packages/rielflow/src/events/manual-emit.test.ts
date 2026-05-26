@@ -200,8 +200,8 @@ describe("manual event emit", () => {
     await writeJson(path.join(eventRoot, "sources", "team-matrix.json"), {
       id: "team-matrix",
       kind: "matrix",
-      homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-      accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+      homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+      accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
       userId: "@rielflow:matrix.example",
       rooms: [{ roomId: "!release:matrix.example" }],
     });
@@ -238,8 +238,8 @@ describe("manual event emit", () => {
       rootDataDir,
       endpoint: "http://example.test/graphql",
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "secret-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
       },
       fetchImpl,
       cwd: root,
@@ -277,7 +277,7 @@ describe("manual event emit", () => {
       provider: "slack",
       webhook: {
         path: "chat-sdk/team-slack",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "bindings", "team-slack.json"), {

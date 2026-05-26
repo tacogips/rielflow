@@ -373,8 +373,8 @@ describe("callStepExecution", () => {
       [
         "#!/bin/sh",
         'echo "call-step command stdout"',
-        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },

@@ -139,7 +139,7 @@ function resolveEventListenerPort(input: {
   readonly optionPort?: number;
   readonly env: Readonly<Record<string, string | undefined>>;
 }): number {
-  const envPort = input.env["DIVEDRA_EVENTS_PORT"];
+  const envPort = input.env["RIEL_EVENTS_PORT"];
   return parseEventListenerPort(
     input.optionPort ??
       (envPort === undefined || envPort.length === 0 ? 43_174 : envPort),
@@ -425,7 +425,7 @@ export function createEventListenerService(
           }
         }
 
-        const host = options.host ?? env["DIVEDRA_EVENTS_HOST"] ?? "127.0.0.1";
+        const host = options.host ?? env["RIEL_EVENTS_HOST"] ?? "127.0.0.1";
         const port = resolveEventListenerPort({
           ...(options.port === undefined ? {} : { optionPort: options.port }),
           env,

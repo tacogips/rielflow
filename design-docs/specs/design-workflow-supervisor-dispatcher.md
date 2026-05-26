@@ -453,7 +453,7 @@ Relationship to existing `event_supervised_runs`:
 Recommended artifact layout:
 
 ```text
-{DIVEDRA_ARTIFACT_DIR}/supervisors/{supervisorConversationId}/
+{RIEL_ARTIFACT_DIR}/supervisors/{supervisorConversationId}/
   conversation.json
   decisions/{eventId-or-commandId}.json
   managed-runs/{managedRunId}.json

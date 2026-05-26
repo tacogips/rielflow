@@ -174,7 +174,7 @@ manifest:
 bun run packages/rielflow/src/bin.ts serve --workflow-manifest ./workflow-manifest.json
 ```
 
-`DIVEDRA_WORKFLOW_MANIFEST` is the environment fallback when
+`RIEL_WORKFLOW_MANIFEST` is the environment fallback when
 `--workflow-manifest` is omitted. A manifest-backed server exposes only enabled
 manifest entries through the browser overview, GraphQL catalog, and
 server-backed start paths. `serve [workflow-name]` narrows by manifest `id`.
@@ -187,7 +187,7 @@ Manifest version `1` uses `workflows[]` entries with stable `id`, optional
 optional `cwd.absolute` or `cwd.relative`, optional `autoImprove.mode`
 (`active` or `disabled`), `defaultVariables`, and display `metadata`. Relative
 paths resolve from the current directory by default. Set
-`DIVEDRA_WORKFLOW_MANIFEST_ROOT` to make relative manifest paths resolve from a
+`RIEL_WORKFLOW_MANIFEST_ROOT` to make relative manifest paths resolve from a
 specific root instead. Each path object must use exactly one of `absolute` or
 `relative`. Validate a manifest and every referenced workflow bundle with:
 
@@ -196,7 +196,7 @@ bun run packages/rielflow/src/bin.ts workflow manifest validate ./workflow-manif
 ```
 
 The manifest path can also come from `--workflow-manifest` or
-`DIVEDRA_WORKFLOW_MANIFEST`. Add `--executable` to include active node
+`RIEL_WORKFLOW_MANIFEST`. Add `--executable` to include active node
 executability preflight. Manifest `defaultVariables` are merged before request
 variables so the request wins. `autoImprove.mode: "disabled"` keeps
 deterministic lifecycle supervision while disabling workflow patching.
@@ -251,8 +251,8 @@ at a recognized scoped catalog such as `<project>/.rielflow/workflows`,
 workflow overview commands infer that project-scoped runtime data root so the
 reported `sessionId` can be passed directly to `session status`,
 `session progress`, and `session step-runs`. Explicit storage overrides such as
-`--session-store`, `--artifact-root`, `DIVEDRA_SESSION_STORE`, and
-`DIVEDRA_ARTIFACT_ROOT` still take precedence.
+`--session-store`, `--artifact-root`, `RIEL_SESSION_STORE`, and
+`RIEL_ARTIFACT_ROOT` still take precedence.
 
 Derived runtime database rows, cached summaries, and session-index entries are
 secondary overview inputs. If a `running` or `paused` candidate cannot be loaded
@@ -450,9 +450,9 @@ Workflow defaults live under `workflow.defaults.selfImprove` with `enabled`,
 `mode`, and `defaultLogLimit`. Source selection defaults to runs since the last
 successful self-improve marker, or the latest configured limit when no marker
 exists. Use `--since-last`, `--latest`, or repeated `--session <session-id>` to
-choose the source runs explicitly. `DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT` changes
+choose the source runs explicitly. `RIEL_SELF_IMPROVE_DEFAULT_LIMIT` changes
 the global fallback, `--limit` overrides it for one call, and
-`DIVEDRA_SELF_IMPROVE_LOG_ROOT` can move the report store from the default
+`RIEL_SELF_IMPROVE_LOG_ROOT` can move the report store from the default
 `~/.rielflow/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
 Disabled workflows reject self-improve unless the caller passes
 `--enable-disabled`. Public CLI, GraphQL, and library inputs are validated
@@ -588,7 +588,7 @@ bun run packages/rielflow/src/bin.ts graphql '
 
 Without `--endpoint`, `graphql` executes against the local in-process GraphQL
 schema using project-scoped workflow/session storage. Use `--endpoint` or
-`DIVEDRA_GRAPHQL_ENDPOINT` to send the same document to a remote server.
+`RIEL_GRAPHQL_ENDPOINT` to send the same document to a remote server.
 
 Run a workflow through a remote endpoint:
 
@@ -663,12 +663,12 @@ Inspect reply dispatch records for a workflow execution:
 bun run packages/rielflow/src/bin.ts events replies <workflow-execution-id>
 ```
 
-Set `DIVEDRA_EVENTS_READ_ONLY=true` or pass `--read-only` to validate and
+Set `RIEL_EVENTS_READ_ONLY=true` or pass `--read-only` to validate and
 persist event receipts without dispatching workflow execution.
 
 Element/Matrix chat sources use `kind: "matrix"` and read credentials from env
-var names in source config, for example `DIVEDRA_MATRIX_HOMESERVER_URL` and
-`DIVEDRA_MATRIX_ACCESS_TOKEN`. Matrix receive normalizes text-like
+var names in source config, for example `RIEL_MATRIX_HOMESERVER_URL` and
+`RIEL_MATRIX_ACCESS_TOKEN`. Matrix receive normalizes text-like
 `m.room.message` events to `chat.message`; chat replies send through the Matrix
 Client-Server room send API with the reply idempotency key as the transaction
 id. The first slice excludes encrypted rooms, attachments, reactions, edits,
@@ -868,33 +868,52 @@ retry, manager-message, and mailbox delivery paths use this same artifact shape,
 so operators can inspect one communication id consistently across normal
 delivery and manual rerun flows.
 
-Relocate storage with the retained compatibility environment variables:
+Relocate storage with the runtime environment variables:
 
-- `DIVEDRA_ARTIFACT_DIR`
-- `DIVEDRA_ARTIFACT_ROOT`
-- `DIVEDRA_SESSION_STORE`
-- `DIVEDRA_ATTACHMENT_ROOT`
-- `DIVEDRA_RUNTIME_DB`
+- `RIEL_ARTIFACT_DIR`
+- `RIEL_ARTIFACT_ROOT`
+- `RIEL_SESSION_STORE`
+- `RIEL_ATTACHMENT_ROOT`
+- `RIEL_RUNTIME_DB`
 
-Workflow and server environment variables are also retained under the
-`DIVEDRA_*` names for existing scripts, workflow bundles, and runtime records:
+Workflow and server environment variables use the `RIEL_*` prefix:
 
-- `DIVEDRA_WORKFLOW_DEFINITION_DIR`
-- `DIVEDRA_WORKFLOW_MANIFEST`
-- `DIVEDRA_WORKFLOW_MANIFEST_ROOT`
-- `DIVEDRA_WORKFLOW_SCOPE`
-- `DIVEDRA_USER_ROOT`
-- `DIVEDRA_PROJECT_ROOT`
-- `DIVEDRA_ADDON_ROOT`
-- `DIVEDRA_SERVE_HOST`
-- `DIVEDRA_SERVE_PORT`
-- `DIVEDRA_GRAPHQL_ENDPOINT`
-- `DIVEDRA_MANAGER_AUTH_TOKEN`
-- `DIVEDRA_MANAGER_SESSION_ID`
-- `DIVEDRA_EVENT_ROOT`
-- `DIVEDRA_EVENTS_READ_ONLY`
-- `DIVEDRA_MATRIX_HOMESERVER_URL`
-- `DIVEDRA_MATRIX_ACCESS_TOKEN`
+- `RIEL_WORKFLOW_DEFINITION_DIR`
+- `RIEL_WORKFLOW_MANIFEST`
+- `RIEL_WORKFLOW_MANIFEST_ROOT`
+- `RIEL_WORKFLOW_SCOPE`
+- `RIEL_USER_ROOT`
+- `RIEL_PROJECT_ROOT`
+- `RIEL_ADDON_ROOT`
+- `RIEL_SERVE_HOST`
+- `RIEL_SERVE_PORT`
+- `RIEL_GRAPHQL_ENDPOINT`
+- `RIEL_MANAGER_AUTH_TOKEN`
+- `RIEL_MANAGER_SESSION_ID`
+- `RIEL_MANAGER_STEP_ID`
+- `RIEL_MANAGER_NODE_EXEC_ID`
+- `RIEL_EVENT_ROOT`
+- `RIEL_EVENTS_HOST`
+- `RIEL_EVENTS_PORT`
+- `RIEL_EVENTS_READ_ONLY`
+- `RIEL_MAILBOX_DIR`
+- `RIEL_WORKFLOW_ID`
+- `RIEL_WORKFLOW_EXECUTION_ID`
+- `RIEL_NODE_ID`
+- `RIEL_NODE_EXEC_ID`
+- `RIEL_AGENT_BACKEND`
+- `RIEL_HOOK_RECORDING`
+- `RIEL_HOOK_STRICT`
+- `RIEL_HOOK_CAPTURE_RAW`
+- `RIEL_LLM_STALL_CHECK_INTERVAL_MS`
+- `RIEL_LLM_STALL_NUDGE_MAX_ATTEMPTS`
+- `RIEL_LLM_STALL_NUDGE_PROMPT`
+- `RIEL_MATRIX_HOMESERVER_URL`
+- `RIEL_MATRIX_ACCESS_TOKEN`
+
+Example event-source bundles also use `RIEL_*` names for provider-specific
+credentials such as `RIEL_EXAMPLE_REPLY_ENDPOINT`,
+`RIEL_CHAT_SDK_SLACK_*`, and `RIEL_CHAT_SDK_DISCORD_*`.
 
 ## Example Workflows
 

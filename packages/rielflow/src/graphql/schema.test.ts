@@ -2842,11 +2842,11 @@ describe("createGraphqlSchema", () => {
         {
           cwd: root,
           env: {
-            DIVEDRA_WORKFLOW_SCOPE: "global",
+            RIEL_WORKFLOW_SCOPE: "global",
           },
         },
       ),
-    ).rejects.toThrow("DIVEDRA_WORKFLOW_SCOPE");
+    ).rejects.toThrow("RIEL_WORKFLOW_SCOPE");
   });
 
   test("passes third-party add-on resolvers through GraphQL validation", async () => {

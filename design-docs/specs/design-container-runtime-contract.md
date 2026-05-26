@@ -111,15 +111,15 @@ or:
 - container workers must not read canonical cross-node communication directories
   directly
 - instead, the runtime exposes a node-local execution mailbox root, typically at
-  `/mailbox`, and sets `DIVEDRA_MAILBOX_DIR` to that mount path
+  `/mailbox`, and sets `RIEL_MAILBOX_DIR` to that mount path
 - worker-facing metadata under that mailbox root must use relative paths such as
   `inbox/input.json` and `outbox/output.json`, not host absolute paths
 - managers remain the only components that create or route canonical mailbox
   artifacts
 - file inputs for `container` nodes use no extra mount mechanism; worker-visible
-  file refs must resolve under `inbox/files/` relative to `DIVEDRA_MAILBOX_DIR`
+  file refs must resolve under `inbox/files/` relative to `RIEL_MAILBOX_DIR`
 - staged output for a container node must be written under `outbox/` relative to
-  `DIVEDRA_MAILBOX_DIR`;
+  `RIEL_MAILBOX_DIR`;
   only the runtime may promote that staged output into canonical execution
   artifacts or downstream routed messages
 - `durability.mode = "node-persistent"` mounts a writable host-backed durable
@@ -131,9 +131,9 @@ or:
 - `stdout` and `stderr` are captured as logs only
 - container process environment is explicit:
   - the container receives rendered `container.envTemplate` values
-  - the runtime injects `DIVEDRA_MAILBOX_DIR`, `DIVEDRA_WORKFLOW_ID`,
-    `DIVEDRA_WORKFLOW_EXECUTION_ID`, `DIVEDRA_NODE_ID`, and
-    `DIVEDRA_NODE_EXEC_ID`
+  - the runtime injects `RIEL_MAILBOX_DIR`, `RIEL_WORKFLOW_ID`,
+    `RIEL_WORKFLOW_EXECUTION_ID`, `RIEL_NODE_ID`, and
+    `RIEL_NODE_EXEC_ID`
   - ambient host environment variables are available to the runner process
     itself, but are not forwarded into the container unless the workflow
     author explicitly maps them through `envTemplate`
@@ -180,7 +180,7 @@ That layer is responsible for:
 - resolving the runner binary from `runnerKind` and optional `runnerPath`
 - preparing execution-local bind mounts, including `/mailbox/inbox` and
   `/mailbox/outbox`
-- preparing `DIVEDRA_MAILBOX_DIR` for the container process
+- preparing `RIEL_MAILBOX_DIR` for the container process
 - preparing optional scratch workspace mounts such as `/workspace`
 - preparing optional durable mounts such as `/durable` backed by
   `{artifact-root}/{workflow_id}/durable/{node_id}/`

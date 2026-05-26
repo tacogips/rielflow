@@ -203,8 +203,8 @@ Every branch worker execution, including local fanout branches and join steps, m
 
 - root artifact `input.json` remains the runtime audit record for the node execution
 - `mailbox/inbox/input.json` is the worker-facing resolved input and must contain the same business input shape needed by prompts, commands, and containers
-- `mailbox/inbox/meta.json` declares `mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR"` and mailbox-root-relative paths such as `inbox/input.json` and `outbox/output.json`
-- prompt guidance for LLM workers must tell the worker where `mailbox/inbox/input.json` is and that `DIVEDRA_MAILBOX_DIR` points at the mailbox root
+- `mailbox/inbox/meta.json` declares `mailboxDirEnvVar: "RIEL_MAILBOX_DIR"` and mailbox-root-relative paths such as `inbox/input.json` and `outbox/output.json`
+- prompt guidance for LLM workers must tell the worker where `mailbox/inbox/input.json` is and that `RIEL_MAILBOX_DIR` points at the mailbox root
 - workers must not write canonical mailbox files or final `output.json`; final output publication and downstream mailbox delivery remain runtime-owned
 
 ## Cross-Workflow Dispatch

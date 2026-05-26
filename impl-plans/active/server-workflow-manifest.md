@@ -23,7 +23,7 @@ manifest validation CLI changes against the accepted design.
 ### Scope
 
 **Included**: manifest JSON schema and loader, absolute/relative path
-resolution from the current directory with `DIVEDRA_WORKFLOW_MANIFEST_ROOT`
+resolution from the current directory with `RIEL_WORKFLOW_MANIFEST_ROOT`
 override support, manifest id identity, enabled filtering, duplicate validation,
 server startup precedence, CLI flag and environment fallback, `workflow manifest
 validate`, GraphQL/catalog allowlist enforcement, request/default variable
@@ -39,7 +39,7 @@ and Cursor-specific readiness behavior.
 Step 3 accepted the current design with one low finding:
 `design-docs/specs/command.md` line 49 uses
 `cli workflow manifest validate <manifest-path>` even though the manifest path
-can also come from `--workflow-manifest` or `DIVEDRA_WORKFLOW_MANIFEST`.
+can also come from `--workflow-manifest` or `RIEL_WORKFLOW_MANIFEST`.
 Implementation may either update the synopsis to
 `cli workflow manifest validate [<manifest-path>]` during the documentation
 refresh step or leave it documented through the following bullets; this is not a
@@ -116,7 +116,7 @@ async function loadWorkflowManifest(
 - [x] Support manifest version `1` only.
 - [x] Enforce exactly one of `absolute` or `relative` for path objects.
 - [x] Resolve relative paths from current directory by default, with
-      `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override support.
+      `RIEL_WORKFLOW_MANIFEST_ROOT` override support.
 - [x] Validate workflow directories by loading or reading `workflow.json`.
 - [x] Reject unsafe or duplicate ids.
 - [x] Reject duplicate enabled workflowDirectory/cwd pairs unless
@@ -191,7 +191,7 @@ interface ServeWorkflowCatalogConfig {
 **Checklist**:
 
 - [x] Parse `--workflow-manifest <path>` for `rielflow serve`.
-- [x] Read `DIVEDRA_WORKFLOW_MANIFEST` as the environment fallback.
+- [x] Read `RIEL_WORKFLOW_MANIFEST` as the environment fallback.
 - [x] Apply precedence: CLI manifest, env manifest, direct definition dir, scoped catalog.
 - [x] Emit a warning when manifest mode ignores `--workflow-definition-dir` for catalog selection.
 - [x] Validate manifest before binding the HTTP listener.
@@ -286,7 +286,7 @@ interface WorkflowCatalogOverviewRow {
 
 - [x] Render manifest rows in browser overview with manifest ids as public workflow names.
 - [x] Extend GraphQL schema text/docs for manifest catalog fields if required by implementation.
-- [x] Document `--workflow-manifest`, `DIVEDRA_WORKFLOW_MANIFEST`, path rules, precedence, and startup validation.
+- [x] Document `--workflow-manifest`, `RIEL_WORKFLOW_MANIFEST`, path rules, precedence, and startup validation.
 - [x] Document reserved `metadata.allowDuplicateSource` behavior.
 - [x] Documentation diff passes whitespace checks.
 
@@ -345,7 +345,7 @@ interface ManifestFixture {
 **Completion Criteria**:
 
 - [x] Manifest version, entry shape, path object, enabled/default values, metadata, and autoImprove mode validation implemented.
-- [x] Path resolution is deterministic and relative paths resolve from the current directory by default, with `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override support.
+- [x] Path resolution is deterministic and relative paths resolve from the current directory by default, with `RIEL_WORKFLOW_MANIFEST_ROOT` override support.
 - [x] Duplicate id/source validation emits actionable errors.
 - [x] `metadata.allowDuplicateSource` is documented in tests as the only reserved operational metadata key.
 
@@ -376,7 +376,7 @@ interface ManifestFixture {
 
 **Completion Criteria**:
 
-- [x] `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST` are accepted for `serve`.
+- [x] `--workflow-manifest` and `RIEL_WORKFLOW_MANIFEST` are accepted for `serve`.
 - [x] Manifest mode is authoritative over `--workflow-definition-dir` with a warning.
 - [x] Startup validates manifest before binding the listener.
 - [x] Server context carries resolved manifest catalog data.
@@ -456,7 +456,7 @@ interface ManifestFixture {
 **Completion Criteria**:
 
 - [x] Confirm manifest `relative` path fields resolve from the process current directory by default, not the manifest file directory.
-- [x] Confirm `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overrides the base directory for both `workflowDirectory.relative` and `cwd.relative`.
+- [x] Confirm `RIEL_WORKFLOW_MANIFEST_ROOT` overrides the base directory for both `workflowDirectory.relative` and `cwd.relative`.
 - [x] Confirm absolute path fields remain absolute and bypass the relative root.
 - [x] Confirm validation diagnostics and JSON output expose the resolved manifest path and effective relative path root without leaking unrelated environment values.
 - [x] Confirm disabled entries are still validated for path and referenced workflow correctness.
@@ -479,7 +479,7 @@ interface ManifestFixture {
 
 **Completion Criteria**:
 
-- [x] Confirm path source precedence is positional argument, `--workflow-manifest`, then `DIVEDRA_WORKFLOW_MANIFEST`.
+- [x] Confirm path source precedence is positional argument, `--workflow-manifest`, then `RIEL_WORKFLOW_MANIFEST`.
 - [x] Confirm missing manifest path is a usage error and malformed/unreadable manifests produce actionable failures.
 - [x] Confirm `workflow manifest validate` validates manifest shape, path resolution, duplicate constraints, disabled entries, and every referenced workflow bundle.
 - [x] Confirm `--executable` extends referenced workflow validation through the same node executability preflight surface as `workflow validate --executable`.
@@ -488,7 +488,7 @@ interface ManifestFixture {
 - [x] Confirm server startup passes the same manifest root semantics into the shared manifest loader as CLI validation.
 - [x] Confirm manifest mode remains authoritative for `serve` while preserving direct/project/user lookup when no manifest is present.
 - [x] Confirm `serve [workflow-name]` continues to narrow only by enabled manifest id in manifest mode.
-- [x] Confirm server and catalog tests cover current-directory root, `DIVEDRA_WORKFLOW_MANIFEST_ROOT`, disabled/unlisted rejection, and no-manifest fallback behavior.
+- [x] Confirm server and catalog tests cover current-directory root, `RIEL_WORKFLOW_MANIFEST_ROOT`, disabled/unlisted rejection, and no-manifest fallback behavior.
 
 ### TASK-010: Documentation, Progress, and Final Verification
 
@@ -502,7 +502,7 @@ interface ManifestFixture {
 
 **Completion Criteria**:
 
-- [x] Keep README aligned with `DIVEDRA_WORKFLOW_MANIFEST_ROOT`, current-directory default relative root, and `workflow manifest validate` usage.
+- [x] Keep README aligned with `RIEL_WORKFLOW_MANIFEST_ROOT`, current-directory default relative root, and `workflow manifest validate` usage.
 - [x] Address the accepted low Step 3 feedback by updating or intentionally retaining the command synopsis with surrounding bullets.
 - [x] Ensure design docs and implementation plan agree on path precedence, validation scope, disabled entry validation, and `--executable` behavior.
 - [x] Record implementation-step progress and verification results in this plan after code review and fixes.
@@ -554,7 +554,7 @@ interface ManifestFixture {
 ## Completion Criteria
 
 - [x] `rielflow serve --workflow-manifest <path>` loads manifest version `1`.
-- [x] `DIVEDRA_WORKFLOW_MANIFEST` works when the flag is absent.
+- [x] `RIEL_WORKFLOW_MANIFEST` works when the flag is absent.
 - [x] Manifest mode exposes only enabled manifest ids in browser and GraphQL catalog surfaces.
 - [x] Direct server-backed starts reject ids outside the enabled manifest allowlist.
 - [x] Manifest entries preserve separate absolute/relative authored fields and deterministic resolved paths.
@@ -566,7 +566,7 @@ interface ManifestFixture {
 - [x] README and schema-facing documentation are updated.
 - [x] Targeted tests, typecheck, and whitespace checks pass.
 - [x] Current review confirms or fixes manifest relative root behavior:
-      current directory by default and `DIVEDRA_WORKFLOW_MANIFEST_ROOT` override.
+      current directory by default and `RIEL_WORKFLOW_MANIFEST_ROOT` override.
 - [x] Current review confirms or fixes `workflow manifest validate` path
       precedence, referenced workflow validation, disabled entry validation,
       JSON/text report fields, and `--executable` behavior.
@@ -627,7 +627,7 @@ TASK-005, and TASK-007.
 **Notes**: Addressed Step 7 mid findings by gating manifest catalog resolution
 behind server contexts, keeping local workflow commands on direct/project/user
 catalog behavior even when `--workflow-manifest` or
-`DIVEDRA_WORKFLOW_MANIFEST` is present, and adding manifest-backed GraphQL and
+`RIEL_WORKFLOW_MANIFEST` is present, and adding manifest-backed GraphQL and
 server startup tests for allowlist catalog rows, disabled/unlisted rejection,
 default variable merge precedence, manifest cwd propagation, and autoImprove
 disabled/request override mapping. Re-ran verification:
@@ -645,7 +645,7 @@ follow-up for TASK-001, TASK-003, and TASK-007.
 **Tasks In Progress**: None.
 **Blockers**: None.
 **Notes**: Changed manifest `relative` path fields to resolve from the current
-directory by default, added `DIVEDRA_WORKFLOW_MANIFEST_ROOT` for explicit
+directory by default, added `RIEL_WORKFLOW_MANIFEST_ROOT` for explicit
 relative-root selection, and added `workflow manifest validate` to validate the
 manifest plus every referenced workflow bundle. Documentation and focused
 manifest/CLI tests were updated for the new behavior. Verification passed:
@@ -685,12 +685,12 @@ commands.
 **Notes**: Reviewed the uncommitted manifest relative-root and
 `workflow manifest validate` implementation against the accepted design and
 plan. Confirmed current-directory default resolution, the
-`DIVEDRA_WORKFLOW_MANIFEST_ROOT` override, disabled-entry validation, ordinary
+`RIEL_WORKFLOW_MANIFEST_ROOT` override, disabled-entry validation, ordinary
 local catalog isolation, manifest-backed serve narrowing, and referenced
 workflow bundle validation. Addressed the accepted low Step 3 documentation
 finding by changing the command synopsis to
 `workflow manifest validate [<manifest-path>]` and aligning CLI help and README
-usage with `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST`. Verification
+usage with `--workflow-manifest` and `RIEL_WORKFLOW_MANIFEST`. Verification
 passed: `bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts packages/rielflow/src/workflow/overview.test.ts`;
 `bun test packages/rielflow/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
 `bun test packages/rielflow/src/server/serve.test.ts -t "manifest|overview"`;

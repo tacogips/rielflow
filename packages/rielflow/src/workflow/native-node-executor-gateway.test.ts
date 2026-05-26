@@ -42,8 +42,8 @@ async function writeReportCwdScript(
     scriptPath,
     [
       "#!/bin/sh",
-      'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-      `printf '{"cwd":"%s"}\n' "$PWD" > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+      `printf '{"cwd":"%s"}\n' "$PWD" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
       "",
     ].join("\n"),
     { encoding: "utf8", mode: 0o755 },
@@ -72,7 +72,7 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",

@@ -398,7 +398,7 @@ interface VerificationCommandSet {
 
 **Tasks Completed**:
 
-- `src/workflow/prompt-composition.ts`: removed the no-op `resolveDefaultManagerSystemPrompt` wrapper (unused workflow/node parameters after structural `rielflow-system-prompt.md` removal); managers always prepend `DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT` directly.
+- `src/workflow/prompt-composition.ts`: removed the no-op `resolveDefaultManagerSystemPrompt` wrapper (unused workflow/node parameters after structural `rielflow-system-prompt.md` removal); managers always prepend `DEFAULT_RIEL_ROLE_SYSTEM_PROMPT` directly.
 - Review Matrix: architecture action column updated (no longer lists structural root/sub scheduler as open work); output-ref row reflects shared `buildOutputRefForExecution(...)` usage; module 4 status set to In Progress with note on README/design alignment already landed on branch.
 
 **Notes / verification**: `bun test` (1105 pass).

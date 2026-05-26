@@ -114,11 +114,11 @@ interface HookCommandDependencies {
 ```typescript
 interface AdapterRielflowHookContext {
   readonly environment: {
-    readonly DIVEDRA_WORKFLOW_ID: string;
-    readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-    readonly DIVEDRA_NODE_ID: string;
-    readonly DIVEDRA_NODE_EXEC_ID: string;
-    readonly DIVEDRA_AGENT_BACKEND: string;
+    readonly RIEL_WORKFLOW_ID: string;
+    readonly RIEL_WORKFLOW_EXECUTION_ID: string;
+    readonly RIEL_NODE_ID: string;
+    readonly RIEL_NODE_EXEC_ID: string;
+    readonly RIEL_AGENT_BACKEND: string;
   };
 }
 ```

@@ -24,9 +24,9 @@ rielflow hook
   +-- extract event name
   +-- resolve rielflow hook context from environment
   |      |
-  |      +-- workflowExecutionId from DIVEDRA_WORKFLOW_EXECUTION_ID
+  |      +-- workflowExecutionId from RIEL_WORKFLOW_EXECUTION_ID
   |      +-- agentSessionId from payload.session_id
-  |      +-- managerSessionId from DIVEDRA_MANAGER_SESSION_ID, when present
+  |      +-- managerSessionId from RIEL_MANAGER_SESSION_ID, when present
   |
   +-- dispatch to handler(vendor, event, payload, rielflowContext)
   |      |
@@ -67,31 +67,31 @@ Rielflow-launched Claude Code, Codex, and Gemini processes must receive a generi
 
 | Variable | Required For Recording | Meaning |
 | -------- | ---------------------- | ------- |
-| `DIVEDRA_WORKFLOW_ID` | Yes | Workflow definition id. |
-| `DIVEDRA_WORKFLOW_EXECUTION_ID` | Yes | Rielflow workflow run id. This is the same identifier used as the persisted workflow session id. |
-| `DIVEDRA_NODE_ID` | Yes | Workflow node currently executing the backend session. |
-| `DIVEDRA_NODE_EXEC_ID` | Yes | Runtime node execution id for this backend invocation. |
-| `DIVEDRA_AGENT_BACKEND` | No | Backend name such as `codex-agent` or `claude-code-agent`; useful for diagnostics. |
-| `DIVEDRA_MANAGER_SESSION_ID` | No | Manager control-plane session id when the hook runs inside a manager node. |
-| `DIVEDRA_MANAGER_STEP_ID` | No | Manager-specific step id. Used only when `DIVEDRA_NODE_ID` is absent. |
-| `DIVEDRA_MANAGER_NODE_EXEC_ID` | No | Backward-compatible manager-specific node execution id. Used only when `DIVEDRA_NODE_EXEC_ID` is absent. |
+| `RIEL_WORKFLOW_ID` | Yes | Workflow definition id. |
+| `RIEL_WORKFLOW_EXECUTION_ID` | Yes | Rielflow workflow run id. This is the same identifier used as the persisted workflow session id. |
+| `RIEL_NODE_ID` | Yes | Workflow node currently executing the backend session. |
+| `RIEL_NODE_EXEC_ID` | Yes | Runtime node execution id for this backend invocation. |
+| `RIEL_AGENT_BACKEND` | No | Backend name such as `codex-agent` or `claude-code-agent`; useful for diagnostics. |
+| `RIEL_MANAGER_SESSION_ID` | No | Manager control-plane session id when the hook runs inside a manager node. |
+| `RIEL_MANAGER_STEP_ID` | No | Manager-specific step id. Used only when `RIEL_NODE_ID` is absent. |
+| `RIEL_MANAGER_NODE_EXEC_ID` | No | Backward-compatible manager-specific node execution id. Used only when `RIEL_NODE_EXEC_ID` is absent. |
 
 The backend hook payload supplies `session_id`; rielflow records that value as `agentSessionId`. The core association is:
 
 ```
-DIVEDRA_WORKFLOW_EXECUTION_ID + payload.session_id
+RIEL_WORKFLOW_EXECUTION_ID + payload.session_id
   -> workflow run + backend agent session
 ```
 
-When `DIVEDRA_MANAGER_SESSION_ID` is present, records also link the backend hook event to the manager control-plane session.
+When `RIEL_MANAGER_SESSION_ID` is present, records also link the backend hook event to the manager control-plane session.
 
 ### Recording Controls
 
 | Variable | Default | Meaning |
 | -------- | ------- | ------- |
-| `DIVEDRA_HOOK_RECORDING` | `auto` | `auto` records only when required rielflow context is present; `off` disables persistence; `required` treats missing context as a hook error. |
-| `DIVEDRA_HOOK_STRICT` | `false` | When `true`, persistence failures become hook errors. When `false`, persistence failures are logged to stderr and the hook remains pass-through. |
-| `DIVEDRA_HOOK_CAPTURE_RAW` | `redacted` | `redacted` writes a redacted payload artifact; `metadata-only` stores no raw payload artifact; `full` stores the full payload and should be used only in trusted environments. |
+| `RIEL_HOOK_RECORDING` | `auto` | `auto` records only when required rielflow context is present; `off` disables persistence; `required` treats missing context as a hook error. |
+| `RIEL_HOOK_STRICT` | `false` | When `true`, persistence failures become hook errors. When `false`, persistence failures are logged to stderr and the hook remains pass-through. |
+| `RIEL_HOOK_CAPTURE_RAW` | `redacted` | `redacted` writes a redacted payload artifact; `metadata-only` stores no raw payload artifact; `full` stores the full payload and should be used only in trusted environments. |
 
 ### Exit Codes
 
@@ -103,7 +103,7 @@ When `DIVEDRA_MANAGER_SESSION_ID` is present, records also link the backend hook
 
 These codes align with the protocol Claude Code, Codex, and Gemini expect.
 
-Recording failures do not block the agent by default. Blocking behavior is reserved for explicit policy handlers or for `DIVEDRA_HOOK_STRICT=true` / `DIVEDRA_HOOK_RECORDING=required` misconfiguration.
+Recording failures do not block the agent by default. Blocking behavior is reserved for explicit policy handlers or for `RIEL_HOOK_STRICT=true` / `RIEL_HOOK_RECORDING=required` misconfiguration.
 
 ## Type Definitions
 
@@ -235,7 +235,7 @@ interface RielflowHookContext {
 }
 ```
 
-`workflowExecutionId` comes from `DIVEDRA_WORKFLOW_EXECUTION_ID`; `agentSessionId` comes from the hook payload `session_id`. The context is absent when the hook is invoked outside a rielflow-launched agent process or when recording has been disabled.
+`workflowExecutionId` comes from `RIEL_WORKFLOW_EXECUTION_ID`; `agentSessionId` comes from the hook payload `session_id`. The context is absent when the hook is invoked outside a rielflow-launched agent process or when recording has been disabled.
 
 ## Dispatch Architecture
 
@@ -362,14 +362,14 @@ Payload artifacts live under the root data directory:
 hooks/<workflowExecutionId>/<nodeExecId>/<agentSessionId>/<hookEventId>/payload.json
 ```
 
-The artifact path is stored as `payloadRef`. The raw payload artifact is redacted by default. Redaction removes or masks keys commonly containing secrets, command outputs, tokens, API keys, authorization headers, and provider-specific sensitive fields. Full payload capture requires `DIVEDRA_HOOK_CAPTURE_RAW=full`.
+The artifact path is stored as `payloadRef`. The raw payload artifact is redacted by default. Redaction removes or masks keys commonly containing secrets, command outputs, tokens, API keys, authorization headers, and provider-specific sensitive fields. Full payload capture requires `RIEL_HOOK_CAPTURE_RAW=full`.
 
 ### Association Semantics
 
 The recorder must treat identifiers as distinct:
 
-- `workflowExecutionId`: rielflow workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
-- `managerSessionId`: rielflow manager control-plane id from `DIVEDRA_MANAGER_SESSION_ID`.
+- `workflowExecutionId`: rielflow workflow run/session id from `RIEL_WORKFLOW_EXECUTION_ID`.
+- `managerSessionId`: rielflow manager control-plane id from `RIEL_MANAGER_SESSION_ID`.
 - `agentSessionId`: backend agent session id from hook payload `session_id`.
 - `nodeExecId`: rielflow node execution that launched the backend process.
 
@@ -377,13 +377,13 @@ The same `agentSessionId` may appear in multiple events and may be reused across
 
 ### Missing Context
 
-If `DIVEDRA_HOOK_RECORDING=auto` and the required rielflow variables are missing, the hook command:
+If `RIEL_HOOK_RECORDING=auto` and the required rielflow variables are missing, the hook command:
 
 - does not write a hook event record
 - still runs the policy handler with `ctx.rielflow` omitted
 - returns the normal response
 
-If `DIVEDRA_HOOK_RECORDING=required`, missing required context is an error because the hook was expected to run inside a rielflow-managed process.
+If `RIEL_HOOK_RECORDING=required`, missing required context is an error because the hook was expected to run inside a rielflow-managed process.
 
 ## Processing Pipeline
 

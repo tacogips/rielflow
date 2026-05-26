@@ -13,8 +13,8 @@ Reads archive checksums from:
   dist/homebrew/rielflow-<version>-<target>.tar.gz.sha256
 
 Environment:
-  DIVEDRA_RELEASE_DIR       Directory containing archives and .sha256 files.
-  DIVEDRA_RELEASE_BASE_URL  Release URL base. Defaults to GitHub v<version>.
+  RIEL_RELEASE_DIR       Directory containing archives and .sha256 files.
+  RIEL_RELEASE_BASE_URL  Release URL base. Defaults to GitHub v<version>.
 
 Example:
   scripts/build-homebrew-release.sh darwin-arm64 darwin-x64 linux-arm64 linux-x64
@@ -50,8 +50,8 @@ main() {
   local version output release_dir release_base_url
   version="$1"
   output="${2:-$repo_root/Formula/rielflow.rb}"
-  release_dir="${DIVEDRA_RELEASE_DIR:-$repo_root/dist/homebrew}"
-  release_base_url="${DIVEDRA_RELEASE_BASE_URL:-https://github.com/tacogips/rielflow/releases/download/v$version}"
+  release_dir="${RIEL_RELEASE_DIR:-$repo_root/dist/homebrew}"
+  release_base_url="${RIEL_RELEASE_BASE_URL:-https://github.com/tacogips/rielflow/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha linux_arm64_sha linux_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"

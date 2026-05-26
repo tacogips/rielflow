@@ -288,7 +288,7 @@ Fields:
 
 The identifier meanings are intentionally distinct:
 
-- `workflowExecutionId` is the rielflow workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
+- `workflowExecutionId` is the rielflow workflow run/session id from `RIEL_WORKFLOW_EXECUTION_ID`.
 - `managerSessionId` is the rielflow manager control-plane session id when the hook runs inside a manager node.
 - `agentSessionId` is the Claude/Codex backend session id from the hook payload `session_id`.
 - `nodeExecId` identifies the rielflow node execution that launched the backend process.

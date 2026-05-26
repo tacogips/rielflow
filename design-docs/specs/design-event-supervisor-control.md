@@ -650,7 +650,7 @@ interface EventSupervisedRunRecord {
 Recommended artifact layout:
 
 ```text
-{DIVEDRA_ARTIFACT_DIR}/events/supervised-runs/{supervisedRunId}/
+{RIEL_ARTIFACT_DIR}/events/supervised-runs/{supervisedRunId}/
   record.json
   commands/
     {commandId}.json

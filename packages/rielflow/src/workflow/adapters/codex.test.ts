@@ -34,7 +34,7 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -76,9 +76,9 @@ const baseContext: AdapterExecutionContext = {
 };
 
 const stallWatchEnvKeys = [
-  "DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS",
-  "DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS",
-  "DIVEDRA_LLM_STALL_NUDGE_PROMPT",
+  "RIEL_LLM_STALL_CHECK_INTERVAL_MS",
+  "RIEL_LLM_STALL_NUDGE_MAX_ATTEMPTS",
+  "RIEL_LLM_STALL_NUDGE_PROMPT",
 ] as const;
 const originalStallWatchEnv = new Map<string, string | undefined>(
   stallWatchEnvKeys.map((key) => [key, process.env[key]]),
@@ -333,9 +333,9 @@ describe("CodexAgentAdapter", () => {
   });
 
   test("uses environment-configured stall watch settings", async () => {
-    process.env["DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS"] = "5";
-    process.env["DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS"] = "1";
-    process.env["DIVEDRA_LLM_STALL_NUDGE_PROMPT"] = "continue from env";
+    process.env["RIEL_LLM_STALL_CHECK_INTERVAL_MS"] = "5";
+    process.env["RIEL_LLM_STALL_NUDGE_MAX_ATTEMPTS"] = "1";
+    process.env["RIEL_LLM_STALL_NUDGE_PROMPT"] = "continue from env";
     const primarySession = new MockCodexRunningSession({
       sessionId: "codex-env-stall-1",
       autoComplete: false,
@@ -390,11 +390,10 @@ describe("CodexAgentAdapter", () => {
     const fixture = makeCodexRunnerFixture();
     const ambientRunner = createMockCodexSessionRunner();
     vi.spyOn(ambientRunner, "startSession").mockImplementation(async () => {
-      observedGraphqlEndpoint = process.env["DIVEDRA_GRAPHQL_ENDPOINT"];
-      observedWorkflowExecutionId =
-        process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"];
-      observedNodeExecId = process.env["DIVEDRA_NODE_EXEC_ID"];
-      observedMailboxDir = process.env["DIVEDRA_MAILBOX_DIR"];
+      observedGraphqlEndpoint = process.env["RIEL_GRAPHQL_ENDPOINT"];
+      observedWorkflowExecutionId = process.env["RIEL_WORKFLOW_EXECUTION_ID"];
+      observedNodeExecId = process.env["RIEL_NODE_EXEC_ID"];
+      observedMailboxDir = process.env["RIEL_MAILBOX_DIR"];
       return new MockCodexRunningSession({
         sessionId: "codex-session-ambient",
         messages: [
@@ -415,31 +414,30 @@ describe("CodexAgentAdapter", () => {
     const adapter = new CodexAgentAdapter({
       createRunner: fixture.createRunner,
     });
-    const priorGraphqlEndpoint = process.env["DIVEDRA_GRAPHQL_ENDPOINT"];
-    const priorWorkflowExecutionId =
-      process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"];
+    const priorGraphqlEndpoint = process.env["RIEL_GRAPHQL_ENDPOINT"];
+    const priorWorkflowExecutionId = process.env["RIEL_WORKFLOW_EXECUTION_ID"];
     await adapter.execute(
       {
         ...baseInput,
         rielflowHookContext: {
           environment: {
-            DIVEDRA_WORKFLOW_ID: "wf",
-            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_NODE_ID: "node-1",
-            DIVEDRA_NODE_EXEC_ID: "exec-1",
-            DIVEDRA_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
-            DIVEDRA_AGENT_BACKEND: "codex-agent",
+            RIEL_WORKFLOW_ID: "wf",
+            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+            RIEL_NODE_ID: "node-1",
+            RIEL_NODE_EXEC_ID: "exec-1",
+            RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
+            RIEL_AGENT_BACKEND: "codex-agent",
           },
         },
         ambientManagerContext: {
           environment: {
-            DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-            DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-            DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-            DIVEDRA_WORKFLOW_ID: "wf",
-            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_MANAGER_STEP_ID: "node-1",
-            DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
+            RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+            RIEL_MANAGER_AUTH_TOKEN: "secret",
+            RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+            RIEL_WORKFLOW_ID: "wf",
+            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+            RIEL_MANAGER_STEP_ID: "node-1",
+            RIEL_MANAGER_NODE_EXEC_ID: "exec-1",
           },
         },
       },
@@ -450,8 +448,8 @@ describe("CodexAgentAdapter", () => {
     expect(observedWorkflowExecutionId).toBe("sess-1");
     expect(observedNodeExecId).toBe("exec-1");
     expect(observedMailboxDir).toBe("/tmp/node-1/exec-1/mailbox");
-    expect(process.env["DIVEDRA_GRAPHQL_ENDPOINT"]).toBe(priorGraphqlEndpoint);
-    expect(process.env["DIVEDRA_WORKFLOW_EXECUTION_ID"]).toBe(
+    expect(process.env["RIEL_GRAPHQL_ENDPOINT"]).toBe(priorGraphqlEndpoint);
+    expect(process.env["RIEL_WORKFLOW_EXECUTION_ID"]).toBe(
       priorWorkflowExecutionId,
     );
   });

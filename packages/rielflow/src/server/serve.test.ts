@@ -148,7 +148,7 @@ describe("startServe", () => {
         {
           host: "127.0.0.1",
           env: {
-            DIVEDRA_SERVE_PORT: "abc",
+            RIEL_SERVE_PORT: "abc",
           },
         },
         {

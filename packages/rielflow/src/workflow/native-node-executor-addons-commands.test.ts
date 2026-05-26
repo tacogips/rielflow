@@ -45,8 +45,8 @@ async function writeReportCwdScript(
     scriptPath,
     [
       "#!/bin/sh",
-      'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-      `printf '{"cwd":"%s"}\n' "$PWD" > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+      `printf '{"cwd":"%s"}\n' "$PWD" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
       "",
     ].join("\n"),
     { encoding: "utf8", mode: 0o755 },
@@ -110,7 +110,7 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -773,8 +773,8 @@ describe("executeNativeNode", () => {
         "#!/bin/sh",
         'echo "native stdout line"',
         'echo "native stderr line" >&2',
-        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -830,8 +830,8 @@ describe("executeNativeNode", () => {
       path.join(scriptDirectory, "write-envelope.sh"),
       [
         "#!/bin/sh",
-        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-        `printf '{"completionPassed":true,"when":{"needs_item":true},"payload":{"decision":"delegate"}}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+        `printf '{"completionPassed":true,"when":{"needs_item":true},"payload":{"decision":"delegate"}}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1091,8 +1091,8 @@ describe("executeNativeNode", () => {
         "#!/bin/sh",
         "set -eu",
         'printf "%s\\n" "$@" > "$CAPTURED_ARGS_PATH"',
-        'mkdir -p "$DIVEDRA_TEST_MAILBOX_HOST/outbox"',
-        `printf '{"summary":"done"}\n' > "$DIVEDRA_TEST_MAILBOX_HOST/outbox/output.json"`,
+        'mkdir -p "$RIEL_TEST_MAILBOX_HOST/outbox"',
+        `printf '{"summary":"done"}\n' > "$RIEL_TEST_MAILBOX_HOST/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },
@@ -1134,7 +1134,7 @@ describe("executeNativeNode", () => {
         executionMailbox: makeExecutionMailbox(),
         env: {
           CAPTURED_ARGS_PATH: capturedArgsPath,
-          DIVEDRA_TEST_MAILBOX_HOST: path.join(artifactDir, "mailbox"),
+          RIEL_TEST_MAILBOX_HOST: path.join(artifactDir, "mailbox"),
           SHOULD_NOT_ENTER_CONTAINER: "host-secret",
         },
       },
@@ -1147,7 +1147,7 @@ describe("executeNativeNode", () => {
     expect(output.payload).toEqual({ summary: "done" });
     const capturedArgs = await readFile(capturedArgsPath, "utf8");
     expect(capturedArgs).toContain("EXPLICIT_ENV=mapped");
-    expect(capturedArgs).toContain("DIVEDRA_MAILBOX_DIR=/mailbox");
+    expect(capturedArgs).toContain("RIEL_MAILBOX_DIR=/mailbox");
     expect(capturedArgs).not.toContain("SHOULD_NOT_ENTER_CONTAINER");
     expect(capturedArgs).not.toContain("host-secret");
   });

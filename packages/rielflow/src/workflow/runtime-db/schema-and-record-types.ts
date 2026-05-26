@@ -249,7 +249,7 @@ export interface PersistedRuntimeNodeLogRow {
 export function resolveRuntimeDbPath(options: LoadOptions): string {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
-  const dbPath = env["DIVEDRA_RUNTIME_DB"];
+  const dbPath = env["RIEL_RUNTIME_DB"];
   if (typeof dbPath === "string" && dbPath.length > 0) {
     return path.isAbsolute(dbPath) ? dbPath : path.resolve(cwd, dbPath);
   }

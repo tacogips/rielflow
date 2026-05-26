@@ -59,12 +59,12 @@ export interface AdapterAmbientManagerContext {
 
 export interface AdapterRielflowHookContext {
   readonly environment: {
-    readonly DIVEDRA_WORKFLOW_ID: string;
-    readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-    readonly DIVEDRA_NODE_ID: string;
-    readonly DIVEDRA_NODE_EXEC_ID: string;
-    readonly DIVEDRA_MAILBOX_DIR?: string;
-    readonly DIVEDRA_AGENT_BACKEND?: string;
+    readonly RIEL_WORKFLOW_ID: string;
+    readonly RIEL_WORKFLOW_EXECUTION_ID: string;
+    readonly RIEL_NODE_ID: string;
+    readonly RIEL_NODE_EXEC_ID: string;
+    readonly RIEL_MAILBOX_DIR?: string;
+    readonly RIEL_AGENT_BACKEND?: string;
   };
 }
 
@@ -78,16 +78,16 @@ export function buildAdapterRielflowHookContext(input: {
 }): AdapterRielflowHookContext {
   return {
     environment: {
-      DIVEDRA_WORKFLOW_ID: input.workflowId,
-      DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
-      DIVEDRA_NODE_ID: input.nodeId,
-      DIVEDRA_NODE_EXEC_ID: input.nodeExecId,
+      RIEL_WORKFLOW_ID: input.workflowId,
+      RIEL_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
+      RIEL_NODE_ID: input.nodeId,
+      RIEL_NODE_EXEC_ID: input.nodeExecId,
       ...(input.mailboxDir === undefined
         ? {}
-        : { DIVEDRA_MAILBOX_DIR: input.mailboxDir }),
+        : { RIEL_MAILBOX_DIR: input.mailboxDir }),
       ...(input.agentBackend === undefined
         ? {}
-        : { DIVEDRA_AGENT_BACKEND: input.agentBackend }),
+        : { RIEL_AGENT_BACKEND: input.agentBackend }),
     },
   };
 }

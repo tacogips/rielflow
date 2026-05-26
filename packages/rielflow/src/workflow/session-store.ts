@@ -34,7 +34,7 @@ function resolveSessionStoreRoot(options: SessionStoreOptions = {}): string {
   }
 
   const env = options.env ?? process.env;
-  const envRoot = env["DIVEDRA_SESSION_STORE"];
+  const envRoot = env["RIEL_SESSION_STORE"];
   if (typeof envRoot === "string" && envRoot.length > 0) {
     return path.isAbsolute(envRoot)
       ? envRoot

@@ -5,15 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
 
-PORT="${DIVEDRA_MATRIX_SAMPLE_PORT:-18008}"
+PORT="${RIEL_MATRIX_SAMPLE_PORT:-18008}"
 HOMESERVER_URL="http://127.0.0.1:${PORT}"
-RUN_ROOT="${DIVEDRA_MATRIX_SAMPLE_RUN_ROOT:-${REPO_ROOT}/tmp/matrix-chat-reply-sample}"
-DATA_DIR="${DIVEDRA_MATRIX_SAMPLE_DATA_DIR:-${RUN_ROOT}/synapse-data}"
+RUN_ROOT="${RIEL_MATRIX_SAMPLE_RUN_ROOT:-${REPO_ROOT}/tmp/matrix-chat-reply-sample}"
+DATA_DIR="${RIEL_MATRIX_SAMPLE_DATA_DIR:-${RUN_ROOT}/synapse-data}"
 EVENT_ROOT="${RUN_ROOT}/.rielflow-events"
 ARTIFACT_ROOT="${RUN_ROOT}/artifacts"
-REGISTRATION_SECRET="${DIVEDRA_MATRIX_SAMPLE_REGISTRATION_SECRET:-rielflow-local-registration-secret}"
-ALICE_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_ALICE_PASSWORD:-rielflow-alice-password}"
-BOT_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_BOT_PASSWORD:-rielflow-bot-password}"
+REGISTRATION_SECRET="${RIEL_MATRIX_SAMPLE_REGISTRATION_SECRET:-rielflow-local-registration-secret}"
+ALICE_PASSWORD="${RIEL_MATRIX_SAMPLE_ALICE_PASSWORD:-rielflow-alice-password}"
+BOT_PASSWORD="${RIEL_MATRIX_SAMPLE_BOT_PASSWORD:-rielflow-bot-password}"
 BOT_USER_ID="@rielflow:localhost"
 ALICE_USER_ID="@alice:localhost"
 
@@ -22,7 +22,7 @@ case "${RUN_ROOT}" in
     SYNC_TOKEN_PATH="${RUN_ROOT#"${REPO_ROOT}/"}/sync/local-matrix.json"
     ;;
   *)
-    echo "DIVEDRA_MATRIX_SAMPLE_RUN_ROOT must be under ${REPO_ROOT}" >&2
+    echo "RIEL_MATRIX_SAMPLE_RUN_ROOT must be under ${REPO_ROOT}" >&2
     exit 2
     ;;
 esac
@@ -124,8 +124,8 @@ write_event_configuration() {
           id: "local-matrix",
           kind: "matrix",
           provider: "matrix",
-          homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-          accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+          homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+          accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
           userId: "@rielflow:localhost",
           rooms: [
             {
@@ -222,7 +222,7 @@ find_reply_event() {
 
 echo "Preparing local Synapse data directory: ${DATA_DIR}"
 mkdir -p "${DATA_DIR}" "${RUN_ROOT}"
-export DIVEDRA_MATRIX_SAMPLE_DATA_DIR="${DATA_DIR}"
+export RIEL_MATRIX_SAMPLE_DATA_DIR="${DATA_DIR}"
 
 if [[ ! -f "${DATA_DIR}/homeserver.yaml" ]]; then
   docker compose -f "${COMPOSE_FILE}" run --rm synapse generate
@@ -295,8 +295,8 @@ bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events validate \
 
 LISTENER_LOG="${RUN_ROOT}/events-serve.log"
 : > "${LISTENER_LOG}"
-DIVEDRA_MATRIX_HOMESERVER_URL="${HOMESERVER_URL}" \
-DIVEDRA_MATRIX_ACCESS_TOKEN="${BOT_TOKEN}" \
+RIEL_MATRIX_HOMESERVER_URL="${HOMESERVER_URL}" \
+RIEL_MATRIX_ACCESS_TOKEN="${BOT_TOKEN}" \
   bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events serve \
     --workflow-definition-dir "${REPO_ROOT}/examples" \
     --event-root "${EVENT_ROOT}" \

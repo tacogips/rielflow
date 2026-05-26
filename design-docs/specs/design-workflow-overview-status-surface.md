@@ -475,8 +475,8 @@ Those parts must stay coupled for status surfaces. Once a workflow source is
 resolved, overview builders and session commands should use a common
 storage-context helper so `workflow status <name>` and
 `session status <session-id>` do not diverge between project scope, user scope,
-direct workflow roots, `DIVEDRA_ARTIFACT_DIR`, `DIVEDRA_ARTIFACT_ROOT`, or
-`DIVEDRA_SESSION_STORE`.
+direct workflow roots, `RIEL_ARTIFACT_DIR`, `RIEL_ARTIFACT_ROOT`, or
+`RIEL_SESSION_STORE`.
 
 Explicit storage overrides win. When an operator provides an explicit session
 store or artifact/data root, workflow status and session commands must respect

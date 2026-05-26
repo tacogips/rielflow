@@ -68,7 +68,7 @@ export async function resolveWorkflowOverviewStorageOptions(
 **Checklist**:
 
 - [x] Make local `workflow list` and `workflow status` derive session-store options through the same project/user/direct and explicit-override rules as session commands.
-- [x] Preserve explicit `--session-store`, `--root-data-dir`, `--artifact-root`, `DIVEDRA_ARTIFACT_DIR`, `DIVEDRA_ARTIFACT_ROOT`, and `DIVEDRA_SESSION_STORE` precedence.
+- [x] Preserve explicit `--session-store`, `--root-data-dir`, `--artifact-root`, `RIEL_ARTIFACT_DIR`, `RIEL_ARTIFACT_ROOT`, and `RIEL_SESSION_STORE` precedence.
 - [x] Keep direct workflow-root inference limited to recognized scoped roots.
 - [x] Add focused `workflow list` and `workflow status` tests for project cwd and workflow-definition-dir cases.
 

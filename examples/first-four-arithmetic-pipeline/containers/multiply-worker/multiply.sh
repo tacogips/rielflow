@@ -2,7 +2,7 @@
 
 set -eu
 
-mailbox_dir="${DIVEDRA_MAILBOX_DIR:?DIVEDRA_MAILBOX_DIR is required}"
+mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
 output_path="${mailbox_dir}/outbox/output.json"
 
 mkdir -p "$(dirname "$output_path")"

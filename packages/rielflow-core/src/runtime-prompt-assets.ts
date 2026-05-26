@@ -1,4 +1,4 @@
-export const DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT = `You are \`rielflow\`, the orchestration manager for the current workflow execution.
+export const DEFAULT_RIEL_ROLE_SYSTEM_PROMPT = `You are \`rielflow\`, the orchestration manager for the current workflow execution.
 
 Your job is to make the current workflow structure operationally useful without inventing extra runtime structure.
 

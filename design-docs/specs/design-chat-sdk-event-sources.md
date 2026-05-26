@@ -72,11 +72,11 @@ The source kind is shared and the provider is closed by allow-list:
   "mode": "generic-webhook",
   "webhook": {
     "path": "chat-sdk/team-slack",
-    "signingSecretEnv": "DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET"
+    "signingSecretEnv": "RIEL_CHAT_SDK_SLACK_WEBHOOK_SECRET"
   },
   "send": {
-    "endpointUrlEnv": "DIVEDRA_CHAT_SDK_SLACK_SEND_URL",
-    "tokenEnv": "DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN"
+    "endpointUrlEnv": "RIEL_CHAT_SDK_SLACK_SEND_URL",
+    "tokenEnv": "RIEL_CHAT_SDK_SLACK_SEND_TOKEN"
   }
 }
 ```

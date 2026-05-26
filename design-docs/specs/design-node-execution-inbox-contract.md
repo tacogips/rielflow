@@ -115,9 +115,9 @@ The runtime may mount or expose the mailbox root differently per executor.
 
 Preferred rule:
 
-- the executor sets `DIVEDRA_MAILBOX_DIR`
+- the executor sets `RIEL_MAILBOX_DIR`
 - metadata paths are relative to that directory
-- worker code joins `DIVEDRA_MAILBOX_DIR` with the relative paths declared in
+- worker code joins `RIEL_MAILBOX_DIR` with the relative paths declared in
   `mailbox/inbox/meta.json`
 
 Example:
@@ -125,7 +125,7 @@ Example:
 ```json
 {
   "protocolVersion": 1,
-  "mailboxDirEnvVar": "DIVEDRA_MAILBOX_DIR",
+  "mailboxDirEnvVar": "RIEL_MAILBOX_DIR",
   "paths": {
     "inputPath": "inbox/input.json",
     "inputFilesDir": "inbox/files",
@@ -151,7 +151,7 @@ Example shape:
 ```json
 {
   "protocolVersion": 1,
-  "mailboxDirEnvVar": "DIVEDRA_MAILBOX_DIR",
+  "mailboxDirEnvVar": "RIEL_MAILBOX_DIR",
   "node": {
     "workflowId": "release",
     "workflowDescription": "Ship a release safely.",
@@ -234,10 +234,10 @@ All node types use the same semantic contract:
   - prompt composition must be derived from that same compiled contract
 - `command`
   - future executor should expose the same mailbox tree on disk and set
-    `DIVEDRA_MAILBOX_DIR`
+    `RIEL_MAILBOX_DIR`
 - `container`
   - future executor should mount the same mailbox tree and set
-    `DIVEDRA_MAILBOX_DIR`
+    `RIEL_MAILBOX_DIR`
 
 Normalization happens before this backend boundary. A `command` or `container`
 worker should see the same JSON inbox shape as an `agent` worker even if the
@@ -269,7 +269,7 @@ review or summary step prove:
 Prompt text sent to an agent backend is an inspectable derivative of the
 mailbox contract, not a separate source of truth. When prompt text summarizes
 large upstream payloads, it must explicitly point workers and reviewers to
-`DIVEDRA_MAILBOX_DIR` and `mailbox/inbox/input.json` for full structured
+`RIEL_MAILBOX_DIR` and `mailbox/inbox/input.json` for full structured
 records. Downstream review steps must rely on `latestOutputs` in
 `mailbox/inbox/input.json` for complete prior-step data rather than on truncated
 prompt snippets.

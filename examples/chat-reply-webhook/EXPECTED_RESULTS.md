@@ -11,6 +11,6 @@ Stable assertions:
 "rielflow/chat-reply-worker"` without a workflow-local node implementation
   file.
 - When dispatched from the `example-reply-webhook` event source with
-  `DIVEDRA_EXAMPLE_REPLY_ENDPOINT` configured, the node emits one outbound chat
+  `RIEL_EXAMPLE_REPLY_ENDPOINT` configured, the node emits one outbound chat
   reply request.
 - The reply text is rendered from the triggering event metadata and input text.

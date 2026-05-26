@@ -155,12 +155,12 @@ describe("Chat SDK event source adapter", () => {
       mode: "generic-webhook",
       webhook: {
         path: "chat-sdk/slack",
-        signingSecretEnv: "DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_SLACK_BEARER_TOKEN",
+        signingSecretEnv: "RIEL_CHAT_SDK_SLACK_WEBHOOK_SECRET",
+        bearerTokenEnv: "RIEL_CHAT_SDK_SLACK_BEARER_TOKEN",
       },
       send: {
-        endpointUrlEnv: "DIVEDRA_CHAT_SDK_SLACK_SEND_URL",
-        tokenEnv: "DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN",
+        endpointUrlEnv: "RIEL_CHAT_SDK_SLACK_SEND_URL",
+        tokenEnv: "RIEL_CHAT_SDK_SLACK_SEND_TOKEN",
       },
     });
     expect(JSON.stringify(fixtureSource)).not.toContain("xoxb-");

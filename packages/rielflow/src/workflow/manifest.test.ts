@@ -88,7 +88,7 @@ describe("loadWorkflowManifest", () => {
     expect(result.value.relativePathRoot).toBe(root);
   });
 
-  test("resolves relative workflowDirectory from DIVEDRA_WORKFLOW_MANIFEST_ROOT", async () => {
+  test("resolves relative workflowDirectory from RIEL_WORKFLOW_MANIFEST_ROOT", async () => {
     const root = makeTempDir();
     const manifestRoot = path.join(root, "workflow-root");
     const workflowDirectory = writeWorkflowBundle(manifestRoot, "bundle");
@@ -105,7 +105,7 @@ describe("loadWorkflowManifest", () => {
 
     const result = await loadWorkflowManifest(manifestPath, {
       cwd: root,
-      env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: manifestRoot },
+      env: { RIEL_WORKFLOW_MANIFEST_ROOT: manifestRoot },
     });
 
     expect(result.ok).toBe(true);

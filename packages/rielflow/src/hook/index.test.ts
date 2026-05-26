@@ -76,11 +76,11 @@ function createRielflowHookEnv(
   overrides: Readonly<Record<string, string | undefined>> = {},
 ): Readonly<Record<string, string | undefined>> {
   return {
-    DIVEDRA_WORKFLOW_ID: "wf-hook",
-    DIVEDRA_WORKFLOW_EXECUTION_ID: "wfexec-hook-1",
-    DIVEDRA_NODE_ID: "node-hook",
-    DIVEDRA_NODE_EXEC_ID: "nodeexec-hook-1",
-    DIVEDRA_AGENT_BACKEND: "codex-agent",
+    RIEL_WORKFLOW_ID: "wf-hook",
+    RIEL_WORKFLOW_EXECUTION_ID: "wfexec-hook-1",
+    RIEL_NODE_ID: "node-hook",
+    RIEL_NODE_EXEC_ID: "nodeexec-hook-1",
+    RIEL_AGENT_BACKEND: "codex-agent",
     ...overrides,
   };
 }
@@ -403,7 +403,7 @@ describe("runHookCommand", () => {
       deps: {
         rootDataDir,
         env: createRielflowHookEnv({
-          DIVEDRA_WORKFLOW_EXECUTION_ID: "wfexec-hook-block",
+          RIEL_WORKFLOW_EXECUTION_ID: "wfexec-hook-block",
         }),
         readStdin: async () =>
           JSON.stringify(
@@ -436,7 +436,7 @@ describe("runHookCommand", () => {
     const capture = createIoCapture();
     const exitCode = await runHookCommand({
       deps: {
-        env: { DIVEDRA_HOOK_RECORDING: "required" },
+        env: { RIEL_HOOK_RECORDING: "required" },
         readStdin: async () =>
           JSON.stringify(
             createHookPayload({

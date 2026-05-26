@@ -73,7 +73,7 @@ Path object rules:
 
 - `absolute` must be an absolute filesystem path.
 - `relative` must be a relative path and resolves from the current directory by
-  default. `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overrides that base directory for
+  default. `RIEL_WORKFLOW_MANIFEST_ROOT` overrides that base directory for
   manifest `workflowDirectory` and `cwd` relative paths.
 - A path object must not contain both `absolute` and `relative`.
 - Resolved workflow directories must contain `workflow.json`.
@@ -108,15 +108,15 @@ does not become a latent broken deployment when re-enabled.
 ## Startup Precedence
 
 `rielflow serve` accepts `--workflow-manifest <path>`. The environment fallback is
-`DIVEDRA_WORKFLOW_MANIFEST`. Relative path fields inside the manifest resolve
-from the current directory unless `DIVEDRA_WORKFLOW_MANIFEST_ROOT` is set.
+`RIEL_WORKFLOW_MANIFEST`. Relative path fields inside the manifest resolve
+from the current directory unless `RIEL_WORKFLOW_MANIFEST_ROOT` is set.
 
 Startup resolution order for server workflow catalog selection:
 
 1. `--workflow-manifest`
-2. `DIVEDRA_WORKFLOW_MANIFEST`
+2. `RIEL_WORKFLOW_MANIFEST`
 3. existing `serve [workflow-name]` plus `--workflow-definition-dir` /
-   `DIVEDRA_WORKFLOW_DEFINITION_DIR`
+   `RIEL_WORKFLOW_DEFINITION_DIR`
 4. existing scoped project/user catalog lookup
 
 When a manifest is present, it is authoritative for that server. The server must
@@ -204,7 +204,7 @@ must not expose environment secrets or redactable runtime variables.
 `workflow manifest validate <manifest-path>` uses the same manifest loader and
 workflow bundle validation rules as server startup, but runs without opening an
 HTTP listener. The command should accept the manifest path positionally, through
-`--workflow-manifest`, or through `DIVEDRA_WORKFLOW_MANIFEST`. The validation
+`--workflow-manifest`, or through `RIEL_WORKFLOW_MANIFEST`. The validation
 report must include the resolved manifest path, the relative path root, each
 entry id, resolved workflow directory, enabled state, authored workflow id when
 available, and per-entry validation errors. `--executable` extends each
@@ -221,7 +221,7 @@ not part of the manifest contract.
 Tests should cover:
 
 - valid manifest resolution with absolute and relative path fields
-- `DIVEDRA_WORKFLOW_MANIFEST_ROOT` overriding the relative path root
+- `RIEL_WORKFLOW_MANIFEST_ROOT` overriding the relative path root
 - disabled entries hidden and not startable
 - manifest allowlist enforced by GraphQL start paths
 - precedence against `--workflow-definition-dir`

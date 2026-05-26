@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 export const DEFAULT_SELF_IMPROVE_LOG_LIMIT = 10;
-const ENV_DEFAULT_LIMIT = "DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT";
+const ENV_DEFAULT_LIMIT = "RIEL_SELF_IMPROVE_DEFAULT_LIMIT";
 const WORKFLOW_SELF_IMPROVE_MODES = [
   "report-only",
   "report-and-auto-improve",

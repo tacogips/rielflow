@@ -43,7 +43,7 @@ export async function runCli(
   const positionals = normalizeCliPositionals(parsed.positionals);
   const [scope, command, target] = positionals;
   const env = resolveCliEnv(deps);
-  const envWorkflowScope = env["DIVEDRA_WORKFLOW_SCOPE"];
+  const envWorkflowScope = env["RIEL_WORKFLOW_SCOPE"];
   if (
     parsed.options.workflowScope === undefined &&
     envWorkflowScope !== undefined &&
@@ -51,7 +51,7 @@ export async function runCli(
     parseWorkflowScopeOption(envWorkflowScope) === undefined
   ) {
     io.stderr(
-      `invalid DIVEDRA_WORKFLOW_SCOPE value '${envWorkflowScope}'; expected auto, project, or user`,
+      `invalid RIEL_WORKFLOW_SCOPE value '${envWorkflowScope}'; expected auto, project, or user`,
     );
     return 2;
   }

@@ -4,9 +4,9 @@ const DEFAULT_STALL_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const DEFAULT_STALL_NUDGE_MAX_ATTEMPTS = 3;
 const DEFAULT_STALL_NUDGE_PROMPT =
   "Your rielflow workflow session appears stalled because the raw SDK session has not changed during the stall-check interval. Continue the assigned workflow step now and return the required output when ready.";
-const STALL_CHECK_INTERVAL_ENV = "DIVEDRA_LLM_STALL_CHECK_INTERVAL_MS";
-const STALL_NUDGE_MAX_ATTEMPTS_ENV = "DIVEDRA_LLM_STALL_NUDGE_MAX_ATTEMPTS";
-const STALL_NUDGE_PROMPT_ENV = "DIVEDRA_LLM_STALL_NUDGE_PROMPT";
+const STALL_CHECK_INTERVAL_ENV = "RIEL_LLM_STALL_CHECK_INTERVAL_MS";
+const STALL_NUDGE_MAX_ATTEMPTS_ENV = "RIEL_LLM_STALL_NUDGE_MAX_ATTEMPTS";
+const STALL_NUDGE_PROMPT_ENV = "RIEL_LLM_STALL_NUDGE_PROMPT";
 
 type WatchedSessionSource = "primary" | "nudge";
 

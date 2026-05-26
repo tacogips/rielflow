@@ -8,7 +8,7 @@ describe("createRuntimeSupervisorConversationRepository", () => {
   let dir: string;
   let dbPath: string;
   const loadOptions = () => ({
-    env: { DIVEDRA_RUNTIME_DB: dbPath },
+    env: { RIEL_RUNTIME_DB: dbPath },
     cwd: dir,
   });
 

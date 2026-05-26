@@ -244,7 +244,7 @@ Execution-local worker mailbox view:
 - That worker mailbox contract is described in
   `design-docs/specs/design-node-execution-inbox-contract.md`.
 - Future `command` and `container` executors should expose that same mailbox
-  contract on disk and set `DIVEDRA_MAILBOX_DIR`.
+  contract on disk and set `RIEL_MAILBOX_DIR`.
 - Any worker-visible file attachments for that node execution must appear only
   under the execution-local inbox files directory; they are not read from
   canonical `communications/...` paths.

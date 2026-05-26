@@ -186,7 +186,7 @@ export async function finalizeExecutedNode(
       createdAt: startedAt,
       updatedAt: endedAt,
       authTokenHash: hashManagerAuthToken(
-        ambientManagerContext.environment.DIVEDRA_MANAGER_AUTH_TOKEN,
+        ambientManagerContext.environment.RIEL_MANAGER_AUTH_TOKEN,
       ),
       authTokenExpiresAt: endedAt,
     });

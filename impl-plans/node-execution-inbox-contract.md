@@ -40,7 +40,7 @@ Out of scope:
 ```typescript
 export interface NodeExecutionMailboxMeta {
   readonly protocolVersion: 1;
-  readonly mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR";
+  readonly mailboxDirEnvVar: "RIEL_MAILBOX_DIR";
   readonly node: {
     readonly workflowId: string;
     readonly workflowDescription: string;

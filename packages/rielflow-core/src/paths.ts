@@ -87,8 +87,8 @@ export function resolveRootDataDir(options: LoadOptions = {}): string {
   const cwd = options.cwd ?? process.cwd();
   const rootDataDir =
     options.rootDataDir ??
-    env["DIVEDRA_ARTIFACT_DIR"] ??
-    computeDefaultRootDataDir(options.userRoot ?? env["DIVEDRA_USER_ROOT"]);
+    env["RIEL_ARTIFACT_DIR"] ??
+    computeDefaultRootDataDir(options.userRoot ?? env["RIEL_USER_ROOT"]);
   return resolveRootPath(rootDataDir, cwd);
 }
 
@@ -97,9 +97,9 @@ export function resolveAttachmentRoot(options: LoadOptions = {}): string {
   const cwd = options.cwd ?? process.cwd();
   const rootDataDir = resolveRootDataDir(options);
   const attachmentRoot =
-    env["DIVEDRA_ATTACHMENT_ROOT"] !== undefined &&
-    env["DIVEDRA_ATTACHMENT_ROOT"] !== ""
-      ? resolveRootPath(env["DIVEDRA_ATTACHMENT_ROOT"], cwd)
+    env["RIEL_ATTACHMENT_ROOT"] !== undefined &&
+    env["RIEL_ATTACHMENT_ROOT"] !== ""
+      ? resolveRootPath(env["RIEL_ATTACHMENT_ROOT"], cwd)
       : path.join(rootDataDir, ROOT_DATA_FILES_SUBDIR);
   return attachmentRoot;
 }
@@ -147,7 +147,7 @@ export function resolveEffectiveRoots(
   const cwd = options.cwd ?? process.cwd();
   const projectRoot = resolveNearestWorkflowProjectRoot(cwd);
   const rootDataDir = resolveRootDataDir(options);
-  const envWorkflowDefinitionDir = env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+  const envWorkflowDefinitionDir = env["RIEL_WORKFLOW_DEFINITION_DIR"];
   const workflowDefinitionDir =
     envWorkflowDefinitionDir !== undefined &&
     envWorkflowDefinitionDir.length > 0
@@ -160,7 +160,7 @@ export function resolveEffectiveRoots(
     path.join(projectRoot, DEFAULT_WORKFLOW_ROOT);
   const artifactRoot =
     options.artifactRoot ??
-    env["DIVEDRA_ARTIFACT_ROOT"] ??
+    env["RIEL_ARTIFACT_ROOT"] ??
     path.join(rootDataDir, ROOT_DATA_WORKFLOW_SUBDIR);
 
   return {

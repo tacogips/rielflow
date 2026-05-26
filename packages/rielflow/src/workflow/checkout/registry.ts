@@ -39,8 +39,7 @@ function resolveCwd(options: LoadOptions): string {
 
 function discoverProjectScopeRoot(options: LoadOptions): string | undefined {
   const env = options.env ?? process.env;
-  const explicitProjectRoot =
-    options.projectRoot ?? env["DIVEDRA_PROJECT_ROOT"];
+  const explicitProjectRoot = options.projectRoot ?? env["RIEL_PROJECT_ROOT"];
   if (explicitProjectRoot !== undefined && explicitProjectRoot.length > 0) {
     return resolveConfiguredRootPath(explicitProjectRoot, options);
   }
@@ -73,14 +72,13 @@ function resolveProjectScopeRootForCheckout(options: LoadOptions): string {
 
 export function resolveUserScopeRootForCheckout(options: LoadOptions): string {
   const env = options.env ?? process.env;
-  const userRoot =
-    options.userRoot ?? env["DIVEDRA_USER_ROOT"] ?? "~/.rielflow";
+  const userRoot = options.userRoot ?? env["RIEL_USER_ROOT"] ?? "~/.rielflow";
   return resolveConfiguredRootPath(userRoot, options);
 }
 
 function directWorkflowRootOverride(options: LoadOptions): string | undefined {
   const env = options.env ?? process.env;
-  const envDefinitionDir = env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+  const envDefinitionDir = env["RIEL_WORKFLOW_DEFINITION_DIR"];
   return options.workflowRoot ?? envDefinitionDir;
 }
 

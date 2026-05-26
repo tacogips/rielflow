@@ -970,8 +970,8 @@ source adapter:
   "id": "team-matrix",
   "kind": "matrix",
   "provider": "matrix",
-  "homeserverUrlEnv": "DIVEDRA_MATRIX_HOMESERVER_URL",
-  "accessTokenEnv": "DIVEDRA_MATRIX_ACCESS_TOKEN",
+  "homeserverUrlEnv": "RIEL_MATRIX_HOMESERVER_URL",
+  "accessTokenEnv": "RIEL_MATRIX_ACCESS_TOKEN",
   "userId": "@rielflow-bot:example.org",
   "rooms": [
     {
@@ -1143,7 +1143,7 @@ interface EventReceiptRecord {
 Artifact layout:
 
 ```text
-{DIVEDRA_ARTIFACT_DIR}/events/{sourceId}/{yyyy-mm-dd}/{receiptId}/
+{RIEL_ARTIFACT_DIR}/events/{sourceId}/{yyyy-mm-dd}/{receiptId}/
   raw.json
   normalized.json
   workflow-input.json
@@ -1300,10 +1300,10 @@ and later stop, restart, or inspect it by correlation key.
 
 Recommended environment variables:
 
-- `DIVEDRA_EVENT_ROOT`
-- `DIVEDRA_EVENT_ENDPOINT_BASE_URL`
-- `DIVEDRA_EVENTS_ENABLED`
-- `DIVEDRA_EVENTS_READ_ONLY`
+- `RIEL_EVENT_ROOT`
+- `RIEL_EVENT_ENDPOINT_BASE_URL`
+- `RIEL_EVENTS_ENABLED`
+- `RIEL_EVENTS_READ_ONLY`
 
 `rielflow serve` may later gain `--events`, but the first implementation should
 prefer a separate command to keep the control plane and event listener lifecycle

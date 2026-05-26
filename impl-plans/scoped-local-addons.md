@@ -84,7 +84,7 @@ export async function resolveAddonSource(input: {
 
 - [x] Add `addonRoot` to shared load/options surfaces
 - [x] Add safe add-on name and version validation helpers
-- [x] Resolve direct add-on root from `--addon-root` / `DIVEDRA_ADDON_ROOT`
+- [x] Resolve direct add-on root from `--addon-root` / `RIEL_ADDON_ROOT`
 - [x] Resolve owning-scope, project-scope, and user-scope add-on candidates
 - [x] Preserve `rielflow/` built-in namespace behavior without filesystem lookup
 - [x] Unit tests for lookup order, shadowing, and unsafe path rejection
@@ -198,7 +198,7 @@ interface AddonSourceJson {
 **Checklist**:
 
 - [x] Parse `--addon-root`
-- [x] Forward `DIVEDRA_ADDON_ROOT` through shared load options
+- [x] Forward `RIEL_ADDON_ROOT` through shared load options
 - [x] Forward add-on root options through library execution and inspection
 - [x] Forward add-on root options through GraphQL validation/save/execution
 - [x] Forward add-on root options through local event dispatch
@@ -261,7 +261,7 @@ test("project-scope local add-on shadows user-scope add-on by exact version", as
 - [x] Non-`rielflow/` add-ons can resolve from project and user `.rielflow/addons`
 - [x] Built-in `rielflow/*` add-ons never resolve from filesystem roots
 - [x] Project add-ons shadow user add-ons by exact `(name, version)`
-- [x] `--addon-root` and `DIVEDRA_ADDON_ROOT` work as direct add-on-root overrides
+- [x] `--addon-root` and `RIEL_ADDON_ROOT` work as direct add-on-root overrides
 - [x] Local manifests materialize ordinary node payloads only
 - [x] Manifest and template paths cannot escape the add-on version directory
 - [x] Type checking passes

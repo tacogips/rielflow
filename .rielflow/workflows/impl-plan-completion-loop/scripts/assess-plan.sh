@@ -2,7 +2,7 @@
 
 set -eu
 
-mailbox_dir="${DIVEDRA_MAILBOX_DIR:?DIVEDRA_MAILBOX_DIR is required}"
+mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
 plan_path="${PLAN_PATH:-}"
 target_tasks_json="${TARGET_TASKS_JSON:-}"
 output_path="${mailbox_dir}/outbox/output.json"
@@ -26,7 +26,7 @@ if ((process.env.TARGET_TASKS_JSON ?? "").trim().length > 0) {
   }
 }
 
-const outputPath = path.join(process.env.DIVEDRA_MAILBOX_DIR, "outbox", "output.json");
+const outputPath = path.join(process.env.RIEL_MAILBOX_DIR, "outbox", "output.json");
 
 function emit(payload) {
   fs.writeFileSync(

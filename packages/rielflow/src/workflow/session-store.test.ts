@@ -48,22 +48,22 @@ describe("session-store", () => {
     );
   });
 
-  test("uses DIVEDRA_USER_ROOT for default session-store scoping", async () => {
+  test("uses RIEL_USER_ROOT for default session-store scoping", async () => {
     const root = await makeTempDir();
     const resolved = getSessionStoreRoot({
       cwd: root,
-      env: { DIVEDRA_USER_ROOT: "custom-user-root" },
+      env: { RIEL_USER_ROOT: "custom-user-root" },
     });
     expect(resolved).toBe(
       path.join(root, "custom-user-root", "artifacts", "sessions"),
     );
   });
 
-  test("derives the session store root from DIVEDRA_ARTIFACT_DIR", async () => {
+  test("derives the session store root from RIEL_ARTIFACT_DIR", async () => {
     const resolved = getSessionStoreRoot({
       cwd: "/tmp/project",
       env: {
-        DIVEDRA_ARTIFACT_DIR: "env-data",
+        RIEL_ARTIFACT_DIR: "env-data",
       },
     });
     expect(resolved).toBe("/tmp/project/env-data/sessions");

@@ -74,22 +74,22 @@ export interface AmbientManagerExecutionContext {
 }
 
 export interface AmbientManagerControlPlaneEnvironment {
-  readonly DIVEDRA_GRAPHQL_ENDPOINT: string;
-  readonly DIVEDRA_MANAGER_AUTH_TOKEN: string;
-  readonly DIVEDRA_MANAGER_SESSION_ID: string;
-  readonly DIVEDRA_WORKFLOW_ID: string;
-  readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-  readonly DIVEDRA_MANAGER_STEP_ID: string;
-  readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
+  readonly RIEL_GRAPHQL_ENDPOINT: string;
+  readonly RIEL_MANAGER_AUTH_TOKEN: string;
+  readonly RIEL_MANAGER_SESSION_ID: string;
+  readonly RIEL_WORKFLOW_ID: string;
+  readonly RIEL_WORKFLOW_EXECUTION_ID: string;
+  readonly RIEL_MANAGER_STEP_ID: string;
+  readonly RIEL_MANAGER_NODE_EXEC_ID: string;
 }
 
 const AMBIENT_MANAGER_ENV_KEYS = [
-  "DIVEDRA_MANAGER_AUTH_TOKEN",
-  "DIVEDRA_MANAGER_SESSION_ID",
-  "DIVEDRA_WORKFLOW_ID",
-  "DIVEDRA_WORKFLOW_EXECUTION_ID",
-  "DIVEDRA_MANAGER_STEP_ID",
-  "DIVEDRA_MANAGER_NODE_EXEC_ID",
+  "RIEL_MANAGER_AUTH_TOKEN",
+  "RIEL_MANAGER_SESSION_ID",
+  "RIEL_WORKFLOW_ID",
+  "RIEL_WORKFLOW_EXECUTION_ID",
+  "RIEL_MANAGER_STEP_ID",
+  "RIEL_MANAGER_NODE_EXEC_ID",
 ] as const;
 
 const DEFAULT_MANAGER_CONTROL_ENDPOINT = "http://127.0.0.1:43173/graphql";
@@ -246,13 +246,10 @@ export function verifyManagerAuthToken(
 export function resolveAmbientManagerExecutionContext(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): AmbientManagerExecutionContext | null {
-  const workflowId = readEnvValue(env, "DIVEDRA_WORKFLOW_ID");
-  const workflowExecutionId = readEnvValue(
-    env,
-    "DIVEDRA_WORKFLOW_EXECUTION_ID",
-  );
-  const managerStepId = readEnvValue(env, "DIVEDRA_MANAGER_STEP_ID");
-  const managerNodeExecId = readEnvValue(env, "DIVEDRA_MANAGER_NODE_EXEC_ID");
+  const workflowId = readEnvValue(env, "RIEL_WORKFLOW_ID");
+  const workflowExecutionId = readEnvValue(env, "RIEL_WORKFLOW_EXECUTION_ID");
+  const managerStepId = readEnvValue(env, "RIEL_MANAGER_STEP_ID");
+  const managerNodeExecId = readEnvValue(env, "RIEL_MANAGER_NODE_EXEC_ID");
 
   if (
     workflowId === undefined ||
@@ -263,8 +260,8 @@ export function resolveAmbientManagerExecutionContext(
     return null;
   }
 
-  const managerSessionId = readEnvValue(env, "DIVEDRA_MANAGER_SESSION_ID");
-  const authToken = readEnvValue(env, "DIVEDRA_MANAGER_AUTH_TOKEN");
+  const managerSessionId = readEnvValue(env, "RIEL_MANAGER_SESSION_ID");
+  const authToken = readEnvValue(env, "RIEL_MANAGER_AUTH_TOKEN");
   return {
     workflowId,
     workflowExecutionId,
@@ -279,7 +276,7 @@ export function resolveManagerControlEndpoint(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
   return (
-    readEnvValue(env, "DIVEDRA_GRAPHQL_ENDPOINT") ??
+    readEnvValue(env, "RIEL_GRAPHQL_ENDPOINT") ??
     DEFAULT_MANAGER_CONTROL_ENDPOINT
   );
 }
@@ -296,13 +293,13 @@ export function buildAmbientManagerControlPlaneEnvironment(input: {
   readonly env?: Readonly<Record<string, string | undefined>>;
 }): AmbientManagerControlPlaneEnvironment {
   return {
-    DIVEDRA_GRAPHQL_ENDPOINT: resolveManagerControlEndpoint(input.env),
-    DIVEDRA_MANAGER_AUTH_TOKEN: input.authToken,
-    DIVEDRA_MANAGER_SESSION_ID: input.managerSessionId,
-    DIVEDRA_WORKFLOW_ID: input.workflowId,
-    DIVEDRA_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
-    DIVEDRA_MANAGER_STEP_ID: input.managerStepId,
-    DIVEDRA_MANAGER_NODE_EXEC_ID: input.managerNodeExecId,
+    RIEL_GRAPHQL_ENDPOINT: resolveManagerControlEndpoint(input.env),
+    RIEL_MANAGER_AUTH_TOKEN: input.authToken,
+    RIEL_MANAGER_SESSION_ID: input.managerSessionId,
+    RIEL_WORKFLOW_ID: input.workflowId,
+    RIEL_WORKFLOW_EXECUTION_ID: input.workflowExecutionId,
+    RIEL_MANAGER_STEP_ID: input.managerStepId,
+    RIEL_MANAGER_NODE_EXEC_ID: input.managerNodeExecId,
   };
 }
 

@@ -355,12 +355,12 @@ describe("manager-session-store", () => {
     expect(resolveAmbientManagerExecutionContext({})).toBeNull();
     expect(
       resolveAmbientManagerExecutionContext({
-        DIVEDRA_WORKFLOW_ID: "demo",
-        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-        DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
-        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
-        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
+        RIEL_WORKFLOW_ID: "demo",
+        RIEL_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+        RIEL_MANAGER_STEP_ID: "rielflow-manager",
+        RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
+        RIEL_MANAGER_SESSION_ID: "mgrsess-000001",
+        RIEL_MANAGER_AUTH_TOKEN: "secret",
       }),
     ).toEqual({
       workflowId: "demo",
@@ -385,34 +385,34 @@ describe("manager-session-store", () => {
         managerSessionId: "mgrsess-000001",
         authToken,
         env: {
-          DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
+          RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
         },
       }),
     ).toEqual({
-      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
-      DIVEDRA_MANAGER_AUTH_TOKEN: authToken,
-      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
-      DIVEDRA_WORKFLOW_ID: "demo",
-      DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-      DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:9999/graphql",
+      RIEL_MANAGER_AUTH_TOKEN: authToken,
+      RIEL_MANAGER_SESSION_ID: "mgrsess-000001",
+      RIEL_WORKFLOW_ID: "demo",
+      RIEL_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+      RIEL_MANAGER_STEP_ID: "rielflow-manager",
+      RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
   });
 
   test("strips ambient manager execution context without removing unrelated env", () => {
     expect(
       stripAmbientManagerExecutionContext({
-        DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-        DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-        DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
-        DIVEDRA_WORKFLOW_ID: "demo",
-        DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-abc12345",
-        DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-        DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+        RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+        RIEL_MANAGER_AUTH_TOKEN: "secret",
+        RIEL_MANAGER_SESSION_ID: "mgrsess-000001",
+        RIEL_WORKFLOW_ID: "demo",
+        RIEL_WORKFLOW_EXECUTION_ID: "sess-abc12345",
+        RIEL_MANAGER_STEP_ID: "rielflow-manager",
+        RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
         PATH: "/usr/bin",
       }),
     ).toEqual({
-      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+      RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
       PATH: "/usr/bin",
     });
   });

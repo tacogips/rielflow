@@ -23,7 +23,7 @@
 
 Review of the current dirty GraphQL manager-control implementation found one remaining attachment-scope gap:
 
-- manager message attachments were validated only as data-root-relative paths under `DIVEDRA_ROOT_DATA_DIR`,
+- manager message attachments were validated only as data-root-relative paths under `RIEL_ROOT_DATA_DIR`,
 - that allowed a manager-scoped mutation to reference unrelated files elsewhere under the root data directory,
 - the intended manager-session boundary is narrower: attachments must stay inside the current execution's `files/{workflowId}/{workflowExecutionId}/...` namespace.
 
@@ -119,7 +119,7 @@ export interface SendManagerMessageInput {
 
 ## Completion Criteria
 
-- [x] Manager attachments can no longer reference unrelated files elsewhere under `DIVEDRA_ROOT_DATA_DIR`
+- [x] Manager attachments can no longer reference unrelated files elsewhere under `RIEL_ROOT_DATA_DIR`
 - [x] The design and command docs describe the narrower execution-scoped attachment contract
 - [x] Targeted verification passes
 

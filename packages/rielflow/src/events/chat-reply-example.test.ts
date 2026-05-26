@@ -48,7 +48,7 @@ describe("chat reply event example", () => {
         "examples/event-sources/payloads/chat-reply-message.json",
       ),
       env: {
-        DIVEDRA_EXAMPLE_REPLY_ENDPOINT: "https://reply.example.test/messages",
+        RIEL_EXAMPLE_REPLY_ENDPOINT: "https://reply.example.test/messages",
       },
       fetchImpl,
       cwd: process.cwd(),

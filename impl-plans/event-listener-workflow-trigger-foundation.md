@@ -34,7 +34,7 @@ resolved.
 
 ### Resolved Decisions
 
-- Default event root resolves from `--event-root`, `DIVEDRA_EVENT_ROOT`, or
+- Default event root resolves from `--event-root`, `RIEL_EVENT_ROOT`, or
   `.rielflow-events` next to the workflow root.
 - Runtime variables expose canonical `workflowInput`, event metadata under
   `event`, and optional compatibility `humanInput`.
@@ -86,7 +86,7 @@ interface EventBinding {
       execution policy types
 - [x] Load `.rielflow-events/sources/*.json` and
       `.rielflow-events/bindings/*.json`
-- [x] Resolve `--event-root` and `DIVEDRA_EVENT_ROOT`
+- [x] Resolve `--event-root` and `RIEL_EVENT_ROOT`
 - [x] Unit tests for missing, malformed, disabled, and duplicate config
 
 ### 2. Event Validation
@@ -224,7 +224,7 @@ execution policy types, plus event-root resolution and JSON config loading.
 - [x] Canonical event and binding types are exported from `src/events/`
 - [x] `.rielflow-events/sources/*.json` and
       `.rielflow-events/bindings/*.json` load deterministically
-- [x] `--event-root`, `DIVEDRA_EVENT_ROOT`, and default root resolution are covered
+- [x] `--event-root`, `RIEL_EVENT_ROOT`, and default root resolution are covered
 - [x] Missing, malformed, disabled, and duplicate config tests pass
 
 ### TASK-002: Event Validation

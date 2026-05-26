@@ -151,14 +151,14 @@ describe("event configuration", () => {
       eventRoot,
       cwd: root,
       env: {
-        DIVEDRA_WORKFLOW_SCOPE: "global",
+        RIEL_WORKFLOW_SCOPE: "global",
       },
     });
 
     expect(validation.valid).toBe(false);
     expect(
       validation.issues.some((issue) =>
-        issue.message.includes("DIVEDRA_WORKFLOW_SCOPE"),
+        issue.message.includes("RIEL_WORKFLOW_SCOPE"),
       ),
     ).toBe(true);
   });
@@ -536,8 +536,8 @@ describe("event configuration", () => {
       id: "team-matrix",
       kind: "matrix",
       provider: "matrix",
-      homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-      accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+      homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+      accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
       userId: "@rielflow:matrix.example",
       rooms: [
         {
@@ -596,13 +596,13 @@ describe("event configuration", () => {
       mode: "generic-webhook",
       webhook: {
         path: `chat-sdk/${provider}`,
-        signingSecretEnv: "DIVEDRA_CHAT_SDK_WEBHOOK_SECRET",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        signingSecretEnv: "RIEL_CHAT_SDK_WEBHOOK_SECRET",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
         rateLimit: { windowMs: 60000, maxRequests: 10 },
       },
       send: {
-        endpointUrlEnv: "DIVEDRA_CHAT_SDK_SEND_URL",
-        tokenEnv: "DIVEDRA_CHAT_SDK_SEND_TOKEN",
+        endpointUrlEnv: "RIEL_CHAT_SDK_SEND_URL",
+        tokenEnv: "RIEL_CHAT_SDK_SEND_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "destinations", `${provider}.json`), {
@@ -700,7 +700,7 @@ describe("event configuration", () => {
       provider: "slack",
       webhook: {
         path: 123,
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "bindings", "bad-path.json"), {
@@ -737,7 +737,7 @@ describe("event configuration", () => {
       provider: "irc",
       webhook: {
         path: "chat-sdk/irc",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "bindings", "irc.json"), {
@@ -810,7 +810,7 @@ describe("event configuration", () => {
       provider: "slack",
       webhook: {
         path: "chat-sdk/shared",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "sources", "second.json"), {
@@ -819,9 +819,9 @@ describe("event configuration", () => {
       provider: "discord",
       webhook: {
         path: "chat-sdk/shared",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
-      send: { endpointUrlEnv: "DIVEDRA_CHAT_SDK_SEND_URL" },
+      send: { endpointUrlEnv: "RIEL_CHAT_SDK_SEND_URL" },
     });
     await writeJson(path.join(eventRoot, "destinations", "reply.json"), {
       id: "missing-send-reply",
@@ -879,7 +879,7 @@ describe("event configuration", () => {
       provider: "slack",
       webhook: {
         path: "chat-sdk/slack",
-        bearerTokenEnv: "DIVEDRA_CHAT_SDK_BEARER_TOKEN",
+        bearerTokenEnv: "RIEL_CHAT_SDK_BEARER_TOKEN",
       },
     });
     await writeJson(path.join(eventRoot, "bindings", "slack.json"), {

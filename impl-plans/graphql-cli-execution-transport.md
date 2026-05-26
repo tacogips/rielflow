@@ -35,7 +35,7 @@ The GraphQL control plane already exists, but the legacy CLI execution commands 
 
 **Excluded**:
 
-- automatic transport switching from ambient `DIVEDRA_GRAPHQL_ENDPOINT` for legacy commands
+- automatic transport switching from ambient `RIEL_GRAPHQL_ENDPOINT` for legacy commands
 - GraphQL transport for `workflow create|validate|inspect`
 - GraphQL transport for `session status|progress`
 - remote support for local-only `--mock-scenario`

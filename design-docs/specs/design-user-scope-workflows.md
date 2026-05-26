@@ -166,7 +166,7 @@ intentionally.
 User scope root resolution order:
 
 1. `--user-root <path>`
-2. `DIVEDRA_USER_ROOT`
+2. `RIEL_USER_ROOT`
 3. bootstrap config `userRoot`
 4. `~/.rielflow`
 
@@ -178,7 +178,7 @@ an explicit add-on-root override.
 
 ### Direct Workflow Definition Directory
 
-`--workflow-definition-dir` and `DIVEDRA_WORKFLOW_DEFINITION_DIR` mean "the
+`--workflow-definition-dir` and `RIEL_WORKFLOW_DEFINITION_DIR` mean "the
 direct directory containing workflow bundle directories." They bypass
 project/user scope catalog lookup and support usage such as:
 
@@ -366,15 +366,15 @@ Explicit runtime roots remain higher precedence:
 3. config
 4. owning scope default
 
-Existing `DIVEDRA_ARTIFACT_DIR`, `DIVEDRA_ARTIFACT_ROOT`, and
-`DIVEDRA_SESSION_STORE` remain supported as compatibility overrides. New scoped
+Existing `RIEL_ARTIFACT_DIR`, `RIEL_ARTIFACT_ROOT`, and
+`RIEL_SESSION_STORE` remain supported as compatibility overrides. New scoped
 defaults should map onto the same internal root types instead of creating a
 second persistence model.
 
 Catalog-aware entrypoints must apply this co-location rule below the CLI layer.
-When `artifactRoot`/`DIVEDRA_ARTIFACT_ROOT` or
-`sessionStoreRoot`/`DIVEDRA_SESSION_STORE` are supplied without an explicit
-`rootDataDir`/`DIVEDRA_ARTIFACT_DIR`, `rootDataDir` is inferred from the
+When `artifactRoot`/`RIEL_ARTIFACT_ROOT` or
+`sessionStoreRoot`/`RIEL_SESSION_STORE` are supplied without an explicit
+`rootDataDir`/`RIEL_ARTIFACT_DIR`, `rootDataDir` is inferred from the
 explicit storage-root parent when possible before falling back to the owning
 scope default. This keeps library, GraphQL, event, and CLI execution aligned.
 
@@ -447,18 +447,18 @@ New environment variables:
 
 | Variable                 | Description                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------- |
-| `DIVEDRA_WORKFLOW_SCOPE` | Default scope selector: `project`, `user`, or `auto`.                                 |
-| `DIVEDRA_USER_ROOT`      | Overrides the user scope root.                                                        |
-| `DIVEDRA_PROJECT_ROOT`   | Overrides the project scope root.                                                     |
-| `DIVEDRA_ADDON_ROOT`     | Direct add-on root override; searched before scoped add-on roots during scoped loads. |
-| `DIVEDRA_LOG_ROOT`       | Overrides the log root.                                                               |
-| `DIVEDRA_CONFIG`         | Overrides the bootstrap config path.                                                  |
+| `RIEL_WORKFLOW_SCOPE` | Default scope selector: `project`, `user`, or `auto`.                                 |
+| `RIEL_USER_ROOT`      | Overrides the user scope root.                                                        |
+| `RIEL_PROJECT_ROOT`   | Overrides the project scope root.                                                     |
+| `RIEL_ADDON_ROOT`     | Direct add-on root override; searched before scoped add-on roots during scoped loads. |
+| `RIEL_LOG_ROOT`       | Overrides the log root.                                                               |
+| `RIEL_CONFIG`         | Overrides the bootstrap config path.                                                  |
 
 Existing variables keep their current meaning. In particular,
-`DIVEDRA_WORKFLOW_DEFINITION_DIR` remains a direct workflow root override and should not
+`RIEL_WORKFLOW_DEFINITION_DIR` remains a direct workflow root override and should not
 be reinterpreted as a scope root.
 
-Invalid `--scope` or `DIVEDRA_WORKFLOW_SCOPE` values are command errors. They
+Invalid `--scope` or `RIEL_WORKFLOW_SCOPE` values are command errors. They
 must not silently fall back to `auto`, because a typo could execute or validate
 a shadowed workflow from the wrong scope.
 
@@ -467,12 +467,12 @@ for better usage messages, but lower-level library, GraphQL, event, and create
 paths must also return or throw an explicit invalid-scope error instead of
 enumerating another scope.
 
-`DIVEDRA_ADDON_ROOT` is intentionally a direct root override, parallel to
-`DIVEDRA_WORKFLOW_DEFINITION_DIR`. It should point at a directory containing
+`RIEL_ADDON_ROOT` is intentionally a direct root override, parallel to
+`RIEL_WORKFLOW_DEFINITION_DIR`. It should point at a directory containing
 `<namespace>/<addon-name>/<version>/addon.json`, not at a scope root. During
 scoped catalog loading it is prepended to add-on candidates and does not
 suppress project/user fallback on a miss. When the host resolves workflows via
-a direct `DIVEDRA_WORKFLOW_DEFINITION_DIR` (bypassing scoped catalog roots), that same
+a direct `RIEL_WORKFLOW_DEFINITION_DIR` (bypassing scoped catalog roots), that same
 override is the only filesystem add-on root unless the host also supplies
 resolver functions.
 
@@ -609,6 +609,6 @@ First implementation boundary:
   workflows by default. The design allows it through the catalog order after
   same-scope lookup, but an implementation may restrict user-origin calls to
   user scope only if portability is more important than convenience.
-- Whether `DIVEDRA_HOME` should be accepted as an alias for
-  `DIVEDRA_USER_ROOT`. The design uses the more explicit name to avoid
+- Whether `RIEL_HOME` should be accepted as an alias for
+  `RIEL_USER_ROOT`. The design uses the more explicit name to avoid
   confusion with the existing artifact/data roots.

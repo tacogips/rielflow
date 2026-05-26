@@ -51,7 +51,7 @@ interface ParsedArgs {
 **Checklist**:
 
 - [x] Reject invalid `--scope` values
-- [x] Reject invalid `DIVEDRA_WORKFLOW_SCOPE` values
+- [x] Reject invalid `RIEL_WORKFLOW_SCOPE` values
 - [x] Add CLI regression tests
 
 ### 2. Library Catalog Resolution

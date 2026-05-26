@@ -4,7 +4,7 @@ import { isSafeWorkflowName, resolveConfiguredRootPath } from "./paths";
 import { err, ok, type Result } from "./result";
 import type { WorkflowManifestAutoImprove } from "./types";
 
-export const WORKFLOW_MANIFEST_ROOT_ENV = "DIVEDRA_WORKFLOW_MANIFEST_ROOT";
+export const WORKFLOW_MANIFEST_ROOT_ENV = "RIEL_WORKFLOW_MANIFEST_ROOT";
 
 export type WorkflowManifestVersion = 1;
 

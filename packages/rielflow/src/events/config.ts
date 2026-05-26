@@ -19,7 +19,7 @@ function resolveRootPath(root: string, cwd: string): string {
 export function resolveEventRoot(options: EventConfigLoadOptions = {}): string {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
-  const configuredRoot = options.eventRoot ?? env["DIVEDRA_EVENT_ROOT"];
+  const configuredRoot = options.eventRoot ?? env["RIEL_EVENT_ROOT"];
   if (configuredRoot !== undefined && configuredRoot.length > 0) {
     return resolveRootPath(configuredRoot, cwd);
   }

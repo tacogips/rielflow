@@ -77,10 +77,9 @@ export async function startServe(
   options: ServeStartOptions = {},
   runtime: ServeRuntime = DEFAULT_RUNTIME,
 ): Promise<StartedServe> {
-  const host =
-    options.host ?? options.env?.["DIVEDRA_SERVE_HOST"] ?? "127.0.0.1";
+  const host = options.host ?? options.env?.["RIEL_SERVE_HOST"] ?? "127.0.0.1";
   const rawPort =
-    options.port ?? options.env?.["DIVEDRA_SERVE_PORT"] ?? DEFAULT_SERVE_PORT;
+    options.port ?? options.env?.["RIEL_SERVE_PORT"] ?? DEFAULT_SERVE_PORT;
   const port = typeof rawPort === "number" ? rawPort : Number(rawPort);
 
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -88,7 +87,7 @@ export async function startServe(
   }
 
   const workflowManifestPath =
-    options.workflowManifestPath ?? options.env?.["DIVEDRA_WORKFLOW_MANIFEST"];
+    options.workflowManifestPath ?? options.env?.["RIEL_WORKFLOW_MANIFEST"];
   const serveOptions =
     workflowManifestPath === undefined || workflowManifestPath.length === 0
       ? options

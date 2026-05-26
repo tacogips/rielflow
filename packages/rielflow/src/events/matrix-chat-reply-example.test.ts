@@ -45,8 +45,8 @@ describe("matrix chat reply event example", () => {
         "examples/event-sources/payloads/matrix-room-message.json",
       ),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
       },
       fetchImpl,
       cwd: process.cwd(),

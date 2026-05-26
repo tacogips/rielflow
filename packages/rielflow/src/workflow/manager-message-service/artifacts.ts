@@ -14,7 +14,7 @@ export function normalizeFileRef(fileRef: DataDirFileRef): string {
     throw new Error("attachment path must be non-empty");
   }
   if (path.isAbsolute(candidate)) {
-    throw new Error("attachment path must be relative to DIVEDRA_ARTIFACT_DIR");
+    throw new Error("attachment path must be relative to RIEL_ARTIFACT_DIR");
   }
   if (candidate.includes("\\")) {
     throw new Error("attachment path must use forward slashes");
@@ -25,7 +25,7 @@ export function normalizeFileRef(fileRef: DataDirFileRef): string {
     normalized === ".." ||
     normalized.startsWith("../")
   ) {
-    throw new Error("attachment path must not escape DIVEDRA_ARTIFACT_DIR");
+    throw new Error("attachment path must not escape RIEL_ARTIFACT_DIR");
   }
   return normalized;
 }
@@ -58,7 +58,7 @@ export async function validateAttachments(
     const resolved = path.resolve(rootDataDir, ...normalized.split("/"));
     const rootPrefix = `${rootDataDir}${path.sep}`;
     if (resolved !== rootDataDir && !resolved.startsWith(rootPrefix)) {
-      throw new Error("attachment path must stay within DIVEDRA_ARTIFACT_DIR");
+      throw new Error("attachment path must stay within RIEL_ARTIFACT_DIR");
     }
     await access(resolved);
     normalizedAttachments.push({

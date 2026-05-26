@@ -78,7 +78,7 @@ describe("workflow self-improve config", () => {
     expect(
       resolveWorkflowSelfImprovePolicy({
         defaults: { enabled: false, mode: "report-only", defaultLogLimit: 7 },
-        env: { DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT: "8" },
+        env: { RIEL_SELF_IMPROVE_DEFAULT_LIMIT: "8" },
         limit: 9,
         mode: "report-and-auto-improve",
         enableDisabled: true,

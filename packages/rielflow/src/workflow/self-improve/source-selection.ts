@@ -40,8 +40,8 @@ function hasRuntimeDbDiscoveryOptions(options: SessionStoreOptions): boolean {
   return (
     options.rootDataDir !== undefined ||
     options.artifactRoot !== undefined ||
-    env["DIVEDRA_ARTIFACT_DIR"] !== undefined ||
-    env["DIVEDRA_ARTIFACT_ROOT"] !== undefined
+    env["RIEL_ARTIFACT_DIR"] !== undefined ||
+    env["RIEL_ARTIFACT_ROOT"] !== undefined
   );
 }
 

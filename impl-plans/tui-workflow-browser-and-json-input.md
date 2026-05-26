@@ -245,7 +245,7 @@ interface TuiWorkflowInputDetection {
 **Tasks Completed**: Post-diff review follow-up
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Reviewed the pending diff as a continuation of the TUI browser work and found two concrete gaps. First, `design-docs/specs/design-tui.md` still described the older three-pane selector/timeline layout, so the design doc was updated to match the shipped four-pane workflow browser, JSON/text editor behavior, and actual keybindings. Second, the CLI wrapped the full-screen TUI in an over-broad fallback path that could hide real application errors as readline fallback; this was tightened so only interactive TUI package-availability failures degrade to readline while normal TUI bugs now surface. Also fixed the new session-store default-root test so it ignores the repo dev-shell `DIVEDRA_ARTIFACT_DIR` override when asserting the computed default path.
+**Notes**: Reviewed the pending diff as a continuation of the TUI browser work and found two concrete gaps. First, `design-docs/specs/design-tui.md` still described the older three-pane selector/timeline layout, so the design doc was updated to match the shipped four-pane workflow browser, JSON/text editor behavior, and actual keybindings. Second, the CLI wrapped the full-screen TUI in an over-broad fallback path that could hide real application errors as readline fallback; this was tightened so only interactive TUI package-availability failures degrade to readline while normal TUI bugs now surface. Also fixed the new session-store default-root test so it ignores the repo dev-shell `RIEL_ARTIFACT_DIR` override when asserting the computed default path.
 
 ### Session: 2026-03-23 18:30 JST
 

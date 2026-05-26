@@ -30,8 +30,8 @@ Targets:
   darwin-arm64  darwin-x64  linux-arm64  linux-x64
 
 Environment:
-  DIVEDRA_VERSION       Override package version used in archive names.
-  DIVEDRA_RELEASE_DIR   Output directory. Defaults to dist/homebrew.
+  RIEL_VERSION       Override package version used in archive names.
+  RIEL_RELEASE_DIR   Output directory. Defaults to dist/homebrew.
 
 Examples:
   scripts/build-homebrew-release.sh
@@ -68,8 +68,8 @@ write_sha256() {
 }
 
 package_version() {
-  if [[ -n "${DIVEDRA_VERSION:-}" ]]; then
-    printf '%s\n' "$DIVEDRA_VERSION"
+  if [[ -n "${RIEL_VERSION:-}" ]]; then
+    printf '%s\n' "$RIEL_VERSION"
     return
   fi
 
@@ -118,7 +118,7 @@ main() {
 
   local version release_dir
   version="$(package_version)"
-  release_dir="${DIVEDRA_RELEASE_DIR:-$repo_root/dist/homebrew}"
+  release_dir="${RIEL_RELEASE_DIR:-$repo_root/dist/homebrew}"
   mkdir -p "$release_dir"
 
   local -a targets

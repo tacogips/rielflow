@@ -27,7 +27,7 @@ This plan closes the remaining transport gap between the GraphQL manager control
 **Included**:
 
 - GraphQL transport header constant and request wiring
-- CLI forwarding of ambient `DIVEDRA_MANAGER_SESSION_ID`
+- CLI forwarding of ambient `RIEL_MANAGER_SESSION_ID`
 - GraphQL HTTP handler resolution of forwarded manager-session context
 - targeted CLI and server transport tests
 - plan/index bookkeeping for this corrective iteration

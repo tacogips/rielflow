@@ -34,7 +34,7 @@ function parseRecordingMode(value: string | undefined): HookRecordingMode {
     return value;
   }
   throw new HookContextError(
-    `DIVEDRA_HOOK_RECORDING must be 'auto', 'off', or 'required'`,
+    `RIEL_HOOK_RECORDING must be 'auto', 'off', or 'required'`,
   );
 }
 
@@ -46,7 +46,7 @@ function parseCaptureMode(value: string | undefined): HookPayloadCaptureMode {
     return value;
   }
   throw new HookContextError(
-    `DIVEDRA_HOOK_CAPTURE_RAW must be 'redacted', 'metadata-only', or 'full'`,
+    `RIEL_HOOK_CAPTURE_RAW must be 'redacted', 'metadata-only', or 'full'`,
   );
 }
 
@@ -59,11 +59,11 @@ export function resolveHookRecordingControls(
 ): HookRecordingControls {
   return {
     recordingMode: parseRecordingMode(
-      readEnvValue(env, "DIVEDRA_HOOK_RECORDING"),
+      readEnvValue(env, "RIEL_HOOK_RECORDING"),
     ),
-    strict: parseBoolean(readEnvValue(env, "DIVEDRA_HOOK_STRICT")),
+    strict: parseBoolean(readEnvValue(env, "RIEL_HOOK_STRICT")),
     captureMode: parseCaptureMode(
-      readEnvValue(env, "DIVEDRA_HOOK_CAPTURE_RAW"),
+      readEnvValue(env, "RIEL_HOOK_CAPTURE_RAW"),
     ),
   };
 }
@@ -79,17 +79,17 @@ export function resolveRielflowHookContext(input: {
     return undefined;
   }
 
-  const workflowId = readEnvValue(env, "DIVEDRA_WORKFLOW_ID");
+  const workflowId = readEnvValue(env, "RIEL_WORKFLOW_ID");
   const workflowExecutionId = readEnvValue(
     env,
-    "DIVEDRA_WORKFLOW_EXECUTION_ID",
+    "RIEL_WORKFLOW_EXECUTION_ID",
   );
   const nodeId =
-    readEnvValue(env, "DIVEDRA_NODE_ID") ??
-    readEnvValue(env, "DIVEDRA_MANAGER_STEP_ID");
+    readEnvValue(env, "RIEL_NODE_ID") ??
+    readEnvValue(env, "RIEL_MANAGER_STEP_ID");
   const nodeExecId =
-    readEnvValue(env, "DIVEDRA_NODE_EXEC_ID") ??
-    readEnvValue(env, "DIVEDRA_MANAGER_NODE_EXEC_ID");
+    readEnvValue(env, "RIEL_NODE_EXEC_ID") ??
+    readEnvValue(env, "RIEL_MANAGER_NODE_EXEC_ID");
 
   if (
     workflowId === undefined ||
@@ -99,14 +99,14 @@ export function resolveRielflowHookContext(input: {
   ) {
     if (controls.recordingMode === "required") {
       throw new HookContextError(
-        "missing rielflow hook context; required env vars are DIVEDRA_WORKFLOW_ID, DIVEDRA_WORKFLOW_EXECUTION_ID, DIVEDRA_NODE_ID, and DIVEDRA_NODE_EXEC_ID",
+        "missing rielflow hook context; required env vars are RIEL_WORKFLOW_ID, RIEL_WORKFLOW_EXECUTION_ID, RIEL_NODE_ID, and RIEL_NODE_EXEC_ID",
       );
     }
     return undefined;
   }
 
-  const managerSessionId = readEnvValue(env, "DIVEDRA_MANAGER_SESSION_ID");
-  const agentBackend = readEnvValue(env, "DIVEDRA_AGENT_BACKEND");
+  const managerSessionId = readEnvValue(env, "RIEL_MANAGER_SESSION_ID");
+  const agentBackend = readEnvValue(env, "RIEL_AGENT_BACKEND");
   return {
     workflowId,
     workflowExecutionId,

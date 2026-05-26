@@ -20,8 +20,8 @@ function matrixSource(
   return {
     id: "team-matrix",
     kind: "matrix",
-    homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-    accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+    homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+    accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
     userId: "@rielflow:matrix.example",
     rooms: [
       { roomId: "!release:matrix.example", alias: "#release:matrix.example" },
@@ -151,8 +151,8 @@ describe("matrix event source adapter", () => {
     expect(source).toMatchObject({
       id: "team-matrix",
       kind: "matrix",
-      homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-      accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+      homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+      accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
       rooms: [{ roomId: "!release:matrix.example" }],
     });
     expect(binding).toMatchObject({
@@ -265,8 +265,8 @@ describe("matrix event source adapter", () => {
       source: matrixSource({ provider: "matrix-production" }),
       request: replyRequest(),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "secret-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
       },
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init: init ?? {} });
@@ -316,8 +316,8 @@ describe("matrix event source adapter", () => {
       signal: abortController.signal,
       now: () => new Date("2026-05-13T00:00:00.000Z"),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "secret-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
       },
       fetchImpl: async () =>
         new Response(
@@ -367,9 +367,9 @@ describe("matrix event source adapter", () => {
       signal: abortController.signal,
       now: () => new Date("2026-05-13T00:00:00.000Z"),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL:
+        RIEL_MATRIX_HOMESERVER_URL:
           "https://matrix.example?access_token=url-secret",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
+        RIEL_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
       },
       fetchImpl: async () =>
         new Response(
@@ -418,9 +418,9 @@ describe("matrix event source adapter", () => {
       signal: abortController.signal,
       now: () => new Date("2026-05-13T00:00:00.000Z"),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL:
+        RIEL_MATRIX_HOMESERVER_URL:
           "https://matrix.example?access_token=url-secret",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
+        RIEL_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
       },
       fetchImpl: async () =>
         new Response(
@@ -466,8 +466,8 @@ describe("matrix event source adapter", () => {
       signal: abortController.signal,
       now: () => new Date("2026-05-13T00:00:00.000Z"),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "matrix-bot-token",
       },
       fetchImpl: async () => {
         const error = new Error(

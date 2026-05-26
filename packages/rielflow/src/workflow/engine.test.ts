@@ -4668,7 +4668,7 @@ describe("runWorkflow", () => {
       };
     };
     expect(reviewerInput.promptText).toContain("Runtime mailbox:");
-    expect(reviewerInput.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(reviewerInput.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(reviewerInput.variables.feature?.id).toBe("feature-a");
     expect(reviewerInput.variables.fanout?.branchIndex).toBe(0);
 
@@ -4688,7 +4688,7 @@ describe("runWorkflow", () => {
         readonly outputPath?: string;
       };
     };
-    expect(reviewerMailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
+    expect(reviewerMailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
     expect(reviewerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
     expect(reviewerMailboxMeta.paths?.outputPath).toBe("outbox/output.json");
 
@@ -4782,7 +4782,7 @@ describe("runWorkflow", () => {
       readonly mailboxDirEnvVar?: string;
       readonly paths?: { readonly inputPath?: string };
     };
-    expect(writerMailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
+    expect(writerMailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
     expect(writerMailboxMeta.paths?.inputPath).toBe("inbox/input.json");
   });
 
@@ -5659,13 +5659,13 @@ describe("runWorkflow", () => {
     expect(inputJson.workflowExecutionId).toBe(result.value.session.sessionId);
     expect(inputJson.promptText).toContain("B");
     expect(inputJson.promptText).toContain("Runtime mailbox:");
-    expect(inputJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(inputJson.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(inputJson.promptText).toContain(
-      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+      "$RIEL_MAILBOX_DIR/inbox/input.json",
     );
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+        mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
         paths: {
           inputPath: "inbox/input.json",
           outputPath: "outbox/output.json",
@@ -5700,7 +5700,7 @@ describe("runWorkflow", () => {
     const mailboxInput = JSON.parse(mailboxInputRaw) as {
       readonly upstream: readonly { communicationId: string }[];
     };
-    expect(mailboxMeta.mailboxDirEnvVar).toBe("DIVEDRA_MAILBOX_DIR");
+    expect(mailboxMeta.mailboxDirEnvVar).toBe("RIEL_MAILBOX_DIR");
     expect(mailboxMeta.paths.inputPath).toBe("inbox/input.json");
     expect(mailboxMeta.paths.outputPath).toBe("outbox/output.json");
     expect(mailboxInput.upstream[0]?.communicationId).toBe("comm-000001");
@@ -6556,7 +6556,7 @@ describe("runWorkflow", () => {
     expect(adapter.calls).toHaveLength(2);
     expect(adapter.calls[0]?.nodeId).toBe("rielflow-manager");
     expect(
-      adapter.calls[0]?.rielflowHookContext?.environment.DIVEDRA_MAILBOX_DIR,
+      adapter.calls[0]?.rielflowHookContext?.environment.RIEL_MAILBOX_DIR,
     ).toBe(
       path.join(
         result.value.session.nodeExecutions[0]?.artifactDir ?? "",
@@ -6564,21 +6564,21 @@ describe("runWorkflow", () => {
       ),
     );
     expect(adapter.calls[0]?.promptText).toContain("Runtime mailbox:");
-    expect(adapter.calls[0]?.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(adapter.calls[0]?.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
-      DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-      DIVEDRA_WORKFLOW_ID: workflowName,
-      DIVEDRA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
-      DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+      RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+      RIEL_WORKFLOW_ID: workflowName,
+      RIEL_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
+      RIEL_MANAGER_STEP_ID: "rielflow-manager",
+      RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
     expect(adapter.calls[1]?.nodeId).toBe("step-1");
     expect(adapter.calls[1]?.ambientManagerContext).toBeUndefined();
 
     const managerAuthToken =
       adapter.calls[0]?.ambientManagerContext?.environment
-        .DIVEDRA_MANAGER_AUTH_TOKEN;
+        .RIEL_MANAGER_AUTH_TOKEN;
     expect(managerAuthToken).toBeDefined();
     if (managerAuthToken === undefined) {
       throw new Error("manager auth token was not captured");
@@ -6630,11 +6630,11 @@ describe("runWorkflow", () => {
     expect(adapter.calls[0]?.nodeId).toBe("rielflow-manager");
     expect(adapter.calls[0]?.promptText).toContain("Node kind: manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
-      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-      DIVEDRA_WORKFLOW_ID: workflowName,
-      DIVEDRA_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
-      DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+      RIEL_WORKFLOW_ID: workflowName,
+      RIEL_WORKFLOW_EXECUTION_ID: result.value.session.sessionId,
+      RIEL_MANAGER_STEP_ID: "rielflow-manager",
+      RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
     expect(adapter.calls[1]?.nodeId).toBe("step-1");
     expect(adapter.calls[1]?.ambientManagerContext).toBeUndefined();
@@ -8684,9 +8684,9 @@ describe("runWorkflow", () => {
     expect(firstRequestJson.executionBackend).toBe("claude-code-agent");
     expect(firstRequestJson.model).toBe("claude-opus-4-1");
     expect(firstRequestJson.promptText).toContain("Runtime mailbox:");
-    expect(firstRequestJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(firstRequestJson.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(firstRequestJson.promptText).toContain(
-      "$DIVEDRA_MAILBOX_DIR/inbox/input.json",
+      "$RIEL_MAILBOX_DIR/inbox/input.json",
     );
     expect(firstRequestJson.promptText).toContain("Candidate-Path:");
     expect(firstRequestJson.promptText).not.toContain(
@@ -8721,7 +8721,7 @@ describe("runWorkflow", () => {
     expect(secondRequestJson.executionBackend).toBe("claude-code-agent");
     expect(secondRequestJson.model).toBe("claude-opus-4-1");
     expect(secondRequestJson.promptText).toContain("Runtime mailbox:");
-    expect(secondRequestJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(secondRequestJson.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(secondRequestJson.promptText).toContain(
       "Previous output was rejected:",
     );
@@ -8743,7 +8743,7 @@ describe("runWorkflow", () => {
       "Node-specific instruction:\nstep audit",
     );
     expect(outputJson.promptText).toContain("Runtime mailbox:");
-    expect(outputJson.promptText).toContain("DIVEDRA_MAILBOX_DIR");
+    expect(outputJson.promptText).toContain("RIEL_MAILBOX_DIR");
     expect(outputJson.promptText).not.toContain(
       "Previous output was rejected:",
     );
@@ -10592,8 +10592,8 @@ describe("runWorkflow", () => {
         "set -eu",
         'echo "hello from command-worker stdout"',
         'echo "hello from command-worker stderr" >&2',
-        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-        `printf '{"summary":"done"}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+        `printf '{"summary":"done"}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },

@@ -110,10 +110,10 @@ export function printHelp(io: CliIo): void {
     "                                  Does not control logs, sessions, or artifacts",
   );
   io.stdout(
-    "  --workflow-manifest <path>       Manifest allowlist path for serve or workflow manifest validate; env fallback DIVEDRA_WORKFLOW_MANIFEST",
+    "  --workflow-manifest <path>       Manifest allowlist path for serve or workflow manifest validate; env fallback RIEL_WORKFLOW_MANIFEST",
   );
   io.stdout(
-    "  DIVEDRA_WORKFLOW_MANIFEST_ROOT   Root for relative manifest workflowDirectory/cwd paths; defaults to current directory",
+    "  RIEL_WORKFLOW_MANIFEST_ROOT   Root for relative manifest workflowDirectory/cwd paths; defaults to current directory",
   );
   io.stdout("  --scope <scope>         Select auto, project, or user scope");
   io.stdout("  --user-root <path>      Override the user scope root");
@@ -656,10 +656,10 @@ export function resolveGraphqlCliTransport(
     return null;
   }
   const authTokenEnvName =
-    parsedOptions.authTokenEnv ?? "DIVEDRA_MANAGER_AUTH_TOKEN";
+    parsedOptions.authTokenEnv ?? "RIEL_MANAGER_AUTH_TOKEN";
   const authToken =
     parsedOptions.authToken ?? env[authTokenEnvName] ?? undefined;
-  const ambientManagerSessionId = env["DIVEDRA_MANAGER_SESSION_ID"];
+  const ambientManagerSessionId = env["RIEL_MANAGER_SESSION_ID"];
   const managerSessionId =
     typeof ambientManagerSessionId === "string" &&
     ambientManagerSessionId.length > 0

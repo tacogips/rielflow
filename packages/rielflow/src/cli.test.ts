@@ -45,15 +45,15 @@ async function makeTempDir(): Promise<string> {
 async function withLegacyWorkflowAuthorshipForCli<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
-  const prev = process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
-  process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] = "true";
+  const prev = process.env["RIEL_VALIDATION_LEGACY_AUTH_DEFAULT"];
+  process.env["RIEL_VALIDATION_LEGACY_AUTH_DEFAULT"] = "true";
   try {
     return await fn();
   } finally {
     if (prev === undefined) {
-      delete process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"];
+      delete process.env["RIEL_VALIDATION_LEGACY_AUTH_DEFAULT"];
     } else {
-      process.env["DIVEDRA_VALIDATION_LEGACY_AUTH_DEFAULT"] = prev;
+      process.env["RIEL_VALIDATION_LEGACY_AUTH_DEFAULT"] = prev;
     }
   }
 }
@@ -1433,7 +1433,7 @@ describe("runCli", () => {
       ],
       capture.io,
       createCliDeps({
-        env: { DIVEDRA_WORKFLOW_MANIFEST: manifestPath },
+        env: { RIEL_WORKFLOW_MANIFEST: manifestPath },
       }),
     );
 
@@ -1514,7 +1514,7 @@ describe("runCli", () => {
     }
   });
 
-  test("workflow manifest validate uses DIVEDRA_WORKFLOW_MANIFEST_ROOT and catches invalid bundles", async () => {
+  test("workflow manifest validate uses RIEL_WORKFLOW_MANIFEST_ROOT and catches invalid bundles", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, "manifest-root");
     const workflowDirectory = path.join(workflowRoot, "broken");
@@ -1561,7 +1561,7 @@ describe("runCli", () => {
       ["workflow", "manifest", "validate", manifestPath, "--output", "json"],
       capture.io,
       createCliDeps({
-        env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: workflowRoot },
+        env: { RIEL_WORKFLOW_MANIFEST_ROOT: workflowRoot },
       }),
     );
 
@@ -1924,7 +1924,7 @@ describe("runCli", () => {
     }
   });
 
-  test("workflow list uses DIVEDRA_WORKFLOW_DEFINITION_DIR as direct definition directory", async () => {
+  test("workflow list uses RIEL_WORKFLOW_DEFINITION_DIR as direct definition directory", async () => {
     const root = await makeTempDir();
     const created = await createWorkflowTemplate("env-demo", {
       workflowRoot: root,
@@ -1935,7 +1935,7 @@ describe("runCli", () => {
     const code = await runCli(
       ["workflow", "list"],
       capture.io,
-      createCliDeps({ env: { DIVEDRA_WORKFLOW_DEFINITION_DIR: root } }),
+      createCliDeps({ env: { RIEL_WORKFLOW_DEFINITION_DIR: root } }),
     );
 
     expect(code).toBe(0);
@@ -2009,7 +2009,7 @@ describe("runCli", () => {
     }
   });
 
-  test("workflow list uses DIVEDRA_PROJECT_ROOT outside the project cwd", async () => {
+  test("workflow list uses RIEL_PROJECT_ROOT outside the project cwd", async () => {
     const root = await makeTempDir();
     const projectScopeRoot = path.join(root, "workspace", ".rielflow");
     const userRoot = path.join(root, "home", ".rielflow");
@@ -2030,7 +2030,7 @@ describe("runCli", () => {
       const code = await runCli(
         ["workflow", "list", "--user-root", userRoot],
         capture.io,
-        createCliDeps({ env: { DIVEDRA_PROJECT_ROOT: projectScopeRoot } }),
+        createCliDeps({ env: { RIEL_PROJECT_ROOT: projectScopeRoot } }),
       );
       expect(code).toBe(0);
       expect(capture.stdout.join("\n")).toContain("project scope");
@@ -2230,13 +2230,13 @@ describe("runCli", () => {
       }),
       isInteractiveTerminal: () => true,
       env: {
-        DIVEDRA_WORKFLOW_SCOPE: "global",
+        RIEL_WORKFLOW_SCOPE: "global",
       },
     });
 
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
-      "invalid DIVEDRA_WORKFLOW_SCOPE value 'global'",
+      "invalid RIEL_WORKFLOW_SCOPE value 'global'",
     );
   });
 
@@ -2869,7 +2869,7 @@ describe("runCli", () => {
           "json",
         ],
         capture.io,
-        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
+        createCliDeps({ env: { RIEL_USER_ROOT: userRoot } }),
       );
 
       expect(code).toBe(0);
@@ -2940,8 +2940,8 @@ describe("runCli", () => {
         capture.io,
         createCliDeps({
           env: {
-            DIVEDRA_PROJECT_ROOT: projectRoot,
-            DIVEDRA_USER_ROOT: userRoot,
+            RIEL_PROJECT_ROOT: projectRoot,
+            RIEL_USER_ROOT: userRoot,
           },
         }),
       );
@@ -4047,7 +4047,7 @@ describe("runCli", () => {
       const statusCode = await runCli(
         ["session", "status", sessionId, "--output", "json"],
         statusCapture.io,
-        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
+        createCliDeps({ env: { RIEL_USER_ROOT: userRoot } }),
       );
       expect(statusCode).toBe(0);
       const payload = JSON.parse(statusCapture.stdout.join("\n")) as {
@@ -4137,7 +4137,7 @@ describe("runCli", () => {
           "json",
         ],
         statusCapture.io,
-        createCliDeps({ env: { DIVEDRA_USER_ROOT: userRoot } }),
+        createCliDeps({ env: { RIEL_USER_ROOT: userRoot } }),
       );
       expect(statusCode).toBe(0);
       const payload = JSON.parse(statusCapture.stdout.join("\n")) as {
@@ -4734,7 +4734,7 @@ describe("runCli", () => {
         createIoCapture().io,
         {
           env: {
-            DIVEDRA_ARTIFACT_DIR: ambientRoot,
+            RIEL_ARTIFACT_DIR: ambientRoot,
           },
           isInteractiveTerminal: () => false,
           startServe: async () => ({
@@ -4770,7 +4770,7 @@ describe("runCli", () => {
       runCapture.io,
       {
         env: {
-          DIVEDRA_ARTIFACT_DIR: ambientRoot,
+          RIEL_ARTIFACT_DIR: ambientRoot,
         },
         isInteractiveTerminal: () => false,
         startServe: async () => ({
@@ -4829,8 +4829,8 @@ describe("runCli", () => {
           });
         },
         env: {
-          DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-          DIVEDRA_MANAGER_SESSION_ID: "mgrsess-000001",
+          RIEL_MANAGER_AUTH_TOKEN: "secret",
+          RIEL_MANAGER_SESSION_ID: "mgrsess-000001",
         },
       },
     );
@@ -6472,7 +6472,7 @@ describe("runCli", () => {
       ],
       capture.io,
       createCliDeps({
-        env: { DIVEDRA_WORKFLOW_MANIFEST_ROOT: root },
+        env: { RIEL_WORKFLOW_MANIFEST_ROOT: root },
         startServe: async (options) => {
           started.push(options);
           return { host: "127.0.0.1", port: 7777, stop: () => {} };
@@ -6694,7 +6694,7 @@ describe("runCli", () => {
     });
   });
 
-  test("events emit honors DIVEDRA_EVENTS_READ_ONLY", async () => {
+  test("events emit honors RIEL_EVENTS_READ_ONLY", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".rielflow");
     const eventRoot = path.join(root, ".rielflow-events");
@@ -6757,7 +6757,7 @@ describe("runCli", () => {
           stop: () => {},
         }),
         isInteractiveTerminal: () => true,
-        env: { DIVEDRA_EVENTS_READ_ONLY: "true" },
+        env: { RIEL_EVENTS_READ_ONLY: "true" },
         fetchImpl,
       },
     );

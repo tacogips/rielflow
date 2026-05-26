@@ -2,7 +2,7 @@
 
 set -eu
 
-mailbox_dir="${DIVEDRA_MAILBOX_DIR:?DIVEDRA_MAILBOX_DIR is required}"
+mailbox_dir="${RIEL_MAILBOX_DIR:?RIEL_MAILBOX_DIR is required}"
 output_path="${mailbox_dir}/outbox/output.json"
 
 mkdir -p "$(dirname "$output_path")"
@@ -11,7 +11,7 @@ bun -e '
 const fs = require("fs");
 const path = require("path");
 
-const mailboxDir = process.env.DIVEDRA_MAILBOX_DIR;
+const mailboxDir = process.env.RIEL_MAILBOX_DIR;
 const outputPath = path.join(mailboxDir, "outbox", "output.json");
 const inboxInputPath = path.join(mailboxDir, "inbox", "input.json");
 const activeDir = path.join("impl-plans", "active");

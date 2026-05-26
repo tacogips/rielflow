@@ -43,11 +43,11 @@ describe("runtime storage paths", () => {
     expect(roots.attachmentRoot).toBe(path.join(rootDataDir, "files"));
   });
 
-  test("uses DIVEDRA_USER_ROOT for non-scoped runtime data defaults", async () => {
+  test("uses RIEL_USER_ROOT for non-scoped runtime data defaults", async () => {
     const cwd = await makeTempDir();
     const rootDataDir = resolveRootDataDir({
       cwd,
-      env: { DIVEDRA_USER_ROOT: "operator-home" },
+      env: { RIEL_USER_ROOT: "operator-home" },
     });
 
     expect(rootDataDir).toBe(path.join(cwd, "operator-home", "artifacts"));
@@ -109,13 +109,13 @@ describe("runtime storage paths", () => {
     );
   });
 
-  test("keeps DIVEDRA_ARTIFACT_DIR as the root data override", async () => {
+  test("keeps RIEL_ARTIFACT_DIR as the root data override", async () => {
     const cwd = await makeTempDir();
     const roots = resolveEffectiveRoots({
       cwd,
       env: {
-        DIVEDRA_ARTIFACT_DIR: "runtime-data",
-        DIVEDRA_USER_ROOT: "operator-home",
+        RIEL_ARTIFACT_DIR: "runtime-data",
+        RIEL_USER_ROOT: "operator-home",
       },
     });
     const rootDataDir = path.join(cwd, "runtime-data");
@@ -125,24 +125,24 @@ describe("runtime storage paths", () => {
     expect(roots.attachmentRoot).toBe(path.join(rootDataDir, "files"));
   });
 
-  test("uses DIVEDRA_WORKFLOW_DEFINITION_DIR as the direct workflow definition directory", async () => {
+  test("uses RIEL_WORKFLOW_DEFINITION_DIR as the direct workflow definition directory", async () => {
     const cwd = await makeTempDir();
     const roots = resolveEffectiveRoots({
       cwd,
       env: {
-        DIVEDRA_WORKFLOW_DEFINITION_DIR: "definitions",
+        RIEL_WORKFLOW_DEFINITION_DIR: "definitions",
       },
     });
 
     expect(roots.workflowRoot).toBe(path.join(cwd, "definitions"));
   });
 
-  test("ignores the removed DIVEDRA_WORKFLOW_ROOT environment variable", async () => {
+  test("ignores the removed RIEL_WORKFLOW_ROOT environment variable", async () => {
     const cwd = await makeTempDir();
     const roots = resolveEffectiveRoots({
       cwd,
       env: {
-        DIVEDRA_WORKFLOW_ROOT: "legacy-root",
+        RIEL_WORKFLOW_ROOT: "legacy-root",
       },
     });
 

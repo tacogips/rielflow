@@ -19,7 +19,7 @@ catalog layer, not only by CLI command parsing.
 
 ### Scope
 
-**Included**: invalid `DIVEDRA_WORKFLOW_SCOPE` handling in catalog-backed APIs,
+**Included**: invalid `RIEL_WORKFLOW_SCOPE` handling in catalog-backed APIs,
 explicit runtime storage-root inference for scoped loads, event validation error
 surfacing, and regression tests.
 
@@ -49,7 +49,7 @@ async function resolveWorkflowSource(
 
 **Checklist**:
 
-- [x] Reject invalid `DIVEDRA_WORKFLOW_SCOPE` values in catalog resolution
+- [x] Reject invalid `RIEL_WORKFLOW_SCOPE` values in catalog resolution
 - [x] Propagate `INVALID_SCOPE` through create and load result types
 - [x] Keep direct `workflowRoot` compatibility behavior unchanged
 - [x] Add catalog regression tests
@@ -72,7 +72,7 @@ interface LoadOptions {
 
 **Checklist**:
 
-- [x] Preserve explicit `rootDataDir`/`DIVEDRA_ARTIFACT_DIR`
+- [x] Preserve explicit `rootDataDir`/`RIEL_ARTIFACT_DIR`
 - [x] Infer `rootDataDir` from explicit artifact/session roots when available
 - [x] Fall back to owning scope artifacts only when no explicit runtime root applies
 - [x] Add session-store-only scoped load regression test
@@ -121,7 +121,7 @@ async function validateEventConfiguration(
 
 ## Completion Criteria
 
-- [x] Invalid `DIVEDRA_WORKFLOW_SCOPE` cannot silently fall back to `auto`
+- [x] Invalid `RIEL_WORKFLOW_SCOPE` cannot silently fall back to `auto`
 - [x] Catalog load/list/create paths propagate invalid scope errors
 - [x] Event validation reports catalog configuration errors
 - [x] Explicit session-store roots keep scoped artifact roots co-located

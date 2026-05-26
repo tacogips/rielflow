@@ -533,8 +533,8 @@ describe("event reply dispatcher", () => {
             id: "team-matrix",
             kind: "matrix",
             provider: "matrix",
-            homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
-            accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
+            homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+            accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
             userId: "@rielflow:matrix.example",
             rooms: [{ roomId: "!release:matrix.example" }],
           },
@@ -544,8 +544,8 @@ describe("event reply dispatcher", () => {
       },
       registry: createDefaultEventSourceRegistry(),
       env: {
-        DIVEDRA_MATRIX_HOMESERVER_URL: "https://matrix.example",
-        DIVEDRA_MATRIX_ACCESS_TOKEN: "secret-token",
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
       },
       fetchImpl: async (_url, init) => {
         calls.push(init ?? {});

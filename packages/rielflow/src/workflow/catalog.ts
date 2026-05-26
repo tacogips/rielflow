@@ -57,7 +57,7 @@ function resolveCwd(options: LoadOptions): string {
 function invalidWorkflowScopeSelector(value: string): WorkflowCatalogFailure {
   return {
     code: "INVALID_SCOPE",
-    message: `invalid DIVEDRA_WORKFLOW_SCOPE value '${value}'; expected auto, project, or user`,
+    message: `invalid RIEL_WORKFLOW_SCOPE value '${value}'; expected auto, project, or user`,
   };
 }
 
@@ -69,7 +69,7 @@ function resolveWorkflowScopeSelectorResult(
   }
 
   const env = options.env ?? process.env;
-  const envScope = env["DIVEDRA_WORKFLOW_SCOPE"];
+  const envScope = env["RIEL_WORKFLOW_SCOPE"];
   if (envScope === undefined || envScope.length === 0) {
     return ok("auto");
   }
@@ -94,7 +94,7 @@ function resolveDirectWorkflowRootOverride(
   options: LoadOptions,
 ): string | undefined {
   const env = options.env ?? process.env;
-  const envDefinitionDir = env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+  const envDefinitionDir = env["RIEL_WORKFLOW_DEFINITION_DIR"];
   const workflowDefinitionDir =
     envDefinitionDir !== undefined && envDefinitionDir.length > 0
       ? envDefinitionDir
@@ -114,7 +114,7 @@ function resolveWorkflowManifestPathOverride(
   }
   const env = options.env ?? process.env;
   const manifestPath =
-    options.workflowManifestPath ?? env["DIVEDRA_WORKFLOW_MANIFEST"];
+    options.workflowManifestPath ?? env["RIEL_WORKFLOW_MANIFEST"];
   if (manifestPath === undefined || manifestPath.length === 0) {
     return undefined;
   }
@@ -135,8 +135,7 @@ function workflowManifestLoadOptions(
 
 function discoverProjectScopeRoot(options: LoadOptions): string | undefined {
   const env = options.env ?? process.env;
-  const explicitProjectRoot =
-    options.projectRoot ?? env["DIVEDRA_PROJECT_ROOT"];
+  const explicitProjectRoot = options.projectRoot ?? env["RIEL_PROJECT_ROOT"];
   if (explicitProjectRoot !== undefined && explicitProjectRoot.length > 0) {
     return resolveConfiguredRootPath(explicitProjectRoot, options);
   }
@@ -169,8 +168,7 @@ function resolveProjectScopeRootForCreate(options: LoadOptions): string {
 
 function resolveUserScopeRoot(options: LoadOptions): string {
   const env = options.env ?? process.env;
-  const userRoot =
-    options.userRoot ?? env["DIVEDRA_USER_ROOT"] ?? "~/.rielflow";
+  const userRoot = options.userRoot ?? env["RIEL_USER_ROOT"] ?? "~/.rielflow";
   return resolveConfiguredRootPath(userRoot, options);
 }
 
@@ -295,7 +293,7 @@ function resolveDirectAddonRootOverride(
   options: LoadOptions,
 ): string | undefined {
   const env = options.env ?? process.env;
-  const directRoot = options.addonRoot ?? env["DIVEDRA_ADDON_ROOT"];
+  const directRoot = options.addonRoot ?? env["RIEL_ADDON_ROOT"];
   if (directRoot === undefined || directRoot.length === 0) {
     return undefined;
   }
@@ -620,8 +618,7 @@ export function resolveWorkflowCreateSource(
 function shouldPreserveConfiguredRootDataDir(options: LoadOptions): boolean {
   const env = options.env ?? process.env;
   return (
-    options.rootDataDir !== undefined ||
-    env["DIVEDRA_ARTIFACT_DIR"] !== undefined
+    options.rootDataDir !== undefined || env["RIEL_ARTIFACT_DIR"] !== undefined
   );
 }
 
@@ -636,14 +633,14 @@ function inferExplicitRuntimeRootDataDir(
   return inferRootDataDirFromExplicitStorageRoots({
     ...(options.artifactRoot !== undefined
       ? { artifactRoot: options.artifactRoot }
-      : env["DIVEDRA_ARTIFACT_ROOT"] === undefined
+      : env["RIEL_ARTIFACT_ROOT"] === undefined
         ? {}
-        : { artifactRoot: env["DIVEDRA_ARTIFACT_ROOT"] }),
+        : { artifactRoot: env["RIEL_ARTIFACT_ROOT"] }),
     ...(options.sessionStoreRoot !== undefined
       ? { sessionStoreRoot: options.sessionStoreRoot }
-      : env["DIVEDRA_SESSION_STORE"] === undefined
+      : env["RIEL_SESSION_STORE"] === undefined
         ? {}
-        : { sessionStoreRoot: env["DIVEDRA_SESSION_STORE"] }),
+        : { sessionStoreRoot: env["RIEL_SESSION_STORE"] }),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
   });
 }
@@ -671,9 +668,9 @@ function scopedRootDataDirForSource(
       scopeRoot: source.scopeRoot,
       ...(options.userRoot !== undefined
         ? { userRoot: options.userRoot }
-        : env["DIVEDRA_USER_ROOT"] === undefined
+        : env["RIEL_USER_ROOT"] === undefined
           ? {}
-          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
+          : { userRoot: env["RIEL_USER_ROOT"] }),
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     });
   }

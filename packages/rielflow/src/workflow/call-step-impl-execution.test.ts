@@ -238,11 +238,11 @@ describe("callStepExecution", () => {
     expect(adapter.calls).toHaveLength(1);
     expect(adapter.calls[0]?.promptText).toContain("Node kind: manager");
     expect(adapter.calls[0]?.ambientManagerContext?.environment).toMatchObject({
-      DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-      DIVEDRA_WORKFLOW_ID: workflowName,
-      DIVEDRA_WORKFLOW_EXECUTION_ID: sessionId,
-      DIVEDRA_MANAGER_STEP_ID: "rielflow-manager",
-      DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-000001",
+      RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+      RIEL_WORKFLOW_ID: workflowName,
+      RIEL_WORKFLOW_EXECUTION_ID: sessionId,
+      RIEL_MANAGER_STEP_ID: "rielflow-manager",
+      RIEL_MANAGER_NODE_EXEC_ID: "exec-000001",
     });
   });
 
@@ -381,7 +381,7 @@ describe("callStepExecution", () => {
     expect(inputJson.managerMessage?.instruction).toBe("produce review json");
     expect(inputJson.executionMailbox).toMatchObject({
       meta: {
-        mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+        mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
         paths: {
           inputPath: "inbox/input.json",
           outputPath: "outbox/output.json",

@@ -151,8 +151,8 @@ Rules:
 - project-scope add-ons live under `<project>/.rielflow/addons` by default
 - scope roots, including `addons`, are configurable through the scoped root
   resolver described in `design-docs/specs/design-user-scope-workflows.md`
-- `DIVEDRA_ADDON_ROOT` and `--addon-root` are direct add-on-root overrides,
-  parallel to `DIVEDRA_WORKFLOW_DEFINITION_DIR`; they point at the directory containing
+- `RIEL_ADDON_ROOT` and `--addon-root` are direct add-on-root overrides,
+  parallel to `RIEL_WORKFLOW_DEFINITION_DIR`; they point at the directory containing
   `<namespace>/<addon-name>/<version>/addon.json`
 - `rielflow/` remains reserved for built-in runtime add-ons and must not be
   loaded from the filesystem add-on roots
@@ -229,7 +229,7 @@ For a workflow loaded from the scoped workflow catalog, add-on lookup order is:
 For direct workflow definition directory mode, scoped add-on roots are not
 inferred from the direct workflow definition directory. The host may still pass explicit
 resolver functions, or the caller may supply `--addon-root` /
-`DIVEDRA_ADDON_ROOT`.
+`RIEL_ADDON_ROOT`.
 
 When scoped catalog loading receives an explicit direct add-on root override,
 that root is prepended to the scoped candidates. It does not suppress project or

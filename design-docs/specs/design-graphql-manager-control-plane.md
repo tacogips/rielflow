@@ -156,7 +156,7 @@ The Rielflow root data directory is resolved from environment variable or config
 
 Design direction:
 
-- introduce `DIVEDRA_ARTIFACT_DIR` as the canonical root-data setting for derived defaults
+- introduce `RIEL_ARTIFACT_DIR` as the canonical root-data setting for derived defaults
 - keep explicit per-surface overrides authoritative
 - `artifactRoot`, session store paths, attachment paths, and future container-mounted work paths may all be derived from that root when more specific overrides are absent
 
@@ -164,14 +164,14 @@ Precedence:
 
 1. explicit CLI flag for that surface
 2. explicit surface-specific environment variable for that surface
-3. derived path from `DIVEDRA_ARTIFACT_DIR`
+3. derived path from `RIEL_ARTIFACT_DIR`
 4. built-in default
 
 Initial derived defaults:
 
-- artifact root: `{DIVEDRA_ARTIFACT_DIR}/workflow`
-- session store root: `{DIVEDRA_ARTIFACT_DIR}/sessions`
-- attachments root: `{DIVEDRA_ARTIFACT_DIR}/files`
+- artifact root: `{RIEL_ARTIFACT_DIR}/workflow`
+- session store root: `{RIEL_ARTIFACT_DIR}/sessions`
+- attachments root: `{RIEL_ARTIFACT_DIR}/files`
 
 This keeps file references portable between:
 
@@ -254,13 +254,13 @@ Manager send must be scope-bound:
 
 Required ambient identity for LLM-triggered CLI use:
 
-- `DIVEDRA_GRAPHQL_ENDPOINT`
-- `DIVEDRA_MANAGER_AUTH_TOKEN`
-- `DIVEDRA_MANAGER_SESSION_ID`
-- `DIVEDRA_WORKFLOW_ID`
-- `DIVEDRA_WORKFLOW_EXECUTION_ID`
-- `DIVEDRA_MANAGER_STEP_ID`
-- `DIVEDRA_MANAGER_NODE_EXEC_ID`
+- `RIEL_GRAPHQL_ENDPOINT`
+- `RIEL_MANAGER_AUTH_TOKEN`
+- `RIEL_MANAGER_SESSION_ID`
+- `RIEL_WORKFLOW_ID`
+- `RIEL_WORKFLOW_EXECUTION_ID`
+- `RIEL_MANAGER_STEP_ID`
+- `RIEL_MANAGER_NODE_EXEC_ID`
 
 The explicit command form requested by the user is supported:
 
@@ -272,7 +272,7 @@ Resolution rules:
 
 - workflow/domain identifiers are carried inside the GraphQL document variables/input
 - manager node identity and authorization are resolved from ambient manager-session environment and validated against the presented bearer token
-- for HTTP transport, `rielflow graphql` forwards `DIVEDRA_MANAGER_SESSION_ID` in `X-Rielflow-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
+- for HTTP transport, `rielflow graphql` forwards `RIEL_MANAGER_SESSION_ID` in `X-Rielflow-Manager-Session-Id` so the server can resolve the scoped manager session without embedding it in GraphQL variables
 - local operator/debug mode may allow explicit overrides, but those are not part of the normal LLM-facing contract
 
 ### Manager Token Contract
@@ -285,7 +285,7 @@ Resolution rules:
   - `managerNodeExecId`
 - normal GraphQL HTTP transport uses `Authorization: Bearer <token>`
 - normal GraphQL HTTP transport forwards `managerSessionId` in `X-Rielflow-Manager-Session-Id`
-- `DIVEDRA_MANAGER_AUTH_TOKEN` is the CLI/env injection path used inside manager tool environments, not a separate authentication mechanism
+- `RIEL_MANAGER_AUTH_TOKEN` is the CLI/env injection path used inside manager tool environments, not a separate authentication mechanism
 - the token must expire or be revoked when the manager step completes, fails, or is cancelled
 - worker nodes must never inherit this token
 
@@ -514,7 +514,7 @@ For HTTP GraphQL calls, the ambient manager-session context is carried by transp
 - bearer auth stays in `Authorization`
 - `managerSessionId` is forwarded in `X-Rielflow-Manager-Session-Id`
 - GraphQL variables keep workflow-domain inputs only
-- the `/graphql` HTTP handler must ignore any server-local `DIVEDRA_MANAGER_*` or `DIVEDRA_WORKFLOW_*` ambient execution variables for request authentication and scope resolution; only request transport metadata may supply manager scope on the HTTP boundary
+- the `/graphql` HTTP handler must ignore any server-local `RIEL_MANAGER_*` or `RIEL_WORKFLOW_*` ambient execution variables for request authentication and scope resolution; only request transport metadata may supply manager scope on the HTTP boundary
 - the `/graphql` HTTP handler must also ignore caller-provided in-process auth/session fallback fields when authenticating an HTTP request; `Authorization` and `X-Rielflow-Manager-Session-Id` remain the only manager-scope carriers on that boundary
 
 ### Typed Action Envelope
@@ -588,7 +588,7 @@ Rules:
 When `sendManagerMessage` includes image or file attachments:
 
 - attachments are represented as `DataDirFileRef`
-- the runtime resolves them against `DIVEDRA_ARTIFACT_DIR`
+- the runtime resolves them against `RIEL_ARTIFACT_DIR`
 - the resolved file must stay inside the configured data root
 - node execution backends must receive the logical attachment content through runtime-prepared inputs, not by being given host absolute paths directly
 

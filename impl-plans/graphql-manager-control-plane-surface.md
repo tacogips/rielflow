@@ -336,7 +336,7 @@ export interface GraphqlControlPlaneServices {
 **Tasks Completed**: TASK-001
 **Tasks In Progress**: None
 **Blockers**: TASK-002 remains blocked on widening communication provenance beyond node-output-backed payload references.
-**Notes**: Added a transport-neutral `ManagerMessageService`, extended typed manager action validation to cover planner-note and replay-communication, enforced attachment path safety under `DIVEDRA_ROOT_DATA_DIR`, and covered the slice with targeted tests and server typecheck.
+**Notes**: Added a transport-neutral `ManagerMessageService`, extended typed manager action validation to cover planner-note and replay-communication, enforced attachment path safety under `RIEL_ROOT_DATA_DIR`, and covered the slice with targeted tests and server typecheck.
 
 ### Session: 2026-03-15 4
 

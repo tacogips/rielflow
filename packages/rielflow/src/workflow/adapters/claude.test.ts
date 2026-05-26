@@ -31,7 +31,7 @@ const baseInput: AdapterExecutionInput = {
   executionMailbox: {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -293,23 +293,23 @@ describe("ClaudeCodeAgentAdapter", () => {
         ...baseInput,
         rielflowHookContext: {
           environment: {
-            DIVEDRA_WORKFLOW_ID: "wf",
-            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_NODE_ID: "node-1",
-            DIVEDRA_NODE_EXEC_ID: "exec-1",
-            DIVEDRA_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
-            DIVEDRA_AGENT_BACKEND: "claude-code-agent",
+            RIEL_WORKFLOW_ID: "wf",
+            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+            RIEL_NODE_ID: "node-1",
+            RIEL_NODE_EXEC_ID: "exec-1",
+            RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
+            RIEL_AGENT_BACKEND: "claude-code-agent",
           },
         },
         ambientManagerContext: {
           environment: {
-            DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-            DIVEDRA_MANAGER_AUTH_TOKEN: "secret",
-            DIVEDRA_MANAGER_SESSION_ID: "mgrsess-exec-000001",
-            DIVEDRA_WORKFLOW_ID: "wf",
-            DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-            DIVEDRA_MANAGER_STEP_ID: "node-1",
-            DIVEDRA_MANAGER_NODE_EXEC_ID: "exec-1",
+            RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+            RIEL_MANAGER_AUTH_TOKEN: "secret",
+            RIEL_MANAGER_SESSION_ID: "mgrsess-exec-000001",
+            RIEL_WORKFLOW_ID: "wf",
+            RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+            RIEL_MANAGER_STEP_ID: "node-1",
+            RIEL_MANAGER_NODE_EXEC_ID: "exec-1",
           },
         },
       },
@@ -319,10 +319,10 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(fixture.createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
         env: expect.objectContaining({
-          DIVEDRA_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
-          DIVEDRA_WORKFLOW_EXECUTION_ID: "sess-1",
-          DIVEDRA_NODE_EXEC_ID: "exec-1",
-          DIVEDRA_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
+          RIEL_GRAPHQL_ENDPOINT: "http://127.0.0.1:43173/graphql",
+          RIEL_WORKFLOW_EXECUTION_ID: "sess-1",
+          RIEL_NODE_EXEC_ID: "exec-1",
+          RIEL_MAILBOX_DIR: "/tmp/node-1/exec-1/mailbox",
         }),
       }),
     );

@@ -149,7 +149,7 @@ interface ParsedOptions {
 
 - [x] Scoped catalog resolves project workflows before user workflows
 - [x] `--scope user` and `--scope project` select only that scope
-- [x] `--workflow-definition-dir` and `DIVEDRA_WORKFLOW_DEFINITION_DIR` are direct definition directory overrides
+- [x] `--workflow-definition-dir` and `RIEL_WORKFLOW_DEFINITION_DIR` are direct definition directory overrides
 - [x] `workflow create` writes to canonical scoped layout by default
 - [x] Existing example commands with `--workflow-definition-dir ./examples` still work
 - [x] Type checking passes

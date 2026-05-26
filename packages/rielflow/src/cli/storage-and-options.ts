@@ -154,8 +154,7 @@ export async function resolveProjectScopeRootForSessionCommand(
 ): Promise<string | undefined> {
   const cwd = process.cwd();
   const env = options.env ?? process.env;
-  const configuredProjectRoot =
-    options.projectRoot ?? env["DIVEDRA_PROJECT_ROOT"];
+  const configuredProjectRoot = options.projectRoot ?? env["RIEL_PROJECT_ROOT"];
   if (configuredProjectRoot !== undefined && configuredProjectRoot.length > 0) {
     const resolved = resolveCliPath(configuredProjectRoot, cwd);
     if (await isDirectory(path.join(resolved, "workflows"))) {
@@ -169,7 +168,7 @@ export async function resolveProjectScopeRootForSessionCommand(
   }
 
   const configuredWorkflowRoot =
-    options.workflowRoot ?? env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+    options.workflowRoot ?? env["RIEL_WORKFLOW_DEFINITION_DIR"];
   if (
     configuredWorkflowRoot !== undefined &&
     configuredWorkflowRoot.length > 0
@@ -202,9 +201,9 @@ export function hasExplicitSessionStorageOverride(
     options.rootDataDir !== undefined ||
     options.artifactRoot !== undefined ||
     options.sessionStoreRoot !== undefined ||
-    env["DIVEDRA_ARTIFACT_DIR"] !== undefined ||
-    env["DIVEDRA_ARTIFACT_ROOT"] !== undefined ||
-    env["DIVEDRA_SESSION_STORE"] !== undefined
+    env["RIEL_ARTIFACT_DIR"] !== undefined ||
+    env["RIEL_ARTIFACT_ROOT"] !== undefined ||
+    env["RIEL_SESSION_STORE"] !== undefined
   );
 }
 function storageOptionsForProjectScopeRoot(
@@ -218,9 +217,9 @@ function storageOptionsForProjectScopeRoot(
       scopeRoot: projectScopeRoot,
       ...(options.userRoot !== undefined
         ? { userRoot: options.userRoot }
-        : env["DIVEDRA_USER_ROOT"] === undefined
+        : env["RIEL_USER_ROOT"] === undefined
           ? {}
-          : { userRoot: env["DIVEDRA_USER_ROOT"] }),
+          : { userRoot: env["RIEL_USER_ROOT"] }),
     }),
   };
 }
@@ -249,7 +248,7 @@ export async function resolveWorkflowOverviewStorageOptions(
 
   const env = options.env ?? process.env;
   const configuredWorkflowRoot =
-    options.workflowRoot ?? env["DIVEDRA_WORKFLOW_DEFINITION_DIR"];
+    options.workflowRoot ?? env["RIEL_WORKFLOW_DEFINITION_DIR"];
   if (
     configuredWorkflowRoot !== undefined &&
     configuredWorkflowRoot.length > 0

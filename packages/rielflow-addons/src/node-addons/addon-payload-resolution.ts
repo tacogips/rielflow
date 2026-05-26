@@ -376,7 +376,7 @@ export function requiresAsyncLocalAddonResolution(input: {
   const env = input.options?.env ?? process.env;
   return (
     input.options?.addonRoot !== undefined ||
-    (env["DIVEDRA_ADDON_ROOT"] ?? "").length > 0 ||
+    (env["RIEL_ADDON_ROOT"] ?? "").length > 0 ||
     (input.workflowSource !== undefined &&
       input.workflowSource.scope !== "direct")
   );

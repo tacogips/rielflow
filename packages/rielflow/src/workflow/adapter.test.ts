@@ -330,7 +330,7 @@ function makeExecutionMailbox() {
   return {
     meta: {
       protocolVersion: 1,
-      mailboxDirEnvVar: "DIVEDRA_MAILBOX_DIR",
+      mailboxDirEnvVar: "RIEL_MAILBOX_DIR",
       node: {
         workflowId: "wf",
         workflowDescription: "demo workflow",
@@ -433,8 +433,8 @@ describe("executeAdapterWithTimeout", () => {
       [
         "#!/bin/sh",
         "sleep 1",
-        'mkdir -p "$DIVEDRA_MAILBOX_DIR/outbox"',
-        `printf '{"ok":true}\n' > "$DIVEDRA_MAILBOX_DIR/outbox/output.json"`,
+        'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+        `printf '{"ok":true}\n' > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
         "",
       ].join("\n"),
       { encoding: "utf8", mode: 0o755 },

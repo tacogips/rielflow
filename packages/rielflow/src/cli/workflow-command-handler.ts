@@ -131,10 +131,10 @@ export async function runCliWorkflowScope(
     const manifestPath =
       positionals[3] ??
       parsed.options.workflowManifestPath ??
-      env["DIVEDRA_WORKFLOW_MANIFEST"];
+      env["RIEL_WORKFLOW_MANIFEST"];
     if (manifestPath === undefined || manifestPath.length === 0) {
       io.stderr(
-        "workflow manifest validate requires a manifest path, --workflow-manifest, or DIVEDRA_WORKFLOW_MANIFEST",
+        "workflow manifest validate requires a manifest path, --workflow-manifest, or RIEL_WORKFLOW_MANIFEST",
       );
       return 2;
     }

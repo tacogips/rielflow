@@ -109,7 +109,7 @@ describe("webhook event source adapter", () => {
       id: "example-reply-webhook",
       kind: "webhook",
       provider: "webhook",
-      replyEndpointEnv: "DIVEDRA_EXAMPLE_REPLY_ENDPOINT",
+      replyEndpointEnv: "RIEL_EXAMPLE_REPLY_ENDPOINT",
     });
     expect(binding).toMatchObject({
       id: "webhook-to-chat-reply",

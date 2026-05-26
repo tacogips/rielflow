@@ -771,10 +771,10 @@ describe("library api", () => {
       inspectWorkflow("scoped-demo", {
         cwd: root,
         env: {
-          DIVEDRA_WORKFLOW_SCOPE: "global",
+          RIEL_WORKFLOW_SCOPE: "global",
         },
       }),
-    ).rejects.toThrow("DIVEDRA_WORKFLOW_SCOPE");
+    ).rejects.toThrow("RIEL_WORKFLOW_SCOPE");
   });
 
   test("passes third-party add-on definitions through execution wrappers", async () => {

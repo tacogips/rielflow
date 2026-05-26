@@ -1,4 +1,4 @@
-import { DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT } from "rielflow-core/runtime-prompt-assets";
+import { DEFAULT_RIEL_ROLE_SYSTEM_PROMPT } from "rielflow-core/runtime-prompt-assets";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "./node-role";
 import { buildPromptTemplateVariables } from "./prompt-template-context";
 import { renderPromptTemplate } from "./render";
@@ -117,7 +117,7 @@ export function composeExecutionPrompts(input: {
         ).trim();
 
   const systemSections = isManagerNodeRef(input.promptComposition.nodeRef)
-    ? [DEFAULT_DIVEDRA_ROLE_SYSTEM_PROMPT, workflowPrompt, nodeSystemPrompt]
+    ? [DEFAULT_RIEL_ROLE_SYSTEM_PROMPT, workflowPrompt, nodeSystemPrompt]
     : [workerSystemPrompt, nodeSystemPrompt];
 
   const promptSections = [sessionStartPrompt];

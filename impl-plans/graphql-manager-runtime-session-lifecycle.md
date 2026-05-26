@@ -53,13 +53,13 @@ This plan closes the remaining runtime integration gap for the GraphQL manager c
 
 ```typescript
 export interface AmbientManagerControlPlaneEnvironment {
-  readonly DIVEDRA_GRAPHQL_ENDPOINT: string;
-  readonly DIVEDRA_MANAGER_AUTH_TOKEN: string;
-  readonly DIVEDRA_MANAGER_SESSION_ID: string;
-  readonly DIVEDRA_WORKFLOW_ID: string;
-  readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
-  readonly DIVEDRA_MANAGER_RUNTIME_ID: string;
-  readonly DIVEDRA_MANAGER_NODE_EXEC_ID: string;
+  readonly RIEL_GRAPHQL_ENDPOINT: string;
+  readonly RIEL_MANAGER_AUTH_TOKEN: string;
+  readonly RIEL_MANAGER_SESSION_ID: string;
+  readonly RIEL_WORKFLOW_ID: string;
+  readonly RIEL_WORKFLOW_EXECUTION_ID: string;
+  readonly RIEL_MANAGER_RUNTIME_ID: string;
+  readonly RIEL_MANAGER_NODE_EXEC_ID: string;
 }
 
 export function mintManagerAuthToken(): string;

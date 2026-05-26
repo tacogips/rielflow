@@ -137,7 +137,7 @@
 
           shellHook = ''
             # Dev-only: fixed root data dir for this checkout (production default is ~/.rielflow/project/<cwd-encoded>/rielflow-artifact).
-            export DIVEDRA_ARTIFACT_DIR="/tmp/rielflow-artifact-dev"
+            export RIEL_ARTIFACT_DIR="/tmp/rielflow-artifact-dev"
             ${preCommitCheck.shellHook}
 
             echo "TypeScript development environment ready"

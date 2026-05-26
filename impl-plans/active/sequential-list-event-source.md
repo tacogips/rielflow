@@ -432,7 +432,7 @@ and keep plan indexes aligned with the final implementation state.
 - [x] Targeted event-source tests pass.
 - [x] Example event configuration validates.
 - [x] Read-only sequential-list verification passes with
-      `DIVEDRA_EVENTS_READ_ONLY=true` or `--read-only`.
+      `RIEL_EVENTS_READ_ONLY=true` or `--read-only`.
 - [x] Plan progress log records commands, results, and residual risks.
 - [x] README and progress indexes match the implementation state.
 
@@ -451,7 +451,7 @@ observer, receipts, and replay semantics share runtime contracts.
 - `bun run typecheck`
 - `bun test packages/rielflow/src/events/validate-source-sequential-list.test.ts packages/rielflow/src/events/adapter-registry.test.ts packages/rielflow/src/events/adapters/sequential-list.test.ts packages/rielflow/src/events/sequential-list-completion.test.ts packages/rielflow/src/events/listener-service.test.ts packages/rielflow/src/events/receipt-ops.test.ts packages/rielflow/src/cli.test.ts`
 - `bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`
-- `DIVEDRA_EVENTS_READ_ONLY=true bun test packages/rielflow/src/events/adapters/sequential-list.test.ts`
+- `RIEL_EVENTS_READ_ONLY=true bun test packages/rielflow/src/events/adapters/sequential-list.test.ts`
 - `bun run packages/rielflow/src/bin.ts events list --event-root ./examples/event-sources/.rielflow-events`
 - `rg -n "sequential-list|Sequential List" README.md examples/event-sources/README.md design-docs/specs/command.md design-docs/specs/design-event-listener-workflow-trigger.md`
 

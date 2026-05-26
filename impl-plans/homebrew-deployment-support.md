@@ -69,7 +69,7 @@ interface HomebrewFormulaChecksums {
 
 - [x] Read checksums for all supported Homebrew targets
 - [x] Render `Formula/rielflow.rb` with platform-specific URLs and SHA values
-- [x] Support alternate release hosts through `DIVEDRA_RELEASE_BASE_URL`
+- [x] Support alternate release hosts through `RIEL_RELEASE_BASE_URL`
 - [x] Fail when required checksum files are missing
 
 ### 3. Documentation and Task Wrappers
