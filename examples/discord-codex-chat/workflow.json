@@ -1,0 +1,47 @@
+{
+  "workflowId": "discord-codex-chat",
+  "description": "Reply to Discord chat messages by generating a concise answer with codex-agent gpt-5.4-mini, then sending that answer back through the configured chat destination.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in payload.replyText and avoid exposing internal workflow details."
+  },
+  "entryStepId": "answer-discord-message",
+  "nodes": [
+    {
+      "id": "answer-discord-message",
+      "nodeFile": "nodes/node-answer-discord-message.json"
+    },
+    {
+      "id": "send-discord-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "visibility": "public",
+          "threadPolicy": "same-thread"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "answer-discord-message",
+      "nodeId": "answer-discord-message",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-discord-reply"
+        }
+      ]
+    },
+    {
+      "id": "send-discord-reply",
+      "nodeId": "send-discord-reply",
+      "role": "worker"
+    }
+  ]
+}

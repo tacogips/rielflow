@@ -2,8 +2,8 @@
   "id": "team-matrix",
   "kind": "matrix",
   "provider": "matrix",
-  "homeserverUrlEnv": "DIVEDRA_MATRIX_HOMESERVER_URL",
-  "accessTokenEnv": "DIVEDRA_MATRIX_ACCESS_TOKEN",
+  "homeserverUrlEnv": "RIEL_MATRIX_HOMESERVER_URL",
+  "accessTokenEnv": "RIEL_MATRIX_ACCESS_TOKEN",
   "userId": "@rielflow:matrix.example",
   "rooms": [
     {

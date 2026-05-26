@@ -112,7 +112,7 @@ Minimal worker-only workflow showing the built-in node add-on catalog:
 - `nodes[].addon.name` selects `rielflow/chat-reply-worker`
 - the node renders a reply from `runtimeVariables.event`
 - when launched through `examples/event-sources`, the webhook source dispatches
-  the reply to `DIVEDRA_EXAMPLE_REPLY_ENDPOINT`
+  the reply to `RIEL_EXAMPLE_REPLY_ENDPOINT`
 
 Validate it:
 
@@ -128,6 +128,33 @@ bun run packages/rielflow/src/bin.ts workflow inspect chat-reply-webhook --workf
 
 See `examples/event-sources/README.md` for a local webhook event and reply
 endpoint demo.
+
+### `discord-codex-chat`
+
+Discord chat workflow using the generic Chat SDK event boundary:
+
+- receives normalized Discord messages from the `chat-sdk-discord` event source
+- generates a reply with `codex-agent` model `gpt-5.4-mini`
+- sends the generated text back through `rielflow/chat-reply-worker`
+- keeps the reply destination external through `chat-sdk-discord-replies`
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate discord-codex-chat --workflow-definition-dir ./examples
+```
+
+Run it through the deterministic Discord event fixture:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit chat-sdk-discord \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-discord-message.json \
+  --mock-scenario ./examples/discord-codex-chat/mock-scenario.json \
+  --output json
+```
 
 ### `matrix-chat-reply`
 

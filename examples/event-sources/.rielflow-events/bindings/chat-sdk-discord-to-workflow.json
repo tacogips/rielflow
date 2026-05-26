@@ -1,0 +1,25 @@
+{
+  "id": "chat-sdk-discord-to-workflow",
+  "sourceId": "chat-sdk-discord",
+  "outputDestinations": ["chat-sdk-discord-replies"],
+  "workflowName": "discord-codex-chat",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "provider": "{{event.input.provider}}",
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": true,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  }
+}

@@ -34,7 +34,7 @@ Then emit the reply fixture without `--endpoint` so the local event runner can
 pass its in-process reply dispatcher into the workflow:
 
 ```bash
-DIVEDRA_EXAMPLE_REPLY_ENDPOINT=http://127.0.0.1:43175/reply \
+RIEL_EXAMPLE_REPLY_ENDPOINT=http://127.0.0.1:43175/reply \
 rielflow events emit example-reply-webhook \
   --workflow-definition-dir ./examples \
   --event-root ./examples/event-sources/.rielflow-events \
@@ -48,8 +48,8 @@ Set a Matrix homeserver URL and bot access token through env vars when serving
 or replying to real rooms:
 
 ```bash
-export DIVEDRA_MATRIX_HOMESERVER_URL=https://matrix.example
-export DIVEDRA_MATRIX_ACCESS_TOKEN=<matrix-bot-access-token>
+export RIEL_MATRIX_HOMESERVER_URL=https://matrix.example
+export RIEL_MATRIX_ACCESS_TOKEN=<matrix-bot-access-token>
 ```
 
 For deterministic local receive tests, emit the checked-in Matrix room-message
@@ -94,10 +94,10 @@ through the configured send endpoint.
 Serve the source with env-var references only:
 
 ```bash
-export DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET=<shared-webhook-secret>
-export DIVEDRA_CHAT_SDK_SLACK_BEARER_TOKEN=<inbound-bearer-token>
-export DIVEDRA_CHAT_SDK_SLACK_SEND_URL=https://chat-sdk.example.test/send
-export DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN=<outbound-send-token>
+export RIEL_CHAT_SDK_SLACK_WEBHOOK_SECRET=<shared-webhook-secret>
+export RIEL_CHAT_SDK_SLACK_BEARER_TOKEN=<inbound-bearer-token>
+export RIEL_CHAT_SDK_SLACK_SEND_URL=https://chat-sdk.example.test/send
+export RIEL_CHAT_SDK_SLACK_SEND_TOKEN=<outbound-send-token>
 rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
@@ -110,6 +110,33 @@ rielflow events emit chat-sdk-slack \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-sdk-slack-message.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
+The `chat-sdk-discord` source uses the same generic boundary for Discord and
+dispatches messages to the `discord-codex-chat` workflow, which generates a
+reply with `codex-agent` model `gpt-5.4-mini` before sending it back to the same
+Discord thread through `rielflow/chat-reply-worker`.
+
+Serve the Discord source with env-var references only:
+
+```bash
+export RIEL_CHAT_SDK_DISCORD_WEBHOOK_SECRET=<shared-webhook-secret>
+export RIEL_CHAT_SDK_DISCORD_BEARER_TOKEN=<inbound-bearer-token>
+export RIEL_CHAT_SDK_DISCORD_SEND_URL=https://chat-sdk.example.test/send
+export RIEL_CHAT_SDK_DISCORD_SEND_TOKEN=<outbound-send-token>
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit the Discord payload fixture:
+
+```bash
+rielflow events emit chat-sdk-discord \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-discord-message.json \
+  --mock-scenario ./examples/discord-codex-chat/mock-scenario.json \
   --output json
 ```
 
@@ -180,7 +207,7 @@ rielflow events replay <receipt-id> \
   --output json
 ```
 
-Use `--read-only` or `DIVEDRA_EVENTS_READ_ONLY=true` with `events serve` to
+Use `--read-only` or `RIEL_EVENTS_READ_ONLY=true` with `events serve` to
 persist skipped receipts and sequence state without dispatching workflow
 executions. The durable cursor remains on the undispatched item so a later
 non-read-only serve can process it.

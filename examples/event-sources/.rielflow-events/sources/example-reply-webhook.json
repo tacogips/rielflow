@@ -3,5 +3,5 @@
   "kind": "webhook",
   "path": "/events/example-reply-webhook",
   "provider": "webhook",
-  "replyEndpointEnv": "DIVEDRA_EXAMPLE_REPLY_ENDPOINT"
+  "replyEndpointEnv": "RIEL_EXAMPLE_REPLY_ENDPOINT"
 }
