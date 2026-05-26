@@ -26,7 +26,6 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
-| `active/product-rename-rielflow` | Completed | `architecture#product-rename-to-rielflow`, `command#product-rename-command-surface` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 
@@ -34,6 +33,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `product-rename-rielflow` | 2026-05-26 | `architecture#product-rename-to-rielflow`, `command#product-rename-command-surface` |
 | `homebrew-deployment-support` | 2026-05-20 | `architecture`, `command` |
 | `duplicate-scavenge-refactoring-workflow-mode` | 2026-05-19 | `architecture` |
 | `refactoring-duplicate-scavenge-product-code` | 2026-05-19 | `refactoring-divide-and-conquer`, `step3-merge-review-plan`, `architecture` |

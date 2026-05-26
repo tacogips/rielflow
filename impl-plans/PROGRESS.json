@@ -549,10 +549,10 @@
     }
   },
   "plans": {
-    "active/product-rename-rielflow": {
+    "completed/product-rename-rielflow": {
       "phase": 185,
       "status": "Completed",
-      "path": "impl-plans/active/product-rename-rielflow.md",
+      "path": "impl-plans/completed/product-rename-rielflow.md",
       "designReference": "design-docs/specs/architecture.md#product-rename-to-rielflow; design-docs/specs/command.md#product-rename-command-surface",
       "tasks": {
         "TASK-001": {

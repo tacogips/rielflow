@@ -13,7 +13,7 @@
 
 ### Summary
 
-Rename product-owned `rielflow` identity to `rielflow` across package names,
+Rename product-owned `divedra` identity to `rielflow` across package names,
 CLI entrypoints, scripts, configuration, workflow bundles, examples,
 documentation, release assets, and file paths while preserving runtime behavior.
 Use `Rielflow` for human-readable product naming and
@@ -36,7 +36,7 @@ artifacts unless the retained reference is explicitly classified.
 
 Step 3 accepted the design with no high or mid findings. The implementation
 must preserve Codex-agent references as backend/workflow context and must keep
-every retained `rielflow` literal classified as compatibility alias, migration
+every retained `divedra` literal classified as compatibility alias, migration
 support, historical artifact reference, or intentionally unchanged backend text.
 
 ### Open Product Decisions
@@ -44,7 +44,7 @@ support, historical artifact reference, or intentionally unchanged backend text.
 Track unresolved decisions in
 `design-docs/user-qa/qa-product-rename-rielflow.md`. Implementation may proceed
 by making compatibility-preserving choices where a decision is not yet final:
-retain a thin `rielflow` CLI alias if needed, keep legacy read discovery for
+retain a thin `divedra` CLI alias if needed, keep legacy read discovery for
 runtime roots, and document historical references instead of deleting context.
 
 ---
