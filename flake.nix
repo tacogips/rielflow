@@ -43,6 +43,7 @@
           gh
           go-task
           podman
+          podman-compose
 
         ];
 
@@ -146,6 +147,8 @@
             echo "Biome version: $(biome --version 2>/dev/null || echo 'not available')"
             echo "Task version: $(task --version 2>/dev/null || echo 'not available')"
             echo "Gitleaks version: $(gitleaks version 2>/dev/null || echo 'not available')"
+            echo "Podman version: $(podman --version 2>/dev/null || echo 'not available')"
+            echo "Podman Compose version: $(podman-compose --version 2>/dev/null || echo 'not available')"
           '';
         };
       }
