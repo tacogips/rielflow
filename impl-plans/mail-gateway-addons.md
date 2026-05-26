@@ -1,7 +1,7 @@
 # Mail Gateway Add-ons Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-divedramail-gateway-read`
+**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-rielflowmail-gateway-read`
 **Created**: 2026-04-20
 **Last Updated**: 2026-04-20
 
@@ -9,13 +9,13 @@
 
 Add two built-in worker add-ons for `tacogips/mail-gateway`:
 
-- `divedra/mail-gateway-read` runs the read-only `mail-gateway-reader graphql
+- `rielflow/mail-gateway-read` runs the read-only `mail-gateway-reader graphql
 --query` surface.
-- `divedra/mail-gateway` runs the full `mail-gateway graphql --query` surface,
+- `rielflow/mail-gateway` runs the full `mail-gateway graphql --query` surface,
   including intentional send mutations such as `sendMessage`.
 
 Both add-ons run through Docker-compatible container runners and use explicit
-`addon.env` mappings so workflows can choose which divedra-side environment
+`addon.env` mappings so workflows can choose which rielflow-side environment
 variables are forwarded into each add-on container.
 
 Scope:
@@ -29,7 +29,7 @@ Out of scope:
 
 - Publishing or building a mail-gateway container image.
 - Direct local execution of mail-gateway outside a container.
-- Making `divedra/mail-gateway-read` send-capable.
+- Making `rielflow/mail-gateway-read` send-capable.
 - Author-controlled command or binary overrides.
 
 ## Modules
@@ -60,8 +60,8 @@ interface MailGatewayAddonConfig {
 
 **Checklist**:
 
-- [x] Resolve `divedra/mail-gateway-read` version `1`.
-- [x] Resolve `divedra/mail-gateway` version `1`.
+- [x] Resolve `rielflow/mail-gateway-read` version `1`.
+- [x] Resolve `rielflow/mail-gateway` version `1`.
 - [x] Validate read and send-capable configs.
 - [x] Reject author-controlled command overrides.
 - [x] Preserve explicit `addon.env` bindings.
@@ -90,7 +90,7 @@ async function executeMailGatewayAddonNode(
 **Checklist**:
 
 - [x] Render query/document templates with normal node template variables.
-- [x] Resolve explicit add-on env bindings from the divedra runtime env.
+- [x] Resolve explicit add-on env bindings from the rielflow runtime env.
 - [x] Run `mail-gateway-reader graphql --query <query>` for read-only nodes.
 - [x] Run `mail-gateway graphql --query <document>` for send-capable nodes.
 - [x] Parse JSON stdout into node output.
@@ -134,7 +134,7 @@ async function executeMailGatewayAddonNode(
 
 ## Completion Criteria
 
-- [x] `divedra/mail-gateway-read` and `divedra/mail-gateway` validate and
+- [x] `rielflow/mail-gateway-read` and `rielflow/mail-gateway` validate and
       resolve.
 - [x] The read add-on uses `mail-gateway-reader`, while the send-capable add-on
       uses `mail-gateway`.

@@ -158,7 +158,7 @@ Target registry entry shapes:
 {
   "id": "reply-worker",
   "addon": {
-    "name": "divedra/chat-reply-worker",
+    "name": "rielflow/chat-reply-worker",
     "version": "1"
   }
 }

@@ -11,7 +11,7 @@
 
 ### Summary
 
-Align default runtime data-root scoping with the documented project model: when no explicit root override is supplied, `DIVEDRA_ARTIFACT_DIR` should encode the nearest ancestor containing `.divedra`, not the raw nested current working directory.
+Align default runtime data-root scoping with the documented project model: when no explicit root override is supplied, `DIVEDRA_ARTIFACT_DIR` should encode the nearest ancestor containing `.rielflow`, not the raw nested current working directory.
 
 ### Scope
 
@@ -37,7 +37,7 @@ Align default runtime data-root scoping with the documented project model: when 
 
 **Checklist**:
 
-- [x] Resolve the nearest `.divedra` ancestor before computing the default root data dir
+- [x] Resolve the nearest `.rielflow` ancestor before computing the default root data dir
 - [x] Keep explicit root overrides higher priority than inferred project scoping
 - [x] Preserve existing path encoding rules for the selected project root
 

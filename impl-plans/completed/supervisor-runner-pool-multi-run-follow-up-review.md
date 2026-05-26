@@ -54,12 +54,12 @@ that preserve public API compatibility.
 No concrete `codex-agent` references are available for this workflow run. Step 1
 reported no supplied `codexAgentReferences` and no local `../../codex-agent`
 reference root. The accepted design intentionally keeps `codex-agent` and Cursor
-behavior adapter-scoped; the implementation plan therefore traces to divedra's
+behavior adapter-scoped; the implementation plan therefore traces to rielflow's
 core supervisor-client and runner-pool contracts instead of external code.
 
 Intentional divergences:
 
-- Divedra `runnerPoolRunId` remains a process-local live-handle id.
+- Rielflow `runnerPoolRunId` remains a process-local live-handle id.
 - Durable inspection uses `supervisedRunId` or `workflowExecutionId`, not
   `runnerPoolRunId`.
 - Backend adapters may translate requests but do not own runner-pool lifecycle
@@ -75,7 +75,7 @@ Intentional divergences:
 #### `src/workflow/supervisor-graphql-client.ts`
 #### `src/events/`
 #### `src/lib.ts`
-#### `packages/divedra-core/src/index.ts`
+#### `packages/rielflow-core/src/index.ts`
 #### `README.md`
 
 **Status**: COMPLETED
@@ -166,8 +166,8 @@ interface SupervisedWorkflowLookup {
 ### 4. Public Surface, Documentation, and Package Boundary
 
 #### `src/lib.ts`
-#### `packages/divedra-core/src/index.ts`
-#### `packages/divedra/src/cli.ts`
+#### `packages/rielflow-core/src/index.ts`
+#### `packages/rielflow/src/cli.ts`
 #### `README.md`
 #### `design-docs/specs/architecture.md`
 
@@ -177,7 +177,7 @@ interface SupervisedWorkflowLookup {
 
 - Refresh documentation only where the current branch still underspecifies
   process-local runner-pool ids, durable lookup ids, or package import guidance.
-- Keep root and `divedra-core` supervision exports aligned.
+- Keep root and `rielflow-core` supervision exports aligned.
 - Confirm adapters do not create independent runner-pool semantics.
 
 **Checklist**:
@@ -221,10 +221,10 @@ interface SupervisedWorkflowLookup {
 
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
-| Current-branch contract audit | `src/workflow/`, `src/graphql/`, `src/events/`, `src/lib.ts`, `packages/divedra-core/src/index.ts`, `README.md` | COMPLETED | inspection plus targeted existing tests |
+| Current-branch contract audit | `src/workflow/`, `src/graphql/`, `src/events/`, `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `README.md` | COMPLETED | inspection plus targeted existing tests |
 | Runner-pool lookup and lifecycle corrections | `src/workflow/`, `src/events/supervised-runs.ts`, `src/workflow/runtime-db/` | COMPLETED | `src/workflow/supervisor-runner-pool.test.ts`, `src/workflow/supervisor-client.test.ts` |
 | GraphQL cross-request and client corrections | `src/graphql/`, `src/server/`, `src/workflow/supervisor-graphql-client.ts` | COMPLETED | `src/server/graphql-supervision-and-resume.test.ts`, `src/workflow/supervisor-graphql-client.test.ts`, `src/graphql/schema.test.ts` |
-| Public surface and documentation | `src/lib.ts`, `packages/divedra-core/src/index.ts`, `README.md`, `design-docs/specs/architecture.md` | COMPLETED | `src/lib-supervision.test.ts` |
+| Public surface and documentation | `src/lib.ts`, `packages/rielflow-core/src/index.ts`, `README.md`, `design-docs/specs/architecture.md` | COMPLETED | `src/lib-supervision.test.ts` |
 | Regression verification and progress recording | tests plus this plan | COMPLETED | targeted suites, typecheck, lint, diff check |
 
 ## Dependencies
@@ -254,7 +254,7 @@ Run these inspection commands during Task 1:
 
 ```bash
 git diff --stat b2b00b592360aa326b59766b1c157f78c3a548d8...HEAD
-rg -n "runnerPoolRunId|supervisedRunId|workflowExecutionId|workflowKey|alias|idempotencyKey|cancel\\(|wait\\(" src/workflow src/graphql src/server src/events packages/divedra-core/src/index.ts src/lib.ts README.md
+rg -n "runnerPoolRunId|supervisedRunId|workflowExecutionId|workflowKey|alias|idempotencyKey|cancel\\(|wait\\(" src/workflow src/graphql src/server src/events packages/rielflow-core/src/index.ts src/lib.ts README.md
 sed -n '129,193p' design-docs/specs/architecture.md
 sed -n '1,220p' src/workflow/supervisor-runner-pool.ts
 ```
@@ -282,7 +282,7 @@ git diff --check
 - [x] Wait/cancel/status behavior is deterministic for active, terminal,
       canceled, unknown, expired, and durable-only runs.
 - [x] Existing idempotency compatibility is preserved.
-- [x] Root and `divedra-core` package exports remain compatible.
+- [x] Root and `rielflow-core` package exports remain compatible.
 - [x] Documentation is refreshed where user-facing or package-boundary wording
       is stale.
 - [x] Targeted tests and repository checks pass, or failures are documented with
@@ -303,7 +303,7 @@ accepted the design.
 - Later implementation must first audit current branch behavior, then edit only
   confirmed gaps.
 - Because no concrete `codex-agent` references are available, the plan uses the
-  accepted divedra design contract as source of truth and records adapter-scope
+  accepted rielflow design contract as source of truth and records adapter-scope
   divergence explicitly.
 
 ### Session: 2026-05-14 17:33 JST

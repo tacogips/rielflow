@@ -15,7 +15,7 @@
 - `design-docs/specs/architecture.md`
 
 ### Summary
-Implemented strict TypeScript domain models, JSON normalization, semantic validation, and filesystem loader utilities for workflow directories under `.divedra/<workflow-name>/`.
+Implemented strict TypeScript domain models, JSON normalization, semantic validation, and filesystem loader utilities for workflow directories under `.rielflow/<workflow-name>/`.
 
 ### Scope
 **Included**:

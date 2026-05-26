@@ -1,6 +1,6 @@
 # Bounded Fanout Join Workflow Execution
 
-This document defines first-class bounded fanout and join behavior for step-addressed divedra workflows.
+This document defines first-class bounded fanout and join behavior for step-addressed rielflow workflows.
 
 ## Overview
 
@@ -28,13 +28,13 @@ Relevant reference points:
 
 - `<reference-repository-root>/src/group/manager.ts`: `runGroup()` uses a bounded `maxConcurrent` loop, an `inFlight` map, and `Promise.race()` to refill pending work as sessions finish.
 - `<reference-repository-root>/src/group/types.ts`: `GroupRunOptions.maxConcurrent` is a small public option on the group execution boundary.
-- `<reference-repository-root>/src/queue/runner.ts`: queue execution is deliberately sequential and is a useful contrast for divedra's current `session.queue` behavior.
+- `<reference-repository-root>/src/queue/runner.ts`: queue execution is deliberately sequential and is a useful contrast for rielflow's current `session.queue` behavior.
 - `<reference-repository-root>/impl-plans/completed/phase3-sqlite-group-queue.md`: documents the separation between concurrency-controlled group execution and strictly sequential queue execution.
 
-The divedra design intentionally diverges from codex-agent in two ways:
+The rielflow design intentionally diverges from codex-agent in two ways:
 
-- codex-agent runs one prompt across existing sessions, while divedra fans out workflow step work items that may share one workflow execution and must preserve mailbox, transition, retry, timeout, and artifact semantics
-- codex-agent emits group events as an `AsyncGenerator`, while divedra must persist fanout group state into the workflow session and runtime artifacts so CLI, GraphQL, TUI, resume, rerun, and supervision can inspect the same source of truth
+- codex-agent runs one prompt across existing sessions, while rielflow fans out workflow step work items that may share one workflow execution and must preserve mailbox, transition, retry, timeout, and artifact semantics
+- codex-agent emits group events as an `AsyncGenerator`, while rielflow must persist fanout group state into the workflow session and runtime artifacts so CLI, GraphQL, TUI, resume, rerun, and supervision can inspect the same source of truth
 
 ## Authoring Model
 
@@ -63,7 +63,7 @@ Cross-workflow fanout uses the existing `toWorkflowId` and `resumeStepId` fields
 ```json
 {
   "toWorkflowId": "feature-local-plan",
-  "toStepId": "divedra-manager",
+  "toStepId": "rielflow-manager",
   "resumeStepId": "join-feature-plans",
   "label": "has_features",
   "fanout": {
@@ -275,7 +275,7 @@ Implementation should be staged:
 4. bounded scheduler for local inline fanout in the parent workflow session with deterministic aggregate join communication
 5. shared-worktree safety checks for branch write ownership, persisted branch workspace roots, and retry lineage through `supersededWorkspaceRoot`
 6. inspection and test coverage
-7. update `.divedra/workflows/design-and-implement-review-loop` only after the schema is accepted and tests pass
+7. update `.rielflow/workflows/design-and-implement-review-loop` only after the schema is accepted and tests pass
 
 Verification should include:
 

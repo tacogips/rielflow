@@ -17,7 +17,7 @@
 ### Summary
 
 Add supervised `--auto-improve` execution on top of the step-addressed runtime.
-The feature launches a target workflow together with a paired `divedra
+The feature launches a target workflow together with a paired `rielflow
 superviser` workflow that watches progress, records incidents, decides rerun
 versus workflow repair, patches an execution-scoped mutable workflow copy by
 default, and reruns until success or supervision budget exhaustion.
@@ -123,7 +123,7 @@ export interface WorkflowPatchRevisionInput {
 
 #### `src/workflow/superviser.ts`, `src/workflow/call-step.ts`, `src/workflow/engine.ts`, `src/workflow/node-addons.ts`, `src/workflow/local-node-addons.ts`
 
-**Status**: SHIPPED (phase 1): `superviser.ts` + `runAutoImproveLoop` (stall watch, repeat-failure `patch-workflow` audit, targeted rerun, budgets). **Phase 2** (nested `superviserWorkflowId` workflow, `divedra/*` control add-ons, `nestedSuperviserSessionId`) is **Completed** in `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md`.
+**Status**: SHIPPED (phase 1): `superviser.ts` + `runAutoImproveLoop` (stall watch, repeat-failure `patch-workflow` audit, targeted rerun, budgets). **Phase 2** (nested `superviserWorkflowId` workflow, `rielflow/*` control add-ons, `nestedSuperviserSessionId`) is **Completed** in `impl-plans/completed/auto-improve-superviser-workflow-phase-2.md`.
 
 ```typescript
 export type SupervisionRemediationAction =
@@ -151,7 +151,7 @@ export interface StartSupervisedRunInput extends LoadOptions, SessionStoreOption
 - [x] Allow targeted rerun when enabled and the step-addressed runtime can validate the selected step (`resolveSupervisionRerunTarget` in `superviser.ts` + `runAutoImproveLoop` remediation `rerun-step` / `targetStepId`)
 - [x] Record `patch-workflow` remediation and `patch-revisions.json` on **consecutive** target failures with the same **failure** `SupervisionIncident.summary` as the latest prior failure incident (engine stores this from `lastError` / failure message; `maxWorkflowPatches` / `stop-patch-budget`)
 - [x] (phase 1) Control-plane **surface** for target session status and reruns: existing `runWorkflow` / `resumeWorkflow` / `rerun` / GraphQL session + `getSupervisionSummary`; no separate superviser add-on API yet
-- [x] (phase 2) Built-in add-ons (`divedra/start-workflow`, `get-workflow-status`, `rerun-workflow`, `load-workflow-definition`, `save-workflow-definition`, etc.) invoked from the nested superviser workflow for the **target** run (`src/workflow/node-addons.ts`, `superviser-runtime-control-impl.ts`; see phase-2 plan)
+- [x] (phase 2) Built-in add-ons (`rielflow/start-workflow`, `get-workflow-status`, `rerun-workflow`, `load-workflow-definition`, `save-workflow-definition`, etc.) invoked from the nested superviser workflow for the **target** run (`src/workflow/node-addons.ts`, `superviser-runtime-control-impl.ts`; see phase-2 plan)
 - [x] (phase 2) Run `superviserWorkflowId` as a nested step-addressed workflow when `--nested-superviser` / `nestedSuperviserDriver` is enabled; phase-1 `runAutoImproveLoop` remains the default without that flag
 
 ### 4. Public Surfaces
@@ -176,7 +176,7 @@ export interface SupervisionSummary {
 
 **Checklist**:
 
-- [x] Add `divedra workflow run <name> --auto-improve` with policy flags
+- [x] Add `rielflow workflow run <name> --auto-improve` with policy flags
 - [x] Expose supervision status through library and GraphQL APIs (summary helper + `session.supervision`; execution client parity TBD)
 - [x] Keep policy parsing explicit for monitor interval, stall timeout, attempt budgets, mutation mode, and targeted rerun
 - [x] `getSupervisionSummary` and GraphQL expose incident/remediation ids, `workflowPatchCount`, `mutableWorkflowDir`, and `status` (including `succeeded` / `stopped` from the engine loop)
@@ -308,7 +308,7 @@ interface SuperviserExampleBundle {
 
 ### Session: 2026-04-25 (engine + CLI entry: autoImprove)
 
-**Tasks Completed**: `WorkflowRunOptions.autoImprove`; on new runs (not `resumeSessionId`), engine seeds `SupervisionRunState` with default `divedra-default-superviser`, policy, empty incidents/remediations. `cloneSession` deep-clones `supervision`. CLI: `--auto-improve`, `--superviser-workflow`, `--monitor-interval-ms`, `--stall-timeout-ms`, `--max-supervised-attempts`, `--max-workflow-patches`, `--workflow-mutation-mode`, `--no-allow-targeted-rerun`; `buildLocalWorkflowRunOverrides` passes policy. Library: `ExecuteWorkflowInput.autoImprove`, `RerunWorkflowInput.autoImprove`. Test: `engine.test.ts` seeds supervision. Help text updated.
+**Tasks Completed**: `WorkflowRunOptions.autoImprove`; on new runs (not `resumeSessionId`), engine seeds `SupervisionRunState` with default `rielflow-default-superviser`, policy, empty incidents/remediations. `cloneSession` deep-clones `supervision`. CLI: `--auto-improve`, `--superviser-workflow`, `--monitor-interval-ms`, `--stall-timeout-ms`, `--max-supervised-attempts`, `--max-workflow-patches`, `--workflow-mutation-mode`, `--no-allow-targeted-rerun`; `buildLocalWorkflowRunOverrides` passes policy. Library: `ExecuteWorkflowInput.autoImprove`, `RerunWorkflowInput.autoImprove`. Test: `engine.test.ts` seeds supervision. Help text updated.
 
 **Verification**: `bun run typecheck:server`, `bash scripts/run-bun-tests.sh`.
 

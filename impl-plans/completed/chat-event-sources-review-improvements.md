@@ -51,7 +51,7 @@ secure Chat SDK generic webhook/send boundary.
 
 - `../../codex-agent`: unavailable in Step 1 through Step 3; do not infer
   reference behavior from missing files.
-- Accepted divergence: use divedra-local event-source contracts only.
+- Accepted divergence: use rielflow-local event-source contracts only.
 - Accepted boundary: no Cursor-specific or Codex-specific chat behavior is
   introduced; provider details stay behind event adapter modules.
 
@@ -59,7 +59,7 @@ secure Chat SDK generic webhook/send boundary.
 
 ### 1. Cross-Source Fixture And Config Audit
 
-#### `examples/event-sources/.divedra-events/**/*.json`
+#### `examples/event-sources/.rielflow-events/**/*.json`
 #### `examples/event-sources/payloads/*.json`
 #### `examples/event-sources/README.md`
 
@@ -95,10 +95,10 @@ interface ChatSourceAuditResult {
 #### `src/events/adapters/webhook.test.ts`
 #### `src/events/chat-reply-example.test.ts`
 #### `examples/chat-reply-webhook/`
-#### `examples/event-sources/.divedra-events/sources/example-webhook.json`
-#### `examples/event-sources/.divedra-events/sources/example-reply-webhook.json`
-#### `examples/event-sources/.divedra-events/bindings/webhook-to-chat-reply.json`
-#### `examples/event-sources/.divedra-events/destinations/example-reply-chat.json`
+#### `examples/event-sources/.rielflow-events/sources/example-webhook.json`
+#### `examples/event-sources/.rielflow-events/sources/example-reply-webhook.json`
+#### `examples/event-sources/.rielflow-events/bindings/webhook-to-chat-reply.json`
+#### `examples/event-sources/.rielflow-events/destinations/example-reply-chat.json`
 #### `examples/event-sources/payloads/chat-message.json`
 #### `examples/event-sources/payloads/chat-reply-message.json`
 
@@ -130,9 +130,9 @@ interface WebhookChatFixtureExpectation {
 #### `src/events/adapters/matrix.test.ts`
 #### `src/events/matrix-chat-reply-example.test.ts`
 #### `examples/matrix-chat-reply/`
-#### `examples/event-sources/.divedra-events/sources/team-matrix.json`
-#### `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`
-#### `examples/event-sources/.divedra-events/destinations/release-matrix-chat.json`
+#### `examples/event-sources/.rielflow-events/sources/team-matrix.json`
+#### `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`
+#### `examples/event-sources/.rielflow-events/destinations/release-matrix-chat.json`
 #### `examples/event-sources/payloads/matrix-room-message.json`
 
 **Status**: COMPLETED
@@ -166,9 +166,9 @@ interface MatrixChatAlignmentExpectation {
 #### `src/events/adapters/chat-sdk/reply.ts`
 #### `src/events/adapters/chat-sdk.test.ts`
 #### `src/events/validate-source-chat-sdk.ts`
-#### `examples/event-sources/.divedra-events/sources/chat-sdk-slack.json`
-#### `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-to-workflow.json`
-#### `examples/event-sources/.divedra-events/destinations/chat-sdk-slack-replies.json`
+#### `examples/event-sources/.rielflow-events/sources/chat-sdk-slack.json`
+#### `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-to-workflow.json`
+#### `examples/event-sources/.rielflow-events/destinations/chat-sdk-slack-replies.json`
 #### `examples/event-sources/payloads/chat-sdk-slack-message.json`
 
 **Status**: COMPLETED
@@ -225,10 +225,10 @@ interface ChatSourceVerificationPlan {
 
 | Module | File Path | Status | Tests |
 | --- | --- | --- | --- |
-| Cross-source fixture/config audit | `examples/event-sources/.divedra-events/**/*.json` | COMPLETED | validation commands |
-| Webhook mock chat/reply fixture improvements | `src/events/adapters/webhook.test.ts`, `src/events/chat-reply-example.test.ts`, `examples/event-sources/.divedra-events/bindings/webhook-to-chat-reply.json`, `examples/event-sources/.divedra-events/destinations/example-reply-chat.json` | COMPLETED | focused webhook tests |
-| Matrix chat source alignment | `src/events/adapters/matrix.test.ts`, `src/events/matrix-chat-reply-example.test.ts`, `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`, `examples/event-sources/.divedra-events/destinations/release-matrix-chat.json` | COMPLETED | focused Matrix tests |
-| Chat SDK boundary/example alignment | `src/events/adapters/chat-sdk.test.ts`, `src/events/validate-source-chat-sdk.ts`, `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-to-workflow.json`, `examples/event-sources/.divedra-events/destinations/chat-sdk-slack-replies.json` | COMPLETED | focused Chat SDK tests |
+| Cross-source fixture/config audit | `examples/event-sources/.rielflow-events/**/*.json` | COMPLETED | validation commands |
+| Webhook mock chat/reply fixture improvements | `src/events/adapters/webhook.test.ts`, `src/events/chat-reply-example.test.ts`, `examples/event-sources/.rielflow-events/bindings/webhook-to-chat-reply.json`, `examples/event-sources/.rielflow-events/destinations/example-reply-chat.json` | COMPLETED | focused webhook tests |
+| Matrix chat source alignment | `src/events/adapters/matrix.test.ts`, `src/events/matrix-chat-reply-example.test.ts`, `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`, `examples/event-sources/.rielflow-events/destinations/release-matrix-chat.json` | COMPLETED | focused Matrix tests |
+| Chat SDK boundary/example alignment | `src/events/adapters/chat-sdk.test.ts`, `src/events/validate-source-chat-sdk.ts`, `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-to-workflow.json`, `examples/event-sources/.rielflow-events/destinations/chat-sdk-slack-replies.json` | COMPLETED | focused Chat SDK tests |
 | Verification/docs closure | `examples/event-sources/README.md`, `README.md` | COMPLETED | shared validation suite |
 
 ## Dependencies
@@ -254,7 +254,7 @@ interface ChatSourceVerificationPlan {
 Required local commands:
 
 ```bash
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun run src/main.ts workflow validate chat-reply-webhook --workflow-definition-dir ./examples
 bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
 bun test src/events/adapters/webhook.test.ts src/events/adapters/matrix.test.ts src/events/adapters/chat-sdk.test.ts src/events/chat-reply-example.test.ts src/events/matrix-chat-reply-example.test.ts src/events/reply-dispatcher.test.ts

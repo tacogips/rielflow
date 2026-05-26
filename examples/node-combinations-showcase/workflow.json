@@ -9,15 +9,15 @@
     }
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Run the command lane, then the container lane, then the foreach lane (judge step transitions loop until continue_items is false).",
+    "rielflowPromptTemplate": "Coordinate {{workflowId}} as a compact structure showcase. Run the command lane, then the container lane, then the foreach lane (judge step transitions loop until continue_items is false).",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise workflow JSON-oriented output."
   },
-  "managerStepId": "divedra-manager",
-  "entryStepId": "divedra-manager",
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
   "nodes": [
     {
-      "id": "divedra-manager",
-      "nodeFile": "nodes/node-divedra-manager.json"
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
     },
     {
       "id": "command-manager",
@@ -74,8 +74,8 @@
   ],
   "steps": [
     {
-      "id": "divedra-manager",
-      "nodeId": "divedra-manager",
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
       "role": "manager",
       "transitions": [{ "toStepId": "command-manager" }]
     },

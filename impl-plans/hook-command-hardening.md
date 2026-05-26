@@ -13,7 +13,7 @@
 
 ### Summary
 
-Harden the first `divedra hook` slice so the implementation matches the intended machine-facing contract. The follow-up keeps the noop behavior but removes stale protocol assumptions: the command should stay JSON-only, validate the stable transport fields it actually depends on, and avoid claiming exhaustive vendor payload coverage before real hook handlers exist.
+Harden the first `rielflow hook` slice so the implementation matches the intended machine-facing contract. The follow-up keeps the noop behavior but removes stale protocol assumptions: the command should stay JSON-only, validate the stable transport fields it actually depends on, and avoid claiming exhaustive vendor payload coverage before real hook handlers exist.
 
 ### Scope
 
@@ -32,7 +32,7 @@ Harden the first `divedra hook` slice so the implementation matches the intended
 
 ```typescript
 interface HookCliContract {
-  readonly command: "divedra hook";
+  readonly command: "rielflow hook";
   readonly vendor?: "claude-code" | "codex";
   readonly successOutput: "json";
 }

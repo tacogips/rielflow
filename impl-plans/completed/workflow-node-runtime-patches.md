@@ -77,7 +77,7 @@ Reference use is behavioral only: preserve model/session dispatch shape and
 model availability validation expectations. Do not copy Codex-specific process
 options into the generic node patch schema. The accepted design explicitly
 diverges by keeping `effort` capability-gated and by isolating Cursor behavior
-behind divedra's Cursor adapter and readiness probe.
+behind rielflow's Cursor adapter and readiness probe.
 
 ---
 
@@ -221,10 +221,10 @@ export interface NodeValidationResult {
 
 ### 4. CLI Validate and Run Surfaces
 
-#### `packages/divedra/src/cli/argument-parser.ts`
-#### `packages/divedra/src/cli/input-output-helpers.ts`
-#### `packages/divedra/src/cli/workflow-command-handler.ts`
-#### `packages/divedra/src/cli/storage-and-options.ts`
+#### `packages/rielflow/src/cli/argument-parser.ts`
+#### `packages/rielflow/src/cli/input-output-helpers.ts`
+#### `packages/rielflow/src/cli/workflow-command-handler.ts`
+#### `packages/rielflow/src/cli/storage-and-options.ts`
 
 **Status**: Completed
 
@@ -259,12 +259,12 @@ export async function readWorkflowNodePatchOption(
 
 ### 5. GraphQL and Library Transport Parity
 
-#### `packages/divedra-graphql/src/schema-contract.ts`
+#### `packages/rielflow-graphql/src/schema-contract.ts`
 #### `src/graphql/types.ts`
 #### `src/graphql/schema/llm-run-overrides.ts`
 #### `src/graphql/schema/execution-resolvers.ts`
-#### `packages/divedra/src/index.ts`
-#### `packages/divedra/src/lib-workflow-run-options.ts`
+#### `packages/rielflow/src/index.ts`
+#### `packages/rielflow/src/lib-workflow-run-options.ts`
 
 **Status**: Completed
 
@@ -379,9 +379,9 @@ Run after implementation:
 
 Focused behavioral checks:
 
-- `divedra workflow validate <name> --node-patch '{"worker":{"executionBackend":"cursor-cli-agent","model":"gpt-5.5"}}' --executable`
-- `divedra workflow validate <name> --node-patch @./patch.json --output json`
-- `divedra workflow run <name> --node-patch ./patch.json --mock-scenario ./scenario.json --output json`
+- `rielflow workflow validate <name> --node-patch '{"worker":{"executionBackend":"cursor-cli-agent","model":"gpt-5.5"}}' --executable`
+- `rielflow workflow validate <name> --node-patch @./patch.json --output json`
+- `rielflow workflow run <name> --node-patch ./patch.json --mock-scenario ./scenario.json --output json`
 - Endpoint-backed `workflow run --endpoint <url> --node-patch <value>` sends
   `ExecuteWorkflowInput.nodePatch`.
 - Hash or read `workflow.json` and `nodes/node-*.json` before and after patched

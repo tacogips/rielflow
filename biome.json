@@ -7,8 +7,8 @@
   },
   "files": {
     "includes": [
-      "packages/divedra/src/**/*.ts",
-      "packages/divedra/src/**/*.tsx",
+      "packages/rielflow/src/**/*.ts",
+      "packages/rielflow/src/**/*.tsx",
       "scripts/**/*.ts",
       "vitest-support/**/*.ts",
       "vitest.config.ts"

@@ -126,7 +126,7 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is divedra, a TypeScript/Bun system for cooperative multi-agent session management.
+This is rielflow, a TypeScript/Bun system for cooperative multi-agent session management.
 The project orchestrates writing sessions with the following agent backends:
 
 - `codex-agent`
@@ -194,10 +194,10 @@ Workflow storage is directory-based under `<workflow-definition-dir>/<workflow-n
 - Keep example bundles aligned with the canonical workflow file set:
   `workflow.json` and `nodes/node-{id}.json`.
 - Prefer examples that demonstrate the recommended backend split:
-  `divedra` managers on `claude-code-agent` and coding workers on
+  `rielflow` managers on `claude-code-agent` and coding workers on
   `codex-agent`.
-- Example workflow-level `divedraPromptTemplate` content may explicitly instruct
-  managers to prefer `divedra gql` when that tool path is available.
+- Example workflow-level `rielflowPromptTemplate` content may explicitly instruct
+  managers to prefer `rielflow gql` when that tool path is available.
 - Example node `promptTemplate` content may reference inbox data via template
   variables such as `{{inbox.latest.output}}`.
 - Prefer `promptTemplateFile` plus workflow-local `prompts/*.md` files for long

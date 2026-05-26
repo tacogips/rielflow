@@ -354,7 +354,7 @@ interface WorkflowTriggerResult {
 
 - [x] Example binding and payload (`webhook-supervised-arithmetic`, `chat-supervised-start`) demonstrate command-map control; README documents follow-up emits for status/stop on the same correlation
 - [x] Operator docs cover local (`events emit` without `--endpoint`) and remote (`--endpoint` GraphQL) supervised paths
-- [x] Configuration validates with `divedra events validate` (same event root)
+- [x] Configuration validates with `rielflow events validate` (same event root)
 
 ## Completion Criteria
 

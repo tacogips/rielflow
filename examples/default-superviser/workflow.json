@@ -1,6 +1,6 @@
 {
-  "workflowId": "divedra-default-superviser",
-  "description": "Minimal phase-2 nested superviser: one step runs divedra/start-workflow with runtime-bound supervision auth (use with --auto-improve --nested-superviser). The engine injects supervisionRunId, targetSessionId, and superviserTargetWorkflowId into the superviser session runtime variables.",
+  "workflowId": "rielflow-default-superviser",
+  "description": "Minimal phase-2 nested superviser: one step runs rielflow/start-workflow with runtime-bound supervision auth (use with --auto-improve --nested-superviser). The engine injects supervisionRunId, targetSessionId, and superviserTargetWorkflowId into the superviser session runtime variables.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 120000
@@ -10,7 +10,7 @@
     {
       "id": "invoke-start",
       "addon": {
-        "name": "divedra/start-workflow",
+        "name": "rielflow/start-workflow",
         "version": "1",
         "config": {
           "argumentsTemplate": {},

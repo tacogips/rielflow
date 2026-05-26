@@ -228,9 +228,9 @@ Completion criteria:
 - [x] `bun test src/cli.test.ts -t "workflow inspect --structure"`
 - [x] `bun test src/workflow/inspect.test.ts`
 - [x] `bun run test`
-- [x] `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure`
+- [x] `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure`
 - [x] `bun run src/main.ts workflow inspect workflow-call-simple --workflow-definition-dir ./examples --structure`
-- [x] `bun run src/main.ts workflow inspect claude-divedra-codex-coding --workflow-definition-dir ./examples --structure --output json`
+- [x] `bun run src/main.ts workflow inspect claude-rielflow-codex-coding --workflow-definition-dir ./examples --structure --output json`
 - [x] `bun run typecheck`
 
 ## Completion Criteria
@@ -258,7 +258,7 @@ review.
 **Blockers**: None.
 **Notes**: Step 3 accepted the design with no high or mid findings. No
 Codex-reference repository inputs were provided, so implementation should use
-existing divedra command and workflow modules as the behavioral source.
+existing rielflow command and workflow modules as the behavioral source.
 
 ### Session: 2026-05-13 Step 6 Implementation
 

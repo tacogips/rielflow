@@ -56,7 +56,7 @@ external codex-agent behavior is copied or used as a compatibility target.
 
 **Status**: Completed
 **Parallelizable**: Yes
-**Deliverables**: `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`, `examples/matrix-chat-reply/EXPECTED_RESULTS.md`, `examples/matrix-chat-reply/README.md`, `examples/event-sources/README.md`, `src/events/matrix-chat-reply-example.test.ts`
+**Deliverables**: `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`, `examples/matrix-chat-reply/EXPECTED_RESULTS.md`, `examples/matrix-chat-reply/README.md`, `examples/event-sources/README.md`, `src/events/matrix-chat-reply-example.test.ts`
 **Dependencies**: None
 
 ```typescript
@@ -80,7 +80,7 @@ and mocked sample assertions name the same workflow.
 - [x] Sample README and expected-results text do not reference the wrong `chat-reply-webhook` workflow.
 - [x] `src/events/matrix-chat-reply-example.test.ts` asserts the Matrix sample dispatches `matrix-chat-reply`.
 - [x] `bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples` passes.
-- [x] `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events` passes.
+- [x] `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events` passes.
 
 ### TASK-002: Correct Completed Matrix Plan Metadata
 
@@ -182,7 +182,7 @@ warnings before Step 5 implementation review.
 
 | Module                  | File Path                                                                                                                    | Status    | Tests                                          |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------- |
-| Matrix sample binding   | `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`                                       | COMPLETED | `src/events/matrix-chat-reply-example.test.ts` |
+| Matrix sample binding   | `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`                                       | COMPLETED | `src/events/matrix-chat-reply-example.test.ts` |
 | Sample documentation    | `examples/matrix-chat-reply/README.md`, `examples/matrix-chat-reply/EXPECTED_RESULTS.md`, `examples/event-sources/README.md` | COMPLETED | workflow and event validation commands         |
 | Plan metadata           | `impl-plans/PROGRESS.json`, `impl-plans/README.md`                                                                           | COMPLETED | index inspection                               |
 | Matrix sync diagnostics | `src/events/adapters/matrix.ts`                                                                                              | COMPLETED | `src/events/adapters/matrix.test.ts`           |
@@ -209,7 +209,7 @@ warnings before Step 5 implementation review.
 ```bash
 bun test src/events/adapters/matrix.test.ts src/events/matrix-chat-reply-example.test.ts src/events/config.test.ts src/events/listener-service.test.ts src/events/manual-emit.test.ts src/events/reply-dispatcher.test.ts
 bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bash -n examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh
 ./examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh
 bun run typecheck

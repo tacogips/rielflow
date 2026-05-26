@@ -208,19 +208,19 @@ interface WorkflowEditorFixture {
 ### Session: 2026-03-07 17:42
 **Tasks Completed**: Additional TASK-002/TASK-003 usability hardening
 **Tasks In Progress**: TASK-003
-**Blockers**: Live `divedra serve` still cannot bind `127.0.0.1` in this sandbox (`serve failed: Failed to listen at 127.0.0.1`), so the full HTTP browser path remains environment-blocked here. Playwright test discovery works, but a full browser run still needs an environment that allows local listening sockets.
+**Blockers**: Live `rielflow serve` still cannot bind `127.0.0.1` in this sandbox (`serve failed: Failed to listen at 127.0.0.1`), so the full HTTP browser path remains environment-blocked here. Playwright test discovery works, but a full browser run still needs an environment that allows local listening sockets.
 **Notes**: Reviewed the pending browser diff again and fixed a concrete usability gap: browser-side workflow creation now enforces the same name rules as the server before submission, disabling the create button for empty/invalid names and showing a clear validation error if submission is attempted anyway. Re-ran targeted Bun tests (`src/server/api.test.ts`, `src/server/serve.test.ts`, `src/cli.test.ts`) and `tsc --noEmit` successfully, and confirmed `bunx playwright test --config playwright.config.cjs --list` still discovers the workflow web-editor spec.
 
 ### Session: 2026-03-09 23:50
 **Tasks Completed**: Additional TASK-003 startup regression review
 **Tasks In Progress**: TASK-003
-**Blockers**: Live `divedra serve` remains sandbox-blocked because this environment rejects local socket binds on `127.0.0.1` with `EPERM`, including plain Node `listen()` probes. Playwright still cannot complete here for that environment reason.
+**Blockers**: Live `rielflow serve` remains sandbox-blocked because this environment rejects local socket binds on `127.0.0.1` with `EPERM`, including plain Node `listen()` probes. Playwright still cannot complete here for that environment reason.
 **Notes**: Re-verified the current browser-serving path and found that the earlier `serve --port 0` mitigation was still structurally wrong: it probed a free port and then rebound it later, leaving a race window. `src/server/serve.ts` now passes `0` directly to the runtime so ephemeral-port allocation stays runtime-owned when binds are permitted. Updated focused `src/server/serve.test.ts` coverage to assert the new contract without relying on sandbox networking. Source-based tests still pass; browser E2E remains environment-blocked rather than code-regressed here.
 
 ### Session: 2026-03-09 18:10
 **Tasks Completed**: Additional TASK-003 browser regression harness hardening
 **Tasks In Progress**: TASK-003
-**Blockers**: Live `divedra serve` integration remains sandbox-blocked because loopback listen on `127.0.0.1` is denied here. The live Playwright spec now skips only for that explicit environment failure and still fails for other startup regressions.
+**Blockers**: Live `rielflow serve` integration remains sandbox-blocked because loopback listen on `127.0.0.1` is denied here. The live Playwright spec now skips only for that explicit environment failure and still fails for other startup regressions.
 **Notes**: Added a second Playwright browser regression path that loads the built `ui/dist` bundle from `file://` and mocks the browser API contract in-page. This preserves real-browser coverage for create/save/execute/cancel UI flows even when the sandbox forbids local TCP listening, while keeping the existing live `serve` spec as the true integration test when loopback sockets are available. Also hardened `scripts/run-ui-e2e.mjs` with an explicit browser-launch prerequisite probe so sandbox Chromium startup failures now report a clear skip reason instead of a misleading product-test failure.
 
 ### Session: 2026-03-09 19:25

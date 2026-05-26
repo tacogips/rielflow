@@ -49,7 +49,7 @@ patch-audit records remain the durable audit contract.
 
 #### `src/workflow/node-addons.ts`, `src/workflow/native-node-executor.ts`, `src/workflow/superviser-control.ts`, `src/workflow/types.ts`
 
-**Status**: Complete (types, validators, `divedra/*` built-ins, native execution; `save` add-on `arguments` include `bundle`)
+**Status**: Complete (types, validators, `rielflow/*` built-ins, native execution; `save` add-on `arguments` include `bundle`)
 
 ```typescript
 export interface StartWorkflowAddonInput {
@@ -142,7 +142,7 @@ interface NestedSuperviserExample {
 
 **Checklist**:
 
-- [x] Add an example bundle that includes an authored superviser workflow (`examples/default-superviser/`, id `divedra-default-superviser`)
+- [x] Add an example bundle that includes an authored superviser workflow (`examples/default-superviser/`, id `rielflow-default-superviser`)
 - [x] Cover nested success + supervised-mock target retry in `engine.test.ts` (rerun/patch/stop matrix still optional)
 - [x] Verify resume/restart behavior for both target and superviser sessions (including nested-superviser **completed** + target still active: new nested round; see `engine.test.ts`)
 - [x] Document operator-visible behavior for the nested path in `examples/auto-improve/README.md` (per-run artifacts follow existing supervision layout)
@@ -179,7 +179,7 @@ interface NestedSuperviserExample {
 **Notes**: Initial plan creation and early scope notes (superseded by implementation sessions below).
 
 ### Session: 2026-04-25 (follow-up)
-**Tasks Completed**: Module-1 control surface (types, six `divedra/*` built-in add-ons, argument/auth validation, native executor wiring, optional `superviserControl` on `CallNodeInput` and `WorkflowRunOptions`; `nestedSuperviserSessionId` on `SupervisionRunState`; tests)
+**Tasks Completed**: Module-1 control surface (types, six `rielflow/*` built-in add-ons, argument/auth validation, native executor wiring, optional `superviserControl` on `CallNodeInput` and `WorkflowRunOptions`; `nestedSuperviserSessionId` on `SupervisionRunState`; tests)
 **Tasks In Progress**: (superseded by orchestration session)
 **Blockers**: None
 **Notes**: Control add-ons return `policy_blocked` when executed without `superviserControl` (normal runs).
@@ -188,7 +188,7 @@ interface NestedSuperviserExample {
 **Tasks Completed**: `buildSuperviserRuntimeControl` in `src/workflow/superviser-runtime-control-impl.ts`; `runNestedSuperviserSessionDriver` in `src/workflow/engine.ts` (seed target session, pre-assign `nestedSuperviserSessionId`, `runWorkflowInternal` on superviser bundle, stamp supervision from superviser exit); `WorkflowRunOptions.nestedSuperviserDriver`; `runWorkflow` routes nested before `runAutoImproveLoop`; CLI `--nested-superviser` + `ExecuteWorkflowInput.nestedSuperviserDriver`; `SaveWorkflowDefinitionAddonInput` requires `bundle`; parse/save path updated.
 **Tasks In Progress** (superseded; finished in follow-on sessions): GraphQL exposure; `examples/default-superviser` bundle; nested engine tests; resume nested supervision.
 **Blockers**: None
-**Notes**: Default superviser id is `divedra-default-superviser` (`DEFAULT_SUPERVISER_WORKFLOW_ID`); a matching bundle under `--workflow-root` is required unless `--superviser-workflow` points elsewhere. Phase-1 `runAutoImproveLoop` remains the default when `--nested-superviser` is omitted.
+**Notes**: Default superviser id is `rielflow-default-superviser` (`DEFAULT_SUPERVISER_WORKFLOW_ID`); a matching bundle under `--workflow-root` is required unless `--superviser-workflow` points elsewhere. Phase-1 `runAutoImproveLoop` remains the default when `--nested-superviser` is omitted.
 
 ### Session: 2026-04-25 (inspection + resume)
 **Tasks Completed**: GraphQL `nestedSuperviserSessionId` on `SupervisionRunState`; `resumeWorkflow` + target-session resume with `nestedSuperviserDriver` re-enters nested superviser via `resumeSessionId` on the superviser session; `design-auto-improve-superviser-mode` Phase 2 paragraph updated; `getSupervisionSummary` + schema/lib tests
@@ -196,7 +196,7 @@ interface NestedSuperviserExample {
 **Blockers**: None
 
 ### Session: 2026-04-25 (example + control parity)
-**Tasks Completed**: Default superviser id aligned with strict `workflowId` rules (`divedra-default-superviser`); `examples/default-superviser/`; engine injects `supervisionRunId` / `targetSessionId` / `superviserTargetWorkflowId` for nested runs; add-on `config` may carry `argumentsTemplate` + `argumentBindings` for `divedra/*` superviser control; `startTargetWorkflow` / `rerunTargetWorkflow` no longer set `supervisionLoopExecution` so the target uses `runAutoImproveLoop` like phase 1; `runNestedSuperviserSessionDriver` passes a `runWorkflow` closure that always forwards the outer `NodeAdapter` + guards so `mockScenario` / scenario adapters work for target runs; `engine.test.ts` nested path with `worker-only-single-step` from `examples/`; `examples/auto-improve/README.md` phase 1 vs 2; design policy example id updated
+**Tasks Completed**: Default superviser id aligned with strict `workflowId` rules (`rielflow-default-superviser`); `examples/default-superviser/`; engine injects `supervisionRunId` / `targetSessionId` / `superviserTargetWorkflowId` for nested runs; add-on `config` may carry `argumentsTemplate` + `argumentBindings` for `rielflow/*` superviser control; `startTargetWorkflow` / `rerunTargetWorkflow` no longer set `supervisionLoopExecution` so the target uses `runAutoImproveLoop` like phase 1; `runNestedSuperviserSessionDriver` passes a `runWorkflow` closure that always forwards the outer `NodeAdapter` + guards so `mockScenario` / scenario adapters work for target runs; `engine.test.ts` nested path with `worker-only-single-step` from `examples/`; `examples/auto-improve/README.md` phase 1 vs 2; design policy example id updated
 **Tasks In Progress**: Optional nested-resume and patch end-to-end tests
 **Blockers**: None
 

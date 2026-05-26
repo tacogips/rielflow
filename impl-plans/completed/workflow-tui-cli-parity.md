@@ -7,10 +7,10 @@
 
 ## Scope
 
-Align `divedra tui` command-line surface with design startup forms.
+Align `rielflow tui` command-line surface with design startup forms.
 
 In scope:
-- `divedra tui --workflow <name>` support
+- `rielflow tui --workflow <name>` support
 - conflict handling when both positional workflow name and `--workflow` are given
 - tests and docs updates
 

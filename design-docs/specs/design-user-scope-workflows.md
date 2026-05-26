@@ -5,14 +5,14 @@ projects while preserving project-local workflows.
 
 ## Overview
 
-`divedra` should support two authored workflow scopes:
+`rielflow` should support two authored workflow scopes:
 
 - project scope: workflows owned by the current project
 - user scope: workflows owned by the operator and callable from any project
 
-The canonical user scope root is `~/.divedra`. User workflows live below
-`~/.divedra/workflows`. Project scopes use the same subdirectory names below the
-project `.divedra` directory, so layout-dependent tooling does not need separate
+The canonical user scope root is `~/.rielflow`. User workflows live below
+`~/.rielflow/workflows`. Project scopes use the same subdirectory names below the
+project `.rielflow` directory, so layout-dependent tooling does not need separate
 project/user path rules.
 
 Canonical layout:
@@ -37,22 +37,22 @@ Canonical layout:
     sessions/
     workflow/
     files/
-    divedra.db
+    rielflow.db
   logs/
 ```
 
 Examples:
 
 ```text
-~/.divedra/workflows/review-pr/workflow.json
-~/.divedra/addons/acme/reviewer/1/addon.json
-~/.divedra/logs/
-~/.divedra/artifacts/sessions/
+~/.rielflow/workflows/review-pr/workflow.json
+~/.rielflow/addons/acme/reviewer/1/addon.json
+~/.rielflow/logs/
+~/.rielflow/artifacts/sessions/
 
-<project>/.divedra/workflows/release-check/workflow.json
-<project>/.divedra/addons/team/release-note/1/addon.json
-<project>/.divedra/logs/
-<project>/.divedra/artifacts/sessions/
+<project>/.rielflow/workflows/release-check/workflow.json
+<project>/.rielflow/addons/team/release-note/1/addon.json
+<project>/.rielflow/logs/
+<project>/.rielflow/artifacts/sessions/
 ```
 
 ## Goals
@@ -64,7 +64,7 @@ Examples:
 - make project and user scope subdirectories identical
 - keep existing direct `--workflow-definition-dir <path>` behavior for examples and
   automation
-- allow `~/.divedra` and project `.divedra` paths to be changed through CLI
+- allow `~/.rielflow` and project `.rielflow` paths to be changed through CLI
   arguments, environment variables, and config
 - keep runtime artifacts and logs scoped with the workflow definition by
   default
@@ -83,8 +83,8 @@ Examples:
 
 A scope root is the directory that owns the shared subdirectory layout:
 
-- user scope root: defaults to `~/.divedra`
-- project scope root: defaults to the nearest ancestor `.divedra`
+- user scope root: defaults to `~/.rielflow`
+- project scope root: defaults to the nearest ancestor `.rielflow`
 
 ### Workflow Root
 
@@ -125,7 +125,7 @@ It contains the existing runtime subtrees:
 - `sessions/`
 - `workflow/`
 - `files/`
-- `divedra.db`
+- `rielflow.db`
 
 ### Log Root
 
@@ -144,19 +144,19 @@ remain under the runtime data root.
 ### Project Scope Discovery
 
 Project scope discovery starts from the command invocation `cwd` and walks
-upward until it finds a `.divedra` directory.
+upward until it finds a `.rielflow` directory.
 
 When found:
 
 ```text
-projectScopeRoot = <nearest-project>/.divedra
-projectWorkflowRoot = <nearest-project>/.divedra/workflows
+projectScopeRoot = <nearest-project>/.rielflow
+projectWorkflowRoot = <nearest-project>/.rielflow/workflows
 ```
 
 When not found, project scope is absent by default. Commands that explicitly
-create a project workflow may create `<cwd>/.divedra/workflows`.
+create a project workflow may create `<cwd>/.rielflow/workflows`.
 
-This differs from the current fallback that treats `<cwd>/.divedra` as a
+This differs from the current fallback that treats `<cwd>/.rielflow` as a
 workflow root for all commands. The new behavior avoids accidentally creating a
 project scope while still letting `workflow create --scope project` create one
 intentionally.
@@ -168,7 +168,7 @@ User scope root resolution order:
 1. `--user-root <path>`
 2. `DIVEDRA_USER_ROOT`
 3. bootstrap config `userRoot`
-4. `~/.divedra`
+4. `~/.rielflow`
 
 The user workflow root is always `<userScopeRoot>/workflows` unless the caller
 uses the lower-level direct workflow definition directory override.
@@ -183,7 +183,7 @@ direct directory containing workflow bundle directories." They bypass
 project/user scope catalog lookup and support usage such as:
 
 ```bash
-divedra workflow validate demo --workflow-definition-dir ./examples
+rielflow workflow validate demo --workflow-definition-dir ./examples
 ```
 
 Direct workflow definition directory mode should use explicit artifact/session
@@ -207,15 +207,15 @@ loads a workflow so shadowing is visible.
 Examples:
 
 ```bash
-# Runs <project>/.divedra/workflows/review/workflow.json when present,
-# otherwise ~/.divedra/workflows/review/workflow.json.
-divedra workflow run review
+# Runs <project>/.rielflow/workflows/review/workflow.json when present,
+# otherwise ~/.rielflow/workflows/review/workflow.json.
+rielflow workflow run review
 
 # Forces the reusable user workflow.
-divedra workflow run review --scope user
+rielflow workflow run review --scope user
 
 # Forces the project workflow.
-divedra workflow run review --scope project
+rielflow workflow run review --scope project
 ```
 
 The TUI should group workflow names by scope. Duplicate names should be shown as
@@ -237,12 +237,12 @@ The path segments are derived from authored add-on names:
   `addons/team/release-note/1/addon.json`
 - add-on names must be safe namespace paths with exactly one `/`
 - add-on versions must be safe path tokens
-- the `divedra/` namespace remains reserved for built-in runtime add-ons and is
+- the `rielflow/` namespace remains reserved for built-in runtime add-ons and is
   not loaded from scoped add-on roots
 
 Default local add-on lookup order:
 
-1. built-in runtime catalog for `divedra/*`
+1. built-in runtime catalog for `rielflow/*`
 2. explicit direct add-on root override, when supplied
 3. project scope add-on root, when present
 4. user scope add-on root
@@ -272,7 +272,7 @@ Rules:
 - outside a discovered project scope, `workflow create <name>` writes to user
   scope.
 - `workflow create <name> --scope project` creates
-  `<cwd>/.divedra/workflows/<name>` when no project scope exists.
+  `<cwd>/.rielflow/workflows/<name>` when no project scope exists.
 - `workflow create <name> --scope user` writes to
   `<userScopeRoot>/workflows/<name>`.
 - save/edit APIs must carry the resolved workflow source scope from load time
@@ -280,7 +280,7 @@ Rules:
   different destination.
 - `workflow checkout <url>` is a command-specific scoped write path. Unlike
   `workflow create`, checkout defaults to project scope even when no project
-  scope is discovered, creating `<cwd>/.divedra/workflows/<name>` as needed.
+  scope is discovered, creating `<cwd>/.rielflow/workflows/<name>` as needed.
   `--user-scope` selects `<userScopeRoot>/workflows/<name>`.
 - `workflow checkout` rejects `--workflow-definition-dir` as a destination and
   records checkout provenance under
@@ -306,10 +306,10 @@ Minimum record shape:
 ```json
 {
   "workflowName": "review-pr",
-  "sourceUrl": "https://github.com/org/repo/tree/main/.divedra/workflows/review-pr",
+  "sourceUrl": "https://github.com/org/repo/tree/main/.rielflow/workflows/review-pr",
   "scope": "project",
   "checkedOutAt": "2026-05-17T00:00:00.000Z",
-  "destinationDirectory": "/workspace/.divedra/workflows/review-pr"
+  "destinationDirectory": "/workspace/.rielflow/workflows/review-pr"
 }
 ```
 
@@ -329,7 +329,7 @@ come from the resolved workflow's owning scope:
 artifact root: <scope-root>/artifacts/workflow
 session root:  <scope-root>/artifacts/sessions
 file root:     <scope-root>/artifacts/files
-db path:       <scope-root>/artifacts/divedra.db
+db path:       <scope-root>/artifacts/rielflow.db
 log root:      <scope-root>/logs
 ```
 
@@ -345,7 +345,7 @@ root data:     <user-root>/projects/<project-basename>-<project-root-hash>/artif
 artifact root: <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/workflow
 session root:  <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/sessions
 file root:     <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/files
-db path:       <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/divedra.db
+db path:       <user-root>/projects/<project-basename>-<project-root-hash>/artifacts/rielflow.db
 ```
 
 Direct `--workflow-definition-dir` and other non-scoped runtime entrypoints do not have an
@@ -356,7 +356,7 @@ root:
 artifact root: <user-root>/artifacts/workflow
 session root:  <user-root>/artifacts/sessions
 file root:     <user-root>/artifacts/files
-db path:       <user-root>/artifacts/divedra.db
+db path:       <user-root>/artifacts/rielflow.db
 ```
 
 Explicit runtime roots remain higher precedence:
@@ -390,26 +390,26 @@ scope root itself.
 Default path:
 
 ```text
-$XDG_CONFIG_HOME/divedra/config.json
+$XDG_CONFIG_HOME/rielflow/config.json
 ```
 
 Fallback path when `XDG_CONFIG_HOME` is unset:
 
 ```text
-~/.config/divedra/config.json
+~/.config/rielflow/config.json
 ```
 
 Initial fields:
 
 ```json
 {
-  "userRoot": "~/.divedra",
-  "projectRootName": ".divedra"
+  "userRoot": "~/.rielflow",
+  "projectRootName": ".rielflow"
 }
 ```
 
 `projectRootName` changes the directory name searched during project scope
-discovery. It defaults to `.divedra`.
+discovery. It defaults to `.rielflow`.
 
 ### Scope Config
 
@@ -515,16 +515,16 @@ Example shape (illustrative; real bundles use full step-addressed `workflow.json
 
 ## Project Layout Migration
 
-The existing project layout places workflow bundles directly under `.divedra/`.
-The new canonical project layout places them under `.divedra/workflows/`.
+The existing project layout places workflow bundles directly under `.rielflow/`.
+The new canonical project layout places them under `.rielflow/workflows/`.
 
 Migration rules:
 
 - `--workflow-definition-dir <path>` continues to load `<path>/<name>/workflow.json`.
-- when a discovered project `.divedra/workflows` exists, it is the project
+- when a discovered project `.rielflow/workflows` exists, it is the project
   workflow root.
-- when `.divedra/workflows` is absent but `.divedra/<name>/workflow.json`
-  exists, the loader may treat `.divedra` as a legacy direct project workflow
+- when `.rielflow/workflows` is absent but `.rielflow/<name>/workflow.json`
+  exists, the loader may treat `.rielflow` as a legacy direct project workflow
   root and emit a migration warning.
 - new `workflow create` writes only the canonical scoped layout unless
   `--workflow-definition-dir` is supplied.
@@ -541,8 +541,8 @@ Migration rules:
   root.
 - Add-on lookup must never let an add-on name, version, manifest path, or
   template file escape the selected add-on version directory.
-- The `divedra/` namespace remains reserved for runtime built-ins and must not
-  be loaded from `.divedra/addons`.
+- The `rielflow/` namespace remains reserved for runtime built-ins and must not
+  be loaded from `.rielflow/addons`.
 - Config path expansion should support `~` only at the start of a path.
 - Project scope shadowing user scope is intentional, but commands should expose
   the resolved path in human-readable output.
@@ -597,7 +597,7 @@ First implementation boundary:
 2. Change CLI/TUI default workflow lookup to catalog lookup.
 3. Change `workflow create` to write scoped canonical layout.
 4. Add scoped add-on root resolution and manifest-based local add-on loading.
-5. Add compatibility detection for legacy `.divedra/<workflow>` project
+5. Add compatibility detection for legacy `.rielflow/<workflow>` project
    bundles.
 6. Add log-root resolution and route exported/session logs through it where
    applicable.

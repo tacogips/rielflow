@@ -1,11 +1,11 @@
 # Event Listener Workflow Trigger Design
 
-This document defines an additive architecture for starting divedra workflow
+This document defines an additive architecture for starting rielflow workflow
 runs from external events.
 
 ## Overview
 
-External events should enter divedra through a trigger layer that is separate
+External events should enter rielflow through a trigger layer that is separate
 from workflow execution. Event-specific code normalizes provider payloads into a
 canonical event envelope, applies a binding-specific input mapping, records
 idempotency state, and invokes the existing workflow execution boundary.
@@ -54,7 +54,7 @@ Recommended placement:
 
 ## Non-Goals
 
-- turning divedra into a full chat bot framework
+- turning rielflow into a full chat bot framework
 - adding provider-specific fields to `workflow.json`
 - making a running workflow depend on a provider SDK after it starts
 - requiring chat UI output streaming before event-to-workflow triggering works
@@ -114,7 +114,7 @@ Provider SDK / Cron Timer / HTTP Webhook
   -> InputMapper
   -> EventLedger
   -> WorkflowTriggerRunner or EventSupervisorRouter
-  -> direct divedra workflow execution or workflow supervisor control
+  -> direct rielflow workflow execution or workflow supervisor control
 ```
 
 ### `EventSourceAdapter`
@@ -178,7 +178,7 @@ A binding connects normalized events to workflow execution.
 Configuration should live outside workflow bundles. Recommended default layout:
 
 ```text
-.divedra-events/
+.rielflow-events/
   sources/
     slack-review.json
     nightly-cron.json
@@ -287,11 +287,11 @@ Command dispatch is also a valid boundary for listener processes that should
 only depend on the installed CLI:
 
 ```bash
-divedra workflow run document-review --variables @mapped-event-input.json
+rielflow workflow run document-review --variables @mapped-event-input.json
 ```
 
 The command dispatcher must write the mapped runtime variables to a data-root
-artifact first, then pass that file path to `divedra workflow run`. Provider
+artifact first, then pass that file path to `rielflow workflow run`. Provider
 payloads must not be shell-interpolated into command arguments.
 
 ## Provider Source Types
@@ -337,7 +337,7 @@ Scheduled cron behavior:
 ### Sequential List
 
 Sequential list is a local event source for operators who want to preconfigure
-an ordered set of instruction prompts and have divedra dispatch each prompt as
+an ordered set of instruction prompts and have rielflow dispatch each prompt as
 one workflow input only after the previous workflow execution has completed.
 The source is served by `events serve` and uses the same adapter, binding, input
 mapping, receipt, dedupe, replay, sticky-session, and supervised execution
@@ -352,7 +352,7 @@ Configured prompt list
   -> ExternalEventEnvelope(eventType = sequential-list.item.ready)
   -> EventBinding
   -> WorkflowTriggerRunner
-  -> divedra workflow run / library client / GraphQL executeWorkflow / supervisor control
+  -> rielflow workflow run / library client / GraphQL executeWorkflow / supervisor control
   -> completion observer
   -> next list item
 ```
@@ -468,7 +468,7 @@ receiver accepts object-created notifications from the store's native event
 mechanism, normalizes them, and dispatches matching bindings to workflow
 execution.
 
-The receiver is an abstraction layer between provider delivery and divedra:
+The receiver is an abstraction layer between provider delivery and rielflow:
 
 ```text
 S3-compatible store event notification
@@ -476,7 +476,7 @@ S3-compatible store event notification
   -> ExternalEventEnvelope(eventType = repository.file.created)
   -> EventBinding
   -> WorkflowTriggerRunner
-  -> divedra workflow run / library client / GraphQL executeWorkflow
+  -> rielflow workflow run / library client / GraphQL executeWorkflow
 ```
 
 Source config:
@@ -541,7 +541,7 @@ Rules:
   unrelated objects
 - default behavior passes metadata only; downloading object contents requires an
   explicit `objectAccess.mode`
-- downloaded objects must be copied under the divedra data root and exposed to
+- downloaded objects must be copied under the rielflow data root and exposed to
   workflows through data-root-relative file refs
 - dedupe should prefer `(sourceId, bucket, key, versionId)` when versioning is
   available, otherwise `(sourceId, bucket, key, sequencer)` or a provider event
@@ -566,7 +566,7 @@ Local filesystem watcher
   -> ExternalEventEnvelope(eventType = file.change.created|modified|deleted)
   -> EventBinding
   -> WorkflowTriggerRunner
-  -> divedra workflow run / library client / GraphQL executeWorkflow
+  -> rielflow workflow run / library client / GraphQL executeWorkflow
 ```
 
 Source config:
@@ -653,7 +653,7 @@ the provider is supported. Current Chat SDK documentation describes a unified
 TypeScript API and adapter catalog for platforms including Slack, Teams, Google
 Chat, Discord, Telegram, GitHub, Linear, WhatsApp, Messenger, and Web.
 
-Divedra should treat Chat SDK as one adapter family:
+Rielflow should treat Chat SDK as one adapter family:
 
 - `kind: "chat-sdk"`
 - provider selected in source config from a closed allow-list
@@ -747,21 +747,21 @@ logic continues.
 
 The Matrix example should be a runnable event-source sample, not only a mocked
 fixture. Keep the authored event config under
-`examples/event-sources/.divedra-events/` so it remains part of the shared
+`examples/event-sources/.rielflow-events/` so it remains part of the shared
 event-source example root, keep the workflow bundle under
 `examples/matrix-chat-reply/`, and put live Matrix verification support under
 `examples/matrix-chat-reply/local-synapse/`.
 
 Required checked-in assets:
 
-- `examples/event-sources/.divedra-events/sources/team-matrix.json` for the
+- `examples/event-sources/.rielflow-events/sources/team-matrix.json` for the
   Matrix source config, with homeserver URL and access token referenced through
   environment variable names.
-- `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`
+- `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`
   for receive-to-workflow mapping. This binding must dispatch
   `workflowName: "matrix-chat-reply"` so the checked-in Matrix sample, event
   config, and local Synapse verification all exercise the same workflow.
-- `examples/event-sources/.divedra-events/destinations/release-matrix-chat.json`
+- `examples/event-sources/.rielflow-events/destinations/release-matrix-chat.json`
   for explicit Matrix reply routing.
 - `examples/event-sources/payloads/matrix-room-message.json` for deterministic
   no-server normalization checks.
@@ -785,7 +785,7 @@ The live verification script should prove the complete path:
 sender user posts Matrix room message
   -> team-matrix /sync listener receives m.room.message
   -> matrix-release-chat-to-workflow dispatches matrix-chat-reply
-  -> divedra/chat-reply-worker emits a provider-neutral chat reply
+  -> rielflow/chat-reply-worker emits a provider-neutral chat reply
   -> release-matrix-chat sends the Matrix reply to the configured room
   -> verification observes the reply through the local Matrix server
 ```
@@ -862,7 +862,7 @@ event-source root and the two chat reply workflows, then running the focused
 adapter and reply-dispatch tests:
 
 ```bash
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun run src/main.ts workflow validate chat-reply-webhook --workflow-definition-dir ./examples
 bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
 bun test src/events/adapters/webhook.test.ts src/events/adapters/matrix.test.ts src/events/adapters/chat-sdk.test.ts src/events/chat-reply-example.test.ts src/events/matrix-chat-reply-example.test.ts src/events/reply-dispatcher.test.ts
@@ -891,7 +891,7 @@ There are two distinct concerns:
 - AI Elements are React UI primitives for chat interfaces built with the Vercel
   AI SDK.
 
-For divedra, the event-trigger layer should expose a provider-neutral HTTP/SDK
+For rielflow, the event-trigger layer should expose a provider-neutral HTTP/SDK
 entrypoint that a web chat UI can call. A UI built with AI Elements can submit a
 message as a `chat.message` event, then display workflow status and final output
 through existing GraphQL session queries or future event reply APIs.
@@ -972,7 +972,7 @@ source adapter:
   "provider": "matrix",
   "homeserverUrlEnv": "DIVEDRA_MATRIX_HOMESERVER_URL",
   "accessTokenEnv": "DIVEDRA_MATRIX_ACCESS_TOKEN",
-  "userId": "@divedra-bot:example.org",
+  "userId": "@rielflow-bot:example.org",
   "rooms": [
     {
       "roomId": "!release-room:example.org",
@@ -1080,7 +1080,7 @@ Supervised bindings extend the existing `execution` block with
   },
   "execution": {
     "mode": "supervised",
-    "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+    "supervisorWorkflowName": "rielflow-default-workflow-supervisor",
     "maxRestartsOnFailure": 3,
     "autoImprove": false,
     "control": {
@@ -1241,7 +1241,7 @@ Reply bridge:
 
 - a runtime-owned reply dispatcher can post provider-neutral reply requests back
   to chat threads
-- `divedra/chat-reply-worker` is the workflow-visible built-in node add-on for
+- `rielflow/chat-reply-worker` is the workflow-visible built-in node add-on for
   creating such reply requests during a workflow run
 - an optional `EventReplyPublisher` can still observe completed workflow runs
   and post configured summaries without requiring a reply node
@@ -1264,9 +1264,9 @@ Rules:
   timestamps
 - event HTTP endpoints must be disabled unless explicitly configured
 - raw provider payloads should be artifacted with filesystem permissions
-  consistent with other divedra runtime artifacts
+  consistent with other rielflow runtime artifacts
 - input mapping should copy only intentional fields into `workflowInput`
-- attachments must be stored under the divedra data root and passed as
+- attachments must be stored under the rielflow data root and passed as
   data-root-relative refs
 - event APIs should support rate limits per source id
 - S3 repository sources must enforce bucket and prefix allow lists before
@@ -1305,7 +1305,7 @@ Recommended environment variables:
 - `DIVEDRA_EVENTS_ENABLED`
 - `DIVEDRA_EVENTS_READ_ONLY`
 
-`divedra serve` may later gain `--events`, but the first implementation should
+`rielflow serve` may later gain `--events`, but the first implementation should
 prefer a separate command to keep the control plane and event listener lifecycle
 clear.
 

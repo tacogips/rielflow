@@ -10,7 +10,7 @@
 - **Workflow**: `design-and-implement-review-loop`
 - **Issue Mode**: issue-resolution
 - **Issue Title**: Self-review and improve root src removal package cutover
-- **Requested Behavior**: Keep `./src` removed, keep runtime and tests under `packages/divedra/src`, update tooling/docs/workflow fixtures to package-local entrypoints, and keep verification green.
+- **Requested Behavior**: Keep `./src` removed, keep runtime and tests under `packages/rielflow/src`, update tooling/docs/workflow fixtures to package-local entrypoints, and keep verification green.
 - **Codex References**:
   - `impl-plans/active/refactoring-duplicate-scavenge-product-code.md` (`REF-019`)
   - `design-docs/specs/architecture.md#package-boundary-architecture`
@@ -20,8 +20,8 @@
 Review and harden the current uncommitted package source ownership cutover. The implementation step should fix only issues that prevent the accepted design from being true:
 
 - root `src/` must remain absent
-- former root runtime and tests must live under `packages/divedra/src`
-- executable commands in root tooling, docs, examples, and workflow fixtures must use `packages/divedra/src/bin.ts` or another package-local entrypoint
+- former root runtime and tests must live under `packages/rielflow/src`
+- executable commands in root tooling, docs, examples, and workflow fixtures must use `packages/rielflow/src/bin.ts` or another package-local entrypoint
 - package-boundary and verification commands must stay green
 
 Excluded:
@@ -43,10 +43,10 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 | Area | Deliverable Paths | Expected Type/API Change |
 | --- | --- | --- |
-| Package runtime and tests | `packages/divedra/src/**` | No new public API; imports resolve package-locally or through package exports |
+| Package runtime and tests | `packages/rielflow/src/**` | No new public API; imports resolve package-locally or through package exports |
 | Root tooling | `package.json`, `Taskfile.yml`, `tsconfig.json`, `tsconfig.build.json`, `vitest.config.ts`, `biome.json` | No public API change |
 | Source-check scripts | `scripts/check-source-filenames.ts`, `scripts/check-source-filenames.test.ts`, `scripts/run-bun-tests.sh`, `scripts/sync-package-declarations.ts` | No public API change |
-| Docs and fixtures | `README.md`, `examples/**`, `.divedra/workflows/**`, `.divedra/README.md` | No runtime API change; command snippets and fixtures use package-local entrypoints |
+| Docs and fixtures | `README.md`, `examples/**`, `.rielflow/workflows/**`, `.rielflow/README.md` | No runtime API change; command snippets and fixtures use package-local entrypoints |
 | Progress tracking | `impl-plans/active/refactoring-duplicate-scavenge-product-code.md`, `impl-plans/PROGRESS.json`, this plan | Documentation/progress only |
 
 ## Task Breakdown
@@ -70,7 +70,7 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 - Confirm `test ! -d src` passes.
 - Classify live versus historical `src/...` references in root tooling, docs, examples, workflow fixtures, and implementation plans.
-- Confirm former root surfaces exist under `packages/divedra/src`, including CLI, workflow, events, GraphQL, server, hook, shared, library, and tests.
+- Confirm former root surfaces exist under `packages/rielflow/src`, including CLI, workflow, events, GraphQL, server, hook, shared, library, and tests.
 - Identify any stale package-to-root imports or executable commands before editing.
 
 **Completion Criteria**:
@@ -83,8 +83,8 @@ No new public TypeScript types or APIs are expected. The implementation should p
 **Verification Commands**:
 
 - `test ! -d src`
-- `rg -n "bun run src/main\\.ts|bun test src/|find src|src/(cli|events|graphql|hook|server|shared|workflow|lib|main)\\b" package.json Taskfile.yml tsconfig.json tsconfig.build.json vitest.config.ts biome.json scripts README.md examples .divedra impl-plans/active/refactoring-duplicate-scavenge-product-code.md`
-- `rg -nP "(from|import) ['\\\"](\\.\\./)*src/" packages/divedra/src packages/divedra-core/src packages/divedra-addons/src packages/divedra-events/src`
+- `rg -n "bun run src/main\\.ts|bun test src/|find src|src/(cli|events|graphql|hook|server|shared|workflow|lib|main)\\b" package.json Taskfile.yml tsconfig.json tsconfig.build.json vitest.config.ts biome.json scripts README.md examples .rielflow impl-plans/active/refactoring-duplicate-scavenge-product-code.md`
+- `rg -nP "(from|import) ['\\\"](\\.\\./)*src/" packages/rielflow/src packages/rielflow-core/src packages/rielflow-addons/src packages/rielflow-events/src`
 
 ### TASK-002: Clean Root Tooling And Scripts
 
@@ -94,7 +94,7 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 **Implementation Work**:
 
-- Ensure build, typecheck, lint, and test config discover `packages/divedra/src` instead of root `src`.
+- Ensure build, typecheck, lint, and test config discover `packages/rielflow/src` instead of root `src`.
 - Ensure Taskfile tasks do not invoke removed root source entrypoints.
 - Ensure source filename checks reject root `src` recreation and report package-local source paths.
 - Ensure declaration sync does not rewrite paths through removed root `src`.
@@ -115,9 +115,9 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 ### TASK-003: Validate Package-Local Runtime And Tests
 
-**Owned Files/Directories**: `packages/divedra/src/**`, package-local imports required by moved files
+**Owned Files/Directories**: `packages/rielflow/src/**`, package-local imports required by moved files
 **Depends On**: TASK-001
-**Parallelizable**: Yes, if TASK-002 and TASK-004 avoid `packages/divedra/src/**`.
+**Parallelizable**: Yes, if TASK-002 and TASK-004 avoid `packages/rielflow/src/**`.
 
 **Implementation Work**:
 
@@ -128,20 +128,20 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 **Completion Criteria**:
 
-- [x] `packages/divedra/src` contains the moved runtime and tests needed by the cutover.
+- [x] `packages/rielflow/src` contains the moved runtime and tests needed by the cutover.
 - [x] No package-local code imports from removed root source paths.
 - [x] CLI and library targeted tests pass from package-local paths.
 - [x] Adapter behavior remains unchanged except for path ownership.
 
 **Verification Commands**:
 
-- `bun test packages/divedra/src/package-boundaries.test.ts`
-- `bun test packages/divedra/src/workflow/addon-package-boundary.test.ts`
-- `bun test packages/divedra/src/lib-api.test.ts packages/divedra/src/cli.test.ts`
+- `bun test packages/rielflow/src/package-boundaries.test.ts`
+- `bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`
+- `bun test packages/rielflow/src/lib-api.test.ts packages/rielflow/src/cli.test.ts`
 
 ### TASK-004: Clean Docs, Examples, And Workflow Fixtures
 
-**Owned Files/Directories**: `README.md`, `examples/**`, `.divedra/README.md`, `.divedra/workflows/**`
+**Owned Files/Directories**: `README.md`, `examples/**`, `.rielflow/README.md`, `.rielflow/workflows/**`
 **Depends On**: TASK-001
 **Parallelizable**: Yes, if TASK-002 and TASK-003 avoid these files.
 
@@ -155,15 +155,15 @@ No new public TypeScript types or APIs are expected. The implementation should p
 **Completion Criteria**:
 
 - [x] README and example commands use package-local entrypoints.
-- [x] Workflow fixture commands use `bun run packages/divedra/src/bin.ts ...` or another package-local entrypoint.
+- [x] Workflow fixture commands use `bun run packages/rielflow/src/bin.ts ...` or another package-local entrypoint.
 - [x] Historical `src/...` text is not presented as current runnable guidance.
 - [x] Reference examples remain runnable with `--workflow-definition-dir ./examples`.
 
 **Verification Commands**:
 
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- `rg -n "bun run src/main\\.ts|bun test src/|find src" README.md examples .divedra`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- `rg -n "bun run src/main\\.ts|bun test src/|find src" README.md examples .rielflow`
 
 ### TASK-005: Harden Boundary Guards And Targeted Verification
 
@@ -185,10 +185,10 @@ No new public TypeScript types or APIs are expected. The implementation should p
 
 **Verification Commands**:
 
-- `bun test packages/divedra/src/package-boundaries.test.ts`
+- `bun test packages/rielflow/src/package-boundaries.test.ts`
 - `bun test scripts/check-source-filenames.test.ts`
-- `bun test packages/divedra/src/workflow/addon-package-boundary.test.ts`
-- `bun test packages/divedra/src/lib-api.test.ts packages/divedra/src/cli.test.ts`
+- `bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`
+- `bun test packages/rielflow/src/lib-api.test.ts packages/rielflow/src/cli.test.ts`
 
 ### TASK-006: Full Verification And Progress Update
 
@@ -216,14 +216,14 @@ No new public TypeScript types or APIs are expected. The implementation should p
 **Verification Commands**:
 
 - `bun run typecheck`
-- `bun test packages/divedra/src/package-boundaries.test.ts`
+- `bun test packages/rielflow/src/package-boundaries.test.ts`
 - `bun test scripts/check-source-filenames.test.ts`
-- `bun test packages/divedra/src/workflow/addon-package-boundary.test.ts`
-- `bun test packages/divedra/src/lib-api.test.ts packages/divedra/src/cli.test.ts`
+- `bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`
+- `bun test packages/rielflow/src/lib-api.test.ts packages/rielflow/src/cli.test.ts`
 - `bun run build`
 - `bun run lint:biome`
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 - `nix develop --command bun install --frozen-lockfile`
 - `nix develop --command bun run typecheck`
 - `nix develop --command bun test`
@@ -249,18 +249,18 @@ No new public TypeScript types or APIs are expected. The implementation should p
 After TASK-001, TASK-002, TASK-003, and TASK-004 may run concurrently only if their write scopes remain disjoint:
 
 - TASK-002 owns root configs and scripts.
-- TASK-003 owns `packages/divedra/src/**`.
-- TASK-004 owns README, examples, and `.divedra` workflow fixtures.
+- TASK-003 owns `packages/rielflow/src/**`.
+- TASK-004 owns README, examples, and `.rielflow` workflow fixtures.
 
 TASK-005 and TASK-006 must be serialized because they integrate findings, run verification, and update plan/progress records.
 
 ## Completion Criteria
 
 - [x] `./src` remains removed.
-- [x] Runtime and tests live under `packages/divedra/src`.
+- [x] Runtime and tests live under `packages/rielflow/src`.
 - [x] Root tooling and scripts resolve package-local source paths only.
 - [x] README, examples, and workflow fixtures use package-local executable entrypoints for live commands.
-- [x] `packages/divedra/src/package-boundaries.test.ts` guards root source absence and package-to-root import rejection.
+- [x] `packages/rielflow/src/package-boundaries.test.ts` guards root source absence and package-to-root import rejection.
 - [ ] Full verification command set passes; local Bun and Taskfile checks pass, while required Nix checks are sandbox-blocked.
 - [ ] Accepted design compatibility validation fully passes; Nix develop, Nix build, and flake app entrypoint checks remain deferred because the sandbox cannot access the Nix daemon socket.
 - [x] Progress logs and referenced plan notes are updated.
@@ -290,13 +290,13 @@ TASK-005 and TASK-006 must be serialized because they integrate findings, run ve
 **Changed Files**:
 
 - `flake.nix`
-- `.divedra/README.md`
-- `.divedra/workflows/design-and-implement-review-loop/EXPECTED_RESULTS.md`
-- `.divedra/workflows/design-and-implement-review-loop/mock-scenario.json`
-- `.divedra/workflows/design-and-implement-review-loop/mock-scenario-planning-only.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/README.md`
+- `.rielflow/workflows/design-and-implement-review-loop/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/design-and-implement-review-loop/mock-scenario.json`
+- `.rielflow/workflows/design-and-implement-review-loop/mock-scenario-planning-only.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
 - `examples/design-and-implement-review-loop/EXPECTED_RESULTS.md`
 - `examples/design-and-implement-review-loop/mock-scenario.json`
 - `examples/design-and-implement-review-loop/mock-scenario-planning-only.json`
@@ -311,23 +311,23 @@ TASK-005 and TASK-006 must be serialized because they integrate findings, run ve
 
 - `test ! -d src` passed.
 - `bun run typecheck` passed.
-- `bun test scripts/check-source-filenames.test.ts packages/divedra/src/package-boundaries.test.ts` passed.
-- `bun test packages/divedra/src/workflow/addon-package-boundary.test.ts packages/divedra/src/lib-api.test.ts packages/divedra/src/cli.test.ts` passed.
-- `bun run lint:biome` passed with existing explicit-`any` warnings in moved `packages/divedra/src/workflow/engine/*.ts` split files.
+- `bun test scripts/check-source-filenames.test.ts packages/rielflow/src/package-boundaries.test.ts` passed.
+- `bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts packages/rielflow/src/lib-api.test.ts packages/rielflow/src/cli.test.ts` passed.
+- `bun run lint:biome` passed with existing explicit-`any` warnings in moved `packages/rielflow/src/workflow/engine/*.ts` split files.
 - `bun run build` passed.
 - `bun run test` passed.
 - `task test` passed.
 - `task build` passed.
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run packages/divedra/src/bin.ts workflow list --workflow-definition-dir ./examples --output json` passed.
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run packages/rielflow/src/bin.ts workflow list --workflow-definition-dir ./examples --output json` passed.
 - `git diff --check` passed.
 - `nix develop --command bun install --frozen-lockfile` blocked by sandboxed access to `/Users/taco/.cache/nix/fetcher-cache-v4.sqlite`.
-- `XDG_CACHE_HOME=/private/tmp/divedra-nix-cache nix develop --command bun install --frozen-lockfile` blocked by sandboxed access to `/nix/var/nix/daemon-socket/socket`; the same sandbox limitation blocks `nix develop`, `nix build .#default`, and `nix run . -- ...` verification here.
+- `XDG_CACHE_HOME=/private/tmp/rielflow-nix-cache nix develop --command bun install --frozen-lockfile` blocked by sandboxed access to `/nix/var/nix/daemon-socket/socket`; the same sandbox limitation blocks `nix develop`, `nix build .#default`, and `nix run . -- ...` verification here.
 
 **Notes**:
 
-- Fixed the Nix app wrapper to execute `packages/divedra/src/bin.ts` from the copied runtime source instead of removed `src/main.ts`.
+- Fixed the Nix app wrapper to execute `packages/rielflow/src/bin.ts` from the copied runtime source instead of removed `src/main.ts`.
 - Updated project-local workflow documentation and deterministic workflow/example fixtures so live commands and first-party changed-file paths use package-local paths while codex-agent reference paths remain explicit.
 - Hardened `scripts/check-source-filenames.ts` so lint detects a recreated root `src/` directory in addition to numbered source part filenames.
 - REF-019 remains accurate after the hardening pass; the remaining compatibility gap is environmental Nix execution in this sandbox, not repository source ownership.
@@ -346,17 +346,17 @@ TASK-005 and TASK-006 must be serialized because they integrate findings, run ve
 
 - `test ! -d src` passed.
 - `bun run typecheck` passed.
-- `bun test scripts/check-source-filenames.test.ts packages/divedra/src/package-boundaries.test.ts` passed.
-- `bun test packages/divedra/src/workflow/addon-package-boundary.test.ts packages/divedra/src/lib-api.test.ts packages/divedra/src/cli.test.ts` passed.
+- `bun test scripts/check-source-filenames.test.ts packages/rielflow/src/package-boundaries.test.ts` passed.
+- `bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts packages/rielflow/src/lib-api.test.ts packages/rielflow/src/cli.test.ts` passed.
 - `bun run build` passed.
-- `bun run lint:biome` passed with existing explicit-`any` warnings in moved `packages/divedra/src/workflow/engine/*.ts` split files.
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json` passed.
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json` passed.
+- `bun run lint:biome` passed with existing explicit-`any` warnings in moved `packages/rielflow/src/workflow/engine/*.ts` split files.
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json` passed.
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json` passed.
 - `jq empty impl-plans/PROGRESS.json` passed.
 - `git diff --check` passed.
 - Nix develop, Nix build, and flake app entrypoint checks remain blocked by sandboxed Nix daemon access.
 
 **Notes**:
 
-- Rewrote live active `src/...` owned files, excluded files, verification commands, and progress notes in `impl-plans/active/refactoring-duplicate-scavenge-product-code.md` to package-local `packages/divedra/src/...` paths.
+- Rewrote live active `src/...` owned files, excluded files, verification commands, and progress notes in `impl-plans/active/refactoring-duplicate-scavenge-product-code.md` to package-local `packages/rielflow/src/...` paths.
 - Corrected this plan and `impl-plans/PROGRESS.json` so TASK-006 is blocked by deferred Nix verification rather than represented as an unqualified full verification pass.

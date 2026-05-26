@@ -13,11 +13,11 @@
 
 ### Summary
 
-Implement workflow-aware hook event recording for `divedra hook`. The command should keep its cross-vendor pass-through behavior while associating Claude/Codex hook `session_id` values with the ambient divedra workflow execution and persisting hook events.
+Implement workflow-aware hook event recording for `rielflow hook`. The command should keep its cross-vendor pass-through behavior while associating Claude/Codex hook `session_id` values with the ambient rielflow workflow execution and persisting hook events.
 
 ### Scope
 
-**Included**: ambient hook context resolution, hook recording controls, redacted payload artifacts, runtime database table and queries, recorder integration in `divedra hook`, generic node execution env injection for agent backends, focused tests
+**Included**: ambient hook context resolution, hook recording controls, redacted payload artifacts, runtime database table and queries, recorder integration in `rielflow hook`, generic node execution env injection for agent backends, focused tests
 **Excluded**: new TUI screens, GraphQL schema exposure, non-noop policy decisions, generated Claude/Codex config installers
 
 ---
@@ -31,7 +31,7 @@ Implement workflow-aware hook event recording for `divedra hook`. The command sh
 **Status**: COMPLETED
 
 ```typescript
-interface DivedraHookContext {
+interface RielflowHookContext {
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
@@ -99,10 +99,10 @@ interface HookCommandDependencies {
 
 **Checklist**:
 
-- [x] Add divedra context to parsed hook dispatch context
+- [x] Add rielflow context to parsed hook dispatch context
 - [x] Record events after handler response
 - [x] Best-effort record handler failures and block errors
-- [x] Preserve pass-through behavior outside divedra context
+- [x] Preserve pass-through behavior outside rielflow context
 - [x] Unit tests
 
 ### 4. Agent Backend Env Injection
@@ -112,7 +112,7 @@ interface HookCommandDependencies {
 **Status**: COMPLETED
 
 ```typescript
-interface AdapterDivedraHookContext {
+interface AdapterRielflowHookContext {
   readonly environment: {
     readonly DIVEDRA_WORKFLOW_ID: string;
     readonly DIVEDRA_WORKFLOW_EXECUTION_ID: string;
@@ -125,7 +125,7 @@ interface AdapterDivedraHookContext {
 
 **Checklist**:
 
-- [x] Inject generic divedra hook env for all agent backend executions
+- [x] Inject generic rielflow hook env for all agent backend executions
 - [x] Preserve existing manager control-plane env injection
 - [x] Cover Codex and Claude adapters
 - [x] Unit tests
@@ -152,10 +152,10 @@ interface AdapterDivedraHookContext {
 
 ## Completion Criteria
 
-- [x] `divedra hook` records workflow-associated hook events
-- [x] Hook recording is pass-through outside divedra context
+- [x] `rielflow hook` records workflow-associated hook events
+- [x] Hook recording is pass-through outside rielflow context
 - [x] Payload artifacts are redacted by default
-- [x] Backend agent processes receive generic divedra hook env
+- [x] Backend agent processes receive generic rielflow hook env
 - [x] Focused hook/runtime/adapter tests pass
 - [x] Type checking passes
 

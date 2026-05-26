@@ -68,7 +68,7 @@
     ".agents/skills/ts-coding-standards/type-safety.md",
     ".agents/skills/ts-review/SKILL.md",
     ".claude",
-    ".divedra/workflows/impl-plan-completion-loop/scripts/archive-completed-plans.sh",
+    ".rielflow/workflows/impl-plan-completion-loop/scripts/archive-completed-plans.sh",
     ".envrc",
     ".gitignore",
     "AGENTS.md",

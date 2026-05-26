@@ -13,7 +13,7 @@
 
 ### Summary
 
-Make divedra core runtime parsing tolerant of common LLM output formatting without shifting responsibility to workflow prompts. Adapter output parsing should recover JSON object payloads from exact object text, prose-wrapped fenced JSON, and the first balanced object embedded in prose. Manager control parsing should treat `payload.managerControl: null` as absent while preserving strict validation for non-null malformed manager-control payloads.
+Make rielflow core runtime parsing tolerant of common LLM output formatting without shifting responsibility to workflow prompts. Adapter output parsing should recover JSON object payloads from exact object text, prose-wrapped fenced JSON, and the first balanced object embedded in prose. Manager control parsing should treat `payload.managerControl: null` as absent while preserving strict validation for non-null malformed manager-control payloads.
 
 ### Scope
 
@@ -38,7 +38,7 @@ Excluded:
 | Source | Reference | Plan Handling |
 | ------ | --------- | ------------- |
 | Workflow node | `design-and-implement-review-loop` / `step4-impl-plan-create` | Plan created for full issue resolution handoff |
-| Issue | `tacogips/divedra`: "Make workflow manager/output parsing robust against nullable managerControl and wrapped JSON responses" | Direct source for task split and verification |
+| Issue | `tacogips/rielflow`: "Make workflow manager/output parsing robust against nullable managerControl and wrapped JSON responses" | Direct source for task split and verification |
 | Codex input | `codex-agent` backend reference from workflow runtime variables; no mailbox or upstream node payloads attached | Design accepted before this plan; no intentional divergence |
 | Existing local diff | `src/workflow/adapter.ts`, `src/workflow/adapter.test.ts`, `src/workflow/manager-control.ts`, `src/workflow/manager-control.test.ts` | Treat as a manual starting patch that must be reviewed and verified |
 

@@ -78,7 +78,7 @@ guidance to `inputMapping`.
   `test -d ../../codex-agent; printf '%s\n' $?` returned `1`.
 - Decision: no codex-agent reference mapping is required because
   schedule-registration policy, event `inputMapping`, validation, and dispatch
-  reuse are divedra runtime surfaces. `codex-agent` remains only an execution
+  reuse are rielflow runtime surfaces. `codex-agent` remains only an execution
   backend for workflow nodes.
 - Intentional divergence: no schedule-registration policy behavior is copied
   from `codex-agent` or Cursor; provider behavior remains behind adapters.
@@ -89,7 +89,7 @@ guidance to `inputMapping`.
 
 ### 1. Public Schedule-Registration Policy Type
 
-#### `packages/divedra-events/src/types.ts`
+#### `packages/rielflow-events/src/types.ts`
 
 **Status**: COMPLETED
 
@@ -149,7 +149,7 @@ function validateScheduleRegistrationBinding(
 
 #### `README.md`
 #### `examples/event-sources/README.md`
-#### `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-schedule-registration.json`
+#### `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-schedule-registration.json`
 #### `impl-plans/active/scheduled-workflow-execution.md`
 #### `impl-plans/active/schedule-registration-policy-surface-cleanup.md`
 #### `impl-plans/PROGRESS.json`
@@ -210,18 +210,18 @@ interface ScheduleRegistrationPolicySurfaceVerification {
 
 | Task | Deliverables | Depends On | Parallelizable | Completion Criteria |
 | ---- | ------------ | ---------- | -------------- | ------------------- |
-| TASK-001 Public policy type cleanup | `packages/divedra-events/src/types.ts` | None | Yes | `EventWorkflowScheduleRegistrationPolicy` no longer exposes `inputPath` or `timezonePath`; unrelated path fields remain intact |
+| TASK-001 Public policy type cleanup | `packages/rielflow-events/src/types.ts` | None | Yes | `EventWorkflowScheduleRegistrationPolicy` no longer exposes `inputPath` or `timezonePath`; unrelated path fields remain intact |
 | TASK-002 Validation rejection and tests | `src/events/validate-schedule-registration.ts`, `src/events/config.test.ts` | None | Yes | Schedule-registration config with `execution.inputPath` or `execution.timezonePath` fails validation with `inputMapping` migration guidance |
-| TASK-003 Docs, examples, and stale plan references | `README.md`, `examples/event-sources/README.md`, `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-schedule-registration.json`, `impl-plans/active/scheduled-workflow-execution.md` | None | Yes | User-facing docs and examples present `inputMapping` as canonical and do not advertise path policy fields |
+| TASK-003 Docs, examples, and stale plan references | `README.md`, `examples/event-sources/README.md`, `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-schedule-registration.json`, `impl-plans/active/scheduled-workflow-execution.md` | None | Yes | User-facing docs and examples present `inputMapping` as canonical and do not advertise path policy fields |
 | TASK-004 Verification and progress tracking | `impl-plans/active/schedule-registration-policy-surface-cleanup.md`, `impl-plans/PROGRESS.json` | TASK-001, TASK-002, TASK-003 | No | Focused tests, regression tests, typecheck, example validation, and diff checks pass or record blockers |
 
 ## Module Status
 
 | Module | File Path | Status | Tests |
 | ------ | --------- | ------ | ----- |
-| Public policy type cleanup | `packages/divedra-events/src/types.ts` | COMPLETED | `bun run typecheck` passed |
+| Public policy type cleanup | `packages/rielflow-events/src/types.ts` | COMPLETED | `bun run typecheck` passed |
 | Validation rejection | `src/events/validate-schedule-registration.ts` | COMPLETED | `src/events/config.test.ts` passed |
-| Docs and examples cleanup | `README.md`, `examples/event-sources/README.md`, `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-schedule-registration.json`, `impl-plans/active/scheduled-workflow-execution.md` | COMPLETED | `rg -n "inputPath|timezonePath|inputMapping|schedule-registration" ...` reviewed |
+| Docs and examples cleanup | `README.md`, `examples/event-sources/README.md`, `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-schedule-registration.json`, `impl-plans/active/scheduled-workflow-execution.md` | COMPLETED | `rg -n "inputPath|timezonePath|inputMapping|schedule-registration" ...` reviewed |
 | Verification and progress | `impl-plans/active/schedule-registration-policy-surface-cleanup.md`, `impl-plans/PROGRESS.json` | COMPLETED | `jq empty impl-plans/PROGRESS.json` passed |
 
 ## Dependencies
@@ -248,16 +248,16 @@ bun test src/events/config.test.ts
 bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts
 bun run typecheck
 bun run lint:biome
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 jq empty impl-plans/PROGRESS.json
 git diff --check
 ```
 
 ## Completion Criteria
 
-- [x] `packages/divedra-events/src/types.ts` removes
+- [x] `packages/rielflow-events/src/types.ts` removes
       `EventWorkflowScheduleRegistrationPolicy.inputPath`.
-- [x] `packages/divedra-events/src/types.ts` removes
+- [x] `packages/rielflow-events/src/types.ts` removes
       `EventWorkflowScheduleRegistrationPolicy.timezonePath`.
 - [x] Schedule-registration validation rejects legacy
       `execution.inputPath` with migration guidance to binding `inputMapping`.
@@ -305,7 +305,7 @@ src/events/workflow-schedule-registry.test.ts`; passed `bun run typecheck`;
 passed `bun run lint:biome` with pre-existing warnings in
 `src/workflow/engine/*`; passed
 `bun run src/main.ts events validate --workflow-definition-dir ./examples
---event-root ./examples/event-sources/.divedra-events`; passed
+--event-root ./examples/event-sources/.rielflow-events`; passed
 `jq empty impl-plans/PROGRESS.json`; passed `git diff --check`; reviewed
 `rg -n "EventWorkflowScheduleRegistrationPolicy|execution\\.inputPath|execution\\.timezonePath|inputMapping|schedule-registration" packages src README.md examples/event-sources design-docs/specs/design-scheduled-workflow-execution.md impl-plans/active`.
 

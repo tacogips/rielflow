@@ -13,7 +13,7 @@
 
 ### Summary
 
-Add Gemini CLI as a first-class hook vendor. `divedra hook` should infer Gemini payloads without `--vendor`, and `divedra hook snippet --vendor gemini` should print a paste-ready Gemini `settings.json` hook block that uses the vendor-detecting `divedra hook` runtime command.
+Add Gemini CLI as a first-class hook vendor. `rielflow hook` should infer Gemini payloads without `--vendor`, and `rielflow hook snippet --vendor gemini` should print a paste-ready Gemini `settings.json` hook block that uses the vendor-detecting `rielflow hook` runtime command.
 
 ### Scope
 
@@ -88,7 +88,7 @@ buildHookConfigurationSnippet(HookVendor.Gemini);
 **Checklist**:
 
 - [x] Generate Gemini settings-compatible hook entries
-- [x] Use `divedra hook` as the generated command
+- [x] Use `rielflow hook` as the generated command
 - [x] CLI tests
 
 ---
@@ -110,9 +110,9 @@ buildHookConfigurationSnippet(HookVendor.Gemini);
 
 ## Completion Criteria
 
-- [x] `divedra hook` detects Gemini-only event payloads without `--vendor`
+- [x] `rielflow hook` detects Gemini-only event payloads without `--vendor`
 - [x] Gemini `SessionStart` payloads with `timestamp` do not get misclassified as Codex
-- [x] `divedra hook snippet --vendor gemini` prints Gemini hook JSON
+- [x] `rielflow hook snippet --vendor gemini` prints Gemini hook JSON
 - [x] Existing Claude Code and Codex tests still pass
 - [x] Type checking passes
 

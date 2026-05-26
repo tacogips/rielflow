@@ -71,7 +71,7 @@ function normalizeNodePayload(input: {
 - [x] Reuse ordinary node payload validation for third-party resolver payloads.
 - [x] Reject third-party resolver payloads with `nodeType: "addon"`.
 - [x] Reject third-party resolver payloads that return runtime add-on metadata.
-- [x] Preserve built-in `divedra/*` add-on resolution behavior.
+- [x] Preserve built-in `rielflow/*` add-on resolution behavior.
 
 ### 3. Tests and Documentation
 

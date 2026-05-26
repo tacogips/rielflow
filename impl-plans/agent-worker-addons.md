@@ -9,13 +9,13 @@
 
 This plan extends the existing built-in node add-on catalog so reusable agent
 worker nodes can be authored as add-on references. The first agent-backed add-ons
-are `divedra/codex-worker` and `divedra/claude-code-worker`.
+are `rielflow/codex-worker` and `rielflow/claude-code-worker`.
 
 Scope:
 
 - Add authored `addon.inputs` for invocation-specific variable values.
-- Resolve `divedra/codex-worker` into an `agent` node using `codex-agent`.
-- Resolve `divedra/claude-code-worker` into an `agent` node using
+- Resolve `rielflow/codex-worker` into an `agent` node using `codex-agent`.
+- Resolve `rielflow/claude-code-worker` into an `agent` node using
   `claude-code-agent`.
 - Preserve authored add-on references during save/edit round trips.
 
@@ -57,8 +57,8 @@ interface WorkflowNodeAddonRef {
 
 ```typescript
 type BuiltinAgentWorkerAddonName =
-  | "divedra/codex-worker"
-  | "divedra/claude-code-worker";
+  | "rielflow/codex-worker"
+  | "rielflow/claude-code-worker";
 ```
 
 **Checklist**:
@@ -100,8 +100,8 @@ function normalizeWorkflowNodeAddonRef(...): WorkflowNodeAddonRef | undefined;
 **Checklist**:
 
 - [x] Document `addon.inputs`.
-- [x] Document `divedra/codex-worker`.
-- [x] Document `divedra/claude-code-worker`.
+- [x] Document `rielflow/codex-worker`.
+- [x] Document `rielflow/claude-code-worker`.
 
 ## Module Status
 
@@ -122,8 +122,8 @@ function normalizeWorkflowNodeAddonRef(...): WorkflowNodeAddonRef | undefined;
 
 ## Completion Criteria
 
-- [x] `divedra/codex-worker` validates and resolves to a `codex-agent` agent node.
-- [x] `divedra/claude-code-worker` validates and resolves to a
+- [x] `rielflow/codex-worker` validates and resolves to a `codex-agent` agent node.
+- [x] `rielflow/claude-code-worker` validates and resolves to a
       `claude-code-agent` agent node.
 - [x] `addon.inputs` is accepted, validated, preserved, and mapped into resolved
       node variables.
@@ -147,8 +147,8 @@ function normalizeWorkflowNodeAddonRef(...): WorkflowNodeAddonRef | undefined;
 tests, design notes, verification
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Added `addon.inputs`, `divedra/codex-worker`, and
-`divedra/claude-code-worker`. Verified with targeted Vitest coverage, Prettier
+**Notes**: Added `addon.inputs`, `rielflow/codex-worker`, and
+`rielflow/claude-code-worker`. Verified with targeted Vitest coverage, Prettier
 check, and TypeScript typecheck.
 
 ### Session: 2026-04-20 21:05

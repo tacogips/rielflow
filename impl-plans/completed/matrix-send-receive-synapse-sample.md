@@ -15,7 +15,7 @@ back through the shared chat reply dispatcher.
 ## Completed Tasks
 
 - [x] Added `examples/matrix-chat-reply/` as a Matrix-specific
-      `divedra/chat-reply-worker` workflow.
+      `rielflow/chat-reply-worker` workflow.
 - [x] Updated the Matrix event-source binding to target `matrix-chat-reply`.
 - [x] Added a Docker Compose Synapse harness under
       `examples/matrix-chat-reply/local-synapse/`.
@@ -30,7 +30,7 @@ back through the shared chat reply dispatcher.
 ```bash
 bash -n examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh
 bun run src/main.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun test src/events/adapters/matrix.test.ts src/events/matrix-chat-reply-example.test.ts
 ./examples/matrix-chat-reply/local-synapse/run-local-matrix-sample.sh
 bun run typecheck

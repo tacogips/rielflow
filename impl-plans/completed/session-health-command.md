@@ -13,8 +13,8 @@
 
 ### Summary
 
-Implement GitHub issue `tacogips/divedra#6` by adding an operator-facing
-`divedra session health <session-id>` inspection command. The command assembles
+Implement GitHub issue `tacogips/rielflow#6` by adding an operator-facing
+`rielflow session health <session-id>` inspection command. The command assembles
 persisted workflow state, runtime DB progress evidence, bounded recent logs,
 artifact/candidate timestamps, optional recent LLM session messages, and
 explicit live/stall uncertainty into text and JSON output.
@@ -42,7 +42,7 @@ guidance only:
 - `src/session/search.ts`: bounded transcript/message scanning.
 - `src/server/handlers/health.ts`: compact and explicit health status output.
 
-Divedra implementation must read provider-neutral runtime DB
+Rielflow implementation must read provider-neutral runtime DB
 `llm_session_messages` produced by the existing adapter/runtime boundary from
 `impl-plans/graphql-llm-session-messages.md`; it must not read Codex rollout
 files directly.
@@ -171,7 +171,7 @@ export {
 **Checklist**:
 
 - [x] Export the reusable health helper from the package library API.
-- [x] Document `divedra session health` usage and output modes.
+- [x] Document `rielflow session health` usage and output modes.
 - [x] Document that `--include-llm-messages` is opt-in because it may expose conversation content.
 - [x] Document `--live` as best-effort and uncertainty-preserving.
 - [x] Note that remote GraphQL health support is intentionally deferred.
@@ -254,7 +254,7 @@ export {
 
 **Completion Criteria**:
 
-- [x] `divedra session health <session-id>` supports documented options.
+- [x] `rielflow session health <session-id>` supports documented options.
 - [x] `--output json` emits the full report.
 - [x] Text output is bounded and operator-facing.
 - [x] Remote `--endpoint` is rejected in the first implementation slice.
@@ -306,7 +306,7 @@ export {
 
 ## Completion Criteria
 
-- [x] Issue `tacogips/divedra#6` has an active implementation plan linked to the accepted design.
+- [x] Issue `tacogips/rielflow#6` has an active implementation plan linked to the accepted design.
 - [x] CLI health command produces conservative text and JSON output.
 - [x] Health report includes persisted state, live signal, progress signal, artifacts, logs, optional LLM messages, and evidence completeness.
 - [x] The implementation does not read `codex-agent` private rollout files.
@@ -334,7 +334,7 @@ export {
 **Tasks Completed**: TASK-001, TASK-002, TASK-003, TASK-004, TASK-005.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Implemented the local `session health` report builder, bounded artifact freshness scanning, CLI parser/output surface, package exports, docs, and focused tests. Verified with `bun test src/workflow/session-health.test.ts`, `bun test src/cli.test.ts -t "session health"`, `HOME=/private/tmp/divedra-test-home bun test src/workflow/session-health.test.ts src/cli.test.ts`, `bun run typecheck`, and `git diff --check`. The unscoped combined test command needs a writable HOME in this sandbox because the unrelated hook test writes to the user runtime root.
+**Notes**: Implemented the local `session health` report builder, bounded artifact freshness scanning, CLI parser/output surface, package exports, docs, and focused tests. Verified with `bun test src/workflow/session-health.test.ts`, `bun test src/cli.test.ts -t "session health"`, `HOME=/private/tmp/rielflow-test-home bun test src/workflow/session-health.test.ts src/cli.test.ts`, `bun run typecheck`, and `git diff --check`. The unscoped combined test command needs a writable HOME in this sandbox because the unrelated hook test writes to the user runtime root.
 
 ## Related Plans
 

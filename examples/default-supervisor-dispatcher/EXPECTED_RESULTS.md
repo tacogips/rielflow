@@ -2,12 +2,12 @@
 
 ## Configuration validation
 
-`divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`
+`rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`
 must exit successfully with no errors for:
 
 - supervisor profile `default-chat-dispatcher`
 - binding `webhook-supervisor-dispatch-demo`
-- workflows `divedra-default-workflow-supervisor`, `dispatcher-llm-resolver-stub`,
+- workflows `rielflow-default-workflow-supervisor`, `dispatcher-llm-resolver-stub`,
   and `worker-only-single-step`
 
 ## Mock emit (answer-directly)

@@ -1,7 +1,7 @@
 # Server UI Asset Serving Refactoring Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-refactoring-server-ui-asset-serving.md, design-docs/specs/architecture.md#local-http-server-divedra-serve
+**Design Reference**: design-docs/specs/design-refactoring-server-ui-asset-serving.md, design-docs/specs/architecture.md#local-http-server-rielflow-serve
 **Created**: 2026-03-10
 **Last Updated**: 2026-03-09
 

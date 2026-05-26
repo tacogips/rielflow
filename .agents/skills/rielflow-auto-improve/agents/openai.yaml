@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rielflow Auto Improve"
+  short_description: "Run supervised remediation workflows"
+  default_prompt: "Use $rielflow-auto-improve to run this workflow with supervised remediation."

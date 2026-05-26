@@ -1,6 +1,6 @@
 # Workflow JSON Design
 
-This document defines the authored workflow bundle format. It is the authoritative schema direction for workflow definitions saved and executed by divedra.
+This document defines the authored workflow bundle format. It is the authoritative schema direction for workflow definitions saved and executed by rielflow.
 
 Supporting design:
 `design-docs/specs/design-workflow-steps-and-node-reuse.md`.
@@ -45,8 +45,8 @@ Typical managed layout:
 Notes:
 
 - in scoped workflow lookup, `<workflow-definition-dir>` is `<scope-root>/workflows`;
-  user scope defaults to `~/.divedra/workflows` and project scope defaults to
-  `<project>/.divedra/workflows`
+  user scope defaults to `~/.rielflow/workflows` and project scope defaults to
+  `<project>/.rielflow/workflows`
 - `workflow.json.steps[]` order is canonical for editor presentation, while step transitions define legal routing.
 - runtime execution artifacts are written outside the workflow-definition directory under the configured artifact root.
 - the workflow keeps an explicit reusable node registry in `workflow.json.nodes[]`; node files are not inferred by filename convention.
@@ -153,7 +153,7 @@ Optional:
 
 - `description: string`
 - `managerStepId: string`
-- `prompts.divedraPromptTemplate: string`
+- `prompts.rielflowPromptTemplate: string`
 - `prompts.workerSystemPromptTemplate: string`
 - `defaults.maxLoopIterations` (defaults to the runtime default when omitted)
 - `defaults.fanoutConcurrency` (defaults to `20` when omitted; per-transition
@@ -255,9 +255,9 @@ Validation rules:
 - `execution.mode`, when present, must be `required` or `optional`
 - `execution.decisionBy`, when present, must be `owning-manager`
 - `repeat.while` is required when `repeat` is present; `repeat.maxIterations`, when present, must be a positive integer
-- `divedra/*` `addon` references are resolved from the built-in node add-on
+- `rielflow/*` `addon` references are resolved from the built-in node add-on
   catalog into an effective node payload during load/validation
-- non-`divedra/` add-on references may resolve from scoped local add-on roots
+- non-`rielflow/` add-on references may resolve from scoped local add-on roots
   under `<scope-root>/addons`, or through explicit host-provided resolver
   functions passed through the library/server load, validation, save, and
   execution options
@@ -280,7 +280,7 @@ Object form:
 {
   "id": "reply",
   "addon": {
-    "name": "divedra/chat-reply-worker",
+    "name": "rielflow/chat-reply-worker",
     "version": "1",
     "config": {
       "textTemplate": "{{inbox.latest.output.payload.text}}",
@@ -299,13 +299,13 @@ Rules:
 - string shorthand may be accepted for built-in add-ons, but should normalize to
   explicit object form in authoring tools
 - unknown add-on names or unsupported versions fail validation
-- `divedra/` names are reserved for built-in add-ons and are not loaded from
+- `rielflow/` names are reserved for built-in add-ons and are not loaded from
   scoped local add-on roots
 - local add-on lookup uses `(name, version)` and searches the caller workflow's
   owning scope, then project scope, then user scope, before falling back to
   host-provided resolvers
 - `addon.config` is validated by the selected add-on descriptor
-- `addon.env`, when present, maps add-on environment variable names to divedra
+- `addon.env`, when present, maps add-on environment variable names to rielflow
   runtime environment variable names for add-ons whose descriptors support
   explicit environment bindings; no ambient environment variables are forwarded
   implicitly. Required source variables are reported by runtime readiness before
@@ -319,21 +319,21 @@ Rules:
 
 Initial built-in add-ons:
 
-- `divedra/chat-reply-worker`: worker node that replies to the chat event target
+- `rielflow/chat-reply-worker`: worker node that replies to the chat event target
   in `runtimeVariables.event` through the event reply adapter registry
-- `divedra/codex-worker`: worker node that resolves to an `agent` payload using
+- `rielflow/codex-worker`: worker node that resolves to an `agent` payload using
   `executionBackend: "codex-agent"`
-- `divedra/claude-code-worker`: worker node that resolves to an `agent` payload
+- `rielflow/claude-code-worker`: worker node that resolves to an `agent` payload
   using `executionBackend: "claude-code-agent"`
-- `divedra/x-gateway-read`: worker node that runs the read-only
+- `rielflow/x-gateway-read`: worker node that runs the read-only
   `x-gateway-reader graphql query` surface in a Docker-compatible container
-- `divedra/x-gateway`: worker node that runs the full `x-gateway graphql query`
+- `rielflow/x-gateway`: worker node that runs the full `x-gateway graphql query`
   surface for intentional query or mutation documents in a Docker-compatible
   container
-- `divedra/mail-gateway-read`: worker node that runs the read-only
+- `rielflow/mail-gateway-read`: worker node that runs the read-only
   `mail-gateway-reader graphql --query` surface in a Docker-compatible
   container
-- `divedra/mail-gateway`: worker node that runs the full
+- `rielflow/mail-gateway`: worker node that runs the full
   `mail-gateway graphql --query` surface for intentional query or send-mutation
   documents in a Docker-compatible container
 

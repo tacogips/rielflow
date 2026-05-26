@@ -7,7 +7,7 @@
 
 ## Scope
 
-Implement a practical TUI MVP for `divedra tui` aligned with the design:
+Implement a practical TUI MVP for `rielflow tui` aligned with the design:
 - start/resume execution from TUI command surface
 - support non-interactive terminal fallback mode
 - provide observable execution progress in terminal output
@@ -29,7 +29,7 @@ Out of scope for this plan:
 - `src/cli.test.ts` (coverage for fallback/resume flows)
 
 **Completion Criteria**:
-- [x] `--resume-session <id>` is accepted for `divedra tui`
+- [x] `--resume-session <id>` is accepted for `rielflow tui`
 - [x] non-interactive terminal fallback does not require readline prompts
 - [x] execution still reports progress and terminal status
 - [x] tests cover the new behavior

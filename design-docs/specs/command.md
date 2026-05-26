@@ -6,6 +6,35 @@ This document defines CLI interfaces for workflow and session management.
 
 Commands are designed around JSON workflow lifecycle operations and writing session execution.
 
+### Product Rename Command Surface
+
+The primary command after the product rename is `rielflow`. Human-facing help,
+errors, examples, shell snippets, generated hook snippets, workflow prompts,
+release packaging scripts, package metadata, and documentation should present
+`Rielflow` as the product and `rielflow` as the executable/repository/package
+identifier.
+
+Backward compatibility for the historical `rielflow` command is an explicit
+product decision, not an implicit requirement of the rename. If compatibility is
+retained, `rielflow` should be implemented as a thin alias that dispatches to
+the same command handlers, reports deprecation consistently in text output, and
+keeps JSON output parseable. If compatibility is not retained, all scripts,
+workflow bundles, docs, examples, package bins, and release assets must switch
+to `rielflow` with no dangling command references except historical notes.
+
+Command examples and generated snippets should be updated as follows:
+
+- `rielflow workflow ...` for lifecycle operations
+- `rielflow session ...` for execution inspection and continuation
+- `rielflow graphql ...` for manager/control-plane requests
+- `rielflow serve`, `rielflow hook`, and `rielflow events ...` for server,
+  backend hook, and event-source surfaces
+
+Verification for this command-surface rename should include command help smoke
+checks, JSON-output smoke checks where available, and a targeted repository
+search proving that retained `rielflow` command strings are documented
+compatibility or historical references rather than missed primary examples.
+
 ## Sections
 
 ### Subcommands
@@ -13,15 +42,15 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `cli workflow create <name>`
   - Create `<workflow-definition-dir>/<name>/` with `workflow.json`, prompt templates, and default `nodes/node-{id}.json` payload files when a direct definition directory is supplied.
   - In scoped mode, create under `<scope-root>/workflows/<name>/`.
-  - Default write scope is project scope when a project `.divedra` exists, otherwise user scope; `--scope project|user` makes the destination explicit.
+  - Default write scope is project scope when a project `.rielflow` exists, otherwise user scope; `--scope project|user` makes the destination explicit.
   - The target starter direction is a `code` manager node by default, with LLM manager authoring retained as experimental.
   - Starter templates use `workflow -> steps[] + nodes[]`, where steps are the execution addresses and `workflow.json.nodes[]` is the reusable node registry.
   - The generated `workflow.json` should contain only authored schema fields from the current model.
   - `--worker-only` switches the starter to a manager-less template whose explicit `entryStepId` points at `main-worker`.
 - `cli workflow checkout <url>`
-  - Install a workflow bundle from a GitHub directory URL, such as `https://github.com/<owner>/<repo>/tree/<ref>/.divedra/workflows/<workflow-name>`.
+  - Install a workflow bundle from a GitHub directory URL, such as `https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>`.
   - The command accepts GitHub web directory URLs for `github.com` repositories. The path must resolve to one workflow directory containing `workflow.json`; the installed workflow name is derived from the final remote directory segment and must pass the normal safe workflow-name rule.
-  - Checkout is a scoped write command. The default destination is project scope: `<project-root>/.divedra/workflows/<workflow-name>`. If no project scope is discovered, the command creates `<cwd>/.divedra/workflows/<workflow-name>` rather than falling back to user scope. `--user-scope` writes to `<user-root>/workflows/<workflow-name>`.
+  - Checkout is a scoped write command. The default destination is project scope: `<project-root>/.rielflow/workflows/<workflow-name>`. If no project scope is discovered, the command creates `<cwd>/.rielflow/workflows/<workflow-name>` rather than falling back to user scope. `--user-scope` writes to `<user-root>/workflows/<workflow-name>`.
   - Checkout does not use `--workflow-definition-dir` as a write destination. Combining `workflow checkout` with `--workflow-definition-dir` is a usage error because checkout registry metadata is scoped by project/user destination.
   - The remote bundle must be fetched into a temporary staging directory first, then loaded and validated through the same workflow bundle validation path as `workflow validate`. Invalid JSON, missing `workflow.json`, invalid step/node references, missing referenced workflow-local prompt files, unsupported authored fields, or unsafe workflow-local file paths fail before the destination directory is created or modified.
   - The recursive download preserves all tracked files below the selected GitHub directory so workflow-local prompt, script, and supporting files remain available after install. Git metadata and files outside the selected directory are not installed.
@@ -47,7 +76,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
     from detailed workflow validation before adding any active backend preflight
     results.
 - `cli workflow manifest validate [<manifest-path>]`
-  - Validate a workflow allowlist manifest without starting `divedra serve`.
+  - Validate a workflow allowlist manifest without starting `rielflow serve`.
   - The manifest path can come from the positional argument,
     `--workflow-manifest`, or `DIVEDRA_WORKFLOW_MANIFEST`; the positional
     argument is preferred when supplied.
@@ -161,7 +190,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 - `graphql <graphql-document>`
   - Execute a GraphQL query or mutation against the canonical control-plane endpoint.
   - Manager-node LLM/tool use should call GraphQL mutations such as `sendManagerMessage` through this command rather than dedicated domain subcommands.
-  - When `DIVEDRA_MANAGER_SESSION_ID` is present, the CLI forwards it to `/graphql` with `X-Divedra-Manager-Session-Id` so manager-scoped mutations do not need to repeat it in GraphQL variables.
+  - When `DIVEDRA_MANAGER_SESSION_ID` is present, the CLI forwards it to `/graphql` with `X-Rielflow-Manager-Session-Id` so manager-scoped mutations do not need to repeat it in GraphQL variables.
   - Without `--endpoint`, executes in-process against local project-scoped workflow/session storage. `--endpoint` or `DIVEDRA_GRAPHQL_ENDPOINT` selects remote HTTP transport.
 - `serve [workflow-name]`
   - Start the local HTTP control plane.
@@ -172,14 +201,14 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
   - Human-facing browser mode should default to the overview-only workflow list and selected-workflow status surface described in `design-workflow-overview-status-surface.md`, not to node-level debugging detail.
   - Exposes `/healthz` for liveness checks.
 - `hook [--vendor claude-code|codex|gemini]`
-  - Receive agent backend hook payloads via stdin, detect vendor and event type, associate hook `session_id` with the ambient divedra workflow execution when available, record the hook event, and dispatch to registered policy handlers.
+  - Receive agent backend hook payloads via stdin, detect vendor and event type, associate hook `session_id` with the ambient rielflow workflow execution when available, record the hook event, and dispatch to registered policy handlers.
   - Claude Code, Codex, and Gemini pipe a JSON object to stdin; the command parses it, validates the shared transport fields (`session_id`, `cwd`, `hook_event_name`), resolves the vendor (from `--vendor` flag or best-effort detection), identifies the `hook_event_name`, and calls the matching handler.
   - When `DIVEDRA_WORKFLOW_EXECUTION_ID`, `DIVEDRA_WORKFLOW_ID`, and the ambient step/node execution context variables are present, hook events are persisted as runtime hook-event records keyed by workflow execution id, backend agent session id, node execution id, and optional manager session id.
-  - Outside a divedra-launched agent process, the command remains pass-through by default and returns empty JSON `{}` unless a policy handler makes a decision.
+  - Outside a rielflow-launched agent process, the command remains pass-through by default and returns empty JSON `{}` unless a policy handler makes a decision.
   - Exit 0 with JSON on stdout for success; exit 2 with reason on stderr to block.
 - `hook snippet --vendor claude-code|codex|gemini`
   - Print a paste-ready JSON hook configuration snippet for the selected backend.
-  - The generated snippet registers the vendor-detecting `divedra hook` command for the recommended lifecycle events.
+  - The generated snippet registers the vendor-detecting `rielflow hook` command for the recommended lifecycle events.
   - This command only prints JSON to stdout; it does not mutate Claude Code, Codex, Gemini, or project configuration files.
 - `events validate [--event-root <path>]`
   - Validate external event source and binding configuration without starting listeners.
@@ -196,7 +225,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
     the listener must wait for the prior workflow execution or supervised run to
     reach a terminal state before dispatching another item from the same
     sequence.
-  - In local command-dispatch mode, starts workflow execution through `divedra workflow run` with a generated mapped-input JSON file.
+  - In local command-dispatch mode, starts workflow execution through `rielflow workflow run` with a generated mapped-input JSON file.
   - In local library mode, invokes the library workflow execution client in-process.
   - With `--endpoint`, dispatches workflow execution through GraphQL and can run as a lightweight listener process.
   - For bindings configured with `execution.mode = "supervised"`, dispatches events to the workflow supervisor control path so the same event source conversation can start, stop, restart, and inspect the active workflow.
@@ -224,7 +253,7 @@ Commands are designed around JSON workflow lifecycle operations and writing sess
 ### Release Packaging Commands
 
 Release packaging is driven by repository automation rather than by a new
-runtime CLI subcommand. The user-facing `divedra` command should remain focused
+runtime CLI subcommand. The user-facing `rielflow` command should remain focused
 on workflow, session, GraphQL, server, hook, and event operations.
 
 The packaging command surface should include:
@@ -237,23 +266,23 @@ The packaging command surface should include:
 - `task build:homebrew`: Taskfile wrapper around the archive builder.
 - `task homebrew:formula`: Taskfile wrapper around formula rendering.
 - `task homebrew:tap-formula`: render the formula into the sibling
-  `../homebrew-tap/Formula/divedra.rb` checkout used by `tacogips/tap`.
+  `../homebrew-tap/Formula/rielflow.rb` checkout used by `tacogips/tap`.
 
 Default local verification commands for this issue:
 
 ```bash
 scripts/build-homebrew-release.sh
 tmp_dir="$(mktemp -d)"
-tar -C "$tmp_dir" -xzf dist/homebrew/divedra-<version>-<target>.tar.gz
-"$tmp_dir/bin/divedra" --help
-brew tap-new local/divedra-test
-tap_root="$(brew --repository local/divedra-test)"
+tar -C "$tmp_dir" -xzf dist/homebrew/rielflow-<version>-<target>.tar.gz
+"$tmp_dir/bin/rielflow" --help
+brew tap-new local/rielflow-test
+tap_root="$(brew --repository local/rielflow-test)"
 DIVEDRA_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
-  scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/divedra.rb"
-brew install local/divedra-test/divedra
-brew test local/divedra-test/divedra
-brew uninstall divedra
-brew untap local/divedra-test
+  scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/rielflow.rb"
+brew install local/rielflow-test/rielflow
+brew test local/rielflow-test/rielflow
+brew uninstall rielflow
+brew untap local/rielflow-test
 ```
 
 `--version` is part of the preferred release smoke test after the CLI exposes a
@@ -275,7 +304,7 @@ may generate a file URL or locally patched formula for smoke testing.
 | `--overwrite`                                     | boolean       | `false`                                             | For `workflow checkout`: after staged remote validation succeeds, remove the existing destination workflow directory and replace its checkout registry record                                                               |
 | `--structure`                                     | boolean       | `false`                                             | For `workflow inspect`: render a compact indented text structure with each step id on its own line and the description on the next line one indent deeper                                                                 |
 | `--executable`                                    | boolean       | `false`                                             | For `workflow validate` and `workflow manifest validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                     |
-| `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `divedra graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |
+| `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `rielflow graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |
 | `--node-patch`                                    | string        | none                                                | For `workflow validate` and `workflow run`: non-persistent node settings patch as inline JSON object, existing file path, or `@path/to/patch.json`; patch keys are node ids and values allow only `executionBackend`, `model`, and `effort` |
 | `--workflow-definition-dir`                       | string (path) | scoped catalog lookup                               | Direct directory containing `<workflow-name>/workflow.json` definition bundles; when supplied, bypasses project/user scope catalog lookup and does not control logs, sessions, or artifacts                               |
 | `--scope`                                         | string        | `auto`                                              | Workflow scope selector for read/write commands: `auto`, `project`, or `user`                                                                                                                                             |
@@ -287,13 +316,13 @@ may generate a file URL or locally patched formula for smoke testing.
 | `--mode`                                          | string        | workflow/default policy                             | For `workflow self-improve`: `report-only` or `report-and-auto-improve`                                                                                                                                                    |
 | `--enable-disabled`                               | boolean       | `false`                                             | For `workflow self-improve`: allow explicit execution for a workflow whose authored self-improve config is disabled                                                                                                        |
 | `--stall-timeout-ms`                              | number        | workflow/default policy                             | For `auto improve mode`: threshold used to mark no-progress evidence as stalled; overrides `workflow.defaults.supervision.stallTimeoutMs`; must be greater than or equal to `--monitor-interval-ms`                       |
-| `--user-root`                                     | string (path) | `~/.divedra`                                        | User scope root; workflows are read from `<user-root>/workflows` unless `--workflow-definition-dir` is supplied                                                                                                           |
-| `--project-root`                                  | string (path) | nearest project `.divedra`                          | Project scope root; workflows are read from `<project-root>/workflows` unless `--workflow-definition-dir` is supplied                                                                                                     |
+| `--user-root`                                     | string (path) | `~/.rielflow`                                        | User scope root; workflows are read from `<user-root>/workflows` unless `--workflow-definition-dir` is supplied                                                                                                           |
+| `--project-root`                                  | string (path) | nearest project `.rielflow`                          | Project scope root; workflows are read from `<project-root>/workflows` unless `--workflow-definition-dir` is supplied                                                                                                     |
 | `--addon-root`                                    | string (path) | scoped add-on catalog lookup                        | Direct root directory containing local add-ons; during scoped catalog loading, searched before project/user add-on roots                                                                                                  |
 | `--artifact-root`                                 | string (path) | resolved runtime data root + `/workflow`            | Root directory for execution artifacts                                                                                                                                                                                    |
 | `--session-store`                                 | string (path) | resolved runtime data root + `/sessions`            | Root directory for persisted workflow sessions                                                                                                                                                                            |
 | `--log-root`                                      | string (path) | `<scope-root>/logs`                                 | Root directory for operator-facing process logs and exported runtime logs                                                                                                                                                 |
-| `--config`                                        | string (path) | `$XDG_CONFIG_HOME/divedra/config.json`              | Bootstrap config path used to resolve user/project scope roots                                                                                                                                                            |
+| `--config`                                        | string (path) | `$XDG_CONFIG_HOME/rielflow/config.json`              | Bootstrap config path used to resolve user/project scope roots                                                                                                                                                            |
 | `--working-dir`                                   | string (path) | command invocation `cwd`                            | Workflow execution working directory override; relative values resolve from the command invocation directory                                                                                                              |
 | `--mock-scenario`                                 | string (path) | none                                                | Deterministic node-output fixture map for local execution/testing paths                                                                                                                                                   |
 | `--max-steps`                                     | number        | none                                                | Hard cap on step executions per run                                                                                                                                                                                       |
@@ -326,7 +355,7 @@ may generate a file URL or locally patched formula for smoke testing.
 | `--read-only`                                     | boolean       | `false`                                             | Disable write/update operations in `serve` mode                                                                                                                                                                           |
 | `--no-exec`                                       | boolean       | `false`                                             | Parsed by `serve`; current GraphQL schema does not yet enforce execution blocking from this flag                                                                                                                          |
 | `--vendor`                                        | string        | auto-detect                                         | For `hook`: explicit vendor identifier (`claude-code` or `codex`); when omitted, detected heuristically from payload fields                                                                                               |
-| `--event-root`                                    | string (path) | nearest `.divedra-events` next to the workflow root | Root directory containing external event source and binding configuration                                                                                                                                                 |
+| `--event-root`                                    | string (path) | nearest `.rielflow-events` next to the workflow root | Root directory containing external event source and binding configuration                                                                                                                                                 |
 
 ### Environment Variables
 
@@ -337,31 +366,31 @@ may generate a file URL or locally patched formula for smoke testing.
 | `DIVEDRA_WORKFLOW_MANIFEST`       | No              | none                                            | Default manifest path for `serve`; when present, defines the complete server workflow allowlist and takes precedence over direct/scoped catalog exposure      |
 | `DIVEDRA_WORKFLOW_MANIFEST_ROOT`  | No              | current directory                               | Root directory for relative `workflowDirectory` and `cwd` paths inside workflow manifests                                                                    |
 | `DIVEDRA_WORKFLOW_SCOPE`          | No              | `auto`                                          | Default workflow scope selector: `auto`, `project`, or `user`                                                                                                 |
-| `DIVEDRA_USER_ROOT`               | No              | `~/.divedra`                                    | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                        |
-| `DIVEDRA_PROJECT_ROOT`            | No              | nearest project `.divedra`                      | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`   |
+| `DIVEDRA_USER_ROOT`               | No              | `~/.rielflow`                                    | User scope root; workflows default to `<user-root>/workflows`, logs to `<user-root>/logs`, and runtime data to `<user-root>/artifacts`                        |
+| `DIVEDRA_PROJECT_ROOT`            | No              | nearest project `.rielflow`                      | Project scope root override; workflows default to `<project-root>/workflows`, logs to `<project-root>/logs`, and runtime data to `<project-root>/artifacts`   |
 | `DIVEDRA_ADDON_ROOT`              | No              | scoped add-on catalog lookup                    | Direct default local add-on root; during scoped catalog loading, searched before project/user add-on roots                                                    |
 | `DIVEDRA_LOG_ROOT`                | No              | `<scope-root>/logs`                             | Overrides operator-facing process/runtime log output root                                                                                                     |
-| `DIVEDRA_CONFIG`                  | No              | `$XDG_CONFIG_HOME/divedra/config.json`          | Bootstrap config path used before user scope root resolution                                                                                                  |
+| `DIVEDRA_CONFIG`                  | No              | `$XDG_CONFIG_HOME/rielflow/config.json`          | Bootstrap config path used before user scope root resolution                                                                                                  |
 | `DIVEDRA_SESSION_STORE`           | No              | local file store                                | Session state backend selector                                                                                                                                |
 | `DIVEDRA_SERVE_HOST`              | No              | `127.0.0.1`                                     | Default bind address for `serve`                                                                                                                              |
 | `DIVEDRA_SERVE_PORT`              | No              | `43173`                                         | Default listen port for `serve`                                                                                                                               |
-| `DIVEDRA_ARTIFACT_DIR`            | No              | owning scope artifacts root or user artifacts   | Canonical root data directory override: sessions, `workflow/`, `files/`, `divedra.db`                                                                         |
+| `DIVEDRA_ARTIFACT_DIR`            | No              | owning scope artifacts root or user artifacts   | Canonical root data directory override: sessions, `workflow/`, `files/`, `rielflow.db`                                                                         |
 | `DIVEDRA_GRAPHQL_ENDPOINT`        | No              | local serve endpoint                            | Default GraphQL endpoint for CLI manager/control-plane commands                                                                                               |
-| `DIVEDRA_MANAGER_AUTH_TOKEN`      | No              | none                                            | Manager-session auth token for `divedra graphql` and GraphQL control-plane mutations                                                                          |
-| `DIVEDRA_MANAGER_SESSION_ID`      | No              | none                                            | Ambient manager session id forwarded by `divedra graphql` to `/graphql` for manager-scoped requests                                                           |
+| `DIVEDRA_MANAGER_AUTH_TOKEN`      | No              | none                                            | Manager-session auth token for `rielflow graphql` and GraphQL control-plane mutations                                                                          |
+| `DIVEDRA_MANAGER_SESSION_ID`      | No              | none                                            | Ambient manager session id forwarded by `rielflow graphql` to `/graphql` for manager-scoped requests                                                           |
 | `DIVEDRA_SELF_IMPROVE_DEFAULT_LIMIT` | No            | `10`                                            | Default latest-run limit for `workflow self-improve` when no workflow `defaults.selfImprove.defaultLogLimit` or command `--limit` is supplied                 |
-| `DIVEDRA_WORKFLOW_ID`             | No              | none                                            | Ambient workflow id for divedra-launched backend processes, manager tool environments, and hook event recording                                               |
-| `DIVEDRA_WORKFLOW_EXECUTION_ID`   | No              | none                                            | Ambient workflow execution id for divedra-launched backend processes, manager tool environments, and hook event recording                                     |
+| `DIVEDRA_WORKFLOW_ID`             | No              | none                                            | Ambient workflow id for rielflow-launched backend processes, manager tool environments, and hook event recording                                               |
+| `DIVEDRA_WORKFLOW_EXECUTION_ID`   | No              | none                                            | Ambient workflow execution id for rielflow-launched backend processes, manager tool environments, and hook event recording                                     |
 | `DIVEDRA_STEP_ID`                 | No              | none                                            | Ambient step id for the current step invocation and hook event recording                                                                                      |
 | `DIVEDRA_NODE_ID`                 | No              | none                                            | Ambient backing node id for the current step invocation and hook event recording                                                                              |
 | `DIVEDRA_NODE_EXEC_ID`            | No              | none                                            | Ambient node execution id for the concrete step invocation and hook event recording                                                                           |
-| `DIVEDRA_AGENT_BACKEND`           | No              | none                                            | Ambient backend name for divedra-launched agent processes, such as `codex-agent` or `claude-code-agent`                                                       |
+| `DIVEDRA_AGENT_BACKEND`           | No              | none                                            | Ambient backend name for rielflow-launched agent processes, such as `codex-agent` or `claude-code-agent`                                                       |
 | `DIVEDRA_MANAGER_STEP_ID`         | No              | none                                            | Ambient manager step id for manager tool environments                                                                                                         |
 | `DIVEDRA_MANAGER_NODE_EXEC_ID`    | No              | none                                            | Ambient manager node execution id for manager tool environments                                                                                               |
-| `DIVEDRA_HOOK_RECORDING`          | No              | `auto`                                          | Hook event recording mode: `auto` records when divedra context is present, `off` disables persistence, and `required` errors when required context is missing |
+| `DIVEDRA_HOOK_RECORDING`          | No              | `auto`                                          | Hook event recording mode: `auto` records when rielflow context is present, `off` disables persistence, and `required` errors when required context is missing |
 | `DIVEDRA_HOOK_STRICT`             | No              | `false`                                         | When `true`, hook persistence failures become hook errors; when `false`, recording failures do not block the backend                                          |
 | `DIVEDRA_HOOK_CAPTURE_RAW`        | No              | `redacted`                                      | Hook payload artifact mode: `redacted`, `metadata-only`, or `full`                                                                                            |
-| `DIVEDRA_EVENT_ROOT`              | No              | nearest `.divedra-events` next to workflow root | Default external event source and binding configuration root                                                                                                  |
+| `DIVEDRA_EVENT_ROOT`              | No              | nearest `.rielflow-events` next to workflow root | Default external event source and binding configuration root                                                                                                  |
 | `DIVEDRA_EVENT_ENDPOINT_BASE_URL` | No              | none                                            | Public base URL used by webhook/chat providers when registering or displaying callback endpoints                                                              |
 | `DIVEDRA_EVENTS_HOST`             | No              | `127.0.0.1` for `events serve`                  | Bind address for event listener HTTP routes                                                                                                                   |
 | `DIVEDRA_EVENTS_PORT`             | No              | `43174` for `events serve`                      | Listen port for event listener HTTP routes                                                                                                                    |
@@ -407,15 +436,15 @@ direct trigger behavior.
 Scope root defaults:
 
 1. user scope root: `--user-root`, `DIVEDRA_USER_ROOT`, bootstrap config
-   `userRoot`, then `~/.divedra`
+   `userRoot`, then `~/.rielflow`
 2. project scope root: `--project-root`, `DIVEDRA_PROJECT_ROOT`, nearest
-   project `.divedra`
+   project `.rielflow`
 3. scope subdirectories: `workflows`, `addons`, `artifacts`, and `logs` unless
    overridden by scope config
 
 Add-on lookup resolution order:
 
-1. built-in runtime catalog for `divedra/*`
+1. built-in runtime catalog for `rielflow/*`
 2. explicit direct add-on root override from `--addon-root` or
    `DIVEDRA_ADDON_ROOT`, when supplied
 3. project scope `<project-root>/addons`, when present
@@ -438,8 +467,8 @@ Artifact root resolution order:
 
 Runtime-root co-location rule:
 
-1. when `--artifact-root` and/or `--session-store` are supplied, `divedra` infers `rootDataDir` from those explicit roots when they provide an unambiguous parent directory
-2. that inferred root keeps `divedra.db` and sibling default roots aligned with the explicit storage tree instead of an unrelated ambient `DIVEDRA_ARTIFACT_DIR`
+1. when `--artifact-root` and/or `--session-store` are supplied, `rielflow` infers `rootDataDir` from those explicit roots when they provide an unambiguous parent directory
+2. that inferred root keeps `rielflow.db` and sibling default roots aligned with the explicit storage tree instead of an unrelated ambient `DIVEDRA_ARTIFACT_DIR`
 
 Session store root resolution order:
 
@@ -460,7 +489,7 @@ GraphQL control-plane resolution order:
 
 1. `--endpoint`
 2. `DIVEDRA_GRAPHQL_ENDPOINT`
-3. local `divedra serve` default (`http://127.0.0.1:43173/graphql`)
+3. local `rielflow serve` default (`http://127.0.0.1:43173/graphql`)
 
 Data-root file reference rule:
 
@@ -480,7 +509,7 @@ GraphQL is the canonical domain-parameter transport for:
 - manager send/control-plane requests.
 
 - domain parameters should be modeled in GraphQL inputs,
-- `divedra graphql` is the thin generic GraphQL client surface,
+- `rielflow graphql` is the thin generic GraphQL client surface,
 - local-only debug flags such as `--mock-scenario` are not forwarded when a command is executed remotely through GraphQL,
 - `workflow list` and `workflow status` should consume compact overview summary queries rather than low-level node, communication, hook-event, or log detail queries,
 - workflow tooling should use GraphQL rather than parallel REST transports.

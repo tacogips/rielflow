@@ -18,7 +18,7 @@
 
 Implement manifest/template add-ons installed under project and user scope
 `addons/` directories. Local add-ons should resolve after built-in
-`divedra/*` add-ons, before host-provided resolver functions, and must
+`rielflow/*` add-ons, before host-provided resolver functions, and must
 materialize ordinary node payloads without executing add-on package code during
 workflow load or validation.
 
@@ -86,7 +86,7 @@ export async function resolveAddonSource(input: {
 - [x] Add safe add-on name and version validation helpers
 - [x] Resolve direct add-on root from `--addon-root` / `DIVEDRA_ADDON_ROOT`
 - [x] Resolve owning-scope, project-scope, and user-scope add-on candidates
-- [x] Preserve `divedra/` built-in namespace behavior without filesystem lookup
+- [x] Preserve `rielflow/` built-in namespace behavior without filesystem lookup
 - [x] Unit tests for lookup order, shadowing, and unsafe path rejection
 
 ### 2. Local Add-on Manifest Loader
@@ -158,7 +158,7 @@ export async function resolveNodeAddonPayloadAsync(input: {
 
 **Checklist**:
 
-- [x] Keep built-in `divedra/*` resolution first
+- [x] Keep built-in `rielflow/*` resolution first
 - [x] Try scoped local add-on manifests before host-provided resolvers
 - [x] Keep sync validation behavior explicit when local manifest resolution needs async loading
 - [x] Normalize local payloads through ordinary node payload validation
@@ -218,7 +218,7 @@ interface AddonSourceJson {
 
 ```typescript
 test("resolves user-scope local add-on manifests", async () => {
-  // Loads a workflow whose non-divedra add-on resolves from ~/.divedra/addons.
+  // Loads a workflow whose non-rielflow add-on resolves from ~/.rielflow/addons.
 });
 
 test("project-scope local add-on shadows user-scope add-on by exact version", async () => {
@@ -258,8 +258,8 @@ test("project-scope local add-on shadows user-scope add-on by exact version", as
 
 ## Completion Criteria
 
-- [x] Non-`divedra/` add-ons can resolve from project and user `.divedra/addons`
-- [x] Built-in `divedra/*` add-ons never resolve from filesystem roots
+- [x] Non-`rielflow/` add-ons can resolve from project and user `.rielflow/addons`
+- [x] Built-in `rielflow/*` add-ons never resolve from filesystem roots
 - [x] Project add-ons shadow user add-ons by exact `(name, version)`
 - [x] `--addon-root` and `DIVEDRA_ADDON_ROOT` work as direct add-on-root overrides
 - [x] Local manifests materialize ordinary node payloads only

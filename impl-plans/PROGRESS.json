@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-22T23:59:30+09:00",
+  "lastUpdated": "2026-05-26T00:00:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -543,9 +543,75 @@
     },
     "184": {
       "status": "COMPLETED"
+    },
+    "185": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
+    "completed/product-rename-rielflow": {
+      "phase": 185,
+      "status": "Completed",
+      "path": "impl-plans/completed/product-rename-rielflow.md",
+      "designReference": "design-docs/specs/architecture.md#product-rename-to-rielflow; design-docs/specs/command.md#product-rename-command-surface",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-005"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005",
+            "TASK-006"
+          ]
+        }
+      }
+    },
     "active/sequential-list-event-source": {
       "phase": 184,
       "status": "Completed",
@@ -1541,7 +1607,7 @@
         }
       }
     },
-    "divedra-manager-prompt-contract": {
+    "rielflow-manager-prompt-contract": {
       "phase": 15,
       "status": "Completed",
       "tasks": {
@@ -1633,7 +1699,7 @@
           "status": "Completed",
           "parallelizable": false,
           "deps": [
-            "divedra-manager-prompt-contract:TASK-003",
+            "rielflow-manager-prompt-contract:TASK-003",
             "node-output-contract-and-validation:TASK-005"
           ]
         },

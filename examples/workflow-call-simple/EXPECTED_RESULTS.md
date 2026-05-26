@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate workflow-call-simple --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate workflow-call-simple --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -18,14 +18,14 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow inspect workflow-call-simple --workflow-definition-dir ./examples --output json
+bun run packages/rielflow/src/bin.ts workflow inspect workflow-call-simple --workflow-definition-dir ./examples --output json
 ```
 
 Expected stable inspection facts:
 
-- `managerStepId` is `divedra-manager`
-- `entryStepId` is `divedra-manager`
-- `stepIds` are `["divedra-manager", "draft-write", "apply-review"]`
+- `managerStepId` is `rielflow-manager`
+- `entryStepId` is `rielflow-manager`
+- `stepIds` are `["rielflow-manager", "draft-write", "apply-review"]`
 - `counts.crossWorkflowDispatches` is `1`
 - `crossWorkflowDispatchIds` contains `__cw:draft-write` (derived from the cross-workflow step transition)
 - the authored bundle does not include structural `subWorkflows` (validation rejects that field)
@@ -35,7 +35,7 @@ Expected stable inspection facts:
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run workflow-call-simple \
+bun run packages/rielflow/src/bin.ts workflow run workflow-call-simple \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/workflow-call-simple/mock-scenario.json \
   --output json

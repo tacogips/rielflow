@@ -13,7 +13,7 @@
 
 ### Summary
 
-Reconcile the package-boundary tests with the accepted self-improve ownership design. Dedicated retrospective self-improve is intentionally part of the provider-neutral `divedra-core` facade, while current package CLI self-improve imports from root `src/workflow/self-improve` remain temporary compatibility-facade imports until package-owned CLI adapters replace them.
+Reconcile the package-boundary tests with the accepted self-improve ownership design. Dedicated retrospective self-improve is intentionally part of the provider-neutral `rielflow-core` facade, while current package CLI self-improve imports from root `src/workflow/self-improve` remain temporary compatibility-facade imports until package-owned CLI adapters replace them.
 
 ### Issue Reference
 
@@ -23,15 +23,15 @@ Reconcile the package-boundary tests with the accepted self-improve ownership de
 - **Source node**: `step3-handoff`
 - **Target workflow**: `design-and-implement-review-loop`
 - **Reviewed range**: `HEAD~2..HEAD plus clean working tree`
-- **Finding 1**: `packages/divedra-core/src/index.ts:17` exports self-improve APIs without the `src/package-boundaries.test.ts` core export contract being reconciled.
-- **Finding 2**: `packages/divedra/src/cli/workflow-command-handler.ts:11` imports root `src/workflow/self-improve` without the temporary package-root import allowlist being reconciled.
+- **Finding 1**: `packages/rielflow-core/src/index.ts:17` exports self-improve APIs without the `src/package-boundaries.test.ts` core export contract being reconciled.
+- **Finding 2**: `packages/rielflow/src/cli/workflow-command-handler.ts:11` imports root `src/workflow/self-improve` without the temporary package-root import allowlist being reconciled.
 
 ### Scope
 
 **Included**:
 
-- Update `src/package-boundaries.test.ts` so intentional `divedra-core` self-improve facade exports are part of the package-boundary contract.
-- Update `src/package-boundaries.test.ts` so the current `packages/divedra/src/cli/workflow-command-handler.ts` self-improve root import is listed as a temporary compatibility-facade import.
+- Update `src/package-boundaries.test.ts` so intentional `rielflow-core` self-improve facade exports are part of the package-boundary contract.
+- Update `src/package-boundaries.test.ts` so the current `packages/rielflow/src/cli/workflow-command-handler.ts` self-improve root import is listed as a temporary compatibility-facade import.
 - Preserve the current public API and CLI behavior.
 - Record the documentation impact explicitly: no user-facing documentation update is expected for a test-contract-only reconciliation, but update `README.md` or the affected design doc if implementation reveals a behavior or public-surface documentation gap.
 - Run the focused package-boundary test and the requested broader verification commands.
@@ -47,7 +47,7 @@ Reconcile the package-boundary tests with the accepted self-improve ownership de
 
 - `codex-agent`: execution backend reference only for workflow worker/provider context.
 - `../../codex-agent`: intentionally not inspected; Step 1 through Step 3 accepted that this issue is package-boundary reconciliation, not Codex-reference behavior replication.
-- Intentional divergence: divedra self-improve remains provider-neutral workflow infrastructure and does not copy Codex rollout formats.
+- Intentional divergence: rielflow self-improve remains provider-neutral workflow infrastructure and does not copy Codex rollout formats.
 
 ---
 
@@ -61,19 +61,19 @@ Reconcile the package-boundary tests with the accepted self-improve ownership de
 
 **Specification**:
 
-- Add the current `packages/divedra/src/cli/workflow-command-handler.ts` import of `../../../../src/workflow/self-improve` to `TEMPORARY_COMPATIBILITY_ROOT_IMPORTS`.
-- Add other current package-facade compatibility imports surfaced by the focused package-boundary test: `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/storage-and-options.ts`, `packages/divedra/src/cli/scoped-command-handlers.ts`, and `packages/divedra-core/src/index.ts`.
-- Update the `packages/divedra-core/src/index.ts` expected export contract to include the intentional self-improve service functions, policy/default constants, and public self-improve input/result/report types exported by the core facade.
+- Add the current `packages/rielflow/src/cli/workflow-command-handler.ts` import of `../../../../src/workflow/self-improve` to `TEMPORARY_COMPATIBILITY_ROOT_IMPORTS`.
+- Add other current package-facade compatibility imports surfaced by the focused package-boundary test: `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/storage-and-options.ts`, `packages/rielflow/src/cli/scoped-command-handlers.ts`, and `packages/rielflow-core/src/index.ts`.
+- Update the `packages/rielflow-core/src/index.ts` expected export contract to include the intentional self-improve service functions, policy/default constants, and public self-improve input/result/report types exported by the core facade.
 - Keep assertions deterministic and sorted consistently with nearby export-contract expectations.
 - Do not add broad wildcard allowlists or allow unrelated root imports.
 
 **Checklist**:
 
 - [x] `workflow-command-handler.ts` self-improve root import is explicitly allowlisted.
-- [x] `divedra-core` expected exports include `executeWorkflowSelfImprove`.
-- [x] `divedra-core` expected exports include report lookup/listing functions.
-- [x] `divedra-core` expected exports include self-improve policy/default exports.
-- [x] `divedra-core` expected exports include public self-improve input/result/report types at the facade source boundary; runtime `Object.keys` assertions cover value exports only.
+- [x] `rielflow-core` expected exports include `executeWorkflowSelfImprove`.
+- [x] `rielflow-core` expected exports include report lookup/listing functions.
+- [x] `rielflow-core` expected exports include self-improve policy/default exports.
+- [x] `rielflow-core` expected exports include public self-improve input/result/report types at the facade source boundary; runtime `Object.keys` assertions cover value exports only.
 - [x] No runtime behavior is changed.
 
 ---
@@ -121,7 +121,7 @@ Update the package-boundary test contract to match the accepted design: self-imp
 **Completion Criteria**:
 
 - [x] `bun test src/package-boundaries.test.ts` no longer fails on the self-improve core export contract.
-- [x] `bun test src/package-boundaries.test.ts` no longer fails on `packages/divedra/src/cli/workflow-command-handler.ts` root import detection.
+- [x] `bun test src/package-boundaries.test.ts` no longer fails on `packages/rielflow/src/cli/workflow-command-handler.ts` root import detection.
 - [x] No unrelated package-boundary allowlist entries are added.
 
 ### TASK-002: Update Plan Progress and Documentation Impact Metadata
@@ -183,13 +183,13 @@ bun run lint:biome
 git diff --check
 ```
 
-Run these only if workflow bundles under `.divedra/workflows` change:
+Run these only if workflow bundles under `.rielflow/workflows` change:
 
 ```bash
-bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows
-bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows
-bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json
-bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json
+bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows
+bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows
+bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json
+bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json
 ```
 
 ## Completion Criteria
@@ -224,7 +224,7 @@ bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-
 
 **Notes**:
 
-- Updated `src/package-boundaries.test.ts` to explicitly allow the current compatibility-facade root imports for self-improve and event scheduling surfaces, including `packages/divedra/src/cli/workflow-command-handler.ts` and `packages/divedra-core/src/index.ts`.
+- Updated `src/package-boundaries.test.ts` to explicitly allow the current compatibility-facade root imports for self-improve and event scheduling surfaces, including `packages/rielflow/src/cli/workflow-command-handler.ts` and `packages/rielflow-core/src/index.ts`.
 - Updated the core source facade runtime export contract to include `DEFAULT_SELF_IMPROVE_LOG_LIMIT`, `executeWorkflowSelfImprove`, `getWorkflowSelfImproveReport`, `listWorkflowSelfImproveReports`, and `resolveWorkflowSelfImprovePolicy`.
 - Runtime behavior, public CLI behavior, workflow bundles, and Codex-agent behavior were not changed.
 - Documentation impact: no `README.md` user-facing change was required because the implementation reconciles test contracts with the already accepted design documents.

@@ -62,7 +62,7 @@ timezone instead of host-local `Date` parsing.
 - `../../codex-agent` was unavailable during design review:
   `test -d ../../codex-agent` returned exit `1`.
 - Intentional divergence: no scheduling semantics are imported from
-  `codex-agent` or `cursor-cli-agent`; validation remains divedra runtime-owned.
+  `codex-agent` or `cursor-cli-agent`; validation remains rielflow runtime-owned.
 
 ---
 
@@ -75,7 +75,7 @@ timezone instead of host-local `Date` parsing.
 **Status**: COMPLETED
 
 ```typescript
-interface WorkflowScheduleRegistrationValidationInput extends DivedraOptions {
+interface WorkflowScheduleRegistrationValidationInput extends RielflowOptions {
   readonly output: unknown;
   readonly minConfidence?: number;
   readonly hasSafeReplyDestination: boolean;
@@ -222,7 +222,7 @@ bun run typecheck
 bun test src/events/workflow-schedule-registration.test.ts
 bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts
 bun run lint:biome
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 git diff --check
 ```
 
@@ -259,7 +259,7 @@ resolver confidence, host-independent offset-less one-time `dueAt` resolution
 through `decision.schedule.timezone`, explicit `Z`/numeric-offset preservation,
 and invalid or ambiguous wall-clock clarification/refusal behavior. Added
 focused regression tests for both recent-change blocking findings. Verification
-passed: `biome format --write src/events/workflow-schedule-registration.ts src/events/workflow-schedule-registration.test.ts`; `bun test src/events/workflow-schedule-registration.test.ts`; `bun run typecheck`; `bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts`; `bun run lint:biome` with only pre-existing warnings in `src/workflow/engine/*`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`; `git diff --check`.
+passed: `biome format --write src/events/workflow-schedule-registration.ts src/events/workflow-schedule-registration.test.ts`; `bun test src/events/workflow-schedule-registration.test.ts`; `bun run typecheck`; `bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts`; `bun run lint:biome` with only pre-existing warnings in `src/workflow/engine/*`; `bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`; `git diff --check`.
 
 ## Progress Log Expectations
 

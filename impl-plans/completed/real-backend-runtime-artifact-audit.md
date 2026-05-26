@@ -23,7 +23,7 @@ In scope:
 Out of scope:
 
 - replacing canonical communication storage
-- delegating divedra workflow mailbox, validation, routing, or publication to
+- delegating rielflow workflow mailbox, validation, routing, or publication to
   `codex-agent`
 - changing mock-scenario semantics except where tests assert mock evidence is
   not sufficient for non-mock audit acceptance
@@ -35,9 +35,9 @@ Out of scope:
   reference for session and rollout auditability.
 - `<reference-repository-root>/src/sdk/session-runner.ts`:
   reference for `SessionConfig`, `RunningSession`, and streamed session
-  messages that stay behind divedra backend adapter boundaries.
+  messages that stay behind rielflow backend adapter boundaries.
 
-Intentional divergence: divedra keeps workflow session artifacts, mailbox
+Intentional divergence: rielflow keeps workflow session artifacts, mailbox
 contracts, output validation, routing, and final publication runtime-owned.
 `codex-agent` remains a backend adapter and auditability reference.
 
@@ -156,7 +156,7 @@ interface NodeExecutionLatestOutput {
 #### `src/workflow/adapters/codex.test.ts`
 #### `src/workflow/adapters/claude.test.ts`
 #### `README.md`
-#### `.divedra/workflows/design-and-implement-review-loop/EXPECTED_RESULTS.md`
+#### `.rielflow/workflows/design-and-implement-review-loop/EXPECTED_RESULTS.md`
 
 **Status**: COMPLETED
 
@@ -326,8 +326,8 @@ was refreshed with the observable runtime artifact layout.
 - `bun test src/workflow/call-step-impl.test.ts`
 - `env -u DIVEDRA_WORKFLOW_EXECUTION_ID -u DIVEDRA_WORKFLOW_ID -u DIVEDRA_NODE_ID -u DIVEDRA_NODE_EXEC_ID -u DIVEDRA_MAILBOX_DIR bun test src/workflow/adapters/codex.test.ts src/workflow/adapters/claude.test.ts`
 - `bun run typecheck`
-- `find /tmp/divedra-impl-workflow-llm.cXaS6W/workflow/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778022566-ce05f607/nodes -path '*output-attempts*' -type f | sort | sed -n '1,160p'`
-- `jq '{latestOutputsCount:(.latestOutputs|length), latestOutputIds:(.latestOutputs|map({nodeId,stepId,nodeExecId,status,artifactDir,hasPayload:(.payload!=null),mailboxInstanceId}))}' /tmp/divedra-impl-workflow-llm.cXaS6W/workflow/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778022566-ce05f607/nodes/step6-implement/exec-000009/mailbox/inbox/input.json`
+- `find /tmp/rielflow-impl-workflow-llm.cXaS6W/workflow/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778022566-ce05f607/nodes -path '*output-attempts*' -type f | sort | sed -n '1,160p'`
+- `jq '{latestOutputsCount:(.latestOutputs|length), latestOutputIds:(.latestOutputs|map({nodeId,stepId,nodeExecId,status,artifactDir,hasPayload:(.payload!=null),mailboxInstanceId}))}' /tmp/rielflow-impl-workflow-llm.cXaS6W/workflow/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778022566-ce05f607/nodes/step6-implement/exec-000009/mailbox/inbox/input.json`
 
 **Unresolved TODOs**: None.
 
@@ -342,15 +342,15 @@ was refreshed with the observable runtime artifact layout.
 **Notes**: Addressed Step 7 feedback by generating a post-implementation
 `design-and-implement-review-loop` issue-resolution smoke execution with the
 updated runtime code and real configured `codex-agent` backend. The smoke run
-failed at `divedra-manager` because the `codex-agent` session exited with code
+failed at `rielflow-manager` because the `codex-agent` session exited with code
 1, but it still produced post-change runtime-owned request/input artifacts that
 prove the updated artifact writers include configured backend/model evidence:
 
-- `/tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/input.json`
-- `/tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/output-attempts/attempt-000001/request.json`
-- `/tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/mailbox/inbox/input.json`
-- `/tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/mailbox/inbox/meta.json`
-- `/tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/output.json`
+- `/tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/input.json`
+- `/tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/output-attempts/attempt-000001/request.json`
+- `/tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/mailbox/inbox/input.json`
+- `/tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/mailbox/inbox/meta.json`
+- `/tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/output.json`
 
 The request artifact recorded `executionBackend: "codex-agent"` and
 `model: "gpt-5.5"`. The node execution `input.json` also recorded
@@ -361,10 +361,10 @@ smoke run is evidence of a real backend attempt rather than a mock scenario.
 
 **Verification Commands**:
 
-- `tmp=$(mktemp -d /tmp/divedra-postchange-real.XXXXXX); bun run src/main.ts workflow run design-and-implement-review-loop --workflow-definition-dir .divedra/workflows --artifact-root "$tmp/artifacts" --session-store "$tmp/sessions" --variables '{"workflowInput":{"executionMode":"issue-resolution","issueTitle":"Verify non-mock impl-plan implementation workflow execution","requestedBehavior":"Post-change audit smoke run to verify request artifacts include executionBackend and model.","targetFeatureArea":"divedra workflow runtime mailbox and session artifact audit","acceptanceSignals":["request artifacts include executionBackend and model"]}}' --max-steps 1 --output json; printf '\nPOSTCHANGE_ROOT=%s\n' "$tmp"`
-- `find /tmp/divedra-postchange-real.R5HRYK -type f | sort`
-- `for f in $(find /tmp/divedra-postchange-real.R5HRYK -path '*output-attempts*/request.json' -type f); do echo $f; jq '{executionBackend,model,hasPrompt:(.promptText!=null),candidatePath}' $f; done`
-- `for f in $(find /tmp/divedra-postchange-real.R5HRYK -path '*/nodes/*/exec-*/input.json' -type f); do echo $f; jq '{nodeId,nodeExecId,nodeType,executionBackend,model,hasMailbox:(.executionMailbox!=null)}' $f; done`
-- `jq '{provider,model,error,payload,validationErrors}' /tmp/divedra-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/divedra-manager/exec-000001/output.json`
+- `tmp=$(mktemp -d /tmp/rielflow-postchange-real.XXXXXX); bun run src/main.ts workflow run design-and-implement-review-loop --workflow-definition-dir .rielflow/workflows --artifact-root "$tmp/artifacts" --session-store "$tmp/sessions" --variables '{"workflowInput":{"executionMode":"issue-resolution","issueTitle":"Verify non-mock impl-plan implementation workflow execution","requestedBehavior":"Post-change audit smoke run to verify request artifacts include executionBackend and model.","targetFeatureArea":"rielflow workflow runtime mailbox and session artifact audit","acceptanceSignals":["request artifacts include executionBackend and model"]}}' --max-steps 1 --output json; printf '\nPOSTCHANGE_ROOT=%s\n' "$tmp"`
+- `find /tmp/rielflow-postchange-real.R5HRYK -type f | sort`
+- `for f in $(find /tmp/rielflow-postchange-real.R5HRYK -path '*output-attempts*/request.json' -type f); do echo $f; jq '{executionBackend,model,hasPrompt:(.promptText!=null),candidatePath}' $f; done`
+- `for f in $(find /tmp/rielflow-postchange-real.R5HRYK -path '*/nodes/*/exec-*/input.json' -type f); do echo $f; jq '{nodeId,nodeExecId,nodeType,executionBackend,model,hasMailbox:(.executionMailbox!=null)}' $f; done`
+- `jq '{provider,model,error,payload,validationErrors}' /tmp/rielflow-postchange-real.R5HRYK/artifacts/design-and-implement-review-loop/executions/div-design-and-implement-review-loop-1778023779-bfbabad2/nodes/rielflow-manager/exec-000001/output.json`
 
 **Unresolved TODOs**: None.

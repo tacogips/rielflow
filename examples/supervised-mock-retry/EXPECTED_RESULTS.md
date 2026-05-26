@@ -7,7 +7,7 @@ Deterministic checks for the bundled mock scenario. Ignore `sessionId`, timestam
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate supervised-mock-retry --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate supervised-mock-retry --workflow-definition-dir ./examples
 ```
 
 Expected: workflow validates as a step-addressed bundle.
@@ -17,7 +17,7 @@ Expected: workflow validates as a step-addressed bundle.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run supervised-mock-retry \
+bun run packages/rielflow/src/bin.ts workflow run supervised-mock-retry \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/supervised-mock-retry/mock-scenario.json \
   --output json
@@ -30,7 +30,7 @@ Expected: the run ends in a failed state (the first mock entry throws).
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run supervised-mock-retry \
+bun run packages/rielflow/src/bin.ts workflow run supervised-mock-retry \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/supervised-mock-retry/mock-scenario.json \
   --auto-improve \
@@ -45,4 +45,4 @@ Expected stable high-level behavior:
 - at least one failure-class incident and a `rerun-workflow` remediation on the first supervised attempt
 - the successful worker output payload includes `summary` starting with `Recovered after supervised rerun`
 
-Regression coverage for stall, patch escalation, and budgets lives in `packages/divedra/src/workflow/engine.test.ts` and `packages/divedra/src/workflow/superviser.test.ts`.
+Regression coverage for stall, patch escalation, and budgets lives in `packages/rielflow/src/workflow/engine.test.ts` and `packages/rielflow/src/workflow/superviser.test.ts`.

@@ -17,7 +17,7 @@ defaults.
   opt-in and mutates the source bundle directory.
 - **Inspection**: library `getSupervisionSummary`, GraphQL `session.supervision`
   on workflow execution types.
-- `superviserWorkflowId` defaults to `divedra-default-superviser` (see `examples/default-superviser/`). **Without** `--nested-superviser`, remediation is still the engine `runAutoImprove` loop. **With** `--nested-superviser`, that bundle runs as a nested step-addressed workflow and drives the target via `divedra/*` control add-ons (the engine injects `supervisionRunId`, `targetSessionId`, and `superviserTargetWorkflowId` as runtime variables on the superviser session).
+- `superviserWorkflowId` defaults to `rielflow-default-superviser` (see `examples/default-superviser/`). **Without** `--nested-superviser`, remediation is still the engine `runAutoImprove` loop. **With** `--nested-superviser`, that bundle runs as a nested step-addressed workflow and drives the target via `rielflow/*` control add-ons (the engine injects `supervisionRunId`, `targetSessionId`, and `superviserTargetWorkflowId` as runtime variables on the superviser session).
 
 See `design-docs/specs/architecture.md`, `design-docs/specs/design-auto-improve-superviser-mode.md`, and `impl-plans/completed/auto-improve-superviser-mode.md` for the model and phasing.
 
@@ -31,7 +31,7 @@ and the mock provider selects the next sequence entry (see `EXPECTED_RESULTS.md`
 in that directory).
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run supervised-mock-retry \
+bun run packages/rielflow/src/bin.ts workflow run supervised-mock-retry \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/supervised-mock-retry/mock-scenario.json \
   --auto-improve \
@@ -42,7 +42,7 @@ bun run packages/divedra/src/bin.ts workflow run supervised-mock-retry \
 Generic flags (adjust paths and workflow name for your project):
 
 ```bash
-divedra workflow run <workflow> --auto-improve \
+rielflow workflow run <workflow> --auto-improve \
   --monitor-interval-ms 5000 \
   --stall-timeout-ms 60000 \
   --max-supervised-attempts 5 \

@@ -50,15 +50,15 @@
           gitleaks
         ];
 
-        divedraCli = pkgs.writeShellApplication {
-          name = "divedra";
+        rielflowCli = pkgs.writeShellApplication {
+          name = "rielflow";
           runtimeInputs = runtimePackages;
           text = ''
             set -euo pipefail
 
             invocation_cwd="$PWD"
             source_dir="${self}"
-            cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/divedra/nix"
+            cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rielflow/nix"
             source_key="''${source_dir##*/}"
             runtime_root="$cache_root/$source_key"
             runtime_src="$runtime_root/src"
@@ -89,12 +89,12 @@
             fi
 
             cd "$invocation_cwd"
-            exec bun run "$runtime_src/packages/divedra/src/bin.ts" "$@"
+            exec bun run "$runtime_src/packages/rielflow/src/bin.ts" "$@"
           '';
           meta = {
             description = "TypeScript/Bun workflow runtime for cooperative multi-agent execution";
-            homepage = "https://github.com/tacogips/divedra";
-            mainProgram = "divedra";
+            homepage = "https://github.com/tacogips/rielflow";
+            mainProgram = "rielflow";
             license = pkgs.lib.licenses.mit;
             platforms = pkgs.lib.platforms.unix;
           };
@@ -113,21 +113,21 @@
           };
         };
 
-        devPackages = runtimePackages ++ devOnlyPackages ++ [ divedraCli ] ++ preCommitCheck.enabledPackages;
+        devPackages = runtimePackages ++ devOnlyPackages ++ [ rielflowCli ] ++ preCommitCheck.enabledPackages;
 
       in
       {
-        packages.default = divedraCli;
+        packages.default = rielflowCli;
 
         packages.dev-tools = pkgs.buildEnv {
-          name = "divedra-dev-tools";
+          name = "rielflow-dev-tools";
           paths = devPackages;
           pathsToLink = [ "/bin" ];
         };
 
         apps.default = {
           type = "app";
-          program = "${divedraCli}/bin/divedra";
+          program = "${rielflowCli}/bin/rielflow";
         };
 
         checks.pre-commit-check = preCommitCheck;
@@ -136,8 +136,8 @@
           packages = devPackages;
 
           shellHook = ''
-            # Dev-only: fixed root data dir for this checkout (production default is ~/.divedra/project/<cwd-encoded>/divedra-artifact).
-            export DIVEDRA_ARTIFACT_DIR="/tmp/divedra-artifact-dev"
+            # Dev-only: fixed root data dir for this checkout (production default is ~/.rielflow/project/<cwd-encoded>/rielflow-artifact).
+            export DIVEDRA_ARTIFACT_DIR="/tmp/rielflow-artifact-dev"
             ${preCommitCheck.shellHook}
 
             echo "TypeScript development environment ready"

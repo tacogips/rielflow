@@ -6,7 +6,7 @@ Use them with the existing example workflow root.
 Validate the source and binding configuration:
 
 ```bash
-divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 For a deterministic no-server run, emit the fixture through the existing
@@ -14,9 +14,9 @@ workflow mock scenario. This dispatches locally and does not require a GraphQL
 server or real agent backend:
 
 ```bash
-divedra events emit example-webhook \
+rielflow events emit example-webhook \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-message.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
@@ -24,7 +24,7 @@ divedra events emit example-webhook \
 ```
 
 The `chat-reply-webhook` workflow demonstrates the built-in
-`divedra/chat-reply-worker` add-on. Start a local reply sink in one shell:
+`rielflow/chat-reply-worker` add-on. Start a local reply sink in one shell:
 
 ```bash
 bun -e 'Bun.serve({ port: 43175, async fetch(req) { console.log(await req.text()); return Response.json({ providerMessageId: "local-demo-message" }); } })'
@@ -35,9 +35,9 @@ pass its in-process reply dispatcher into the workflow:
 
 ```bash
 DIVEDRA_EXAMPLE_REPLY_ENDPOINT=http://127.0.0.1:43175/reply \
-divedra events emit example-reply-webhook \
+rielflow events emit example-reply-webhook \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-reply-message.json \
   --output json
@@ -56,9 +56,9 @@ For deterministic local receive tests, emit the checked-in Matrix room-message
 fixture without contacting Matrix:
 
 ```bash
-divedra events emit team-matrix \
+rielflow events emit team-matrix \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/matrix-room-message.json \
   --output json
@@ -81,14 +81,14 @@ against a Docker Compose Synapse homeserver:
 
 The script follows the Synapse Docker flow of generating a local config,
 starting the homeserver, registering two users, creating a room, serving
-divedra Matrix events, sending an Alice message, and waiting for the divedra
+rielflow Matrix events, sending an Alice message, and waiting for the rielflow
 bot reply in the same room.
 
 The `chat-sdk-slack` source demonstrates the shared Chat SDK generic boundary.
 The provider allow-list is `slack`, `teams`, `gchat`, `discord`, `telegram`,
 `github`, `linear`, `whatsapp`, `messenger`, and `web`. This first pass does
 not import `@chat-adapter/*` packages directly; an operator-owned Chat SDK
-deployment posts normalized webhook payloads to divedra and receives replies
+deployment posts normalized webhook payloads to rielflow and receives replies
 through the configured send endpoint.
 
 Serve the source with env-var references only:
@@ -98,15 +98,15 @@ export DIVEDRA_CHAT_SDK_SLACK_WEBHOOK_SECRET=<shared-webhook-secret>
 export DIVEDRA_CHAT_SDK_SLACK_BEARER_TOKEN=<inbound-bearer-token>
 export DIVEDRA_CHAT_SDK_SLACK_SEND_URL=https://chat-sdk.example.test/send
 export DIVEDRA_CHAT_SDK_SLACK_SEND_TOKEN=<outbound-send-token>
-divedra events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 For deterministic local checks, emit the generic-boundary payload fixture:
 
 ```bash
-divedra events emit chat-sdk-slack \
+rielflow events emit chat-sdk-slack \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-sdk-slack-message.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
@@ -122,7 +122,7 @@ safe relative file metadata only; file contents are not read.
 Serve it and create a matching file:
 
 ```bash
-divedra events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 mkdir -p ./examples/event-sources/watched-docs/plans
 printf 'release notes\n' > ./examples/event-sources/watched-docs/plans/release.md
 ```
@@ -130,9 +130,9 @@ printf 'release notes\n' > ./examples/event-sources/watched-docs/plans/release.m
 For deterministic local checks without a watcher, emit the fixture payload:
 
 ```bash
-divedra events emit local-docs \
+rielflow events emit local-docs \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/file-change-created.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
@@ -149,13 +149,13 @@ from the persisted cursor for the same source/config revision and does not
 rerun completed entries.
 
 ```bash
-divedra events validate \
+rielflow events validate \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events
+  --event-root ./examples/event-sources/.rielflow-events
 
-divedra events serve \
+rielflow events serve \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts
 ```
 
@@ -167,14 +167,14 @@ with `events list` and replay one stored item without resetting the whole
 sequence:
 
 ```bash
-divedra events list \
+rielflow events list \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --source nightly-instruction-list \
   --output json
 
-divedra events replay <receipt-id> \
+rielflow events replay <receipt-id> \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --reason "replay one sequential-list item" \
   --output json
@@ -227,17 +227,17 @@ request is refused instead of persisted.
 Inspect and cancel persisted schedules with the operator commands:
 
 ```bash
-divedra events schedules list \
+rielflow events schedules list \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --source chat-sdk-slack \
   --status active \
   --output json
 
-divedra events schedules inspect <schedule-id> \
+rielflow events schedules inspect <schedule-id> \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --output json
 
-divedra events schedules cancel <schedule-id> \
+rielflow events schedules cancel <schedule-id> \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --reason "operator cleanup" \
   --output json
@@ -247,16 +247,16 @@ Start a workflow control-plane endpoint in another shell when you want fixture
 events to dispatch real workflow executions:
 
 ```bash
-divedra serve --workflow-definition-dir ./examples
+rielflow serve --workflow-definition-dir ./examples
 ```
 
 Emit the chat-shaped webhook fixture. Use an explicit artifact root so receipt
 inspection and replay commands read the same runtime database:
 
 ```bash
-divedra events emit example-webhook \
+rielflow events emit example-webhook \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-message.json \
   --endpoint http://127.0.0.1:43173/graphql \
@@ -266,7 +266,7 @@ divedra events emit example-webhook \
 List persisted event receipts:
 
 ```bash
-divedra events list \
+rielflow events list \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --source example-webhook \
   --output json
@@ -275,7 +275,7 @@ divedra events list \
 List persisted outbound chat reply dispatches for a workflow execution:
 
 ```bash
-divedra events replies <workflow-execution-id> \
+rielflow events replies <workflow-execution-id> \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --status sent \
   --output json
@@ -285,9 +285,9 @@ Replay a stored receipt by replacing `<receipt-id>` with the id returned by
 `events emit` or `events list`:
 
 ```bash
-divedra events replay <receipt-id> \
+rielflow events replay <receipt-id> \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --endpoint http://127.0.0.1:43173/graphql \
   --reason "operator verification" \
@@ -309,7 +309,7 @@ The binding `bindings/webhook-supervised-arithmetic.json` sets
 `execution.mode` to `supervised` so the event runner records a supervised-run
 id, maps each event to a control action, and drives the target workflow through
 the supervisor client (local library when no `--endpoint`, or the remote
-GraphQL supervisor mutations when `--endpoint` points at `divedra serve`).
+GraphQL supervisor mutations when `--endpoint` points at `rielflow serve`).
 
 The binding uses `intentMapping` mode `command-map`: the first token of
 `event.input.text` selects `start`, `stop`, `restart`, or `status`; any other
@@ -318,15 +318,15 @@ text is treated as `input` (see `defaultAction`).
 Validate including this binding:
 
 ```bash
-divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 Emit a `start` command against the mock scenario (no live agents):
 
 ```bash
-divedra events emit example-webhook \
+rielflow events emit example-webhook \
   --workflow-definition-dir ./examples \
-  --event-root ./examples/event-sources/.divedra-events \
+  --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-supervised-start.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \

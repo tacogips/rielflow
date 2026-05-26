@@ -24,10 +24,10 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
 - let `workflow.json.nodes[]` reference reusable built-in and third-party
   worker nodes
 - keep add-on resolution deterministic, inspectable, and validation-friendly
-- ship a small deterministic built-in catalog under the `divedra/` namespace
-- keep `divedra/` reserved for runtime-provided add-ons while allowing
-  non-`divedra/` add-ons to be resolved by host-provided extension code
-- allow non-`divedra/` add-ons to be installed in project and user scope
+- ship a small deterministic built-in catalog under the `rielflow/` namespace
+- keep `rielflow/` reserved for runtime-provided add-ons while allowing
+  non-`rielflow/` add-ons to be resolved by host-provided extension code
+- allow non-`rielflow/` add-ons to be installed in project and user scope
   add-on roots under `<scope-root>/addons`
 - keep provider SDKs and credentials outside workflow bundles
 - make chat replies runtime-owned and idempotent
@@ -70,7 +70,7 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
       "id": "reply",
       "role": "worker",
       "addon": {
-        "name": "divedra/chat-reply-worker",
+        "name": "rielflow/chat-reply-worker",
         "version": "1",
         "config": {
           "textTemplate": "{{inbox.latest.output.payload.text}}",
@@ -116,11 +116,11 @@ Rules:
 - an add-on reference is part of authored workflow JSON; it is not copied into a
   `nodes/node-*.json` file during normal save/edit round-trips
 - `addon.env` is an optional explicit mapping from add-on environment variable
-  names to divedra runtime environment variable names; ambient host environment
+  names to rielflow runtime environment variable names; ambient host environment
   variables are not forwarded implicitly
 - `addon.inputs` is an optional invocation-specific variable map; resolved
   add-on inputs become the effective node payload `variables`
-- `divedra/` is a reserved namespace for built-ins; third-party references
+- `rielflow/` is a reserved namespace for built-ins; third-party references
   should use a distinct namespace such as `vendor/addon-name`
 
 ## Scoped Local Add-on Roots
@@ -141,20 +141,20 @@ workflows:
 Examples:
 
 ```text
-~/.divedra/addons/acme/reviewer/1/addon.json
-<project>/.divedra/addons/team/release-note/1/addon.json
+~/.rielflow/addons/acme/reviewer/1/addon.json
+<project>/.rielflow/addons/team/release-note/1/addon.json
 ```
 
 Rules:
 
-- user-scope add-ons live under `~/.divedra/addons` by default
-- project-scope add-ons live under `<project>/.divedra/addons` by default
+- user-scope add-ons live under `~/.rielflow/addons` by default
+- project-scope add-ons live under `<project>/.rielflow/addons` by default
 - scope roots, including `addons`, are configurable through the scoped root
   resolver described in `design-docs/specs/design-user-scope-workflows.md`
 - `DIVEDRA_ADDON_ROOT` and `--addon-root` are direct add-on-root overrides,
   parallel to `DIVEDRA_WORKFLOW_DEFINITION_DIR`; they point at the directory containing
   `<namespace>/<addon-name>/<version>/addon.json`
-- `divedra/` remains reserved for built-in runtime add-ons and must not be
+- `rielflow/` remains reserved for built-in runtime add-ons and must not be
   loaded from the filesystem add-on roots
 - local filesystem add-ons are manifest/template add-ons in the first
   iteration; they must not execute arbitrary JavaScript, TypeScript, shell, or
@@ -220,7 +220,7 @@ descriptors until a separate trusted executor-registration design exists.
 
 For a workflow loaded from the scoped workflow catalog, add-on lookup order is:
 
-1. built-in runtime catalog for `divedra/*`
+1. built-in runtime catalog for `rielflow/*`
 2. explicit direct add-on root override, when supplied
 3. project scope add-on root, when present
 4. user scope add-on root
@@ -258,7 +258,7 @@ The normalized runtime bundle should expose local add-on provenance:
     "scope": "project",
     "name": "team/release-note",
     "version": "1",
-    "manifestPath": "<project>/.divedra/addons/team/release-note/1/addon.json"
+    "manifestPath": "<project>/.rielflow/addons/team/release-note/1/addon.json"
   }
 }
 ```
@@ -289,7 +289,7 @@ workflow bundles.
 
 Descriptor rules:
 
-- `name` is namespaced; built-ins use the `divedra/` prefix
+- `name` is namespaced; built-ins use the `rielflow/` prefix
 - `version` is a catalog version, not a provider model version
 - major versions are compatibility boundaries
 - `configSchema` validates `addon.config` before the workflow can execute
@@ -333,7 +333,7 @@ type NodeAddonPayloadResolver = (
 
 Resolver rules:
 
-- built-in `divedra/*` references are resolved by the runtime catalog and are
+- built-in `rielflow/*` references are resolved by the runtime catalog and are
   not overrideable by third-party resolvers
 - resolver-facing types such as `NodeAddonPayloadResolver`,
   `NodeAddonResolveInput`, `NodeAddonResolveResult`, `WorkflowNodeAddonRef`,
@@ -392,7 +392,7 @@ Rules:
 
 - add-on validation returns `NodeValidationResult(status,message)` records
   rather than transport-specific CLI or GraphQL payloads
-- built-in `divedra/*` descriptors may provide bounded, side-effect-free
+- built-in `rielflow/*` descriptors may provide bounded, side-effect-free
   `validate` hooks
 - host-code resolvers may return validation results with the resolved payload
   when the host owns the add-on implementation
@@ -417,7 +417,7 @@ normalization:
 2. Validate each `WorkflowNodeRef` has exactly one source: `nodeFile` or
    `addon`.
 3. Resolve `addon.name` and `addon.version` from the built-in catalog for
-   `divedra/*`, from scoped local add-on roots for manifest/template add-ons, or
+   `rielflow/*`, from scoped local add-on roots for manifest/template add-ons, or
    from host-provided third-party resolvers for other namespaces.
 4. Validate `addon.config`, `addon.env`, and `addon.inputs` through the
    descriptor or resolver. Resolver invocation is a validation boundary:
@@ -439,7 +439,7 @@ The normalized runtime bundle should expose enough metadata for inspection:
   "nodeId": "reply",
   "source": {
     "kind": "builtin-addon",
-    "name": "divedra/chat-reply-worker",
+    "name": "rielflow/chat-reply-worker",
     "version": "1"
   }
 }
@@ -457,11 +457,11 @@ Persistence rules:
   `nodeFile` payloads unless an explicit future `workflow vendor-addon` command
   asks for that
 
-## Built-in `divedra/chat-reply-worker`
+## Built-in `rielflow/chat-reply-worker`
 
 ### Purpose
 
-`divedra/chat-reply-worker` sends a reply to the chat conversation associated
+`rielflow/chat-reply-worker` sends a reply to the chat conversation associated
 with `runtimeVariables.event`.
 
 It is intended for workflows started by chat-like event sources such as:
@@ -534,13 +534,13 @@ Validation rules:
 Two generic agent-backed worker add-ons are available for workflows that want a
 compact authored reference instead of a workflow-local `node-*.json` payload:
 
-- `divedra/codex-worker`
-- `divedra/claude-code-worker`
+- `rielflow/codex-worker`
+- `rielflow/claude-code-worker`
 
 Both are worker-only add-ons. They resolve to ordinary `agent` node payloads:
 
-- `divedra/codex-worker` sets `executionBackend: "codex-agent"`
-- `divedra/claude-code-worker` sets `executionBackend: "claude-code-agent"`
+- `rielflow/codex-worker` sets `executionBackend: "codex-agent"`
+- `rielflow/claude-code-worker` sets `executionBackend: "claude-code-agent"`
 
 The add-on name selects the backend. `executionBackend` remains the low-level
 runtime adapter field and is not replaced by the add-on system.
@@ -552,7 +552,7 @@ Authored example:
   "id": "implement",
   "role": "worker",
   "addon": {
-    "name": "divedra/codex-worker",
+    "name": "rielflow/codex-worker",
     "version": "1",
     "config": {
       "model": "gpt-5.4-codex",
@@ -589,11 +589,11 @@ workflow runtime variables and inbox context.
 Credential and runtime environment handling remains owned by the configured
 agent backend adapters.
 
-## Built-in `divedra/x-gateway-read`
+## Built-in `rielflow/x-gateway-read`
 
 ### Purpose
 
-`divedra/x-gateway-read` runs a read-only x-gateway GraphQL query in a
+`rielflow/x-gateway-read` runs a read-only x-gateway GraphQL query in a
 Docker-compatible container runner. It is intended for workflow nodes that need
 to inspect X/Twitter state without embedding x-gateway-specific container
 plumbing or credential forwarding in each workflow-local node payload.
@@ -610,7 +610,7 @@ cannot override that binary with the full `x-gateway` client.
   "id": "read-post",
   "role": "worker",
   "addon": {
-    "name": "divedra/x-gateway-read",
+    "name": "rielflow/x-gateway-read",
     "version": "1",
     "env": {
       "X_GW_TOKEN": {
@@ -652,7 +652,7 @@ Defaults:
 Execution behavior:
 
 1. render `config.queryTemplate` with the normal node template context
-2. resolve `addon.env` mappings from the divedra runtime environment
+2. resolve `addon.env` mappings from the rielflow runtime environment
 3. run `x-gateway-reader graphql query <rendered-query> --json` in the
    configured container image
 4. parse JSON stdout into the node payload under `xGateway`
@@ -679,11 +679,11 @@ Validation rules:
 - `networkPolicy` must be `disabled` or `egress-allowed`
 - write and mutation surfaces are intentionally omitted from version `1`
 
-## Built-in `divedra/x-gateway`
+## Built-in `rielflow/x-gateway`
 
 ### Purpose
 
-`divedra/x-gateway` runs an x-gateway GraphQL document in a Docker-compatible
+`rielflow/x-gateway` runs an x-gateway GraphQL document in a Docker-compatible
 container runner. It is intended for workflow nodes that intentionally need the
 full x-gateway client surface, including post mutations such as creating X
 posts, while still keeping credential forwarding explicit and scoped per add-on
@@ -701,7 +701,7 @@ binary or supply an arbitrary command.
   "id": "post-to-x",
   "role": "worker",
   "addon": {
-    "name": "divedra/x-gateway",
+    "name": "rielflow/x-gateway",
     "version": "1",
     "env": {
       "X_GW_CONSUMER_KEY": {
@@ -723,7 +723,7 @@ binary or supply an arbitrary command.
       "runnerKind": "docker"
     },
     "inputs": {
-      "postText": "Hello from divedra"
+      "postText": "Hello from rielflow"
     }
   }
 }
@@ -752,13 +752,13 @@ Defaults:
 Execution behavior:
 
 1. render `config.documentTemplate` with the normal node template context
-2. resolve `addon.env` mappings from the divedra runtime environment
+2. resolve `addon.env` mappings from the rielflow runtime environment
 3. run `x-gateway graphql query <rendered-document> --json` in the configured
    container image
 4. parse JSON stdout into the node payload under `xGateway`
 5. attach stdout/stderr as process logs
 
-Environment rules match `divedra/x-gateway-read`: only explicitly mapped target
+Environment rules match `rielflow/x-gateway-read`: only explicitly mapped target
 environment variable names are exposed to the container, required source
 variables are runtime readiness prerequisites, and optional bindings may set
 `required: false`.
@@ -771,11 +771,11 @@ Validation rules:
 - command or binary overrides are rejected; version `1` always runs
   `x-gateway`
 
-## Built-in `divedra/mail-gateway-read`
+## Built-in `rielflow/mail-gateway-read`
 
 ### Purpose
 
-`divedra/mail-gateway-read` runs a read-only mail-gateway GraphQL query in a
+`rielflow/mail-gateway-read` runs a read-only mail-gateway GraphQL query in a
 Docker-compatible container runner. It is intended for workflow nodes that need
 to inspect configured mail accounts without embedding mail-gateway-specific
 container plumbing or credential path forwarding in each workflow-local node
@@ -793,7 +793,7 @@ authors cannot override that binary with the full `mail-gateway` client.
   "id": "read-mail",
   "role": "worker",
   "addon": {
-    "name": "divedra/mail-gateway-read",
+    "name": "rielflow/mail-gateway-read",
     "version": "1",
     "env": {
       "MAIL_GATEWAY_CONFIG": {
@@ -836,7 +836,7 @@ Defaults:
 Execution behavior:
 
 1. render `config.queryTemplate` with the normal node template context
-2. resolve `addon.env` mappings from the divedra runtime environment
+2. resolve `addon.env` mappings from the rielflow runtime environment
 3. run `mail-gateway-reader graphql --query <rendered-query>` in the configured
    container image
 4. parse JSON stdout into the node payload under `mailGateway`
@@ -854,11 +854,11 @@ Validation rules:
 - `networkPolicy` must be `disabled` or `egress-allowed`
 - send and mutation surfaces are intentionally omitted from version `1`
 
-## Built-in `divedra/mail-gateway`
+## Built-in `rielflow/mail-gateway`
 
 ### Purpose
 
-`divedra/mail-gateway` runs a mail-gateway GraphQL document in a
+`rielflow/mail-gateway` runs a mail-gateway GraphQL document in a
 Docker-compatible container runner. It is intended for workflow nodes that
 intentionally need the full mail-gateway client surface, including send
 mutations such as `sendMessage`, while still keeping credential forwarding
@@ -876,7 +876,7 @@ binary or supply an arbitrary command.
   "id": "send-mail",
   "role": "worker",
   "addon": {
-    "name": "divedra/mail-gateway",
+    "name": "rielflow/mail-gateway",
     "version": "1",
     "env": {
       "MAIL_GATEWAY_CONFIG": {
@@ -892,7 +892,7 @@ binary or supply an arbitrary command.
       "accountId": "work",
       "to": "person@example.test",
       "subject": "Hello",
-      "body": "Hello from divedra"
+      "body": "Hello from rielflow"
     }
   }
 }
@@ -921,13 +921,13 @@ Defaults:
 Execution behavior:
 
 1. render `config.documentTemplate` with the normal node template context
-2. resolve `addon.env` mappings from the divedra runtime environment
+2. resolve `addon.env` mappings from the rielflow runtime environment
 3. run `mail-gateway graphql --query <rendered-document>` in the configured
    container image
 4. parse JSON stdout into the node payload under `mailGateway`
 5. attach stdout/stderr as process logs
 
-Environment rules match `divedra/mail-gateway-read`: only explicitly mapped
+Environment rules match `rielflow/mail-gateway-read`: only explicitly mapped
 target environment variable names are exposed to the container, required source
 variables are runtime readiness prerequisites, and optional bindings may set
 `required: false`.
@@ -1061,13 +1061,13 @@ Discord, Telegram, or web-chat SDKs directly.
 
 Current rules:
 
-- built-in `divedra/*` add-ons resolve through the installed runtime catalog
-- non-`divedra/` add-ons resolve only when the host process explicitly provides
+- built-in `rielflow/*` add-ons resolve through the installed runtime catalog
+- non-`rielflow/` add-ons resolve only when the host process explicitly provides
   resolver functions
 - no network access occurs during workflow load or validation
 - unknown or unhandled add-on names fail validation
 - add-on descriptors are part of the installed runtime and are covered by the
-  same release integrity model as the rest of `divedra`
+  same release integrity model as the rest of `rielflow`
 - external add-on registries, package downloads, and lockfiles are future work
 
 Future distributed add-on support must require:

@@ -282,7 +282,7 @@ rerun mode.
 Add a new history-linked continuation command:
 
 ```bash
-divedra session continue <source-workflow-execution-id> \
+rielflow session continue <source-workflow-execution-id> \
   --start-step <step-id> \
   --after-step-run <step-run-id>
 ```
@@ -296,7 +296,7 @@ Reasons to use a new command instead of silently changing `session rerun`:
 Add a history listing command:
 
 ```bash
-divedra session step-runs <workflowExecutionId> [--step <step-id>] [--status <status>]
+rielflow session step-runs <workflowExecutionId> [--step <step-id>] [--status <status>]
 ```
 
 Expected output fields:

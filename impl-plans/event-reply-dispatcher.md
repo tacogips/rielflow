@@ -8,7 +8,7 @@
 ## Design Summary
 
 Add the provider-neutral outbound reply boundary used by
-`divedra/chat-reply-worker`. The first implementation routes chat reply requests
+`rielflow/chat-reply-worker`. The first implementation routes chat reply requests
 to event source adapters and adds webhook/web-chat style HTTP reply delivery via
 a source-configured environment variable.
 

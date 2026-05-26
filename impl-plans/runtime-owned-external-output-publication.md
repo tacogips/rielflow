@@ -298,4 +298,4 @@ bun test
 
 - **Previous**: `impl-plans/node-output-contract-and-validation.md`
 - **Next**: None
-- **Depends On**: `impl-plans/divedra-manager-prompt-contract.md`, `impl-plans/node-output-contract-and-validation.md`
+- **Depends On**: `impl-plans/rielflow-manager-prompt-contract.md`, `impl-plans/node-output-contract-and-validation.md`

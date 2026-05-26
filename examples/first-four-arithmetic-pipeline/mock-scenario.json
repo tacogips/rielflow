@@ -1,5 +1,5 @@
 {
-  "divedra-manager": {
+  "rielflow-manager": {
     "provider": "scenario-mock",
     "model": "claude-haiku-4-5",
     "when": {

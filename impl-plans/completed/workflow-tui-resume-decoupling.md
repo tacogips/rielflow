@@ -7,7 +7,7 @@
 
 ## Scope
 
-Ensure `divedra tui --resume-session <id>` is independent from workflow directory listing.
+Ensure `rielflow tui --resume-session <id>` is independent from workflow directory listing.
 
 ## Tasks
 

@@ -9,7 +9,7 @@
 
 Add an AI-facing workflow discovery surface that lists workflow purpose plus the
 callable input/output contract plus a compact step overview, document authored
-node input contracts, and teach the divedra workflow usage skill to use the new
+node input contracts, and teach the rielflow workflow usage skill to use the new
 command.
 
 Out of scope:
@@ -101,9 +101,9 @@ export interface WorkflowUsageCatalog {
 
 #### `README.md`
 
-#### `.agents/skills/divedra-workflow-run/SKILL.md`
+#### `.agents/skills/rielflow-workflow-run/SKILL.md`
 
-#### `.agents/skills/divedra-workflow-reference/SKILL.md`
+#### `.agents/skills/rielflow-workflow-reference/SKILL.md`
 
 **Status**: COMPLETED
 
@@ -121,7 +121,7 @@ export interface WorkflowUsageCatalog {
 | Input contract schema    | `src/workflow/types.ts`, `src/workflow/validate.ts`                                                               | COMPLETED | Passed |
 | Usage summary builder    | `src/workflow/inspect.ts`, `src/workflow/usage.ts`                                                                | COMPLETED | Passed |
 | CLI surface              | `src/cli.ts`, `src/cli.test.ts`                                                                                   | COMPLETED | Passed |
-| Documentation and skills | `README.md`, `.agents/skills/divedra-workflow-run/SKILL.md`, `.agents/skills/divedra-workflow-reference/SKILL.md` | COMPLETED | Passed |
+| Documentation and skills | `README.md`, `.agents/skills/rielflow-workflow-run/SKILL.md`, `.agents/skills/rielflow-workflow-reference/SKILL.md` | COMPLETED | Passed |
 
 ## Dependencies
 
@@ -137,7 +137,7 @@ export interface WorkflowUsageCatalog {
 - [x] One CLI command lists workflow purpose plus callable input/output contract and compact step overview
 - [x] `workflow inspect --output json` includes callable contract data and step summaries
 - [x] CLI tests cover the new command and contract reporting
-- [x] README and divedra workflow usage skills document the new discovery flow
+- [x] README and rielflow workflow usage skills document the new discovery flow
 - [x] Tests and type checks pass
 
 ## Progress Log

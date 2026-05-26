@@ -9,12 +9,12 @@ PORT="${DIVEDRA_MATRIX_SAMPLE_PORT:-18008}"
 HOMESERVER_URL="http://127.0.0.1:${PORT}"
 RUN_ROOT="${DIVEDRA_MATRIX_SAMPLE_RUN_ROOT:-${REPO_ROOT}/tmp/matrix-chat-reply-sample}"
 DATA_DIR="${DIVEDRA_MATRIX_SAMPLE_DATA_DIR:-${RUN_ROOT}/synapse-data}"
-EVENT_ROOT="${RUN_ROOT}/.divedra-events"
+EVENT_ROOT="${RUN_ROOT}/.rielflow-events"
 ARTIFACT_ROOT="${RUN_ROOT}/artifacts"
-REGISTRATION_SECRET="${DIVEDRA_MATRIX_SAMPLE_REGISTRATION_SECRET:-divedra-local-registration-secret}"
-ALICE_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_ALICE_PASSWORD:-divedra-alice-password}"
-BOT_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_BOT_PASSWORD:-divedra-bot-password}"
-BOT_USER_ID="@divedra:localhost"
+REGISTRATION_SECRET="${DIVEDRA_MATRIX_SAMPLE_REGISTRATION_SECRET:-rielflow-local-registration-secret}"
+ALICE_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_ALICE_PASSWORD:-rielflow-alice-password}"
+BOT_PASSWORD="${DIVEDRA_MATRIX_SAMPLE_BOT_PASSWORD:-rielflow-bot-password}"
+BOT_USER_ID="@rielflow:localhost"
 ALICE_USER_ID="@alice:localhost"
 
 case "${RUN_ROOT}" in
@@ -126,7 +126,7 @@ write_event_configuration() {
           provider: "matrix",
           homeserverUrlEnv: "DIVEDRA_MATRIX_HOMESERVER_URL",
           accessTokenEnv: "DIVEDRA_MATRIX_ACCESS_TOKEN",
-          userId: "@divedra:localhost",
+          userId: "@rielflow:localhost",
           rooms: [
             {
               roomId: process.env.ROOM_ID,
@@ -193,14 +193,14 @@ wait_for_listener() {
     fi
     if [[ -n "${listener_pid}" ]] && ! kill -0 "${listener_pid}" 2>/dev/null; then
       cat "${log_file}" >&2 || true
-      echo "divedra events serve exited before it was ready" >&2
+      echo "rielflow events serve exited before it was ready" >&2
       return 1
     fi
     sleep 1
   done
 
   cat "${log_file}" >&2 || true
-  echo "divedra events serve did not report readiness" >&2
+  echo "rielflow events serve did not report readiness" >&2
   return 1
 }
 
@@ -241,19 +241,19 @@ wait_for_synapse
 
 mkdir -p "${RUN_ROOT}"
 register_user "alice" "${ALICE_PASSWORD}"
-register_user "divedra" "${BOT_PASSWORD}"
+register_user "rielflow" "${BOT_PASSWORD}"
 
 login_user "alice" "${ALICE_PASSWORD}" "${RUN_ROOT}/alice-login.json"
-login_user "divedra" "${BOT_PASSWORD}" "${RUN_ROOT}/bot-login.json"
+login_user "rielflow" "${BOT_PASSWORD}" "${RUN_ROOT}/bot-login.json"
 ALICE_TOKEN="$(json_field "${RUN_ROOT}/alice-login.json" "access_token")"
 BOT_TOKEN="$(json_field "${RUN_ROOT}/bot-login.json" "access_token")"
 
-ROOM_ALIAS="divedra-sample-$(date +%s)-${RANDOM}"
+ROOM_ALIAS="rielflow-sample-$(date +%s)-${RANDOM}"
 ROOM_CREATE_BODY="${RUN_ROOT}/create-room.json"
 ROOM_ALIAS="${ROOM_ALIAS}" BOT_USER_ID="${BOT_USER_ID}" bun -e '
   const body = {
     room_alias_name: process.env.ROOM_ALIAS,
-    name: "Divedra Matrix Sample",
+    name: "Rielflow Matrix Sample",
     preset: "private_chat",
     invite: [process.env.BOT_USER_ID],
   };
@@ -287,7 +287,7 @@ mkdir -p \
   "${ARTIFACT_ROOT}"
 write_event_configuration
 
-bun run "${REPO_ROOT}/packages/divedra/src/bin.ts" events validate \
+bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events validate \
   --workflow-definition-dir "${REPO_ROOT}/examples" \
   --event-root "${EVENT_ROOT}" \
   --output json \
@@ -297,7 +297,7 @@ LISTENER_LOG="${RUN_ROOT}/events-serve.log"
 : > "${LISTENER_LOG}"
 DIVEDRA_MATRIX_HOMESERVER_URL="${HOMESERVER_URL}" \
 DIVEDRA_MATRIX_ACCESS_TOKEN="${BOT_TOKEN}" \
-  bun run "${REPO_ROOT}/packages/divedra/src/bin.ts" events serve \
+  bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events serve \
     --workflow-definition-dir "${REPO_ROOT}/examples" \
     --event-root "${EVENT_ROOT}" \
     --artifact-root "${ARTIFACT_ROOT}" \
@@ -333,7 +333,7 @@ for _ in $(seq 1 90); do
   fi
   if [[ -n "${listener_pid}" ]] && ! kill -0 "${listener_pid}" 2>/dev/null; then
     cat "${LISTENER_LOG}" >&2 || true
-    echo "divedra events serve exited before the Matrix reply was observed" >&2
+    echo "rielflow events serve exited before the Matrix reply was observed" >&2
     exit 1
   fi
   sleep 1
@@ -345,13 +345,13 @@ if [[ -z "${REPLY_EVENT_ID}" ]]; then
   exit 1
 fi
 
-bun run "${REPO_ROOT}/packages/divedra/src/bin.ts" events list \
+bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events list \
   --artifact-root "${ARTIFACT_ROOT}" \
   --source local-matrix \
   --output json \
   > "${RUN_ROOT}/event-receipts.json"
 
-bun run "${REPO_ROOT}/packages/divedra/src/bin.ts" events replies \
+bun run "${REPO_ROOT}/packages/rielflow/src/bin.ts" events replies \
   --artifact-root "${ARTIFACT_ROOT}" \
   --status sent \
   --output json \

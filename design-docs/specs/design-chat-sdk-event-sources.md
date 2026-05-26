@@ -1,11 +1,11 @@
 # Chat SDK Event Sources
 
-This document defines the divedra event-source design for Vercel Chat SDK
+This document defines the rielflow event-source design for Vercel Chat SDK
 platform adapters.
 
 ## Overview
 
-divedra currently has event-source coverage for cron, generic webhook, Matrix,
+rielflow currently has event-source coverage for cron, generic webhook, Matrix,
 and S3 repository events. The Chat SDK event-source family adds one shared
 `kind: "chat-sdk"` adapter boundary for Chat SDK-supported chat platforms that
 are not already implemented directly:
@@ -29,7 +29,7 @@ publisher. Provider-specific SDKs and webhook details stay behind the
 
 The preferred first implementation is a secure generic Chat SDK deployment
 boundary rather than direct runtime imports from every `@chat-adapter/*`
-package. divedra should be able to receive a normalized webhook from an
+package. rielflow should be able to receive a normalized webhook from an
 operator-owned Chat SDK deployment and send replies to that deployment through a
 configured send endpoint. Direct package integration remains a later option
 only when dependency stability, credential surface, and provider verification
@@ -39,7 +39,7 @@ requirements are reviewed.
 
 - Add an explicit provider allow-list for every current Chat SDK chat platform
   adapter listed above.
-- Normalize inbound provider events into divedra `chat.message` events.
+- Normalize inbound provider events into rielflow `chat.message` events.
 - Preserve source id, event id, provider, actor, conversation, thread, text,
   attachments, dedupe key, and raw artifact reference.
 - Dispatch chat replies through the same provider-neutral output destination
@@ -97,8 +97,8 @@ Rules:
 
 ## Generic Chat SDK Boundary
 
-The generic boundary lets divedra integrate with a deployed Chat SDK bot without
-depending on the Chat SDK package graph in the divedra runtime.
+The generic boundary lets rielflow integrate with a deployed Chat SDK bot without
+depending on the Chat SDK package graph in the rielflow runtime.
 
 Inbound request contract:
 
@@ -158,7 +158,7 @@ Every supported provider produces `ExternalEventEnvelope` with:
 - `provider`: one of the Chat SDK provider ids.
 - `eventType`: `chat.message` unless capability metadata maps a supported
   mention, command, or action event to a narrower event type.
-- `receivedAt`: divedra receive time.
+- `receivedAt`: rielflow receive time.
 - `occurredAt`: provider occurrence time when supplied.
 - `dedupeKey`: stable provider event id plus source id; if no event id is
   supplied, a hash over source id, provider, conversation, thread, actor, time
@@ -292,9 +292,9 @@ Validation fails when:
 
 Expected repository updates:
 
-- `examples/event-sources/.divedra-events/sources/chat-sdk-slack.json`
-- `examples/event-sources/.divedra-events/bindings/chat-sdk-slack-to-workflow.json`
-- `examples/event-sources/.divedra-events/destinations/chat-sdk-slack-replies.json`
+- `examples/event-sources/.rielflow-events/sources/chat-sdk-slack.json`
+- `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-to-workflow.json`
+- `examples/event-sources/.rielflow-events/destinations/chat-sdk-slack-replies.json`
 - `examples/event-sources/payloads/chat-sdk-slack-message.json`
 - `examples/event-sources/README.md`
 
@@ -312,14 +312,14 @@ chat and Matrix examples:
   `examples/event-sources/payloads/chat-sdk-slack-message.json`
 - it requires live Chat SDK deployment URLs and credentials only through
   environment-variable names
-- it does not introduce direct `@chat-adapter/*` dependencies in divedra runtime
+- it does not introduce direct `@chat-adapter/*` dependencies in rielflow runtime
   code for the generic-boundary implementation
 
 Review closure for this source should include the shared event source
 validation command and the focused Chat SDK adapter test:
 
 ```bash
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun test src/events/adapters/chat-sdk.test.ts
 ```
 
@@ -341,7 +341,7 @@ workflow intake:
 - `https://chat-sdk.dev/adapters`
 - `https://chat-sdk.dev/docs/contributing`
 
-These are adapter behavior references only. divedra intentionally keeps Chat
+These are adapter behavior references only. rielflow intentionally keeps Chat
 SDK and any Cursor- or Codex-specific behavior isolated behind event adapter
 modules, runtime receipts, and provider-neutral external mailbox/output
 contracts.

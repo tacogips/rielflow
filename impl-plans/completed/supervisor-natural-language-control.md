@@ -381,7 +381,7 @@ idempotency, and execution.
 
 ### Session: 2026-04-29 (CLI canonical supervisor spellings)
 
-**Tasks Completed**: Partial TASK-001: `divedra` CLI accepts `--supervisor-workflow`
+**Tasks Completed**: Partial TASK-001: `rielflow` CLI accepts `--supervisor-workflow`
 and `--nested-supervisor` as aliases for legacy `--superviser-workflow` and
 `--nested-superviser`; help text and `command.md` updated; regression tests for
 GraphQL forwarding and nested-driver guardrail.

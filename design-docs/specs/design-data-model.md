@@ -38,7 +38,7 @@ Authoring and normalized shapes are defined in `src/workflow/types.ts` (`Authore
 
 ### `WorkflowPrompts`
 
-- optional `divedraPromptTemplate`
+- optional `rielflowPromptTemplate`
 - optional `workerSystemPromptTemplate`
 
 ### `WorkflowNodeRef`
@@ -260,7 +260,7 @@ These records allow `sessionPolicy.mode = "reuse"` to continue provider-managed 
 
 ## Hook Event Model
 
-`HookEventRecord` represents a Claude Code or Codex lifecycle hook received through `divedra hook`.
+`HookEventRecord` represents a Claude Code or Codex lifecycle hook received through `rielflow hook`.
 
 Fields:
 
@@ -288,10 +288,10 @@ Fields:
 
 The identifier meanings are intentionally distinct:
 
-- `workflowExecutionId` is the divedra workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
-- `managerSessionId` is the divedra manager control-plane session id when the hook runs inside a manager node.
+- `workflowExecutionId` is the rielflow workflow run/session id from `DIVEDRA_WORKFLOW_EXECUTION_ID`.
+- `managerSessionId` is the rielflow manager control-plane session id when the hook runs inside a manager node.
 - `agentSessionId` is the Claude/Codex backend session id from the hook payload `session_id`.
-- `nodeExecId` identifies the divedra node execution that launched the backend process.
+- `nodeExecId` identifies the rielflow node execution that launched the backend process.
 
 Hook event records are append-only audit records. They are stored in the runtime database and indexed by workflow execution, backend agent session, manager session, and node execution. Redacted payload artifacts are stored under:
 

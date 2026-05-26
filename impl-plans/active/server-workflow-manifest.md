@@ -13,7 +13,7 @@
 
 ### Summary
 
-Implement and review `divedra serve` workflow manifest support plus the
+Implement and review `rielflow serve` workflow manifest support plus the
 `workflow manifest validate` preflight surface. A manifest-backed server loads a
 JSON allowlist of workflow entries, exposes only enabled manifest ids in server
 catalog surfaces, and enforces the same allowlist for every server-backed start
@@ -55,7 +55,7 @@ display-only and non-semantic.
 
 ### 1. Manifest Types and Loader
 
-#### packages/divedra/src/workflow/manifest.ts
+#### packages/rielflow/src/workflow/manifest.ts
 
 **Status**: COMPLETED
 
@@ -127,10 +127,10 @@ async function loadWorkflowManifest(
 
 ### 2. Catalog Source Model
 
-#### packages/divedra/src/workflow/catalog.ts
-#### packages/divedra/src/workflow/load.ts
-#### packages/divedra/src/workflow/types.ts
-#### packages/divedra/src/workflow/overview.ts
+#### packages/rielflow/src/workflow/catalog.ts
+#### packages/rielflow/src/workflow/load.ts
+#### packages/rielflow/src/workflow/types.ts
+#### packages/rielflow/src/workflow/overview.ts
 
 **Status**: COMPLETED
 
@@ -169,10 +169,10 @@ interface WorkflowCatalogOptions extends LoadOptions {
 
 ### 3. CLI and Server Startup Wiring
 
-#### packages/divedra/src/cli.ts
-#### packages/divedra/src/cli/storage-and-options.ts
-#### packages/divedra/src/server/serve.ts
-#### packages/divedra/src/server/api.ts
+#### packages/rielflow/src/cli.ts
+#### packages/rielflow/src/cli/storage-and-options.ts
+#### packages/rielflow/src/server/serve.ts
+#### packages/rielflow/src/server/api.ts
 
 **Status**: COMPLETED
 
@@ -190,7 +190,7 @@ interface ServeWorkflowCatalogConfig {
 
 **Checklist**:
 
-- [x] Parse `--workflow-manifest <path>` for `divedra serve`.
+- [x] Parse `--workflow-manifest <path>` for `rielflow serve`.
 - [x] Read `DIVEDRA_WORKFLOW_MANIFEST` as the environment fallback.
 - [x] Apply precedence: CLI manifest, env manifest, direct definition dir, scoped catalog.
 - [x] Emit a warning when manifest mode ignores `--workflow-definition-dir` for catalog selection.
@@ -200,10 +200,10 @@ interface ServeWorkflowCatalogConfig {
 
 ### 4. GraphQL Allowlist Enforcement
 
-#### packages/divedra/src/graphql/types.ts
-#### packages/divedra/src/graphql/schema/llm-run-overrides.ts
-#### packages/divedra/src/graphql/schema/execution-resolvers.ts
-#### packages/divedra/src/server/graphql-executable-schema.ts
+#### packages/rielflow/src/graphql/types.ts
+#### packages/rielflow/src/graphql/schema/llm-run-overrides.ts
+#### packages/rielflow/src/graphql/schema/execution-resolvers.ts
+#### packages/rielflow/src/server/graphql-executable-schema.ts
 
 **Status**: COMPLETED
 
@@ -229,10 +229,10 @@ function resolveServerWorkflowSource(
 
 ### 5. Execution Defaults and Runtime Identity
 
-#### packages/divedra/src/lib-workflow-run-options.ts
-#### packages/divedra/src/workflow/auto-improve-policy.ts
-#### packages/divedra/src/workflow/engine/auto-improve-and-runner.ts
-#### packages/divedra/src/workflow/working-directory.ts
+#### packages/rielflow/src/lib-workflow-run-options.ts
+#### packages/rielflow/src/workflow/auto-improve-policy.ts
+#### packages/rielflow/src/workflow/engine/auto-improve-and-runner.ts
+#### packages/rielflow/src/workflow/working-directory.ts
 
 **Status**: COMPLETED
 
@@ -264,8 +264,8 @@ function mergeManifestRunVariables(
 
 ### 6. Browser Overview and Documentation
 
-#### packages/divedra/src/server/browser-overview.ts
-#### packages/divedra/src/server/graphql-schema-text.ts
+#### packages/rielflow/src/server/browser-overview.ts
+#### packages/rielflow/src/server/graphql-schema-text.ts
 #### README.md
 
 **Status**: COMPLETED
@@ -292,13 +292,13 @@ interface WorkflowCatalogOverviewRow {
 
 ### 7. Verification and Regression Coverage
 
-#### packages/divedra/src/workflow/manifest.test.ts
-#### packages/divedra/src/workflow/catalog.test.ts
-#### packages/divedra/src/cli.test.ts
-#### packages/divedra/src/server/serve.test.ts
-#### packages/divedra/src/server/api.test.ts
-#### packages/divedra/src/graphql/schema.test.ts
-#### packages/divedra/src/server/graphql-queries-and-inspection.test.ts
+#### packages/rielflow/src/workflow/manifest.test.ts
+#### packages/rielflow/src/workflow/catalog.test.ts
+#### packages/rielflow/src/cli.test.ts
+#### packages/rielflow/src/server/serve.test.ts
+#### packages/rielflow/src/server/api.test.ts
+#### packages/rielflow/src/graphql/schema.test.ts
+#### packages/rielflow/src/server/graphql-queries-and-inspection.test.ts
 
 **Status**: COMPLETED
 
@@ -324,12 +324,12 @@ interface ManifestFixture {
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| Manifest types and loader | `packages/divedra/src/workflow/manifest.ts` | COMPLETED | Covered in `packages/divedra/src/workflow/manifest.test.ts` |
-| Catalog source model | `packages/divedra/src/workflow/catalog.ts`, `packages/divedra/src/workflow/load.ts`, `packages/divedra/src/workflow/overview.ts` | COMPLETED | Covered in workflow manifest/catalog tests and GraphQL overview tests |
-| CLI and server startup | `packages/divedra/src/cli.ts`, `packages/divedra/src/cli/storage-and-options.ts`, `packages/divedra/src/server/serve.ts`, `packages/divedra/src/server/api.ts` | COMPLETED | Covered in targeted CLI serve tests |
-| GraphQL allowlist enforcement | `packages/divedra/src/graphql/types.ts`, `packages/divedra/src/graphql/schema/llm-run-overrides.ts`, `packages/divedra/src/graphql/schema/execution-resolvers.ts`, `packages/divedra/src/server/graphql-executable-schema.ts` | COMPLETED | Covered in targeted GraphQL catalog/execution tests |
-| Execution defaults and identity | `packages/divedra/src/lib-workflow-run-options.ts`, `packages/divedra/src/workflow/auto-improve-policy.ts`, `packages/divedra/src/workflow/engine/auto-improve-and-runner.ts`, `packages/divedra/src/workflow/working-directory.ts` | COMPLETED | Covered by manifest/catalog tests, GraphQL execution tests, and typecheck |
-| Browser overview and docs | `packages/divedra/src/server/browser-overview.ts`, `packages/divedra/src/server/graphql-schema-text.ts`, `README.md` | COMPLETED | Covered by schema text update, overview model changes, and diff checks |
+| Manifest types and loader | `packages/rielflow/src/workflow/manifest.ts` | COMPLETED | Covered in `packages/rielflow/src/workflow/manifest.test.ts` |
+| Catalog source model | `packages/rielflow/src/workflow/catalog.ts`, `packages/rielflow/src/workflow/load.ts`, `packages/rielflow/src/workflow/overview.ts` | COMPLETED | Covered in workflow manifest/catalog tests and GraphQL overview tests |
+| CLI and server startup | `packages/rielflow/src/cli.ts`, `packages/rielflow/src/cli/storage-and-options.ts`, `packages/rielflow/src/server/serve.ts`, `packages/rielflow/src/server/api.ts` | COMPLETED | Covered in targeted CLI serve tests |
+| GraphQL allowlist enforcement | `packages/rielflow/src/graphql/types.ts`, `packages/rielflow/src/graphql/schema/llm-run-overrides.ts`, `packages/rielflow/src/graphql/schema/execution-resolvers.ts`, `packages/rielflow/src/server/graphql-executable-schema.ts` | COMPLETED | Covered in targeted GraphQL catalog/execution tests |
+| Execution defaults and identity | `packages/rielflow/src/lib-workflow-run-options.ts`, `packages/rielflow/src/workflow/auto-improve-policy.ts`, `packages/rielflow/src/workflow/engine/auto-improve-and-runner.ts`, `packages/rielflow/src/workflow/working-directory.ts` | COMPLETED | Covered by manifest/catalog tests, GraphQL execution tests, and typecheck |
+| Browser overview and docs | `packages/rielflow/src/server/browser-overview.ts`, `packages/rielflow/src/server/graphql-schema-text.ts`, `README.md` | COMPLETED | Covered by schema text update, overview model changes, and diff checks |
 | Verification coverage | listed test files | COMPLETED | Targeted commands recorded in progress log |
 
 ## Task Breakdown
@@ -338,8 +338,8 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/workflow/manifest.ts`,
-`packages/divedra/src/workflow/manifest.test.ts`
+**Deliverables**: `packages/rielflow/src/workflow/manifest.ts`,
+`packages/rielflow/src/workflow/manifest.test.ts`
 **Dependencies**: None
 
 **Completion Criteria**:
@@ -353,9 +353,9 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: Yes, after TASK-001
-**Deliverables**: `packages/divedra/src/workflow/catalog.ts`,
-`packages/divedra/src/workflow/load.ts`, `packages/divedra/src/workflow/types.ts`,
-`packages/divedra/src/workflow/overview.ts`
+**Deliverables**: `packages/rielflow/src/workflow/catalog.ts`,
+`packages/rielflow/src/workflow/load.ts`, `packages/rielflow/src/workflow/types.ts`,
+`packages/rielflow/src/workflow/overview.ts`
 **Dependencies**: TASK-001
 
 **Completion Criteria**:
@@ -369,9 +369,9 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: Yes, after TASK-001
-**Deliverables**: `packages/divedra/src/cli.ts`,
-`packages/divedra/src/cli/storage-and-options.ts`,
-`packages/divedra/src/server/serve.ts`, `packages/divedra/src/server/api.ts`
+**Deliverables**: `packages/rielflow/src/cli.ts`,
+`packages/rielflow/src/cli/storage-and-options.ts`,
+`packages/rielflow/src/server/serve.ts`, `packages/rielflow/src/server/api.ts`
 **Dependencies**: TASK-001
 
 **Completion Criteria**:
@@ -385,10 +385,10 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/graphql/types.ts`,
-`packages/divedra/src/graphql/schema/llm-run-overrides.ts`,
-`packages/divedra/src/graphql/schema/execution-resolvers.ts`,
-`packages/divedra/src/server/graphql-executable-schema.ts`
+**Deliverables**: `packages/rielflow/src/graphql/types.ts`,
+`packages/rielflow/src/graphql/schema/llm-run-overrides.ts`,
+`packages/rielflow/src/graphql/schema/execution-resolvers.ts`,
+`packages/rielflow/src/server/graphql-executable-schema.ts`
 **Dependencies**: TASK-002, TASK-003
 
 **Completion Criteria**:
@@ -402,10 +402,10 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: Yes, after TASK-002
-**Deliverables**: `packages/divedra/src/lib-workflow-run-options.ts`,
-`packages/divedra/src/workflow/auto-improve-policy.ts`,
-`packages/divedra/src/workflow/engine/auto-improve-and-runner.ts`,
-`packages/divedra/src/workflow/working-directory.ts`
+**Deliverables**: `packages/rielflow/src/lib-workflow-run-options.ts`,
+`packages/rielflow/src/workflow/auto-improve-policy.ts`,
+`packages/rielflow/src/workflow/engine/auto-improve-and-runner.ts`,
+`packages/rielflow/src/workflow/working-directory.ts`
 **Dependencies**: TASK-002
 
 **Completion Criteria**:
@@ -420,8 +420,8 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: Yes, after TASK-002
-**Deliverables**: `packages/divedra/src/server/browser-overview.ts`,
-`packages/divedra/src/server/graphql-schema-text.ts`, `README.md`
+**Deliverables**: `packages/rielflow/src/server/browser-overview.ts`,
+`packages/rielflow/src/server/graphql-schema-text.ts`, `README.md`
 **Dependencies**: TASK-002
 
 **Completion Criteria**:
@@ -448,9 +448,9 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/workflow/manifest.ts`,
-`packages/divedra/src/workflow/types.ts`,
-`packages/divedra/src/workflow/manifest.test.ts`
+**Deliverables**: `packages/rielflow/src/workflow/manifest.ts`,
+`packages/rielflow/src/workflow/types.ts`,
+`packages/rielflow/src/workflow/manifest.test.ts`
 **Dependencies**: Accepted current design review
 
 **Completion Criteria**:
@@ -466,15 +466,15 @@ interface ManifestFixture {
 
 **Status**: COMPLETED
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/cli/workflow-command-handler.ts`,
-`packages/divedra/src/cli/storage-and-options.ts`,
-`packages/divedra/src/cli/input-output-helpers.ts`,
-`packages/divedra/src/cli/workflow-manifest-validation.ts`,
-`packages/divedra/src/cli.test.ts`,
-`packages/divedra/src/server/serve.ts`,
-`packages/divedra/src/workflow/catalog.ts`,
-`packages/divedra/src/workflow/catalog.test.ts`,
-`packages/divedra/src/server/serve.test.ts`
+**Deliverables**: `packages/rielflow/src/cli/workflow-command-handler.ts`,
+`packages/rielflow/src/cli/storage-and-options.ts`,
+`packages/rielflow/src/cli/input-output-helpers.ts`,
+`packages/rielflow/src/cli/workflow-manifest-validation.ts`,
+`packages/rielflow/src/cli.test.ts`,
+`packages/rielflow/src/server/serve.ts`,
+`packages/rielflow/src/workflow/catalog.ts`,
+`packages/rielflow/src/workflow/catalog.test.ts`,
+`packages/rielflow/src/server/serve.test.ts`
 **Dependencies**: TASK-008
 
 **Completion Criteria**:
@@ -541,19 +541,19 @@ interface ManifestFixture {
 
 ## Verification Plan
 
-- `bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts packages/divedra/src/workflow/overview.test.ts`
-- `bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`
-- `bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`
-- `bun test packages/divedra/src/server/api.test.ts`
-- `bun test packages/divedra/src/graphql/schema.test.ts packages/divedra/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`
-- `bun test packages/divedra/src/workflow/auto-improve-policy.test.ts packages/divedra/src/workflow/working-directory.test.ts`
+- `bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts packages/rielflow/src/workflow/overview.test.ts`
+- `bun test packages/rielflow/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`
+- `bun test packages/rielflow/src/server/serve.test.ts -t "manifest|overview"`
+- `bun test packages/rielflow/src/server/api.test.ts`
+- `bun test packages/rielflow/src/graphql/schema.test.ts packages/rielflow/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`
+- `bun test packages/rielflow/src/workflow/auto-improve-policy.test.ts packages/rielflow/src/workflow/working-directory.test.ts`
 - `bun run typecheck`
 - `bun run lint:biome`
 - `git diff --check`
 
 ## Completion Criteria
 
-- [x] `divedra serve --workflow-manifest <path>` loads manifest version `1`.
+- [x] `rielflow serve --workflow-manifest <path>` loads manifest version `1`.
 - [x] `DIVEDRA_WORKFLOW_MANIFEST` works when the flag is absent.
 - [x] Manifest mode exposes only enabled manifest ids in browser and GraphQL catalog surfaces.
 - [x] Direct server-backed starts reject ids outside the enabled manifest allowlist.
@@ -597,9 +597,9 @@ manifest-backed catalog sources, serve flag/env wiring, startup validation,
 fixed manifest narrowing, GraphQL allowlist resolution, manifest variable/cwd
 and autoImprove defaults, overview/schema fields, README documentation, and
 focused regression tests. Verification passed:
-`bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts`;
-`bun test packages/divedra/src/cli.test.ts -t "serve command"`;
-`bun test packages/divedra/src/graphql/schema.test.ts -t "workflowCatalogOverview|executeWorkflow"`;
+`bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts`;
+`bun test packages/rielflow/src/cli.test.ts -t "serve command"`;
+`bun test packages/rielflow/src/graphql/schema.test.ts -t "workflowCatalogOverview|executeWorkflow"`;
 `bun run typecheck`; `bun run lint:biome`; `git diff --check`.
 Residual risk: full server HTTP API integration coverage remains focused
 through shared server context and GraphQL resolver tests rather than a new
@@ -613,9 +613,9 @@ end-to-end HTTP test fixture.
 **Notes**: Tightened duplicate source validation so every enabled duplicate
 workflowDirectory/cwd entry must set `metadata.allowDuplicateSource: true`, and
 added focused regression coverage. Re-ran verification:
-`bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts`;
-`bun test packages/divedra/src/cli.test.ts -t "serve command"`;
-`bun test packages/divedra/src/graphql/schema.test.ts -t "workflowCatalogOverview|executeWorkflow"`;
+`bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts`;
+`bun test packages/rielflow/src/cli.test.ts -t "serve command"`;
+`bun test packages/rielflow/src/graphql/schema.test.ts -t "workflowCatalogOverview|executeWorkflow"`;
 `bun run typecheck`; `bun run lint:biome`; `git diff --check`.
 
 ### Session: 2026-05-20 08:04
@@ -631,10 +631,10 @@ catalog behavior even when `--workflow-manifest` or
 server startup tests for allowlist catalog rows, disabled/unlisted rejection,
 default variable merge precedence, manifest cwd propagation, and autoImprove
 disabled/request override mapping. Re-ran verification:
-`bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts`;
-`bun test packages/divedra/src/cli.test.ts -t "workflow list ignores|serve command"`;
-`bun test packages/divedra/src/graphql/schema.test.ts -t "manifest|workflowCatalogOverview|executeWorkflow"`;
-`bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
+`bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts`;
+`bun test packages/rielflow/src/cli.test.ts -t "workflow list ignores|serve command"`;
+`bun test packages/rielflow/src/graphql/schema.test.ts -t "manifest|workflowCatalogOverview|executeWorkflow"`;
+`bun test packages/rielflow/src/server/serve.test.ts -t "manifest|overview"`;
 `bun run typecheck`; `bun run lint:biome`; `jq empty impl-plans/PROGRESS.json`;
 `git diff --check`.
 
@@ -649,9 +649,9 @@ directory by default, added `DIVEDRA_WORKFLOW_MANIFEST_ROOT` for explicit
 relative-root selection, and added `workflow manifest validate` to validate the
 manifest plus every referenced workflow bundle. Documentation and focused
 manifest/CLI tests were updated for the new behavior. Verification passed:
-`bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts`;
-`bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
-`bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
+`bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts`;
+`bun test packages/rielflow/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
+`bun test packages/rielflow/src/server/serve.test.ts -t "manifest|overview"`;
 `bun run typecheck`; `bun run lint:biome`; `git diff --check`.
 
 ### Session: 2026-05-20 19:46
@@ -691,12 +691,12 @@ workflow bundle validation. Addressed the accepted low Step 3 documentation
 finding by changing the command synopsis to
 `workflow manifest validate [<manifest-path>]` and aligning CLI help and README
 usage with `--workflow-manifest` and `DIVEDRA_WORKFLOW_MANIFEST`. Verification
-passed: `bun test packages/divedra/src/workflow/manifest.test.ts packages/divedra/src/workflow/catalog.test.ts packages/divedra/src/workflow/overview.test.ts`;
-`bun test packages/divedra/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
-`bun test packages/divedra/src/server/serve.test.ts -t "manifest|overview"`;
-`bun test packages/divedra/src/server/api.test.ts`;
-`bun test packages/divedra/src/graphql/schema.test.ts packages/divedra/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`;
-`bun test packages/divedra/src/workflow/auto-improve-policy.test.ts packages/divedra/src/workflow/working-directory.test.ts`;
+passed: `bun test packages/rielflow/src/workflow/manifest.test.ts packages/rielflow/src/workflow/catalog.test.ts packages/rielflow/src/workflow/overview.test.ts`;
+`bun test packages/rielflow/src/cli.test.ts -t "workflow manifest validate|serve command|workflow list ignores"`;
+`bun test packages/rielflow/src/server/serve.test.ts -t "manifest|overview"`;
+`bun test packages/rielflow/src/server/api.test.ts`;
+`bun test packages/rielflow/src/graphql/schema.test.ts packages/rielflow/src/server/graphql-queries-and-inspection.test.ts -t "workflowCatalogOverview|manifest|autoImprove"`;
+`bun test packages/rielflow/src/workflow/auto-improve-policy.test.ts packages/rielflow/src/workflow/working-directory.test.ts`;
 `bun run typecheck`; `bun run lint:biome`; `git diff --check`.
 Residual risk: none identified in this implementation step.
 

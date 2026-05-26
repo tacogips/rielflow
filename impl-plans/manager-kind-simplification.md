@@ -11,7 +11,7 @@
 
 ### Summary
 
-Refactor the authored workflow schema so manager structure is expressed with `root-manager` and `subworkflow-manager`, removing `sub-divedra-manager` and legacy manager-kind aliases from the authored format while preserving current runtime control-scope behavior.
+Refactor the authored workflow schema so manager structure is expressed with `root-manager` and `subworkflow-manager`, removing `sub-rielflow-manager` and legacy manager-kind aliases from the authored format while preserving current runtime control-scope behavior.
 
 ### Scope
 
@@ -25,7 +25,7 @@ Refactor the authored workflow schema so manager structure is expressed with `ro
 
 **Excluded**:
 
-- renaming node ids such as `divedra-manager`
+- renaming node ids such as `rielflow-manager`
 - package/environment variable renames
 - behavioral changes to manager control semantics
 - compatibility aliases for removed authored manager kinds
@@ -59,7 +59,7 @@ function normalizeNodeKind(value: unknown): NodeKind | undefined;
 ```
 
 **Checklist**:
-- [x] Replace `sub-divedra-manager` with `subworkflow-manager` in shared types
+- [x] Replace `sub-rielflow-manager` with `subworkflow-manager` in shared types
 - [x] Remove authored compatibility aliases for `manager` and `sub-manager`
 - [x] Require `workflow.managerRuntimeId` to target `root-manager`
 - [x] Require `subWorkflows[].managerRuntimeId` to target `subworkflow-manager`
@@ -91,7 +91,7 @@ export function parseManagerControlActions(
 - [x] Rename sub-workflow manager branches to `subworkflow-manager`
 - [x] Keep root manager planning behavior unchanged
 - [x] Keep sub-workflow child-input forwarding behavior unchanged
-- [x] Update mailbox/prompt text that currently names `sub-divedra-manager`
+- [x] Update mailbox/prompt text that currently names `sub-rielflow-manager`
 - [x] Update runtime tests covering manager control and manager planning
 
 ### 3. Editor, Examples, and Fixtures
@@ -119,7 +119,7 @@ export function updateNodeKindValue(
 - [x] Update editor validation messages to the new kind name
 - [x] Update example bundles and created fixture bundles to canonical manager kinds
 - [x] Update E2E harness fixtures and assertions where kind labels are surfaced
-- [x] Update UI/editor tests that currently expect `sub-divedra-manager`
+- [x] Update UI/editor tests that currently expect `sub-rielflow-manager`
 
 ### 4. Verification and Cleanup
 
@@ -137,7 +137,7 @@ interface VerificationCommandSet {
 ```
 
 **Checklist**:
-- [x] Remove stale authored `sub-divedra-manager` fixtures outside explicit migration tests
+- [x] Remove stale authored `sub-rielflow-manager` fixtures outside explicit migration tests
 - [x] Run `bun run typecheck:server`
 - [x] Run targeted workflow/runtime/editor tests for manager kinds
 - [x] Run `bun run typecheck:ui`
@@ -165,7 +165,7 @@ interface VerificationCommandSet {
 ## Completion Criteria
 
 - [x] Authored schema uses `root-manager` and `subworkflow-manager` only
-- [x] `sub-divedra-manager` is removed from runtime/editor/example authored paths
+- [x] `sub-rielflow-manager` is removed from runtime/editor/example authored paths
 - [x] Root-manager and sub-workflow-manager behavior remains unchanged in tests
 - [x] Editor-created bundles persist the new canonical manager kinds
 - [x] Type checking passes

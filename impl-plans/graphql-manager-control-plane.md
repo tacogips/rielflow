@@ -33,7 +33,7 @@ This plan implements the additive foundation required before the GraphQL schema 
 **Excluded**:
 - GraphQL SDL/schema construction
 - `/graphql` HTTP handler integration
-- `divedra gql` CLI client and prompt/tool contract changes
+- `rielflow gql` CLI client and prompt/tool contract changes
 - browser UI GraphQL migration
 
 ## Modules

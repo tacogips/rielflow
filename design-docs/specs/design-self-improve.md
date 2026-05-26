@@ -1,6 +1,6 @@
 # Dedicated Workflow Self-Improve Design
 
-This document defines the dedicated `divedra` self-improve capability for retrospective workflow quality analysis and optional workflow-definition improvement.
+This document defines the dedicated `rielflow` self-improve capability for retrospective workflow quality analysis and optional workflow-definition improvement.
 
 ## Overview
 
@@ -8,8 +8,8 @@ Self-improve is separate from supervisor and auto-improve execution. Supervisor 
 
 The feature is available through three equivalent entrypoints:
 
-- CLI: `divedra workflow self-improve <workflow-name>`
-- GraphQL while `divedra serve` is running: `executeWorkflowSelfImprove`
+- CLI: `rielflow workflow self-improve <workflow-name>`
+- GraphQL while `rielflow serve` is running: `executeWorkflowSelfImprove`
 - library API: `executeWorkflowSelfImprove()`
 
 All entrypoints resolve the same workflow bundle, runtime storage context, source-run selection, report schema, backup rules, validation rules, and optional patch mode.
@@ -49,7 +49,7 @@ The feature review for "Review and improve dedicated self-improve feature" shoul
 
 ## Shared Function Reuse Audit
 
-The issue "Audit self-improve implementation for duplicated existing functionality" is an integration hardening pass, not a request to broaden the product boundary. The implementation should prefer existing divedra workflow helpers for common behavior and keep self-improve code responsible only for retrospective policy, report shape, and canonical workflow edit orchestration.
+The issue "Audit self-improve implementation for duplicated existing functionality" is an integration hardening pass, not a request to broaden the product boundary. The implementation should prefer existing rielflow workflow helpers for common behavior and keep self-improve code responsible only for retrospective policy, report shape, and canonical workflow edit orchestration.
 
 Audit decisions:
 
@@ -59,7 +59,7 @@ Audit decisions:
 - Log and report pathing in `src/workflow/self-improve/pathing.ts` intentionally stays separate from workflow execution artifacts. Reports live under `DIVEDRA_SELF_IMPROVE_LOG_ROOT` or `<user-root>/self-improve-log/` so retrospective reports do not mutate or masquerade as session artifacts. The directory identity hash is required to avoid collisions between same-named workflows from different scopes.
 - `src/workflow/self-improve/marker-store.ts` and `src/workflow/self-improve/report.ts` should use shared JSON object checks where they validate public inputs, but typed report persistence may keep direct JSON serialization as long as parsing failures are surfaced as report-read failures and not silently normalized into successful results.
 - Source selection in `src/workflow/self-improve/source-selection.ts` should reuse session-store/runtime-db discovery semantics rather than introducing a separate run index. File-backed session state remains authoritative for selected source runs; runtime DB helpers such as `src/workflow/runtime-db/session-query-records.ts` are indexes and inspection accelerators. Explicit sessions must still be loaded and checked against the resolved `workflowName` and `workflowId`.
-- Git commit behavior in `src/workflow/self-improve/git.ts` is policy-compatible with, but not the same executor as, native git add-ons in `src/workflow/native-node-executor/git-and-addon-execution.ts` and `packages/divedra-addons/src/native-node-executor/git-and-addon-execution.ts`. Self-improve runs outside a node artifact context, so it should not call the add-on executor directly. It should align with add-on safety rules: normalize committed paths relative to the owning repo, reject directory or escaped paths, refuse unexpected pre-staged files outside the current self-improve changed-file set, commit only when there are staged changes, never push, and persist failure status in the report.
+- Git commit behavior in `src/workflow/self-improve/git.ts` is policy-compatible with, but not the same executor as, native git add-ons in `src/workflow/native-node-executor/git-and-addon-execution.ts` and `packages/rielflow-addons/src/native-node-executor/git-and-addon-execution.ts`. Self-improve runs outside a node artifact context, so it should not call the add-on executor directly. It should align with add-on safety rules: normalize committed paths relative to the owning repo, reject directory or escaped paths, refuse unexpected pre-staged files outside the current self-improve changed-file set, commit only when there are staged changes, never push, and persist failure status in the report.
 - CLI, library, GraphQL, and server surfaces must stay adapters over the same core functions in `src/workflow/self-improve/service.ts`. Endpoint-backed CLI/library calls should use typed GraphQL fields in `src/graphql/types.ts`, `src/graphql/schema/execution-resolvers.ts`, and `src/server/graphql-executable-schema.ts`; they must not introduce manager-message shortcuts or a second execution path.
 
 Implementation review should classify each apparent duplicate as one of:
@@ -146,7 +146,7 @@ Each self-improve execution receives a generated `selfImproveId` and writes arti
   marker.json
 ```
 
-`<user-root>` defaults to `~/.divedra`. The workflow directory name is sanitized from the final workflow directory segment plus a short hash of the absolute resolved directory so same-named workflows from different scopes do not collide.
+`<user-root>` defaults to `~/.rielflow`. The workflow directory name is sanitized from the final workflow directory segment plus a short hash of the absolute resolved directory so same-named workflows from different scopes do not collide.
 
 The report includes:
 
@@ -199,7 +199,7 @@ The provider-neutral core service is the source of truth:
 - `listWorkflowSelfImproveReports(input): Promise<WorkflowSelfImproveReportSummary[]>`
 
 These functions and their public result/input types are intentionally part of
-the stable `divedra-core` facade and the compatibility `divedra` library
+the stable `rielflow-core` facade and the compatibility `rielflow` library
 facade. The core package owns the provider-neutral self-improve service because
 it depends on workflow loading, validation, session stores, runtime indexes,
 backup/patch policy, and report persistence rather than CLI process behavior.
@@ -210,9 +210,9 @@ CLI and GraphQL are adapters over this service. GraphQL should expose typed inpu
 
 Package-boundary validation should reflect this ownership:
 
-- `packages/divedra-core/src/index.ts` exports the self-improve service,
+- `packages/rielflow-core/src/index.ts` exports the self-improve service,
   policy resolver, default log limit, and public report/result/input types.
-- `packages/divedra/src/index.ts` keeps the compatibility library wrappers that
+- `packages/rielflow/src/index.ts` keeps the compatibility library wrappers that
   call the core service locally or route to the typed GraphQL contract when a
   server endpoint is configured.
 - package CLI modules may temporarily import root `src/workflow/self-improve`
@@ -234,7 +234,7 @@ The local `codex-agent` reference is useful for structural patterns only:
 - `src/queue/runner.ts`: queued prompt execution and durable progress events
 - `src/main.ts`: library facade exports
 
-Divedra must not copy Codex rollout formats into workflow self-improve. Divedra source runs come from divedra session/artifact stores, and backend-specific transcript readers stay behind existing agent adapter boundaries.
+Rielflow must not copy Codex rollout formats into workflow self-improve. Rielflow source runs come from rielflow session/artifact stores, and backend-specific transcript readers stay behind existing agent adapter boundaries.
 
 ## Cursor CLI Adapter Boundary
 

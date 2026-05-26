@@ -106,7 +106,7 @@ interface ParsedOptions {
 }
 
 // usage:
-// divedra call-node <workflow-id> <workflow-run-id> <node-id> [options]
+// rielflow call-node <workflow-id> <workflow-run-id> <node-id> [options]
 ```
 
 **Checklist**:
@@ -153,7 +153,7 @@ describe("library api callWorkflowNode", () => {});
 - [x] `call-node` runtime works against an existing workflow session
 - [x] Output validation failures re-enter the same node session for repair
 - [x] Library exposes the new direct node call API
-- [x] CLI exposes `divedra call-node ...`
+- [x] CLI exposes `rielflow call-node ...`
 - [x] `bun run typecheck` passes
 - [x] Focused tests for runtime, library, and CLI pass
 
@@ -171,7 +171,7 @@ describe("library api callWorkflowNode", () => {});
 **Tasks Completed**: Direct node call runtime, library surface, CLI surface, focused tests
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Implemented local `divedra call-node`, added runtime-owned output validation/repair, exported the library wrapper, and verified with `bun run typecheck` plus focused tests for runtime, CLI, and library behavior.
+**Notes**: Implemented local `rielflow call-node`, added runtime-owned output validation/repair, exported the library wrapper, and verified with `bun run typecheck` plus focused tests for runtime, CLI, and library behavior.
 
 ### Session: 2026-03-16 19:10 JST
 

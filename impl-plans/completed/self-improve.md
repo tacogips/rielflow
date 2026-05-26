@@ -15,7 +15,7 @@
 
 Implement a dedicated retrospective workflow self-improve capability that is separate from supervisor and `workflow run --auto-improve`. The service inspects recent workflow execution results, judges whether the workflow achieved its authored purpose, writes structure and prompt reports, and optionally patches the canonical workflow bundle when `report-and-auto-improve` is enabled.
 
-The feature is exposed through `divedra workflow self-improve <workflow-name>`, GraphQL while `divedra serve` is running, and public library APIs. Source runs default to runs since the previous successful self-improve marker for the resolved workflow directory, or the latest configured limit when no marker exists. The initial fallback limit is `10`, configurable through workflow defaults, environment, and command/API options.
+The feature is exposed through `rielflow workflow self-improve <workflow-name>`, GraphQL while `rielflow serve` is running, and public library APIs. Source runs default to runs since the previous successful self-improve marker for the resolved workflow directory, or the latest configured limit when no marker exists. The initial fallback limit is `10`, configurable through workflow defaults, environment, and command/API options.
 
 ### Scope
 
@@ -32,7 +32,7 @@ The feature is exposed through `divedra workflow self-improve <workflow-name>`, 
 
 - Scheduled or automatic background self-improve execution beyond explicit CLI/GraphQL/library calls.
 - Git pushes from runtime code.
-- Runtime artifact mutation outside `~/.divedra/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
+- Runtime artifact mutation outside `~/.rielflow/self-improve-log/<workflow-directory-name>/<self-improve-id>/`.
 - Backend-specific adapter policy changes except using existing agent execution boundaries for analysis/prompt generation.
 - Cross-workflow source-run selection; explicit source ids must belong to the resolved workflow.
 
@@ -47,7 +47,7 @@ The feature is exposed through `divedra workflow self-improve <workflow-name>`, 
 - `/Users/taco/gits/tacogips/codex-agent/src/queue/runner.ts`
 - `/Users/taco/gits/tacogips/codex-agent/src/main.ts`
 
-Codex-agent is a reference only for discovery, transcript parsing/search, file-change summary, queue execution, and facade export patterns. Divedra source runs stay in divedra session/artifact stores, and backend transcript details stay behind existing adapter boundaries.
+Codex-agent is a reference only for discovery, transcript parsing/search, file-change summary, queue execution, and facade export patterns. Rielflow source runs stay in rielflow session/artifact stores, and backend transcript details stay behind existing adapter boundaries.
 
 ---
 
@@ -82,7 +82,7 @@ export interface WorkflowSelfImprovePolicy {
 - [x] Add `WorkflowDefaults.selfImprove`.
 - [x] Reject unknown self-improve default fields and invalid modes/limits.
 - [x] Resolve workflow, env, and caller override precedence.
-- [x] Export public types through `packages/divedra-core/src/index.ts`.
+- [x] Export public types through `packages/rielflow-core/src/index.ts`.
 
 ### 2. Source Run Selection and Marker Store
 
@@ -202,7 +202,7 @@ export interface WorkflowSelfImproveGitCommitResult {
 
 ### 5. Public Core and Library API
 
-#### `src/workflow/self-improve/index.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/index.ts`, `src/lib.ts`
+#### `src/workflow/self-improve/index.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/index.ts`, `src/lib.ts`
 
 **Status**: COMPLETED
 
@@ -239,7 +239,7 @@ export function executeWorkflowSelfImprove(
 
 ### 6. CLI Adapter and Remote GraphQL Transport
 
-#### `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/cli/input-output-helpers.ts`, `packages/divedra/src/cli/workflow-graphql-formatters.ts`, `src/cli.test.ts`
+#### `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/cli/input-output-helpers.ts`, `packages/rielflow/src/cli/workflow-graphql-formatters.ts`, `src/cli.test.ts`
 
 **Status**: COMPLETED
 
@@ -265,7 +265,7 @@ export interface WorkflowSelfImproveCliOptions {
 
 ### 7. GraphQL and Server API
 
-#### `packages/divedra-graphql/src/schema-contract.ts`, `packages/divedra-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/server/graphql-queries-and-inspection.test.ts`, `src/graphql/schema.test.ts`
+#### `packages/rielflow-graphql/src/schema-contract.ts`, `packages/rielflow-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/server/graphql-queries-and-inspection.test.ts`, `src/graphql/schema.test.ts`
 
 **Status**: COMPLETED
 
@@ -320,9 +320,9 @@ export interface WorkflowSelfImproveDocumentationExample {
 | Source selection and markers | `src/workflow/self-improve/source-selection.ts`, `src/workflow/self-improve/marker-store.ts`, `src/workflow/self-improve/pathing.ts` | COMPLETED | `src/workflow/self-improve/source-selection.test.ts` |
 | Reports and analysis | `src/workflow/self-improve/report.ts`, `src/workflow/self-improve/analyzer.ts`, `src/workflow/self-improve/service.ts` | COMPLETED | `src/workflow/self-improve/report.test.ts`, `src/workflow/self-improve/service.test.ts` |
 | Backup, patch, and git | `src/workflow/self-improve/backup.ts`, `src/workflow/self-improve/patcher.ts`, `src/workflow/self-improve/git.ts` | COMPLETED | `src/workflow/self-improve/backup-git.test.ts`, `src/workflow/self-improve/patcher.test.ts` |
-| Public and library APIs | `packages/divedra-core/src/index.ts`, `packages/divedra/src/index.ts`, `src/lib.ts` | COMPLETED | `src/lib-api.test.ts` |
-| CLI adapter | `packages/divedra/src/cli/*.ts`, `src/cli.test.ts` | COMPLETED | `src/cli.test.ts` |
-| GraphQL and server API | `packages/divedra-graphql/src/*.ts`, `src/graphql/**/*.ts`, `src/server/**/*.ts` | COMPLETED | `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts` |
+| Public and library APIs | `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/index.ts`, `src/lib.ts` | COMPLETED | `src/lib-api.test.ts` |
+| CLI adapter | `packages/rielflow/src/cli/*.ts`, `src/cli.test.ts` | COMPLETED | `src/cli.test.ts` |
+| GraphQL and server API | `packages/rielflow-graphql/src/*.ts`, `src/graphql/**/*.ts`, `src/server/**/*.ts` | COMPLETED | `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts` |
 | Documentation and tracking | `README.md`, `impl-plans/README.md`, `impl-plans/PROGRESS.json` | COMPLETED | `git diff --check` |
 
 ## Task Breakdown
@@ -331,7 +331,7 @@ export interface WorkflowSelfImproveDocumentationExample {
 
 **Status**: Completed
 **Parallelizable**: Yes
-**Deliverables**: `src/workflow/types.ts`, `src/workflow/self-improve/types.ts`, `src/workflow/validate/workflow-normalization.ts`, `src/workflow/validate/semantic-validation-and-addons.ts`, `src/workflow/validate.test.ts`, `src/workflow/self-improve/config.test.ts`, `packages/divedra-core/src/index.ts`
+**Deliverables**: `src/workflow/types.ts`, `src/workflow/self-improve/types.ts`, `src/workflow/validate/workflow-normalization.ts`, `src/workflow/validate/semantic-validation-and-addons.ts`, `src/workflow/validate.test.ts`, `src/workflow/self-improve/config.test.ts`, `packages/rielflow-core/src/index.ts`
 **Dependencies**: None
 
 **Description**:
@@ -399,7 +399,7 @@ Support `report-and-auto-improve` by creating mandatory backups, applying bounde
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `src/workflow/self-improve/index.ts`, `packages/divedra-core/src/index.ts`, `packages/divedra/src/index.ts`, `src/lib.ts`, `src/lib-api.test.ts`
+**Deliverables**: `src/workflow/self-improve/index.ts`, `packages/rielflow-core/src/index.ts`, `packages/rielflow/src/index.ts`, `src/lib.ts`, `src/lib-api.test.ts`
 **Dependencies**: TASK-003, TASK-004
 
 **Description**:
@@ -416,11 +416,11 @@ Expose provider-neutral core APIs and public package/library facade methods for 
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/cli/argument-parser.ts`, `packages/divedra/src/cli/workflow-command-handler.ts`, `packages/divedra/src/cli/input-output-helpers.ts`, `packages/divedra/src/cli/workflow-graphql-formatters.ts`, `src/cli.test.ts`
+**Deliverables**: `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/cli/input-output-helpers.ts`, `packages/rielflow/src/cli/workflow-graphql-formatters.ts`, `src/cli.test.ts`
 **Dependencies**: TASK-005
 
 **Description**:
-Implement `divedra workflow self-improve <workflow-name>` with source selection flags, mode override, disabled-workflow override, JSON/text output, local execution, and GraphQL endpoint execution.
+Implement `rielflow workflow self-improve <workflow-name>` with source selection flags, mode override, disabled-workflow override, JSON/text output, local execution, and GraphQL endpoint execution.
 
 **Completion Criteria**:
 
@@ -434,7 +434,7 @@ Implement `divedra workflow self-improve <workflow-name>` with source selection 
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra-graphql/src/schema-contract.ts`, `packages/divedra-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
+**Deliverables**: `packages/rielflow-graphql/src/schema-contract.ts`, `packages/rielflow-graphql/src/dto.ts`, `src/graphql/schema/execution-resolvers.ts`, `src/graphql/types.ts`, `src/server/graphql-executable-schema.ts`, `src/graphql/schema.test.ts`, `src/server/graphql-queries-and-inspection.test.ts`
 **Dependencies**: TASK-005
 
 **Description**:
@@ -501,7 +501,7 @@ Document self-improve usage and update implementation progress tracking after im
 - [x] Report-only mode writes durable JSON and markdown reports without workflow modification.
 - [x] Report-and-auto-improve mode backs up before modification, validates, reverts failed patches, and records git status.
 - [x] Git-managed workflows are committed locally after successful self-improve modifications without staging unrelated changes.
-- [x] Non-git-managed workflows have recoverable backups under `~/.divedra/self-improve-log/<workflow-directory-name>/<self-improve-id>/backup/`.
+- [x] Non-git-managed workflows have recoverable backups under `~/.rielflow/self-improve-log/<workflow-directory-name>/<self-improve-id>/backup/`.
 - [x] Server read-only/no-exec behavior matches the design.
 - [x] Documentation and tests keep self-improve separate from supervisor/auto-improve.
 

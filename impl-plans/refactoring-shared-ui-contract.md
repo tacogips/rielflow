@@ -1,7 +1,7 @@
 # Shared UI/API Contract Refactoring Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-refactoring-shared-ui-contract.md, design-docs/specs/architecture.md#local-http-server-divedra-serve, design-docs/specs/architecture.md#browser-workflow-editor
+**Design Reference**: design-docs/specs/design-refactoring-shared-ui-contract.md, design-docs/specs/architecture.md#local-http-server-rielflow-serve, design-docs/specs/architecture.md#browser-workflow-editor
 **Created**: 2026-03-09
 **Last Updated**: 2026-03-10
 

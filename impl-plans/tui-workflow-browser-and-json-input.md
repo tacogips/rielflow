@@ -20,7 +20,7 @@
 
 ### Summary
 
-Expand `divedra tui` from a workflow selector into a stateful workflow browser that can:
+Expand `rielflow tui` from a workflow selector into a stateful workflow browser that can:
 
 - browse workflows and historical workflow executions,
 - inspect node-level inbox/outbox and execution logs,
@@ -252,28 +252,28 @@ interface TuiWorkflowInputDetection {
 **Tasks Completed**: Post-diff review hardening
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Continued the diff review and fixed two more quality issues. The computed default artifact-root path encoding now normalizes path-hostile characters so Windows-style drive letters and similar inputs do not produce invalid directory names under `~/.divedra/project/...`. The interactive TUI fallback classifier was also narrowed again so only concrete module/widget availability failures fall back to readline. Finally, the implementation-tracking state was synchronized by marking phase 71 as completed in `impl-plans/PROGRESS.json`.
+**Notes**: Continued the diff review and fixed two more quality issues. The computed default artifact-root path encoding now normalizes path-hostile characters so Windows-style drive letters and similar inputs do not produce invalid directory names under `~/.rielflow/project/...`. The interactive TUI fallback classifier was also narrowed again so only concrete module/widget availability failures fall back to readline. Finally, the implementation-tracking state was synchronized by marking phase 71 as completed in `impl-plans/PROGRESS.json`.
 
 ### Session: 2026-03-23 19:05 JST
 
 **Tasks Completed**: Interactive resume-session TUI alignment
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: The post-diff review found that `divedra tui --resume-session <id>` still forced the legacy fallback path even on interactive terminals, which contradicted the workflow-browser design. The CLI/runtime-mode flow now enters the full-screen TUI with the requested session preselected when the workflow definition is still available, while non-interactive or workflow-missing cases keep the direct resume fallback. Also tightened the TUI editor prefill logic so JSON-oriented historical sessions reopen from `promptJson`/`userPromptJson` rather than collapsing to text-oriented defaults.
+**Notes**: The post-diff review found that `rielflow tui --resume-session <id>` still forced the legacy fallback path even on interactive terminals, which contradicted the workflow-browser design. The CLI/runtime-mode flow now enters the full-screen TUI with the requested session preselected when the workflow definition is still available, while non-interactive or workflow-missing cases keep the direct resume fallback. Also tightened the TUI editor prefill logic so JSON-oriented historical sessions reopen from `promptJson`/`userPromptJson` rather than collapsing to text-oriented defaults.
 
 ### Session: 2026-03-23 19:25 JST
 
 **Tasks Completed**: Neo-blessed resume fallback hardening
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Continued the same TUI/browser plan with one more post-diff correction. When the interactive workflow browser cannot start because the OpenTUI screen is unavailable, `divedra tui --resume-session <id>` now preserves direct-resume behavior instead of dropping into the generic readline workflow prompt, which could not preserve the selected historical session. The CLI gained small TUI entrypoint dependency hooks so this fallback contract can be regression-tested directly.
+**Notes**: Continued the same TUI/browser plan with one more post-diff correction. When the interactive workflow browser cannot start because the OpenTUI screen is unavailable, `rielflow tui --resume-session <id>` now preserves direct-resume behavior instead of dropping into the generic readline workflow prompt, which could not preserve the selected historical session. The CLI gained small TUI entrypoint dependency hooks so this fallback contract can be regression-tested directly.
 
 ### Session: 2026-03-23 19:50 JST
 
 **Tasks Completed**: Mock-scenario fallback parity cleanup
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Reviewed the same TUI/browser diff for one more continuation bug and a maintainability issue. The full-screen interactive flow already auto-discovered workflow-local `mock-scenario.json`, but the direct fallback/resume branches did not, so identical `divedra tui` commands could behave differently depending on whether the interactive TUI loaded. The CLI now routes interactive execution, rerun, resume, and fallback flows through shared local run-option assembly and shared mock-scenario resolution, and regression coverage now proves that `--resume-session` fallback still succeeds with only the workflow-local mock scenario present.
+**Notes**: Reviewed the same TUI/browser diff for one more continuation bug and a maintainability issue. The full-screen interactive flow already auto-discovered workflow-local `mock-scenario.json`, but the direct fallback/resume branches did not, so identical `rielflow tui` commands could behave differently depending on whether the interactive TUI loaded. The CLI now routes interactive execution, rerun, resume, and fallback flows through shared local run-option assembly and shared mock-scenario resolution, and regression coverage now proves that `--resume-session` fallback still succeeds with only the workflow-local mock scenario present.
 
 ### Session: 2026-03-26 22:40 JST
 

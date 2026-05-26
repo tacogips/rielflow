@@ -130,7 +130,7 @@ async function main(): Promise<void> {
 
   if (result.rootSourceTreePresent) {
     console.error(
-      "Root source tree found at ./src. Runtime and tests must live under packages/divedra/src.",
+      "Root source tree found at ./src. Runtime and tests must live under packages/rielflow/src.",
     );
   }
 

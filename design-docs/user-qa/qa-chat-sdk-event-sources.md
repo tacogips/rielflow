@@ -6,9 +6,9 @@ first Chat SDK event-source implementation beyond the secure generic boundary.
 ## Pending Decisions
 
 1. Direct package integration:
-   Should divedra add direct runtime dependencies on selected
+   Should rielflow add direct runtime dependencies on selected
    `@chat-adapter/*` packages after the generic boundary works, or should Chat
-   SDK deployments remain external to divedra for this feature?
+   SDK deployments remain external to rielflow for this feature?
 
 2. Provider rollout depth:
    Should WhatsApp and Messenger be exposed as first-class examples, or only as

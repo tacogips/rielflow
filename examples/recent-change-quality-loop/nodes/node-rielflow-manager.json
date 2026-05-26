@@ -1,0 +1,33 @@
+{
+  "id": "rielflow-manager",
+  "description": "Coordinate the recent-change quality loop.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/rielflow-manager.md",
+  "variables": {},
+  "input": {
+    "description": "Workflow arguments. `hours` is optional and defaults to 24; it controls the recent git-history window reviewed together with uncommitted changes.",
+    "jsonSchema": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "hours": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Number of hours of git history to review. Defaults to 24 when omitted."
+        },
+        "targetPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Optional repository-relative paths to prioritize during review."
+        }
+      }
+    }
+  },
+  "output": {
+    "description": "Route to Step 1 and preserve runtime inputs such as hours for both review and delegated-handoff steps."
+  }
+}

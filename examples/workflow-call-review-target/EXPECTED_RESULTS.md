@@ -8,7 +8,7 @@ Ignore `sessionId`, timestamps, and artifact paths.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow validate workflow-call-review-target --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate workflow-call-review-target --workflow-definition-dir ./examples
 ```
 
 Expected result: the workflow is valid.
@@ -18,7 +18,7 @@ Expected result: the workflow is valid.
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow inspect workflow-call-review-target --workflow-definition-dir ./examples --output json
+bun run packages/rielflow/src/bin.ts workflow inspect workflow-call-review-target --workflow-definition-dir ./examples --output json
 ```
 
 Expected stable inspection facts:
@@ -33,7 +33,7 @@ Expected stable inspection facts:
 Command:
 
 ```bash
-bun run packages/divedra/src/bin.ts workflow run workflow-call-review-target \
+bun run packages/rielflow/src/bin.ts workflow run workflow-call-review-target \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/workflow-call-review-target/mock-scenario.json \
   --output json

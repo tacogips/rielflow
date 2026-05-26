@@ -56,7 +56,7 @@ each firing.
   this issue.
 - Scheduling is provider-neutral runtime behavior and must not depend on
   `codex-agent`, Cursor CLI, or any agent adapter.
-- Intentional divergence: this implementation follows divedra workflow/runtime
+- Intentional divergence: this implementation follows rielflow workflow/runtime
   event scheduling docs, not Codex-agent execution semantics.
 
 ---

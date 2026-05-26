@@ -331,7 +331,7 @@ export interface AdapterOutputRuntimeContext {
 **Tasks Completed**: Post-review temp-staging lifecycle hardening, regression coverage update
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Reserved candidate staging files/directories under `/tmp/divedra-output-candidates/...` are now deleted after every attempt, while the runtime-preserved audit copy remains under `output-attempts/*`; added success/failure cleanup regression coverage so temp staging cannot silently accumulate.
+**Notes**: Reserved candidate staging files/directories under `/tmp/rielflow-output-candidates/...` are now deleted after every attempt, while the runtime-preserved audit copy remains under `output-attempts/*`; added success/failure cleanup regression coverage so temp staging cannot silently accumulate.
 
 ### Session: 2026-03-07 17:10
 **Tasks Completed**: Post-review failure-semantics hardening, full regression verification

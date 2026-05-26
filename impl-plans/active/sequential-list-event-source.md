@@ -51,12 +51,12 @@ specific sequencing behavior.
 ### Codex Reference Mapping
 
 - `AGENTS.md`: repository planning, TypeScript, documentation, and commit rules.
-- `.agents/skills/divedra-event-sources/SKILL.md`: event validation, serve,
+- `.agents/skills/rielflow-event-sources/SKILL.md`: event validation, serve,
   list, replay, receipts, and read-only behavior.
-- `.agents/skills/divedra-impl-workflow/SKILL.md`: issue-resolution workflow
+- `.agents/skills/rielflow-impl-workflow/SKILL.md`: issue-resolution workflow
   context.
 - `codex-agent`: referenced only as a possible workflow node backend.
-  Sequencing remains provider-neutral and is owned by divedra events.
+  Sequencing remains provider-neutral and is owned by rielflow events.
 
 ---
 
@@ -64,9 +64,9 @@ specific sequencing behavior.
 
 ### 1. Sequential List Config Types
 
-#### packages/divedra-events/src/types.ts
-#### packages/divedra/src/events/config.ts
-#### packages/divedra/src/events/validate.ts
+#### packages/rielflow-events/src/types.ts
+#### packages/rielflow/src/events/config.ts
+#### packages/rielflow/src/events/validate.ts
 
 **Status**: COMPLETED
 
@@ -96,9 +96,9 @@ export interface SequentialListSourceConfig extends EventSourceConfigBase {
 
 ### 2. Sequence State And Adapter
 
-#### packages/divedra/src/events/adapters/sequential-list.ts
-#### packages/divedra/src/events/sequential-list-state.ts
-#### packages/divedra/src/events/adapter-registry.ts
+#### packages/rielflow/src/events/adapters/sequential-list.ts
+#### packages/rielflow/src/events/sequential-list-state.ts
+#### packages/rielflow/src/events/adapter-registry.ts
 
 **Status**: COMPLETED
 
@@ -140,11 +140,11 @@ interface SequentialListStateRecord {
 
 ### 3. Dispatch Result And Completion Observation
 
-#### packages/divedra/src/events/source-adapter.ts
-#### packages/divedra/src/events/listener-service.ts
-#### packages/divedra/src/events/trigger-runner.ts
-#### packages/divedra/src/events/trigger-runner/trigger-dispatch-runner.ts
-#### packages/divedra/src/events/sequential-list-completion.ts
+#### packages/rielflow/src/events/source-adapter.ts
+#### packages/rielflow/src/events/listener-service.ts
+#### packages/rielflow/src/events/trigger-runner.ts
+#### packages/rielflow/src/events/trigger-runner/trigger-dispatch-runner.ts
+#### packages/rielflow/src/events/sequential-list-completion.ts
 
 **Status**: COMPLETED
 
@@ -176,11 +176,11 @@ interface SequentialListCompletionObserver {
 
 ### 4. Receipt, List, And Replay Semantics
 
-#### packages/divedra/src/events/ledger.ts
-#### packages/divedra/src/events/receipt-ops.ts
-#### packages/divedra/src/workflow/runtime-db/event-records.ts
-#### packages/divedra/src/workflow/runtime-db/schema-and-record-types.ts
-#### packages/divedra/src/cli.ts
+#### packages/rielflow/src/events/ledger.ts
+#### packages/rielflow/src/events/receipt-ops.ts
+#### packages/rielflow/src/workflow/runtime-db/event-records.ts
+#### packages/rielflow/src/workflow/runtime-db/schema-and-record-types.ts
+#### packages/rielflow/src/cli.ts
 
 **Status**: COMPLETED
 
@@ -216,8 +216,8 @@ interface SequentialListReceiptMetadata {
 
 ### 5. Examples And User Documentation
 
-#### examples/event-sources/.divedra-events/sources/sequential-list.json
-#### examples/event-sources/.divedra-events/bindings/sequential-list-to-arithmetic.json
+#### examples/event-sources/.rielflow-events/sources/sequential-list.json
+#### examples/event-sources/.rielflow-events/bindings/sequential-list-to-arithmetic.json
 #### examples/event-sources/README.md
 #### README.md
 
@@ -239,21 +239,21 @@ interface SequentialListReceiptMetadata {
 **Checklist**:
 
 - [x] Add a runnable sequential-list source fixture under
-      `examples/event-sources/.divedra-events/sources/`.
+      `examples/event-sources/.rielflow-events/sources/`.
 - [x] Add a binding that maps each item prompt into workflow input.
 - [x] Document configuration, validation, serving, state/resume behavior,
       receipts, list output, and single-item replay.
 - [x] Keep examples usable with
-      `--workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`.
+      `--workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`.
 
 ### 6. Verification Coverage
 
-#### packages/divedra/src/events/config.test.ts
-#### packages/divedra/src/events/adapter-registry.test.ts
-#### packages/divedra/src/events/adapters/sequential-list.test.ts
-#### packages/divedra/src/events/listener-service.test.ts
-#### packages/divedra/src/events/receipt-ops.test.ts
-#### packages/divedra/src/cli.test.ts
+#### packages/rielflow/src/events/config.test.ts
+#### packages/rielflow/src/events/adapter-registry.test.ts
+#### packages/rielflow/src/events/adapters/sequential-list.test.ts
+#### packages/rielflow/src/events/listener-service.test.ts
+#### packages/rielflow/src/events/receipt-ops.test.ts
+#### packages/rielflow/src/cli.test.ts
 
 **Status**: COMPLETED
 
@@ -285,9 +285,9 @@ interface SequentialListTestHarness {
 
 | Module | File Path | Status | Tests |
 | --- | --- | --- | --- |
-| Config types and validation | `packages/divedra-events/src/types.ts`, `packages/divedra/src/events/validate.ts` | COMPLETED | `validate-source-sequential-list.test.ts` |
-| Sequence state and adapter | `packages/divedra/src/events/adapters/sequential-list.ts`, `packages/divedra/src/events/sequential-list-state.ts` | COMPLETED | `adapters/sequential-list.test.ts` |
-| Dispatch completion gate | `packages/divedra/src/events/listener-service.ts`, `packages/divedra/src/events/sequential-list-completion.ts` | COMPLETED | `listener-service.test.ts`, `adapters/sequential-list.test.ts`, `sequential-list-completion.test.ts` |
+| Config types and validation | `packages/rielflow-events/src/types.ts`, `packages/rielflow/src/events/validate.ts` | COMPLETED | `validate-source-sequential-list.test.ts` |
+| Sequence state and adapter | `packages/rielflow/src/events/adapters/sequential-list.ts`, `packages/rielflow/src/events/sequential-list-state.ts` | COMPLETED | `adapters/sequential-list.test.ts` |
+| Dispatch completion gate | `packages/rielflow/src/events/listener-service.ts`, `packages/rielflow/src/events/sequential-list-completion.ts` | COMPLETED | `listener-service.test.ts`, `adapters/sequential-list.test.ts`, `sequential-list-completion.test.ts` |
 | Receipt/list/replay metadata | existing receipt artifact and replay path | COMPLETED | `receipt-ops.test.ts`, `cli.test.ts` |
 | Examples and docs | `examples/event-sources/README.md`, `README.md` | COMPLETED | CLI validation command |
 
@@ -310,7 +310,7 @@ interface SequentialListTestHarness {
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra-events/src/types.ts`, `packages/divedra/src/events/config.ts`, `packages/divedra/src/events/validate.ts`, `packages/divedra/src/events/validate-source-sequential-list.ts`, `packages/divedra/src/events/validate-source-sequential-list.test.ts`
+**Deliverables**: `packages/rielflow-events/src/types.ts`, `packages/rielflow/src/events/config.ts`, `packages/rielflow/src/events/validate.ts`, `packages/rielflow/src/events/validate-source-sequential-list.ts`, `packages/rielflow/src/events/validate-source-sequential-list.test.ts`
 **Dependencies**: None
 
 **Description**:
@@ -330,7 +330,7 @@ non-object metadata, and unknown `startPolicy` or `onItemFailure` values.
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/events/adapters/sequential-list.ts`, `packages/divedra/src/events/sequential-list-state.ts`, `packages/divedra/src/events/adapter-registry.ts`, `packages/divedra/src/events/adapters/sequential-list.test.ts`, `packages/divedra/src/events/adapter-registry.test.ts`
+**Deliverables**: `packages/rielflow/src/events/adapters/sequential-list.ts`, `packages/rielflow/src/events/sequential-list-state.ts`, `packages/rielflow/src/events/adapter-registry.ts`, `packages/rielflow/src/events/adapters/sequential-list.test.ts`, `packages/rielflow/src/events/adapter-registry.test.ts`
 **Dependencies**: TASK-001
 
 **Description**:
@@ -351,7 +351,7 @@ the same source/config revision.
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/events/source-adapter.ts`, `packages/divedra/src/events/listener-service.ts`, `packages/divedra/src/events/sequential-list-completion.ts`, `packages/divedra/src/events/trigger-runner/trigger-dispatch-runner.ts`, `packages/divedra/src/events/listener-service.test.ts`
+**Deliverables**: `packages/rielflow/src/events/source-adapter.ts`, `packages/rielflow/src/events/listener-service.ts`, `packages/rielflow/src/events/sequential-list-completion.ts`, `packages/rielflow/src/events/trigger-runner/trigger-dispatch-runner.ts`, `packages/rielflow/src/events/listener-service.test.ts`
 **Dependencies**: TASK-001, TASK-002
 
 **Description**:
@@ -375,7 +375,7 @@ according to persisted failure policy.
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `packages/divedra/src/events/ledger.ts`, `packages/divedra/src/events/receipt-ops.ts`, `packages/divedra/src/workflow/runtime-db/event-records.ts`, `packages/divedra/src/workflow/runtime-db/schema-and-record-types.ts`, `packages/divedra/src/cli.ts`, `packages/divedra/src/events/receipt-ops.test.ts`, `packages/divedra/src/cli.test.ts`
+**Deliverables**: `packages/rielflow/src/events/ledger.ts`, `packages/rielflow/src/events/receipt-ops.ts`, `packages/rielflow/src/workflow/runtime-db/event-records.ts`, `packages/rielflow/src/workflow/runtime-db/schema-and-record-types.ts`, `packages/rielflow/src/cli.ts`, `packages/rielflow/src/events/receipt-ops.test.ts`, `packages/rielflow/src/cli.test.ts`
 **Dependencies**: TASK-002, TASK-003
 
 **Description**:
@@ -400,7 +400,7 @@ mutate sequence cursor state except by creating replay-specific receipts.
 
 **Status**: Completed
 **Parallelizable**: Yes
-**Deliverables**: `examples/event-sources/.divedra-events/sources/sequential-list.json`, `examples/event-sources/.divedra-events/bindings/sequential-list-to-arithmetic.json`, `examples/event-sources/README.md`, `README.md`
+**Deliverables**: `examples/event-sources/.rielflow-events/sources/sequential-list.json`, `examples/event-sources/.rielflow-events/bindings/sequential-list-to-arithmetic.json`, `examples/event-sources/README.md`, `README.md`
 **Dependencies**: TASK-001, TASK-004
 
 **Description**:
@@ -449,10 +449,10 @@ observer, receipts, and replay semantics share runtime contracts.
 ## Verification Plan
 
 - `bun run typecheck`
-- `bun test packages/divedra/src/events/validate-source-sequential-list.test.ts packages/divedra/src/events/adapter-registry.test.ts packages/divedra/src/events/adapters/sequential-list.test.ts packages/divedra/src/events/sequential-list-completion.test.ts packages/divedra/src/events/listener-service.test.ts packages/divedra/src/events/receipt-ops.test.ts packages/divedra/src/cli.test.ts`
-- `bun run packages/divedra/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events`
-- `DIVEDRA_EVENTS_READ_ONLY=true bun test packages/divedra/src/events/adapters/sequential-list.test.ts`
-- `bun run packages/divedra/src/bin.ts events list --event-root ./examples/event-sources/.divedra-events`
+- `bun test packages/rielflow/src/events/validate-source-sequential-list.test.ts packages/rielflow/src/events/adapter-registry.test.ts packages/rielflow/src/events/adapters/sequential-list.test.ts packages/rielflow/src/events/sequential-list-completion.test.ts packages/rielflow/src/events/listener-service.test.ts packages/rielflow/src/events/receipt-ops.test.ts packages/rielflow/src/cli.test.ts`
+- `bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`
+- `DIVEDRA_EVENTS_READ_ONLY=true bun test packages/rielflow/src/events/adapters/sequential-list.test.ts`
+- `bun run packages/rielflow/src/bin.ts events list --event-root ./examples/event-sources/.rielflow-events`
 - `rg -n "sequential-list|Sequential List" README.md examples/event-sources/README.md design-docs/specs/command.md design-docs/specs/design-event-listener-workflow-trigger.md`
 
 ## Completion Criteria

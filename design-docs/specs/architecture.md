@@ -1,15 +1,15 @@
 # Architecture Design
 
 This document describes the current runtime architecture implemented primarily
-under `packages/divedra/src/`, with reusable package surfaces under
-`packages/divedra-core/src/`, `packages/divedra-addons/src/`,
-`packages/divedra-adapters/src/`, `packages/divedra-events/src/`,
-`packages/divedra-graphql/src/`, `packages/divedra-server/src/`, and
-`packages/divedra-hook/src/`.
+under `packages/rielflow/src/`, with reusable package surfaces under
+`packages/rielflow-core/src/`, `packages/rielflow-addons/src/`,
+`packages/rielflow-adapters/src/`, `packages/rielflow-events/src/`,
+`packages/rielflow-graphql/src/`, `packages/rielflow-server/src/`, and
+`packages/rielflow-hook/src/`.
 
 ## Overview
 
-`divedra` executes JSON-defined workflows by combining:
+`rielflow` executes JSON-defined workflows by combining:
 
 - workflow definition loading and validation
 - queue-based session orchestration
@@ -55,11 +55,11 @@ Current direction:
   terminal state before dispatching the next item. Sequence cursor state lives
   with event runtime state and receipts, not in workflow bundles. See
   `design-docs/specs/design-event-listener-workflow-trigger.md`.
-- `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `divedra superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
+- `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `rielflow superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 - dedicated workflow self-improve is a separate retrospective analysis and
   optional canonical workflow-edit service; it reads recent workflow run
   artifacts after executions complete, writes reports under
-  `~/.divedra/self-improve-log/`, and may patch/commit workflow bundles only
+  `~/.rielflow/self-improve-log/`, and may patch/commit workflow bundles only
   through explicit self-improve policy. See
   `design-docs/specs/design-self-improve.md`.
 - server workflow manifests are a serve-time allowlist for publishing multiple
@@ -67,6 +67,61 @@ Current direction:
   server exposes only enabled manifest entries through browser, GraphQL catalog,
   and server-backed start paths. See
   `design-docs/specs/design-server-workflow-manifest.md`.
+
+### Product Rename to Rielflow
+
+The product rename changes the repository, package, command, documentation,
+workflow bundle, and user-facing product identity from `rielflow` to
+`rielflow`, using `Rielflow` for human-readable product naming. The rename is a
+behavior-preserving migration: workflow execution, mailbox semantics, GraphQL
+contracts, event dispatch, adapters, TUI behavior, and session persistence keep
+their current behavior except where an identifier, file path, command name, URL,
+or displayed product label intentionally changes.
+
+Canonical naming after the rename:
+
+- human-readable product name: `Rielflow`
+- lowercase command, package, directory, workflow, and repository identifiers:
+  `rielflow`
+- repository origin: `https://github.com/tacogips/rielflow`
+- backend execution identifiers such as `codex-agent`, `claude-code-agent`,
+  `official/openai-sdk`, and `official/anthropic-sdk` remain backend names, not
+  product names
+
+The rename boundary is product ownership, not every literal string. Rename
+product-owned package directories, public package names, CLI binary names,
+workflow catalog roots, examples, scripts, configuration, documentation,
+release packaging, Homebrew formula paths, GraphQL/TUI/server labels, and
+workflow prompt text where those strings refer to the product or repository.
+Do not rename compatibility-neutral protocol concepts, persisted historical
+artifacts, third-party backend names, or references whose value is part of an
+external agent identity. Any retained `rielflow` literal must be classified as
+one of: compatibility alias, migration support, historical artifact reference,
+or intentionally unchanged backend/reference text.
+
+Runtime persistence needs a compatibility plan before changing on-disk storage
+roots or persisted identifiers. Existing workflow executions, mailbox
+artifacts, self-improve logs, event receipts, and GraphQL inspection paths may
+contain `rielflow` in historical data. New writes should use `rielflow` where
+the value is product-owned, while read paths should either continue to discover
+legacy roots or provide an explicit migration/alias rule. The implementation
+plan must identify every persisted-path change and its verification command.
+
+Rollout validation must include both behavior checks and rename consistency
+checks:
+
+- repository search for stale product-owned `rielflow` / `Rielflow` references
+- repository search for expected retained backend and compatibility references
+- package/build/typecheck/test commands for the renamed workspace
+- workflow bundle validation for `.rielflow/workflows` and `examples`
+- command help or smoke checks for the `rielflow` CLI surface and any retained
+  compatibility alias
+- `git remote -v` verification for `https://github.com/tacogips/rielflow`
+
+Codex-agent is relevant only as the current worker execution backend and as
+part of the `codex-design-and-implement-review-loop` workflow context. This
+rename introduces no Cursor-specific behavior mapping and no intentional
+divergence from Codex behavior.
 
 ### Dedicated Workflow Self-Improve
 
@@ -99,7 +154,7 @@ report-and-auto-improve mode requires workflow config or explicit caller
 authorization and post-patch workflow validation.
 
 Implementation owners should keep the compatibility public facade in
-`packages/divedra/src/lib.ts`, expose the served contract through GraphQL
+`packages/rielflow/src/lib.ts`, expose the served contract through GraphQL
 schema/resolver modules, and keep backend transcript parsing behind existing
 agent adapter/session-history boundaries. Codex-agent is a reference for
 session discovery and transcript/file-change summary patterns only; Cursor CLI
@@ -108,11 +163,11 @@ probes.
 
 ### Duplicate-Scavenge Refactoring Workflow Mode
 
-The existing `.divedra/workflows/refactoring-divide-and-conquer` workflow should
+The existing `.rielflow/workflows/refactoring-divide-and-conquer` workflow should
 support duplicate-scavenge refactoring as an operator-selectable mode of the
 same divide-and-conquer flow. It must not become a separate duplicate-only
 workflow. The parent workflow still slices the codebase, fans out read-only
-slice reviews through `.divedra/workflows/refactoring-slice-review`, merges
+slice reviews through `.rielflow/workflows/refactoring-slice-review`, merges
 findings into one implementation plan, implements one bounded task at a time,
 self-reviews, runs independent post-refactor review, and loops until the plan is
 complete or blocked.
@@ -174,17 +229,17 @@ and verification explicit for every task:
   changed workflow bundles
 
 Rollout is prompt/config focused. The expected changed surfaces are
-`.divedra/workflows/refactoring-divide-and-conquer/workflow.json`, the parent
-workflow prompts, `.divedra/workflows/refactoring-slice-review/workflow.json`,
+`.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`, the parent
+workflow prompts, `.rielflow/workflows/refactoring-slice-review/workflow.json`,
 the child slice-review prompt, and
-`.agents/skills/divedra-refactoring-workflow/SKILL.md`. Runtime TypeScript code
+`.agents/skills/rielflow-refactoring-workflow/SKILL.md`. Runtime TypeScript code
 is not required unless validation proves the current workflow input or fanout
 contracts cannot carry the mode guidance.
 
 Validation must include both changed workflow bundles:
 
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run packages/divedra/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run packages/rielflow/src/bin.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 
 Codex-agent remains only the execution backend for relevant worker nodes in
 this issue. No Codex-reference behavior was provided for duplicate-scavenge
@@ -199,11 +254,11 @@ The active product-code duplicate-scavenge plan at
 source of truth for implementation order, task ownership, and verification. It
 continues the workflow-mode design above after the root source tree was removed:
 live runtime, event, hook, GraphQL, server, shared, workflow, and test sources
-are package-local under `packages/divedra/src`, with reusable package surfaces
-under `packages/divedra-core`, `packages/divedra-addons`,
-`packages/divedra-adapters`, `packages/divedra-events`,
-`packages/divedra-graphql`, `packages/divedra-server`, and
-`packages/divedra-hook`.
+are package-local under `packages/rielflow/src`, with reusable package surfaces
+under `packages/rielflow-core`, `packages/rielflow-addons`,
+`packages/rielflow-adapters`, `packages/rielflow-events`,
+`packages/rielflow-graphql`, `packages/rielflow-server`, and
+`packages/rielflow-hook`.
 
 Consolidation should prefer narrow helpers that preserve existing observable
 behavior. Shared logic may move only when the active plan identifies a repeated
@@ -237,11 +292,11 @@ The delegated completion run for `REF-003` and `REF-015` includes explicit
 owner decisions that resolve the prior public-surface blockers. `REF-003` may
 add or expose the narrowest package-owned Docker-compatible runner predicate
 surface needed by root runtime readiness, including a top-level
-`packages/divedra-addons/src/index.ts` export when that follows the package's
+`packages/rielflow-addons/src/index.ts` export when that follows the package's
 existing convention. The shared predicate covers `podman`, `docker`, and
 `nerdctl`, while readiness reporting and native executor policy errors remain
 caller-owned. `REF-015` may establish core-owned node execution backend
-constants and normalization in `packages/divedra-core/src/workflow-model.ts`.
+constants and normalization in `packages/rielflow-core/src/workflow-model.ts`.
 Root validation, adapter dispatch, runtime-readiness, node-patch, and payload
 validation modules must use wrappers or compatibility helpers where needed so
 existing null-versus-undefined caller semantics and public validation issue
@@ -259,7 +314,7 @@ No Codex-reference implementation behavior is required for this active plan.
 The default local reference root `../../codex-agent` was checked for this
 design pass and was unavailable. `codex-agent` remains an execution backend and
 adapter-behavior reference only. Cursor CLI behavior remains isolated behind
-`packages/divedra-adapters/src/cursor.ts` and related runtime-readiness or
+`packages/rielflow-adapters/src/cursor.ts` and related runtime-readiness or
 adapter-validation modules; shared local-agent helpers must not alter Codex
 adapter semantics.
 
@@ -332,13 +387,13 @@ generic patch schema.
 
 The authoritative implementation for those behaviors lives in:
 
-- `packages/divedra/src/workflow/engine.ts`
-- `packages/divedra/src/workflow/call-step.ts`
-- `packages/divedra/src/workflow/superviser.ts`
-- `packages/divedra/src/workflow/superviser-control.ts` (phase-2 `SuperviserRuntimeControl` and add-on argument validation)
-- `packages/divedra/src/workflow/node-addons.ts` (native `divedra/*` supervision add-ons)
-- `packages/divedra/src/workflow/types.ts` (shared step-addressed runtime identifiers, including phase-2 superviser-control add-on names)
-- `packages/divedra/src/workflow/validate.ts`
+- `packages/rielflow/src/workflow/engine.ts`
+- `packages/rielflow/src/workflow/call-step.ts`
+- `packages/rielflow/src/workflow/superviser.ts`
+- `packages/rielflow/src/workflow/superviser-control.ts` (phase-2 `SuperviserRuntimeControl` and add-on argument validation)
+- `packages/rielflow/src/workflow/node-addons.ts` (native `rielflow/*` supervision add-ons)
+- `packages/rielflow/src/workflow/types.ts` (shared step-addressed runtime identifiers, including phase-2 superviser-control add-on names)
+- `packages/rielflow/src/workflow/validate.ts`
 
 ### Default Supervisor-Backed Starts
 
@@ -376,7 +431,7 @@ Implementation boundaries for this default are strict:
 
 This keeps the user-facing execution model supervisor-first while avoiding a
 second lifecycle implementation. The default policy records
-`divedra-default-workflow-supervisor` as the supervisor workflow name and uses a
+`rielflow-default-workflow-supervisor` as the supervisor workflow name and uses a
 deterministic runner-pool service for lifecycle control. Explicit LLM-backed
 supervisor decisions remain opt-in through `intentMapping.mode = "llm-command"`
 or an explicit nested supervisor mode; auto-improve patching remains opt-in and
@@ -467,9 +522,9 @@ Public surface and package-boundary rules:
   supervisor-client surface. CLI, server, event-source, and GraphQL adapters may
   translate transport inputs, but they must not maintain independent live-run
   pools with different ambiguity, wait, or cancellation behavior.
-- `packages/divedra/src/lib.ts` and the `divedra-core` package boundary should expose the stable
+- `packages/rielflow/src/lib.ts` and the `rielflow-core` package boundary should expose the stable
   supervisor-client and runner-pool types needed by embedders. Deep imports from
-  `packages/divedra/src/workflow/*` remain internal unless intentionally re-exported.
+  `packages/rielflow/src/workflow/*` remain internal unless intentionally re-exported.
 - `codex-agent` and any Cursor CLI integration remain backend adapters. They do
   not define runner-pool lifecycle semantics, and Cursor-specific behavior must
   stay isolated from provider-neutral supervisor-client contracts.
@@ -515,7 +570,7 @@ Current compatibility-removal sequence (see
   back multiple authored steps without reintroducing node-addressed selection
   assumptions
 - phase-2 superviser-control add-on identifiers are part of the runtime control
-  surface and should stay centralized; duplicating the same `divedra/*`
+  surface and should stay centralized; duplicating the same `rielflow/*`
   catalog across validation, add-on resolution, and native execution is
   implementation drift, not intended architecture
 - node ids remain reusable payload registry identifiers, not execution
@@ -533,12 +588,12 @@ Earlier oversized source files have already been split into semantic modules
 and now remain as small facades where their public import paths still matter.
 The current lint issue target is:
 
-- `packages/divedra/src/workflow/engine/workflow-runner-lifecycle.ts`
+- `packages/rielflow/src/workflow/engine/workflow-runner-lifecycle.ts`
 
 For the issue-resolution workflow "Split only workflow-runner-lifecycle.ts
 below 1000 lines", this boundary is implementation work, not planning-only
 work. The implementation must make real TypeScript extractions from
-`packages/divedra/src/workflow/engine/workflow-runner-lifecycle.ts`; implementation-plan-only or
+`packages/rielflow/src/workflow/engine/workflow-runner-lifecycle.ts`; implementation-plan-only or
 progress-log-only updates do not satisfy the design intent.
 
 Module splits should follow these boundaries:
@@ -578,11 +633,11 @@ Validation for this boundary is layered:
 
 #### Workflow Runner Module Split
 
-`packages/divedra/src/workflow/engine/workflow-runner-lifecycle.ts` is the remaining oversized
+`packages/rielflow/src/workflow/engine/workflow-runner-lifecycle.ts` is the remaining oversized
 workflow engine source file and should be split without changing the public
-workflow engine surface. `packages/divedra/src/workflow/engine.ts` remains the stable facade,
-`packages/divedra/src/workflow/engine/workflow-runner.ts` remains a small internal facade for the
-runner contract, and `packages/divedra/src/workflow/engine/auto-improve-and-runner.ts` remains
+workflow engine surface. `packages/rielflow/src/workflow/engine.ts` remains the stable facade,
+`packages/rielflow/src/workflow/engine/workflow-runner.ts` remains a small internal facade for the
+runner contract, and `packages/rielflow/src/workflow/engine/auto-improve-and-runner.ts` remains
 the public runner entrypoint that exports `runWorkflow()` and delegates to the
 internal runner. The extracted files must use responsibility-based names, not
 ordinal or `part-NN` names, and must not add Biome suppression comments.
@@ -634,7 +689,7 @@ explicit fields on local context records; extracted modules should not depend
 on hidden lexical state, generated source strings, `eval`, `Function`, or
 `globalThis.Function`.
 
-Existing semantic helper modules under `packages/divedra/src/workflow/engine/` should remain the
+Existing semantic helper modules under `packages/rielflow/src/workflow/engine/` should remain the
 preferred owners for behavior they already encapsulate:
 
 - `types-and-session-state.ts` for shared runner primitives, failure helpers,
@@ -657,8 +712,8 @@ runtime boundary directly, for example `run-setup.ts`,
 
 Large additions should not be moved into already near-limit files outside the
 target engine split. Known near-limit files at the time this issue was triaged
-include `packages/divedra/src/workflow/call-step-impl/direct-step-execution.ts` and
-`packages/divedra/src/workflow/supervisor-client/workflow-supervisor-client-factory.ts`; those
+include `packages/rielflow/src/workflow/call-step-impl/direct-step-execution.ts` and
+`packages/rielflow/src/workflow/supervisor-client/workflow-supervisor-client-factory.ts`; those
 modules may be imported from when appropriate, but they are not expansion
 targets for this lifecycle split.
 
@@ -667,8 +722,8 @@ Verification for the workflow-runner split must include:
 - `bun run format`
 - `bun run lint:biome`
 - `bun run typecheck`
-- `find packages/divedra/src -path '*test*' -prune -o -name '*.ts' -print0 | xargs -0 wc -l | sort -nr | head`
-- `bun test packages/divedra/src/workflow/engine.test.ts packages/divedra/src/workflow/call-step.test.ts packages/divedra/src/workflow/call-step-impl-execution.test.ts packages/divedra/src/workflow/call-step-impl-failures.test.ts packages/divedra/src/workflow/history-continuation.test.ts packages/divedra/src/workflow/manager-control.test.ts packages/divedra/src/workflow/manager-message-service.test.ts packages/divedra/src/workflow/manager-session-store.test.ts packages/divedra/src/workflow/superviser.test.ts packages/divedra/src/workflow/auto-improve-policy.test.ts packages/divedra/src/workflow/supervisor-runner-pool.test.ts`
+- `find packages/rielflow/src -path '*test*' -prune -o -name '*.ts' -print0 | xargs -0 wc -l | sort -nr | head`
+- `bun test packages/rielflow/src/workflow/engine.test.ts packages/rielflow/src/workflow/call-step.test.ts packages/rielflow/src/workflow/call-step-impl-execution.test.ts packages/rielflow/src/workflow/call-step-impl-failures.test.ts packages/rielflow/src/workflow/history-continuation.test.ts packages/rielflow/src/workflow/manager-control.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts packages/rielflow/src/workflow/manager-session-store.test.ts packages/rielflow/src/workflow/superviser.test.ts packages/rielflow/src/workflow/auto-improve-policy.test.ts packages/rielflow/src/workflow/supervisor-runner-pool.test.ts`
 
 ## Core Architectural Boundaries
 
@@ -685,17 +740,17 @@ Workflow definitions live under `<workflow-definition-dir>/<workflow-name>/` and
 
 The loader resolves those workflow-local prompt files into effective inline template text before validation and execution.
 
-Authored workflow boundary rules are centralized in `packages/divedra/src/workflow/authored-workflow.ts`:
+Authored workflow boundary rules are centralized in `packages/rielflow/src/workflow/authored-workflow.ts`:
 
 - removed top-level authored fields, their rejection messages, and canonical validation issue construction live there
 - save-time persistence strips only normalized-only workflow fields from in-memory `WorkflowJson` inputs before validation and write
-- `packages/divedra/src/workflow/load.ts`, `packages/divedra/src/workflow/validate.ts`, and `packages/divedra/src/workflow/save.ts` should reuse that module rather than carrying separate copies of authored-schema guard logic
+- `packages/rielflow/src/workflow/load.ts`, `packages/rielflow/src/workflow/validate.ts`, and `packages/rielflow/src/workflow/save.ts` should reuse that module rather than carrying separate copies of authored-schema guard logic
 
 Workflow roots can be resolved directly or through the scoped workflow catalog.
 The scoped model defines:
 
-- project scope root: nearest project `.divedra`
-- user scope root: `~/.divedra` by default
+- project scope root: nearest project `.rielflow`
+- user scope root: `~/.rielflow` by default
 - workflow root: `<scope-root>/workflows`
 - add-on root: `<scope-root>/addons`
 - runtime data root: `<scope-root>/artifacts`
@@ -704,7 +759,7 @@ The scoped model defines:
 Project scope is searched before user scope for bare workflow names, while
 `--workflow-definition-dir` and `DIVEDRA_WORKFLOW_DEFINITION_DIR` remain direct workflow-definition-dir
 overrides for examples and automation. Scope resolution is implemented in
-`packages/divedra/src/workflow/catalog.ts`.
+`packages/rielflow/src/workflow/catalog.ts`.
 
 ### Workflow Checkout Boundary
 
@@ -744,7 +799,7 @@ normal verification remains offline.
 The destination scope model is intentionally command-specific:
 
 - default checkout destination is project scope, creating
-  `<cwd>/.divedra/workflows` when no project `.divedra` exists
+  `<cwd>/.rielflow/workflows` when no project `.rielflow` exists
 - `--user-scope` selects `<user-root>/workflows`
 - `--workflow-definition-dir` is rejected for checkout because registry records
   are keyed by project/user scope, not by arbitrary direct roots
@@ -783,7 +838,7 @@ The runtime persists three distinct forms of state:
 
 - workflow session state in `{rootDataDir}/sessions/`
 - node and communication artifacts in `{rootDataDir}/workflow/`
-- query-oriented runtime index data in `{rootDataDir}/divedra.db`
+- query-oriented runtime index data in `{rootDataDir}/rielflow.db`
 
 In project-scoped catalog mode, `{rootDataDir}` defaults to
 `<user-root>/projects/<project-basename>-<project-root-hash>/artifacts`.
@@ -795,7 +850,7 @@ File artifacts remain the authoritative source for execution payloads. SQLite is
 
 When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
 artifact and/or session-store roots, they infer `rootDataDir` from those
-explicit storage roots when possible so `divedra.db` stays co-located with the
+explicit storage roots when possible so `rielflow.db` stays co-located with the
 selected runtime tree instead of drifting to an ambient default. An explicit
 `DIVEDRA_ARTIFACT_DIR` remains the canonical root data directory override and is
 not replaced by scoped defaults.
@@ -803,7 +858,7 @@ not replaced by scoped defaults.
 ### LLM Session Message Inspection Boundary
 
 GraphQL workflow inspection should distinguish runtime logs from backend LLM
-session messages. Runtime logs describe divedra-owned execution milestones,
+session messages. Runtime logs describe rielflow-owned execution milestones,
 process output summaries, and hook metadata. LLM session messages are
 provider-originated records emitted while an agent backend is executing a node.
 
@@ -879,7 +934,7 @@ Supporting design:
 
 ### Execution Boundary
 
-The main runtime entrypoint is `runWorkflow()` in `packages/divedra/src/workflow/engine.ts`.
+The main runtime entrypoint is `runWorkflow()` in `packages/rielflow/src/workflow/engine.ts`.
 
 It owns:
 
@@ -915,7 +970,7 @@ Planned extension:
   must be reviewed explicitly during continuation work; the current hotspots are
   in `buildUpstreamOutputRefs()`, `buildUpstreamInputs()`,
   `findLatestPublishedWorkflowResult()`, and
-  `findLatestWorkflowCallResultExecution()` in `packages/divedra/src/workflow/engine.ts`
+  `findLatestWorkflowCallResultExecution()` in `packages/rielflow/src/workflow/engine.ts`
 
 Execution-time working directory is resolved separately from workflow/artifact/session root resolution.
 
@@ -924,16 +979,16 @@ Execution-time working directory is resolved separately from workflow/artifact/s
 - node-scoped override: `nodePayload.workingDirectory`, resolved from the effective workflow execution working directory
 
 Working-directory resolution is implemented in
-`packages/divedra/src/workflow/working-directory.ts`.
+`packages/rielflow/src/workflow/working-directory.ts`.
 
 ### Bounded Fanout And Join Boundary
 
 Source:
 
-- `packages/divedra/src/workflow/engine.ts`
-- `packages/divedra/src/workflow/cross-workflow-from-steps.ts`
-- `packages/divedra/src/workflow/types.ts`
-- `packages/divedra/src/workflow/validate.ts`
+- `packages/rielflow/src/workflow/engine.ts`
+- `packages/rielflow/src/workflow/cross-workflow-from-steps.ts`
+- `packages/rielflow/src/workflow/types.ts`
+- `packages/rielflow/src/workflow/validate.ts`
 
 Target design:
 
@@ -982,12 +1037,12 @@ execute the same backend-neutral node payload contract as every other step.
 
 Source:
 
-- `packages/divedra/src/workflow/engine.ts`
-- `packages/divedra/src/workflow/superviser.ts`
-- `packages/divedra/src/workflow/superviser-control.ts`
-- `packages/divedra/src/workflow/node-addons.ts`
-- `packages/divedra/src/workflow/mutable-workspace.ts`
-- `packages/divedra/src/workflow/auto-improve-policy.ts`
+- `packages/rielflow/src/workflow/engine.ts`
+- `packages/rielflow/src/workflow/superviser.ts`
+- `packages/rielflow/src/workflow/superviser-control.ts`
+- `packages/rielflow/src/workflow/node-addons.ts`
+- `packages/rielflow/src/workflow/mutable-workspace.ts`
+- `packages/rielflow/src/workflow/auto-improve-policy.ts`
 
 Current phase-1 responsibilities:
 
@@ -997,7 +1052,7 @@ Current phase-1 responsibilities:
 - choose deterministic remediations (`rerun-workflow`, `rerun-step`, `patch-workflow`, `stop-supervision`)
 - create execution-copy mutable workflow workspaces and patch audit records
 
-**Phase 2 (optional)** is implemented as an opt-in path: with `WorkflowRunOptions.nestedSuperviserDriver` (CLI `--nested-superviser` plus `--auto-improve`), the engine runs `superviserWorkflowId` as a nested step-addressed workflow and passes a runtime `SuperviserRuntimeControl` handle to native `divedra/*` add-ons for start/status/rerun/load/save on the paired target session. Without that flag, the engine still uses the phase-1 outer `runAutoImproveLoop`. Supervision state records `nestedSuperviserSessionId` when the nested path is used; it is exposed in library/GraphQL inspection. Target-session resume with the nested flag continues the saved nested superviser session when that id is present.
+**Phase 2 (optional)** is implemented as an opt-in path: with `WorkflowRunOptions.nestedSuperviserDriver` (CLI `--nested-superviser` plus `--auto-improve`), the engine runs `superviserWorkflowId` as a nested step-addressed workflow and passes a runtime `SuperviserRuntimeControl` handle to native `rielflow/*` add-ons for start/status/rerun/load/save on the paired target session. Without that flag, the engine still uses the phase-1 outer `runAutoImproveLoop`. Supervision state records `nestedSuperviserSessionId` when the nested path is used; it is exposed in library/GraphQL inspection. Target-session resume with the nested flag continues the saved nested superviser session when that id is present.
 
 ### Repository Lint Policy Boundary
 
@@ -1039,15 +1094,15 @@ stay in repository lint scripts/tests rather than in backend adapter modules.
 
 Source:
 
-- `packages/divedra/src/workflow/load.ts`
-- `packages/divedra/src/workflow/validate.ts`
+- `packages/rielflow/src/workflow/load.ts`
+- `packages/rielflow/src/workflow/validate.ts`
 
 Responsibilities:
 
 - read workflow bundle files
 - resolve `promptTemplateFile`
 - validate step definitions, node registry entries, transitions, and payload shapes
-- share authored-schema guard rules with the save path through `packages/divedra/src/workflow/authored-workflow.ts` so validation and persistence reject the same removed fields with the same messages
+- share authored-schema guard rules with the save path through `packages/rielflow/src/workflow/authored-workflow.ts` so validation and persistence reject the same removed fields with the same messages
 
 Important validation facts:
 
@@ -1075,27 +1130,27 @@ authored add-on reference.
 
 Initial scope:
 
-- runtime-provided `divedra/*` add-ons
+- runtime-provided `rielflow/*` add-ons
 - scoped local add-on manifests under `<scope-root>/addons`, where project and
   user scopes use the same add-on directory layout as workflow scopes
 - third-party add-on references through host-provided resolver functions; these
   are local process integrations and do not perform package or network
   resolution during workflow load
 - no network resolution at workflow load time
-- `divedra/chat-reply-worker` for provider-neutral event replies
-- `divedra/codex-worker` and `divedra/claude-code-worker` for reusable
+- `rielflow/chat-reply-worker` for provider-neutral event replies
+- `rielflow/codex-worker` and `rielflow/claude-code-worker` for reusable
   agent-backed worker nodes
-- `divedra/x-gateway-read` for read-only x-gateway GraphQL inspection through
+- `rielflow/x-gateway-read` for read-only x-gateway GraphQL inspection through
   an explicit container runner binding
-- `divedra/x-gateway` for intentional x-gateway GraphQL query or mutation
+- `rielflow/x-gateway` for intentional x-gateway GraphQL query or mutation
   execution, including X post mutations, through the same explicit container
   runner and environment binding model
-- `divedra/mail-gateway-read` and `divedra/mail-gateway` for read-only mail
+- `rielflow/mail-gateway-read` and `rielflow/mail-gateway` for read-only mail
   inspection and intentional mail send mutations through the same explicit
   container runner and environment binding model
 - add-on nodes remain ordinary worker nodes after resolution
-- `divedra/` is reserved for runtime-provided add-ons; third-party add-ons use
-  non-`divedra/` names such as `vendor/name`
+- `rielflow/` is reserved for runtime-provided add-ons; third-party add-ons use
+  non-`rielflow/` names such as `vendor/name`
 
 The chat reply worker creates provider-neutral reply requests from
 `runtimeVariables.event` and dispatches them through the event reply adapter
@@ -1105,8 +1160,8 @@ workflow engine. Add-ons that need invocation-specific values use
 bindings accept `addon.env`. Host applications can pass add-on resolvers through
 workflow load, validation, save, and execution options to materialize
 third-party add-on references into ordinary node payloads. The package root
-exports the library API from `packages/divedra/src/lib.ts` rather than the CLI entrypoint so
-third-party add-on packages can type resolver exports from `divedra` without
+exports the library API from `packages/rielflow/src/lib.ts` rather than the CLI entrypoint so
+third-party add-on packages can type resolver exports from `rielflow` without
 deep imports. Third-party resolver calls are package-boundary validation
 boundaries: both synchronous and asynchronous resolver paths must normalize
 handled, unhandled, malformed, and throwing resolver outcomes into ordinary
@@ -1125,9 +1180,9 @@ transport-specific checks.
 
 Source:
 
-- `packages/divedra/src/workflow/input-assembly.ts`
-- `packages/divedra/src/workflow/prompt-composition.ts`
-- `packages/divedra/src/workflow/prompt-template-context.ts`
+- `packages/rielflow/src/workflow/input-assembly.ts`
+- `packages/rielflow/src/workflow/prompt-composition.ts`
+- `packages/rielflow/src/workflow/prompt-template-context.ts`
 
 Responsibilities:
 
@@ -1157,8 +1212,8 @@ wrappers only when a session is first created.
 
 Source:
 
-- `packages/divedra/src/workflow/adapter.ts`
-- `packages/divedra/src/workflow/adapters/*`
+- `packages/rielflow/src/workflow/adapter.ts`
+- `packages/rielflow/src/workflow/adapters/*`
 
 Responsibilities:
 
@@ -1184,7 +1239,7 @@ wrappers before validation:
 
 The parser must still reject non-object JSON such as arrays, strings, numbers,
 or partial/unbalanced object text. Backend-specific output collection remains in
-`packages/divedra/src/workflow/adapters/*`; wrapper recovery stays in the shared adapter module
+`packages/rielflow/src/workflow/adapters/*`; wrapper recovery stays in the shared adapter module
 so `codex-agent`, `claude-code-agent`, and SDK-backed adapters converge before
 engine-level schema, completion, and manager-control validation.
 
@@ -1200,9 +1255,9 @@ business payloads and incorrectly routed through `!(needs_revision)`.
 
 Source:
 
-- `packages/divedra/src/workflow/session.ts`
-- `packages/divedra/src/workflow/session-store.ts`
-- `packages/divedra/src/workflow/runtime-db.ts`
+- `packages/rielflow/src/workflow/session.ts`
+- `packages/rielflow/src/workflow/session-store.ts`
+- `packages/rielflow/src/workflow/runtime-db.ts`
 
 Responsibilities:
 
@@ -1217,10 +1272,10 @@ The queue is deduplicated after each scheduling pass. Multiple valid transition 
 
 Source:
 
-- `packages/divedra/src/workflow/cross-workflow-from-steps.ts` (projection of step transitions to dispatch rows)
-- `packages/divedra/src/workflow/engine.ts` (enqueue and run callee workflows; artifacts under `workflow-calls/`)
-- `packages/divedra/src/workflow/runtime-readiness.ts` (readiness checks for callee targets and dispatch chains)
-- `packages/divedra/src/workflow/manager-control.ts` (validates manager-emitted control actions)
+- `packages/rielflow/src/workflow/cross-workflow-from-steps.ts` (projection of step transitions to dispatch rows)
+- `packages/rielflow/src/workflow/engine.ts` (enqueue and run callee workflows; artifacts under `workflow-calls/`)
+- `packages/rielflow/src/workflow/runtime-readiness.ts` (readiness checks for callee targets and dispatch chains)
+- `packages/rielflow/src/workflow/manager-control.ts` (validates manager-emitted control actions)
 
 Responsibilities:
 
@@ -1256,8 +1311,8 @@ Fanout extension:
 
 Source:
 
-- `packages/divedra/src/server/*`
-- `packages/divedra/src/graphql/*`
+- `packages/rielflow/src/server/*`
+- `packages/rielflow/src/graphql/*`
 
 Responsibilities:
 
@@ -1267,7 +1322,7 @@ Responsibilities:
 
 Serve-mode behavior:
 
-- `divedra serve` runs the local HTTP control plane
+- `rielflow serve` runs the local HTTP control plane
 - an optional fixed workflow name constrains GraphQL workflow-definition access to that authored bundle
 - `readOnly` is enforced for write mutations
 - legacy workflow/session REST routes remain removed
@@ -1292,7 +1347,7 @@ routing when the binding opts into lifecycle control; same pipeline powers libra
 The workflow engine should not import provider SDKs or provider-specific event
 types. Event bindings live outside workflow bundles so adding or changing an
 event source does not mutate `workflow.json`. The current implementation lives
-under `packages/divedra/src/events/`.
+under `packages/rielflow/src/events/`.
 
 Target architectural direction: event bindings should be understood as bridges
 between provider transports and the runtime-owned `external-mailbox` boundary,
@@ -1337,8 +1392,8 @@ Execution policies:
 - node add-ons are an authoring reuse layer, not a third role axis; after
   resolution, an add-on node executes as a normal worker with descriptor
   provenance recorded in runtime metadata
-- this behavior is implemented across `packages/divedra/src/workflow/engine.ts`,
-  `packages/divedra/src/workflow/types.ts`, and `packages/divedra/src/events/`
+- this behavior is implemented across `packages/rielflow/src/workflow/engine.ts`,
+  `packages/rielflow/src/workflow/types.ts`, and `packages/rielflow/src/events/`
 
 ## Current Execution Flow
 
@@ -1418,7 +1473,7 @@ Before each node execution, the runtime compiles a worker-facing execution
 inbox/outbox contract under the node artifact directory. That contract is the
 stable node-facing ABI across `agent`, `command`, `container`, and `addon`
 execution. The current implementation is centered on
-`packages/divedra/src/workflow/node-execution-mailbox.ts`.
+`packages/rielflow/src/workflow/node-execution-mailbox.ts`.
 
 ## Output Ownership
 
@@ -1476,7 +1531,7 @@ passes the same scope and action validation rules.
 - `execute-optional-step` / `skip-optional-step` (replacing `execute-optional-node` / `skip-optional-node`)
 - no structural child-workflow actions
 
-**Current** implementation in `packages/divedra/src/workflow/manager-control.ts` accepts `planner-note`, `retry-step`, `replay-communication`, `execute-optional-step`, and `skip-optional-step` (retry/optional actions use `stepId`). Removal-bound aliases `retry-node` / `execute-optional-node` / `skip-optional-node` are **rejected** (no `nodeId` field on these actions). Structural compatibility actions `start-sub-workflow` and `deliver-to-child-input` are **rejected**. Remaining follow-up work in `impl-plans/workflow-legacy-compatibility-removal.md` is now mostly naming/doc cleanup rather than live authored compatibility logic. Cross-workflow dispatch is step-derived only; the engine does not execute authored top-level `workflow.workflowCalls`.
+**Current** implementation in `packages/rielflow/src/workflow/manager-control.ts` accepts `planner-note`, `retry-step`, `replay-communication`, `execute-optional-step`, and `skip-optional-step` (retry/optional actions use `stepId`). Removal-bound aliases `retry-node` / `execute-optional-node` / `skip-optional-node` are **rejected** (no `nodeId` field on these actions). Structural compatibility actions `start-sub-workflow` and `deliver-to-child-input` are **rejected**. Remaining follow-up work in `impl-plans/workflow-legacy-compatibility-removal.md` is now mostly naming/doc cleanup rather than live authored compatibility logic. Cross-workflow dispatch is step-derived only; the engine does not execute authored top-level `workflow.workflowCalls`.
 
 Scope enforcement:
 
@@ -1490,9 +1545,9 @@ Manager sessions are minted per manager-step execution and expire when that exec
 ## Package Boundary Architecture
 
 Issue-resolution workflow `design-and-implement-review-loop` for "Split
-divedra TypeScript packages" introduces package boundaries without changing the
+rielflow TypeScript packages" introduces package boundaries without changing the
 existing CLI or library contract. The current single package publishes
-`dist/lib.js` as `import "divedra"` and `dist/main.js` as the CLI entrypoint;
+`dist/lib.js` as `import "rielflow"` and `dist/main.js` as the CLI entrypoint;
 the split must preserve those entrypoints through compatibility facades while
 moving implementation ownership into workspace packages.
 
@@ -1503,36 +1558,36 @@ Biome, Vitest, or Task.
 
 Required packages:
 
-- `divedra-core`: owns workflow definitions, validation, execution engine,
+- `rielflow-core`: owns workflow definitions, validation, execution engine,
   runtime DB/session artifacts, mailbox contracts, supervisor primitives,
   backend adapter dispatch contracts, dedicated self-improve service contracts,
   and provider-neutral public library API contracts exported through package
   surfaces rather than root source files.
-- `divedra-addons`: owns built-in node add-on catalog resolution, native
+- `rielflow-addons`: owns built-in node add-on catalog resolution, native
   add-on execution, add-on configuration validation, and any reusable add-on
   types that should not force downstream callers to depend on the CLI/server
   surface.
-- `divedra`: remains the compatibility package name and published CLI/library
-  facade. It re-exports the stable library surface from `divedra-core` and
+- `rielflow`: remains the compatibility package name and published CLI/library
+  facade. It re-exports the stable library surface from `rielflow-core` and
   keeps the `./cli` export/bin behavior compatible with current callers.
 
 Additional package candidates should be evaluated during implementation:
 
-- `divedra-cli`: separate when CLI parsing, command handlers, help text, and
-  process I/O can depend on `divedra-core` without creating reverse imports.
-  If split, `divedra` should keep a CLI shim that delegates to this package.
-- `divedra-graphql`: separate when GraphQL schema/client/server resolver code
-  can depend only on `divedra-core` and optional server transport helpers.
-- `divedra-events`: separate when external event source parsing, receipts,
+- `rielflow-cli`: separate when CLI parsing, command handlers, help text, and
+  process I/O can depend on `rielflow-core` without creating reverse imports.
+  If split, `rielflow` should keep a CLI shim that delegates to this package.
+- `rielflow-graphql`: separate when GraphQL schema/client/server resolver code
+  can depend only on `rielflow-core` and optional server transport helpers.
+- `rielflow-events`: separate when external event source parsing, receipts,
   listener service, and supervisor chat dispatch can depend on core runtime
   contracts without importing CLI-only behavior.
-- `divedra-server`: separate only if HTTP serving and GraphQL endpoint wiring
+- `rielflow-server`: separate only if HTTP serving and GraphQL endpoint wiring
   become independently reusable; otherwise keep server transport with the CLI
   package to avoid over-splitting.
 
 Boundary rules:
 
-- dependencies point inward toward `divedra-core`; `divedra-core` must not
+- dependencies point inward toward `rielflow-core`; `rielflow-core` must not
   import CLI, server, GraphQL endpoint, event listener, or add-on package code
   except through narrow type-only contracts that belong in core
 - add-on resolution may depend on core workflow types, but core workflow
@@ -1551,16 +1606,16 @@ Boundary rules:
 Root source removal cutover:
 
 - the repository root `src/` directory is not a runtime, test, or compatibility
-  location; former root runtime and tests live under `packages/divedra/src`
+  location; former root runtime and tests live under `packages/rielflow/src`
 - executable commands in root tooling, README guidance, examples, and workflow
-  fixtures must invoke `bun run packages/divedra/src/bin.ts ...` or another
+  fixtures must invoke `bun run packages/rielflow/src/bin.ts ...` or another
   package-local entrypoint; `bun run src/main.ts ...` is obsolete
 - root `package.json`, `tsconfig.json`, `tsconfig.build.json`,
   `vitest.config.ts`, `biome.json`, `scripts/run-bun-tests.sh`,
   `scripts/check-source-filenames.ts`, and
   `scripts/sync-package-declarations.ts` must resolve package-local sources
   only
-- `packages/divedra/src/package-boundaries.test.ts` is the design guard for the
+- `packages/rielflow/src/package-boundaries.test.ts` is the design guard for the
   cutover: it must fail if root `src/` is recreated or package-local code
   imports from root source paths
 - current docs and workflow fixtures should use package-local paths for live
@@ -1571,11 +1626,11 @@ Root source removal cutover:
 Supervisor runner-pool package boundary:
 
 - runner-pool lifecycle types, client request/response shapes, and the
-  deterministic in-process pool implementation belong to `divedra-core`
-- `packages/divedra/src/lib.ts` and `packages/divedra-core/src/index.ts` should
+  deterministic in-process pool implementation belong to `rielflow-core`
+- `packages/rielflow/src/lib.ts` and `packages/rielflow-core/src/index.ts` should
   expose the same stable supervision client surface needed by embedders without
-  requiring deep imports from `packages/divedra/src/workflow/*`
-- `divedra` remains a compatibility facade and CLI package; it may re-export
+  requiring deep imports from `packages/rielflow/src/workflow/*`
+- `rielflow` remains a compatibility facade and CLI package; it may re-export
   core supervision APIs but must not own independent runner-pool state
 - GraphQL, event-source, and CLI adapters may translate transport-specific
   commands into core supervisor-client operations, but process/run-pool
@@ -1594,11 +1649,11 @@ Supervisor runner-pool package boundary:
 Self-improve package-boundary contract:
 
 - the dedicated retrospective self-improve service is a core runtime service,
-  not CLI-owned behavior; `packages/divedra-core/src/index.ts` should export
+  not CLI-owned behavior; `packages/rielflow-core/src/index.ts` should export
   `executeWorkflowSelfImprove`, report lookup/listing functions, policy
   resolution, default log-limit constants, and the public self-improve
   input/result/report types
-- `packages/divedra/src/index.ts` remains the compatibility library facade and
+- `packages/rielflow/src/index.ts` remains the compatibility library facade and
   may wrap core self-improve calls with endpoint-backed GraphQL routing, but it
   must not define a second self-improve execution path
 - package CLI handlers must call package-local or exported package surfaces; root
@@ -1630,14 +1685,14 @@ Compatibility validation for the package split:
 ### Homebrew Release Packaging
 
 Homebrew installation should be supported through standalone release archives
-that contain a compiled `divedra` executable. The release path is additive to
+that contain a compiled `rielflow` executable. The release path is additive to
 the current source-run and Nix-flake paths: it must not replace `bun run
-packages/divedra/src/bin.ts`, `nix run`, or the package-local build outputs used
+packages/rielflow/src/bin.ts`, `nix run`, or the package-local build outputs used
 by development and tests.
 
 The packaging boundary is a release artifact builder plus a Homebrew formula
 template. Runtime behavior stays in the existing CLI entrypoint under
-`packages/divedra/src/bin.ts`; packaging code must not introduce a second CLI
+`packages/rielflow/src/bin.ts`; packaging code must not introduce a second CLI
 dispatcher or change workflow/session storage defaults. The compiled binary
 should be produced with Bun's standalone compile flow so Homebrew users do not
 need Bun installed at runtime. The archive should install only the executable
@@ -1650,7 +1705,7 @@ Release artifact data flow:
    remain synchronized with the workspace build contract
 2. compile the package-local CLI entrypoint into platform-specific executable
    outputs
-3. stage each artifact under a deterministic directory containing `bin/divedra`,
+3. stage each artifact under a deterministic directory containing `bin/rielflow`,
    `README.md`, `LICENSE` when present, and any required runtime assets
 4. create compressed archives with names that include package version, target
    operating system, and architecture
@@ -1660,18 +1715,18 @@ Release artifact data flow:
 7. verify the staged archive by extracting it and running executable smoke tests
 
 Artifact names should be stable enough for release automation and formula
-updates, for example `divedra-<version>-darwin-arm64.tar.gz` and
-`divedra-<version>-darwin-x64.tar.gz`. Linux archive support may use the same
+updates, for example `rielflow-<version>-darwin-arm64.tar.gz` and
+`rielflow-<version>-darwin-x64.tar.gz`. Linux archive support may use the same
 builder shape for Linuxbrew, but Homebrew-on-macOS support is the required first
 slice. When cross-compilation is unavailable or unreliable, the builder should
 fail with a clear unsupported-target message rather than producing a mislabeled
 archive.
 
 The Homebrew formula should live in a repository-owned Homebrew surface, such as
-`Formula/divedra.rb`, so it can be copied into a tap or published from the same
+`Formula/rielflow.rb`, so it can be copied into a tap or published from the same
 repository when the release hosting decision is resolved. The formula installs
 from prebuilt release archives, selects the correct archive for supported OS and
-CPU combinations, installs `bin/divedra`, and runs a formula `test do` smoke
+CPU combinations, installs `bin/rielflow`, and runs a formula `test do` smoke
 check. The formula is not intended for Homebrew core submission unless later
 policy work replaces binary-only installation with a source build acceptable to
 Homebrew core.
@@ -1684,14 +1739,14 @@ Validation rules:
 - every generated archive must have a checksum record
 - the formula must not contain placeholder URLs or placeholder SHA values in
   publish mode
-- formula tests must run `divedra --help`; `divedra --version` should be added
+- formula tests must run `rielflow --help`; `rielflow --version` should be added
   to the release smoke test after the CLI exposes a stable version command
 - local verification should install from the generated formula or extracted
   archive where Homebrew is available, otherwise it should perform archive
   extraction plus binary smoke tests
 
 Rollout is documentation and packaging focused. Expected implementation
-surfaces are `scripts/`, `package.json`, `Taskfile.yml`, `Formula/divedra.rb`,
+surfaces are `scripts/`, `package.json`, `Taskfile.yml`, `Formula/rielflow.rb`,
 `README.md`, and release-related tests or shell checks. TypeScript runtime code
 is only required if smoke testing proves the CLI lacks a stable `--version`
 surface or the compiled binary cannot locate required runtime assets.
@@ -1713,8 +1768,8 @@ formula behavior.
 ## References
 
 - `README.md`
-- `packages/divedra/src/workflow/`
-- `packages/divedra/src/events/`
-- `packages/divedra/src/graphql/`
-- `packages/divedra/src/server/`
+- `packages/rielflow/src/workflow/`
+- `packages/rielflow/src/events/`
+- `packages/rielflow/src/graphql/`
+- `packages/rielflow/src/server/`
 - `design-docs/specs/design-workflow-supervisor-dispatcher.md`

@@ -94,7 +94,7 @@ Active preflight:
 - may spawn bounded local commands such as backend version, auth-status, or
   model-reachability probes
 - must use timeouts and structured error capture
-- must never start a divedra workflow session or publish node artifacts
+- must never start a rielflow workflow session or publish node artifacts
 
 This split keeps ordinary validation fast and deterministic while still giving
 operators a concrete executability check before a run.
@@ -103,9 +103,9 @@ operators a concrete executability check before a run.
 
 CLI:
 
-- `divedra workflow validate <name>` remains structural/passive by default
-- `divedra workflow validate <name> --executable` enables active preflight
-- `divedra workflow validate <name> --node-patch <json|@file|file>` applies a
+- `rielflow workflow validate <name>` remains structural/passive by default
+- `rielflow workflow validate <name> --executable` enables active preflight
+- `rielflow workflow validate <name> --node-patch <json|@file|file>` applies a
   non-persistent node patch before both passive validation and active preflight
 - `--output json` includes `nodeValidationResults`
 - text output summarizes invalid and warning node results after existing
@@ -155,7 +155,7 @@ runtime readiness, and execution agree on the same effective node settings.
 
 Add-on hooks should be descriptor-owned:
 
-- built-in `divedra/*` descriptors may provide a synchronous or asynchronous
+- built-in `rielflow/*` descriptors may provide a synchronous or asynchronous
   `validate` function
 - host-provided resolvers may return add-on validation results along with an
   effective node payload
@@ -219,11 +219,11 @@ Backend capability matrix:
 
 | Backend | Authentication | Model reachability | Plan executability | Valid mode | Valid effort |
 | ------- | -------------- | ------------------ | ------------------ | ---------- | ------------ |
-| `codex-agent` | Active preflight uses `codex login status` through `/Users/taco/gits/tacogips/codex-agent/src/sdk/model-availability.ts`; unauthenticated is `invalid`. | Active preflight uses `codex-agent model check --model <model> --json` or the SDK `checkCodexModelAvailability`; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Divedra later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate Codex process options against `/Users/taco/gits/tacogips/codex-agent/src/process/types.ts`: sandbox `full`, `network-only`, `none`; approval mode `always`, `unless-allow-listed`, `never`, `on-failure`; stream granularity `event`, `char`. Unsupported authored values are `invalid`. | The inspected Codex reference exposes no reasoning-effort option on `CodexProcessOptions`. With no authored effort, return `valid` and `not applicable`; any authored Codex effort is `invalid` until a concrete Codex reference field exists. |
-| `claude-code-agent` | Active preflight uses `/Users/taco/gits/tacogips/claude-code-agent/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `/Users/taco/gits/tacogips/claude-code-agent/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | The inspected Claude reference exposes budget and turn limits but no reasoning-effort enum. With no authored effort, return `valid` and `not applicable`; any authored Claude effort is `invalid` until a concrete Claude reference field exists. |
-| `cursor-cli-agent` | Cursor has no stable local auth-status API in `/Users/taco/gits/tacogips/cursor-agent/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `/Users/taco/gits/tacogips/cursor-agent/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `/Users/taco/gits/tacogips/cursor-agent/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | The inspected Cursor reference exposes no effort enum. With no authored effort, return `valid` and `not applicable`; any authored Cursor effort is `invalid` until a concrete Cursor reference field exists. |
+| `codex-agent` | Active preflight uses `codex login status` through `<codex-agent-checkout>/src/sdk/model-availability.ts`; unauthenticated is `invalid`. | Active preflight uses `codex-agent model check --model <model> --json` or the SDK `checkCodexModelAvailability`; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate Codex process options against `<codex-agent-checkout>/src/process/types.ts`: sandbox `full`, `network-only`, `none`; approval mode `always`, `unless-allow-listed`, `never`, `on-failure`; stream granularity `event`, `char`. Unsupported authored values are `invalid`. | The inspected Codex reference exposes no reasoning-effort option on `CodexProcessOptions`. With no authored effort, return `valid` and `not applicable`; any authored Codex effort is `invalid` until a concrete Codex reference field exists. |
+| `claude-code-agent` | Active preflight uses `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `<claude-code-agent-checkout>/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | The inspected Claude reference exposes budget and turn limits but no reasoning-effort enum. With no authored effort, return `valid` and `not applicable`; any authored Claude effort is `invalid` until a concrete Claude reference field exists. |
+| `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | The inspected Cursor reference exposes no effort enum. With no authored effort, return `valid` and `not applicable`; any authored Cursor effort is `invalid` until a concrete Cursor reference field exists. |
 
-Divedra implementation boundary:
+Rielflow implementation boundary:
 
 - workflow validation owns grouping nodes by backend and formatting
   `NodeValidationResult`
@@ -326,12 +326,12 @@ Implementation should cover:
 - `src/workflow/validate.ts`
 - `src/workflow/runtime-readiness.ts`
 - `src/workflow/runtime-readiness-agent-probes.ts`
-- `packages/divedra-addons/src/node-addons/`
-- `/Users/taco/gits/tacogips/codex-agent/src/sdk/model-availability.ts`
-- `/Users/taco/gits/tacogips/codex-agent/src/cli/index.ts`
-- `/Users/taco/gits/tacogips/codex-agent/src/process/types.ts`
-- `/Users/taco/gits/tacogips/claude-code-agent/src/sdk/credentials/reader.ts`
-- `/Users/taco/gits/tacogips/claude-code-agent/src/cli/commands/auth/status.ts`
-- `/Users/taco/gits/tacogips/claude-code-agent/src/sdk/session-runner.ts`
-- `/Users/taco/gits/tacogips/cursor-agent/src/cursor/model-availability.ts`
-- `/Users/taco/gits/tacogips/cursor-agent/src/sdk/agent-runner.ts`
+- `packages/rielflow-addons/src/node-addons/`
+- `<codex-agent-checkout>/src/sdk/model-availability.ts`
+- `<codex-agent-checkout>/src/cli/index.ts`
+- `<codex-agent-checkout>/src/process/types.ts`
+- `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts`
+- `<claude-code-agent-checkout>/src/cli/commands/auth/status.ts`
+- `<claude-code-agent-checkout>/src/sdk/session-runner.ts`
+- `<cursor-agent-checkout>/src/cursor/model-availability.ts`
+- `<cursor-agent-checkout>/src/sdk/agent-runner.ts`

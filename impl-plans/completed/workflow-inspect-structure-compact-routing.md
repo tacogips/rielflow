@@ -44,7 +44,7 @@ TUI behavior, or Codex-reference porting.
 ### Codex-Agent References
 
 No codex-agent reference repository, issue URL, or source paths were provided.
-This plan intentionally follows the accepted local divedra design only.
+This plan intentionally follows the accepted local rielflow design only.
 
 ---
 

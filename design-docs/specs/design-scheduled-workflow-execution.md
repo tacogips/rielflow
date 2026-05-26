@@ -1,7 +1,7 @@
 # Scheduled Workflow Execution From Chat
 
 This document defines the design for chat-originated schedule registration and
-later workflow execution through the existing divedra event runtime.
+later workflow execution through the existing rielflow event runtime.
 
 ## Overview
 
@@ -17,7 +17,7 @@ The same event pool is the runtime boundary for three scheduled work kinds:
 - `cron`: dispatch a configured cron event source occurrence.
 - `workflow-schedule`: dispatch a user-created scheduled workflow run.
 
-Schedule registration, schedule execution re-arming, and `divedra events serve`
+Schedule registration, schedule execution re-arming, and `rielflow events serve`
 startup must all enqueue the next due `workflow-schedule` event into the shared
 event pool. Provider adapters, agent backends, Codex, and Cursor do not own
 schedule semantics.
@@ -26,7 +26,7 @@ schedule semantics.
 
 - Let chat users register one-time and recurring workflow executions by natural
   language.
-- Resolve the requested workflow name against the divedra workflow catalog and
+- Resolve the requested workflow name against the rielflow workflow catalog and
   usage summaries before scheduling.
 - Ask for clarification when workflow, time, timezone, recurrence, or required
   workflow input is missing or ambiguous.
@@ -98,7 +98,7 @@ events serve startup
 
 ## Schedule Registration Workflow
 
-The schedule-registration workflow is an ordinary divedra workflow invoked from
+The schedule-registration workflow is an ordinary rielflow workflow invoked from
 a chat event binding. Its output must be structured. A ready decision includes:
 
 - selected workflow name and workflow source scope or directory when available
@@ -199,7 +199,7 @@ The fired normalized envelope uses:
 
 ```json
 {
-  "provider": "divedra-scheduler",
+  "provider": "rielflow-scheduler",
   "eventType": "workflow.schedule.due",
   "input": {
     "scheduleId": "sched_123",
@@ -227,7 +227,7 @@ the workflow engine directly from the timer callback. This preserves:
 - duplicate detection
 
 The internal scheduler source can be represented as a runtime-owned source with
-provider `divedra-scheduler` and event type `workflow.schedule.due`. Bindings
+provider `rielflow-scheduler` and event type `workflow.schedule.due`. Bindings
 may be generated internally from the persisted schedule record, or routed
 through a dedicated scheduler dispatch binding. The implementation plan should
 pick the smaller change that still records normal event receipts.
@@ -360,7 +360,7 @@ Schedule firing fails or records a failed attempt when:
 
 The first design default is conservative:
 
-- one-time schedules whose due time passed while divedra was stopped fire once
+- one-time schedules whose due time passed while rielflow was stopped fire once
   on startup, then complete
 - recurring schedules enqueue only the next due occurrence on startup by
   default; catch-up of every missed occurrence is out of scope
@@ -375,7 +375,7 @@ Alternative missed-run policies are tracked in user Q&A.
 - Keep `workflow-schedule`, `cron`, and `workflow-sleep` on one scheduled event
   manager.
 - Do not store schedules under workflow definition directories or authored
-  `.divedra-events` config.
+  `.rielflow-events` config.
 - Do not add or preserve a parallel schedule-registration path policy for
   resolver input or timezone selection; use event binding `inputMapping`
   instead.
@@ -391,7 +391,7 @@ Alternative missed-run policies are tracked in user Q&A.
 The expected local reference root is `../../codex-agent`. It was not available
 during this design update, so no codex-agent files were inspected. This feature
 does not intentionally diverge from Codex behavior because Codex does not own
-event scheduling semantics in divedra. Relevant backend references remain
+event scheduling semantics in rielflow. Relevant backend references remain
 limited to preserving agent backend isolation for `codex-agent` and
 `cursor-cli-agent` when scheduled workflows eventually execute worker nodes.
 
@@ -407,7 +407,7 @@ rg -n "workflow-schedule|workflow.schedule.due|events schedules" design-docs src
 bun run typecheck
 bun test src/events/workflow-schedule-registration.test.ts src/events/workflow-schedule-dispatch.test.ts src/events/workflow-schedule-registry.test.ts
 bun run lint:biome
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun test src/events/scheduled-event-manager.test.ts src/events/adapters/cron.test.ts src/events/listener-service.test.ts
 bun test src/events/trigger-runner*.test.ts src/events/*task-planning*.test.ts src/events/*supervisor*.test.ts
 bun test src/cli.test.ts

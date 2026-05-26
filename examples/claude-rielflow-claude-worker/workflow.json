@@ -1,0 +1,83 @@
+{
+  "workflowId": "claude-rielflow-claude-worker",
+  "description": "Reference workflow that keeps both rielflow coordination and the task node on claude-code-agent, authored in the step-addressed workflow shape.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "rielflowPromptTemplate": "Coordinate {{workflowId}} so the claude-code managers hand off one bounded task to a claude-code worker and keep the result concise.",
+    "workerSystemPromptTemplate": "Work only on the current node responsibility and return a concise business JSON payload."
+  },
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
+  "nodes": [
+    {
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
+    },
+    {
+      "id": "main-rielflow",
+      "nodeFile": "nodes/node-main-rielflow.json"
+    },
+    {
+      "id": "workflow-input",
+      "nodeFile": "nodes/node-workflow-input.json"
+    },
+    {
+      "id": "claude-task",
+      "nodeFile": "nodes/node-claude-task.json"
+    },
+    {
+      "id": "workflow-output",
+      "nodeFile": "nodes/node-workflow-output.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
+      "role": "manager",
+      "transitions": [
+        {
+          "toStepId": "main-rielflow"
+        }
+      ]
+    },
+    {
+      "id": "main-rielflow",
+      "nodeId": "main-rielflow",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-input"
+        }
+      ]
+    },
+    {
+      "id": "workflow-input",
+      "nodeId": "workflow-input",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "claude-task"
+        }
+      ]
+    },
+    {
+      "id": "claude-task",
+      "nodeId": "claude-task",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "workflow-output"
+        }
+      ]
+    },
+    {
+      "id": "workflow-output",
+      "nodeId": "workflow-output",
+      "role": "worker"
+    }
+  ]
+}

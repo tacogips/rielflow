@@ -19,7 +19,7 @@ Implemented local HTTP serve MVP with workflow/session APIs and CLI `serve` comm
 
 ### Scope
 **Included**:
-- `divedra serve [workflow-name]`
+- `rielflow serve [workflow-name]`
 - Workflow APIs: list/get/validate
 - Execution APIs: execute/status/cancel
 - Local bind defaults and read-only/no-exec safeguards

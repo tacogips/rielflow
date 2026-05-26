@@ -176,15 +176,15 @@ inspectable.
 The Matrix send/receive sample should verify outbound delivery through the
 normal destination publisher and Matrix source adapter boundary. It should not
 special-case Matrix sends inside the workflow or script around the
-`divedra/chat-reply-worker` add-on.
+`rielflow/chat-reply-worker` add-on.
 
 The expected local sample mapping is:
 
-- source: `examples/event-sources/.divedra-events/sources/team-matrix.json`
+- source: `examples/event-sources/.rielflow-events/sources/team-matrix.json`
 - binding:
-  `examples/event-sources/.divedra-events/bindings/matrix-release-chat-to-workflow.json`
+  `examples/event-sources/.rielflow-events/bindings/matrix-release-chat-to-workflow.json`
 - destination:
-  `examples/event-sources/.divedra-events/destinations/release-matrix-chat.json`
+  `examples/event-sources/.rielflow-events/destinations/release-matrix-chat.json`
 - workflow: `examples/chat-reply-webhook`
 - live verification root: `examples/event-sources/matrix/`
 
@@ -254,7 +254,7 @@ repository as a behavioral reference only:
 - `../../codex-agent/src/queue/runner.ts` is a reference for deterministic runner-owned progress emission.
 - `../../codex-agent/design-docs/specs/design-codex-session-management.md` is a reference for session event persistence boundaries.
 
-Divedra intentionally diverges by routing external event outputs through repository-local event adapters, runtime receipts, and workflow/supervisor contracts instead of mirroring Codex CLI session streams directly.
+Rielflow intentionally diverges by routing external event outputs through repository-local event adapters, runtime receipts, and workflow/supervisor contracts instead of mirroring Codex CLI session streams directly.
 
 The Matrix send/receive sample issue has no Codex-reference input. Step 4 should
 therefore treat the repository-local event-source and output-destination design

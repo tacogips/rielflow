@@ -23,7 +23,7 @@ Codex-reference mapping:
 - No codex-agent reference repository, file paths, or behavior inputs were
   supplied.
 - No Cursor adapter behavior is involved.
-- Implementation should follow local divedra behavior, tests, and the accepted
+- Implementation should follow local rielflow behavior, tests, and the accepted
   architecture boundary instead of importing external reference behavior.
 
 In scope:

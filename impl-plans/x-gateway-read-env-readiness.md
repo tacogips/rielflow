@@ -1,21 +1,21 @@
 # X Gateway Read Env Readiness Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-divedrax-gateway-read`
+**Design Reference**: `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md#built-in-rielflowx-gateway-read`
 **Created**: 2026-04-20
 **Last Updated**: 2026-04-20
 
 ## Design Summary
 
 Runtime readiness must represent all prerequisites that can make a workflow fail
-before useful node execution begins. `divedra/x-gateway-read` already validates
+before useful node execution begins. `rielflow/x-gateway-read` already validates
 and resolves explicit `addon.env` mappings, but readiness previously reported
 only the Docker-compatible container runner. This plan adds readiness coverage
 for required mapped source environment variables.
 
 Scope:
 
-- Required non-empty `addon.env` source variables for `divedra/x-gateway-read`.
+- Required non-empty `addon.env` source variables for `rielflow/x-gateway-read`.
 - Optional bindings with `required: false` remain non-blocking.
 - Readiness output must not expose environment variable values.
 
@@ -116,7 +116,7 @@ interface AddonEnvRequirementCandidate {
 **Tasks In Progress**: None.
 **Blockers**: None.
 **Notes**: Added environment-variable readiness requirements for required
-`divedra/x-gateway-read` add-on env sources, plus targeted coverage and design
+`rielflow/x-gateway-read` add-on env sources, plus targeted coverage and design
 updates.
 
 ### Session: 2026-04-20 21:30

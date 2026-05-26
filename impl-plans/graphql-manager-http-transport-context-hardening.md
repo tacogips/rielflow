@@ -1,7 +1,7 @@
 # GraphQL Manager HTTP Transport Context Hardening Implementation Plan
 
 **Status**: Completed
-**Design Reference**: design-docs/specs/design-graphql-manager-control-plane.md#manager-send-semantics, design-docs/specs/architecture.md#local-http-server-divedra-serve
+**Design Reference**: design-docs/specs/design-graphql-manager-control-plane.md#manager-send-semantics, design-docs/specs/architecture.md#local-http-server-rielflow-serve
 **Created**: 2026-03-15
 **Last Updated**: 2026-03-15
 

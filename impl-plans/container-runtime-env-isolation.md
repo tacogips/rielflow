@@ -50,7 +50,7 @@ function buildContainerEnv(
 
 - [x] Keep command nodes compatible with ambient host env inheritance
 - [x] Keep runner CLI processes compatible with ambient host env inheritance
-- [x] Limit container `-e` entries to explicit workflow env and Divedra runtime env
+- [x] Limit container `-e` entries to explicit workflow env and Rielflow runtime env
 - [x] Unit tests
 
 ---

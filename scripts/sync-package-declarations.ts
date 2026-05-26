@@ -36,7 +36,7 @@ interface PackageDeclarationContract {
 
 const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
   {
-    packageName: "divedra",
+    packageName: "rielflow",
     supportDirs: [
       "cli",
       "events",
@@ -48,153 +48,153 @@ const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
     ],
     supportDeclarations: [
       {
-        source: "packages/divedra/src/lib-continuation.d.ts",
+        source: "packages/rielflow/src/lib-continuation.d.ts",
         target: "lib-continuation.d.ts",
         rewriteRootSourceImports: true,
       },
       {
-        source: "packages/divedra/src/lib-sessions.d.ts",
+        source: "packages/rielflow/src/lib-sessions.d.ts",
         target: "lib-sessions.d.ts",
         rewriteRootSourceImports: true,
       },
       {
-        source: "packages/divedra/src/lib-step-runs.d.ts",
+        source: "packages/rielflow/src/lib-step-runs.d.ts",
         target: "lib-step-runs.d.ts",
         rewriteRootSourceImports: true,
       },
       {
-        source: "packages/divedra/src/lib-workflow-run-options.d.ts",
+        source: "packages/rielflow/src/lib-workflow-run-options.d.ts",
         target: "lib-workflow-run-options.d.ts",
         rewriteRootSourceImports: true,
       },
     ],
     exports: [
       {
-        source: "packages/divedra/src/index.d.ts",
+        source: "packages/rielflow/src/index.d.ts",
         target: "lib.d.ts",
         rewriteRootSourceImports: true,
       },
       {
-        source: "packages/divedra/src/cli.d.ts",
+        source: "packages/rielflow/src/cli.d.ts",
         target: "cli.d.ts",
         rewriteRootSourceImports: true,
       },
       {
-        source: "packages/divedra/src/bin.d.ts",
+        source: "packages/rielflow/src/bin.d.ts",
         target: "main.d.ts",
         rewriteRootSourceImports: true,
       },
     ],
   },
   {
-    packageName: "divedra-core",
-    supportSourcePackageName: "divedra",
+    packageName: "rielflow-core",
+    supportSourcePackageName: "rielflow",
     supportDirs: ["shared", "workflow"],
     supportDeclarations: [
       {
-        source: "packages/divedra-core/src/authored-node.d.ts",
+        source: "packages/rielflow-core/src/authored-node.d.ts",
         target: "authored-node.d.ts",
       },
       {
-        source: "packages/divedra-core/src/authored-workflow.d.ts",
+        source: "packages/rielflow-core/src/authored-workflow.d.ts",
         target: "authored-workflow.d.ts",
       },
       {
-        source: "packages/divedra-core/src/json-schema.d.ts",
+        source: "packages/rielflow-core/src/json-schema.d.ts",
         target: "json-schema.d.ts",
       },
       {
-        source: "packages/divedra-core/src/node-template-fields.d.ts",
+        source: "packages/rielflow-core/src/node-template-fields.d.ts",
         target: "node-template-fields.d.ts",
       },
       {
-        source: "packages/divedra-core/src/paths.d.ts",
+        source: "packages/rielflow-core/src/paths.d.ts",
         target: "paths.d.ts",
       },
       {
-        source: "packages/divedra-core/src/prompt-template-file.d.ts",
+        source: "packages/rielflow-core/src/prompt-template-file.d.ts",
         target: "prompt-template-file.d.ts",
       },
       {
-        source: "packages/divedra-core/src/prompt-template-context.d.ts",
+        source: "packages/rielflow-core/src/prompt-template-context.d.ts",
         target: "prompt-template-context.d.ts",
       },
       {
-        source: "packages/divedra-core/src/render.d.ts",
+        source: "packages/rielflow-core/src/render.d.ts",
         target: "render.d.ts",
       },
       {
-        source: "packages/divedra-core/src/result.d.ts",
+        source: "packages/rielflow-core/src/result.d.ts",
         target: "result.d.ts",
       },
       {
-        source: "packages/divedra-core/src/runtime-prompt-assets.d.ts",
+        source: "packages/rielflow-core/src/runtime-prompt-assets.d.ts",
         target: "runtime-prompt-assets.d.ts",
       },
       {
-        source: "packages/divedra-core/src/workflow-bundle-input.d.ts",
+        source: "packages/rielflow-core/src/workflow-bundle-input.d.ts",
         target: "workflow-bundle-input.d.ts",
       },
       {
-        source: "packages/divedra-core/src/workflow-validation.d.ts",
+        source: "packages/rielflow-core/src/workflow-validation.d.ts",
         target: "workflow-validation.d.ts",
       },
       {
-        source: "packages/divedra-core/src/workflow-model.d.ts",
+        source: "packages/rielflow-core/src/workflow-model.d.ts",
         target: "workflow-model.d.ts",
       },
     ],
     exports: [
       {
-        source: "packages/divedra-core/src/index.d.ts",
+        source: "packages/rielflow-core/src/index.d.ts",
         target: "index.d.ts",
         rewriteRootSourceImports: true,
       },
     ],
   },
   {
-    packageName: "divedra-addons",
+    packageName: "rielflow-addons",
     supportDirs: ["shared", "workflow"],
     supportDeclarations: [
       {
-        source: "packages/divedra-addons/src/addon-source-summary.d.ts",
+        source: "packages/rielflow-addons/src/addon-source-summary.d.ts",
         target: "addon-source-summary.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/local-node-addons.d.ts",
+        source: "packages/rielflow-addons/src/local-node-addons.d.ts",
         target: "local-node-addons.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/mailbox-prompt-guidance.d.ts",
+        source: "packages/rielflow-addons/src/mailbox-prompt-guidance.d.ts",
         target: "mailbox-prompt-guidance.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/native-node-executor",
+        source: "packages/rielflow-addons/src/native-node-executor",
         target: "native-node-executor",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/node-addons.d.ts",
+        source: "packages/rielflow-addons/src/node-addons.d.ts",
         target: "node-addons.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/node-addons",
+        source: "packages/rielflow-addons/src/node-addons",
         target: "node-addons",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-addons/src/runtime-readiness.d.ts",
+        source: "packages/rielflow-addons/src/runtime-readiness.d.ts",
         target: "runtime-readiness.d.ts",
         rewritePackageSourceImports: true,
       },
     ],
     exports: [
       {
-        source: "packages/divedra-addons/src/index.d.ts",
+        source: "packages/rielflow-addons/src/index.d.ts",
         target: "index.d.ts",
         rewriteRootSourceImports: true,
         rewritePackageSourceImports: true,
@@ -202,179 +202,179 @@ const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
     ],
   },
   {
-    packageName: "divedra-adapters",
+    packageName: "rielflow-adapters",
     supportDirs: [],
     supportDeclarations: [
       {
-        source: "packages/divedra-adapters/src/anthropic-sdk.d.ts",
+        source: "packages/rielflow-adapters/src/anthropic-sdk.d.ts",
         target: "anthropic-sdk.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/claude.d.ts",
+        source: "packages/rielflow-adapters/src/claude.d.ts",
         target: "claude.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/codex.d.ts",
+        source: "packages/rielflow-adapters/src/codex.d.ts",
         target: "codex.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/cursor.d.ts",
+        source: "packages/rielflow-adapters/src/cursor.d.ts",
         target: "cursor.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/dispatch.d.ts",
+        source: "packages/rielflow-adapters/src/dispatch.d.ts",
         target: "dispatch.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/llm-session-stall-watch.d.ts",
+        source: "packages/rielflow-adapters/src/llm-session-stall-watch.d.ts",
         target: "llm-session-stall-watch.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/local-agent.d.ts",
+        source: "packages/rielflow-adapters/src/local-agent.d.ts",
         target: "local-agent.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/openai-sdk.d.ts",
+        source: "packages/rielflow-adapters/src/openai-sdk.d.ts",
         target: "openai-sdk.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-adapters/src/shared.d.ts",
+        source: "packages/rielflow-adapters/src/shared.d.ts",
         target: "shared.d.ts",
         rewritePackageSourceImports: true,
       },
     ],
     exports: [
       {
-        source: "packages/divedra-adapters/src/index.d.ts",
+        source: "packages/rielflow-adapters/src/index.d.ts",
         target: "index.d.ts",
         rewritePackageSourceImports: true,
       },
     ],
   },
   {
-    packageName: "divedra-events",
+    packageName: "rielflow-events",
     supportDirs: [],
     supportDeclarations: [
       {
-        source: "packages/divedra-events/src/path-resolution.d.ts",
+        source: "packages/rielflow-events/src/path-resolution.d.ts",
         target: "path-resolution.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-events/src/runtime-ports.d.ts",
+        source: "packages/rielflow-events/src/runtime-ports.d.ts",
         target: "runtime-ports.d.ts",
         rewritePackageSourceImports: true,
       },
       {
-        source: "packages/divedra-events/src/types.d.ts",
+        source: "packages/rielflow-events/src/types.d.ts",
         target: "types.d.ts",
         rewritePackageSourceImports: true,
       },
     ],
     exports: [
       {
-        source: "packages/divedra-events/src/index.d.ts",
+        source: "packages/rielflow-events/src/index.d.ts",
         target: "index.d.ts",
         rewritePackageSourceImports: true,
       },
     ],
   },
   {
-    packageName: "divedra-graphql",
+    packageName: "rielflow-graphql",
     supportDirs: [],
     supportDeclarations: [
       {
-        source: "packages/divedra-graphql/src/control-plane-service.d.ts",
+        source: "packages/rielflow-graphql/src/control-plane-service.d.ts",
         target: "control-plane-service.d.ts",
       },
       {
-        source: "packages/divedra-graphql/src/dto.d.ts",
+        source: "packages/rielflow-graphql/src/dto.d.ts",
         target: "dto.d.ts",
       },
       {
-        source: "packages/divedra-graphql/src/schema-contract.d.ts",
+        source: "packages/rielflow-graphql/src/schema-contract.d.ts",
         target: "schema-contract.d.ts",
       },
     ],
     exports: [
       {
-        source: "packages/divedra-graphql/src/index.d.ts",
+        source: "packages/rielflow-graphql/src/index.d.ts",
         target: "index.d.ts",
       },
     ],
   },
   {
-    packageName: "divedra-hook",
+    packageName: "rielflow-hook",
     supportDirs: [],
     supportDeclarations: [
       {
-        source: "packages/divedra-hook/src/config.d.ts",
+        source: "packages/rielflow-hook/src/config.d.ts",
         target: "config.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/context.d.ts",
+        source: "packages/rielflow-hook/src/context.d.ts",
         target: "context.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/detect-vendor.d.ts",
+        source: "packages/rielflow-hook/src/detect-vendor.d.ts",
         target: "detect-vendor.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/dispatch.d.ts",
+        source: "packages/rielflow-hook/src/dispatch.d.ts",
         target: "dispatch.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/handler.d.ts",
+        source: "packages/rielflow-hook/src/handler.d.ts",
         target: "handler.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/parse.d.ts",
+        source: "packages/rielflow-hook/src/parse.d.ts",
         target: "parse.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/recorder-contracts.d.ts",
+        source: "packages/rielflow-hook/src/recorder-contracts.d.ts",
         target: "recorder-contracts.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/redaction.d.ts",
+        source: "packages/rielflow-hook/src/redaction.d.ts",
         target: "redaction.d.ts",
       },
       {
-        source: "packages/divedra-hook/src/types.d.ts",
+        source: "packages/rielflow-hook/src/types.d.ts",
         target: "types.d.ts",
       },
     ],
     exports: [
       {
-        source: "packages/divedra-hook/src/index.d.ts",
+        source: "packages/rielflow-hook/src/index.d.ts",
         target: "index.d.ts",
       },
     ],
   },
   {
-    packageName: "divedra-server",
+    packageName: "rielflow-server",
     supportDirs: [],
     supportDeclarations: [
       {
-        source: "packages/divedra-server/src/browser-overview.d.ts",
+        source: "packages/rielflow-server/src/browser-overview.d.ts",
         target: "browser-overview.d.ts",
       },
       {
-        source: "packages/divedra-server/src/contracts.d.ts",
+        source: "packages/rielflow-server/src/contracts.d.ts",
         target: "contracts.d.ts",
       },
     ],
     exports: [
       {
-        source: "packages/divedra-server/src/index.d.ts",
+        source: "packages/rielflow-server/src/index.d.ts",
         target: "index.d.ts",
       },
     ],
@@ -478,8 +478,8 @@ async function copyDeclarationSupport(
 
 function rewritePackageSourceImports(source: string): string {
   return source.replaceAll(
-    /(["'])(?:\.\.\/)+divedra-core\/src\/(?:index|adapter-contracts)\1/gu,
-    '"divedra-core"',
+    /(["'])(?:\.\.\/)+rielflow-core\/src\/(?:index|adapter-contracts)\1/gu,
+    '"rielflow-core"',
   );
 }
 
@@ -583,7 +583,7 @@ for (const contract of packageDeclarationContracts) {
 }
 
 await writeFile(
-  path.join(rootDir, "packages", "divedra-core", "dist", "index.js"),
+  path.join(rootDir, "packages", "rielflow-core", "dist", "index.js"),
   'export * from "./core-runtime.js";\n',
   "utf8",
 );
@@ -591,7 +591,7 @@ await writeFile(
 const adapterRuntimeEntrypoint = path.join(
   rootDir,
   "packages",
-  "divedra-adapters",
+  "rielflow-adapters",
   "dist",
   "index.js",
 );
@@ -599,8 +599,8 @@ const adapterRuntimeSource = await readFile(adapterRuntimeEntrypoint, "utf8");
 await writeFile(
   adapterRuntimeEntrypoint,
   adapterRuntimeSource.replaceAll(
-    '"divedra-core"',
-    '"../../divedra-core/dist/index.js"',
+    '"rielflow-core"',
+    '"../../rielflow-core/dist/index.js"',
   ),
   "utf8",
 );

@@ -10,7 +10,7 @@ Parent tracker:
 
 ## Completion (2026-04-29 follow-up)
 
-The remaining live residue called out in the prior snapshot is resolved: `parseRerunTargetWorkflowControlArguments` no longer contains a dedicated `rerunFromNodeId` branch. Nested `divedra/rerun-workflow` uses an **allowlist** of supported argument keys; any other key (including former node-addressed names) is rejected with a single generic error shape.
+The remaining live residue called out in the prior snapshot is resolved: `parseRerunTargetWorkflowControlArguments` no longer contains a dedicated `rerunFromNodeId` branch. Nested `rielflow/rerun-workflow` uses an **allowlist** of supported argument keys; any other key (including former node-addressed names) is rejected with a single generic error shape.
 
 **Completed?**
 

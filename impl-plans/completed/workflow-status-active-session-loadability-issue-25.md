@@ -13,7 +13,7 @@
 
 ### Summary
 
-Resolve `tacogips/divedra#25`, the follow-up to `tacogips/divedra#23` and `tacogips/divedra#24`: `workflow status design-and-implement-review-loop --workflow-definition-dir <ign-worktree>/divedra-workflows` must not report `aggregateStatus: running`, `activeExecutionCount: 4`, or `newestActiveExecution` from session ids that direct `session status <id>` cannot load under the same workflow-definition-dir and storage options.
+Resolve `tacogips/rielflow#25`, the follow-up to `tacogips/rielflow#23` and `tacogips/rielflow#24`: `workflow status design-and-implement-review-loop --workflow-definition-dir <ign-worktree>/rielflow-workflows` must not report `aggregateStatus: running`, `activeExecutionCount: 4`, or `newestActiveExecution` from session ids that direct `session status <id>` cannot load under the same workflow-definition-dir and storage options.
 
 The accepted design makes persisted `WorkflowSessionState` loaded through the selected session store the primary authority for active overview rows. Runtime DB `sessions` rows, session indexes, cached overview records, and previous-root records are secondary only; they may enrich a summary after primary session load succeeds, but they must never independently mark a workflow as `running` or `paused`.
 
@@ -35,9 +35,9 @@ The accepted design makes persisted `WorkflowSessionState` loaded through the se
 
 ### Codex Reference Trace
 
-- `https://github.com/tacogips/divedra/issues/25`: primary issue report and acceptance behavior.
-- `https://github.com/tacogips/divedra/issues/23`: prior storage-context/loadability issue that was only partially fixed.
-- `https://github.com/tacogips/divedra/pull/24`: prior implementation context.
+- `https://github.com/tacogips/rielflow/issues/25`: primary issue report and acceptance behavior.
+- `https://github.com/tacogips/rielflow/issues/23`: prior storage-context/loadability issue that was only partially fixed.
+- `https://github.com/tacogips/rielflow/pull/24`: prior implementation context.
 - `codex-agent`: execution backend/reference signal only; no implementation behavior is copied.
 - `../../codex-agent`: preferred local reference path recorded by design as unavailable in this worktree context.
 
@@ -115,7 +115,7 @@ interface Issue25DirectWorkflowStatusFixture {
 
 **Checklist**:
 
-- [x] Reproduce the issue shape with `workflow status design-and-implement-review-loop --workflow-definition-dir <fixture>/divedra-workflows --output json`.
+- [x] Reproduce the issue shape with `workflow status design-and-implement-review-loop --workflow-definition-dir <fixture>/rielflow-workflows --output json`.
 - [x] Seed stale ids matching the issue pattern, including `div-design-and-implement-review-loop-1777861733-fe70502e`, without corresponding primary session payloads.
 - [x] Assert `activeExecutionCount` excludes all unloadable stale ids.
 - [x] Assert `newestActiveExecution` is `null` or points only to a loadable active session.
@@ -163,7 +163,7 @@ interface ImplementationProgressEntry {
 - [x] Update this plan's progress log after each implementation session.
 - [x] Refresh user-facing docs only if final operator output or diagnostics change beyond the accepted design-doc wording.
 - [x] Record any intentional divergence from the accepted Step 2 design.
-- [x] Keep issue references to `tacogips/divedra#25`, `#23`, and `#24` explicit.
+- [x] Keep issue references to `tacogips/rielflow#25`, `#23`, and `#24` explicit.
 
 ---
 
@@ -300,13 +300,13 @@ git diff --check
 Optional manual smoke check if a fixture workflow root is available:
 
 ```bash
-bun run src/main.ts workflow status design-and-implement-review-loop --workflow-definition-dir <ign-worktree>/divedra-workflows --output json
-bun run src/main.ts session status div-design-and-implement-review-loop-1777861733-fe70502e --workflow-definition-dir <ign-worktree>/divedra-workflows --output json
+bun run src/main.ts workflow status design-and-implement-review-loop --workflow-definition-dir <ign-worktree>/rielflow-workflows --output json
+bun run src/main.ts session status div-design-and-implement-review-loop-1777861733-fe70502e --workflow-definition-dir <ign-worktree>/rielflow-workflows --output json
 ```
 
 ## Completion Criteria
 
-- [x] Issue `tacogips/divedra#25` acceptance signals are covered by tests.
+- [x] Issue `tacogips/rielflow#25` acceptance signals are covered by tests.
 - [x] `workflow status` excludes unloadable active candidates from `activeExecutionCount`, `newestActiveExecution`, active recent rows, and aggregate running/paused derivation.
 - [x] `workflow list`, GraphQL overview, and browser overview preserve parity through shared overview builders.
 - [x] Direct `session status` not-found behavior remains scoped and does not search unrelated roots.
@@ -357,9 +357,9 @@ bun run src/main.ts session status div-design-and-implement-review-loop-17778617
 
 **Tasks Completed**: TASK-003 follow-up, TASK-005 verification refresh.
 
-**Notes**: Addressed the high-severity Step 6 self-review finding for the exact issue #25 direct-root shape. `resolveSessionCommandStorageOptions` now treats an explicit `--workflow-definition-dir` that is not under a recognized `.divedra/workflows` scope as direct storage instead of falling through to the current working directory's project scope. Added a regression for `<fixture>/divedra-workflows` proving `workflow status` and `session status` share the same direct storage context for the reported `div-design-and-implement-review-loop-1777861733-fe70502e` id. Renamed the previous stale runtime DB CLI regression to clarify it covers the project-scoped `.divedra/workflows` path. Updated `impl-plans/README.md` status to match this plan's completed state. No `codex-agent` provider or backend adapter behavior was changed.
+**Notes**: Addressed the high-severity Step 6 self-review finding for the exact issue #25 direct-root shape. `resolveSessionCommandStorageOptions` now treats an explicit `--workflow-definition-dir` that is not under a recognized `.rielflow/workflows` scope as direct storage instead of falling through to the current working directory's project scope. Added a regression for `<fixture>/rielflow-workflows` proving `workflow status` and `session status` share the same direct storage context for the reported `div-design-and-implement-review-loop-1777861733-fe70502e` id. Renamed the previous stale runtime DB CLI regression to clarify it covers the project-scoped `.rielflow/workflows` path. Updated `impl-plans/README.md` status to match this plan's completed state. No `codex-agent` provider or backend adapter behavior was changed.
 
-**Addressed Feedback**: Step 6 self-review high finding on non-scoped direct workflow-definition-dir storage mismatch was fixed in `packages/divedra/src/cli/storage-and-options.ts` and covered in `src/cli.test.ts`.
+**Addressed Feedback**: Step 6 self-review high finding on non-scoped direct workflow-definition-dir storage mismatch was fixed in `packages/rielflow/src/cli/storage-and-options.ts` and covered in `src/cli.test.ts`.
 
 **Verification**:
 
@@ -367,6 +367,6 @@ bun run src/main.ts session status div-design-and-implement-review-loop-17778617
 - `bun test src/cli.test.ts -t "workflow status excludes unloadable runtime-db active sessions in project-scoped workflow-definition context"` passed.
 - `bun test src/cli.test.ts -t "workflow status"` passed.
 - `bun test src/workflow/overview.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql-queries-and-inspection.test.ts` passed.
-- `biome check packages/divedra/src/cli/storage-and-options.ts src/workflow/overview.ts src/workflow/overview.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql-queries-and-inspection.test.ts --diagnostic-level=warn` passed.
+- `biome check packages/rielflow/src/cli/storage-and-options.ts src/workflow/overview.ts src/workflow/overview.test.ts src/cli.test.ts src/graphql/schema.test.ts src/server/graphql-queries-and-inspection.test.ts --diagnostic-level=warn` passed.
 - `bun run typecheck` passed.
 - `git diff --check` passed.

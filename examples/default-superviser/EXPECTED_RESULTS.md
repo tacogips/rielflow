@@ -1,7 +1,7 @@
 # Expected results (default-superviser)
 
 This directory holds the default **`superviserWorkflowId`** bundle
-(`divedra-default-superviser`) used when `--auto-improve` is combined with
+(`rielflow-default-superviser`) used when `--auto-improve` is combined with
 `--nested-superviser` (or library `nestedSuperviserDriver`).
 
 It is a **reference shape** for phase-2 supervision: the engine injects

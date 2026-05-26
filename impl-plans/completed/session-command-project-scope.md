@@ -7,14 +7,14 @@
 
 ## Goal
 
-Make local `divedra session ...` commands discover project-scoped session state
-without requiring operators to pass `--user-root <project>/.divedra`.
+Make local `rielflow session ...` commands discover project-scoped session state
+without requiring operators to pass `--user-root <project>/.rielflow`.
 
 ## Scope
 
 Included:
 
-- project `.divedra/artifacts/sessions` discovery from the current working
+- project `.rielflow/artifacts/sessions` discovery from the current working
   directory for local session commands
 - preservation of explicit storage overrides such as `--session-store`,
   `--artifact-root`, `--user-root`, and matching environment variables
@@ -31,7 +31,7 @@ Excluded:
 - `src/cli.ts`: infer project-scoped root data for session commands when no
   explicit storage override is provided.
 - `src/cli.test.ts`: verify `session status` loads a project-local session from
-  `.divedra/artifacts/sessions` by current working directory alone.
+  `.rielflow/artifacts/sessions` by current working directory alone.
 
 ## Completion Criteria
 
@@ -52,7 +52,7 @@ added regression coverage.
 
 - `bun test src/cli.test.ts -t "session status discovers project-local session store from cwd"`
 - `bun run typecheck`
-- `bun run divedra/src/main.ts session status div-design-and-implement-review-loop-1777949666-19515852 --output json`
+- `bun run rielflow/src/main.ts session status div-design-and-implement-review-loop-1777949666-19515852 --output json`
 
 ### Session: 2026-05-05 (follow-up review)
 

@@ -81,8 +81,8 @@ export formats.
 
 ## Completion Criteria
 
-- [x] `divedra session export <session-id>` works locally
-- [x] `divedra session logs <session-id> --format jsonl` works locally
+- [x] `rielflow session export <session-id>` works locally
+- [x] `rielflow session logs <session-id> --format jsonl` works locally
 - [x] `--file` writes a JSON export bundle
 - [x] Regression tests pass
 - [x] Type checking passes
@@ -101,13 +101,13 @@ new persistence path.
 **Tasks Completed**: CLI export command, file output path, regression tests, and docs updates
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Implemented local `divedra export <workflow-id> <workflow-run-id>` with `--file`, verified workflow-id/workflow-run-id matching, and exported a canonical bundle containing session state, runtime node execution rows, runtime node logs, and communication snapshots.
+**Notes**: Implemented local `rielflow export <workflow-id> <workflow-run-id>` with `--file`, verified workflow-id/workflow-run-id matching, and exported a canonical bundle containing session state, runtime node execution rows, runtime node logs, and communication snapshots.
 
 ### Session: 2026-04-17
 **Tasks Completed**: Renamed ambiguous top-level export surface to session-scoped commands
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Replaced `divedra export <workflow-id> <workflow-run-id>` with `divedra session export <session-id>` so the command reads as a workflow-run/session artifact export rather than a workflow-definition export. Added `divedra session logs <session-id> --format text|json|jsonl` for the narrower log-viewing use case.
+**Notes**: Replaced `rielflow export <workflow-id> <workflow-run-id>` with `rielflow session export <session-id>` so the command reads as a workflow-run/session artifact export rather than a workflow-definition export. Added `rielflow session logs <session-id> --format text|json|jsonl` for the narrower log-viewing use case.
 
 ## Related Plans
 

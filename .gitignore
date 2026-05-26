@@ -53,16 +53,16 @@ impl-plans/.progress.lock
 **/.envrc.private*
 .private*/
 
-# divedra runtime artifacts and session store (default paths)
-.divedra/artifacts/
-.divedra/artifacts/**
-.divedra/logs/
-.divedra/logs/**
-.divedra-data/
-.divedra-data/**
-.divedra-opt/
-.divedra-opt/**
-.divedra-artifact/
-.divedra-artifact/**
-.divedra-datas/
-.divedra-datas/**
+# rielflow runtime artifacts and session store (default paths)
+.rielflow/artifacts/
+.rielflow/artifacts/**
+.rielflow/logs/
+.rielflow/logs/**
+.rielflow-data/
+.rielflow-data/**
+.rielflow-opt/
+.rielflow-opt/**
+.rielflow-artifact/
+.rielflow-artifact/**
+.rielflow-datas/
+.rielflow-datas/**

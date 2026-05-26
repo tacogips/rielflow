@@ -15,7 +15,7 @@ surfaces, while the supervisor becomes the preferred consumer of external input
 for interactive sources and the preferred publisher of control/progress output
 for those same sources.
 
-For chat, web app, and other interactive event sources, divedra also needs a
+For chat, web app, and other interactive event sources, rielflow also needs a
 supervised control path:
 
 ```text
@@ -55,7 +55,7 @@ operator-facing `supervisor` naming migration are implemented as described in
   restart, or inspect the same running workflow.
 - Make supervisor-based execution usable from chat adapters, web-chat adapters,
   CLI event serving, GraphQL, and library clients.
-- Treat the workflow supervisor itself as a divedra system workflow rather than
+- Treat the workflow supervisor itself as a rielflow system workflow rather than
   a separate orchestration model.
 - Provide a default supervisor policy: no automatic workflow improvement,
   restart failed target workflows up to a configured limit, and stop after the
@@ -139,7 +139,7 @@ and `impl-plans/completed/event-supervisor-control-review-hardening.md`:
 the authored workflow named in `supervisorWorkflowName`. The deterministic follow-up keeps that native
 runtime ownership and formalizes it as an in-process workflow-runner pool. The supervisor is still represented
 by the default supervisor workflow name for policy, audit, and future packaging, but default lifecycle control
-does not shell out to a `divedra` binary and does not make the supervisor itself an LLM-backed node.
+does not shell out to a `rielflow` binary and does not make the supervisor itself an LLM-backed node.
 LLM-backed command analysis remains an explicit fallback parser node, not the supervisor authority.
 
 ### Phase 4 implementation (natural-language supervisor control)
@@ -153,7 +153,7 @@ Implemented per `impl-plans/completed/supervisor-natural-language-control.md`:
 
 ### Remaining / follow-up (not Phase 1)
 
-- Packaged default workflow bundle `divedra-default-workflow-supervisor` and execution path that populates
+- Packaged default workflow bundle `rielflow-default-workflow-supervisor` and execution path that populates
   `supervisorExecutionId` and delegates policy steps to authored nodes (see "Supervisor As A System Workflow").
 - Multi-workflow chat dispatch, where one supervisor conversation chooses among
   a profile-defined catalog of manageable workflows, is specified separately in
@@ -163,20 +163,20 @@ Implemented per `impl-plans/completed/supervisor-natural-language-control.md`:
 
 ## Supervisor As A System Workflow
 
-The target architecture is that the workflow supervisor is a divedra workflow
+The target architecture is that the workflow supervisor is a rielflow workflow
 stored and executed like any other workflow, with additional runtime-scoped
 system capabilities.
 
 Phase 1 implements the same **capability set** (start/status/cancel/rerun, durable supervised-run
 persistence) through the runtime-owned `WorkflowSupervisorClient` service rather than by shipping and
 executing the recommended workflow bundle. The next step is deterministic in-process runner-pool mode:
-package `divedra-default-workflow-supervisor` as the supervisor identity, execute lifecycle control through
+package `rielflow-default-workflow-supervisor` as the supervisor identity, execute lifecycle control through
 a native runner-pool service that calls the workflow engine in the same process, and keep authored LLM
 decision nodes opt-in.
 
 Recommended default workflow id:
 
-- `divedra-default-workflow-supervisor`
+- `rielflow-default-workflow-supervisor`
 
 Recommended system workflow steps:
 
@@ -210,7 +210,7 @@ with scoped authorization.
 ### Deterministic In-Process Runner-Pool Mode
 
 Default supervisor mode is deterministic. It is represented as the
-`divedra-default-workflow-supervisor` workflow, but the lifecycle-control step is
+`rielflow-default-workflow-supervisor` workflow, but the lifecycle-control step is
 a native in-process runner-pool service rather than an LLM manager node. The
 runner pool owns command persistence, active workflow handles, progress polling,
 and event-source reply materialization.
@@ -218,7 +218,7 @@ and event-source reply materialization.
 Hard boundaries:
 
 - deterministic mode runs target workflows asynchronously in the same process
-  through the workflow engine; it must not spawn a `divedra` child process for
+  through the workflow engine; it must not spawn a `rielflow` child process for
   supervisor lifecycle, inspection, or event-source command handling
 - the supervisor itself is deterministic and must not be an LLM-backed node
 - command-analysis LLM execution is a fallback parser only; its output is a
@@ -358,7 +358,7 @@ Relevant reference paths:
 - `../../codex-agent/src/process/manager.ts` (negative/contrast reference only)
 - `../../codex-agent/impl-plans/issue6-stable-runner-api.md`
 
-Concepts to reuse in divedra:
+Concepts to reuse in rielflow:
 
 - stable caller-facing runner facade hides whether a command starts new work,
   resumes existing work, or performs inspection
@@ -370,18 +370,18 @@ Concepts to reuse in divedra:
 
 Intentional divergences:
 
-- codex-agent manages `codex` subprocesses and Codex session events; divedra
-  deterministic supervisor mode manages in-process divedra workflow executions
+- codex-agent manages `codex` subprocesses and Codex session events; rielflow
+  deterministic supervisor mode manages in-process rielflow workflow executions
   and supervised workflow/event records
-- divedra persists command correlation in supervised-run records, event
+- rielflow persists command correlation in supervised-run records, event
   receipts, workflow sessions, and runtime DB rows rather than in codex-agent
   queue/session stores
 - Cursor/Codex/backend-specific behavior remains behind existing adapter
   modules; the deterministic runner pool accepts provider-neutral
   supervisor commands and emits provider-neutral status/reply payloads
-- divedra may use GraphQL for remote control-plane parity, but the local
+- rielflow may use GraphQL for remote control-plane parity, but the local
   deterministic supervisor runner pool must not shell out to the configured
-  `divedra` binary for lifecycle and inspection operations
+  `rielflow` binary for lifecycle and inspection operations
 
 Minimum supervisor-only capabilities:
 
@@ -437,7 +437,7 @@ Recommended supervised binding shape:
   "execution": {
     "mode": "supervised",
     "async": true,
-    "supervisorWorkflowName": "divedra-default-workflow-supervisor",
+    "supervisorWorkflowName": "rielflow-default-workflow-supervisor",
     "maxRestartsOnFailure": 3,
     "autoImprove": false,
     "control": {
@@ -462,7 +462,7 @@ Rules:
 - `supervisorWorkflowName` is the proposed event-layer field for the supervisor
   system workflow. The runtime may map it to existing `superviserWorkflowId`
   fields until naming is migrated.
-- `supervisorWorkflowName` defaults to `divedra-default-workflow-supervisor`.
+- `supervisorWorkflowName` defaults to `rielflow-default-workflow-supervisor`.
 - `maxRestartsOnFailure` must be finite; recommended default is 3.
 - `autoImprove` defaults to false in supervised mode.
 - a supervised binding must define a stable correlation key or use the default
@@ -594,7 +594,7 @@ unknown first-token text:
   "intentMapping": {
     "mode": "command-map",
     "inputPath": "event.input.text",
-    "resolverWorkflowName": "divedra-default-workflow-supervisor",
+    "resolverWorkflowName": "rielflow-default-workflow-supervisor",
     "resolverNodeId": "command-analysis",
     "minConfidence": 0.8,
     "fallbackAction": "proposal",
@@ -710,7 +710,7 @@ active target workflow status when known.
 3. Binding maps the event to `action = "start"` and
    `workflowName = "release-review"`.
 4. Event supervisor router starts or resumes
-   `divedra-default-workflow-supervisor` for the thread correlation key.
+   `rielflow-default-workflow-supervisor` for the thread correlation key.
 5. Supervisor starts the target workflow and persists the association.
 6. User later sends `stop` in the same chat thread.
 7. The same binding maps the event to `action = "stop"`.
@@ -720,7 +720,7 @@ active target workflow status when known.
 
 ### Web App Library Usage
 
-A web app embedding divedra should prefer a supervisor client rather than
+A web app embedding rielflow should prefer a supervisor client rather than
 calling raw workflow execution for interactive jobs:
 
 ```typescript
@@ -916,10 +916,10 @@ auto-improve patching:
 - event router integration for local and remote modes
 
 Phase 2 should implement the deterministic in-process runner-pool default. It
-packages `divedra-default-workflow-supervisor` as the supervisor identity and
+packages `rielflow-default-workflow-supervisor` as the supervisor identity and
 routes validated lifecycle commands to a native runner-pool service that starts,
 tracks, cancels, resumes, and reruns workflow executions asynchronously in the
-same process. This phase must not shell out to a configured `divedra` binary for
+same process. This phase must not shell out to a configured `rielflow` binary for
 deterministic target lifecycle, inspection, or event-source command handling.
 
 Phase 3 should add richer chat/web examples, status replies, and optional
@@ -959,7 +959,7 @@ supervisor run is created.
    `EventSupervisorCommand` objects.
 4. Add library cancel parity and a local `WorkflowSupervisorClient`.
 5. Add GraphQL supervised workflow wrappers or equivalent typed mutations.
-6. Package `divedra-default-workflow-supervisor` as a system workflow.
+6. Package `rielflow-default-workflow-supervisor` as a system workflow.
 7. Route supervised event commands through local library mode and remote GraphQL
    endpoint mode.
 8. Add chat/web-chat examples that start, stop, restart, and query status from

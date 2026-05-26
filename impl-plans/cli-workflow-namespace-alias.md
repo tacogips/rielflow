@@ -12,8 +12,8 @@
 **Source**: `design-docs/specs/command.md`
 
 ### Summary
-Accept and document `divedra cli workflow ...` as the workflow-command form while
-preserving top-level `divedra gql ...`.
+Accept and document `rielflow cli workflow ...` as the workflow-command form while
+preserving top-level `rielflow gql ...`.
 
 ### Scope
 **Included**: CLI positional normalization for `cli workflow`, help text,
@@ -34,7 +34,7 @@ transport changes.
 **Checklist**:
 - [x] Normalize `cli workflow ...` to the existing workflow handler
 - [x] Keep `gql` top-level and unchanged
-- [x] Update help text to show `divedra cli workflow ...`
+- [x] Update help text to show `rielflow cli workflow ...`
 
 #### src/cli.test.ts
 
@@ -49,7 +49,7 @@ transport changes.
 **Status**: COMPLETED
 
 **Checklist**:
-- [x] Update workflow command examples to `divedra cli workflow ...`
+- [x] Update workflow command examples to `rielflow cli workflow ...`
 
 #### design-docs/specs/command.md
 
@@ -77,8 +77,8 @@ transport changes.
 
 ## Completion Criteria
 
-- [x] `divedra cli workflow run <name>` works
-- [x] `divedra gql ...` remains unchanged
+- [x] `rielflow cli workflow run <name>` works
+- [x] `rielflow gql ...` remains unchanged
 - [x] Focused CLI tests pass
 - [x] Type checking passes
 

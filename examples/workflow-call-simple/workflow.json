@@ -6,15 +6,15 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Coordinate {{workflowId}}. Start draft-write first, then wait for the workflow-call review result before apply-review runs.",
+    "rielflowPromptTemplate": "Coordinate {{workflowId}}. Start draft-write first, then wait for the workflow-call review result before apply-review runs.",
     "workerSystemPromptTemplate": "Work only on the current node responsibility and return concise business JSON."
   },
-  "managerStepId": "divedra-manager",
-  "entryStepId": "divedra-manager",
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
   "nodes": [
     {
-      "id": "divedra-manager",
-      "nodeFile": "nodes/node-divedra-manager.json"
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
     },
     {
       "id": "draft-write",
@@ -27,8 +27,8 @@
   ],
   "steps": [
     {
-      "id": "divedra-manager",
-      "nodeId": "divedra-manager",
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
       "role": "manager",
       "transitions": [
         {

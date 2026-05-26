@@ -17,7 +17,7 @@ Complete the remaining bounded fanout runtime gap after parent-session local fan
 - Accepted inbox contract: `design-docs/specs/design-node-execution-inbox-contract.md`
 - Codex references: `<reference-repository-root>/src/group/manager.ts`, `<reference-repository-root>/src/group/types.ts`, `<reference-repository-root>/src/queue/runner.ts`, `<reference-repository-root>/impl-plans/completed/phase3-sqlite-group-queue.md`
 
-Codex-agent maps only to the bounded scheduler mechanics: `runGroup()` keeps an in-flight set up to `maxConcurrent` and refills it as work completes. divedra intentionally diverges by executing step-addressed workflow work items, persisting fanout group state on workflow sessions, and preserving mailbox, retry, timeout, artifact, GraphQL, CLI, TUI, and library inspection semantics.
+Codex-agent maps only to the bounded scheduler mechanics: `runGroup()` keeps an in-flight set up to `maxConcurrent` and refills it as work completes. rielflow intentionally diverges by executing step-addressed workflow work items, persisting fanout group state on workflow sessions, and preserving mailbox, retry, timeout, artifact, GraphQL, CLI, TUI, and library inspection semantics.
 
 ## Review Feedback Addressed
 
@@ -124,7 +124,7 @@ Checklist:
 
 - [x] Ensure existing session status/progress/GraphQL/library/TUI views can expose local and cross-workflow fanout groups from the same session state.
 - [x] Reject ambiguous branch target reruns unless persisted fanout scope proves the branch context.
-- [x] Keep `divedra workflow run --max-concurrency` and GraphQL/event forwarding behavior unchanged.
+- [x] Keep `rielflow workflow run --max-concurrency` and GraphQL/event forwarding behavior unchanged.
 
 ## Task Breakdown
 
@@ -208,13 +208,13 @@ Completion criteria:
 
 **Status**: Completed
 **Parallelizable**: No
-**Deliverables**: `src/workflow/engine.test.ts`, `src/workflow/validate.test.ts`, `src/cli.test.ts`, `src/graphql/schema.test.ts`, `.divedra/workflows/design-and-implement-review-loop/workflow.json`, user-facing docs only if output changes
+**Deliverables**: `src/workflow/engine.test.ts`, `src/workflow/validate.test.ts`, `src/cli.test.ts`, `src/graphql/schema.test.ts`, `.rielflow/workflows/design-and-implement-review-loop/workflow.json`, user-facing docs only if output changes
 **Dependencies**: TASK-002, TASK-003, TASK-004, TASK-005
 
 Completion criteria:
 
 - [x] All verification commands in this plan pass or have documented environment-only blockers.
-- [x] `.divedra/workflows/design-and-implement-review-loop` continues to use cross-workflow fanout safely unless local inline fanout is intentionally adopted after tests pass.
+- [x] `.rielflow/workflows/design-and-implement-review-loop` continues to use cross-workflow fanout safely unless local inline fanout is intentionally adopted after tests pass.
 - [x] LLM execution artifacts prove structured input delivery through root `input.json`, `mailbox/inbox/input.json`, and `DIVEDRA_MAILBOX_DIR` metadata guidance.
 - [x] Documentation reflects actual supported behavior and remaining coverage.
 
@@ -247,10 +247,10 @@ Completion criteria:
 - `bun test src/workflow/engine.test.ts --runInBand --test-name-pattern "retry workspace"`
 - `bun test src/workflow/call-step-impl.test.ts src/workflow/adapters/codex.test.ts src/workflow/adapters/claude.test.ts`
 - `bun test src/workflow/session-store.test.ts --runInBand --test-name-pattern fanout`
-- `HOME=/private/tmp/divedra-home bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`
+- `HOME=/private/tmp/rielflow-home bun test src/graphql/schema.test.ts src/cli.test.ts --runInBand`
 - `test ! -d src/tui`
-- `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .divedra/workflows`
-- `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .divedra/workflows`
+- `bun run src/main.ts workflow validate design-and-implement-review-loop --workflow-definition-dir .rielflow/workflows`
+- `bun run src/main.ts workflow validate design-and-implement-review-loop-feature-plan --workflow-definition-dir .rielflow/workflows`
 - `git diff --check`
 
 ## Plan Completion Criteria
@@ -355,4 +355,4 @@ Completion criteria:
 **Tasks Completed**: TASK-006.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Completed the final verification pass. Verified typecheck, workflow schema validation, local and cross-workflow fanout regressions, max concurrency, retry workspace lineage, mailbox/adapter artifact contracts, session persistence, GraphQL/CLI surfaces, workflow bundle validation, and whitespace checks. Confirmed `.divedra/workflows/design-and-implement-review-loop` still uses bounded cross-workflow fanout to `design-and-implement-review-loop-feature-plan` with `resumeStepId` and `joinStepId` set to `step5-feature-plan-join`; local inline fanout was not adopted for that workflow. Replaced the stale TUI test command with an explicit `test ! -d src/tui` guard because this checkout has no `src/tui` module.
+**Notes**: Completed the final verification pass. Verified typecheck, workflow schema validation, local and cross-workflow fanout regressions, max concurrency, retry workspace lineage, mailbox/adapter artifact contracts, session persistence, GraphQL/CLI surfaces, workflow bundle validation, and whitespace checks. Confirmed `.rielflow/workflows/design-and-implement-review-loop` still uses bounded cross-workflow fanout to `design-and-implement-review-loop-feature-plan` with `resumeStepId` and `joinStepId` set to `step5-feature-plan-join`; local inline fanout was not adopted for that workflow. Replaced the stale TUI test command with an explicit `test ! -d src/tui` guard because this checkout has no `src/tui` module.

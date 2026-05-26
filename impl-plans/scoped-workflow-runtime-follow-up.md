@@ -61,7 +61,7 @@ interface ParsedArgs {
 **Status**: COMPLETED
 
 ```typescript
-async function resolveWorkflowCatalogOptions<T extends DivedraOptions>(
+async function resolveWorkflowCatalogOptions<T extends RielflowOptions>(
   workflowName: string,
   options: T,
 ): Promise<T>;

@@ -1,9 +1,9 @@
-name: divedra-matrix-sample
+name: rielflow-matrix-sample
 
 services:
   synapse:
     image: matrixdotorg/synapse:v1.152.1
-    container_name: divedra-matrix-sample-synapse
+    container_name: rielflow-matrix-sample-synapse
     environment:
       SYNAPSE_SERVER_NAME: localhost
       SYNAPSE_REPORT_STATS: "no"

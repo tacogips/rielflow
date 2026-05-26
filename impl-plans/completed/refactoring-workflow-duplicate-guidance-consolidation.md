@@ -13,7 +13,7 @@
 
 ### Summary
 
-Consolidate duplicated duplicate-scavenge guidance across the existing refactoring workflow bundles and exposed refactoring skill. The refactor must keep duplicate-scavenge as a mode of `.divedra/workflows/refactoring-divide-and-conquer`, preserve the existing child `.divedra/workflows/refactoring-slice-review` contract, and avoid creating a separate workflow or package.
+Consolidate duplicated duplicate-scavenge guidance across the existing refactoring workflow bundles and exposed refactoring skill. The refactor must keep duplicate-scavenge as a mode of `.rielflow/workflows/refactoring-divide-and-conquer`, preserve the existing child `.rielflow/workflows/refactoring-slice-review` contract, and avoid creating a separate workflow or package.
 
 ### Scope
 
@@ -23,7 +23,7 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 - Parent Step 1 slicing guidance that should prioritize explicit `targetPaths` and `requestedOutcome` before package-boundary heuristics.
 - Child slice-review prompt and fixture assertions that document the duplicate-scavenge evidence contract.
 - Parent mock and expected-result fixtures that currently duplicate child slice-review fixture payloads.
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md` operator guidance that should summarize workflow-owned behavior without restating full schemas.
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md` operator guidance that should summarize workflow-owned behavior without restating full schemas.
 
 **Excluded**:
 
@@ -65,18 +65,18 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Owner paths**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step4-implement-next-task.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step5-self-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step6-post-refactor-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
-- `.divedra/workflows/refactoring-slice-review/prompts/slice-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step4-implement-next-task.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step5-self-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step6-post-refactor-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
+- `.rielflow/workflows/refactoring-slice-review/prompts/slice-review.md`
 
 **Counterpart duplicate paths**:
 
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 
 **Behavior to preserve**:
 
@@ -94,23 +94,23 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification suggestions**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 - `git diff --check`
 
 ### DUP-002: Parent and Child Fixture Duplication
 
 **Owner paths**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
 
 **Counterpart duplicate paths**:
 
-- `.divedra/workflows/refactoring-slice-review/prompts/slice-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
+- `.rielflow/workflows/refactoring-slice-review/prompts/slice-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
 
 **Behavior to preserve**:
 
@@ -127,27 +127,27 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification suggestions**:
 
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
-- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
 - `git diff --check`
 
 ### DUP-003: Operator and Runtime Guidance Duplication
 
 **Owner paths**:
 
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/workflow.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-divedra-manager.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-step1-slice-codebase.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-step3-merge-review-plan.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-workflow-output.json`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-rielflow-manager.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-step1-slice-codebase.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-step3-merge-review-plan.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-workflow-output.json`
 
 **Counterpart duplicate paths**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/divedra-manager.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/rielflow-manager.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
 
 **Behavior to preserve**:
 
@@ -165,8 +165,8 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification suggestions**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 - `git diff --check`
 
 ---
@@ -188,14 +188,14 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: Yes
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/workflow.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/**`
-- `.divedra/workflows/refactoring-slice-review/**`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/**`
+- `.rielflow/workflows/refactoring-slice-review/**`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -212,7 +212,7 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -225,19 +225,19 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: Yes
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step4-implement-next-task.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step5-self-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step6-post-refactor-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step3-merge-review-plan.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step4-implement-next-task.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step5-self-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step6-post-refactor-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/workflow-output.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/workflow.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/**`
-- `.divedra/workflows/refactoring-slice-review/**`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/step1-slice-codebase.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/**`
+- `.rielflow/workflows/refactoring-slice-review/**`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -255,7 +255,7 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -268,17 +268,17 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: No
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/workflow.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-divedra-manager.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-step1-slice-codebase.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-step3-merge-review-plan.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/node-workflow-output.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-rielflow-manager.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-step1-slice-codebase.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-step3-merge-review-plan.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/node-workflow-output.json`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/**`
-- `.divedra/workflows/refactoring-slice-review/**`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/**`
+- `.rielflow/workflows/refactoring-slice-review/**`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -296,7 +296,7 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -309,14 +309,14 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: Yes
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-slice-review/prompts/slice-review.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/**`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-slice-review/prompts/slice-review.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/**`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -333,8 +333,8 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -347,14 +347,14 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: No
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-slice-review/prompts/slice-review.md`
+- `.rielflow/workflows/refactoring-slice-review/prompts/slice-review.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-slice-review/mock-scenario.json`
-- `.divedra/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
-- `.divedra/workflows/refactoring-divide-and-conquer/**`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-slice-review/mock-scenario.json`
+- `.rielflow/workflows/refactoring-slice-review/EXPECTED_RESULTS.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/**`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -371,8 +371,8 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -385,16 +385,16 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 **Parallelizable**: No
 **Owned Files/Directories**:
 
-- `.divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json`
-- `.divedra/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
-- `.agents/skills/divedra-refactoring-workflow/SKILL.md`
+- `.rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json`
+- `.rielflow/workflows/refactoring-divide-and-conquer/EXPECTED_RESULTS.md`
+- `.agents/skills/rielflow-refactoring-workflow/SKILL.md`
 
 **Excluded Files/Directories**:
 
-- `.divedra/workflows/refactoring-slice-review/**`
-- `.divedra/workflows/refactoring-divide-and-conquer/prompts/**`
-- `.divedra/workflows/refactoring-divide-and-conquer/nodes/**`
-- `.divedra/workflows/refactoring-divide-and-conquer/workflow.json`
+- `.rielflow/workflows/refactoring-slice-review/**`
+- `.rielflow/workflows/refactoring-divide-and-conquer/prompts/**`
+- `.rielflow/workflows/refactoring-divide-and-conquer/nodes/**`
+- `.rielflow/workflows/refactoring-divide-and-conquer/workflow.json`
 - `dist`
 - `node_modules`
 - `impl-plans/completed`
@@ -412,10 +412,10 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 **Verification Commands**:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
 - `git diff --check`
 
 **Residual Risk Notes**:
@@ -428,17 +428,17 @@ Consolidate duplicated duplicate-scavenge guidance across the existing refactori
 
 Run narrow verification after each task:
 
-- Parent workflow-only tasks: `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- Child workflow-only tasks: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
+- Parent workflow-only tasks: `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- Child workflow-only tasks: `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
 - Fixture tasks: run the relevant `workflow run ... --mock-scenario ... --output json` command.
 - Every implementation pass: `git diff --check`
 
 Final verification:
 
-- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .divedra/workflows --output json`
-- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
-- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .divedra/workflows --mock-scenario .divedra/workflows/refactoring-slice-review/mock-scenario.json --output json`
+- `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow validate refactoring-slice-review --workflow-definition-dir .rielflow/workflows --output json`
+- `bun run src/main.ts workflow run refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-divide-and-conquer/mock-scenario.json --output json`
+- `bun run src/main.ts workflow run refactoring-slice-review --workflow-definition-dir .rielflow/workflows --mock-scenario .rielflow/workflows/refactoring-slice-review/mock-scenario.json --output json`
 - `git diff --check`
 
 ## Exit Criteria
@@ -499,7 +499,7 @@ Final verification:
 **Tasks Completed**: `REF-003`.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Aligned parent workflow and node descriptions with route-critical fields: workflow-level duplicate-scavenge wording now delegates detailed phase behavior to step prompts, manager metadata preserves `refactoringMode`, Step 1 names both fanout routes, Step 3 names route booleans plus `duplicateGroups` and task DAG fields, and final output names duplicate-scavenge summaries, blocked tasks, verification results, and residual risks. Verification passed with `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .divedra/workflows --output json` and `git diff --check`.
+**Notes**: Aligned parent workflow and node descriptions with route-critical fields: workflow-level duplicate-scavenge wording now delegates detailed phase behavior to step prompts, manager metadata preserves `refactoringMode`, Step 1 names both fanout routes, Step 3 names route booleans plus `duplicateGroups` and task DAG fields, and final output names duplicate-scavenge summaries, blocked tasks, verification results, and residual risks. Verification passed with `bun run src/main.ts workflow validate refactoring-divide-and-conquer --workflow-definition-dir .rielflow/workflows --output json` and `git diff --check`.
 
 ### Session: 2026-05-19 12:30 JST
 
@@ -519,7 +519,7 @@ Final verification:
 
 **Tasks Completed**: None.
 **Tasks In Progress**: `REF-006` partial.
-**Blockers**: `.agents/skills/divedra-refactoring-workflow/SKILL.md` is not writable in the current sandbox (`Operation not permitted`), so skill duplicate-scavenge guidance could not be condensed.
+**Blockers**: `.agents/skills/rielflow-refactoring-workflow/SKILL.md` is not writable in the current sandbox (`Operation not permitted`), so skill duplicate-scavenge guidance could not be condensed.
 **Notes**: Reduced the parent mock scenario to minimal child fanout payloads needed for Step 3 planning context and updated parent expected results to assert parent aggregation fields instead of child schema details. Verification passed with parent and child workflow validation, parent and child mock-scenario execution, and `git diff --check`. `REF-006` remains blocked until the exposed skill file can be edited.
 
 ### Session: 2026-05-19 12:52 JST
@@ -527,4 +527,4 @@ Final verification:
 **Tasks Completed**: `REF-006`; plan complete.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Parent process had write access to `.agents/skills/divedra-refactoring-workflow/SKILL.md`, so the skill duplicate-scavenge section was condensed to operator guidance that points to Step 1, child slice-review evidence, Step 3 duplicate groups, and Steps 4 through 6 review contracts instead of restating runtime schemas. Plan exit criteria are complete and the plan is ready for archival under `impl-plans/completed/`.
+**Notes**: Parent process had write access to `.agents/skills/rielflow-refactoring-workflow/SKILL.md`, so the skill duplicate-scavenge section was condensed to operator guidance that points to Step 1, child slice-review evidence, Step 3 duplicate groups, and Steps 4 through 6 review contracts instead of restating runtime schemas. Plan exit criteria are complete and the plan is ready for archival under `impl-plans/completed/`.

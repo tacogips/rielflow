@@ -10,7 +10,7 @@ Usage:
   scripts/render-homebrew-formula.sh <version> [output-file]
 
 Reads archive checksums from:
-  dist/homebrew/divedra-<version>-<target>.tar.gz.sha256
+  dist/homebrew/rielflow-<version>-<target>.tar.gz.sha256
 
 Environment:
   DIVEDRA_RELEASE_DIR       Directory containing archives and .sha256 files.
@@ -18,7 +18,7 @@ Environment:
 
 Example:
   scripts/build-homebrew-release.sh darwin-arm64 darwin-x64 linux-arm64 linux-x64
-  scripts/render-homebrew-formula.sh 0.1.0 Formula/divedra.rb
+  scripts/render-homebrew-formula.sh 0.1.0 Formula/rielflow.rb
 EOF
 }
 
@@ -27,7 +27,7 @@ sha_for_target() {
   version="$1"
   target="$2"
   release_dir="$3"
-  sha_file="$release_dir/divedra-$version-$target.tar.gz.sha256"
+  sha_file="$release_dir/rielflow-$version-$target.tar.gz.sha256"
 
   if [[ ! -f "$sha_file" ]]; then
     printf 'missing checksum file: %s\n' "$sha_file" >&2
@@ -49,9 +49,9 @@ main() {
 
   local version output release_dir release_base_url
   version="$1"
-  output="${2:-$repo_root/Formula/divedra.rb}"
+  output="${2:-$repo_root/Formula/rielflow.rb}"
   release_dir="${DIVEDRA_RELEASE_DIR:-$repo_root/dist/homebrew}"
-  release_base_url="${DIVEDRA_RELEASE_BASE_URL:-https://github.com/tacogips/divedra/releases/download/v$version}"
+  release_base_url="${DIVEDRA_RELEASE_BASE_URL:-https://github.com/tacogips/rielflow/releases/download/v$version}"
 
   local darwin_arm64_sha darwin_x64_sha linux_arm64_sha linux_x64_sha
   darwin_arm64_sha="$(sha_for_target "$version" darwin-arm64 "$release_dir")"
@@ -61,9 +61,9 @@ main() {
 
   mkdir -p "$(dirname "$output")"
   cat > "$output" <<EOF
-class Divedra < Formula
+class Rielflow < Formula
   desc "TypeScript/Bun workflow runtime for cooperative multi-agent execution"
-  homepage "https://github.com/tacogips/divedra"
+  homepage "https://github.com/tacogips/rielflow"
   version "$version"
   license "MIT"
 
@@ -74,30 +74,30 @@ class Divedra < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "$release_base_url/divedra-$version-darwin-arm64.tar.gz"
+      url "$release_base_url/rielflow-$version-darwin-arm64.tar.gz"
       sha256 "$darwin_arm64_sha"
     else
-      url "$release_base_url/divedra-$version-darwin-x64.tar.gz"
+      url "$release_base_url/rielflow-$version-darwin-x64.tar.gz"
       sha256 "$darwin_x64_sha"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "$release_base_url/divedra-$version-linux-arm64.tar.gz"
+      url "$release_base_url/rielflow-$version-linux-arm64.tar.gz"
       sha256 "$linux_arm64_sha"
     else
-      url "$release_base_url/divedra-$version-linux-x64.tar.gz"
+      url "$release_base_url/rielflow-$version-linux-x64.tar.gz"
       sha256 "$linux_x64_sha"
     end
   end
 
   def install
-    bin.install "bin/divedra"
+    bin.install "bin/rielflow"
   end
 
   test do
-    assert_match "Usage:", shell_output("#{bin}/divedra --help")
+    assert_match "Usage:", shell_output("#{bin}/rielflow --help")
   end
 end
 EOF

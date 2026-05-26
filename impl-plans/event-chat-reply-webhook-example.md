@@ -8,7 +8,7 @@
 ## Design Summary
 
 Add a checked-in example that demonstrates authoring a workflow node with the
-built-in `divedra/chat-reply-worker` add-on and dispatching it from a webhook
+built-in `rielflow/chat-reply-worker` add-on and dispatching it from a webhook
 event source with an outbound reply endpoint.
 
 ## Modules
@@ -27,7 +27,7 @@ event source with an outbound reply endpoint.
 
 ### 2. Event Fixtures
 
-#### `examples/event-sources/.divedra-events/`
+#### `examples/event-sources/.rielflow-events/`
 
 **Status**: Completed
 

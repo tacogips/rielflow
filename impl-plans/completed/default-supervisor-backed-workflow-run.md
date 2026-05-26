@@ -30,7 +30,7 @@ Source-of-truth requirements:
 Out of scope:
 
 - Reverting or fixing unrelated dirty worktree files.
-- Adding the missing `divedra-default-superviser` workflow bundle.
+- Adding the missing `rielflow-default-superviser` workflow bundle.
 - Changing nested supervisor session catalog discovery.
 - Changing docs beyond the accepted default-supervisor-backed start contract
   unless Step 7 review finds a direct mismatch.
@@ -130,7 +130,7 @@ Commands:
 
 - `bun run typecheck`
 - `bun test src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`
-- `env -u DIVEDRA_WORKFLOW_EXECUTION_ID -u DIVEDRA_NODE_EXEC_ID -u DIVEDRA_MAILBOX_DIR -u DIVEDRA_GRAPHQL_ENDPOINT DIVEDRA_ARTIFACT_DIR=/private/tmp/divedra-review-artifacts bun run test -- src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`
+- `env -u DIVEDRA_WORKFLOW_EXECUTION_ID -u DIVEDRA_NODE_EXEC_ID -u DIVEDRA_MAILBOX_DIR -u DIVEDRA_GRAPHQL_ENDPOINT DIVEDRA_ARTIFACT_DIR=/private/tmp/rielflow-review-artifacts bun run test -- src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`
 
 Checklist:
 
@@ -215,4 +215,4 @@ already matched the accepted design; only this plan status and
 `bun run typecheck`,
 `bun test src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`,
 and
-`env -u DIVEDRA_WORKFLOW_EXECUTION_ID -u DIVEDRA_NODE_EXEC_ID -u DIVEDRA_MAILBOX_DIR -u DIVEDRA_GRAPHQL_ENDPOINT DIVEDRA_ARTIFACT_DIR=/private/tmp/divedra-review-artifacts bun run test -- src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`.
+`env -u DIVEDRA_WORKFLOW_EXECUTION_ID -u DIVEDRA_NODE_EXEC_ID -u DIVEDRA_MAILBOX_DIR -u DIVEDRA_GRAPHQL_ENDPOINT DIVEDRA_ARTIFACT_DIR=/private/tmp/rielflow-review-artifacts bun run test -- src/cli.test.ts src/graphql/schema.test.ts src/server/graphql.test.ts src/workflow/auto-improve-policy.test.ts`.

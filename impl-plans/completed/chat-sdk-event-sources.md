@@ -58,9 +58,9 @@ chat replies through provider-neutral `chat` output destinations.
 
 Intentional divergences:
 
-- divedra will not copy Codex-agent code or add Cursor/Codex-specific chat
+- rielflow will not copy Codex-agent code or add Cursor/Codex-specific chat
   behavior.
-- divedra will not directly depend on every Chat SDK provider package in this
+- rielflow will not directly depend on every Chat SDK provider package in this
   first implementation.
 - Provider-specific payloads stay behind `src/events/adapters/chat-sdk/`; event
   bindings and workflow input mapping see only normalized contracts.
@@ -297,9 +297,9 @@ type ChatSdkNormalizedEventType =
 **Status**: Completed
 **Parallelizable**: Yes
 **Deliverables**:
-`examples/event-sources/.divedra-events/sources/chat-sdk-slack.json`,
-`examples/event-sources/.divedra-events/bindings/chat-sdk-slack-to-workflow.json`,
-`examples/event-sources/.divedra-events/destinations/chat-sdk-slack-replies.json`,
+`examples/event-sources/.rielflow-events/sources/chat-sdk-slack.json`,
+`examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-to-workflow.json`,
+`examples/event-sources/.rielflow-events/destinations/chat-sdk-slack-replies.json`,
 `examples/event-sources/payloads/chat-sdk-slack-message.json`,
 `examples/event-sources/README.md`, `README.md`
 **Dependencies**: TASK-001
@@ -341,7 +341,7 @@ type ChatSdkNormalizedEventType =
 | Runtime route and replay integration | `src/events/http-routes.ts`, `src/events/listener-service.ts`, `src/events/manual-emit.ts`, `src/events/source-rate-limit.ts` | COMPLETED | `src/events/listener-service.test.ts`, `src/events/manual-emit.test.ts` |
 | Chat reply dispatch | `src/events/adapters/chat-sdk/reply.ts` | COMPLETED | `src/events/adapters/chat-sdk.test.ts`, `src/events/reply-dispatcher.test.ts` |
 | Registry and capabilities | `src/events/adapter-registry.ts`, `src/events/validate-destinations.ts` | COMPLETED | `src/events/adapter-registry.test.ts`, `src/events/config.test.ts` |
-| Examples and docs | `examples/event-sources/**`, `README.md` | COMPLETED | `divedra events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events` |
+| Examples and docs | `examples/event-sources/**`, `README.md` | COMPLETED | `rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events` |
 
 ## Dependencies
 
@@ -374,7 +374,7 @@ rg -n "chat-sdk|chat\\.message|Chat SDK|outputDestinations" design-docs examples
 rg -n "rate-limit|chat\\.mention|chat\\.command|chat\\.action|chat\\.modal-submit|capability" impl-plans/active/chat-sdk-event-sources.md design-docs/specs/design-chat-sdk-event-sources.md design-docs/specs/design-event-listener-workflow-trigger.md
 bun run typecheck
 bun test src/events/adapter-registry.test.ts src/events/config.test.ts src/events/listener-service.test.ts src/events/manual-emit.test.ts src/events/reply-dispatcher.test.ts src/events/adapters/chat-sdk.test.ts
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.divedra-events
+bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 ## Completion Criteria

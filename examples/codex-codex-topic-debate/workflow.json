@@ -6,15 +6,15 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "divedraPromptTemplate": "Run {{workflowId}} as a two-sided debate. Start the affirmative lane, run the negative lane, and let the judge step decide whether another round is needed.",
+    "rielflowPromptTemplate": "Run {{workflowId}} as a two-sided debate. Start the affirmative lane, run the negative lane, and let the judge step decide whether another round is needed.",
     "workerSystemPromptTemplate": "Return concise business JSON that is useful to the next workflow node."
   },
-  "managerStepId": "divedra-manager",
-  "entryStepId": "divedra-manager",
+  "managerStepId": "rielflow-manager",
+  "entryStepId": "rielflow-manager",
   "nodes": [
     {
-      "id": "divedra-manager",
-      "nodeFile": "nodes/node-divedra-manager.json"
+      "id": "rielflow-manager",
+      "nodeFile": "nodes/node-rielflow-manager.json"
     },
     {
       "id": "affirmative-manager",
@@ -59,8 +59,8 @@
   ],
   "steps": [
     {
-      "id": "divedra-manager",
-      "nodeId": "divedra-manager",
+      "id": "rielflow-manager",
+      "nodeId": "rielflow-manager",
       "role": "manager",
       "transitions": [{ "toStepId": "affirmative-manager" }]
     },
