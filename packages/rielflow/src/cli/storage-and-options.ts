@@ -348,6 +348,21 @@ export interface ParsedOptions {
   readonly selfImproveSessions?: readonly string[];
   readonly selfImproveMode?: WorkflowSelfImproveMode;
   readonly selfImproveEnableDisabled: boolean;
+  readonly registry?: string;
+  readonly registryUrl?: string;
+  readonly packageName?: string;
+  readonly packageId?: string;
+  readonly branch?: string;
+  readonly backend?: string;
+  readonly localPath?: string;
+  readonly refresh: boolean;
+  readonly noCache: boolean;
+  readonly createPr: boolean;
+  readonly tags?: readonly string[];
+  readonly preInstallCheck: boolean;
+  readonly noPreInstallCheck: boolean;
+  readonly preInstallCheckMode?: "warn" | "reject";
+  readonly preInstallCheckContainer?: "docker" | "podman" | "auto";
 }
 export interface ParsedArgs {
   readonly positionals: string[];

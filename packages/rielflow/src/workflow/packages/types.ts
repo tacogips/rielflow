@@ -1,0 +1,196 @@
+export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID = "default";
+export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL =
+  "https://github.com/tacogips/rielflow-packages";
+export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_LOCAL_PATH =
+  "/Users/taco/gits/tacogips/rielflow-packages";
+export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_BRANCH = "main";
+export const WORKFLOW_PACKAGE_MANIFEST_FILE = "rielflow-package.json";
+
+export type WorkflowPackageChecksumAlgorithm = "md5";
+export type WorkflowPackageCacheBackendKind = "json" | "sqlite";
+export type WorkflowPackageIntegrityAlgorithm = "sha256";
+export type WorkflowPackageSignatureAlgorithm = "ed25519";
+export type WorkflowPackagePreInstallCheckMode = "warn" | "reject";
+export type WorkflowPackagePreInstallCheckStatus =
+  | "passed"
+  | "warned"
+  | "failed"
+  | "skipped";
+export type WorkflowPackagePreInstallFindingSeverity =
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
+export type WorkflowPackageContainerRuntime = "docker" | "podman";
+export type WorkflowPackageContainerRuntimeRequest =
+  | WorkflowPackageContainerRuntime
+  | "auto";
+
+export interface WorkflowPackageTrustedSigner {
+  readonly id: string;
+  readonly publicKey: string;
+}
+
+export interface WorkflowPackageSignature {
+  readonly keyId: string;
+  readonly algorithm: WorkflowPackageSignatureAlgorithm;
+  readonly signature: string;
+}
+
+export interface WorkflowPackageIntegrity {
+  readonly digestAlgorithm: WorkflowPackageIntegrityAlgorithm;
+  readonly digest: string;
+  readonly signatures?: readonly WorkflowPackageSignature[];
+}
+
+export interface WorkflowPackageRegistryEntry {
+  readonly id: string;
+  readonly url: string;
+  readonly defaultBranch: string;
+  readonly registeredAt: string;
+  readonly updatedAt: string;
+  readonly localPath?: string;
+  readonly description?: string;
+  readonly priority?: number;
+  readonly trustedSigners?: readonly WorkflowPackageTrustedSigner[];
+  readonly requireSignature?: boolean;
+}
+
+export interface WorkflowPackageRegistryConfig {
+  readonly registries: readonly WorkflowPackageRegistryEntry[];
+  readonly defaultRegistryId: string;
+}
+
+export interface WorkflowPackageRegistryConfigOptions {
+  readonly userRoot?: string;
+  readonly projectRoot?: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly cwd?: string;
+  readonly now?: Date;
+}
+
+export interface WorkflowPackageManifest {
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly workflow: WorkflowPackageWorkflowMetadata;
+  readonly registry: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly integrity?: WorkflowPackageIntegrity;
+  readonly workflowDirectory?: string;
+  readonly title?: string;
+  readonly authors?: readonly string[];
+  readonly license?: string;
+  readonly homepage?: string;
+  readonly repository?: string;
+  readonly examples?: readonly string[];
+  readonly minimumRielflowVersion?: string;
+  readonly backends?: readonly string[];
+}
+
+export interface NormalizedWorkflowPackageManifest
+  extends WorkflowPackageManifest {
+  readonly workflowDirectory: string;
+  readonly backends: readonly string[];
+}
+
+export interface WorkflowPackageWorkflowMetadata {
+  readonly title?: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly backends?: readonly string[];
+}
+
+export interface WorkflowPackageIndexRecord {
+  readonly registryId: string;
+  readonly registryUrl: string;
+  readonly packageName: string;
+  readonly version: string;
+  readonly title?: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly backends: readonly string[];
+  readonly workflowId: string;
+  readonly workflowDescription: string;
+  readonly workflowDirectory: string;
+  readonly sourceBranch: string;
+  readonly sourcePath: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly integrity?: WorkflowPackageIntegrity;
+  readonly updatedAt: string;
+}
+
+export interface WorkflowPackageSearchRecord {
+  readonly packageId: string;
+  readonly packageName: string;
+  readonly workflowName: string;
+  readonly title?: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly backends: readonly string[];
+  readonly registryId: string;
+  readonly registryUrl: string;
+  readonly registryRef: string;
+  readonly workflowDirectory: string;
+  readonly sourceDirectory: string;
+  readonly metadataPath: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly integrity?: WorkflowPackageIntegrity;
+  readonly updatedAt: string;
+}
+
+export interface WorkflowPackageSearchCliResult {
+  readonly query?: string;
+  readonly registryFilters: readonly string[];
+  readonly packages: readonly WorkflowPackageSearchRecord[];
+  readonly records: readonly WorkflowPackageIndexRecord[];
+  readonly cache: {
+    readonly backend: WorkflowPackageCacheBackendKind;
+    readonly used: boolean;
+    readonly refreshed: boolean;
+  };
+  readonly cacheUsed: boolean;
+  readonly refreshed: boolean;
+}
+
+export interface WorkflowPackageFailure {
+  readonly code:
+    | "DUPLICATE_PACKAGE"
+    | "FETCH_FAILED"
+    | "GIT_FAILED"
+    | "INVALID_MANIFEST"
+    | "INVALID_PACKAGE_NAME"
+    | "INVALID_REGISTRY"
+    | "IO"
+    | "MISSING_PACKAGE"
+    | "MISSING_REGISTRY"
+    | "MISSING_WORKFLOW_BUNDLE"
+    | "PRE_INSTALL_CHECK_FAILED"
+    | "UNSAFE_PATH"
+    | "USAGE"
+    | "VALIDATION";
+  readonly message: string;
+}
+
+export interface WorkflowPackagePreInstallFinding {
+  readonly id: string;
+  readonly severity: WorkflowPackagePreInstallFindingSeverity;
+  readonly relativePath: string;
+  readonly evidence: string;
+  readonly ruleName: string;
+  readonly remediation: string;
+}
+
+export interface WorkflowPackagePreInstallCheckResult {
+  readonly enabled: boolean;
+  readonly mode: WorkflowPackagePreInstallCheckMode;
+  readonly status: WorkflowPackagePreInstallCheckStatus;
+  readonly scannerVersion: string;
+  readonly containerRuntime?: WorkflowPackageContainerRuntime;
+  readonly findings: readonly WorkflowPackagePreInstallFinding[];
+}

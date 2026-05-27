@@ -42,6 +42,7 @@ import {
   resolveXGatewayPayload,
   resolveXGatewayReadPayload,
 } from "./gateway-and-git-config";
+import { resolveWorkflowPackageSandboxReviewPayload } from "./package-sanitize-review-config";
 
 export function resolveSuperviserControlPayload(input: {
   readonly nodeId: string;
@@ -164,6 +165,14 @@ export function resolveBuiltinNodeAddonPayload(
     agentWorkerPayload.issues.length > 0
   ) {
     return agentWorkerPayload;
+  }
+  const packageSanitizeReviewPayload =
+    resolveWorkflowPackageSandboxReviewPayload(input);
+  if (
+    packageSanitizeReviewPayload.payload !== undefined ||
+    packageSanitizeReviewPayload.issues.length > 0
+  ) {
+    return packageSanitizeReviewPayload;
   }
   const xGatewayReadPayload = resolveXGatewayReadPayload(input);
   if (

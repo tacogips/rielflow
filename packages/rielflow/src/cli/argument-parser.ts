@@ -4,6 +4,7 @@ import type {
   WorkflowSelfImproveSourceMode,
 } from "rielflow-core";
 import type { ParsedArgs } from "./storage-and-options";
+import { validateCliFlagCombinations } from "./argument-validation";
 import {
   parseAutoImprovePolicyFromCliFlags,
   parseEnumOption,
@@ -86,18 +87,30 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let selfImproveSessions: string[] = [];
   let selfImproveMode: WorkflowSelfImproveMode | undefined;
   let selfImproveEnableDisabled = false;
-
+  let registry: string | undefined;
+  let registryUrl: string | undefined;
+  let packageName: string | undefined;
+  let packageId: string | undefined;
+  let branch: string | undefined;
+  let backend: string | undefined;
+  let localPath: string | undefined;
+  let refresh = false;
+  let noCache = false;
+  let createPr = false;
+  let preInstallCheck = false;
+  let noPreInstallCheck = false;
+  let preInstallCheckMode: "warn" | "reject" | undefined;
+  let preInstallCheckContainer: "docker" | "podman" | "auto" | undefined;
+  let tags: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === undefined) {
       continue;
     }
-
     if (!token.startsWith("--")) {
       positionals.push(token);
       continue;
     }
-
     const readNext = (): string | undefined => {
       const next = argv[index + 1];
       if (next !== undefined && !next.startsWith("--")) {
@@ -112,7 +125,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         firstAutoImproveOnlyPolicyFlag ??= token;
       }
     };
-
     switch (token) {
       case "--workflow-definition-dir":
         {
@@ -719,6 +731,126 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--enable-disabled":
         selfImproveEnableDisabled = true;
         break;
+      case "--registry": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        registry = parsedString.value;
+        break;
+      }
+      case "--registry-url": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        registryUrl = parsedString.value;
+        break;
+      }
+      case "--package-name": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        packageName = parsedString.value;
+        break;
+      }
+      case "--package-id": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        packageId = parsedString.value;
+        break;
+      }
+      case "--branch": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        branch = parsedString.value;
+        break;
+      }
+      case "--backend": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        backend = parsedString.value;
+        break;
+      }
+      case "--local-path":
+      case "--registry-local-path": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        localPath = parsedString.value;
+        break;
+      }
+      case "--refresh":
+        refresh = true;
+        break;
+      case "--no-cache":
+        noCache = true;
+        break;
+      case "--pre-install-check":
+        preInstallCheck = true;
+        break;
+      case "--no-pre-install-check":
+        noPreInstallCheck = true;
+        break;
+      case "--pre-install-check-mode": {
+        const parsedMode = parseEnumOption(
+          token,
+          readNext(),
+          ["warn", "reject"],
+          "warn or reject",
+        );
+        if (parsedMode.error !== undefined) {
+          parseError = parsedMode.error;
+          break;
+        }
+        preInstallCheckMode = parsedMode.value;
+        break;
+      }
+      case "--pre-install-check-container": {
+        const parsedRuntime = parseEnumOption(
+          token,
+          readNext(),
+          ["docker", "podman", "auto"],
+          "docker, podman, or auto",
+        );
+        if (parsedRuntime.error !== undefined) {
+          parseError = parsedRuntime.error;
+          break;
+        }
+        preInstallCheckContainer = parsedRuntime.value;
+        preInstallCheck = true;
+        break;
+      }
+      case "--pr":
+      case "--create-pr":
+        createPr = true;
+        break;
+      case "--tag": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        if (parsedString.value !== undefined) {
+          tags = [...tags, parsedString.value];
+        }
+        break;
+      }
       default:
         break;
     }
@@ -727,7 +859,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       break;
     }
   }
-
   const isSessionHealthCommand =
     positionals[0] === "session" && positionals[1] === "health";
   const hasWorkflowAutoImprovePolicyFlag =
@@ -758,30 +889,19 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   } as const;
   const autoImprovePolicy =
     parseAutoImprovePolicyFromCliFlags(autoImproveInputs);
-  if (parseError === undefined) {
-    if (autoImprove && disableAutoImprove) {
-      parseError = "--auto-improve cannot be combined with --no-auto-improve";
-    } else if (nestedSuperviser && disableAutoImprove) {
-      parseError =
-        "--nested-superviser / --nested-supervisor cannot be combined with --no-auto-improve";
-    } else if (disableAutoImprove && maxWorkflowPatches !== undefined) {
-      parseError =
-        "--max-workflow-patches cannot be combined with --no-auto-improve";
-    } else if (disableAutoImprove && workflowMutationMode !== undefined) {
-      parseError =
-        "--workflow-mutation-mode cannot be combined with --no-auto-improve";
-    } else if (
-      isSessionHealthCommand &&
-      !autoImprove &&
-      firstAutoImproveOnlyPolicyFlag !== undefined
-    ) {
-      parseError = `${firstAutoImproveOnlyPolicyFlag} requires --auto-improve`;
-    }
-  }
-  if (parseError === undefined && autoImprovePolicy.error !== undefined) {
-    parseError = `invalid --auto-improve policy: ${autoImprovePolicy.error}`;
-  }
-
+  parseError = validateCliFlagCombinations({
+    parseError,
+    autoImprove,
+    disableAutoImprove,
+    nestedSuperviser,
+    maxWorkflowPatches,
+    workflowMutationMode,
+    isSessionHealthCommand,
+    firstAutoImproveOnlyPolicyFlag,
+    autoImprovePolicyError: autoImprovePolicy.error,
+    preInstallCheck,
+    noPreInstallCheck,
+  });
   return {
     positionals,
     options: {
@@ -853,6 +973,23 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(selfImproveSessions.length === 0 ? {} : { selfImproveSessions }),
       ...(selfImproveMode === undefined ? {} : { selfImproveMode }),
       selfImproveEnableDisabled,
+      ...(registry === undefined ? {} : { registry }),
+      ...(registryUrl === undefined ? {} : { registryUrl }),
+      ...(packageName === undefined ? {} : { packageName }),
+      ...(packageId === undefined ? {} : { packageId }),
+      ...(branch === undefined ? {} : { branch }),
+      ...(backend === undefined ? {} : { backend }),
+      ...(localPath === undefined ? {} : { localPath }),
+      refresh,
+      noCache,
+      createPr,
+      preInstallCheck,
+      noPreInstallCheck,
+      ...(preInstallCheckMode === undefined ? {} : { preInstallCheckMode }),
+      ...(preInstallCheckContainer === undefined
+        ? {}
+        : { preInstallCheckContainer }),
+      ...(tags.length === 0 ? {} : { tags }),
     },
     ...(parseError === undefined ? {} : { error: parseError }),
   };

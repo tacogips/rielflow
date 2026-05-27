@@ -30,6 +30,7 @@ export {
 export {
   resolveWorkflowCheckoutDestination,
   resolveUserScopeRootForCheckout,
+  writeWorkflowCheckoutRegistryRecord,
 } from "./registry";
 
 export interface WorkflowCheckoutOptions extends LoadOptions {

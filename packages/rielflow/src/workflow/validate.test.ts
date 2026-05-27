@@ -1181,6 +1181,118 @@ describe("validateWorkflowBundle", () => {
     });
   });
 
+  test("built-in workflow package sandbox review add-on resolves to an LLM-backed worker", async () => {
+    const raw = {
+      workflow: {
+        workflowId: "package-sanitize-review",
+        description: "package sanitize review",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "sanitize-step",
+        nodes: [
+          {
+            id: "sanitize-node",
+            addon: {
+              name: "rielflow/workflow-package-sandbox-review",
+              version: "1",
+              config: {
+                executionBackend: "cursor-cli-agent",
+                model: "claude-sonnet-4-5",
+                decisionPolicy: "block-on-high",
+              },
+              inputs: {
+                packageSummary: "Fixture package",
+                reviewFocus: "Check fixture package safety.",
+              },
+            },
+          },
+        ],
+        steps: [
+          { id: "sanitize-step", nodeId: "sanitize-node", role: "worker" },
+        ],
+      },
+      nodePayloads: {},
+    };
+
+    const result = await validateWorkflowBundleDetailedAsync(raw);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const payload = result.value.bundle.nodePayloads["sanitize-node"];
+    expect(payload).toMatchObject({
+      id: "sanitize-node",
+      executionBackend: "cursor-cli-agent",
+      model: "claude-sonnet-4-5",
+      addon: {
+        name: "rielflow/workflow-package-sandbox-review",
+        version: "1",
+      },
+      output: {
+        jsonSchema: {
+          required: [
+            "decision",
+            "severity",
+            "summary",
+            "findings",
+            "reviewedInputs",
+            "backend",
+          ],
+        },
+      },
+    });
+    expect(payload?.variables).toMatchObject({
+      decisionPolicy: "block-on-high",
+      packageSummary: "Fixture package",
+    });
+    expect(
+      result.value.nodeValidationResults.some(
+        (entry) =>
+          entry.source === "addon" &&
+          entry.status === "valid" &&
+          entry.addonName === "rielflow/workflow-package-sandbox-review",
+      ),
+    ).toBe(true);
+  });
+
+  test("built-in workflow package sandbox review add-on rejects unsupported backends", async () => {
+    const raw = {
+      workflow: {
+        workflowId: "package-sanitize-review-invalid",
+        description: "package sanitize review invalid",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        entryStepId: "sanitize-step",
+        nodes: [
+          {
+            id: "sanitize-node",
+            addon: {
+              name: "rielflow/workflow-package-sandbox-review",
+              version: "1",
+              config: { executionBackend: "official/openai-sdk" },
+              inputs: { packageSummary: "Fixture package" },
+            },
+          },
+        ],
+        steps: [
+          { id: "sanitize-step", nodeId: "sanitize-node", role: "worker" },
+        ],
+      },
+      nodePayloads: {},
+    };
+
+    const result = await validateWorkflowBundleDetailedAsync(raw);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContainEqual({
+      severity: "error",
+      path: "workflow.nodes[0].addon.config.executionBackend",
+      message: "must be codex-agent, claude-code-agent, or cursor-cli-agent",
+    });
+  });
+
   test("async third-party add-on resolver failures become validation issues", async () => {
     const raw = {
       workflow: {

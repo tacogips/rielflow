@@ -16,6 +16,7 @@ Current built-ins, version `1`:
 - `rielflow/chat-reply-worker`
 - `rielflow/codex-worker`
 - `rielflow/claude-code-worker`
+- `rielflow/workflow-package-sandbox-review`
 - `rielflow/x-gateway-read`
 - `rielflow/x-gateway`
 - `rielflow/mail-gateway-read`

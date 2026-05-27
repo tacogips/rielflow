@@ -16,6 +16,7 @@ import {
   resolveCliEnv,
   resolveGraphqlCliTransport,
 } from "./input-output-helpers";
+import { runCliWorkflowPackageScope } from "./workflow-package-command-handler";
 import {
   runCliCallStepScope,
   runCliEventsScope,
@@ -144,7 +145,10 @@ export async function runCli(
   }
   if (
     target === undefined &&
-    !(scope === "workflow" && (command === "list" || command === "usage"))
+    !(
+      (scope === "workflow" && (command === "list" || command === "usage")) ||
+      (scope === "publish" && command !== undefined)
+    )
   ) {
     io.stderr("scope, command, and target are required");
     printHelp(io);
@@ -153,16 +157,34 @@ export async function runCli(
 
   if (
     parsed.options.output === "table" &&
-    !(scope === "workflow" && (command === "list" || command === "status"))
+    !(
+      scope === "workflow" &&
+      (command === "list" ||
+        command === "status" ||
+        command === "search" ||
+        (command === "package" && target === "search"))
+    )
   ) {
     io.stderr(
-      "`--output table` is only supported for workflow list and workflow status",
+      "`--output table` is only supported for workflow list, workflow status, and workflow search",
     );
     return 2;
   }
 
   if (scope === "workflow") {
     return runCliWorkflowScope(runCliContext);
+  }
+
+  if (scope === "publish") {
+    return runCliWorkflowPackageScope({
+      ...runCliContext,
+      scope: "workflow",
+      command: "package",
+      target: "publish",
+      positionals: ["workflow", "package", "publish", command].filter(
+        (value): value is string => value !== undefined,
+      ),
+    });
   }
 
   if (scope === "session") {
