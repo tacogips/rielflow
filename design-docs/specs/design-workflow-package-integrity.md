@@ -23,6 +23,13 @@ that expected content contains suspicious prompts, scripts, or workflow payloads
 Both gates run before destination writes, and a scanner failure must not weaken
 or skip digest and signature validation.
 
+LLM-backed package review through the
+`rielflow/workflow-package-sandbox-review` node add-on is also separate from
+checkout integrity. That add-on is a normal workflow worker for review and
+triage workflows; it may inspect staged or fixture package content and return a
+mailbox decision, but it does not replace digest/signature validation, mutate
+checkout provenance, or make checkout automatically run an LLM backend.
+
 ## Trust Model
 
 Registry config entries may define `trustedSigners` and `requireSignature`.
@@ -73,3 +80,8 @@ The scanner may report package-relative evidence and rule ids, but it must not
 store secret values in checkout records or package manifests. Scanner results
 belong in command output and test assertions; package manifests remain focused
 on source metadata, checksums, sha256 integrity, and signatures.
+
+Workflows that need human or LLM-assisted package review should compose the
+`rielflow/workflow-package-sandbox-review` add-on before or after checkout
+staging according to their own approval flow. The package installer remains
+deterministic unless an explicit future checkout policy adds an LLM review gate.

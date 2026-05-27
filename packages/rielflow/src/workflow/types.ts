@@ -558,6 +558,16 @@ export interface AgentWorkerAddonConfig {
   readonly timeoutMs?: number;
 }
 
+export interface WorkflowPackageSandboxReviewAddonConfig {
+  readonly executionBackend: CliAgentBackend;
+  readonly model: string;
+  readonly decisionPolicy?: "advisory" | "block-on-high";
+  readonly maxEvidenceBytes?: number;
+  readonly systemPromptTemplate?: string;
+  readonly sessionPolicy?: NodeSessionPolicy;
+  readonly timeoutMs?: number;
+}
+
 export interface ChatReplyDispatchTarget {
   readonly sourceId: string;
   readonly provider: string;
@@ -692,6 +702,13 @@ export type ResolvedAgentWorkerAddon =
   | ResolvedCodexWorkerAddon
   | ResolvedClaudeCodeWorkerAddon;
 
+export interface ResolvedWorkflowPackageSandboxReviewAddon {
+  readonly name: "rielflow/workflow-package-sandbox-review";
+  readonly version: "1";
+  readonly config: WorkflowPackageSandboxReviewAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Phase-2 nested superviser control-plane add-ons. Invoked as `nodeType: "addon"`
  * and executed natively when a {@link import("./superviser-control").SuperviserRuntimeControl}
@@ -784,6 +801,7 @@ export type ResolvedNodeAddon =
   | ResolvedGitCommitAddon
   | ResolvedGitPushAddon
   | ResolvedAgentWorkerAddon
+  | ResolvedWorkflowPackageSandboxReviewAddon
   | ResolvedSuperviserControlAddon;
 
 export interface NodePayload {
