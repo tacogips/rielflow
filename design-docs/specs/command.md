@@ -420,7 +420,7 @@ No CLI command should require telemetry configuration to run.
 The first local verification path should be:
 
 1. start Jaeger with Docker Compose:
-   `docker compose -f docker-compose.jaeger.yml up -d`
+   `docker compose -f compose.jaeger.yaml up -d`
 2. run a workflow with `OTEL_SERVICE_NAME=rielflow` and
    `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the Compose Jaeger collector
 3. keep `RIELFLOW_OTEL_EXPORT_MESSAGES` unset for the default
@@ -436,11 +436,11 @@ Verification commands for the implementation plan should include:
 - focused `bun test` targets for telemetry configuration, redaction, workflow
   execution instrumentation, mailbox/communication instrumentation, and CLI or
   library option propagation
-- `docker compose -f docker-compose.jaeger.yml up -d`
-- `docker compose -f docker-compose.jaeger.yml ps`
+- `docker compose -f compose.jaeger.yaml up -d`
+- `docker compose -f compose.jaeger.yaml ps`
 - an example `bun run packages/rielflow/src/bin.ts workflow run ...` invocation
   with `OTEL_EXPORTER_OTLP_ENDPOINT` configured
-- `docker compose -f docker-compose.jaeger.yml down`
+- `docker compose -f compose.jaeger.yaml down`
 
 Workflow lookup resolution order:
 

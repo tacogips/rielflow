@@ -1,0 +1,4 @@
+interface:
+  display_name: "Compose YAML Edit"
+  short_description: "Edit Docker/Podman Compose YAML files safely and consistently."
+  default_prompt: "Edit this Compose YAML file using current Compose naming, schema, and validation conventions."

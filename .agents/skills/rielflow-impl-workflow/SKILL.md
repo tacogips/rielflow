@@ -107,7 +107,7 @@ aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
 an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; inbox/outbox message payloads
 must remain excluded unless `RIELFLOW_OTEL_EXPORT_MESSAGES=true` is explicitly
 set for trusted fixtures. Jaeger smoke checks should use the repository-owned
-`docker-compose.jaeger.yml` file and `docker compose -f docker-compose.jaeger.yml`.
+`compose.jaeger.yaml` file and `docker compose -f compose.jaeger.yaml`.
 
 ## Reporting
 

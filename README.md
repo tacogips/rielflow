@@ -163,8 +163,8 @@ debugging a trusted local fixture.
 Local Jaeger smoke verification:
 
 ```bash
-docker compose -f docker-compose.jaeger.yml up -d
-docker compose -f docker-compose.jaeger.yml ps
+docker compose -f compose.jaeger.yaml up -d
+docker compose -f compose.jaeger.yaml ps
 OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   bun run packages/rielflow/src/bin.ts workflow run first-four-arithmetic-pipeline \
   --workflow-definition-dir ./examples \
@@ -173,7 +173,7 @@ OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 curl -fsS http://localhost:16686/api/services | jq -e '.data | index("rielflow") != null'
 curl -fsS 'http://localhost:16686/api/traces?service=rielflow&limit=20' \
   | jq -e '[.data[]?.spans[]?.operationName] | length > 0'
-docker compose -f docker-compose.jaeger.yml down
+docker compose -f compose.jaeger.yaml down
 ```
 
 Use `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only for trusted fixtures. Redaction

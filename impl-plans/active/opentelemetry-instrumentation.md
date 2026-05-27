@@ -20,7 +20,7 @@ mailbox/communication handoff. Add startup and library configuration that
 keeps inbox/outbox message payload export disabled by default, with explicit
 opt-in via `WorkflowTelemetryOptions.exportMessages` or
 `RIELFLOW_OTEL_EXPORT_MESSAGES`. Add a repository-owned
-`docker-compose.jaeger.yml` verification path for local Jaeger traces.
+`compose.jaeger.yaml` verification path for local Jaeger traces.
 
 ### Scope
 
@@ -316,7 +316,7 @@ interface ControlPlaneSpanAttributes {
 
 ### 7. Jaeger Compose Verification And Documentation
 
-#### docker-compose.jaeger.yml
+#### compose.jaeger.yaml
 #### README.md
 #### design-docs/specs/command.md
 #### examples/README.md or relevant example notes
@@ -335,9 +335,9 @@ services:
 
 **Checklist**:
 
-- [x] Add `docker-compose.jaeger.yml` with Jaeger UI and OTLP collector ports.
+- [x] Add `compose.jaeger.yaml` with Jaeger UI and OTLP collector ports.
 - [x] Document the local verification path using
-      `docker compose -f docker-compose.jaeger.yml`.
+      `docker compose -f compose.jaeger.yaml`.
 - [x] Document telemetry environment variables and privacy defaults.
 - [x] Include an example workflow run command with
       `OTEL_SERVICE_NAME=rielflow` and `OTEL_EXPORTER_OTLP_ENDPOINT`
@@ -362,7 +362,7 @@ services:
 | Backend adapter spans | `packages/rielflow/src/workflow/adapter-execution.ts`, `packages/rielflow/src/workflow/adapters/*` | Completed | Required |
 | Communication/mailbox spans | `packages/rielflow/src/workflow/communication*.ts`, `packages/rielflow/src/workflow/node-execution-mailbox.ts` | Completed | Required |
 | Server/GraphQL spans | `packages/rielflow/src/server/*`, `packages/rielflow/src/graphql/*`, `packages/rielflow-graphql/src/*` | Completed | Required |
-| Jaeger/docs | `docker-compose.jaeger.yml`, `README.md`, `design-docs/specs/command.md` | Completed | Manual smoke |
+| Jaeger/docs | `compose.jaeger.yaml`, `README.md`, `design-docs/specs/command.md` | Completed | Manual smoke |
 
 ## Dependencies
 
@@ -466,13 +466,13 @@ GraphQL, and control-plane files.
 
 **Status**: Completed
 **Parallelizable**: Yes, after TASK-001; write scope is docs and Compose file.
-**Deliverables**: `docker-compose.jaeger.yml` and documentation updates.
+**Deliverables**: `compose.jaeger.yaml` and documentation updates.
 
 **Completion Criteria**:
 
 - [x] Compose file exposes Jaeger UI and OTLP collector ports.
 - [x] Verification commands are documented with explicit
-      `docker compose -f docker-compose.jaeger.yml` syntax.
+      `docker compose -f compose.jaeger.yaml` syntax.
 - [x] Smoke verification runs `first-four-arithmetic-pipeline` with
       `./examples/first-four-arithmetic-pipeline/mock-scenario.json`.
 - [x] Verification checks Jaeger for the `rielflow` service and at least one
@@ -513,12 +513,12 @@ that those spans should attach to.
 - `bun test packages/rielflow/src/events/listener-service.test.ts packages/rielflow/src/events/config.test.ts`
 - `OTEL_SDK_DISABLED=true bun run packages/rielflow/src/bin.ts events serve --help`
 - `bun test`
-- `docker compose -f docker-compose.jaeger.yml up -d`
-- `docker compose -f docker-compose.jaeger.yml ps`
+- `docker compose -f compose.jaeger.yaml up -d`
+- `docker compose -f compose.jaeger.yaml ps`
 - `OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 bun run packages/rielflow/src/bin.ts workflow run first-four-arithmetic-pipeline --workflow-definition-dir ./examples --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json --output json`
 - `curl -fsS http://localhost:16686/api/services | jq -e '.data | index("rielflow") != null'`
 - `curl -fsS 'http://localhost:16686/api/traces?service=rielflow&limit=20' | jq -e '[.data[]?.spans[]?.operationName] | length > 0'`
-- `docker compose -f docker-compose.jaeger.yml down`
+- `docker compose -f compose.jaeger.yaml down`
 
 ## Completion Criteria
 

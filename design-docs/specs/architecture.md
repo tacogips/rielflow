@@ -1834,14 +1834,14 @@ Data flow:
    without changing the workflow bundle.
 
 The local Jaeger setup is a development verification aid, not a production
-runtime requirement. The repository-owned `docker-compose.jaeger.yml` file
+runtime requirement. The repository-owned `compose.jaeger.yaml` file
 should define a `jaeger` service exposing the Jaeger UI and OTLP collector
 ports. Verification commands should start Jaeger with
-`docker compose -f docker-compose.jaeger.yml up -d`, run a workflow with
+`docker compose -f compose.jaeger.yaml up -d`, run a workflow with
 `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the local collector, inspect service
-status with `docker compose -f docker-compose.jaeger.yml ps`, and confirm
+status with `docker compose -f compose.jaeger.yaml ps`, and confirm
 traces through the UI or Jaeger API where practical before cleanup with
-`docker compose -f docker-compose.jaeger.yml down`.
+`docker compose -f compose.jaeger.yaml down`.
 
 Codex-agent reference mapping: Step 1 inspected
 `/Users/taco/gits/tacogips/codex-agent` and

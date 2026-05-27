@@ -170,13 +170,13 @@ For a local trace smoke check, start the repository Jaeger stack and point the
 OTLP exporter at it:
 
 ```bash
-docker compose -f docker-compose.jaeger.yml up -d
+docker compose -f compose.jaeger.yaml up -d
 OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   bun run packages/rielflow/src/bin.ts workflow run first-four-arithmetic-pipeline \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
   --output json
-docker compose -f docker-compose.jaeger.yml down
+docker compose -f compose.jaeger.yaml down
 ```
 
 ## Remote And Server Use
