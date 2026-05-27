@@ -151,6 +151,36 @@ as `workflow-loader.ts`, `node-output-contract.ts`, or
 `bun run check:source-filenames`; run the shared `lint:biome` script instead of
 calling `biome check` directly when validating repository changes.
 
+## OpenTelemetry And Jaeger
+
+Rielflow can emit coarse OpenTelemetry spans for workflow runs, step execution,
+adapter calls, mailbox handoff, server requests, GraphQL handling, and event
+listener startup. Telemetry is disabled unless an OTLP endpoint is configured or
+`RIELFLOW_OTEL_ENABLED=true` is set. Message bodies are not exported by
+default; keep `RIELFLOW_OTEL_EXPORT_MESSAGES` unset or `false` unless you are
+debugging a trusted local fixture.
+
+Local Jaeger smoke verification:
+
+```bash
+docker compose -f compose.jaeger.yaml up -d
+docker compose -f compose.jaeger.yaml ps
+OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  bun run packages/rielflow/src/bin.ts workflow run first-four-arithmetic-pipeline \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+curl -fsS http://localhost:16686/api/services | jq -e '.data | index("rielflow") != null'
+curl -fsS 'http://localhost:16686/api/traces?service=rielflow&limit=20' \
+  | jq -e '[.data[]?.spans[]?.operationName] | length > 0'
+docker compose -f compose.jaeger.yaml down
+```
+
+Use `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only for trusted fixtures. Redaction
+still runs when message export is enabled, but prompts, model output,
+authorization headers, GraphQL variables, stdout/stderr, attachments, and file
+contents should not be treated as routine telemetry attributes.
+
 ## Workflow Locations
 
 By default, rielflow looks for workflow bundles in scoped catalogs:

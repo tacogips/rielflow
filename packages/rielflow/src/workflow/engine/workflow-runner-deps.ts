@@ -12,7 +12,6 @@ import {
   executeAdapterWithTimeout,
   executePackageNodeWithTimeout,
 } from "../adapter-execution";
-import { DispatchingNodeAdapter } from "../adapters/dispatch";
 import { claimFanoutStepBudget } from "../engine-fanout";
 import {
   loadContinuationRelatedSnapshots,
@@ -111,7 +110,6 @@ import {
   executeCrossWorkflowDispatchesForNode,
   executeLocalFanoutTransition,
 } from "./fanout-dispatch";
-import { runNestedSuperviserSessionDriver } from "./auto-improve-and-runner";
 import {
   buildLatestOutputMailboxIndex,
   buildCommitMessageTemplate,
@@ -128,6 +126,12 @@ import {
 } from "./mailbox-communication-artifacts";
 import { finalizeCompletedWorkflowRun } from "./result-finalization";
 
+const runNestedSuperviserSessionDriver: typeof import("./auto-improve-and-runner").runNestedSuperviserSessionDriver =
+  async (...args) => {
+    const module = await import("./auto-improve-and-runner");
+    return await module.runNestedSuperviserSessionDriver(...args);
+  };
+
 export const workflowRunnerDeps = {
   mkdir,
   rm,
@@ -138,8 +142,8 @@ export const workflowRunnerDeps = {
   normalizeOutputContractEnvelope,
   executeAdapterWithTimeout,
   executePackageNodeWithTimeout,
-  DispatchingNodeAdapter,
-  claimFanoutStepBudget,
+  claimFanoutStepBudget: (...args: Parameters<typeof claimFanoutStepBudget>) =>
+    claimFanoutStepBudget(...args),
   loadContinuationRelatedSnapshots,
   resolveContinuationAnchorPlacement,
   assembleNodeInput,
@@ -248,7 +252,6 @@ export type WorkflowRunnerAdapterPort = Pick<
   | "normalizeOutputContractEnvelope"
   | "executeAdapterWithTimeout"
   | "executePackageNodeWithTimeout"
-  | "DispatchingNodeAdapter"
   | "ScenarioNodeAdapter"
 >;
 
@@ -289,7 +292,6 @@ export type WorkflowRunnerExecutionPort = Omit<
 
 export type WorkflowRunSetupPort = Pick<
   WorkflowRunnerDeps,
-  | "DispatchingNodeAdapter"
   | "loadWorkflowFromDisk"
   | "createManagerSessionStore"
   | "createExecutionCopyMutableWorkspace"
@@ -305,7 +307,6 @@ export type WorkflowRunSetupPort = Pick<
 >;
 
 export const workflowRunSetupPort: WorkflowRunSetupPort = {
-  DispatchingNodeAdapter,
   loadWorkflowFromDisk,
   createManagerSessionStore,
   createExecutionCopyMutableWorkspace,

@@ -1,8 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { describe, expect, test } from "vitest";
+import * as telemetry from "../telemetry";
 import {
   AdapterExecutionError,
   type AdapterExecutionInput,
@@ -20,6 +21,7 @@ import {
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -367,6 +369,58 @@ function makeExecutionMailbox() {
 }
 
 describe("executeAdapterWithTimeout", () => {
+  test("wraps adapter execution in a coarse telemetry span without raw prompt output", async () => {
+    const spanCalls: Array<{
+      readonly name: string;
+      readonly attributes: Readonly<Record<string, unknown>>;
+    }> = [];
+    vi.spyOn(telemetry, "withTelemetryResultSpan").mockImplementation(
+      async (name, attributes, run) => {
+        spanCalls.push({ name, attributes });
+        return await run();
+      },
+    );
+    const adapter = {
+      async execute() {
+        return {
+          provider: "codex-agent",
+          model: "gpt-5.5",
+          promptText: "raw completion prompt",
+          completionPassed: true,
+          when: { always: true },
+          payload: { ok: true },
+          processLogs: [{ stream: "stdout", text: "raw stdout" }],
+        };
+      },
+    } satisfies NodeAdapter;
+
+    const result = await executeAdapterWithTimeout(
+      adapter,
+      makeExecutionInput({
+        promptText: "raw prompt with secret",
+        node: {
+          executionBackend: "codex-agent",
+          model: "gpt-5.5",
+        } as AdapterExecutionInput["node"],
+      }),
+      1000,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(spanCalls).toHaveLength(1);
+    expect(spanCalls[0]?.name).toBe("rielflow.adapter.execute");
+    expect(spanCalls[0]?.attributes).toMatchObject({
+      "agent.backend": "codex-agent",
+      "agent.model": "gpt-5.5",
+    });
+    expect(Object.keys(spanCalls[0]?.attributes ?? {})).not.toContain(
+      "promptText",
+    );
+    expect(Object.keys(spanCalls[0]?.attributes ?? {})).not.toContain(
+      "stdout",
+    );
+  });
+
   test("classifies non-DOM abort errors from timed-out adapters as timeout", async () => {
     const abortingAdapter = {
       async execute(_input, context) {

@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/opentelemetry-instrumentation` | Ready | `architecture#opentelemetry-runtime-instrumentation`, `command#telemetry-and-jaeger-verification` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 

@@ -156,10 +156,28 @@ bun run src/main.ts session continue <session-id> \
 - Prefer supervised execution with `--auto-improve --nested-supervisor` for real work where failure recovery matters.
 - Prefer `--output json` when the result will be parsed, saved, or compared.
 - Prefer `--mock-scenario` for demos, tests, and docs because it avoids real backend calls.
+- Keep OpenTelemetry message payload export disabled for normal runs. Telemetry
+  can be enabled with an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`, but
+  set `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only for trusted fixtures.
 - Do not combine `--mock-scenario` with `--endpoint`; mock scenarios are local-only.
 - Use `--working-dir` when workflow execution must happen relative to a specific project directory.
 - Use `--artifact-root` and `--session-store` when the user wants isolated runtime state.
 - Use `session rerun` when restarting from a step with variables only; use `session continue` only when intentionally importing history up to a concrete prior step-run.
+
+## OpenTelemetry And Jaeger
+
+For a local trace smoke check, start the repository Jaeger stack and point the
+OTLP exporter at it:
+
+```bash
+docker compose -f compose.jaeger.yaml up -d
+OTEL_SERVICE_NAME=rielflow OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  bun run packages/rielflow/src/bin.ts workflow run first-four-arithmetic-pipeline \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+docker compose -f compose.jaeger.yaml down
+```
 
 ## Remote And Server Use
 

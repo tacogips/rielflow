@@ -102,6 +102,13 @@ variables as compatibility/runtime contracts unless a design explicitly
 approves a migration. Product-owned package names, CLI examples, workflow
 catalog paths, and human-facing documentation should use Rielflow/`rielflow`.
 
+Telemetry-related issue-resolution runs should keep user-facing documentation
+aligned with the runtime privacy contract. OpenTelemetry tracing is opt-in via
+an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`; inbox/outbox message payloads
+must remain excluded unless `RIELFLOW_OTEL_EXPORT_MESSAGES=true` is explicitly
+set for trusted fixtures. Jaeger smoke checks should use the repository-owned
+`compose.jaeger.yaml` file and `docker compose -f compose.jaeger.yaml`.
+
 ## Reporting
 
 After the workflow finishes, report:

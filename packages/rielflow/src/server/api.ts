@@ -1,5 +1,6 @@
 import type { SessionStoreOptions } from "../workflow/session-store";
 import type { LoadOptions, ResolvedWorkflowSource } from "../workflow/types";
+import type { WorkflowTelemetryOptions } from "../telemetry";
 import { inferRootDataDirFromExplicitStorageRoots } from "../workflow/paths";
 import {
   BROWSER_WORKFLOW_OVERVIEW_RECENT_LIMIT,
@@ -7,12 +8,14 @@ import {
   overviewBrowserHtml,
 } from "./browser-overview";
 import { handleGraphqlRequest } from "./graphql";
+import { withTelemetrySpan } from "../telemetry";
 
 export interface ApiContext extends LoadOptions, SessionStoreOptions {
   readonly readOnly?: boolean;
   readonly noExec?: boolean;
   readonly fixedWorkflowName?: string;
   readonly fixedResolvedWorkflowSource?: ResolvedWorkflowSource;
+  readonly telemetry?: WorkflowTelemetryOptions;
 }
 
 export { BROWSER_WORKFLOW_OVERVIEW_RECENT_LIMIT };
@@ -33,6 +36,21 @@ function json(payload: unknown, status = 200): Response {
 }
 
 export async function handleApiRequest(
+  request: Request,
+  context: ApiContext,
+): Promise<Response> {
+  return await withTelemetrySpan(
+    "rielflow.server.request",
+    {
+      "http.method": request.method,
+      "http.route": new URL(request.url).pathname,
+      "workflow.id": context.fixedWorkflowName,
+    },
+    async () => await handleApiRequestInternal(request, context),
+  );
+}
+
+async function handleApiRequestInternal(
   request: Request,
   context: ApiContext,
 ): Promise<Response> {

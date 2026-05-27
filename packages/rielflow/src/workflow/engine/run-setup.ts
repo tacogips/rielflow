@@ -1,5 +1,6 @@
 import { workflowRunSetupPort } from "./workflow-runner-deps";
 import type { NodeAdapter } from "../adapter";
+import { DispatchingNodeAdapter } from "../adapters/dispatch";
 import type { LoadedWorkflow } from "../load";
 import type { ManagerSessionStore } from "../manager-session-store";
 import type { Result } from "../result";
@@ -19,7 +20,6 @@ import type {
 } from "./types-and-session-state";
 
 const {
-  DispatchingNodeAdapter,
   loadWorkflowFromDisk,
   createManagerSessionStore,
   createExecutionCopyMutableWorkspace,

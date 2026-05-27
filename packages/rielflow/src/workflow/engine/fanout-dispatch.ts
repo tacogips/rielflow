@@ -64,7 +64,15 @@ import {
   persistCommunicationArtifact,
   runWorkflowInternal,
 } from "./mailbox-and-communications";
-import { runWorkflow } from "./auto-improve-and-runner";
+
+async function runWorkflowDeferred(
+  ...args: Parameters<
+    typeof import("./auto-improve-and-runner").runWorkflow
+  >
+): ReturnType<typeof import("./auto-improve-and-runner").runWorkflow> {
+  const module = await import("./auto-improve-and-runner");
+  return await module.runWorkflow(...args);
+}
 
 interface ExecuteLocalFanoutTransitionInput {
   readonly workflowName: string;
@@ -279,7 +287,7 @@ async function executeLocalFanoutBranch(input: {
       },
       transitionInput.options,
     );
-    const branchRun = await runWorkflow(
+    const branchRun = await runWorkflowDeferred(
       transitionInput.workflowName,
       {
         ...transitionInput.options,
