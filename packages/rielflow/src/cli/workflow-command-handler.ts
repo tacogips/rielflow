@@ -1,5 +1,8 @@
 import { collectWorkflowAddonSourceSummaries } from "../workflow/addon-source-summary";
-import { checkoutWorkflow } from "../workflow/checkout";
+import {
+  checkoutWorkflow,
+  parseGitHubDirectoryUrl,
+} from "../workflow/checkout";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
 import {
@@ -69,6 +72,7 @@ import {
   renderWorkflowManifestValidationLines,
   validateWorkflowManifestForCli,
 } from "./workflow-manifest-validation";
+import { runCliWorkflowPackageScope } from "./workflow-package-command-handler";
 
 function renderWorkflowStructureLines(
   rows: readonly WorkflowStructureRow[],
@@ -429,6 +433,24 @@ export async function runCliWorkflowScope(
     return 0;
   }
 
+  if (command === "package") {
+    return await runCliWorkflowPackageScope(context);
+  }
+
+  if (command === "search") {
+    return await runCliWorkflowPackageScope({
+      ...context,
+      command: "package",
+      target: "search",
+      positionals: [
+        positionals[0] ?? "workflow",
+        "package",
+        "search",
+        ...positionals.slice(2),
+      ],
+    });
+  }
+
   const workflowTarget = target;
   if (workflowTarget === undefined) {
     io.stderr("scope, command, and target are required");
@@ -450,6 +472,20 @@ export async function runCliWorkflowScope(
     if (graphqlCliTransport !== null) {
       io.stderr("workflow checkout is local-only; omit --endpoint");
       return 2;
+    }
+
+    if (!parseGitHubDirectoryUrl(workflowTarget).ok) {
+      return await runCliWorkflowPackageScope({
+        ...context,
+        command: "package",
+        target: "checkout",
+        positionals: [
+          positionals[0] ?? "workflow",
+          "package",
+          "checkout",
+          workflowTarget,
+        ],
+      });
     }
 
     const checkedOut = await checkoutWorkflow({

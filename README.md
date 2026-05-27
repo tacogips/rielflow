@@ -251,6 +251,62 @@ set. Each successful checkout writes provenance to
 source URL, scope, checkout time, and destination directory. Do not combine
 checkout with `--workflow-definition-dir`; checkout is a scoped catalog write.
 
+Workflow packages add a registry-backed catalog on top of scoped workflow
+checkout. Registries are GitHub repositories recorded in
+`~/.rielflow/workflow-packages/registries.json`; the built-in default is
+`https://github.com/tacogips/rielflow-packages` with local development path
+`/Users/taco/gits/tacogips/rielflow-packages`. Register another registry with:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow package registry add personal \
+  --registry-url https://github.com/<owner>/<repo> \
+  --local-path /path/to/local/clone
+```
+
+Each package contains `rielflow-package.json` plus a workflow bundle directory.
+The manifest stores package metadata, structured workflow metadata from
+`workflow.json.metadata.rielflowPackage`, tags, workflow directory, a legacy md5
+checksum, and sha256 integrity metadata over deterministic package contents.
+Search reads registry metadata and uses the cache under
+`~/.rielflow/workflow-packages/cache` unless `--refresh` or `--no-cache` is set:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow package search review --refresh
+```
+
+Checkout installs a package workflow into project scope by default, or user
+scope with `--user-scope`:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow package checkout worker-only-single-step
+```
+
+Package checkout can run an optional pre-install security check before it
+copies the workflow or writes checkout records. `--pre-install-check` runs the
+built-in static scanner and rejects high or critical findings by default. Use
+`--pre-install-check-mode warn` to report findings without blocking checkout.
+Add `--pre-install-check-container docker|podman|auto` to request an additional
+container inspection with network disabled and the staged package mounted
+read-only.
+
+Publish stages a workflow directory into the selected registry local clone,
+writes package metadata and integrity, commits it, and pushes the requested
+branch. Publish validates `workflow.metadata.rielflowPackage` before writing the
+package. Set `RIEL_WORKFLOW_PACKAGE_SIGNER_ID` plus
+`RIEL_WORKFLOW_PACKAGE_SIGNING_KEY` or `RIEL_WORKFLOW_PACKAGE_SIGNING_KEY_FILE`
+to add an Ed25519 package signature. Checkout always rejects sha256 digest
+mismatches, and it requires trusted signatures when the registry config sets
+`requireSignature`, has `trustedSigners`, or
+`RIEL_WORKFLOW_PACKAGE_REQUIRE_SIGNATURE=true` is set. Use `--pr` to push a
+publish branch and create a pull request when direct branch push is unavailable:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow package publish .rielflow/workflows/demo \
+  --package-name demo-workflow \
+  --registry default \
+  --branch main
+```
+
 ## Workflow Discovery
 
 Use `workflow usage` when an LLM or automation needs to decide which workflow to

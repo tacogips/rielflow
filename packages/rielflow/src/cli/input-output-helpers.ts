@@ -46,7 +46,7 @@ import { HOOK_VENDOR_USAGE } from "./storage-and-options";
 export function printHelp(io: CliIo): void {
   io.stdout("Usage:");
   io.stdout(
-    "  rielflow cli workflow <create|checkout|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
+    "  rielflow cli workflow <create|checkout|package|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
   );
   io.stdout(
     "  rielflow cli workflow manifest validate [<manifest-path>] [--workflow-manifest <path>] [--executable] [--output json|text]",
@@ -100,6 +100,23 @@ export function printHelp(io: CliIo): void {
   io.stdout("  --user-scope   Install checkout under the user scope root");
   io.stdout(
     "  --overwrite    Replace an existing checkout after staged validation",
+  );
+  io.stdout("");
+  io.stdout("Package options:");
+  io.stdout(
+    "  workflow package registry add <id> --registry-url <url> [--local-path <path>] [--branch <name>]",
+  );
+  io.stdout(
+    "  workflow package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
+  );
+  io.stdout(
+    "  workflow package checkout <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--pre-install-check]",
+  );
+  io.stdout(
+    "    --pre-install-check [--pre-install-check-mode warn|reject] [--pre-install-check-container docker|podman|auto]",
+  );
+  io.stdout(
+    "  workflow package publish <workflow-dir> --package-name <name> [--registry <id-or-url>] [--branch <name>] [--pr]",
   );
   io.stdout("");
   io.stdout("Workflow scope options:");

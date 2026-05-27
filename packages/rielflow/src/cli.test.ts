@@ -10,7 +10,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { runCli, type CliDependencies } from "./cli";
+import { parseArgs } from "./cli/argument-parser";
 import { createWorkflowTemplate } from "./workflow/create";
+import { computeWorkflowPackageChecksum } from "./workflow/packages/checksum";
+import { WORKFLOW_PACKAGE_MANIFEST_FILE } from "./workflow/packages/types";
 import { mockAgentCliCommands } from "./workflow/runtime-readiness-agent-probes-test-helpers";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
@@ -691,6 +694,49 @@ async function createCompletedCliWorkflowRun(root: string): Promise<{
 }
 
 describe("runCli", () => {
+  test("parses workflow package checkout pre-install security flags", () => {
+    const parsed = parseArgs([
+      "workflow",
+      "package",
+      "checkout",
+      "demo",
+      "--pre-install-check",
+      "--pre-install-check-mode",
+      "warn",
+      "--pre-install-check-container",
+      "auto",
+    ]);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.options.preInstallCheck).toBe(true);
+    expect(parsed.options.preInstallCheckMode).toBe("warn");
+    expect(parsed.options.preInstallCheckContainer).toBe("auto");
+  });
+
+  test("rejects conflicting pre-install check CLI flags", () => {
+    const parsed = parseArgs([
+      "workflow",
+      "package",
+      "checkout",
+      "demo",
+      "--pre-install-check",
+      "--no-pre-install-check",
+    ]);
+
+    expect(parsed.error).toContain("--pre-install-check cannot be combined");
+  });
+
+  test("help documents workflow package checkout pre-install security flags", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(["--help"], capture.io);
+
+    expect(code).toBe(0);
+    expect(capture.stdout.join("\n")).toContain("--pre-install-check");
+    expect(capture.stdout.join("\n")).toContain(
+      "--pre-install-check-container docker|podman|auto",
+    );
+  });
+
   test("returns help for unknown scope", async () => {
     const capture = createIoCapture();
     const code = await runCli(["unknown", "cmd", "target"], capture.io);
@@ -1040,6 +1086,289 @@ describe("runCli", () => {
     expect(rejected.stderr.join("\n")).toContain(
       "workflow checkout does not support --workflow-definition-dir",
     );
+  });
+
+  test("workflow package aliases search and checkout package ids", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const projectRoot = path.join(root, "project");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "cli-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("cli-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "cli-flow",
+          version: "1.0.0",
+          description: "CLI searchable package",
+          tags: ["cli"],
+          workflow: {
+            description: "CLI searchable package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "cli-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "cli-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const searchCapture = createIoCapture();
+    const searchCode = await runCli(
+      [
+        "workflow",
+        "search",
+        "cli",
+        "--registry",
+        "local",
+        "--refresh",
+        "--output",
+        "json",
+        "--user-root",
+        userRoot,
+      ],
+      searchCapture.io,
+      createCliDeps(),
+    );
+    expect(searchCode).toBe(0);
+    expect(searchCapture.stdout.join("\n")).toContain(
+      '"packageId": "cli-flow"',
+    );
+
+    const packageSearchTableCapture = createIoCapture();
+    const packageSearchTableCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "search",
+        "cli",
+        "--registry",
+        "local",
+        "--refresh",
+        "--output",
+        "table",
+        "--user-root",
+        userRoot,
+      ],
+      packageSearchTableCapture.io,
+      createCliDeps(),
+    );
+    expect(packageSearchTableCode).toBe(0);
+    expect(packageSearchTableCapture.stdout.join("\n")).toContain("cli-flow");
+
+    const checkoutCapture = createIoCapture();
+    const checkoutCode = await runCli(
+      [
+        "workflow",
+        "checkout",
+        "cli-flow",
+        "--registry",
+        "local",
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      checkoutCapture.io,
+      createCliDeps(),
+    );
+    expect(checkoutCode).toBe(0);
+    const payload = JSON.parse(checkoutCapture.stdout.join("\n")) as {
+      packageId: string;
+      registryUrl: string;
+    };
+    expect(payload.packageId).toBe("cli-flow");
+    expect(payload.registryUrl).toBe(
+      "https://github.com/example/rielflow-packages",
+    );
+  });
+
+  test("rielflow publish accepts explicit registry URL and local path", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const sourceRoot = await makeTempDir();
+    const created = await createWorkflowTemplate("cli-publish-flow", {
+      workflowRoot: sourceRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    const workflowJsonPath = path.join(
+      created.value.workflowDirectory,
+      "workflow.json",
+    );
+    const workflowJson = JSON.parse(
+      await readFile(workflowJsonPath, "utf8"),
+    ) as Record<string, unknown>;
+    workflowJson["metadata"] = {
+      rielflowPackage: {
+        title: "CLI Publish Flow",
+        description: "Publishable CLI workflow package",
+        tags: ["cli", "publish"],
+      },
+    };
+    await writeFile(
+      workflowJsonPath,
+      `${JSON.stringify(workflowJson, null, 2)}\n`,
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "publish",
+        created.value.workflowDirectory,
+        "--registry",
+        "https://github.com/example/rielflow-packages",
+        "--registry-local-path",
+        registryRoot,
+        "--dry-run",
+        "--output",
+        "json",
+        "--user-root",
+        userRoot,
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      packageId: string;
+      registryUrl: string;
+      packageDirectory: string;
+      dryRun: boolean;
+    };
+    expect(payload.packageId).toBe("cli-publish-flow");
+    expect(payload.registryUrl).toBe(
+      "https://github.com/example/rielflow-packages",
+    );
+    expect(payload.packageDirectory).toBe(
+      path.join(registryRoot, "packages", "cli-publish-flow"),
+    );
+    expect(payload.dryRun).toBe(true);
+  });
+
+  test("rielflow publish resolves project-scoped workflow names", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const projectScopeRoot = path.join(root, "project", ".rielflow");
+    const registryRoot = path.join(root, "registry");
+    const created = await createWorkflowTemplate("catalog-publish-flow", {
+      workflowRoot: path.join(projectScopeRoot, "workflows"),
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    const workflowJsonPath = path.join(
+      created.value.workflowDirectory,
+      "workflow.json",
+    );
+    const workflowJson = JSON.parse(
+      await readFile(workflowJsonPath, "utf8"),
+    ) as Record<string, unknown>;
+    workflowJson["metadata"] = {
+      rielflowPackage: {
+        title: "Catalog Publish Flow",
+        description: "Project-scoped publishable workflow package",
+        tags: ["catalog", "publish"],
+      },
+    };
+    await writeFile(
+      workflowJsonPath,
+      `${JSON.stringify(workflowJson, null, 2)}\n`,
+      "utf8",
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "publish",
+        "catalog-publish-flow",
+        "--registry",
+        "https://github.com/example/rielflow-packages",
+        "--registry-local-path",
+        registryRoot,
+        "--dry-run",
+        "--output",
+        "json",
+        "--project-root",
+        projectScopeRoot,
+        "--user-root",
+        userRoot,
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      packageId: string;
+      workflowName: string;
+      packageDirectory: string;
+      dryRun: boolean;
+    };
+    expect(payload.packageId).toBe("catalog-publish-flow");
+    expect(payload.workflowName).toBe("catalog-publish-flow");
+    expect(payload.packageDirectory).toBe(
+      path.join(registryRoot, "packages", "catalog-publish-flow"),
+    );
+    expect(payload.dryRun).toBe(true);
   });
 
   test("workflow validate --executable returns invalid node validation results", async () => {
@@ -3458,7 +3787,7 @@ describe("runCli", () => {
     );
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
-      "`--output table` is only supported for workflow list and workflow status",
+      "`--output table` is only supported for workflow list, workflow status, and workflow search",
     );
   });
 
