@@ -1000,6 +1000,9 @@ describe("runCli", () => {
       scope: string;
       destinationDirectory: string;
       registryPath: string;
+      contentDigestAlgorithm: string;
+      contentDigest: string;
+      includedFiles: readonly string[];
       validationStatus: string;
       overwritten: boolean;
     };
@@ -1021,6 +1024,9 @@ describe("runCli", () => {
       validationStatus: "valid",
       overwritten: false,
     });
+    expect(payload.contentDigestAlgorithm).toBe("sha256");
+    expect(payload.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(payload.includedFiles).toContain("workflow.json");
     expect(
       await readFile(
         path.join(payload.destinationDirectory, "workflow.json"),
@@ -1100,6 +1106,22 @@ describe("runCli", () => {
       templateMode: "worker-only",
     });
     expect(created.ok).toBe(true);
+    await mkdir(path.join(packageRoot, "cli-flow", "scripts"), {
+      recursive: true,
+    });
+    await mkdir(path.join(packageRoot, "cli-flow", "skills", "cli-skill"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "cli-flow", "scripts", "preflight.sh"),
+      "#!/usr/bin/env bash\nprintf 'cli preflight\\n'\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(packageRoot, "cli-flow", "skills", "cli-skill", "SKILL.md"),
+      "# CLI Skill\n\nUsed by package checkout CLI metadata tests.\n",
+      "utf8",
+    );
     const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
     await writeFile(
       manifestPath,
@@ -1227,11 +1249,25 @@ describe("runCli", () => {
     const payload = JSON.parse(checkoutCapture.stdout.join("\n")) as {
       packageId: string;
       registryUrl: string;
+      contentDigestAlgorithm: string;
+      contentDigest: string;
+      includedFiles: readonly string[];
     };
     expect(payload.packageId).toBe("cli-flow");
     expect(payload.registryUrl).toBe(
       "https://github.com/example/rielflow-packages",
     );
+    expect(payload.contentDigestAlgorithm).toBe("sha256");
+    expect(payload.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(payload.includedFiles).toEqual(
+      expect.arrayContaining([
+        "workflow.json",
+        "prompts/main-worker.md",
+        "scripts/preflight.sh",
+        "skills/cli-skill/SKILL.md",
+      ]),
+    );
+    expect(payload.includedFiles).not.toContain(WORKFLOW_PACKAGE_MANIFEST_FILE);
   });
 
   test("rielflow publish accepts explicit registry URL and local path", async () => {

@@ -14,6 +14,7 @@ import {
 } from "./registry-config";
 import { searchWorkflowPackages } from "./search";
 import type { WorkflowCheckoutScope } from "../checkout";
+import { computeWorkflowCheckoutContentDigest } from "../checkout/content-digest";
 import {
   resolveWorkflowCheckoutDestination,
   writeWorkflowCheckoutRegistryRecord,
@@ -53,6 +54,9 @@ export interface WorkflowPackageCheckoutResult {
   readonly metadataPath: string;
   readonly checkoutRecordPath: string;
   readonly checksum: string;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly includedFiles: readonly string[];
   readonly preInstallCheck?: WorkflowPackagePreInstallCheckResult;
 }
 
@@ -231,6 +235,11 @@ export async function checkoutWorkflowPackage(
     preInstallCheck === undefined
       ? undefined
       : mergePreInstallResults(preInstallCheck, containerCheck?.value);
+  const contentDigest =
+    await computeWorkflowCheckoutContentDigest(sourceDirectory);
+  if (!contentDigest.ok) {
+    return err(packageFailure("IO", contentDigest.error.message));
+  }
   const destination = resolveWorkflowCheckoutDestination(
     loaded.value.workflowName,
     {
@@ -261,6 +270,9 @@ export async function checkoutWorkflowPackage(
       scope: destination.value.scope,
       checkedOutAt: checkedOutAt.toISOString(),
       destinationDirectory: destination.value.workflowDirectory,
+      contentDigestAlgorithm: contentDigest.value.contentDigestAlgorithm,
+      contentDigest: contentDigest.value.contentDigest,
+      includedFiles: contentDigest.value.includedFiles,
     });
     await atomicWriteJsonFile(
       path.join(
@@ -305,6 +317,9 @@ export async function checkoutWorkflowPackage(
       metadataPath: path.posix.join(record.sourcePath, "rielflow-package.json"),
       checkoutRecordPath: destination.value.registryPath,
       checksum: record.checksum,
+      contentDigestAlgorithm: contentDigest.value.contentDigestAlgorithm,
+      contentDigest: contentDigest.value.contentDigest,
+      includedFiles: contentDigest.value.includedFiles,
       ...(combinedPreInstallCheck === undefined
         ? {}
         : { preInstallCheck: combinedPreInstallCheck }),

@@ -243,10 +243,16 @@ describe("workflow checkout GitHub directory support", () => {
     const projectRoot = path.join(root, "project");
     const userRoot = path.join(root, "user", ".rielflow");
     await mkdir(projectRoot, { recursive: true });
-    const files = await createRemoteTemplate({
-      root: sourceRoot,
-      workflowName: "demo",
-    });
+    const files = [
+      ...(await createRemoteTemplate({
+        root: sourceRoot,
+        workflowName: "demo",
+      })),
+      {
+        repoPath: ".rielflow/workflows/demo/skills/demo/SKILL.md",
+        content: "# Demo Skill\n\nUsed by checkout identity tests.\n",
+      },
+    ];
 
     const checkedOut = await checkoutWorkflow({
       sourceUrl:
@@ -281,7 +287,15 @@ describe("workflow checkout GitHub directory support", () => {
       scope: string;
       checkedOutAt: string;
       destinationDirectory: string;
+      contentDigestAlgorithm: string;
+      contentDigest: string;
+      includedFiles: readonly string[];
     };
+    expect(checkedOut.value.contentDigestAlgorithm).toBe("sha256");
+    expect(checkedOut.value.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(checkedOut.value.includedFiles).toEqual(
+      expect.arrayContaining(["workflow.json", "skills/demo/SKILL.md"]),
+    );
     expect(registry).toEqual({
       workflowName: "demo",
       sourceUrl:
@@ -289,6 +303,9 @@ describe("workflow checkout GitHub directory support", () => {
       scope: "project",
       checkedOutAt: "2026-05-17T00:00:00.000Z",
       destinationDirectory: checkedOut.value.destinationDirectory,
+      contentDigestAlgorithm: "sha256",
+      contentDigest: checkedOut.value.contentDigest,
+      includedFiles: checkedOut.value.includedFiles,
     });
   });
 

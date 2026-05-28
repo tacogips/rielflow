@@ -24,6 +24,9 @@ export interface WorkflowCheckoutRegistryRecord {
   readonly scope: WorkflowCheckoutScope;
   readonly checkedOutAt: string;
   readonly destinationDirectory: string;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly includedFiles: readonly string[];
 }
 
 function checkoutFailure(
@@ -140,6 +143,9 @@ export function createWorkflowCheckoutRegistryRecord(input: {
   readonly scope: WorkflowCheckoutScope;
   readonly checkedOutAt: Date;
   readonly destinationDirectory: string;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly includedFiles: readonly string[];
 }): WorkflowCheckoutRegistryRecord {
   return {
     workflowName: input.workflowName,
@@ -147,6 +153,9 @@ export function createWorkflowCheckoutRegistryRecord(input: {
     scope: input.scope,
     checkedOutAt: input.checkedOutAt.toISOString(),
     destinationDirectory: input.destinationDirectory,
+    contentDigestAlgorithm: input.contentDigestAlgorithm,
+    contentDigest: input.contentDigest,
+    includedFiles: input.includedFiles,
   };
 }
 

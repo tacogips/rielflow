@@ -178,6 +178,7 @@ export async function runCliWorkflowPackageScope(
       io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
       io.stdout(`registry: ${checkedOut.value.registryUrl}`);
       io.stdout(`checksum: ${checkedOut.value.checksum}`);
+      io.stdout(`content digest: ${checkedOut.value.contentDigest}`);
       if (checkedOut.value.preInstallCheck !== undefined) {
         const blockingFindings =
           checkedOut.value.preInstallCheck.findings.filter(

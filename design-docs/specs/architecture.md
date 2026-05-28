@@ -818,6 +818,20 @@ Each record must include:
 - `scope`
 - `checkedOutAt`
 - `destinationDirectory`
+- `contentDigestAlgorithm`
+- `contentDigest`
+- `includedFiles`
+
+The checkout content digest is the SHA-256 identity of the installed workflow
+bundle, not package provenance or registry metadata. Direct GitHub-directory
+checkout and registry-backed package checkout must use the same workflow-root
+relative hashing rules: include `workflow.json`, file-backed nodes, prompt
+files, workflow-local `scripts/`, workflow-local `skills/`, and any other
+ordinary bundle files; exclude generated checkout metadata, `.rielflow` runtime
+state, `.git` state, and temporary files. Package checkout may separately verify
+and persist package integrity data from `rielflow-package.json`, but that package
+integrity digest must not be reused as the checkout `contentDigest` and package
+root paths must not be recorded as checkout `includedFiles`.
 
 Registry writes should be staged and renamed into place to avoid corrupt JSON on
 interrupted writes. Duplicate detection must consider both the destination

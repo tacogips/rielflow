@@ -509,6 +509,7 @@ export async function runCliWorkflowScope(
       io.stdout(`scope: ${checkedOut.value.scope}`);
       io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
       io.stdout(`registry: ${checkedOut.value.registryPath}`);
+      io.stdout(`content digest: ${checkedOut.value.contentDigest}`);
     }
     return 0;
   }

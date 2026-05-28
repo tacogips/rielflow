@@ -22,6 +22,9 @@ export interface WorkflowCheckoutResult {
   readonly scope: WorkflowCheckoutScope;
   readonly destinationDirectory: string;
   readonly registryPath: string;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly includedFiles: readonly string[];
   readonly validationStatus: "valid";
   readonly overwritten: boolean;
 }

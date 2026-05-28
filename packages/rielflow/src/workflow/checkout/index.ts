@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadWorkflowFromDisk } from "../load";
 import { err, ok, type Result } from "../result";
 import type { LoadOptions } from "../types";
+import { computeWorkflowCheckoutContentDigest } from "./content-digest";
 import {
   fetchGitHubDirectoryToStaging,
   parseGitHubDirectoryUrl,
@@ -32,6 +33,7 @@ export {
   resolveUserScopeRootForCheckout,
   writeWorkflowCheckoutRegistryRecord,
 } from "./registry";
+export { computeWorkflowCheckoutContentDigest } from "./content-digest";
 
 export interface WorkflowCheckoutOptions extends LoadOptions {
   readonly sourceUrl: string;
@@ -196,12 +198,22 @@ export async function checkoutWorkflow(
       );
     }
 
+    const contentDigest = await computeWorkflowCheckoutContentDigest(
+      stagedWorkflowDirectory,
+    );
+    if (!contentDigest.ok) {
+      return contentDigest;
+    }
+
     const record = createWorkflowCheckoutRegistryRecord({
       workflowName,
       sourceUrl: options.sourceUrl,
       scope: destination.value.scope,
       checkedOutAt: options.now?.() ?? new Date(),
       destinationDirectory: destination.value.workflowDirectory,
+      contentDigestAlgorithm: contentDigest.value.contentDigestAlgorithm,
+      contentDigest: contentDigest.value.contentDigest,
+      includedFiles: contentDigest.value.includedFiles,
     });
 
     await mkdir(destination.value.workflowRoot, { recursive: true });
@@ -265,6 +277,9 @@ export async function checkoutWorkflow(
       scope: destination.value.scope,
       destinationDirectory: destination.value.workflowDirectory,
       registryPath: destination.value.registryPath,
+      contentDigestAlgorithm: contentDigest.value.contentDigestAlgorithm,
+      contentDigest: contentDigest.value.contentDigest,
+      includedFiles: contentDigest.value.includedFiles,
       validationStatus: "valid",
       overwritten: duplicateExists,
     });

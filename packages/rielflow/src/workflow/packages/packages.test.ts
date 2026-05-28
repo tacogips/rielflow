@@ -145,6 +145,27 @@ async function createPackagedWorkflow(input: {
   return packageRoot;
 }
 
+async function addWorkflowLocalIdentityFiles(input: {
+  readonly packageRoot: string;
+  readonly workflowName: string;
+}): Promise<void> {
+  const workflowDirectory = path.join(input.packageRoot, input.workflowName);
+  await mkdir(path.join(workflowDirectory, "scripts"), { recursive: true });
+  await mkdir(path.join(workflowDirectory, "skills", "package-skill"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(workflowDirectory, "scripts", "preflight.sh"),
+    "#!/usr/bin/env bash\nprintf 'preflight\\n'\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(workflowDirectory, "skills", "package-skill", "SKILL.md"),
+    "# Package Skill\n\nUsed by package checkout identity metadata tests.\n",
+    "utf8",
+  );
+}
+
 async function refreshPackageManifestDigests(input: {
   readonly packageRoot: string;
   readonly workflowDirectory: string;
@@ -348,10 +369,18 @@ describe("workflow package registry", () => {
     const userRoot = await makeTempDir();
     const registryRoot = await makeTempDir();
     const projectRoot = await makeTempDir();
-    await createPackagedWorkflow({
+    const packageRoot = await createPackagedWorkflow({
       registryRoot,
       packageName: "checkout-flow",
       workflowName: "checkout-flow",
+    });
+    await addWorkflowLocalIdentityFiles({
+      packageRoot,
+      workflowName: "checkout-flow",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "checkout-flow",
     });
     const registered = await registerWorkflowPackageRegistry({
       id: "local",
@@ -380,6 +409,37 @@ describe("workflow package registry", () => {
       expect(checkedOut.value.destinationDirectory).toBe(
         path.join(projectRoot, ".rielflow", "workflows", "checkout-flow"),
       );
+      expect(checkedOut.value.contentDigestAlgorithm).toBe("sha256");
+      expect(checkedOut.value.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+      expect(checkedOut.value.includedFiles).toEqual(
+        expect.arrayContaining([
+          "workflow.json",
+          "nodes/node-main-worker.json",
+          "prompts/main-worker.md",
+          "scripts/preflight.sh",
+          "skills/package-skill/SKILL.md",
+        ]),
+      );
+      expect(checkedOut.value.includedFiles).not.toContain(
+        WORKFLOW_PACKAGE_MANIFEST_FILE,
+      );
+      expect(
+        checkedOut.value.includedFiles.some((file) =>
+          file.startsWith("checkout-flow/"),
+        ),
+      ).toBe(false);
+      const checkoutRecord = JSON.parse(
+        await readFile(checkedOut.value.checkoutRecordPath, "utf8"),
+      ) as {
+        readonly contentDigestAlgorithm?: string;
+        readonly contentDigest?: string;
+        readonly includedFiles?: readonly string[];
+      };
+      expect(checkoutRecord.contentDigestAlgorithm).toBe("sha256");
+      expect(checkoutRecord.contentDigest).toBe(checkedOut.value.contentDigest);
+      expect(checkoutRecord.includedFiles).toEqual(
+        checkedOut.value.includedFiles,
+      );
       const provenance = await readFile(
         path.join(
           checkedOut.value.destinationDirectory,
@@ -388,6 +448,76 @@ describe("workflow package registry", () => {
         "utf8",
       );
       expect(provenance).toContain("checkout-flow");
+      const initialContentDigest = checkedOut.value.contentDigest;
+      const manifestPath = path.join(
+        packageRoot,
+        WORKFLOW_PACKAGE_MANIFEST_FILE,
+      );
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["title"] = "Package metadata changed without workflow changes";
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+      await refreshPackageManifestDigests({
+        packageRoot,
+        workflowDirectory: "checkout-flow",
+      });
+      await searchWorkflowPackages({
+        registry: "local",
+        refresh: true,
+        options: { userRoot },
+      });
+      const manifestOnlyCheckout = await checkoutWorkflowPackage({
+        packageName: "checkout-flow",
+        registry: "local",
+        overwrite: true,
+        options: { userRoot, cwd: projectRoot },
+      });
+      expect(manifestOnlyCheckout.ok).toBe(true);
+      if (!manifestOnlyCheckout.ok) {
+        throw new Error("manifest-only checkout failed");
+      }
+      expect(manifestOnlyCheckout.value.contentDigest).toBe(
+        initialContentDigest,
+      );
+
+      await writeFile(
+        path.join(
+          packageRoot,
+          "checkout-flow",
+          "skills",
+          "package-skill",
+          "SKILL.md",
+        ),
+        "# Package Skill\n\nWorkflow-local skill content changed.\n",
+        "utf8",
+      );
+      await refreshPackageManifestDigests({
+        packageRoot,
+        workflowDirectory: "checkout-flow",
+      });
+      await searchWorkflowPackages({
+        registry: "local",
+        refresh: true,
+        options: { userRoot },
+      });
+      const workflowContentCheckout = await checkoutWorkflowPackage({
+        packageName: "checkout-flow",
+        registry: "local",
+        overwrite: true,
+        options: { userRoot, cwd: projectRoot },
+      });
+      expect(workflowContentCheckout.ok).toBe(true);
+      if (!workflowContentCheckout.ok) {
+        throw new Error("workflow content checkout failed");
+      }
+      expect(workflowContentCheckout.value.contentDigest).not.toBe(
+        initialContentDigest,
+      );
     }
   });
 

@@ -20,6 +20,7 @@ export interface WorkflowPackageSigningConfig {
 export interface WorkflowPackageIntegrityVerificationResult {
   readonly digest: string;
   readonly digestAlgorithm: "sha256";
+  readonly includedFiles: readonly string[];
   readonly signatureVerified: boolean;
   readonly signatureRequired: boolean;
 }
@@ -275,6 +276,7 @@ export async function verifyWorkflowPackageIntegrity(input: {
       : ok({
           digest: computed.value.digest,
           digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
           signatureVerified: false,
           signatureRequired,
         });
@@ -299,6 +301,7 @@ export async function verifyWorkflowPackageIntegrity(input: {
       : ok({
           digest: computed.value.digest,
           digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
           signatureVerified: false,
           signatureRequired,
         });
@@ -322,6 +325,7 @@ export async function verifyWorkflowPackageIntegrity(input: {
         return ok({
           digest: computed.value.digest,
           digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
           signatureVerified: true,
           signatureRequired,
         });

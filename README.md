@@ -248,8 +248,10 @@ at `<project>/.rielflow/workflows/<workflow-name>`; use `--user-scope` to instal
 under `~/.rielflow/workflows`. Duplicate checkouts fail unless `--overwrite` is
 set. Each successful checkout writes provenance to
 `~/.rielflow/workflow-registry/checkouts/<scope>-<workflow-name>.json` with the
-source URL, scope, checkout time, and destination directory. Do not combine
-checkout with `--workflow-definition-dir`; checkout is a scoped catalog write.
+source URL, scope, checkout time, destination directory, and a SHA-256 content
+digest over the checked-out workflow files, including workflow-local prompts,
+scripts, skills, and other bundle files. Do not combine checkout with
+`--workflow-definition-dir`; checkout is a scoped catalog write.
 
 Workflow packages add a registry-backed catalog on top of scoped workflow
 checkout. Registries are GitHub repositories recorded in
@@ -267,6 +269,9 @@ Each package contains `rielflow-package.json` plus a workflow bundle directory.
 The manifest stores package metadata, structured workflow metadata from
 `workflow.json.metadata.rielflowPackage`, tags, workflow directory, a legacy md5
 checksum, and sha256 integrity metadata over deterministic package contents.
+Package checkout content digest metadata remains separate from package integrity:
+it identifies only the installed workflow bundle files, not
+`rielflow-package.json` or other package-root registry metadata.
 Search reads registry metadata and uses the cache under
 `~/.rielflow/workflow-packages/cache` unless `--refresh` or `--no-cache` is set:
 
