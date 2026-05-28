@@ -1035,7 +1035,7 @@ describe("runCli", () => {
     ).toContain('"workflowId": "demo"');
   });
 
-  test("workflow checkout supports user scope and rejects direct definition directories", async () => {
+  test("workflow checkout supports user scope and direct definition directories", async () => {
     const root = await makeTempDir();
     const sourceRoot = path.join(root, "source");
     const projectRoot = path.join(root, "project");
@@ -1075,23 +1075,29 @@ describe("runCli", () => {
       ),
     ).toContain('"workflowId": "demo"');
 
-    const rejected = createIoCapture();
-    const rejectedCode = await runCli(
+    const directRoot = path.join(root, "direct");
+    const direct = createIoCapture();
+    const directCode = await runCli(
       [
         "workflow",
         "checkout",
         "https://github.com/org/repo/tree/main/.rielflow/workflows/demo",
         "--workflow-definition-dir",
-        path.join(root, "direct"),
+        directRoot,
+        "--user-root",
+        path.join(root, "direct-user", ".rielflow"),
       ],
-      rejected.io,
+      direct.io,
       createCliDeps({ fetchImpl }),
     );
 
-    expect(rejectedCode).toBe(2);
-    expect(rejected.stderr.join("\n")).toContain(
-      "workflow checkout does not support --workflow-definition-dir",
+    expect(directCode).toBe(0);
+    expect(direct.stdout.join("\n")).toContain(
+      `destination: ${path.join(directRoot, "demo")}`,
     );
+    expect(
+      await readFile(path.join(directRoot, "demo", "workflow.json"), "utf8"),
+    ).toContain('"workflowId": "demo"');
   });
 
   test("workflow package aliases search and checkout package ids", async () => {
@@ -1252,6 +1258,7 @@ describe("runCli", () => {
       contentDigestAlgorithm: string;
       contentDigest: string;
       includedFiles: readonly string[];
+      installId: string;
     };
     expect(payload.packageId).toBe("cli-flow");
     expect(payload.registryUrl).toBe(
@@ -1268,6 +1275,65 @@ describe("runCli", () => {
       ]),
     );
     expect(payload.includedFiles).not.toContain(WORKFLOW_PACKAGE_MANIFEST_FILE);
+    expect(payload.installId).toContain("package-");
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "status",
+        "--install-id",
+        payload.installId,
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      statusCapture.io,
+      createCliDeps(),
+    );
+    expect(statusCode).toBe(0);
+    expect(statusCapture.stdout.join("\n")).toContain(
+      `"installId": "${payload.installId}"`,
+    );
+
+    const noopUpdateCapture = createIoCapture();
+    const noopUpdateCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "update",
+        "--install-id",
+        payload.installId,
+        "--user-root",
+        userRoot,
+      ],
+      noopUpdateCapture.io,
+      createCliDeps(),
+    );
+    expect(noopUpdateCode).toBe(0);
+    expect(noopUpdateCapture.stdout.join("\n")).toContain("updated: false");
+
+    const updateCapture = createIoCapture();
+    const updateCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "update",
+        "--install-id",
+        payload.installId,
+        "--user-root",
+        userRoot,
+        "--yes",
+        "--output",
+        "json",
+      ],
+      updateCapture.io,
+      createCliDeps(),
+    );
+    expect(updateCode).toBe(0);
+    expect(updateCapture.stdout.join("\n")).toContain('"updated": false');
   });
 
   test("rielflow publish accepts explicit registry URL and local path", async () => {

@@ -234,8 +234,8 @@ deterministic lifecycle supervision while disabling workflow patching.
 validation; when set to `true`, duplicate enabled workflowDirectory/cwd pairs
 are allowed intentionally.
 
-Install a workflow bundle from a public GitHub directory into the scoped
-catalog with `workflow checkout`:
+Install a workflow bundle from a public GitHub directory with
+`workflow checkout`:
 
 ```bash
 bun run packages/rielflow/src/bin.ts workflow checkout \
@@ -250,8 +250,9 @@ set. Each successful checkout writes provenance to
 `~/.rielflow/workflow-registry/checkouts/<scope>-<workflow-name>.json` with the
 source URL, scope, checkout time, destination directory, and a SHA-256 content
 digest over the checked-out workflow files, including workflow-local prompts,
-scripts, skills, and other bundle files. Do not combine checkout with
-`--workflow-definition-dir`; checkout is a scoped catalog write.
+scripts, skills, and other bundle files. When `--workflow-definition-dir <path>`
+is supplied, checkout writes directly to `<path>/<workflow-name>` instead of a
+scoped workflow catalog.
 
 Workflow packages add a registry-backed catalog on top of scoped workflow
 checkout. Registries are GitHub repositories recorded in
@@ -265,13 +266,14 @@ bun run packages/rielflow/src/bin.ts workflow package registry add personal \
   --local-path /path/to/local/clone
 ```
 
-Each package contains `rielflow-package.json` plus a workflow bundle directory.
-The manifest stores package metadata, structured workflow metadata from
-`workflow.json.metadata.rielflowPackage`, tags, workflow directory, a legacy md5
-checksum, and sha256 integrity metadata over deterministic package contents.
-Package checkout content digest metadata remains separate from package integrity:
-it identifies only the installed workflow bundle files, not
-`rielflow-package.json` or other package-root registry metadata.
+Each package contains `rielflow-package.json` plus a workflow bundle directory
+and may also contain a separate skill directory. The manifest stores package
+metadata, structured workflow metadata from
+`workflow.json.metadata.rielflowPackage`, tags, `workflowDirectory`,
+`skillDirectory`, a legacy md5 checksum, and sha256 integrity metadata over
+deterministic package contents. Package checkout content digest metadata remains
+separate from package integrity: it identifies only the installed workflow bundle
+files, not `rielflow-package.json` or other package-root registry metadata.
 Search reads registry metadata and uses the cache under
 `~/.rielflow/workflow-packages/cache` unless `--refresh` or `--no-cache` is set:
 
@@ -280,11 +282,32 @@ bun run packages/rielflow/src/bin.ts workflow package search review --refresh
 ```
 
 Checkout installs a package workflow into project scope by default, or user
-scope with `--user-scope`:
+scope with `--user-scope`. When `--workflow-definition-dir <path>` is supplied,
+package checkout writes the workflow directly to
+`<path>/<workflow-name>`; do not combine direct workflow-definition
+destinations with `--user-scope`:
 
 ```bash
 bun run packages/rielflow/src/bin.ts workflow package checkout worker-only-single-step
 ```
+
+Package skills are accepted only under the package skill directory for the
+supported vendors and current vendor layouts:
+
+- `skills/agents/AGENTS.md`
+- `skills/claude/<name>/SKILL.md`
+- `skills/codex/<name>/SKILL.md`
+- `skills/cursor/*.mdc`
+- `skills/gemini/GEMINI.md`
+
+Package checkout stores installed skills under a managed package area before
+projection. Project-scope checkout projects all supported vendors into the
+current project locations: `AGENTS.md`, `.claude/skills/<name>/SKILL.md`,
+`.codex/skills/<name>/SKILL.md`, `.cursor/rules/*.mdc`, and `GEMINI.md`.
+User-scope installs and projects Claude and Codex skills into user-level vendor
+roots; `agents`, `cursor`, and `gemini` remain managed-only in user scope.
+Symlinks, path escapes, unknown vendors, and invalid vendor layouts are
+rejected before install.
 
 Package checkout can run an optional pre-install security check before it
 copies the workflow or writes checkout records. `--pre-install-check` runs the
@@ -293,6 +316,21 @@ built-in static scanner and rejects high or critical findings by default. Use
 Add `--pre-install-check-container docker|podman|auto` to request an additional
 container inspection with network disabled and the staged package mounted
 read-only.
+
+Each successful package checkout persists a package record with the registry
+URL/ref, workflow name, package version, package hash/checksum, integrity
+metadata, install id, destination, direct `--workflow-definition-dir` override
+when used, and installed skill metadata. Use status to compare the installed
+record against the registry, or update to refresh the installed workflow and
+skills from the package record. Ambiguous records require `--install-id`;
+mutating updates require `--yes`, while up-to-date updates return without
+rewriting files:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow package status worker-only-single-step
+bun run packages/rielflow/src/bin.ts workflow package update worker-only-single-step --yes
+bun run packages/rielflow/src/bin.ts workflow package status --install-id <install-id> --output json
+```
 
 Publish stages a workflow directory into the selected registry local clone,
 writes package metadata and integrity, commits it, and pushes the requested

@@ -463,12 +463,6 @@ export async function runCliWorkflowScope(
       io.stderr("workflow checkout accepts exactly one GitHub directory URL");
       return 2;
     }
-    if (parsed.options.workflowRoot !== undefined) {
-      io.stderr(
-        "workflow checkout does not support --workflow-definition-dir; use project scope or --user-scope",
-      );
-      return 2;
-    }
     if (graphqlCliTransport !== null) {
       io.stderr("workflow checkout is local-only; omit --endpoint");
       return 2;

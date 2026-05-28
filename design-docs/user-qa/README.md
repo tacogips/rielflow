@@ -26,6 +26,9 @@ Store questions, pending decisions, and items awaiting user approval.
 - `qa-homebrew-deployment-support.md`: Homebrew tap ownership, release URL
   pattern, target matrix, and version smoke-test decisions for standalone
   release archives.
+- `qa-workflow-package-checkout.md`: scope flag naming, package update command
+  aliasing, modified projected skill update policy, and skill search metadata
+  decisions for workflow package checkout.
 - `qa-scheduled-sleep-node-runtime.md`: restart recovery, initial sleep schema,
   and cancellation-scope decisions for scheduled sleep and shared cron
   scheduling.

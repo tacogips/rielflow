@@ -296,6 +296,7 @@ export interface ParsedOptions {
   readonly workerOnly: boolean;
   readonly userScope: boolean;
   readonly overwrite: boolean;
+  readonly yes: boolean;
   readonly output: "text" | "json" | "table";
   readonly structure: boolean;
   readonly executablePreflight: boolean;
@@ -350,6 +351,7 @@ export interface ParsedOptions {
   readonly selfImproveEnableDisabled: boolean;
   readonly registry?: string;
   readonly registryUrl?: string;
+  readonly installId?: string;
   readonly packageName?: string;
   readonly packageId?: string;
   readonly branch?: string;

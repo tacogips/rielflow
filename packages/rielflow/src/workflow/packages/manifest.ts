@@ -6,6 +6,8 @@ import {
   WORKFLOW_PACKAGE_MANIFEST_FILE,
   type NormalizedWorkflowPackageManifest,
   type WorkflowPackageFailure,
+  type WorkflowPackageManifestSkillEntry,
+  type WorkflowPackageSkillVendor,
   type WorkflowPackageWorkflowMetadata,
 } from "./types";
 
@@ -50,6 +52,72 @@ function readStringArray(value: unknown): readonly string[] | undefined {
     (entry): entry is string => typeof entry === "string" && entry.length > 0,
   );
   return values.length === value.length ? values : undefined;
+}
+
+const WORKFLOW_PACKAGE_SKILL_VENDOR_SET: ReadonlySet<string> = new Set([
+  "agents",
+  "claude",
+  "codex",
+  "cursor",
+  "gemini",
+]);
+
+function normalizeWorkflowPackageSkillVendor(
+  value: unknown,
+): WorkflowPackageSkillVendor | undefined {
+  return typeof value === "string" &&
+    WORKFLOW_PACKAGE_SKILL_VENDOR_SET.has(value)
+    ? (value as WorkflowPackageSkillVendor)
+    : undefined;
+}
+
+function normalizeWorkflowPackageManifestSkills(
+  value: unknown,
+): Result<
+  readonly WorkflowPackageManifestSkillEntry[] | undefined,
+  WorkflowPackageFailure
+> {
+  if (value === undefined) {
+    return ok(undefined);
+  }
+  if (!Array.isArray(value)) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "package manifest skills must be an array",
+      ),
+    );
+  }
+  const entries: WorkflowPackageManifestSkillEntry[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (!isRecord(entry)) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `package manifest skills[${index}] must be an object`,
+        ),
+      );
+    }
+    const vendor = normalizeWorkflowPackageSkillVendor(entry["vendor"]);
+    const name = entry["name"];
+    const sourcePath = entry["sourcePath"];
+    if (
+      vendor === undefined ||
+      typeof name !== "string" ||
+      name.length === 0 ||
+      typeof sourcePath !== "string" ||
+      normalizePackageRelativePath(sourcePath) === undefined
+    ) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `package manifest skills[${index}] is invalid`,
+        ),
+      );
+    }
+    entries.push({ vendor, name, sourcePath });
+  }
+  return ok(entries);
 }
 
 export function normalizeWorkflowPackageWorkflowMetadata(
@@ -201,6 +269,25 @@ export function normalizeWorkflowPackageManifest(
       ),
     );
   }
+  const skillDirectoryRaw = value["skillDirectory"];
+  const skillDirectory =
+    skillDirectoryRaw === undefined
+      ? undefined
+      : typeof skillDirectoryRaw === "string"
+        ? normalizePackageRelativePath(skillDirectoryRaw)
+        : undefined;
+  if (skillDirectoryRaw !== undefined && skillDirectory === undefined) {
+    return err(
+      packageFailure(
+        "UNSAFE_PATH",
+        `unsafe skillDirectory for package '${name}'`,
+      ),
+    );
+  }
+  const skills = normalizeWorkflowPackageManifestSkills(value["skills"]);
+  if (!skills.ok) {
+    return skills;
+  }
   const workflowJsonPath = path.join(
     packageRoot,
     workflowDirectory,
@@ -228,6 +315,8 @@ export function normalizeWorkflowPackageManifest(
     checksumAlgorithm,
     ...(integrity.value === undefined ? {} : { integrity: integrity.value }),
     workflowDirectory,
+    ...(skillDirectory === undefined ? {} : { skillDirectory }),
+    ...(skills.value === undefined ? {} : { skills: skills.value }),
     ...(typeof value["title"] === "string" ? { title: value["title"] } : {}),
     ...(authors === undefined ? {} : { authors }),
     ...(typeof value["license"] === "string"
