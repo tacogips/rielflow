@@ -330,7 +330,8 @@ interface DocumentationUpdate {
       run behavior.
 - [x] `--endpoint` with `--from-registry` fails as a usage error.
 - [x] Existing run options are forwarded unchanged.
-- [x] Cleanup runs after success, run failure, and pre-start failure.
+- [x] Cleanup runs after terminal success, run failure, and pre-start failure,
+      while paused/non-terminal sessions retain the temporary checkout.
 
 ### TASK-004: Add Provenance And Cleanup Reporting
 
@@ -488,6 +489,17 @@ restoring them to the parent revision, but `bun run lint:biome` then failed on
 those parent versions. Kept the Biome-only formatting changes because they are
 required for the repository post-TypeScript-modification lint gate; no feature
 behavior was added to those files.
+
+### Session: 2026-05-28 21:47
+
+**Tasks Completed**: Step 7 implementation review follow-up.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Addressed the mid-severity Step 7 finding in
+`packages/rielflow/src/cli/workflow-run-command.ts` by running temporary
+registry cleanup only for terminal successful sessions and retaining the
+temporary checkout for paused/non-terminal sessions. Added a focused paused
+registry-run regression test in `packages/rielflow/src/cli.test.ts`.
 
 ## Related Plans
 

@@ -1487,6 +1487,161 @@ describe("runCli", () => {
     ).rejects.toThrow();
   });
 
+  test("workflow run keeps registry temporary checkout for paused sessions", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-paused-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-paused-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    await writeFile(
+      path.join(
+        created.value.workflowDirectory,
+        "nodes",
+        "node-main-worker.json",
+      ),
+      `${JSON.stringify(
+        {
+          id: "main-worker",
+          nodeType: "user-action",
+          promptTemplate: "Approve the registry-backed run.",
+          variables: {},
+          userAction: {
+            messageToolIds: ["matrix-primary"],
+            notificationToolIds: ["desktop-notify"],
+            replyPolicy: "first-valid-reply-wins",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-paused-flow",
+          version: "1.0.0",
+          description: "Temporary paused CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary paused CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-paused-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-paused-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-paused-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(4);
+    const payload = JSON.parse(runCapture.stdout.join("\n")) as {
+      status: string;
+      registrySource: {
+        package: {
+          temporaryWorkflowDirectory: string;
+        };
+        cleanup: {
+          ok: boolean;
+          skipped?: boolean;
+          reason?: string;
+        };
+      };
+    };
+    expect(payload.status).toBe("paused");
+    expect(payload.registrySource.cleanup).toMatchObject({
+      ok: false,
+      skipped: true,
+      reason: "workflow session status 'paused' is not terminal",
+    });
+    await expect(
+      realpath(payload.registrySource.package.temporaryWorkflowDirectory),
+    ).resolves.toEqual(expect.any(String));
+    await expect(
+      readFile(
+        path.join(
+          payload.registrySource.package.temporaryWorkflowDirectory,
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("temp-paused-flow");
+  });
+
   test("workflow run rejects registry packages over endpoint transport", async () => {
     const capture = createIoCapture();
     const code = await runCli(

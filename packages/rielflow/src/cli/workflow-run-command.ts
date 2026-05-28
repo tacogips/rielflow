@@ -9,6 +9,7 @@ import {
 } from "../workflow/packages";
 import { resolveRootDataDir } from "../workflow/paths";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
+import { isTerminalWorkflowSessionStatus } from "../workflow/session";
 import type {
   RunCliScopeContext,
   RunCliSharedOptions,
@@ -33,11 +34,19 @@ import {
   workflowSourceJson,
 } from "./workflow-graphql-formatters";
 
+type RegistryRunCleanupOutput =
+  | { readonly ok: true; readonly remainingPaths: readonly string[] }
+  | { readonly ok: false; readonly error: string }
+  | {
+      readonly ok: false;
+      readonly skipped: true;
+      readonly reason: string;
+      readonly remainingPaths: readonly string[];
+    };
+
 function registryRunSourceJson(input: {
   readonly provenance: WorkflowPackageRunProvenance;
-  readonly cleanup?:
-    | { readonly ok: true; readonly remainingPaths: readonly string[] }
-    | { readonly ok: false; readonly error: string };
+  readonly cleanup?: RegistryRunCleanupOutput;
 }): Readonly<Record<string, unknown>> {
   return {
     source: "registry",
@@ -48,11 +57,7 @@ function registryRunSourceJson(input: {
 
 async function cleanupTemporaryRegistryRun(
   checkout: WorkflowPackageTemporaryRunCheckoutResult | undefined,
-): Promise<
-  | { readonly ok: true; readonly remainingPaths: readonly string[] }
-  | { readonly ok: false; readonly error: string }
-  | undefined
-> {
+): Promise<RegistryRunCleanupOutput | undefined> {
   if (checkout === undefined) {
     return undefined;
   }
@@ -60,6 +65,24 @@ async function cleanupTemporaryRegistryRun(
   return cleaned.ok
     ? { ok: true, remainingPaths: cleaned.value.remainingPaths }
     : { ok: false, error: cleaned.error.message };
+}
+
+function skippedTemporaryRegistryRunCleanup(
+  checkout: WorkflowPackageTemporaryRunCheckoutResult | undefined,
+  reason: string,
+): RegistryRunCleanupOutput | undefined {
+  if (checkout === undefined) {
+    return undefined;
+  }
+  return {
+    ok: false,
+    skipped: true,
+    reason,
+    remainingPaths: [
+      checkout.provenance.temporaryWorkflowDirectory,
+      checkout.packageStagingDirectory,
+    ],
+  };
 }
 
 async function persistRegistryRunProvenance(input: {
@@ -258,7 +281,7 @@ export async function runCliWorkflowRunCommand(
       if (loadedWorkflow.error.issues) {
         io.stderr(formatValidationIssues(loadedWorkflow.error.issues));
       }
-      if (cleanup !== undefined && !cleanup.ok) {
+      if (cleanup !== undefined && !cleanup.ok && !("skipped" in cleanup)) {
         io.stderr(`cleanup warning: ${cleanup.error}`);
       }
     }
@@ -303,9 +326,8 @@ export async function runCliWorkflowRunCommand(
               sessionId: result.error.sessionId,
               provenance: registryRun.provenance,
             });
-  const cleanup = await cleanupTemporaryRegistryRun(registryRun);
-
   if (!result.ok) {
+    const cleanup = await cleanupTemporaryRegistryRun(registryRun);
     if (parsed.options.output === "json") {
       emitJson(io, {
         ...result.error,
@@ -320,7 +342,7 @@ export async function runCliWorkflowRunCommand(
       });
     } else {
       io.stderr(`run failed: ${result.error.message}`);
-      if (cleanup !== undefined && !cleanup.ok) {
+      if (cleanup !== undefined && !cleanup.ok && !("skipped" in cleanup)) {
         io.stderr(`cleanup warning: ${cleanup.error}`);
       }
       if (provenancePersistError !== undefined) {
@@ -329,6 +351,13 @@ export async function runCliWorkflowRunCommand(
     }
     return result.error.exitCode;
   }
+
+  const cleanup = isTerminalWorkflowSessionStatus(result.value.session.status)
+    ? await cleanupTemporaryRegistryRun(registryRun)
+    : skippedTemporaryRegistryRunCleanup(
+        registryRun,
+        `workflow session status '${result.value.session.status}' is not terminal`,
+      );
 
   if (parsed.options.output === "json") {
     emitJson(io, {
@@ -365,7 +394,9 @@ export async function runCliWorkflowRunCommand(
     io.stdout(`run session: ${result.value.session.sessionId}`);
     io.stdout(`status: ${result.value.session.status}`);
     io.stdout(`nodeExecutions: ${result.value.session.nodeExecutions.length}`);
-    if (cleanup !== undefined && !cleanup.ok) {
+    if (cleanup !== undefined && !cleanup.ok && "skipped" in cleanup) {
+      io.stdout(`cleanup: skipped (${cleanup.reason})`);
+    } else if (cleanup !== undefined && !cleanup.ok) {
       io.stderr(`cleanup warning: ${cleanup.error}`);
     }
     if (provenancePersistError !== undefined) {
