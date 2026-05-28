@@ -273,25 +273,25 @@ export function createCommunicationService(
         },
         async () => {
           const loaded = await loadSession(input.workflowExecutionId, options);
-      if (!loaded.ok) {
-        return null;
-      }
-      const communication = findCommunication(loaded.value, input);
-      if (communication === null) {
-        return null;
-      }
-      return {
-        record: communication,
-        sourceNodeExecution: findNodeExecution(
-          loaded.value,
-          communication.sourceNodeExecId,
-        ),
-        consumedByNodeExecution: findNodeExecution(
-          loaded.value,
-          communication.consumedByNodeExecId,
-        ),
-        artifactSnapshot: await loadCommunicationSnapshot(communication),
-      };
+          if (!loaded.ok) {
+            return null;
+          }
+          const communication = findCommunication(loaded.value, input);
+          if (communication === null) {
+            return null;
+          }
+          return {
+            record: communication,
+            sourceNodeExecution: findNodeExecution(
+              loaded.value,
+              communication.sourceNodeExecId,
+            ),
+            consumedByNodeExecution: findNodeExecution(
+              loaded.value,
+              communication.consumedByNodeExecId,
+            ),
+            artifactSnapshot: await loadCommunicationSnapshot(communication),
+          };
         },
       );
     },
@@ -304,112 +304,119 @@ export function createCommunicationService(
           "communication.id": input.communicationId,
         },
         async () => {
-      const now = deps.now?.() ?? new Date().toISOString();
-      return await runIdempotentMutation({
-        mutationName: "replayCommunication",
-        managerSessionId: input.managerSessionId,
-        idempotencyKey: input.idempotencyKey,
-        normalizedPayload: {
-          workflowId: input.workflowId,
-          workflowExecutionId: input.workflowExecutionId,
-          communicationId: input.communicationId,
-          reason: input.reason ?? null,
-        },
-        store: deps.idempotencyStore,
-        now,
-        action: async () => {
-          const loaded = await loadSession(input.workflowExecutionId, options);
-          if (!loaded.ok) {
-            throw new Error(loaded.error.message);
-          }
-          const sourceCommunication = findCommunication(loaded.value, input);
-          if (sourceCommunication === null) {
-            throw new Error(
-              `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
-            );
-          }
+          const now = deps.now?.() ?? new Date().toISOString();
+          return await runIdempotentMutation({
+            mutationName: "replayCommunication",
+            managerSessionId: input.managerSessionId,
+            idempotencyKey: input.idempotencyKey,
+            normalizedPayload: {
+              workflowId: input.workflowId,
+              workflowExecutionId: input.workflowExecutionId,
+              communicationId: input.communicationId,
+              reason: input.reason ?? null,
+            },
+            store: deps.idempotencyStore,
+            now,
+            action: async () => {
+              const loaded = await loadSession(
+                input.workflowExecutionId,
+                options,
+              );
+              if (!loaded.ok) {
+                throw new Error(loaded.error.message);
+              }
+              const sourceCommunication = findCommunication(
+                loaded.value,
+                input,
+              );
+              if (sourceCommunication === null) {
+                throw new Error(
+                  `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
+                );
+              }
 
-          const outputRaw = await loadSourceOutputRaw(sourceCommunication);
-          const deliveredByNodeId =
-            await loadDeliveredByNodeId(sourceCommunication);
-          const persistedArtifacts =
-            await persistDeliveredCommunicationArtifacts({
-              artifactWorkflowRoot: resolveArtifactWorkflowRoot(
-                sourceCommunication.artifactDir,
-              ),
-              workflowId: sourceCommunication.workflowId,
-              workflowExecutionId: sourceCommunication.workflowExecutionId,
-              communicationCounter: loaded.value.communicationCounter,
-              fromNodeId: sourceCommunication.fromNodeId,
-              toNodeId: sourceCommunication.toNodeId,
-              routingScope: sourceCommunication.routingScope,
-              sourceNodeExecId: sourceCommunication.sourceNodeExecId,
-              deliveryKind: "manual-rerun",
-              payloadRef: sourceCommunication.payloadRef,
-              outputRaw,
-              deliveredByNodeId,
-              createdAt: now,
-              extraEnvelopeFields: {
+              const outputRaw = await loadSourceOutputRaw(sourceCommunication);
+              const deliveredByNodeId =
+                await loadDeliveredByNodeId(sourceCommunication);
+              const persistedArtifacts =
+                await persistDeliveredCommunicationArtifacts({
+                  artifactWorkflowRoot: resolveArtifactWorkflowRoot(
+                    sourceCommunication.artifactDir,
+                  ),
+                  workflowId: sourceCommunication.workflowId,
+                  workflowExecutionId: sourceCommunication.workflowExecutionId,
+                  communicationCounter: loaded.value.communicationCounter,
+                  fromNodeId: sourceCommunication.fromNodeId,
+                  toNodeId: sourceCommunication.toNodeId,
+                  routingScope: sourceCommunication.routingScope,
+                  sourceNodeExecId: sourceCommunication.sourceNodeExecId,
+                  deliveryKind: "manual-rerun",
+                  payloadRef: sourceCommunication.payloadRef,
+                  outputRaw,
+                  deliveredByNodeId,
+                  createdAt: now,
+                  extraEnvelopeFields: {
+                    replayedFromCommunicationId:
+                      sourceCommunication.communicationId,
+                  },
+                  extraMetaFields: {
+                    replayedFromCommunicationId:
+                      sourceCommunication.communicationId,
+                    ...(input.reason === undefined
+                      ? {}
+                      : { replayReason: input.reason }),
+                  },
+                  extraAttemptFields:
+                    input.reason === undefined ? {} : { reason: input.reason },
+                });
+
+              const replayedRecord: CommunicationRecord = {
+                workflowId: sourceCommunication.workflowId,
+                workflowExecutionId: sourceCommunication.workflowExecutionId,
+                communicationId: persistedArtifacts.communicationId,
+                fromNodeId: sourceCommunication.fromNodeId,
+                toNodeId: sourceCommunication.toNodeId,
+                routingScope: sourceCommunication.routingScope,
+                sourceNodeExecId: sourceCommunication.sourceNodeExecId,
+                payloadRef: sourceCommunication.payloadRef,
+                deliveryKind: "manual-rerun",
+                transitionWhen: `manual-rerun:${sourceCommunication.communicationId}`,
+                status: "delivered",
+                deliveryAttemptIds: [persistedArtifacts.deliveryAttemptId],
+                activeDeliveryAttemptId: persistedArtifacts.deliveryAttemptId,
+                createdAt: now,
+                deliveredAt: now,
                 replayedFromCommunicationId:
                   sourceCommunication.communicationId,
-              },
-              extraMetaFields: {
-                replayedFromCommunicationId:
-                  sourceCommunication.communicationId,
-                ...(input.reason === undefined
-                  ? {}
-                  : { replayReason: input.reason }),
-              },
-              extraAttemptFields:
-                input.reason === undefined ? {} : { reason: input.reason },
-            });
-
-          const replayedRecord: CommunicationRecord = {
-            workflowId: sourceCommunication.workflowId,
-            workflowExecutionId: sourceCommunication.workflowExecutionId,
-            communicationId: persistedArtifacts.communicationId,
-            fromNodeId: sourceCommunication.fromNodeId,
-            toNodeId: sourceCommunication.toNodeId,
-            routingScope: sourceCommunication.routingScope,
-            sourceNodeExecId: sourceCommunication.sourceNodeExecId,
-            payloadRef: sourceCommunication.payloadRef,
-            deliveryKind: "manual-rerun",
-            transitionWhen: `manual-rerun:${sourceCommunication.communicationId}`,
-            status: "delivered",
-            deliveryAttemptIds: [persistedArtifacts.deliveryAttemptId],
-            activeDeliveryAttemptId: persistedArtifacts.deliveryAttemptId,
-            createdAt: now,
-            deliveredAt: now,
-            replayedFromCommunicationId: sourceCommunication.communicationId,
-            artifactDir: persistedArtifacts.artifactDir,
-          };
-          const updatedCommunications = loaded.value.communications.map(
-            (communication) =>
-              communication.communicationId ===
-              sourceCommunication.communicationId
-                ? {
-                    ...communication,
-                    status: "superseded" as const,
-                    supersededByCommunicationId:
-                      persistedArtifacts.communicationId,
-                    supersededAt: now,
-                  }
-                : communication,
-          );
-          const updatedSession: WorkflowSessionState = {
-            ...loaded.value,
-            communicationCounter: loaded.value.communicationCounter + 1,
-            communications: [...updatedCommunications, replayedRecord],
-          };
-          await persistUpdatedSession(updatedSession, options);
-          return {
-            sourceCommunicationId: sourceCommunication.communicationId,
-            workflowExecutionId: input.workflowExecutionId,
-            replayedCommunicationId: persistedArtifacts.communicationId,
-            status: replayedRecord.status,
-          } satisfies ReplayCommunicationResult;
-        },
-      });
+                artifactDir: persistedArtifacts.artifactDir,
+              };
+              const updatedCommunications = loaded.value.communications.map(
+                (communication) =>
+                  communication.communicationId ===
+                  sourceCommunication.communicationId
+                    ? {
+                        ...communication,
+                        status: "superseded" as const,
+                        supersededByCommunicationId:
+                          persistedArtifacts.communicationId,
+                        supersededAt: now,
+                      }
+                    : communication,
+              );
+              const updatedSession: WorkflowSessionState = {
+                ...loaded.value,
+                communicationCounter: loaded.value.communicationCounter + 1,
+                communications: [...updatedCommunications, replayedRecord],
+              };
+              await persistUpdatedSession(updatedSession, options);
+              return {
+                sourceCommunicationId: sourceCommunication.communicationId,
+                workflowExecutionId: input.workflowExecutionId,
+                replayedCommunicationId: persistedArtifacts.communicationId,
+                status: replayedRecord.status,
+              } satisfies ReplayCommunicationResult;
+            },
+          });
         },
       );
     },
@@ -422,132 +429,139 @@ export function createCommunicationService(
           "communication.id": input.communicationId,
         },
         async () => {
-      const now = deps.now?.() ?? new Date().toISOString();
-      return await runIdempotentMutation({
-        mutationName: "retryCommunicationDelivery",
-        managerSessionId: input.managerSessionId,
-        idempotencyKey: input.idempotencyKey,
-        normalizedPayload: {
-          workflowId: input.workflowId,
-          workflowExecutionId: input.workflowExecutionId,
-          communicationId: input.communicationId,
-          reason: input.reason ?? null,
-        },
-        store: deps.idempotencyStore,
-        now,
-        action: async () => {
-          const loaded = await loadSession(input.workflowExecutionId, options);
-          if (!loaded.ok) {
-            throw new Error(loaded.error.message);
-          }
-          const communication = findCommunication(loaded.value, input);
-          if (communication === null) {
-            throw new Error(
-              `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
-            );
-          }
-          if (
-            communication.status === "superseded" ||
-            communication.status === "consumed"
-          ) {
-            throw new Error(
-              `communication '${communication.communicationId}' cannot be retried from status '${communication.status}'`,
-            );
-          }
+          const now = deps.now?.() ?? new Date().toISOString();
+          return await runIdempotentMutation({
+            mutationName: "retryCommunicationDelivery",
+            managerSessionId: input.managerSessionId,
+            idempotencyKey: input.idempotencyKey,
+            normalizedPayload: {
+              workflowId: input.workflowId,
+              workflowExecutionId: input.workflowExecutionId,
+              communicationId: input.communicationId,
+              reason: input.reason ?? null,
+            },
+            store: deps.idempotencyStore,
+            now,
+            action: async () => {
+              const loaded = await loadSession(
+                input.workflowExecutionId,
+                options,
+              );
+              if (!loaded.ok) {
+                throw new Error(loaded.error.message);
+              }
+              const communication = findCommunication(loaded.value, input);
+              if (communication === null) {
+                throw new Error(
+                  `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
+                );
+              }
+              if (
+                communication.status === "superseded" ||
+                communication.status === "consumed"
+              ) {
+                throw new Error(
+                  `communication '${communication.communicationId}' cannot be retried from status '${communication.status}'`,
+                );
+              }
 
-          const activeDeliveryAttemptId = nextDeliveryAttemptId(
-            communication.deliveryAttemptIds,
-          );
-          const deliveredByNodeId = await loadDeliveredByNodeId(communication);
-          await mkdir(
-            path.join(
-              communication.artifactDir,
-              "attempts",
-              activeDeliveryAttemptId,
-            ),
-            { recursive: true },
-          );
-          const attempt = {
-            workflowId: communication.workflowId,
-            workflowExecutionId: communication.workflowExecutionId,
-            communicationId: communication.communicationId,
-            deliveryAttemptId: activeDeliveryAttemptId,
-            toNodeId: communication.toNodeId,
-            status: "succeeded",
-            startedAt: now,
-            endedAt: now,
-            ...(input.reason === undefined ? {} : { reason: input.reason }),
-          };
-          const receipt = {
-            communicationId: communication.communicationId,
-            deliveryAttemptId: activeDeliveryAttemptId,
-            deliveredByNodeId,
-            deliveredAt: now,
-          };
-          const metaPath = path.join(communication.artifactDir, "meta.json");
-          const existingMetaRaw = await readOptionalText(metaPath);
-          const existingMeta =
-            existingMetaRaw === null
-              ? {}
-              : (JSON.parse(existingMetaRaw) as Record<string, unknown>);
-          const updatedMeta: Record<string, unknown> = {
-            ...existingMeta,
-            status: "delivered",
-            activeDeliveryAttemptId,
-            deliveryAttemptIds: [
-              ...communication.deliveryAttemptIds,
-              activeDeliveryAttemptId,
-            ],
-            deliveredAt: now,
-          };
-          delete updatedMeta["failureReason"];
+              const activeDeliveryAttemptId = nextDeliveryAttemptId(
+                communication.deliveryAttemptIds,
+              );
+              const deliveredByNodeId =
+                await loadDeliveredByNodeId(communication);
+              await mkdir(
+                path.join(
+                  communication.artifactDir,
+                  "attempts",
+                  activeDeliveryAttemptId,
+                ),
+                { recursive: true },
+              );
+              const attempt = {
+                workflowId: communication.workflowId,
+                workflowExecutionId: communication.workflowExecutionId,
+                communicationId: communication.communicationId,
+                deliveryAttemptId: activeDeliveryAttemptId,
+                toNodeId: communication.toNodeId,
+                status: "succeeded",
+                startedAt: now,
+                endedAt: now,
+                ...(input.reason === undefined ? {} : { reason: input.reason }),
+              };
+              const receipt = {
+                communicationId: communication.communicationId,
+                deliveryAttemptId: activeDeliveryAttemptId,
+                deliveredByNodeId,
+                deliveredAt: now,
+              };
+              const metaPath = path.join(
+                communication.artifactDir,
+                "meta.json",
+              );
+              const existingMetaRaw = await readOptionalText(metaPath);
+              const existingMeta =
+                existingMetaRaw === null
+                  ? {}
+                  : (JSON.parse(existingMetaRaw) as Record<string, unknown>);
+              const updatedMeta: Record<string, unknown> = {
+                ...existingMeta,
+                status: "delivered",
+                activeDeliveryAttemptId,
+                deliveryAttemptIds: [
+                  ...communication.deliveryAttemptIds,
+                  activeDeliveryAttemptId,
+                ],
+                deliveredAt: now,
+              };
+              delete updatedMeta["failureReason"];
 
-          await atomicWriteJsonFile(
-            path.join(
-              communication.artifactDir,
-              "attempts",
-              activeDeliveryAttemptId,
-              "attempt.json",
-            ),
-            attempt,
-          );
-          await atomicWriteJsonFile(
-            path.join(
-              communication.artifactDir,
-              "attempts",
-              activeDeliveryAttemptId,
-              "receipt.json",
-            ),
-            receipt,
-          );
-          await atomicWriteJsonFile(metaPath, updatedMeta);
+              await atomicWriteJsonFile(
+                path.join(
+                  communication.artifactDir,
+                  "attempts",
+                  activeDeliveryAttemptId,
+                  "attempt.json",
+                ),
+                attempt,
+              );
+              await atomicWriteJsonFile(
+                path.join(
+                  communication.artifactDir,
+                  "attempts",
+                  activeDeliveryAttemptId,
+                  "receipt.json",
+                ),
+                receipt,
+              );
+              await atomicWriteJsonFile(metaPath, updatedMeta);
 
-          const updatedRecord: CommunicationRecord = {
-            ...communication,
-            status: "delivered",
-            deliveryAttemptIds: [
-              ...communication.deliveryAttemptIds,
-              activeDeliveryAttemptId,
-            ],
-            activeDeliveryAttemptId,
-            deliveredAt: now,
-          };
-          const updatedSession: WorkflowSessionState = {
-            ...loaded.value,
-            communications: loaded.value.communications.map((entry) =>
-              entry.communicationId === communication.communicationId
-                ? updatedRecord
-                : entry,
-            ),
-          };
-          await persistUpdatedSession(updatedSession, options);
-          return {
-            communicationId: communication.communicationId,
-            activeDeliveryAttemptId,
-            status: updatedRecord.status,
-          } satisfies RetryCommunicationDeliveryResult;
-        },
-      });
+              const updatedRecord: CommunicationRecord = {
+                ...communication,
+                status: "delivered",
+                deliveryAttemptIds: [
+                  ...communication.deliveryAttemptIds,
+                  activeDeliveryAttemptId,
+                ],
+                activeDeliveryAttemptId,
+                deliveredAt: now,
+              };
+              const updatedSession: WorkflowSessionState = {
+                ...loaded.value,
+                communications: loaded.value.communications.map((entry) =>
+                  entry.communicationId === communication.communicationId
+                    ? updatedRecord
+                    : entry,
+                ),
+              };
+              await persistUpdatedSession(updatedSession, options);
+              return {
+                communicationId: communication.communicationId,
+                activeDeliveryAttemptId,
+                status: updatedRecord.status,
+              } satisfies RetryCommunicationDeliveryResult;
+            },
+          });
         },
       );
     },

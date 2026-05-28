@@ -87,10 +87,12 @@ function shouldReplaceState(
   return !current.config.enabled && next.config.enabled;
 }
 
-export function initializeWorkflowTelemetry(input: {
-  readonly options?: WorkflowTelemetryOptions;
-  readonly env?: Readonly<Record<string, string | undefined>>;
-} = {}): WorkflowTelemetry {
+export function initializeWorkflowTelemetry(
+  input: {
+    readonly options?: WorkflowTelemetryOptions;
+    readonly env?: Readonly<Record<string, string | undefined>>;
+  } = {},
+): WorkflowTelemetry {
   if (state?.sdk !== undefined) {
     return getWorkflowTelemetry();
   }
@@ -214,7 +216,9 @@ async function runWithSpan<T>(
   }
 }
 
-function resultFailureAttributes(result: unknown): TelemetryAttributes | undefined {
+function resultFailureAttributes(
+  result: unknown,
+): TelemetryAttributes | undefined {
   if (
     typeof result !== "object" ||
     result === null ||
@@ -224,12 +228,15 @@ function resultFailureAttributes(result: unknown): TelemetryAttributes | undefin
     return undefined;
   }
   const error =
-    "error" in result && typeof result.error === "object" && result.error !== null
+    "error" in result &&
+    typeof result.error === "object" &&
+    result.error !== null
       ? result.error
       : undefined;
   return {
     "result.ok": false,
-    "error.type": readErrorField(error, "kind") ?? readErrorField(error, "type"),
+    "error.type":
+      readErrorField(error, "kind") ?? readErrorField(error, "type"),
     "error.message": readErrorField(error, "message"),
   };
 }

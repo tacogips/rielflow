@@ -60,7 +60,9 @@ export function resolveWorkflowTelemetryConfig(
   input: ResolveWorkflowTelemetryConfigInput = {},
 ): ResolvedWorkflowTelemetryConfig {
   const env = input.env ?? process.env;
-  const tracesEndpoint = firstNonEmpty(env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]);
+  const tracesEndpoint = firstNonEmpty(
+    env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"],
+  );
   const genericEndpoint = firstNonEmpty(env["OTEL_EXPORTER_OTLP_ENDPOINT"]);
   const endpoint =
     tracesEndpoint ??

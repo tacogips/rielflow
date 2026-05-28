@@ -416,9 +416,7 @@ describe("executeAdapterWithTimeout", () => {
     expect(Object.keys(spanCalls[0]?.attributes ?? {})).not.toContain(
       "promptText",
     );
-    expect(Object.keys(spanCalls[0]?.attributes ?? {})).not.toContain(
-      "stdout",
-    );
+    expect(Object.keys(spanCalls[0]?.attributes ?? {})).not.toContain("stdout");
   });
 
   test("classifies non-DOM abort errors from timed-out adapters as timeout", async () => {

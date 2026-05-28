@@ -46,7 +46,7 @@ import { HOOK_VENDOR_USAGE } from "./storage-and-options";
 export function printHelp(io: CliIo): void {
   io.stdout("Usage:");
   io.stdout(
-    "  rielflow cli workflow <create|checkout|package|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
+    "  rielflow cli workflow <create|checkout|registry|package|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
   );
   io.stdout(
     "  rielflow cli workflow manifest validate [<manifest-path>] [--workflow-manifest <path>] [--executable] [--output json|text]",
@@ -106,6 +106,8 @@ export function printHelp(io: CliIo): void {
   );
   io.stdout("");
   io.stdout("Package options:");
+  io.stdout("  workflow registry list [--output json|text]");
+  io.stdout("  workflow package registry list [--output json|text]");
   io.stdout(
     "  workflow package registry add <id> --registry-url <url> [--local-path <path>] [--branch <name>]",
   );

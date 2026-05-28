@@ -384,136 +384,123 @@ async function startEventListener(
   registry: EventSourceRegistry,
   runtime: EventListenerRuntime,
 ): Promise<EventListenerHandle> {
-      const validation = await loadAndValidateEventConfiguration(options);
-      if (!validation.valid) {
+  const validation = await loadAndValidateEventConfiguration(options);
+  if (!validation.valid) {
+    throw new Error(
+      validation.issues
+        .filter((issue) => issue.severity === "error")
+        .map((issue) => `${issue.path}: ${issue.message}`)
+        .join("; "),
+    );
+  }
+  const configuration = validation.configuration;
+  const abortController = new AbortController();
+  const now = (): Date => new Date();
+  const env = options.env ?? process.env;
+  const rateLimiter = createEventSourceRateLimiter();
+  const scheduledEventManager =
+    options.scheduledEventManager ?? createScheduledEventManager({ now });
+  const ownsScheduledEventManager = options.scheduledEventManager === undefined;
+  const eventReplyDispatcher =
+    options.eventReplyDispatcher ??
+    createEventReplyDispatcher({
+      configuration,
+      registry,
+      env,
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
+      runtimeOptions: options,
+    });
+  const triggerOptions: WorkflowTriggerRunnerOptions = {
+    ...options,
+    eventReplyDispatcher,
+    scheduledEventManager,
+  };
+  const runner = createWorkflowTriggerRunner(triggerOptions);
+  const sequentialListCompletionObserver =
+    createSequentialListCompletionObserver(triggerOptions);
+  const handles: Awaited<ReturnType<EventSourceAdapter["start"]>>[] = [];
+  const routes: EventHttpRoute[] = [];
+  let server: EventListenerServer | undefined;
+  try {
+    await createWorkflowScheduleDispatcher(
+      triggerOptions,
+    ).rehydrateActiveSchedules({
+      ...triggerOptions,
+      scheduledEventManager,
+    });
+    const enabledSources = configuration.sources.filter(isEventSourceEnabled);
+    for (const source of enabledSources) {
+      const adapter = registry.get(source.kind);
+      if (adapter === undefined) {
         throw new Error(
-          validation.issues
-            .filter((issue) => issue.severity === "error")
-            .map((issue) => `${issue.path}: ${issue.message}`)
-            .join("; "),
+          `no event source adapter registered for '${source.kind}'`,
         );
       }
-      const configuration = validation.configuration;
-      const abortController = new AbortController();
-      const now = (): Date => new Date();
-      const env = options.env ?? process.env;
-      const rateLimiter = createEventSourceRateLimiter();
-      const scheduledEventManager =
-        options.scheduledEventManager ?? createScheduledEventManager({ now });
-      const ownsScheduledEventManager =
-        options.scheduledEventManager === undefined;
-      const eventReplyDispatcher =
-        options.eventReplyDispatcher ??
-        createEventReplyDispatcher({
-          configuration,
-          registry,
-          env,
-          ...(options.fetchImpl === undefined
-            ? {}
-            : { fetchImpl: options.fetchImpl }),
-          runtimeOptions: options,
-        });
-      const triggerOptions: WorkflowTriggerRunnerOptions = {
-        ...options,
-        eventReplyDispatcher,
-        scheduledEventManager,
-      };
-      const runner = createWorkflowTriggerRunner(triggerOptions);
-      const sequentialListCompletionObserver =
-        createSequentialListCompletionObserver(triggerOptions);
-      const handles: Awaited<ReturnType<EventSourceAdapter["start"]>>[] = [];
-      const routes: EventHttpRoute[] = [];
-      let server: EventListenerServer | undefined;
-      try {
-        await createWorkflowScheduleDispatcher(
-          triggerOptions,
-        ).rehydrateActiveSchedules({
-          ...triggerOptions,
-          scheduledEventManager,
-        });
-        const enabledSources =
-          configuration.sources.filter(isEventSourceEnabled);
-        for (const source of enabledSources) {
-          const adapter = registry.get(source.kind);
-          if (adapter === undefined) {
-            throw new Error(
-              `no event source adapter registered for '${source.kind}'`,
-            );
-          }
-          const routePath = resolveEventSourceHttpPath(source);
-          if (routePath !== undefined) {
-            routes.push({ source, adapter, path: routePath });
-          }
-          if (adapter.capabilities.supportsStart) {
-            handles.push(
-              await adapter.start({
-                source,
-                signal: abortController.signal,
-                now,
-                env,
-                ...(options.fetchImpl === undefined
-                  ? {}
-                  : { fetchImpl: options.fetchImpl }),
-                diagnosticSink: writeEventSourceDiagnostic,
-                scheduledEventManager,
-                eventDataRoot: resolveRootDataDir(options),
-                readOnly: options.readOnly === true,
-                sequentialListCompletionObserver,
-                dispatch: async (event, raw) => {
-                  const receipts = await dispatchEventToMatchingBindings(
-                    {
-                      configuration,
-                      event,
-                      ...(raw === undefined ? {} : { raw }),
-                      runner,
-                    },
-                    triggerOptions,
-                  );
-                  return { receipts };
+      const routePath = resolveEventSourceHttpPath(source);
+      if (routePath !== undefined) {
+        routes.push({ source, adapter, path: routePath });
+      }
+      if (adapter.capabilities.supportsStart) {
+        handles.push(
+          await adapter.start({
+            source,
+            signal: abortController.signal,
+            now,
+            env,
+            ...(options.fetchImpl === undefined
+              ? {}
+              : { fetchImpl: options.fetchImpl }),
+            diagnosticSink: writeEventSourceDiagnostic,
+            scheduledEventManager,
+            eventDataRoot: resolveRootDataDir(options),
+            readOnly: options.readOnly === true,
+            sequentialListCompletionObserver,
+            dispatch: async (event, raw) => {
+              const receipts = await dispatchEventToMatchingBindings(
+                {
+                  configuration,
+                  event,
+                  ...(raw === undefined ? {} : { raw }),
+                  runner,
                 },
+                triggerOptions,
+              );
+              return { receipts };
+            },
+          }),
+        );
+      }
+    }
+
+    const host = options.host ?? env["RIEL_EVENTS_HOST"] ?? "127.0.0.1";
+    const port = resolveEventListenerPort({
+      ...(options.port === undefined ? {} : { optionPort: options.port }),
+      env,
+    });
+    server =
+      routes.length === 0
+        ? undefined
+        : runtime.serve({
+            hostname: host,
+            port,
+            fetch: (request) =>
+              handleEventHttpRequest(request, {
+                configuration,
+                routes,
+                triggerOptions,
+                registry,
+                rateLimiter,
+                env,
+                now,
               }),
-            );
-          }
-        }
+          });
 
-        const host = options.host ?? env["RIEL_EVENTS_HOST"] ?? "127.0.0.1";
-        const port = resolveEventListenerPort({
-          ...(options.port === undefined ? {} : { optionPort: options.port }),
-          env,
-        });
-        server =
-          routes.length === 0
-            ? undefined
-            : runtime.serve({
-                hostname: host,
-                port,
-                fetch: (request) =>
-                  handleEventHttpRequest(request, {
-                    configuration,
-                    routes,
-                    triggerOptions,
-                    registry,
-                    rateLimiter,
-                    env,
-                    now,
-                  }),
-              });
-
-        return {
-          ...(server === undefined ? {} : { host, port: server.port }),
-          sources: enabledSources.map((source) => source.id),
-          stop: async () => {
-            if (ownsScheduledEventManager) {
-              scheduledEventManager.stop();
-            }
-            await stopEventListenerResources({
-              abortController,
-              handles,
-              ...(server === undefined ? {} : { server }),
-            });
-          },
-        };
-      } catch (error: unknown) {
+    return {
+      ...(server === undefined ? {} : { host, port: server.port }),
+      sources: enabledSources.map((source) => source.id),
+      stop: async () => {
         if (ownsScheduledEventManager) {
           scheduledEventManager.stop();
         }
@@ -521,7 +508,18 @@ async function startEventListener(
           abortController,
           handles,
           ...(server === undefined ? {} : { server }),
-        }).catch(() => {});
-        throw error;
-      }
+        });
+      },
+    };
+  } catch (error: unknown) {
+    if (ownsScheduledEventManager) {
+      scheduledEventManager.stop();
+    }
+    await stopEventListenerResources({
+      abortController,
+      handles,
+      ...(server === undefined ? {} : { server }),
+    }).catch(() => {});
+    throw error;
+  }
 }

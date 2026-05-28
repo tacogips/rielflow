@@ -66,9 +66,7 @@ import {
 } from "./mailbox-and-communications";
 
 async function runWorkflowDeferred(
-  ...args: Parameters<
-    typeof import("./auto-improve-and-runner").runWorkflow
-  >
+  ...args: Parameters<typeof import("./auto-improve-and-runner").runWorkflow>
 ): ReturnType<typeof import("./auto-improve-and-runner").runWorkflow> {
   const module = await import("./auto-improve-and-runner");
   return await module.runWorkflow(...args);

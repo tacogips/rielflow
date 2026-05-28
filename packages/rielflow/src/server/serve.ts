@@ -84,7 +84,11 @@ export async function startServe(
   });
   return await withTelemetrySpan(
     "rielflow.server.start",
-    { "server.kind": "serve", "server.host": options.host, "server.port": options.port },
+    {
+      "server.kind": "serve",
+      "server.host": options.host,
+      "server.port": options.port,
+    },
     async () => await startServeInternal(options, runtime),
   );
 }

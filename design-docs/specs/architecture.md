@@ -1233,6 +1233,8 @@ Responsibilities:
 
 - execute agent nodes against concrete backends
 - propagate backend session reuse when `sessionPolicy.mode = "reuse"`
+- keep system prompt text and per-turn user prompt text as separate adapter
+  fields whenever a backend runner exposes a `systemPrompt` option
 - enforce runtime timeout boundaries through adapter cancellation
 - normalize common LLM response wrappers before the runtime validates candidate
   output payloads
@@ -1256,6 +1258,60 @@ or partial/unbalanced object text. Backend-specific output collection remains in
 `packages/rielflow/src/workflow/adapters/*`; wrapper recovery stays in the shared adapter module
 so `codex-agent`, `claude-code-agent`, and SDK-backed adapters converge before
 engine-level schema, completion, and manager-control validation.
+
+#### Local Agent Prompt Splitting on Reused Sessions
+
+Issue-resolution handoff:
+`codex-recent-change-quality-loop/div-codex-recent-change-quality-loop-1779948622-fae615cb`
+reported two mid-severity findings against
+`packages/rielflow-adapters/src/codex.ts` and
+`packages/rielflow-adapters/src/cursor.ts`: the backend-session reuse path sent
+`buildCombinedPromptText(input)` as the resume prompt while also forwarding
+`systemPromptText` through the backend runner's `systemPrompt` field. That can
+duplicate stable system instructions on resumed sessions.
+
+The adapter contract is:
+
+- first-turn starts pass `prompt: input.promptText` and, when present,
+  `systemPrompt: input.systemPromptText`
+- backend-session reuse passes the per-turn user prompt only
+  (`input.promptText`) and keeps `systemPromptText` in the backend runner option
+  only
+- stall-watch resume callbacks keep the stall-nudge prompt supplied by the
+  watcher and continue forwarding the stable `systemPrompt` through backend
+  options; they must not replace nudge prompts with the original node prompt
+- `buildCombinedPromptText(input)` remains available only for backend surfaces
+  that do not expose a separate `systemPrompt` field
+
+Codex-agent reference mapping: installed `node_modules/codex-agent` shows
+`src/process/manager.ts` builds both start and resume CLI prompts by appending
+`options.systemPrompt` to the supplied prompt. Cursor reference mapping:
+installed `node_modules/cursor-cli-agent/src/cursor/process-runner.ts` applies
+the same final prompt assembly for start and resume paths. The default local
+reference root `../../codex-agent` was checked during this design pass and was
+not available, so installed package sources are the concrete reference trail for
+this issue. The references are behavioral only; rielflow should not copy their
+implementation.
+
+Cursor-specific behavior remains isolated in
+`packages/rielflow-adapters/src/cursor.ts`. The intentional divergence from a
+single shared local-agent prompt helper is that Codex and Cursor adapters both
+share the same semantic split but translate it into their backend-specific
+runner APIs independently.
+
+Regression coverage should exercise backend-session reuse with
+`systemPromptText` in:
+
+- `packages/rielflow/src/workflow/adapters/codex.test.ts`
+- `packages/rielflow/src/workflow/adapters/cursor.test.ts`
+
+The expected assertion is that resume receives the user prompt and system prompt
+as separate values, and no resumed user prompt contains the system prompt text.
+Verification commands:
+
+- `bun test packages/rielflow/src/workflow/adapters/codex.test.ts packages/rielflow/src/workflow/adapters/cursor.test.ts`
+- `bun test packages/rielflow/src/workflow/adapters/claude.test.ts`
+- `git diff -- packages/rielflow-adapters/src/codex.ts packages/rielflow-adapters/src/cursor.ts packages/rielflow/src/workflow/adapters/codex.test.ts packages/rielflow/src/workflow/adapters/cursor.test.ts design-docs/specs/architecture.md`
 
 For nodes with `output` configured, output-contract normalization also accepts a
 valid adapter envelope from inline adapter payloads or reserved candidate files:

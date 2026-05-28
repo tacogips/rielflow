@@ -263,6 +263,7 @@ describe("CursorCliAgentAdapter", () => {
     const output = await adapter.execute(
       {
         ...baseInput,
+        systemPromptText: "system",
         backendSession: { mode: "reuse", sessionId },
         output: {
           maxValidationAttempts: 2,
@@ -286,9 +287,11 @@ describe("CursorCliAgentAdapter", () => {
         sessionId,
         prompt: "hello",
         model: "claude-sonnet-4-5",
+        systemPrompt: "system",
         streamMode: "event",
       }),
     );
+    expect(output.promptText).toBe("system\n\nhello");
     expect(output.payload).toEqual({ summary: "ok" });
     expect(output.backendSession?.sessionId).toBe(sessionId);
   });

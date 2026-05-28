@@ -8,14 +8,10 @@ import { runWorkflow } from "../workflow/engine";
 import {
   buildInspectionSummary,
   deriveWorkflowStructureRows,
-  type WorkflowStructureRow,
 } from "../workflow/inspect";
 import { loadWorkflowFromCatalog } from "../workflow/load";
 import { executeWorkflowSelfImprove } from "rielflow-core";
-import {
-  hasInvalidNodeValidationResult,
-  type NodeValidationResult,
-} from "../workflow/validate";
+import { hasInvalidNodeValidationResult } from "../workflow/validate";
 import {
   buildWorkflowCatalogOverview,
   buildWorkflowStatusOverview,
@@ -73,33 +69,11 @@ import {
   validateWorkflowManifestForCli,
 } from "./workflow-manifest-validation";
 import { runCliWorkflowPackageScope } from "./workflow-package-command-handler";
-
-function renderWorkflowStructureLines(
-  rows: readonly WorkflowStructureRow[],
-  options: { readonly indentUnit: string } = { indentUnit: "  " },
-): string[] {
-  if (rows.length === 0) {
-    return ["(none)"];
-  }
-  return rows.flatMap((row) => [
-    `${options.indentUnit.repeat(row.indent)}${row.stepId}`,
-    `${options.indentUnit.repeat(row.indent + 1)}${row.description}`,
-  ]);
-}
-
-function renderNodeValidationSummaryLines(
-  results: readonly NodeValidationResult[],
-): readonly string[] {
-  return results
-    .filter(
-      (result) => result.status === "invalid" || result.status === "warning",
-    )
-    .map((result) => {
-      const nodeLabel =
-        result.nodeId === undefined ? "workflow.nodes" : result.nodeId;
-      return `nodeValidation: [${result.status}] ${nodeLabel}: ${result.message}`;
-    });
-}
+import { runCliWorkflowRegistryScope } from "./workflow-registry-command-handler";
+import {
+  renderNodeValidationSummaryLines,
+  renderWorkflowStructureLines,
+} from "./workflow-renderers";
 
 export async function runCliWorkflowScope(
   context: RunCliScopeContext,
@@ -435,6 +409,10 @@ export async function runCliWorkflowScope(
 
   if (command === "package") {
     return await runCliWorkflowPackageScope(context);
+  }
+
+  if (command === "registry") {
+    return await runCliWorkflowRegistryScope(context);
   }
 
   if (command === "search") {
