@@ -8,4 +8,6 @@ export * from "./pre-install-scanner";
 export * from "./publish";
 export * from "./registry-config";
 export * from "./search";
+export * from "./skill-install";
+export * from "./skills";
 export * from "./types";

@@ -97,12 +97,37 @@ export function resolveWorkflowCheckoutDestination(
   }
 
   if (directWorkflowRootOverride(options) !== undefined) {
-    return err(
-      checkoutFailure(
-        "USAGE",
-        "workflow checkout does not support --workflow-definition-dir; use project scope or --user-scope",
-      ),
+    const directWorkflowRoot = resolveConfiguredRootPath(
+      directWorkflowRootOverride(options) ?? "",
+      options,
     );
+    const workflowDirectory = resolveSafeScopedPath(
+      directWorkflowRoot,
+      workflowName,
+    );
+    if (workflowDirectory === undefined) {
+      return err(
+        checkoutFailure(
+          "UNSAFE_DESTINATION",
+          `checkout destination is not safe for workflow '${workflowName}'`,
+        ),
+      );
+    }
+    const userScopeRoot = resolveUserScopeRootForCheckout(options);
+    const scope: WorkflowCheckoutScope =
+      options.userScope === true ? "user" : "project";
+    return ok({
+      scope,
+      scopeRoot: path.dirname(directWorkflowRoot),
+      workflowRoot: directWorkflowRoot,
+      workflowDirectory,
+      registryPath: path.join(
+        userScopeRoot,
+        "workflow-registry",
+        "checkouts",
+        `${scope}-${workflowName}.json`,
+      ),
+    });
   }
 
   const userScopeRoot = resolveUserScopeRootForCheckout(options);

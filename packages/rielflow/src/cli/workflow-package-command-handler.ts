@@ -1,9 +1,11 @@
 import {
   checkoutWorkflowPackage,
+  getWorkflowPackageCheckoutStatus,
   loadWorkflowPackageRegistryConfig,
   publishWorkflowPackage,
   registerWorkflowPackageRegistry,
   searchWorkflowPackages,
+  updateWorkflowPackageCheckout,
 } from "../workflow/packages";
 import { emitJson } from "./input-output-helpers";
 import type { RunCliScopeContext } from "./storage-and-options";
@@ -35,6 +37,9 @@ export async function runCliWorkflowPackageScope(
     ...(sharedOptions.projectRoot === undefined
       ? {}
       : { projectRoot: sharedOptions.projectRoot }),
+    ...(sharedOptions.workflowRoot === undefined
+      ? {}
+      : { workflowRoot: sharedOptions.workflowRoot }),
   };
 
   if (packageCommand === "registry") {
@@ -149,6 +154,7 @@ export async function runCliWorkflowPackageScope(
         : { branch: parsed.options.branch }),
       ...(parsed.options.userScope ? { userScope: true } : {}),
       ...(parsed.options.overwrite ? { overwrite: true } : {}),
+      ...(parsed.options.yes ? { yes: true } : {}),
       ...(parsed.options.preInstallCheck && !parsed.options.noPreInstallCheck
         ? { preInstallCheck: true }
         : {}),
@@ -179,6 +185,11 @@ export async function runCliWorkflowPackageScope(
       io.stdout(`registry: ${checkedOut.value.registryUrl}`);
       io.stdout(`checksum: ${checkedOut.value.checksum}`);
       io.stdout(`content digest: ${checkedOut.value.contentDigest}`);
+      io.stdout(`updated: ${String(checkedOut.value.updated)}`);
+      io.stdout(`installId: ${checkedOut.value.installId}`);
+      if (checkedOut.value.skills.length > 0) {
+        io.stdout(`skills: ${checkedOut.value.skills.length}`);
+      }
       if (checkedOut.value.preInstallCheck !== undefined) {
         const blockingFindings =
           checkedOut.value.preInstallCheck.findings.filter(
@@ -189,6 +200,63 @@ export async function runCliWorkflowPackageScope(
           `pre-install check: ${checkedOut.value.preInstallCheck.status} (${blockingFindings} blocking finding(s))`,
         );
       }
+    }
+    return 0;
+  }
+
+  if (packageCommand === "status" || packageCommand === "update") {
+    if (packageTarget === undefined && parsed.options.installId === undefined) {
+      io.stderr(
+        `workflow package ${packageCommand} requires a workflow name or --install-id`,
+      );
+      return 2;
+    }
+    const scope =
+      parsed.options.userScope || parsed.options.workflowScope === "user"
+        ? "user"
+        : parsed.options.workflowScope === "project"
+          ? "project"
+          : undefined;
+    const result =
+      packageCommand === "status"
+        ? await getWorkflowPackageCheckoutStatus({
+            ...(packageTarget === undefined
+              ? {}
+              : { workflowName: packageTarget }),
+            ...(parsed.options.installId === undefined
+              ? {}
+              : { installId: parsed.options.installId }),
+            ...(scope === undefined ? {} : { scope }),
+            options: packageOptions,
+          })
+        : await updateWorkflowPackageCheckout({
+            ...(packageTarget === undefined
+              ? {}
+              : { workflowName: packageTarget }),
+            ...(parsed.options.installId === undefined
+              ? {}
+              : { installId: parsed.options.installId }),
+            ...(scope === undefined ? {} : { scope }),
+            ...(parsed.options.yes ? { yes: true } : {}),
+            options: packageOptions,
+          });
+    if (!result.ok) {
+      io.stderr(`package ${packageCommand} failed: ${result.error.message}`);
+      return result.error.code === "IO" ? 1 : 2;
+    }
+    if (parsed.options.output === "json") {
+      emitJson(io, result.value);
+    } else {
+      io.stdout(`package: ${String(result.value.packageId)}`);
+      io.stdout(`workflow: ${String(result.value.workflowName)}`);
+      io.stdout(`scope: ${String(result.value.scope)}`);
+      io.stdout(`destination: ${String(result.value.destinationDirectory)}`);
+      io.stdout(`registry: ${String(result.value.registryUrl)}`);
+      io.stdout(`checksum: ${String(result.value.checksum)}`);
+      io.stdout(`installId: ${String(result.value.installId)}`);
+      io.stdout(
+        `updated: ${String("updated" in result.value ? result.value.updated : false)}`,
+      );
     }
     return 0;
   }
@@ -242,6 +310,8 @@ export async function runCliWorkflowPackageScope(
     return 0;
   }
 
-  io.stderr("workflow package supports: registry, search, checkout, publish");
+  io.stderr(
+    "workflow package supports: registry, search, checkout, status, update, publish",
+  );
   return 2;
 }

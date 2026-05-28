@@ -109,6 +109,13 @@ must remain excluded unless `RIELFLOW_OTEL_EXPORT_MESSAGES=true` is explicitly
 set for trusted fixtures. Jaeger smoke checks should use the repository-owned
 `compose.jaeger.yaml` file and `docker compose -f compose.jaeger.yaml`.
 
+Workflow package checkout issue-resolution runs should refresh user-facing
+docs for package manifests, direct `--workflow-definition-dir` destinations,
+package status/update commands, and vendor-scoped skill layouts. Keep `Issue
+#35` references explicit when that issue is present in workflow input but
+unrelated, and preserve `codex-agent` as an execution-backend identifier while
+documenting Codex skill projection as `.codex/skills/<name>/SKILL.md`.
+
 ## Reporting
 
 After the workflow finishes, report:

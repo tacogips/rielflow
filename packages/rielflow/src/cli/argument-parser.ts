@@ -1,12 +1,12 @@
-import type { WorkflowScopeSelector } from "../workflow/types";
 import type {
   WorkflowSelfImproveMode,
   WorkflowSelfImproveSourceMode,
 } from "rielflow-core";
+import type { WorkflowScopeSelector } from "../workflow/types";
 import type { ParsedArgs } from "./storage-and-options";
+import { parseAutoImproveFlagState } from "./argument-auto-improve";
 import { validateCliFlagCombinations } from "./argument-validation";
 import {
-  parseAutoImprovePolicyFromCliFlags,
   parseEnumOption,
   parseNumericOption,
   parseRequiredStringOption,
@@ -83,12 +83,14 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let stepRunsFilterStepId: string | undefined;
   let userScope = false;
   let overwrite = false;
+  let yes = false;
   let selfImproveSourceMode: WorkflowSelfImproveSourceMode | undefined;
   let selfImproveSessions: string[] = [];
   let selfImproveMode: WorkflowSelfImproveMode | undefined;
   let selfImproveEnableDisabled = false;
   let registry: string | undefined;
   let registryUrl: string | undefined;
+  let installId: string | undefined;
   let packageName: string | undefined;
   let packageId: string | undefined;
   let branch: string | undefined;
@@ -231,6 +233,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--overwrite":
         overwrite = true;
+        break;
+      case "--yes":
+        yes = true;
         break;
       case "--structure":
         structure = true;
@@ -749,6 +754,16 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         registryUrl = parsedString.value;
         break;
       }
+      case "--install-id":
+        {
+          const parsedString = parseRequiredStringOption(token, readNext());
+          if (parsedString.error !== undefined) {
+            parseError = parsedString.error;
+            break;
+          }
+          installId = parsedString.value;
+        }
+        break;
       case "--package-name": {
         const parsedString = parseRequiredStringOption(token, readNext());
         if (parsedString.error !== undefined) {
@@ -859,36 +874,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       break;
     }
   }
-  const isSessionHealthCommand =
-    positionals[0] === "session" && positionals[1] === "health";
-  const hasWorkflowAutoImprovePolicyFlag =
-    firstAutoImprovePolicyFlag !== undefined && !isSessionHealthCommand;
-  const shouldEnableCliAutoImprovePolicy =
-    !isSessionHealthCommand &&
-    (disableAutoImprove ||
-      autoImprove ||
-      nestedSuperviser ||
-      hasWorkflowAutoImprovePolicyFlag);
-  const autoImproveInputs = {
-    enabled: shouldEnableCliAutoImprovePolicy,
-    ...(superviserWorkflowId === undefined ? {} : { superviserWorkflowId }),
-    ...(monitorIntervalMs === undefined ? {} : { monitorIntervalMs }),
-    ...(stallTimeoutMs === undefined || (!autoImprove && isSessionHealthCommand)
-      ? {}
-      : { stallTimeoutMs }),
-    ...(maxSupervisedAttempts === undefined ? {} : { maxSupervisedAttempts }),
-    ...(disableAutoImprove
-      ? { maxWorkflowPatches: 0 }
-      : maxWorkflowPatches === undefined
-        ? {}
-        : { maxWorkflowPatches }),
-    ...(disableAutoImprove || workflowMutationMode === undefined
-      ? {}
-      : { workflowMutationMode }),
-    ...(noAllowTargetedRerun ? { allowTargetedRerun: false } : {}),
-  } as const;
-  const autoImprovePolicy =
-    parseAutoImprovePolicyFromCliFlags(autoImproveInputs);
+  const autoImproveState = parseAutoImproveFlagState({
+    positionals,
+    disableAutoImprove,
+    autoImprove,
+    nestedSuperviser,
+    firstAutoImprovePolicyFlag,
+    superviserWorkflowId,
+    monitorIntervalMs,
+    stallTimeoutMs,
+    maxSupervisedAttempts,
+    maxWorkflowPatches,
+    workflowMutationMode,
+    noAllowTargetedRerun,
+  });
   parseError = validateCliFlagCombinations({
     parseError,
     autoImprove,
@@ -896,9 +895,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     nestedSuperviser,
     maxWorkflowPatches,
     workflowMutationMode,
-    isSessionHealthCommand,
+    isSessionHealthCommand: autoImproveState.isSessionHealthCommand,
     firstAutoImproveOnlyPolicyFlag,
-    autoImprovePolicyError: autoImprovePolicy.error,
+    autoImprovePolicyError: autoImproveState.autoImprovePolicy.error,
     preInstallCheck,
     noPreInstallCheck,
   });
@@ -917,6 +916,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       workerOnly,
       userScope,
       overwrite,
+      yes,
       structure,
       executablePreflight,
       ...(format === undefined ? {} : { format }),
@@ -957,9 +957,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       live,
       ...(stallTimeoutMs === undefined ? {} : { stallTimeoutMs }),
       ...(reason === undefined ? {} : { reason }),
-      ...(autoImprovePolicy.policy === undefined
+      ...(autoImproveState.autoImprovePolicy.policy === undefined
         ? {}
-        : { autoImprove: autoImprovePolicy.policy }),
+        : { autoImprove: autoImproveState.autoImprovePolicy.policy }),
       disableAutoImprove,
       ...(nestedSuperviser ? { nestedSuperviser: true } : {}),
       ...(continuationStartStepId === undefined
@@ -975,6 +975,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       selfImproveEnableDisabled,
       ...(registry === undefined ? {} : { registry }),
       ...(registryUrl === undefined ? {} : { registryUrl }),
+      ...(installId === undefined ? {} : { installId }),
       ...(packageName === undefined ? {} : { packageName }),
       ...(packageId === undefined ? {} : { packageId }),
       ...(branch === undefined ? {} : { branch }),

@@ -26,6 +26,13 @@ export type WorkflowPackageContainerRuntime = "docker" | "podman";
 export type WorkflowPackageContainerRuntimeRequest =
   | WorkflowPackageContainerRuntime
   | "auto";
+export type WorkflowPackageSkillVendor =
+  | "agents"
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "gemini";
+export type WorkflowPackageSkillInstallMode = "managed-only" | "projected";
 
 export interface WorkflowPackageTrustedSigner {
   readonly id: string;
@@ -65,6 +72,7 @@ export interface WorkflowPackageRegistryConfig {
 export interface WorkflowPackageRegistryConfigOptions {
   readonly userRoot?: string;
   readonly projectRoot?: string;
+  readonly workflowRoot?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
   readonly now?: Date;
@@ -81,6 +89,8 @@ export interface WorkflowPackageManifest {
   readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
   readonly integrity?: WorkflowPackageIntegrity;
   readonly workflowDirectory?: string;
+  readonly skillDirectory?: string;
+  readonly skills?: readonly WorkflowPackageManifestSkillEntry[];
   readonly title?: string;
   readonly authors?: readonly string[];
   readonly license?: string;
@@ -102,6 +112,12 @@ export interface WorkflowPackageWorkflowMetadata {
   readonly description: string;
   readonly tags: readonly string[];
   readonly backends?: readonly string[];
+}
+
+export interface WorkflowPackageManifestSkillEntry {
+  readonly vendor: WorkflowPackageSkillVendor;
+  readonly name: string;
+  readonly sourcePath: string;
 }
 
 export interface WorkflowPackageIndexRecord {
@@ -160,11 +176,14 @@ export interface WorkflowPackageSearchCliResult {
 
 export interface WorkflowPackageFailure {
   readonly code:
+    | "UPDATE_CONFIRMATION_REQUIRED"
     | "DUPLICATE_PACKAGE"
     | "FETCH_FAILED"
     | "GIT_FAILED"
     | "INVALID_MANIFEST"
     | "INVALID_PACKAGE_NAME"
+    | "INVALID_SKILL_ENTRY"
+    | "INVALID_SKILL_VENDOR"
     | "INVALID_REGISTRY"
     | "IO"
     | "MISSING_PACKAGE"
@@ -175,6 +194,20 @@ export interface WorkflowPackageFailure {
     | "USAGE"
     | "VALIDATION";
   readonly message: string;
+}
+
+export interface WorkflowPackageSkillSelection {
+  readonly vendor: WorkflowPackageSkillVendor;
+  readonly name: string;
+  readonly sourcePath: string;
+  readonly checksum: string;
+}
+
+export interface WorkflowPackageSkillInstallTarget
+  extends WorkflowPackageSkillSelection {
+  readonly managedPath: string;
+  readonly projectionPath?: string;
+  readonly installMode: WorkflowPackageSkillInstallMode;
 }
 
 export interface WorkflowPackagePreInstallFinding {

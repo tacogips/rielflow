@@ -101,6 +101,9 @@ export function printHelp(io: CliIo): void {
   io.stdout(
     "  --overwrite    Replace an existing checkout after staged validation",
   );
+  io.stdout(
+    "  --yes          Bypass overwrite confirmation for checkout updates",
+  );
   io.stdout("");
   io.stdout("Package options:");
   io.stdout(
@@ -110,7 +113,7 @@ export function printHelp(io: CliIo): void {
     "  workflow package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
   );
   io.stdout(
-    "  workflow package checkout <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--pre-install-check]",
+    "  workflow package checkout <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--yes] [--pre-install-check]",
   );
   io.stdout(
     "    --pre-install-check [--pre-install-check-mode warn|reject] [--pre-install-check-container docker|podman|auto]",

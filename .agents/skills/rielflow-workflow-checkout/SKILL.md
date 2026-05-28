@@ -16,7 +16,7 @@ For running, listing, validating, inspecting, or monitoring existing workflows, 
 Inside this repository, prefer:
 
 ```bash
-bun run src/main.ts workflow checkout <github-directory-url>
+bun run packages/rielflow/src/bin.ts workflow checkout <github-directory-url>
 ```
 
 When rielflow is installed, prefer:
@@ -63,6 +63,14 @@ https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>
 ```
 
 - `--user-root <path>` or `DIVEDRA_USER_ROOT` can override the user root. The checkout registry is always written under the resolved user root, including project-scope checkouts.
+- Add `--workflow-definition-dir <path>` to bypass scoped workflow catalogs and install directly under:
+
+```text
+<path>/<workflow-name>
+```
+
+The registry record is still written under the resolved user root.
+
 - Duplicate checkouts fail when the destination directory or registry record already exists.
 - Add `--overwrite` only when the user explicitly wants replacement. The implementation validates the newly staged bundle before replacing the existing destination.
 - Each successful checkout writes provenance under:
@@ -82,16 +90,16 @@ Text output prints the checked-out workflow name, scope, destination, and regist
    - Default to project scope unless the user asks for user-wide installation.
    - Use `--user-scope` for user-wide installation.
    - Use `--project-root` or `--user-root` only when the destination root must be explicit.
-3. Reject or remove conflicting direct-root options before running checkout:
-   - Do not pass `--workflow-definition-dir`.
+   - Use `--workflow-definition-dir` only when the user wants a direct workflow definition directory destination.
+3. Reject or remove conflicting remote-control options before running checkout:
    - Do not run against `--endpoint`.
 4. For duplicates, run without `--overwrite` first unless the user explicitly requested replacement.
 5. Use `--output json` when the result will be parsed or saved.
 6. After checkout, optionally validate or list from scoped catalog lookup:
 
 ```bash
-bun run src/main.ts workflow validate <workflow-name>
-bun run src/main.ts workflow list
+bun run packages/rielflow/src/bin.ts workflow validate <workflow-name>
+bun run packages/rielflow/src/bin.ts workflow list
 ```
 
 ## Examples
@@ -99,14 +107,14 @@ bun run src/main.ts workflow list
 Project-scope checkout:
 
 ```bash
-bun run src/main.ts workflow checkout \
+bun run packages/rielflow/src/bin.ts workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>
 ```
 
 User-scope checkout:
 
 ```bash
-bun run src/main.ts workflow checkout \
+bun run packages/rielflow/src/bin.ts workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name> \
   --user-scope
 ```
@@ -114,7 +122,7 @@ bun run src/main.ts workflow checkout \
 Replace an existing checkout after staged validation succeeds:
 
 ```bash
-bun run src/main.ts workflow checkout \
+bun run packages/rielflow/src/bin.ts workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name> \
   --overwrite
 ```
@@ -122,7 +130,7 @@ bun run src/main.ts workflow checkout \
 Machine-readable result:
 
 ```bash
-bun run src/main.ts workflow checkout \
+bun run packages/rielflow/src/bin.ts workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name> \
   --output json
 ```
@@ -130,14 +138,22 @@ bun run src/main.ts workflow checkout \
 Explicit project root:
 
 ```bash
-bun run src/main.ts workflow checkout \
+bun run packages/rielflow/src/bin.ts workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name> \
   --project-root /path/to/project/.rielflow
 ```
 
+Direct workflow definition directory:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow checkout \
+  https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name> \
+  --workflow-definition-dir /path/to/workflow-definitions
+```
+
 ## Guardrails
 
-- Do not combine checkout with `--workflow-definition-dir`; checkout writes to scoped catalogs only.
+- Use `--workflow-definition-dir` only for a direct local workflow definition directory; it writes to `<path>/<workflow-name>` instead of a scoped catalog.
 - Do not combine checkout with `--endpoint`; checkout is local-only.
 - Do not use checkout for arbitrary filesystem copies or non-GitHub sources.
 - Do not assume a slash-containing branch or tag name is safe if checkout reports an ambiguous URL; ask the user for a less ambiguous ref or directory path.
@@ -152,6 +168,6 @@ bun run src/main.ts workflow checkout \
 - `INVALID_REMOTE_DIRECTORY`: confirm the URL resolves to a directory rather than a file and that the selected directory exists for the ref.
 - `INVALID_WORKFLOW_NAME`: rename the remote workflow directory to a safe workflow name.
 - `DUPLICATE_CHECKOUT`: rerun with `--overwrite` only if replacement is intended.
-- `USAGE`: remove unsupported checkout options such as `--workflow-definition-dir`.
+- `USAGE`: remove unsupported checkout options such as `--endpoint`.
 - `VALIDATION`: inspect the remote bundle for invalid `workflow.json`, missing node payloads, missing prompt files, invalid step/node references, or unsafe workflow-local file paths.
 - `FETCH_FAILED`: confirm the repository, ref, directory path, and network access.

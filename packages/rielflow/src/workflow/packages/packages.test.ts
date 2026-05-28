@@ -1,10 +1,21 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createWorkflowTemplate } from "../create";
-import { checkoutWorkflowPackage } from "./checkout";
+import {
+  checkoutWorkflowPackage,
+  getWorkflowPackageCheckoutStatus,
+  updateWorkflowPackageCheckout,
+} from "./checkout";
 import {
   decodeWorkflowPackageCacheSegment,
   encodeWorkflowPackageCacheSegment,
@@ -404,7 +415,12 @@ describe("workflow package registry", () => {
         "https://github.com/example/rielflow-packages",
       );
       expect(checkedOut.value.checkoutRecordPath).toBe(
-        checkedOut.value.registryPath,
+        path.join(
+          userRoot,
+          "workflow-registry",
+          "checkouts",
+          `${checkedOut.value.installId}.json`,
+        ),
       );
       expect(checkedOut.value.destinationDirectory).toBe(
         path.join(projectRoot, ".rielflow", "workflows", "checkout-flow"),
@@ -475,6 +491,7 @@ describe("workflow package registry", () => {
         packageName: "checkout-flow",
         registry: "local",
         overwrite: true,
+        yes: true,
         options: { userRoot, cwd: projectRoot },
       });
       expect(manifestOnlyCheckout.ok).toBe(true);
@@ -509,6 +526,7 @@ describe("workflow package registry", () => {
         packageName: "checkout-flow",
         registry: "local",
         overwrite: true,
+        yes: true,
         options: { userRoot, cwd: projectRoot },
       });
       expect(workflowContentCheckout.ok).toBe(true);
@@ -518,6 +536,814 @@ describe("workflow package registry", () => {
       expect(workflowContentCheckout.value.contentDigest).not.toBe(
         initialContentDigest,
       );
+    }
+  });
+
+  test("checkout installs packaged skills and projects project-scope vendor files", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "skillful-flow",
+      workflowName: "skillful-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "agents"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "agents", "AGENTS.md"),
+      "# Agent policy\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "claude", "review"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "claude", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review workflows\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "codex", "audit"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "audit", "SKILL.md"),
+      "---\nname: audit\ndescription: Audit workflows\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "cursor"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "cursor", "package-review.mdc"),
+      "---\ndescription: Package review\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "gemini"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "gemini", "GEMINI.md"),
+      "# Gemini policy\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "skillful-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "skillful-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.skills).toHaveLength(5);
+      expect(checkedOut.value.managedSkillRoot).toBe(
+        path.join(
+          projectRoot,
+          ".rielflow",
+          "managed",
+          "packages",
+          "skillful-flow",
+          "1.0.0",
+          "skills",
+        ),
+      );
+      await expect(
+        readFile(path.join(projectRoot, "AGENTS.md"), "utf8"),
+      ).resolves.toContain("Agent policy");
+      await expect(
+        readFile(
+          path.join(projectRoot, ".claude", "skills", "review", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain("Review workflows");
+      await expect(
+        readFile(
+          path.join(projectRoot, ".codex", "skills", "audit", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain("Audit workflows");
+      await expect(
+        readFile(
+          path.join(projectRoot, ".cursor", "rules", "package-review.mdc"),
+          "utf8",
+        ),
+      ).resolves.toContain("Package review");
+      await expect(
+        readFile(path.join(projectRoot, "GEMINI.md"), "utf8"),
+      ).resolves.toContain("Gemini policy");
+      const provenance = JSON.parse(
+        await readFile(
+          path.join(
+            checkedOut.value.destinationDirectory,
+            ".rielflow-package-provenance.json",
+          ),
+          "utf8",
+        ),
+      ) as { readonly skills?: readonly unknown[] };
+      expect(provenance.skills).toHaveLength(5);
+    }
+  });
+
+  test("checkout rejects symlinked project skill projection ancestors", async () => {
+    for (const vendor of ["claude", "codex", "cursor"] as const) {
+      const userRoot = await makeTempDir();
+      const registryRoot = await makeTempDir();
+      const projectRoot = await makeTempDir();
+      const outsideRoot = await makeTempDir();
+      const packageRoot = await createPackagedWorkflow({
+        registryRoot,
+        packageName: `${vendor}-symlink-flow`,
+        workflowName: `${vendor}-symlink-flow`,
+      });
+      if (vendor === "cursor") {
+        await mkdir(path.join(packageRoot, "skills", "cursor"), {
+          recursive: true,
+        });
+        await writeFile(
+          path.join(packageRoot, "skills", "cursor", "unsafe.mdc"),
+          "---\ndescription: unsafe\n---\n",
+          "utf8",
+        );
+      } else {
+        await mkdir(path.join(packageRoot, "skills", vendor, "unsafe"), {
+          recursive: true,
+        });
+        await writeFile(
+          path.join(packageRoot, "skills", vendor, "unsafe", "SKILL.md"),
+          "---\nname: unsafe\ndescription: Unsafe projection\n---\n",
+          "utf8",
+        );
+      }
+      await refreshPackageManifestDigests({
+        packageRoot,
+        workflowDirectory: `${vendor}-symlink-flow`,
+      });
+      const linkedDirectory = vendor === "cursor" ? ".cursor" : `.${vendor}`;
+      await symlink(outsideRoot, path.join(projectRoot, linkedDirectory));
+      const registered = await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      });
+      expect(registered.ok).toBe(true);
+
+      const checkedOut = await checkoutWorkflowPackage({
+        packageName: `${vendor}-symlink-flow`,
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      });
+
+      expect(checkedOut.ok).toBe(false);
+      if (!checkedOut.ok) {
+        expect(checkedOut.error.code).toBe("UNSAFE_PATH");
+      }
+    }
+  });
+
+  test("checkout projects user-scope Claude and Codex skills safely", async () => {
+    const homeRoot = await makeTempDir();
+    const userRoot = path.join(homeRoot, ".rielflow");
+    const codexHome = path.join(homeRoot, "codex-home");
+    const registryRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "user-skill-flow",
+      workflowName: "user-skill-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "claude", "review"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "claude", "review", "SKILL.md"),
+      "---\nname: review\ndescription: User review\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "codex", "audit"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "audit", "SKILL.md"),
+      "---\nname: audit\ndescription: User audit\n---\n",
+      "utf8",
+    );
+    await mkdir(path.join(packageRoot, "skills", "agents"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "agents", "AGENTS.md"),
+      "# Managed only\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "user-skill-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "user-skill-flow",
+      registry: "local",
+      userScope: true,
+      options: {
+        userRoot,
+        env: { CODEX_HOME: codexHome },
+      },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(
+        checkedOut.value.skills.find(
+          (skill) => skill.vendor === "claude" && skill.name === "review",
+        )?.projectionPath,
+      ).toBe(path.join(homeRoot, ".claude", "skills", "review"));
+      expect(
+        checkedOut.value.skills.find(
+          (skill) => skill.vendor === "codex" && skill.name === "audit",
+        )?.projectionPath,
+      ).toBe(path.join(codexHome, "skills", "audit"));
+      expect(
+        checkedOut.value.skills.find((skill) => skill.vendor === "agents")
+          ?.installMode,
+      ).toBe("managed-only");
+      await expect(
+        readFile(
+          path.join(homeRoot, ".claude", "skills", "review", "SKILL.md"),
+          "utf8",
+        ),
+      ).resolves.toContain("User review");
+      await expect(
+        readFile(path.join(codexHome, "skills", "audit", "SKILL.md"), "utf8"),
+      ).resolves.toContain("User audit");
+    }
+  });
+
+  test("checkout supports direct workflow definition destination roots", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const directWorkflowRoot = path.join(projectRoot, "direct-workflows");
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "direct-flow",
+      workflowName: "direct-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "direct-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot, workflowRoot: directWorkflowRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.destinationDirectory).toBe(
+        path.join(directWorkflowRoot, "direct-flow"),
+      );
+      await expect(
+        readFile(
+          path.join(directWorkflowRoot, "direct-flow", "workflow.json"),
+          "utf8",
+        ),
+      ).resolves.toContain("direct-flow");
+    }
+  });
+
+  test("checkout resolves relative direct workflow definition roots from cwd", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "relative-direct-flow",
+      workflowName: "relative-direct-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "relative-direct-flow",
+      registry: "local",
+      options: {
+        userRoot,
+        cwd: projectRoot,
+        workflowRoot: "relative-workflows",
+      },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      const resolvedWorkflowRoot = path.join(projectRoot, "relative-workflows");
+      expect(checkedOut.value.destinationDirectory).toBe(
+        path.join(resolvedWorkflowRoot, "relative-direct-flow"),
+      );
+      expect(checkedOut.value.workflowDefinitionDirOverride).toBe(
+        resolvedWorkflowRoot,
+      );
+      const status = await getWorkflowPackageCheckoutStatus({
+        workflowName: "relative-direct-flow",
+        options: {
+          userRoot,
+          cwd: projectRoot,
+          workflowRoot: "relative-workflows",
+        },
+      });
+      expect(status.ok).toBe(true);
+      if (status.ok) {
+        expect(status.value["workflowDefinitionDirOverride"]).toBe(
+          resolvedWorkflowRoot,
+        );
+      }
+    }
+  });
+
+  test("checkout rejects unknown skill vendors before installing", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "unknown-skill-flow",
+      workflowName: "unknown-skill-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "unknown"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "unknown", "SKILL.md"),
+      "unknown\n",
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "unknown-skill-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "unknown-skill-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("INVALID_SKILL_VENDOR");
+    }
+  });
+
+  test("checkout requires explicit yes when overwriting an existing package checkout", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "update-flow",
+      workflowName: "update-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const first = await checkoutWorkflowPackage({
+      packageName: "update-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(first.ok).toBe(true);
+
+    const withoutYes = await checkoutWorkflowPackage({
+      packageName: "update-flow",
+      registry: "local",
+      overwrite: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+    const withYes = await checkoutWorkflowPackage({
+      packageName: "update-flow",
+      registry: "local",
+      overwrite: true,
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(withoutYes.ok).toBe(false);
+    if (!withoutYes.ok) {
+      expect(withoutYes.error.code).toBe("UPDATE_CONFIRMATION_REQUIRED");
+    }
+    expect(withYes.ok).toBe(true);
+  });
+
+  test("package checkout status and update resolve package records by install id", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "status-flow",
+      workflowName: "status-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "status-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error("checkout failed");
+    }
+
+    const status = await getWorkflowPackageCheckoutStatus({
+      installId: checkedOut.value.installId,
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value["checkoutKind"]).toBe("package");
+      expect(status.value["installId"]).toBe(checkedOut.value.installId);
+      expect(status.value["status"]).toBe("up-to-date");
+      expect(status.value["updateAvailable"]).toBe(false);
+      expect(status.value["installedVersion"]).toBe("1.0.0");
+      expect(status.value["availableVersion"]).toBe("1.0.0");
+      expect(status.value["installedChecksum"]).toBe(checkedOut.value.checksum);
+      expect(status.value["availableChecksum"]).toBe(checkedOut.value.checksum);
+      expect(Array.isArray(status.value["installedArtifacts"])).toBe(true);
+      expect(status.value["provenancePath"]).toBe(
+        path.join(
+          checkedOut.value.destinationDirectory,
+          ".rielflow-package-provenance.json",
+        ),
+      );
+    }
+
+    const noop = await updateWorkflowPackageCheckout({
+      installId: checkedOut.value.installId,
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(noop.ok).toBe(true);
+    if (noop.ok) {
+      expect(noop.value.updated).toBe(false);
+    }
+    const updated = await updateWorkflowPackageCheckout({
+      installId: checkedOut.value.installId,
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.updated).toBe(false);
+      expect(updated.value.installId).toBe(checkedOut.value.installId);
+    }
+  });
+
+  test("package status resolves same workflow name by current project root", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectOne = await makeTempDir();
+    const projectTwo = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "shared-name-flow",
+      workflowName: "shared-name-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const first = await checkoutWorkflowPackage({
+      packageName: "shared-name-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectOne },
+    });
+    const second = await checkoutWorkflowPackage({
+      packageName: "shared-name-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectTwo },
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) {
+      throw new Error("checkouts failed");
+    }
+
+    const firstStatus = await getWorkflowPackageCheckoutStatus({
+      workflowName: "shared-name-flow",
+      scope: "project",
+      options: { userRoot, cwd: projectOne },
+    });
+    const secondStatus = await getWorkflowPackageCheckoutStatus({
+      workflowName: "shared-name-flow",
+      scope: "project",
+      options: { userRoot, cwd: projectTwo },
+    });
+
+    expect(firstStatus.ok).toBe(true);
+    expect(secondStatus.ok).toBe(true);
+    if (firstStatus.ok && secondStatus.ok) {
+      expect(firstStatus.value["installId"]).toBe(first.value.installId);
+      expect(secondStatus.value["installId"]).toBe(second.value.installId);
+    }
+  });
+
+  test("confirmed package update removes stale package-owned skill projections", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "stale-skill-flow",
+      workflowName: "stale-skill-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "codex", "old-skill"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "old-skill", "SKILL.md"),
+      "---\nname: old-skill\ndescription: Old skill\n---\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "stale-skill-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "stale-skill-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+    await expect(
+      readFile(
+        path.join(projectRoot, ".codex", "skills", "old-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).resolves.toContain("Old skill");
+
+    await rm(path.join(packageRoot, "skills", "codex", "old-skill"), {
+      recursive: true,
+      force: true,
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "stale-skill-flow",
+    });
+    const refreshed = await searchWorkflowPackages({
+      query: "stale-skill-flow",
+      registry: "local",
+      refresh: true,
+      options: { userRoot },
+    });
+    expect(refreshed.ok).toBe(true);
+    const status = await getWorkflowPackageCheckoutStatus({
+      installId: checkedOut.ok ? checkedOut.value.installId : "missing",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value["status"]).toBe("update-available");
+      expect(status.value["updateAvailable"]).toBe(true);
+      expect(status.value["installedChecksum"]).not.toBe(
+        status.value["availableChecksum"],
+      );
+      expect(Array.isArray(status.value["installedArtifacts"])).toBe(true);
+    }
+
+    const updated = await updateWorkflowPackageCheckout({
+      installId: checkedOut.ok ? checkedOut.value.installId : "missing",
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.changedArtifacts).toContain("skills");
+    }
+    await expect(
+      readFile(
+        path.join(projectRoot, ".codex", "skills", "old-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+  });
+
+  test("package checkout restores workflow and skills when update projection fails", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "rollback-flow",
+      workflowName: "rollback-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "rollback-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+    const workflowJsonPath = path.join(
+      projectRoot,
+      ".rielflow",
+      "workflows",
+      "rollback-flow",
+      "workflow.json",
+    );
+    const originalWorkflowJson = await readFile(workflowJsonPath, "utf8");
+
+    await mkdir(path.join(packageRoot, "skills", "claude", "review"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "claude", "review", "SKILL.md"),
+      "---\nname: review\ndescription: Review skill\n---\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "rollback-flow",
+    });
+    const refreshed = await searchWorkflowPackages({
+      query: "rollback-flow",
+      registry: "local",
+      refresh: true,
+      options: { userRoot },
+    });
+    expect(refreshed.ok).toBe(true);
+    await writeFile(
+      path.join(projectRoot, ".claude"),
+      "not a directory",
+      "utf8",
+    );
+
+    const updated = await updateWorkflowPackageCheckout({
+      installId: checkedOut.ok ? checkedOut.value.installId : "missing",
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(updated.ok).toBe(false);
+    await expect(readFile(workflowJsonPath, "utf8")).resolves.toBe(
+      originalWorkflowJson,
+    );
+    await expect(
+      readFile(
+        path.join(
+          projectRoot,
+          ".rielflow",
+          "managed",
+          "packages",
+          "rollback-flow",
+          "1.0.0",
+          "skills",
+          "skills",
+          "claude",
+          "review",
+          "SKILL.md",
+        ),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+  });
+
+  test("package checkout rejects user scope with direct workflow definition roots", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "direct-user-flow",
+      workflowName: "direct-user-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "direct-user-flow",
+      registry: "local",
+      userScope: true,
+      options: {
+        userRoot,
+        cwd: projectRoot,
+        workflowRoot: path.join(projectRoot, "direct-workflows"),
+      },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("USAGE");
     }
   });
 
