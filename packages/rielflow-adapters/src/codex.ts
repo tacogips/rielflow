@@ -39,6 +39,7 @@ interface CodexSessionRunnerOptions {
 
 interface CodexSessionConfig {
   readonly prompt: string;
+  readonly systemPrompt?: string;
   readonly cwd?: string;
   readonly sandbox?: CodexSandboxMode;
   readonly approvalMode?: CodexApprovalMode;
@@ -159,7 +160,10 @@ function resolveLocalSessionConfig(
   return {
     promptText,
     sessionConfig: {
-      prompt: promptText,
+      prompt: input.promptText,
+      ...(input.systemPromptText === undefined
+        ? {}
+        : { systemPrompt: input.systemPromptText }),
       cwd: config.cwd ?? input.workingDirectory,
       model: input.node.model,
       ...(config.sandbox === undefined ? {} : { sandbox: config.sandbox }),
@@ -183,6 +187,9 @@ function buildResumeSessionOptions(
 ): Omit<CodexSessionConfig, "prompt"> {
   return {
     ...(sessionConfig.cwd === undefined ? {} : { cwd: sessionConfig.cwd }),
+    ...(sessionConfig.systemPrompt === undefined
+      ? {}
+      : { systemPrompt: sessionConfig.systemPrompt }),
     ...(sessionConfig.model === undefined
       ? {}
       : { model: sessionConfig.model }),

@@ -197,7 +197,8 @@ describe("CodexAgentAdapter", () => {
     ]);
     expect(fixture.startSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: "system\n\nhello",
+        prompt: "hello",
+        systemPrompt: "system",
         cwd: "/tmp/project",
         model: "gpt-5-nano",
         streamGranularity: "event",

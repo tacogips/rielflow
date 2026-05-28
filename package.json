@@ -53,8 +53,8 @@
     "@opentelemetry/sdk-node": "0.218.0",
     "@opentelemetry/semantic-conventions": "1.41.1",
     "claude-code-agent": "github:tacogips/claude-code-agent#eb3d81d3499df77695cc3b0ed92da73fc5b21f4e",
-    "codex-agent": "github:tacogips/codex-agent#ab30bfd2ef208ccc323536d6d500625427f7f461",
-    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#827b5a09403e78935de721a89fdbcad770de000c",
+    "codex-agent": "github:tacogips/codex-agent#47dc2377b731224401e6fd25589e6a87c2e89725",
+    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#b14a00e5008cceae6debb73c986aa793671ff8ef",
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",
     "openai": "6.27.0"

@@ -175,7 +175,8 @@ describe("CursorCliAgentAdapter", () => {
     ]);
     expect(runner.start).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: "system\n\nhello",
+        prompt: "hello",
+        systemPrompt: "system",
         cwd: "/tmp/project",
         model: "claude-sonnet-4-5",
         streamMode: "event",

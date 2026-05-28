@@ -31,6 +31,7 @@ type CursorAgentStreamMode = "event" | "normalized";
 
 interface CursorAgentRequest {
   readonly prompt?: string;
+  readonly systemPrompt?: string;
   readonly sessionId?: string;
   readonly cwd?: string;
   readonly model?: string;
@@ -189,6 +190,9 @@ function resolveLocalSessionConfig(
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
+    ...(input.systemPromptText === undefined
+      ? {}
+      : { systemPrompt: input.systemPromptText }),
     model: input.node.model,
     ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
@@ -196,7 +200,7 @@ function resolveLocalSessionConfig(
   };
   return {
     promptText,
-    startRequest: { ...baseRequest, prompt: promptText },
+    startRequest: { ...baseRequest, prompt: input.promptText },
     baseResumeRequest: baseRequest,
   };
 }
