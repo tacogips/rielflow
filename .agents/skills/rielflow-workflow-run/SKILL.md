@@ -44,6 +44,31 @@ rielflow <command>
 
 Use `--workflow-definition-dir <path>` when the workflow definition bundles are not coming from scoped project/user lookup. This option points at a directory containing `<workflow-name>/workflow.json` bundles; it does not control logs, sessions, or artifacts. In this repository, examples use `--workflow-definition-dir ./examples`.
 
+Run a registry package without installing it into a scoped catalog by adding
+`--from-registry` to `workflow run`:
+
+```bash
+bun run src/main.ts workflow run <package-id> \
+  --from-registry \
+  --registry default \
+  --branch main \
+  --output json
+```
+
+Registry-backed runs are explicit and local-only. Bare `workflow run <name>`
+never fetches from a registry, and `--from-registry` cannot be combined with
+`--endpoint`. Rielflow resolves the package through the selected registry,
+validates package metadata, checksum/integrity, and the workflow bundle, stages
+the workflow under a command-owned temporary workflow-definition directory, then
+uses the normal local run path. JSON output includes `registrySource`
+provenance. Temporary registry runs do not write persistent checkout records,
+mutate project/user catalogs, or install package skills. Cleanup runs after a
+terminal session or pre-start failure; paused or otherwise non-terminal sessions
+retain the temporary checkout and report skipped cleanup metadata. Local
+`session resume` and `session continue` automatically use the retained checkout
+when no explicit `--workflow-definition-dir` is supplied, then remove it after
+the resumed or continued execution reaches a terminal status.
+
 Install a public GitHub workflow directory into a scoped catalog with:
 
 ```bash

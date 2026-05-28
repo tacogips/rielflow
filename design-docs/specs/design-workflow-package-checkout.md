@@ -295,6 +295,56 @@ text output and JSON output while preserving the workflow execution result.
 Cleanup must not run before all workflow-local files needed by prompts, scripts,
 add-ons, or container contexts have been read by the runtime.
 
+Paused registry-backed runs are the exception to immediate temporary checkout
+removal. When `workflow run --from-registry` leaves the session in a resumable
+non-terminal state, the command must retain the temporary workflow-definition
+directory and persist registry-run provenance under the runtime store so later
+local session lifecycle commands can find the retained workflow bundle. The
+provenance record is execution metadata, not normal checkout catalog metadata,
+and must remain separate from `~/.rielflow/workflow-registry/checkouts/`.
+
+Required retained-run provenance records contain a top-level session id and a
+registry package payload with:
+
+- `packageId`
+- `workflowName`
+- `registryId`
+- `registryUrl`
+- `registryRef`
+- `sourcePath`
+- `sourceDirectory`
+- `metadataPath`
+- `checksum`
+- `checksumAlgorithm`
+- `temporaryWorkflowDirectory`
+
+`session resume <session-id>` and local `session continue <session-id> ...`
+must consult retained registry-run provenance when the caller did not supply an
+explicit `--workflow-definition-dir`. If provenance exists for the source
+workflow execution id, the command uses the parent workflow-definition
+directory of the retained `temporaryWorkflowDirectory` as the effective
+workflow root and then executes through the normal local resume or continuation
+path. Explicit
+operator input has higher precedence: a caller-provided workflow-definition
+directory must not be silently overridden by registry provenance.
+
+Terminal cleanup responsibility moves to the lifecycle command that observes
+the terminal result. A resumed or continued registry-backed session must remove
+the retained temporary checkout after the resulting execution reaches a
+terminal status (`completed`, `failed`, or `cancelled`). Cleanup must not run
+when the lifecycle command returns another paused or running state. Cleanup
+failure is reported in text and JSON output without changing the session
+result. JSON output reports the registry source and cleanup result so operators
+can diagnose and manually remove a path when cleanup fails.
+
+Continuation uses the source session's retained checkout to load workflow-local
+files for the new continued execution. The initial implementation does not need
+to create a second package checkout for the continuation; it may share the
+retained source checkout until the continued execution reaches a terminal
+state. If multiple resumable descendants require the same retained checkout in
+the future, the provenance model must add reference ownership before cleanup is
+broadened.
+
 Registry-backed run is local-only for the initial implementation. Combining
 `--from-registry` with `--endpoint` is a usage error because a remote server
 cannot access the caller's temporary checkout path. Remote execution should use

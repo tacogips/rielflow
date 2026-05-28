@@ -4,6 +4,7 @@ import { runWorkflow } from "../workflow/engine";
 import { buildFanoutGroupSummaries } from "../workflow/inspect";
 import { listRuntimeNodeLogs } from "../workflow/runtime-db";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
+import { isTerminalWorkflowSessionStatus } from "../workflow/session";
 import { buildSessionHealthReport } from "../workflow/session-health";
 import { loadSession } from "../workflow/session-store";
 import type {
@@ -32,6 +33,13 @@ import {
   writeExportFile,
   writeTextFile,
 } from "./input-output-helpers";
+import {
+  cleanupRetainedRegistryRunCheckout,
+  readRegistryRunProvenance,
+  registryRunSourceJson,
+  registryRunWorkflowRoot,
+  skippedRetainedRegistryRunCleanup,
+} from "./registry-run-provenance";
 import { buildLocalWorkflowRunOverrides } from "./workflow-graphql-formatters";
 
 export async function runCliSessionScope(
@@ -264,6 +272,18 @@ export async function runCliSessionScope(
       io.stderr(session.error.message);
       return 1;
     }
+    const registryRunProvenance = await readRegistryRunProvenance({
+      options: sharedOptions,
+      sessionId: session.value.sessionId,
+    });
+    const resumeSessionOptions =
+      registryRunProvenance === undefined ||
+      sharedOptions.workflowRoot !== undefined
+        ? sessionOptions
+        : {
+            ...sessionOptions,
+            workflowRoot: registryRunWorkflowRoot(registryRunProvenance),
+          };
 
     let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
     try {
@@ -277,7 +297,7 @@ export async function runCliSessionScope(
     }
 
     const result = await runWorkflow(session.value.workflowName, {
-      ...sessionOptions,
+      ...resumeSessionOptions,
       ...buildLocalWorkflowRunOverrides(parsed.options),
       ...buildSupervisorProgressEventSink(parsed.options, io),
       resumeSessionId: session.value.sessionId,
@@ -289,15 +309,49 @@ export async function runCliSessionScope(
       return result.error.exitCode;
     }
 
+    const registryCleanup =
+      registryRunProvenance === undefined
+        ? undefined
+        : isTerminalWorkflowSessionStatus(result.value.session.status)
+          ? await cleanupRetainedRegistryRunCheckout(registryRunProvenance)
+          : skippedRetainedRegistryRunCleanup(
+              registryRunProvenance,
+              `workflow session status '${result.value.session.status}' is not terminal`,
+            );
+
     if (parsed.options.output === "json") {
       emitJson(io, {
         sessionId: result.value.session.sessionId,
         status: result.value.session.status,
         exitCode: result.value.exitCode,
+        ...(registryRunProvenance === undefined
+          ? {}
+          : {
+              registrySource: registryRunSourceJson({
+                provenance: registryRunProvenance,
+                ...(registryCleanup === undefined
+                  ? {}
+                  : { cleanup: registryCleanup }),
+              }),
+            }),
       });
     } else {
+      if (registryRunProvenance !== undefined) {
+        io.stdout(
+          `registry: ${registryRunProvenance.packageId} ${registryRunProvenance.registryUrl}#${registryRunProvenance.registryRef}`,
+        );
+      }
       io.stdout(`session resumed: ${result.value.session.sessionId}`);
       io.stdout(`status: ${result.value.session.status}`);
+      if (
+        registryCleanup !== undefined &&
+        !registryCleanup.ok &&
+        "skipped" in registryCleanup
+      ) {
+        io.stdout(`cleanup: skipped (${registryCleanup.reason})`);
+      } else if (registryCleanup !== undefined && !registryCleanup.ok) {
+        io.stderr(`cleanup warning: ${registryCleanup.error}`);
+      }
     }
     return result.value.exitCode;
   }
@@ -356,15 +410,36 @@ export async function runCliSessionScope(
         nestedSuperviserDriver: _omitN,
         ...budgetOverrides
       } = buildLocalWorkflowRunOverrides(parsed.options);
+      const registryRunProvenance = await readRegistryRunProvenance({
+        options: sharedOptions,
+        sessionId: sessionTarget,
+      });
+      const continueSessionOptions =
+        registryRunProvenance === undefined ||
+        sharedOptions.workflowRoot !== undefined
+          ? sessionOptions
+          : {
+              ...sessionOptions,
+              workflowRoot: registryRunWorkflowRoot(registryRunProvenance),
+            };
 
       const result = await continueWorkflowFromHistory({
-        ...sessionOptions,
+        ...continueSessionOptions,
         ...budgetOverrides,
         sourceWorkflowExecutionId: sessionTarget,
         afterStepRunId: afterRun,
         startStepId: startStep,
         ...mockScenarioOptions,
       });
+      const registryCleanup =
+        registryRunProvenance === undefined
+          ? undefined
+          : isTerminalWorkflowSessionStatus(result.status)
+            ? await cleanupRetainedRegistryRunCheckout(registryRunProvenance)
+            : skippedRetainedRegistryRunCleanup(
+                registryRunProvenance,
+                `workflow session status '${result.status}' is not terminal`,
+              );
 
       if (parsed.options.output === "json") {
         emitJson(io, {
@@ -374,13 +449,37 @@ export async function runCliSessionScope(
           continuedAfterStepRunId: result.continuedAfterStepRunId,
           continuedStartStepId: result.continuedStartStepId,
           exitCode: result.exitCode,
+          ...(registryRunProvenance === undefined
+            ? {}
+            : {
+                registrySource: registryRunSourceJson({
+                  provenance: registryRunProvenance,
+                  ...(registryCleanup === undefined
+                    ? {}
+                    : { cleanup: registryCleanup }),
+                }),
+              }),
         });
       } else {
+        if (registryRunProvenance !== undefined) {
+          io.stdout(
+            `registry: ${registryRunProvenance.packageId} ${registryRunProvenance.registryUrl}#${registryRunProvenance.registryRef}`,
+          );
+        }
         io.stdout(`sourceWorkflowExecutionId: ${sessionTarget}`);
         io.stdout(`continued session: ${result.sessionId}`);
         io.stdout(`continuedAfterStepRunId: ${result.continuedAfterStepRunId}`);
         io.stdout(`continuedStartStepId: ${result.continuedStartStepId}`);
         io.stdout(`status: ${result.status}`);
+        if (
+          registryCleanup !== undefined &&
+          !registryCleanup.ok &&
+          "skipped" in registryCleanup
+        ) {
+          io.stdout(`cleanup: skipped (${registryCleanup.reason})`);
+        } else if (registryCleanup !== undefined && !registryCleanup.ok) {
+          io.stderr(`cleanup warning: ${registryCleanup.error}`);
+        }
       }
       return result.exitCode;
     } catch (error: unknown) {

@@ -1642,6 +1642,169 @@ describe("runCli", () => {
     ).resolves.toContain("temp-paused-flow");
   });
 
+  test("session resume restores and cleans paused registry temporary checkout", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-resume-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-resume-flow", {
+      workflowRoot: packageRoot,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-resume-flow",
+          version: "1.0.0",
+          description: "Temporary resumable CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary resumable CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-resume-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-resume-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeFile(
+      mockScenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-resume-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--max-steps",
+          "1",
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(4);
+    const runPayload = JSON.parse(runCapture.stdout.join("\n")) as {
+      sessionId: string;
+      status: string;
+      registrySource: {
+        package: {
+          temporaryWorkflowDirectory: string;
+        };
+      };
+    };
+    expect(runPayload.status).toBe("paused");
+    const temporaryWorkflowDirectory =
+      runPayload.registrySource.package.temporaryWorkflowDirectory;
+    const temporaryRoot = path.dirname(
+      path.dirname(temporaryWorkflowDirectory),
+    );
+    await expect(realpath(temporaryWorkflowDirectory)).resolves.toEqual(
+      expect.any(String),
+    );
+
+    const resumeCapture = createIoCapture();
+    const resumeCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "session",
+          "resume",
+          runPayload.sessionId,
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--output",
+          "json",
+        ],
+        resumeCapture.io,
+        createCliDeps(),
+      ),
+    );
+    expect(
+      resumeCode,
+      `stdout:\n${resumeCapture.stdout.join("\n")}\nstderr:\n${resumeCapture.stderr.join("\n")}`,
+    ).toBe(0);
+    const resumePayload = JSON.parse(resumeCapture.stdout.join("\n")) as {
+      status: string;
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(resumePayload.status).toBe("completed");
+    expect(resumePayload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
   test("workflow run rejects registry packages over endpoint transport", async () => {
     const capture = createIoCapture();
     const code = await runCli(
@@ -6500,6 +6663,136 @@ describe("runCli", () => {
       continuedStartStepId: "step-2",
       exitCode: 0,
     });
+  });
+
+  test("local session continue uses retained registry checkout and cleans terminal result", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const sessionStoreRoot = path.join(root, "sessions");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(temporaryWorkflowDirectory, "workflow.json"),
+      "{}\n",
+      "utf8",
+    );
+    const sourceSessionId = "sess-registry-continue-src";
+    const session = createSessionState({
+      sessionId: sourceSessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await mkdir(path.join(root, "registry-runs"), { recursive: true });
+    await writeFile(
+      path.join(root, "registry-runs", `${sourceSessionId}.json`),
+      `${JSON.stringify(
+        {
+          source: "registry",
+          sessionId: sourceSessionId,
+          package: {
+            packageId: "demo-package",
+            workflowName: "demo",
+            registryId: "local",
+            registryUrl: "https://github.com/example/rielflow-packages",
+            registryRef: "main",
+            sourcePath: "packages/demo-package",
+            sourceDirectory: path.join(temporaryRoot, "package", "demo"),
+            metadataPath: "packages/demo-package/rielflow-package.json",
+            checksum: "abc123",
+            checksumAlgorithm: "md5",
+            temporaryWorkflowDirectory,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const continuedSessionState = createSessionState({
+      sessionId: "sess-registry-continue-new",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "step-2",
+      runtimeVariables: {},
+    });
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: {
+            ...continuedSessionState,
+            status: "completed",
+          },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "continue",
+        sourceSessionId,
+        "--user-root",
+        userRoot,
+        "--session-store",
+        sessionStoreRoot,
+        "--start-step",
+        "step-2",
+        "--after-step-run",
+        "exec-anchor",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(
+      code,
+      `stdout:\n${capture.stdout.join("\n")}\nstderr:\n${capture.stderr.join("\n")}`,
+    ).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        sessionStoreRoot,
+        workflowRoot: path.join(temporaryRoot, "workflows"),
+        continueFromWorkflowExecutionId: sourceSessionId,
+        continueAfterStepRunId: "exec-anchor",
+        continueStartStepId: "step-2",
+      }),
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      status: string;
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(payload.status).toBe("completed");
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
   });
 
   test("workflow run forwards --max-concurrency to runWorkflow options", async () => {

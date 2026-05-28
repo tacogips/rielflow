@@ -1,19 +1,12 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { runWorkflow } from "../workflow/engine";
 import { loadWorkflowFromCatalog } from "../workflow/load";
 import {
   checkoutWorkflowPackageForTemporaryRun,
-  type WorkflowPackageRunProvenance,
   type WorkflowPackageTemporaryRunCheckoutResult,
 } from "../workflow/packages";
-import { resolveRootDataDir } from "../workflow/paths";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { isTerminalWorkflowSessionStatus } from "../workflow/session";
-import type {
-  RunCliScopeContext,
-  RunCliSharedOptions,
-} from "./storage-and-options";
+import type { RunCliScopeContext } from "./storage-and-options";
 import {
   buildRemoteExecutionInput,
   buildSupervisorProgressEventSink,
@@ -28,32 +21,16 @@ import {
   rejectUnsupportedRemoteMockScenario,
 } from "./input-output-helpers";
 import {
+  type RegistryRunCleanupOutput,
+  persistRegistryRunProvenance,
+  registryRunSourceJson,
+} from "./registry-run-provenance";
+import {
   buildLocalWorkflowRunOverrides,
   formatWorkflowSource,
   optionsForLoadedWorkflow,
   workflowSourceJson,
 } from "./workflow-graphql-formatters";
-
-type RegistryRunCleanupOutput =
-  | { readonly ok: true; readonly remainingPaths: readonly string[] }
-  | { readonly ok: false; readonly error: string }
-  | {
-      readonly ok: false;
-      readonly skipped: true;
-      readonly reason: string;
-      readonly remainingPaths: readonly string[];
-    };
-
-function registryRunSourceJson(input: {
-  readonly provenance: WorkflowPackageRunProvenance;
-  readonly cleanup?: RegistryRunCleanupOutput;
-}): Readonly<Record<string, unknown>> {
-  return {
-    source: "registry",
-    package: input.provenance,
-    ...(input.cleanup === undefined ? {} : { cleanup: input.cleanup }),
-  };
-}
 
 async function cleanupTemporaryRegistryRun(
   checkout: WorkflowPackageTemporaryRunCheckoutResult | undefined,
@@ -83,36 +60,6 @@ function skippedTemporaryRegistryRunCleanup(
       checkout.packageStagingDirectory,
     ],
   };
-}
-
-async function persistRegistryRunProvenance(input: {
-  readonly options: RunCliSharedOptions;
-  readonly sessionId: string;
-  readonly provenance: WorkflowPackageRunProvenance;
-}): Promise<string | undefined> {
-  try {
-    const directory = path.join(
-      resolveRootDataDir(input.options),
-      "registry-runs",
-    );
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      path.join(directory, `${input.sessionId}.json`),
-      `${JSON.stringify(
-        {
-          source: "registry",
-          sessionId: input.sessionId,
-          package: input.provenance,
-        },
-        null,
-        2,
-      )}\n`,
-      "utf8",
-    );
-    return undefined;
-  } catch (error: unknown) {
-    return error instanceof Error ? error.message : "unknown error";
-  }
 }
 
 export async function runCliWorkflowRunCommand(

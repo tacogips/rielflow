@@ -295,8 +295,8 @@ Run a registry package without installing it first by adding `--from-registry`
 to `workflow run`. Rielflow resolves the package through the selected registry,
 stages the workflow bundle in a command-owned temporary workflow-definition
 directory, runs the normal local workflow path, reports registry provenance in
-JSON output, and removes the temporary checkout after the run finishes or fails
-before start:
+JSON output, and removes the temporary checkout after a terminal run or a
+pre-start failure:
 
 ```bash
 bun run packages/rielflow/src/bin.ts workflow run worker-only-single-step \
@@ -311,7 +311,13 @@ Registry-backed runs are explicit and local-only: bare `workflow run <name>`
 never fetches from the registry, and `--from-registry` cannot be combined with
 `--endpoint`. Temporary runs validate package metadata, checksum/integrity, and
 the workflow bundle, but they do not write persistent checkout records, mutate
-project/user catalogs, or install package skills.
+project/user catalogs, or install package skills. If a registry-backed run
+pauses or otherwise returns a non-terminal session status, rielflow keeps the
+temporary checkout in place and reports skipped cleanup metadata so later
+local `session resume` or `session continue` operations can still read
+workflow-local files. Those lifecycle commands use the retained checkout
+automatically when no explicit `--workflow-definition-dir` is supplied and
+remove it after the resumed or continued execution reaches a terminal status.
 
 Package skills are accepted only under the package skill directory for the
 supported vendors and current vendor layouts:
