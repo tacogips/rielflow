@@ -52,6 +52,18 @@ rielflow workflow package show <package-id> [--registry <registry-url-or-alias>]
 rielflow publish <workflow-name-or-path> [--registry <registry-url>] [--registry-local-path <path>] [--branch <branch>] [--package-id <id>] [--source-workflow-dir <path>] [--message <text>] [--create-pr] [--pr-base <branch>] [--dry-run] [--output json|text]
 ```
 
+Current compatibility command forms:
+
+```bash
+rielflow workflow package registry list [--output json|text]
+```
+
+The top-level `workflow registry list` form is the expected user-facing surface
+for displaying the remote workflow package registry list. The package-scoped
+`workflow package registry list` form remains supported as a compatibility alias
+because existing users and README examples may already depend on it. Both forms
+must render the same registry-list data and JSON shape.
+
 The implementation may also accept `rielflow workflow publish ...` as an alias
 to `rielflow publish ...` if routing is simpler or if help output benefits from
 workflow scoping. The canonical documented form remains `rielflow publish`.
@@ -66,7 +78,9 @@ implicitly; adding it explicitly records local preferences such as alias or
 local path.
 
 `workflow registry list` prints configured registries plus the implicit default
-registry. JSON output must include stable fields for automation:
+registry. It must route to the same package registry listing service used by
+`workflow package registry list`, not maintain a separate registry reader or
+output renderer. JSON output must include stable fields for automation:
 
 - `registries`
 - `defaultRegistryUrl`
@@ -81,6 +95,28 @@ explicit disable flag in a later design.
 selected registry or all enabled registries. It should use the registry
 metadata/cache contract rather than duplicating index parsing in the command
 handler.
+
+### Registry List Issue Addendum
+
+Issue-resolution request: support `workflow registry list --output json` while
+preserving the existing working `workflow package registry list --output json`
+path.
+
+Behavioral boundary for this issue:
+
+- `workflow registry list --output json` exits successfully and emits the same
+  registry-list JSON shape as `workflow package registry list --output json`.
+- `workflow package registry list --output json` continues to route exactly as
+  before.
+- The implementation should share command handling or a small adapter so the two
+  list forms cannot drift in validation, config loading, default registry
+  inclusion, or JSON rendering.
+- `workflow registry add`, `workflow registry remove`, and
+  `workflow registry refresh` remain part of the broader package-command design,
+  but this issue only requires the top-level `list` surface.
+- Help and user-facing docs should mention `workflow registry list` as the
+  expected discovery surface and may keep `workflow package registry list` as a
+  compatibility form.
 
 ## Search And Metadata Commands
 
@@ -198,6 +234,9 @@ unchanged.
 `workflow registry` uses a nested command target. The parser should interpret
 `rielflow workflow registry add`, `list`, `remove`, and `refresh` without
 confusing the registry subcommand with a workflow name or checkout target.
+For the registry-list issue, it is sufficient to add the `list` route first,
+provided the parser keeps returning the existing package-registry behavior for
+`rielflow workflow package registry list`.
 
 Help output and README examples must make these distinctions explicit:
 
@@ -216,6 +255,9 @@ Help output and README examples must make these distinctions explicit:
   `workflow publish` alias left to implementation convenience.
 - The default registry is implicit even when the user has not created a personal
   registry record.
+- `workflow registry list` is the canonical registry-list display command;
+  `workflow package registry list` is retained as a compatibility alias with the
+  same output contract.
 - Personal registry configuration is stored under `~/.rielflow`, not project
   scope.
 - Checkout keeps direct GitHub directory compatibility and branches into package
@@ -262,6 +304,9 @@ Expected focused verification commands:
 
 ```bash
 bun test packages/rielflow/src/cli.test.ts
+bun test packages/rielflow/src/workflow/packages/packages.test.ts
+bun run packages/rielflow/src/bin.ts workflow registry list --output json
+bun run packages/rielflow/src/bin.ts workflow package registry list --output json
 bun test packages/rielflow/src/workflow/checkout/checkout.test.ts
 bun test packages/rielflow/src/workflow/catalog.test.ts
 bun run packages/rielflow/src/bin.ts workflow search --output json

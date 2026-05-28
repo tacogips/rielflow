@@ -37,6 +37,8 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adapter-reused-session-prompt-splitting` | 2026-05-29 | `architecture#adapter-layer`, `command` |
+| `workflow-registry-list-command` | 2026-05-29 | `design-workflow-package-commands#registry-list-issue-addendum` |
 | `product-rename-rielflow` | 2026-05-26 | `architecture#product-rename-to-rielflow`, `command#product-rename-command-surface` |
 | `homebrew-deployment-support` | 2026-05-20 | `architecture`, `command` |
 | `duplicate-scavenge-refactoring-workflow-mode` | 2026-05-19 | `architecture` |

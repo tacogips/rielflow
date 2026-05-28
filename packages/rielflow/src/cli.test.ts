@@ -829,10 +829,111 @@ describe("runCli", () => {
     const code = await runCli(["--help"], capture.io);
 
     expect(code).toBe(0);
+    expect(capture.stdout.join("\n")).toContain("workflow registry list");
     expect(capture.stdout.join("\n")).toContain("--pre-install-check");
     expect(capture.stdout.join("\n")).toContain("--from-registry");
     expect(capture.stdout.join("\n")).toContain(
       "--pre-install-check-container docker|podman|auto",
+    );
+  });
+
+  test("workflow registry list reuses package registry list behavior", async () => {
+    const userRoot = await makeTempDir();
+
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "registry",
+        "list",
+        "--output",
+        "json",
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+
+    const packageRegistryCapture = createIoCapture();
+    const packageRegistryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "list",
+        "--output",
+        "json",
+        "--user-root",
+        userRoot,
+      ],
+      packageRegistryCapture.io,
+      createCliDeps(),
+    );
+
+    expect(registryCode).toBe(0);
+    expect(packageRegistryCode).toBe(0);
+    const registryPayload = JSON.parse(registryCapture.stdout.join("\n")) as {
+      registries: readonly unknown[];
+      defaultRegistryId: string;
+    };
+    const packageRegistryPayload = JSON.parse(
+      packageRegistryCapture.stdout.join("\n"),
+    ) as {
+      registries: readonly unknown[];
+      defaultRegistryId: string;
+    };
+    expect(registryPayload.registries.length).toBeGreaterThan(0);
+    expect(registryPayload.defaultRegistryId).toBe("default");
+    expect(registryPayload.defaultRegistryId).toBe(
+      packageRegistryPayload.defaultRegistryId,
+    );
+    expect(registryPayload.registries).toEqual(
+      packageRegistryPayload.registries,
+    );
+  });
+
+  test("workflow registry rejects unsupported actions and remote endpoints", async () => {
+    const unsupportedCapture = createIoCapture();
+    const unsupportedCode = await runCli(
+      ["workflow", "registry", "add"],
+      unsupportedCapture.io,
+      createCliDeps(),
+    );
+
+    expect(unsupportedCode).toBe(2);
+    expect(unsupportedCapture.stderr.join("\n")).toContain(
+      "workflow registry supports: list",
+    );
+
+    const extraArgCapture = createIoCapture();
+    const extraArgCode = await runCli(
+      ["workflow", "registry", "list", "extra"],
+      extraArgCapture.io,
+      createCliDeps(),
+    );
+
+    expect(extraArgCode).toBe(2);
+    expect(extraArgCapture.stderr.join("\n")).toContain(
+      "workflow registry list accepts no positional arguments",
+    );
+
+    const remoteCapture = createIoCapture();
+    const remoteCode = await runCli(
+      [
+        "workflow",
+        "registry",
+        "list",
+        "--endpoint",
+        "http://127.0.0.1:43173/graphql",
+      ],
+      remoteCapture.io,
+      createCliDeps(),
+    );
+
+    expect(remoteCode).toBe(2);
+    expect(remoteCapture.stderr.join("\n")).toContain(
+      "workflow package commands are local-only; omit --endpoint",
     );
   });
 
@@ -2601,7 +2702,10 @@ describe("runCli", () => {
       ],
       runCapture.io,
     );
-    expect(runCode).toBe(0);
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(0);
     const runPayload = JSON.parse(runCapture.stdout.join("\n")) as {
       source?: { scope?: string; workflowDirectory?: string };
     };

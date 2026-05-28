@@ -238,7 +238,7 @@ async function executeLocalCursorAgent(
       return runner.resume({
         ...baseResumeRequest,
         sessionId: input.backendSession.sessionId,
-        prompt: promptText,
+        prompt: input.promptText,
       });
     }
     return runner.start(startRequest);

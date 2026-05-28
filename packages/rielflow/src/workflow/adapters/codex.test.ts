@@ -246,6 +246,7 @@ describe("CodexAgentAdapter", () => {
     const output = await adapter.execute(
       {
         ...baseInput,
+        systemPromptText: "system",
         backendSession: {
           mode: "reuse",
           sessionId: "backend-codex-1",
@@ -272,9 +273,11 @@ describe("CodexAgentAdapter", () => {
       "hello",
       expect.objectContaining({
         model: "gpt-5-nano",
+        systemPrompt: "system",
         streamGranularity: "event",
       }),
     );
+    expect(output.promptText).toBe("system\n\nhello");
     expect(output.payload).toEqual({ summary: "ok" });
     expect(output.backendSession?.sessionId).toBe("backend-codex-1");
   });

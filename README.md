@@ -266,6 +266,15 @@ bun run packages/rielflow/src/bin.ts workflow package registry add personal \
   --local-path /path/to/local/clone
 ```
 
+Display configured registries, including the built-in default registry, with:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow registry list --output json
+```
+
+The existing `workflow package registry list --output json` form remains
+available for compatibility.
+
 Each package contains `rielflow-package.json` plus a workflow bundle directory
 and may also contain a separate skill directory. The manifest stores package
 metadata, structured workflow metadata from
@@ -513,6 +522,13 @@ facade. The canonical backend set is `codex-agent`, `claude-code-agent`,
 Compatibility wrappers in `rielflow` keep the historical `null` return value for
 invalid backend normalization while core validation continues to report
 `undefined` for invalid values and preserves existing validation issue shapes.
+For local agent backends that expose separate prompt fields, rielflow keeps
+stable system instructions separate from each turn's user prompt. `codex-agent`
+and `cursor-cli-agent` starts and reused-session resumes pass the user prompt as
+the backend prompt while forwarding `systemPromptText` through the backend
+`systemPrompt` option; this avoids duplicating system instructions when a
+backend assembles the final CLI prompt during resume. Stall-watch resume nudges
+keep their nudge prompt and still forward the same stable system prompt option.
 Runtime readiness for container nodes reuses the add-ons-owned
 `isContainerRunnerWithDockerCli` predicate so Docker CLI requirements are
 recognized consistently for `podman`, `docker`, and `nerdctl`; readiness
@@ -1255,6 +1271,10 @@ validation evidence. Its required documentation targets are `README.md` and
 LLM-facing workflow skill stay aligned. When implementation changes CLI,
 GraphQL, library, or workflow-operation behavior, the matching user-facing
 workflow skills under `.agents/skills/` should be refreshed in the same step.
+For Codex-agent workflow runs, the Codex-specific workflow skill target is
+`.agents/skills/rielflow-codex-impl-workflow/SKILL.md` when present; if that
+repository-local alias is not installed, refresh the active workflow skill that
+routes to `codex-design-and-implement-review-loop`.
 
 For active implementation-plan completion handoffs, this documentation refresh
 should preserve the accepted review decision: unresolved blocker tasks stay

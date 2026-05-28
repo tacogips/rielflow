@@ -267,7 +267,7 @@ async function executeLocalCodexAgent(
     ) {
       return await runner.resumeSession(
         input.backendSession.sessionId,
-        promptText,
+        input.promptText,
         buildResumeSessionOptions(sessionConfig),
       );
     }
