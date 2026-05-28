@@ -4,7 +4,6 @@ import {
   parseGitHubDirectoryUrl,
 } from "../workflow/checkout";
 import { createWorkflowTemplate } from "../workflow/create";
-import { runWorkflow } from "../workflow/engine";
 import {
   buildInspectionSummary,
   deriveWorkflowStructureRows,
@@ -22,7 +21,6 @@ import {
   parseWorkflowOverviewAggregateStatusFilter,
   type WorkflowOverviewRow,
 } from "../workflow/overview";
-import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import {
   buildWorkflowUsageCatalog,
   buildWorkflowUsageSummary,
@@ -32,25 +30,17 @@ import {
   type RunCliScopeContext,
 } from "./storage-and-options";
 import {
-  buildRemoteExecutionInput,
-  buildSupervisorProgressEventSink,
   emitJson,
   executeCliGraphqlOperation,
-  fetchRemoteWorkflowRunSummary,
   formatValidationIssues,
   printHelp,
-  readMockScenarioOption,
-  readRemoteWorkflowExecutionPayload,
-  readRuntimeVariables,
   readWorkflowNodePatchOption,
-  rejectUnsupportedRemoteMockScenario,
   requireArrayField,
   requireObjectField,
 } from "./input-output-helpers";
 import {
   WORKFLOW_CATALOG_OVERVIEW_GQL,
   WORKFLOW_STATUS_OVERVIEW_GQL,
-  buildLocalWorkflowRunOverrides,
   buildWorkflowVariablesExamples,
   emitLocalWorkflowCatalogWarnings,
   emitWorkflowOverviewWarnings,
@@ -73,6 +63,7 @@ import {
   validateWorkflowManifestForCli,
 } from "./workflow-manifest-validation";
 import { runCliWorkflowPackageScope } from "./workflow-package-command-handler";
+import { runCliWorkflowRunCommand } from "./workflow-run-command";
 
 function renderWorkflowStructureLines(
   rows: readonly WorkflowStructureRow[],
@@ -828,176 +819,7 @@ export async function runCliWorkflowScope(
   }
 
   if (command === "run") {
-    let runtimeVariables: Readonly<Record<string, unknown>> = {};
-    if (parsed.options.variablesPath !== undefined) {
-      try {
-        runtimeVariables = await readRuntimeVariables(
-          parsed.options.variablesPath,
-        );
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(`failed to parse --variables: ${message}`);
-        return 1;
-      }
-    }
-    let nodePatch = undefined;
-    if (parsed.options.nodePatchPath !== undefined) {
-      try {
-        nodePatch = await readWorkflowNodePatchOption(
-          parsed.options.nodePatchPath,
-        );
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(`failed to parse --node-patch: ${message}`);
-        return 1;
-      }
-    }
-    if (graphqlCliTransport !== null) {
-      if (rejectUnsupportedRemoteMockScenario(parsed.options, io)) {
-        return 2;
-      }
-      try {
-        const data = await executeCliGraphqlOperation({
-          transport: graphqlCliTransport,
-          document: `
-              mutation ExecuteWorkflow($input: ExecuteWorkflowInput!) {
-                executeWorkflow(input: $input) {
-                  workflowExecutionId
-                  sessionId
-                  status
-                  exitCode
-                }
-              }
-            `,
-          variables: {
-            input: {
-              workflowName: workflowTarget,
-              runtimeVariables,
-              ...(nodePatch === undefined ? {} : { nodePatch }),
-              ...buildRemoteExecutionInput(parsed.options),
-            },
-          },
-        });
-        const payload = readRemoteWorkflowExecutionPayload(
-          data,
-          "executeWorkflow",
-        );
-        const summary = await fetchRemoteWorkflowRunSummary(
-          graphqlCliTransport,
-          payload.sessionId,
-        );
-
-        if (parsed.options.output === "json") {
-          emitJson(io, {
-            sessionId: payload.sessionId,
-            status: payload.status,
-            workflowName: summary.workflowName,
-            workflowId: summary.workflowId,
-            nodeExecutions: summary.nodeExecutions,
-            transitions: summary.transitions,
-            exitCode: payload.exitCode,
-          });
-        } else {
-          io.stdout(`run session: ${payload.sessionId}`);
-          io.stdout(`status: ${payload.status}`);
-          io.stdout(`nodeExecutions: ${summary.nodeExecutions}`);
-        }
-        return payload.exitCode;
-      } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : "unknown error";
-        io.stderr(`remote run failed: ${message}`);
-        return 1;
-      }
-    }
-    let mockScenarioOptions: Readonly<{ mockScenario?: MockNodeScenario }> = {};
-    try {
-      mockScenarioOptions = await readMockScenarioOption(
-        parsed.options.mockScenarioPath,
-      );
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      io.stderr(`failed to read --mock-scenario file: ${message}`);
-      return 1;
-    }
-
-    const loadedWorkflow = await loadWorkflowFromCatalog(workflowTarget, {
-      ...sharedOptions,
-      ...(nodePatch === undefined ? {} : { nodePatch }),
-    });
-    if (!loadedWorkflow.ok) {
-      if (parsed.options.output === "json") {
-        emitJson(io, loadedWorkflow.error);
-      } else {
-        io.stderr(`run failed: ${loadedWorkflow.error.message}`);
-        if (loadedWorkflow.error.issues) {
-          io.stderr(formatValidationIssues(loadedWorkflow.error.issues));
-        }
-      }
-      return loadedWorkflow.error.code === "VALIDATION" ||
-        loadedWorkflow.error.code === "INVALID_WORKFLOW_NAME" ||
-        loadedWorkflow.error.code === "INVALID_SCOPE"
-        ? 2
-        : 1;
-    }
-    const workflowRunOptions = optionsForLoadedWorkflow(
-      loadedWorkflow.value,
-      sharedOptions,
-    );
-
-    const result = await runWorkflow(workflowTarget, {
-      ...workflowRunOptions,
-      ...(nodePatch === undefined ? {} : { nodePatch }),
-      runtimeVariables,
-      ...mockScenarioOptions,
-      ...buildLocalWorkflowRunOverrides(parsed.options, true),
-      ...buildSupervisorProgressEventSink(parsed.options, io),
-      ...(parsed.options.maxSteps === undefined
-        ? {}
-        : { maxSteps: parsed.options.maxSteps }),
-      ...(parsed.options.maxConcurrency === undefined
-        ? {}
-        : { maxConcurrency: parsed.options.maxConcurrency }),
-    });
-
-    if (!result.ok) {
-      if (parsed.options.output === "json") {
-        emitJson(io, result.error);
-      } else {
-        io.stderr(`run failed: ${result.error.message}`);
-      }
-      return result.error.exitCode;
-    }
-
-    if (parsed.options.output === "json") {
-      emitJson(io, {
-        sessionId: result.value.session.sessionId,
-        status: result.value.session.status,
-        workflowName: result.value.session.workflowName,
-        workflowId: result.value.session.workflowId,
-        source: workflowSourceJson(loadedWorkflow.value.source),
-        nodeExecutions: result.value.session.nodeExecutions.length,
-        transitions: result.value.session.transitions.length,
-        exitCode: result.value.exitCode,
-        ...(result.value.session.supervision === undefined
-          ? {}
-          : { supervision: result.value.session.supervision }),
-      });
-    } else {
-      const sourceLine = formatWorkflowSource(loadedWorkflow.value.source);
-      if (sourceLine !== undefined) {
-        io.stdout(`source: ${sourceLine}`);
-      }
-      io.stdout(`run session: ${result.value.session.sessionId}`);
-      io.stdout(`status: ${result.value.session.status}`);
-      io.stdout(
-        `nodeExecutions: ${result.value.session.nodeExecutions.length}`,
-      );
-    }
-
-    return result.value.exitCode;
+    return await runCliWorkflowRunCommand(context, workflowTarget);
   }
 
   io.stderr(`unknown workflow command: ${command}`);

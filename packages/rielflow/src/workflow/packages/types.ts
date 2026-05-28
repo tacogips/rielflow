@@ -1,3 +1,5 @@
+import type { Result } from "../result";
+
 export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID = "default";
 export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL =
   "https://github.com/tacogips/rielflow-packages";
@@ -194,6 +196,43 @@ export interface WorkflowPackageFailure {
     | "USAGE"
     | "VALIDATION";
   readonly message: string;
+}
+
+export interface WorkflowPackageTemporaryRunCleanupResult {
+  readonly removed: boolean;
+  readonly temporaryRoot: string;
+  readonly remainingPaths: readonly string[];
+}
+
+export interface WorkflowPackageRunProvenance {
+  readonly packageId: string;
+  readonly workflowName: string;
+  readonly registryId: string;
+  readonly registryUrl: string;
+  readonly registryRef: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly metadataPath: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly temporaryWorkflowDirectory: string;
+}
+
+export interface WorkflowPackageTemporaryRunCheckoutInput {
+  readonly packageName: string;
+  readonly registry?: string;
+  readonly branch?: string;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}
+
+export interface WorkflowPackageTemporaryRunCheckoutResult {
+  readonly workflowName: string;
+  readonly workflowDefinitionDir: string;
+  readonly packageStagingDirectory: string;
+  readonly provenance: WorkflowPackageRunProvenance;
+  cleanup(): Promise<
+    Result<WorkflowPackageTemporaryRunCleanupResult, WorkflowPackageFailure>
+  >;
 }
 
 export interface WorkflowPackageSkillSelection {

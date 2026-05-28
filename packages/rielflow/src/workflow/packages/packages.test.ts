@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -16,6 +17,7 @@ import {
   getWorkflowPackageCheckoutStatus,
   updateWorkflowPackageCheckout,
 } from "./checkout";
+import { checkoutWorkflowPackageForTemporaryRun } from "./temp-run";
 import {
   decodeWorkflowPackageCacheSegment,
   encodeWorkflowPackageCacheSegment,
@@ -207,6 +209,15 @@ async function refreshPackageManifestDigests(input: {
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf8",
   );
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function addWorkflowPackageMetadata(input: {
@@ -537,6 +548,87 @@ describe("workflow package registry", () => {
         initialContentDigest,
       );
     }
+  });
+
+  test("temporary run checkout stages workflow without persistent checkout or skills", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "temp-run-flow",
+      workflowName: "temp-run-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "codex", "temp-skill"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "temp-skill", "SKILL.md"),
+      "---\nname: temp-skill\ndescription: Not installed by temp run\n---\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "temp-run-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      packageName: "temp-run-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error("temporary checkout failed");
+    }
+    expect(checkedOut.value.workflowName).toBe("temp-run-flow");
+    expect(
+      await pathExists(
+        path.join(
+          checkedOut.value.workflowDefinitionDir,
+          "temp-run-flow",
+          "workflow.json",
+        ),
+      ),
+    ).toBe(true);
+    expect(checkedOut.value.provenance.packageId).toBe("temp-run-flow");
+    expect(checkedOut.value.provenance.registryId).toBe("local");
+    expect(
+      await pathExists(path.join(userRoot, "workflow-registry", "checkouts")),
+    ).toBe(false);
+    expect(
+      await pathExists(
+        path.join(projectRoot, ".codex", "skills", "temp-skill"),
+      ),
+    ).toBe(false);
+
+    const cleanup = await checkedOut.value.cleanup();
+    expect(cleanup.ok).toBe(true);
+    expect(await pathExists(checkedOut.value.workflowDefinitionDir)).toBe(
+      false,
+    );
+    expect(await pathExists(checkedOut.value.packageStagingDirectory)).toBe(
+      false,
+    );
   });
 
   test("checkout installs packaged skills and projects project-scope vendor files", async () => {

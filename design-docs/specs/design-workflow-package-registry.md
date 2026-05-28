@@ -20,9 +20,9 @@ The registry feature extends the existing scoped workflow catalog:
 - package search reads registry metadata, with an optional sqlite-backed cache
 
 This document covers the `registry-metadata-cache` feature slice. Command
-syntax, publish transport, and checkout installation mechanics should consume
-these contracts rather than redefining package identity, metadata, or cache
-semantics.
+syntax, publish transport, checkout installation mechanics, and temporary
+registry-backed workflow runs should consume these contracts rather than
+redefining package identity, metadata, or cache semantics.
 
 ## Feature Contract
 
@@ -235,6 +235,12 @@ workflow id, and workflow description. JSON output should include enough source
 fields for an automation agent to select a package and call checkout without
 another discovery round trip.
 
+Registry-backed run uses the same normalized package index record as checkout.
+The index record must preserve enough fields for a temporary run resolver to
+fetch and validate the package without consulting a persistent checkout record:
+`registryId`, `registryUrl`, `packageName`, `workflowId`, `workflowDirectory`,
+`sourceBranch`, `sourcePath`, `checksum`, and `checksumAlgorithm`.
+
 Index generation should scan the registry working tree for
 `rielflow-package.json`, load the referenced workflow bundle, validate it through
 the existing workflow loader/validator path, and then emit only valid packages.
@@ -349,6 +355,36 @@ Package checkout must stage the remote package in a temporary directory, validat
 the workflow bundle, verify checksum when available, and only then mutate the
 project or user catalog.
 
+## Temporary Run Integration
+
+`workflow run --from-registry <package-id>` consumes registry metadata like
+checkout but produces no persistent install. The registry layer should expose a
+resolver that returns the same package selection fields used by checkout:
+package identity, registry URL/id, branch/ref, source path, workflow directory,
+manifest path, checksum, checksum algorithm, and derived workflow id.
+
+The temporary run caller owns lifecycle and cleanup. Registry metadata services
+must remain side-effect limited to registry config reads, cache reads/refreshes
+when requested, and package fetch/copy into caller-provided staging paths. They
+must not write checkout records, project workflow catalogs, user workflow
+catalogs, or vendor skill projections on behalf of a run.
+
+Validation rules are identical to persistent checkout before execution:
+
+- package id must resolve to exactly one package after registry and branch
+  filters
+- manifest paths and workflow directories must be safe relative paths
+- workflow bundles must load and validate through the existing workflow
+  validator
+- checksum/integrity metadata must be verified when present
+- invalid package records should fail the run before any workflow execution
+
+Temporary run output and artifacts should retain package source provenance
+because the temporary checkout path is removed after execution. Registry
+metadata should therefore keep package identity stable across cache refreshes
+and branch refs so later diagnostics can explain which registry package was
+executed.
+
 ## Publish Integration
 
 Publish writes package manifests into a GitHub registry repository. Push
@@ -387,6 +423,9 @@ should close these gaps before the feature is accepted:
   not silently use JSON behavior when `sqlite` is requested
 - checkout should verify the selected package checksum against staged package
   content before mutating project or user workflow catalogs
+- temporary registry-backed run should reuse the checkout resolver and checksum
+  verification path while avoiding checkout provenance writes and package skill
+  projection
 
 ## Migration
 
@@ -411,6 +450,7 @@ bun test packages/rielflow/src/workflow/runtime-db.test.ts
 bun test packages/rielflow/src/workflow/packages
 bun run packages/rielflow/src/bin.ts workflow validate <checked-out-workflow-name>
 bun run packages/rielflow/src/bin.ts workflow usage <checked-out-workflow-name> --output json
+bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --mock-scenario <fixture> --output json
 git diff --check
 ```
 
@@ -431,6 +471,9 @@ when enabled, search ranking/filtering, and package checkout provenance.
   omitted.
 - Package metadata is discovery/provenance data and must not bypass workflow
   bundle validation.
+- Temporary registry-backed workflow runs use package metadata for source
+  resolution and audit only; runtime behavior remains owned by the workflow
+  bundle and existing `workflow run` engine path.
 - JSON cache is the baseline backend; sqlite is optional and must preserve the
   same index record contract.
 - The `packages/rielflow/src/workflow/packages/` module is the feature-local

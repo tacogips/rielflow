@@ -24,6 +24,10 @@ import type {
   UnknownRecord,
 } from "./validation-types-and-runtime-options";
 import {
+  normalizeNamedStringArrayField,
+  normalizeOptionalNamedStringArrayField,
+} from "./string-array-fields";
+import {
   isLegacyCliModelIdentifier,
   isNodeSessionMode,
   isNodeType,
@@ -522,9 +526,9 @@ export function normalizeNodePayload(input: {
           return;
         }
 
-        const sourceRef = entry["sourceRef"];
-        const sourcePath = entry["sourcePath"];
-        const required = entry["required"];
+        const sourceRef = entry["sourceRef"],
+          sourcePath = entry["sourcePath"],
+          required = entry["required"];
 
         parsed.push({
           targetPath,
@@ -937,17 +941,17 @@ export function normalizeUserActionNodeConfig(
   }
 
   const allowStructuredReply = normalizeOptionalBooleanField(
-    value,
-    "allowStructuredReply",
-    path,
-    issues,
-  );
-  const allowFreeTextReply = normalizeOptionalBooleanField(
-    value,
-    "allowFreeTextReply",
-    path,
-    issues,
-  );
+      value,
+      "allowStructuredReply",
+      path,
+      issues,
+    ),
+    allowFreeTextReply = normalizeOptionalBooleanField(
+      value,
+      "allowFreeTextReply",
+      path,
+      issues,
+    );
 
   if (messageToolIds === null) {
     return undefined;
@@ -960,42 +964,4 @@ export function normalizeUserActionNodeConfig(
     ...(allowStructuredReply === undefined ? {} : { allowStructuredReply }),
     ...(allowFreeTextReply === undefined ? {} : { allowFreeTextReply }),
   };
-}
-export function normalizeNamedStringArrayField(
-  record: UnknownRecord,
-  key: string,
-  path: string,
-  issues: ValidationIssue[],
-): readonly string[] | null {
-  const value = record[key];
-  if (!Array.isArray(value)) {
-    issues.push(makeIssue("error", `${path}.${key}`, "must be an array"));
-    return null;
-  }
-  const normalized = value.filter(
-    (entry): entry is string => typeof entry === "string" && entry.length > 0,
-  );
-  if (normalized.length !== value.length) {
-    issues.push(
-      makeIssue(
-        "error",
-        `${path}.${key}`,
-        "must contain only non-empty strings",
-      ),
-    );
-  }
-  return normalized;
-}
-export function normalizeOptionalNamedStringArrayField(
-  record: UnknownRecord,
-  key: string,
-  path: string,
-  issues: ValidationIssue[],
-): readonly string[] | undefined {
-  const value = record[key];
-  if (value === undefined) {
-    return undefined;
-  }
-  const normalized = normalizeNamedStringArrayField(record, key, path, issues);
-  return normalized === null ? undefined : normalized;
 }

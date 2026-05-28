@@ -713,6 +713,24 @@ describe("runCli", () => {
     expect(parsed.options.preInstallCheckContainer).toBe("auto");
   });
 
+  test("parses explicit registry-backed workflow run flags", () => {
+    const parsed = parseArgs([
+      "workflow",
+      "run",
+      "cli-flow",
+      "--from-registry",
+      "--registry",
+      "local",
+      "--branch",
+      "feature/test",
+    ]);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.options.fromRegistry).toBe(true);
+    expect(parsed.options.registry).toBe("local");
+    expect(parsed.options.branch).toBe("feature/test");
+  });
+
   test("rejects conflicting pre-install check CLI flags", () => {
     const parsed = parseArgs([
       "workflow",
@@ -732,6 +750,7 @@ describe("runCli", () => {
 
     expect(code).toBe(0);
     expect(capture.stdout.join("\n")).toContain("--pre-install-check");
+    expect(capture.stdout.join("\n")).toContain("--from-registry");
     expect(capture.stdout.join("\n")).toContain(
       "--pre-install-check-container docker|podman|auto",
     );
@@ -1334,6 +1353,158 @@ describe("runCli", () => {
     );
     expect(updateCode).toBe(0);
     expect(updateCapture.stdout.join("\n")).toContain('"updated": false');
+  });
+
+  test("workflow run executes registry packages through temporary checkout", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-cli-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-cli-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-cli-flow",
+          version: "1.0.0",
+          description: "Temporary CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-cli-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-cli-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeFile(
+      mockScenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-cli-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--variables",
+          JSON.stringify({ run: "registry" }),
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(0);
+    const payload = JSON.parse(runCapture.stdout.join("\n")) as {
+      sessionId: string;
+      workflowName: string;
+      registrySource: {
+        package: {
+          packageId: string;
+          temporaryWorkflowDirectory: string;
+        };
+        cleanup: { ok: boolean };
+      };
+    };
+    expect(payload.workflowName).toBe("temp-cli-flow");
+    expect(payload.registrySource.package.packageId).toBe("temp-cli-flow");
+    expect(payload.registrySource.cleanup.ok).toBe(true);
+    await expect(
+      readFile(
+        payload.registrySource.package.temporaryWorkflowDirectory,
+        "utf8",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(userRoot, "workflow-registry", "checkouts"), "utf8"),
+    ).rejects.toThrow();
+  });
+
+  test("workflow run rejects registry packages over endpoint transport", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "temp-cli-flow",
+        "--from-registry",
+        "--endpoint",
+        "http://127.0.0.1:4317/graphql",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain("--from-registry");
+    expect(capture.stderr.join("\n")).toContain("--endpoint");
   });
 
   test("rielflow publish accepts explicit registry URL and local path", async () => {

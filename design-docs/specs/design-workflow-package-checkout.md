@@ -70,6 +70,8 @@ managed install record for both workflows and skills.
 - Owning search ranking or sqlite cache internals.
 - Supporting non-GitHub registry backends.
 - Installing workflow package dependencies or add-ons.
+- Installing or projecting package skills as part of temporary registry-backed
+  workflow execution.
 - Translating arbitrary vendor-specific extensions beyond the documented
   package skill projections.
 - Replacing direct URL checkout behavior.
@@ -242,6 +244,66 @@ The supplied workflow-definition directory must not be used as a vendor
 projection root unless it is also the discovered project root. This prevents a
 custom workflow collection directory from unexpectedly receiving `AGENTS.md`,
 `GEMINI.md`, `.claude/`, `.codex/`, or `.cursor/` files.
+
+## Temporary Registry Run Checkout
+
+`workflow run --from-registry <package-id>` uses the package checkout resolver
+and validation flow without creating a persistent project or user installation.
+It is an npx-like execution path for a package workflow that should behave like
+an ordinary local `workflow run` after the temporary bundle has been prepared.
+
+Temporary run checkout data flow:
+
+- resolve package id through registry metadata using optional `--registry` and
+  `--branch`
+- fetch or copy the package root into a command-owned temporary staging root
+- validate `rielflow-package.json`, checksum/integrity metadata, and the
+  selected workflow bundle through the same validation path used by persistent
+  package checkout
+- copy only the workflow bundle into a temporary workflow-definition directory
+  whose shape is `<temp-workflow-root>/<workflow-name>/workflow.json`
+- execute the existing local `workflow run` path with
+  `--workflow-definition-dir <temp-workflow-root>` and all ordinary run options
+  forwarded unchanged
+- remove the temporary package staging root and temporary workflow-definition
+  root after the run reaches a terminal result or fails before start
+
+The temporary run checkout must not write normal checkout provenance under
+`~/.rielflow/workflow-registry/checkouts/`, must not mutate project or user
+workflow catalogs, and must not install or project package skills. Package skill
+content may be staged for checksum verification only; it is not made visible to
+agent vendors during the run unless a future explicit design adds isolated
+skill projection.
+
+Execution artifacts should record source provenance separately from checkout
+provenance so a removed temporary directory remains auditable. Required
+provenance fields are:
+
+- `packageId`
+- `workflowName`
+- `registryUrl`
+- `registryRef`
+- `sourceDirectory`
+- `metadataPath`
+- `checksum`
+- `checksumAlgorithm`
+- `temporaryWorkflowDirectory`
+
+Temporary cleanup is best-effort after terminal run completion. If cleanup
+fails, the command must report the remaining temporary path and cleanup error in
+text output and JSON output while preserving the workflow execution result.
+Cleanup must not run before all workflow-local files needed by prompts, scripts,
+add-ons, or container contexts have been read by the runtime.
+
+Registry-backed run is local-only for the initial implementation. Combining
+`--from-registry` with `--endpoint` is a usage error because a remote server
+cannot access the caller's temporary checkout path. Remote execution should use
+a workflow already installed or explicitly exposed by that remote server.
+
+The positional run target remains unambiguous: `workflow run <name>` resolves
+local project/user/direct workflows only. The caller must pass
+`--from-registry` to trigger registry resolution, so an unknown local workflow
+does not unexpectedly fetch and execute remote package content.
 
 ## Package Resolution Input
 
@@ -444,6 +506,9 @@ Package checkout should surface explicit failure codes for:
 - update requires confirmation
 - unsafe skill projection
 - unsafe destination
+- temporary run checkout failure
+- temporary run cleanup failure
+- unsupported endpoint with registry-backed run
 - local I/O failure
 
 Existing direct checkout errors should remain compatible where command behavior
@@ -473,6 +538,13 @@ has not changed.
   the explicit noninteractive bypass.
 - Keep sqlite optional; checkout must be testable through injected registry
   resolver/cache/fetch abstractions.
+- Make registry-backed execution explicit with `workflow run --from-registry`
+  so local workflow names and registry package ids do not collide.
+- Treat temporary registry-backed run checkout as non-persistent: no project/user
+  catalog writes, no normal checkout provenance record, and no package skill
+  projection.
+- Preserve ordinary `workflow run` behavior by forwarding execution through the
+  existing direct workflow-definition directory path after temporary checkout.
 
 ## Open Questions
 
@@ -499,6 +571,12 @@ Tracked in `design-docs/user-qa/qa-workflow-package-checkout.md`.
 - Some vendors do not expose safe user-level projection targets; managed-only
   install records avoid unsafe writes while still enabling package update and
   audit.
+- Temporary registry-backed runs cannot be resumed from a deleted workflow
+  bundle unless the execution records enough registry provenance to rehydrate or
+  diagnose the source later.
+- Package skill projection during temporary execution could unexpectedly mutate
+  user or project vendor state, so the first implementation rejects that
+  behavior.
 
 ## Verification Commands
 
@@ -507,7 +585,9 @@ bun test packages/rielflow/src/workflow/packages/packages.test.ts
 bun test packages/rielflow/src/workflow/checkout/checkout.test.ts
 bun test packages/rielflow/src/workflow/packages/checkout.test.ts
 bun test packages/rielflow/src/cli.test.ts
+bun test packages/rielflow/src/cli.test.ts -t "registry"
 bun run typecheck
+bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --mock-scenario <fixture> --output json
 bunx biome check packages/rielflow/src/workflow/packages packages/rielflow/src/cli
 git diff --check -- design-docs/specs/design-workflow-package-checkout.md design-docs/specs/design-workflow-package-skills.md design-docs/specs/design-workflow-package-update.md
 ```

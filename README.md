@@ -291,6 +291,28 @@ destinations with `--user-scope`:
 bun run packages/rielflow/src/bin.ts workflow package checkout worker-only-single-step
 ```
 
+Run a registry package without installing it first by adding `--from-registry`
+to `workflow run`. Rielflow resolves the package through the selected registry,
+stages the workflow bundle in a command-owned temporary workflow-definition
+directory, runs the normal local workflow path, reports registry provenance in
+JSON output, and removes the temporary checkout after the run finishes or fails
+before start:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run worker-only-single-step \
+  --from-registry \
+  --registry default \
+  --branch main \
+  --mock-scenario ./path/to/mock-scenario.json \
+  --output json
+```
+
+Registry-backed runs are explicit and local-only: bare `workflow run <name>`
+never fetches from the registry, and `--from-registry` cannot be combined with
+`--endpoint`. Temporary runs validate package metadata, checksum/integrity, and
+the workflow bundle, but they do not write persistent checkout records, mutate
+project/user catalogs, or install package skills.
+
 Package skills are accepted only under the package skill directory for the
 supported vendors and current vendor layouts:
 

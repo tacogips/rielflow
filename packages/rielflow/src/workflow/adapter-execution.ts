@@ -406,7 +406,8 @@ export async function executePackageNodeWithTimeout(
       "node.exec.id": input.nodeExecId,
       "node.type": input.node.nodeType ?? "agent",
     },
-    async () => await executePackageNodeWithTimeoutInternal(input, dependencies),
+    async () =>
+      await executePackageNodeWithTimeoutInternal(input, dependencies),
   );
 }
 

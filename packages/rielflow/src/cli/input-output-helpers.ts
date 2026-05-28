@@ -116,6 +116,9 @@ export function printHelp(io: CliIo): void {
     "  workflow package checkout <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--yes] [--pre-install-check]",
   );
   io.stdout(
+    "  workflow run <package> --from-registry [--registry <id-or-url>] [--branch <name>]",
+  );
+  io.stdout(
     "    --pre-install-check [--pre-install-check-mode warn|reject] [--pre-install-check-container docker|podman|auto]",
   );
   io.stdout(
