@@ -1,508 +1,545 @@
 # Workflow Registry Run Temporary Checkout Implementation Plan
 
-**Status**: Completed
-**Design Reference**: `design-docs/specs/design-workflow-package-checkout.md#temporary-registry-run-checkout`, `design-docs/specs/design-workflow-package-registry.md#temporary-run-integration`, `design-docs/specs/command.md#commands`
+**Status**: In Progress
+**Design Reference**: `design-docs/specs/command.md#command-surface`, `design-docs/specs/design-workflow-package-checkout.md#temporary-registry-run-checkout`, `design-docs/specs/design-workflow-package-registry.md#temporary-run-integration`
 **Created**: 2026-05-28
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-05-29
 
-## Design Document Reference
+## Design Reference
 
-**Source**:
+Issue-resolution plan for workflow
+`codex-design-and-implement-review-loop`, Step 4
+`step4-impl-plan-create`.
 
+Accepted design sources:
+
+- `design-docs/specs/command.md`
 - `design-docs/specs/design-workflow-package-checkout.md#temporary-registry-run-checkout`
 - `design-docs/specs/design-workflow-package-registry.md#temporary-run-integration`
-- `design-docs/specs/command.md#commands`
+- `design-docs/user-qa/qa-workflow-package-checkout.md`
 
-### Summary
+Step 3 accepted the revised design with no remaining high or mid findings.
+The implementation extends `workflow run --from-registry <target>` from
+package ids only to three explicit online target forms:
 
-Implement explicit npx-like registry workflow execution with
-`workflow run --from-registry <package-id>`. The command resolves a registry
-package, stages the selected workflow in a command-owned temporary
-workflow-definition directory, executes through the existing local
-`workflow run` path, records registry source provenance, and performs
-best-effort cleanup.
+- existing registry package ids, preserving current behavior;
+- GitHub workflow directory URLs, including tree URLs and branchless directory
+  URLs;
+- registered shorthand values written as `<registry-owner>/<workflow-dir>`.
 
-### Scope
+## Scope
 
-**Included**:
+Included:
 
-- Parse and validate `--from-registry`, `--registry`, and `--branch` for
-  `workflow run`.
-- Reject `--from-registry` with `--endpoint`.
-- Reuse package registry resolution, manifest validation, checksum/integrity
-  verification, workflow loading, and workflow validation.
-- Stage only the selected workflow bundle as
-  `<temporary-workflow-root>/<workflow-name>/workflow.json`.
-- Forward normal local run options unchanged after temporary checkout.
-- Record source provenance in local run output/artifacts.
-- Report cleanup failures without changing the workflow execution result.
-- Add focused CLI/package tests and refresh user-facing docs.
+- Preserve current `workflow run <package-id> --from-registry` behavior.
+- Accept GitHub tree URLs like
+  `https://github.com/<owner>/<repo>/tree/<ref>/<workflow-dir>`.
+- Accept branchless GitHub directory URLs like
+  `https://github.com/<owner>/<repo>/<workflow-dir>`.
+- Resolve branchless URL refs by `--branch`, then matching registered registry
+  default branch, then GitHub repository default branch metadata, otherwise
+  usage error before staging.
+- Resolve shorthand only through configured registries, narrowed by
+  `--registry` when supplied, and fail on missing or ambiguous matches.
+- Allow raw GitHub directory URLs without `rielflow-package.json` only after
+  workflow-bundle validation and with reduced provenance.
+- Keep package-backed metadata validation, checksum/integrity validation,
+  provenance, and cleanup behavior.
+- Keep `--from-registry` local-only and reject `--endpoint` before staging.
+- Preserve retained temporary checkout cleanup for local `session resume` and
+  `session continue`.
+- Refresh tests, README, and `.agents/skills/rielflow-workflow-run/SKILL.md`.
 
-**Excluded**:
+Excluded:
 
-- Silent registry fallback for bare `workflow run <name>`.
-- Remote GraphQL registry-backed execution.
-- Persistent checkout records under
-  `~/.rielflow/workflow-registry/checkouts/`.
-- Project/user catalog mutation.
-- Package skill installation or vendor skill projection during temporary runs.
-- New registry backends beyond existing localPath-backed registry behavior.
+- Bare `workflow run <name>` remote fetching.
+- Remote GraphQL registry temporary run starts.
+- Persistent install/catalog mutation for temporary runs.
+- Package skill installation or vendor projection for temporary runs.
+- Cursor CLI behavior or codex-agent backend behavior changes.
 
 ## Codex Agent References
 
+- Workflow ID: `codex-design-and-implement-review-loop`
+- Workflow mode: `issue-resolution`
+- Node ID: `step4-impl-plan-create`
+- Worker backend reference: `codex-agent`
 - `AGENTS.md`
 - `packages/rielflow/src/workflow/adapters/codex.ts`
-- `packages/rielflow/src/cli/workflow-command-handler.ts`
-- `packages/rielflow/src/cli/argument-parser.ts`
-- `packages/rielflow/src/cli/input-output-helpers.ts`
-- `packages/rielflow/src/cli/storage-and-options.ts`
-- `packages/rielflow/src/workflow/packages/checkout.ts`
-- `packages/rielflow/src/workflow/packages/search.ts`
-- `packages/rielflow/src/workflow/packages/registry-config.ts`
-- `packages/rielflow/src/workflow/packages/types.ts`
-- `packages/rielflow/src/workflow/load.ts`
-- `packages/rielflow/src/workflow/validate.ts`
-- `packages/rielflow/src/workflow/engine.ts`
-- `packages/rielflow/src/cli.test.ts`
-- `packages/rielflow/src/workflow/packages/checkout.test.ts`
-- `README.md`
+- `../../codex-agent` unavailable per Step 1 and Step 3; no external
+  codex-agent behavior is imported.
 
-Codex-agent backend behavior remains adapter-owned and unchanged. This plan
-uses codex-agent references only to preserve current backend execution while
-changing CLI/package resolution before the existing local run path starts.
+Intentional divergence: codex-agent remains only an execution backend string.
+This plan changes rielflow CLI/package-resolution behavior before the existing
+local workflow execution path starts.
 
-## Modules
+## Issue Reference
 
-### 1. CLI Option Surface
+- Source: `workflowInput`
+- Title: `Support running online registry workflows by GitHub directory URL or registered shorthand`
+- Issue URL: none supplied
+- Issue repository/number: none supplied
 
-#### `packages/rielflow/src/cli/argument-parser.ts`
-#### `packages/rielflow/src/cli/input-output-helpers.ts`
+## Modules And Contracts
 
-**Status**: Completed
+### `packages/rielflow/src/cli/workflow-run-command.ts`
+
+Expected contract:
 
 ```typescript
-interface ParsedCliOptions {
-  readonly fromRegistry: boolean;
-  readonly registry?: string;
-  readonly branch?: string;
+type RegistryRunTargetKind =
+  | "package-id"
+  | "github-directory-url"
+  | "registered-shorthand";
+
+interface RegistryBackedWorkflowRunContext {
+  readonly targetKind: RegistryRunTargetKind;
+  readonly workflowName: string;
+  readonly workflowDefinitionDir: string;
+  readonly provenance: WorkflowRegistryRunSourceOutput;
+  readonly cleanup: () => Promise<RegistryRunCleanupOutput>;
 }
 ```
 
-**Checklist**:
+### `packages/rielflow/src/workflow/packages/temp-run.ts`
 
-- [x] Parse `--from-registry` as a boolean workflow-run option.
-- [x] Ensure `--registry` and `--branch` remain available to package commands
-      and are accepted by `workflow run --from-registry`.
-- [x] Update help text with explicit `workflow run <package-id> --from-registry`
-      usage.
-- [x] Reject unsupported flag combinations through existing CLI validation
-      patterns.
-
-### 2. Temporary Registry Run Resolver
-
-#### `packages/rielflow/src/workflow/packages/checkout.ts`
-#### Optional: `packages/rielflow/src/workflow/packages/temp-run.ts`
-#### `packages/rielflow/src/workflow/packages/index.ts`
-
-**Status**: Completed
+Expected contract:
 
 ```typescript
-export interface WorkflowPackageTemporaryRunCheckoutInput {
-  readonly packageName: string;
+interface TemporaryRegistryRunCheckoutInput {
+  readonly target: string;
   readonly registry?: string;
   readonly branch?: string;
-  readonly options?: WorkflowPackageRegistryConfigOptions;
+  readonly registryConfigRoot?: string;
+  readonly fetchImpl?: typeof fetch;
 }
 
-export interface WorkflowPackageRunProvenance {
+interface TemporaryRegistryRunCheckoutResult {
+  readonly targetKind: RegistryRunTargetKind;
+  readonly workflowName: string;
+  readonly workflowDefinitionDir: string;
+  readonly temporaryWorkflowDirectory: string;
+  readonly provenance: WorkflowRegistryRunSourceOutput;
+  cleanup(): Promise<RegistryRunCleanupOutput>;
+}
+```
+
+### `packages/rielflow/src/workflow/checkout/github-directory.ts`
+
+Expected contract:
+
+```typescript
+interface GitHubDirectoryUrl {
+  readonly owner: string;
+  readonly repository: string;
+  readonly ref: string;
+  readonly directoryPath: string;
+}
+
+interface BranchlessGitHubDirectoryUrl {
+  readonly owner: string;
+  readonly repository: string;
+  readonly directoryPath: string;
+}
+```
+
+Implementation may extend existing parsing/fetch helpers or add a small
+resolver module if that keeps URL parsing and default-branch lookup isolated.
+
+### `packages/rielflow/src/cli/registry-run-provenance.ts`
+
+Expected contract:
+
+```typescript
+interface WorkflowRegistryRunSourceOutput {
+  readonly source: "registry";
+  readonly originalTarget: string;
+  readonly targetKind: RegistryRunTargetKind;
+  readonly package?: WorkflowPackageRunProvenance;
+  readonly github?: GitHubDirectoryRunProvenance;
+  readonly retained?: RetainedRegistryRunProvenance;
+  readonly cleanup?: RegistryRunCleanupOutput;
+}
+
+interface GitHubDirectoryRunProvenance {
+  readonly originalTarget: string;
+  readonly owner: string;
+  readonly repository: string;
+  readonly ref: string;
+  readonly directoryPath: string;
+  readonly sourceUrl: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly temporaryWorkflowDirectory: string;
+  readonly verification: "package-integrity" | "workflow-bundle-only";
+}
+
+interface WorkflowPackageRunProvenance {
+  readonly originalTarget: string;
   readonly packageId: string;
   readonly workflowName: string;
+  readonly registryId: string;
   readonly registryUrl: string;
   readonly registryRef: string;
+  readonly sourcePath: string;
   readonly sourceDirectory: string;
   readonly metadataPath: string;
   readonly checksum: string;
   readonly checksumAlgorithm: string;
+  readonly integrityVerified: boolean;
   readonly temporaryWorkflowDirectory: string;
 }
 
-export interface WorkflowPackageTemporaryRunCheckoutResult {
-  readonly workflowName: string;
-  readonly workflowDefinitionDir: string;
-  readonly packageStagingDirectory: string;
-  readonly provenance: WorkflowPackageRunProvenance;
-  cleanup(): Promise<Result<WorkflowPackageTemporaryRunCleanupResult, WorkflowPackageFailure>>;
+interface RetainedRegistryRunProvenance {
+  readonly sessionId: string;
+  readonly retainedForStatus: "paused" | "running" | "waiting";
+  readonly temporaryWorkflowDirectory: string;
+  readonly retainedProvenancePath: string;
+  readonly cleanupOwner: "workflow-run" | "session-resume" | "session-continue";
 }
 ```
-
-**Checklist**:
-
-- [x] Resolve package id through `searchWorkflowPackages` with registry/branch
-      filters and existing registry config options.
-- [x] Validate manifest, safe workflow directory, checksum, integrity, and
-      workflow bundle before returning a runnable checkout.
-- [x] Copy package content only as needed for validation and copy only the
-      selected workflow bundle to the temporary workflow-definition root.
-- [x] Do not call persistent checkout destination/provenance writers.
-- [x] Do not call package skill installation/projection.
-- [x] Return typed package failures consistent with existing package command
-      behavior.
-
-### 3. Workflow Run Integration
-
-#### `packages/rielflow/src/cli/workflow-command-handler.ts`
-#### `packages/rielflow/src/cli/storage-and-options.ts`
-
-**Status**: Completed
-
-```typescript
-interface RegistryBackedWorkflowRunContext {
-  readonly workflowName: string;
-  readonly workflowDefinitionDir: string;
-  readonly provenance: WorkflowPackageRunProvenance;
-  readonly cleanup: () => Promise<Result<WorkflowPackageTemporaryRunCleanupResult, WorkflowPackageFailure>>;
-}
-```
-
-**Checklist**:
-
-- [x] In `workflow run`, interpret the positional name as a package id only
-      when `--from-registry` is present.
-- [x] Reject `--from-registry` with `--endpoint` before registry mutation or
-      staging.
-- [x] Execute existing local run behavior with the temporary
-      `workflowDefinitionDir`.
-- [x] Forward existing run options unchanged: variables, node patch,
-      mock scenario, output mode, artifact/session roots, working directory,
-      supervision flags, timeout flags, verbose/debug flags, and validation
-      behavior.
-- [x] Ensure cleanup runs after terminal result or pre-start failure and does
-      not run early while workflow-local files may still be needed.
-- [x] Preserve the workflow execution result if cleanup fails.
-
-### 4. Provenance And Output
-
-#### `packages/rielflow/src/cli/workflow-command-handler.ts`
-#### `packages/rielflow/src/cli/workflow-graphql-formatters.ts`
-#### Runtime artifact writer touched by local run path, if needed
-
-**Status**: Completed
-
-```typescript
-interface WorkflowRunRegistrySourceOutput {
-  readonly source: "registry";
-  readonly package: WorkflowPackageRunProvenance;
-  readonly cleanup?: {
-    readonly ok: boolean;
-    readonly remainingPaths?: readonly string[];
-    readonly error?: string;
-  };
-}
-```
-
-**Checklist**:
-
-- [x] Include registry source provenance in JSON output for
-      `workflow run --from-registry --output json`.
-- [x] Include concise registry source and cleanup warning lines in text output.
-- [x] Persist enough provenance in the workflow execution artifact/session
-      metadata to audit the removed temporary path.
-- [x] Report cleanup failure paths and reason without replacing the original
-      run failure/success code.
-
-### 5. Tests And Fixtures
-
-#### `packages/rielflow/src/cli.test.ts`
-#### `packages/rielflow/src/workflow/packages/checkout.test.ts`
-#### Optional package fixture under existing test temp setup
-
-**Status**: Completed
-
-```typescript
-interface RegistryRunTestFixture {
-  readonly registryRoot: string;
-  readonly packageId: string;
-  readonly workflowName: string;
-  readonly registryConfigRoot: string;
-}
-```
-
-**Checklist**:
-
-- [x] Test successful registry-backed run through temp checkout.
-- [x] Test cleanup after successful run and after validation/pre-start failure.
-- [x] Test invalid or ambiguous registry package fails before workflow
-      execution.
-- [x] Test `--endpoint` plus `--from-registry` is rejected.
-- [x] Test ordinary run options are forwarded, including `--variables`,
-      `--mock-scenario`, `--output json`, storage roots, and working directory.
-- [x] Test no persistent checkout record, project/user catalog mutation, or
-      package skill projection occurs.
-
-### 6. User-Facing Documentation
-
-#### `README.md`
-#### `design-docs/specs/command.md` if implementation discovers a documented flag detail mismatch
-
-**Status**: Completed
-
-```typescript
-interface DocumentationUpdate {
-  readonly command: "workflow run --from-registry";
-  readonly localOnly: true;
-  readonly persistentCheckout: false;
-}
-```
-
-**Checklist**:
-
-- [x] Document `rielflow workflow run <package-id> --from-registry`.
-- [x] Document `--registry` and `--branch` for registry-backed runs.
-- [x] State local-only behavior and `--endpoint` rejection.
-- [x] State that temporary runs do not install package skills or persist
-      checkout records.
-- [x] Include a JSON-output/provenance note.
-
-## Module Status
-
-| Module | File Path | Status | Tests |
-|--------|-----------|--------|-------|
-| CLI option surface | `packages/rielflow/src/cli/argument-parser.ts`, `packages/rielflow/src/cli/input-output-helpers.ts` | Completed | `packages/rielflow/src/cli.test.ts` |
-| Temporary resolver | `packages/rielflow/src/workflow/packages/checkout.ts` or `packages/rielflow/src/workflow/packages/temp-run.ts` | Completed | `packages/rielflow/src/workflow/packages/packages.test.ts` |
-| Run integration | `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/cli/storage-and-options.ts` | Completed | `packages/rielflow/src/cli.test.ts` |
-| Provenance/output | `packages/rielflow/src/cli/workflow-command-handler.ts`, `packages/rielflow/src/cli/workflow-run-command.ts` | Completed | `packages/rielflow/src/cli.test.ts` |
-| Tests and fixtures | `packages/rielflow/src/cli.test.ts`, `packages/rielflow/src/workflow/packages/packages.test.ts` | Completed | same |
-| Docs | `README.md` | Completed | `git diff --check` |
 
 ## Task Breakdown
 
-### TASK-001: Parse And Document CLI Flags
-
-**Status**: Completed
-**Parallelizable**: Yes
-**Deliverables**:
-
-- `packages/rielflow/src/cli/argument-parser.ts`
-- `packages/rielflow/src/cli/input-output-helpers.ts`
-
-**Dependencies**: None
-
-**Completion Criteria**:
-
-- [x] `--from-registry` is parsed for `workflow run`.
-- [x] `--registry` and `--branch` are available to registry-backed runs.
-- [x] Help text includes registry-backed run syntax.
-
-### TASK-002: Build Temporary Package Run Checkout
+### TASK-001: Classify Registry Run Targets
 
 **Status**: Completed
 **Parallelizable**: No
 **Deliverables**:
 
-- `packages/rielflow/src/workflow/packages/checkout.ts` or
-  `packages/rielflow/src/workflow/packages/temp-run.ts`
-- `packages/rielflow/src/workflow/packages/index.ts`
+- `packages/rielflow/src/cli/workflow-run-command.ts`
+- `packages/rielflow/src/workflow/packages/temp-run.ts`
+- `packages/rielflow/src/workflow/packages/types.ts`
 
-**Dependencies**: Existing package registry/search/checkout modules
+**Dependencies**: Existing `--from-registry`, `--registry`, and `--branch`
+parsing.
 
 **Completion Criteria**:
 
-- [x] Package resolution, validation, checksum/integrity, and workflow
-      validation happen before execution.
-- [x] Temporary workflow root has the existing workflow-definition-dir shape.
-- [x] No persistent checkout record or skill projection is written.
-- [x] Cleanup API removes package staging and workflow-definition temp roots.
+- [x] Package ids still route through the existing package temporary checkout.
+- [x] GitHub URL targets are detected only when `--from-registry` is present.
+- [x] Shorthand targets are detected as registry-resolved
+      `<registry-owner>/<workflow-dir>` only when `--from-registry` is present.
+- [x] Unknown/ambiguous target errors are usage errors before execution.
 
-### TASK-003: Integrate Temporary Checkout With Local Workflow Run
+### TASK-002: Resolve GitHub Directory URL Temporary Checkouts
 
 **Status**: Completed
 **Parallelizable**: No
 **Deliverables**:
 
-- `packages/rielflow/src/cli/workflow-command-handler.ts`
+- `packages/rielflow/src/workflow/checkout/github-directory.ts`
+- `packages/rielflow/src/workflow/checkout/checkout.test.ts`
+- `packages/rielflow/src/workflow/packages/temp-run.ts`
+
+**Dependencies**: TASK-001 target classification.
+
+**Completion Criteria**:
+
+- [x] Tree URLs preserve explicit refs and directory paths.
+- [x] Branchless URLs resolve refs by `--branch`, matching registered registry
+      default branch, GitHub repository default branch metadata, or fail before
+      staging.
+- [x] Fetch failures and unresolved default branches produce actionable errors.
+- [x] Raw URL checkouts validate the staged workflow bundle.
+- [x] Raw URL checkouts without package metadata produce reduced provenance.
+
+### TASK-003: Resolve Registered Shorthand Through Registries
+
+**Status**: Completed
+**Parallelizable**: No
+**Deliverables**:
+
+- `packages/rielflow/src/workflow/packages/search.ts`
+- `packages/rielflow/src/workflow/packages/registry-config.ts`
+- `packages/rielflow/src/workflow/packages/temp-run.ts`
+- `packages/rielflow/src/workflow/packages/packages.test.ts`
+
+**Dependencies**: TASK-001 target classification.
+
+**Completion Criteria**:
+
+- [x] Shorthand searches configured registries and honors `--registry`.
+- [x] Matching considers package name, workflow id, and terminal source path
+      segment as accepted by the design.
+- [x] Missing matches fail with no checkout staging.
+- [x] Multiple matches fail with candidates listed.
+- [x] Successful shorthand runs use package-backed checksum/integrity
+      validation and package provenance.
+
+### TASK-004: Preserve Run Integration, Provenance, And Cleanup
+
+**Status**: Completed
+**Parallelizable**: No
+**Deliverables**:
+
+- `packages/rielflow/src/cli/workflow-run-command.ts`
+- `packages/rielflow/src/cli/registry-run-provenance.ts`
+- `packages/rielflow/src/cli/session-command-handler.ts`
 - `packages/rielflow/src/cli/storage-and-options.ts`
 
-**Dependencies**: TASK-001, TASK-002
+**Dependencies**: TASK-002 and TASK-003.
 
 **Completion Criteria**:
 
-- [x] `workflow run --from-registry <package-id>` executes via existing local
-      run behavior.
-- [x] `--endpoint` with `--from-registry` fails as a usage error.
-- [x] Existing run options are forwarded unchanged.
-- [x] Cleanup runs after terminal success, run failure, and pre-start failure,
-      while paused/non-terminal sessions retain the temporary checkout.
+- [x] `--endpoint` with `--from-registry` remains rejected before network or
+      staging work.
+- [x] Existing local run options are forwarded unchanged for all target kinds.
+- [x] Terminal initial runs clean temporary checkout and report cleanup.
+- [x] Non-terminal runs retain temporary checkout and persisted provenance.
+- [x] Local `session resume` and `session continue` continue consuming retained
+      provenance and cleaning only after terminal resumed/continued results.
+- [x] JSON/text output distinguishes package integrity provenance from reduced
+      raw GitHub workflow-bundle-only provenance.
+- [x] JSON/text output and retained provenance include `originalTarget`,
+      registry identity, source path/source directory, checksum algorithm,
+      `integrityVerified`, and session-retention cleanup metadata where
+      applicable.
 
-### TASK-004: Add Provenance And Cleanup Reporting
-
-**Status**: Completed
-**Parallelizable**: No
-**Deliverables**:
-
-- `packages/rielflow/src/cli/workflow-command-handler.ts`
-- `packages/rielflow/src/cli/workflow-graphql-formatters.ts` if output
-  helpers need shared formatting
-
-**Dependencies**: TASK-002, TASK-003
-
-**Completion Criteria**:
-
-- [x] JSON output includes package provenance and cleanup status.
-- [x] Text output includes source scope/directory and cleanup warnings.
-- [x] Runtime artifacts retain package source provenance after temp removal.
-- [x] Cleanup failures do not mask workflow execution results.
-
-### TASK-005: Add Focused Tests
+### TASK-005: Add CLI And Package Regression Coverage
 
 **Status**: Completed
 **Parallelizable**: No
 **Deliverables**:
 
 - `packages/rielflow/src/cli.test.ts`
-- `packages/rielflow/src/workflow/packages/checkout.test.ts`
+- `packages/rielflow/src/workflow/checkout/checkout.test.ts`
+- `packages/rielflow/src/workflow/packages/packages.test.ts`
 
-**Dependencies**: TASK-001, TASK-002, TASK-003, TASK-004
+**Dependencies**: TASK-002, TASK-003, TASK-004.
 
 **Completion Criteria**:
 
-- [x] Success, cleanup, invalid package, endpoint rejection, option
-      forwarding, and non-persistence cases are covered.
-- [x] Tests use local temp registries and do not require network access.
-- [x] Tests pass under targeted Bun test commands.
+- [x] Package-id behavior remains covered.
+- [x] GitHub tree URL temporary run succeeds with fake fetch.
+- [x] Branchless URL uses `--branch`, registered default branch, and GitHub
+      default branch metadata in separate tests.
+- [x] Branchless URL failure occurs before staging when no ref can resolve.
+- [x] Registered shorthand success, no-match, and ambiguous-match cases are
+      covered.
+- [x] Raw URL reduced provenance and package-backed provenance are asserted.
+- [x] Output and retained-run provenance assertions cover `originalTarget`,
+      `registryId`, `registryUrl`, `sourcePath`, `sourceDirectory`,
+      `checksumAlgorithm`, `integrityVerified`, session id, retained path, and
+      cleanup owner.
+- [x] Endpoint rejection, cleanup retention, resume cleanup, and continue
+      cleanup remain covered.
+- [x] Tests avoid real network access by injecting fake fetch or local caches.
 
-### TASK-006: Refresh User Documentation
+### TASK-006: Refresh User-Facing Documentation
 
 **Status**: Completed
 **Parallelizable**: Yes
 **Deliverables**:
 
 - `README.md`
+- `.agents/skills/rielflow-workflow-run/SKILL.md`
+- `design-docs/user-qa/qa-workflow-package-checkout.md` if examples need QA
+  alignment
 
-**Dependencies**: TASK-001 for final flag wording
+**Dependencies**: TASK-001 final target grammar and TASK-004 final provenance
+field names.
 
 **Completion Criteria**:
 
-- [x] README documents the new command and key flags.
-- [x] README states local-only, temporary, non-persistent, no-skill-install
-      behavior.
-- [x] README mentions provenance/cleanup reporting.
+- [x] README documents package id, GitHub URL, and shorthand examples.
+- [x] README states `--from-registry` is required and `--endpoint` is rejected.
+- [x] README states raw GitHub URLs may have reduced provenance.
+- [x] Workflow-run skill docs include the new target forms and cleanup
+      behavior for operators.
+- [x] Documentation keeps codex-agent references unchanged.
 
 ## Dependencies
 
 | Task | Depends On | Status |
 |------|------------|--------|
-| TASK-001 | Existing argument parser and help conventions | Completed |
-| TASK-002 | Existing package registry/search/checkout validation modules | Completed |
-| TASK-003 | TASK-001, TASK-002 | Completed |
+| TASK-001 | Existing package-id temporary run implementation | Completed |
+| TASK-002 | TASK-001 | Completed |
+| TASK-003 | TASK-001 | Completed |
 | TASK-004 | TASK-002, TASK-003 | Completed |
-| TASK-005 | TASK-001, TASK-002, TASK-003, TASK-004 | Completed |
-| TASK-006 | TASK-001 final flag wording | Completed |
+| TASK-005 | TASK-002, TASK-003, TASK-004 | Completed |
+| TASK-006 | TASK-001, TASK-004 field names | Completed |
 
 ## Parallelizable Tasks
 
-- TASK-001 and TASK-002 may begin independently because write scopes are
-  disjoint.
-- TASK-006 may begin after TASK-001 flag wording is confirmed; it does not
-  share TypeScript write scope.
-- TASK-003, TASK-004, and TASK-005 are sequential because they touch shared
-  run integration/output behavior and depend on the temp checkout contract.
+- TASK-006 can begin after target grammar/output field names are confirmed
+  because its write scope is documentation-only.
+- TASK-002 and TASK-003 are conceptually separable but both write
+  `packages/rielflow/src/workflow/packages/temp-run.ts`; run them sequentially
+  unless one implementation first extracts disjoint helper modules.
+- TASK-004 and TASK-005 are sequential because they share CLI output,
+  lifecycle, and regression-test surfaces.
 
 ## Verification Plan
 
+- `bun test packages/rielflow/src/workflow/checkout/checkout.test.ts packages/rielflow/src/workflow/packages/packages.test.ts packages/rielflow/src/cli.test.ts`
+- `bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --registry default --output json`
+- `bun run packages/rielflow/src/bin.ts workflow run https://github.com/user/workflow-repo/tree/main/workflow-dir --from-registry --output json`
+- `bun run packages/rielflow/src/bin.ts workflow run https://github.com/user/workflow-repo/workflow-dir --from-registry --branch main --output json`
+- `bun run packages/rielflow/src/bin.ts workflow run user/workflow-dir --from-registry --registry default --output json`
+- `bun run packages/rielflow/src/bin.ts workflow run user/workflow-dir --from-registry --endpoint http://127.0.0.1:43173/graphql`
 - `bun run typecheck`
-- `bun test packages/rielflow/src/cli.test.ts packages/rielflow/src/workflow/packages/checkout.test.ts`
-- `bun run packages/rielflow/src/bin.ts workflow validate worker-only-single-step --workflow-definition-dir ./examples`
-- `bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --mock-scenario <fixture> --output json`
+- `bun run lint:biome`
 - `git diff --check`
 
 ## Completion Criteria
 
-- [x] `workflow run --from-registry <package-id>` resolves and runs a registry
-      package from a temporary checkout.
-- [x] Bare `workflow run <name>` never fetches registry packages implicitly.
-- [x] `--endpoint` with `--from-registry` is rejected before staging.
-- [x] Registry-backed run forwards existing local run options unchanged.
-- [x] Temporary directories are removed after terminal completion or pre-start
-      failure, with cleanup failure reported non-destructively.
-- [x] No persistent checkout record, catalog mutation, or skill projection is
-      produced by temporary runs.
-- [x] JSON/text outputs and runtime artifacts include package provenance.
-- [x] Focused tests and verification commands pass.
-- [x] README documents the new behavior.
+- [x] `workflow run <package-id> --from-registry` remains compatible.
+- [x] `workflow run <github-directory-url> --from-registry` stages and runs a
+      temporary checkout without installation.
+- [x] Branchless GitHub URLs follow the accepted ref-resolution order and fail
+      before staging when unresolved.
+- [x] `workflow run <registry-owner>/<workflow-dir> --from-registry` resolves
+      through configured registries and rejects ambiguity.
+- [x] Package-backed runs preserve metadata, checksum/integrity validation,
+      provenance, and cleanup behavior.
+- [x] Package-backed and retained-run provenance explicitly includes
+      `originalTarget`, registry id/url, source path/source directory, checksum
+      algorithm, `integrityVerified`, and session-retention cleanup metadata.
+- [x] Raw GitHub directory runs validate workflow bundles and report reduced
+      provenance.
+- [x] `--from-registry --endpoint` remains a local-only usage error.
+- [x] Resume/continue cleanup behavior remains correct for retained temporary
+      checkouts.
+- [x] README, workflow-run skill docs, and tests are updated.
+- [x] Typecheck, Biome lint, targeted tests, and `git diff --check` pass.
 
 ## Addressed Feedback
 
-- Step 3 design review had no high or mid findings.
-- Accepted feedback requires explicit `workflow run --from-registry` behavior,
-  temporary checkout, validation, option forwarding, registry metadata reuse,
-  provenance, cleanup, and docs/test expectations. Each item is represented in
-  TASK-001 through TASK-006.
-- The plan keeps codex-agent execution unchanged and limits implementation to
-  CLI/package-resolution boundaries, matching the accepted design boundary.
+- Step 3 accepted the revised design with no remaining high or mid findings.
+- Step 4 self-review high finding: the prior on-disk plan was package-id-only
+  and did not map to GitHub URL or shorthand targets. This revision replaces it
+  with accepted-design coverage for package ids, GitHub URLs, shorthand,
+  provenance, endpoint rejection, cleanup, tests, and docs.
+- Step 4 self-review high finding: the prior on-disk plan was marked
+  `Completed` with completed checkboxes. This revision resets the plan to
+  `Ready`, marks implementation tasks `Not Started`, and keeps completion
+  criteria unchecked.
+- Step 4 self-review mid finding: required test and documentation coverage was
+  incomplete. TASK-005 and TASK-006 now name CLI/package/checkout tests,
+  README, workflow-run skill docs, and QA alignment.
+- Step 5 mid finding: the provenance contract omitted `originalTarget` and
+  retained-run provenance fields required by the accepted design. The contract,
+  TASK-004 criteria, TASK-005 assertions, and completion criteria now name
+  original target, registry id/url, source path/source directory, checksum
+  algorithm, integrity verification, session-retention path, and cleanup owner.
+- Step 7 mid finding: legacy retained package-id provenance files were no
+  longer readable after adding required provenance fields. The reader now
+  normalizes the legacy file shape with package-id target kind, `originalTarget`
+  from `packageId`, `integrityVerified: true`, and
+  `verification: "package-integrity"`, with a resume cleanup regression test.
+- Step 7 mid finding: branchless GitHub URL resolution ignored explicit invalid
+  `--registry` selectors and fell through to GitHub default-branch metadata.
+  The resolver now returns `INVALID_REGISTRY` before any GitHub fetch, with
+  regression coverage.
+- Step 7 low finding: branchless default-branch failure-before-staging coverage
+  was incomplete. Tests now assert malformed GitHub default-branch metadata
+  fails before contents fetch and invalid registry selectors fail before any
+  fetch.
+- Step 2 intentional divergences are preserved: raw GitHub URLs may use reduced
+  provenance, shorthand is registry-qualified and ambiguity-rejecting, and no
+  Cursor/codex-agent behavior is introduced.
 
 ## Risks
 
-- Cleanup that runs too early can break workflow-local prompt, script, add-on,
-  or container file reads.
-- Removed temporary workflow directories make resume/rerun diagnostics depend
-  on provenance quality.
-- Existing checkout helpers may assume persistent destinations; temporary run
-  code must avoid provenance and skill-install side effects.
-- Registry-backed execution can run remote content; the explicit
-  `--from-registry` flag and validation are required to avoid surprising
-  execution.
-- Test fixtures must avoid default registry/network dependencies to remain
-  deterministic.
+- GitHub default-branch metadata lookup can accidentally start staging too
+  early unless resolver ordering is explicit.
+- Shorthand matching can run the wrong workflow if ambiguity detection misses
+  package-name, workflow-id, or terminal-path duplicates.
+- Raw URL reduced provenance can be misread as package integrity unless output
+  fields are explicit.
+- Temporary checkout cleanup can regress resume/continue if new target-kind
+  provenance is not compatible with retained registry-run records.
+- Fake-fetch tests must cover branchless/default-branch behavior without
+  depending on live GitHub availability.
 
 ## Progress Log
 
-### Session: 2026-05-28 20:46
+### Session: 2026-05-29 08:10
 
-**Tasks Completed**: Created initial implementation plan from accepted Step 3
-design.
+**Tasks Completed**: Revised the prior completed package-id temporary run plan
+after Step 4 self-review required revision.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Later TypeScript implementation steps must use the repository
-ts-coding and check-and-test-after-modify requirements after any TypeScript
-file changes.
+**Notes**: Later TypeScript implementation must use repository TypeScript
+coding standards and must run check/test verification after TypeScript edits.
 
-### Session: 2026-05-28 21:10
+### Session: 2026-05-29 08:25
+
+**Tasks Completed**: Addressed Step 5 implementation-plan review feedback by
+making original-target, package provenance, and retained-run cleanup metadata
+explicit in contracts, TASK-004, TASK-005, and completion criteria.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Accepted design did not require revision; this was a plan
+completeness fix.
+
+### Session: 2026-05-29 07:55
 
 **Tasks Completed**: TASK-001 through TASK-006.
 **Tasks In Progress**: None.
-**Blockers**: The rielflow implementation workflow dispatched design and plan
-steps successfully, then stalled before recording the implementation step; the
-accepted design/plan was used to complete implementation in the same feature
-worktree.
-**Notes**: Verified with `bun run lint:biome`, `bun run typecheck`,
-`bun test packages/rielflow/src/cli.test.ts packages/rielflow/src/workflow/packages/packages.test.ts`,
-and `git diff --check`.
+**Blockers**: None.
+**Notes**: Implemented package-id preservation, GitHub directory URL temporary
+checkout, branchless ref resolution, registered shorthand resolution,
+package-backed and raw-GitHub provenance, retained-run compatibility,
+README/workflow-run skill refresh, and targeted regression coverage. Typecheck,
+Biome, package/checkout tests, focused CLI registry/resume/continue tests, and
+`git diff --check` pass. The broader `cli.test.ts` targeted suite still exposes
+an unrelated pre-existing failure in `workflow status and session commands share
+direct workflow-definition storage outside project scopes`.
 
-### Session: 2026-05-28 21:24
+### Session: 2026-05-29 08:03
 
-**Tasks Completed**: Step 6 self-review feedback follow-up.
+**Tasks Completed**: Step 7 revision pass for raw GitHub URL correctness.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Reviewed the unrelated formatting/code-shape self-review finding.
-Attempted to remove the non-feature formatting files from the branch diff by
-restoring them to the parent revision, but `bun run lint:biome` then failed on
-those parent versions. Kept the Biome-only formatting changes because they are
-required for the repository post-TypeScript-modification lint gate; no feature
-behavior was added to those files.
+**Notes**: Addressed Step 7 mid findings by wrapping GitHub default-branch
+metadata JSON parsing in a typed fetch failure and by constructing raw GitHub
+run provenance from the resolver-selected `fetchGitHubDirectoryToStaging`
+result. Added regression coverage for malformed default-branch metadata and
+slash-containing tree refs. Typecheck, Biome, package/checkout tests, focused
+CLI registry/resume/continue tests, and `git diff --check` pass.
 
-### Session: 2026-05-28 21:47
+### Session: 2026-05-29 08:08
 
-**Tasks Completed**: Step 7 implementation review follow-up.
+**Tasks Completed**: Second Step 7 revision pass for package-id compatibility
+and branchless URL precedence.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Addressed the mid-severity Step 7 finding in
-`packages/rielflow/src/cli/workflow-run-command.ts` by running temporary
-registry cleanup only for terminal successful sessions and retaining the
-temporary checkout for paused/non-terminal sessions. Added a focused paused
-registry-run regression test in `packages/rielflow/src/cli.test.ts`.
+**Notes**: Preserved scoped package ids such as `@scope/name` by classifying
+valid package names before shorthand fallback, and changed branchless GitHub URL
+resolution to honor explicit `--branch` before consulting registry default
+branches. Added regression coverage for scoped package-id temporary runs and
+`--branch` precedence over an invalid `--registry`. Typecheck, Biome,
+package/checkout tests, focused CLI registry/resume/continue tests, and
+`git diff --check` pass.
+
+### Session: 2026-05-29 09:05
+
+**Tasks Completed**: Step 6 implementation verification rerun.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Reconfirmed accepted Step 5 plan alignment and reran required
+checks. Checkout/package tests, focused CLI registry temporary-run tests,
+typecheck, Biome, and `git diff --check` pass. Full `cli.test.ts` still has the
+same unrelated failure in `workflow status and session commands share direct
+workflow-definition storage outside project scopes`.
+
+### Session: 2026-05-29 09:35
+
+**Tasks Completed**: Step 7 review remediation for retained provenance
+compatibility and explicit registry selector handling.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Added legacy package provenance normalization, invalid branchless
+GitHub `--registry` rejection before fallback/fetch, and regression coverage for
+legacy resume cleanup plus branchless failure-before-staging behavior. Checkout
+and package tests, focused CLI registry/resume tests, typecheck, Biome, and
+`git diff --check` pass.
 
 ## Related Plans
 
 - **Depends On**: `impl-plans/active/workflow-package-registry.md`
 - **Depends On**: `impl-plans/active/workflow-package-checkout.md`
 - **Related**: `impl-plans/active/workflow-package-checkout-search.md`
+- **Related**: `impl-plans/active/workflow-registry-run-resume-cleanup.md`

@@ -241,6 +241,15 @@ fetch and validate the package without consulting a persistent checkout record:
 `registryId`, `registryUrl`, `packageName`, `workflowId`, `workflowDirectory`,
 `sourceBranch`, `sourcePath`, `checksum`, and `checksumAlgorithm`.
 
+Temporary `workflow run --from-registry` also uses registry metadata to resolve
+registered shorthand targets such as `<registry-owner>/<workflow-dir>`. The
+resolver must derive the registry owner from each registered GitHub registry
+URL, filter by optional `--registry`, and require exactly one package whose
+`packageName`, `workflowId`, or terminal `sourcePath` segment matches
+`<workflow-dir>`. Package-id lookup remains unchanged and exact package-name
+matches keep the existing package resolution behavior. Ambiguous shorthand
+matches must fail before content checkout begins.
+
 Index generation should scan the registry working tree for
 `rielflow-package.json`, load the referenced workflow bundle, validate it through
 the existing workflow loader/validator path, and then emit only valid packages.
@@ -357,11 +366,14 @@ project or user catalog.
 
 ## Temporary Run Integration
 
-`workflow run --from-registry <package-id>` consumes registry metadata like
-checkout but produces no persistent install. The registry layer should expose a
-resolver that returns the same package selection fields used by checkout:
-package identity, registry URL/id, branch/ref, source path, workflow directory,
-manifest path, checksum, checksum algorithm, and derived workflow id.
+`workflow run --from-registry <target>` consumes registry metadata like checkout
+when the target is a package id or registered shorthand, but produces no
+persistent install. The registry layer should expose a resolver that returns the
+same package selection fields used by checkout: package identity, registry
+URL/id, branch/ref, source path, workflow directory, manifest path, checksum,
+checksum algorithm, and derived workflow id. Direct GitHub directory URL targets
+that are not backed by package metadata bypass package resolution and use the
+GitHub directory checkout path with reduced provenance.
 
 The temporary run caller owns lifecycle and cleanup. Registry metadata services
 must remain side-effect limited to registry config reads, cache reads/refreshes

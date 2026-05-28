@@ -3,6 +3,8 @@ import { loadWorkflowFromCatalog } from "../workflow/load";
 import {
   checkoutWorkflowPackageForTemporaryRun,
   type WorkflowPackageTemporaryRunCheckoutResult,
+  workflowRegistryRunTextSummary,
+  workflowRegistryRunTemporaryWorkflowDirectory,
 } from "../workflow/packages";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { isTerminalWorkflowSessionStatus } from "../workflow/session";
@@ -32,6 +34,15 @@ import {
   workflowSourceJson,
 } from "./workflow-graphql-formatters";
 
+function retainedRegistryStatus(
+  status: string,
+): "paused" | "running" | "waiting" {
+  if (status === "running" || status === "waiting") {
+    return status;
+  }
+  return "paused";
+}
+
 async function cleanupTemporaryRegistryRun(
   checkout: WorkflowPackageTemporaryRunCheckoutResult | undefined,
 ): Promise<RegistryRunCleanupOutput | undefined> {
@@ -56,7 +67,7 @@ function skippedTemporaryRegistryRunCleanup(
     skipped: true,
     reason,
     remainingPaths: [
-      checkout.provenance.temporaryWorkflowDirectory,
+      workflowRegistryRunTemporaryWorkflowDirectory(checkout.provenance),
       checkout.packageStagingDirectory,
     ],
   };
@@ -167,7 +178,7 @@ export async function runCliWorkflowRunCommand(
 
   const registryCheckout = parsed.options.fromRegistry
     ? await checkoutWorkflowPackageForTemporaryRun({
-        packageName: workflowTarget,
+        target: workflowTarget,
         ...(parsed.options.registry === undefined
           ? {}
           : { registry: parsed.options.registry }),
@@ -175,6 +186,9 @@ export async function runCliWorkflowRunCommand(
           ? {}
           : { branch: parsed.options.branch }),
         options: sharedOptions,
+        ...(context.deps.fetchImpl === undefined
+          ? {}
+          : { fetchImpl: context.deps.fetchImpl }),
       })
     : undefined;
   if (registryCheckout !== undefined && !registryCheckout.ok) {
@@ -257,22 +271,6 @@ export async function runCliWorkflowRunCommand(
       ? {}
       : { maxConcurrency: parsed.options.maxConcurrency }),
   });
-  const provenancePersistError =
-    registryRun === undefined
-      ? undefined
-      : result.ok
-        ? await persistRegistryRunProvenance({
-            options: sharedOptions,
-            sessionId: result.value.session.sessionId,
-            provenance: registryRun.provenance,
-          })
-        : result.error.sessionId === undefined
-          ? undefined
-          : await persistRegistryRunProvenance({
-              options: sharedOptions,
-              sessionId: result.error.sessionId,
-              provenance: registryRun.provenance,
-            });
   if (!result.ok) {
     const cleanup = await cleanupTemporaryRegistryRun(registryRun);
     if (parsed.options.output === "json") {
@@ -292,13 +290,22 @@ export async function runCliWorkflowRunCommand(
       if (cleanup !== undefined && !cleanup.ok && !("skipped" in cleanup)) {
         io.stderr(`cleanup warning: ${cleanup.error}`);
       }
-      if (provenancePersistError !== undefined) {
-        io.stderr(`provenance warning: ${provenancePersistError}`);
-      }
     }
     return result.error.exitCode;
   }
 
+  const provenancePersistError =
+    registryRun === undefined ||
+    isTerminalWorkflowSessionStatus(result.value.session.status)
+      ? undefined
+      : await persistRegistryRunProvenance({
+          options: sharedOptions,
+          sessionId: result.value.session.sessionId,
+          provenance: registryRun.provenance,
+          retainedForStatus: retainedRegistryStatus(
+            result.value.session.status,
+          ),
+        });
   const cleanup = isTerminalWorkflowSessionStatus(result.value.session.status)
     ? await cleanupTemporaryRegistryRun(registryRun)
     : skippedTemporaryRegistryRunCleanup(
@@ -335,7 +342,7 @@ export async function runCliWorkflowRunCommand(
     }
     if (registryRun !== undefined) {
       io.stdout(
-        `registry: ${registryRun.provenance.packageId} ${registryRun.provenance.registryUrl}#${registryRun.provenance.registryRef}`,
+        `registry: ${workflowRegistryRunTextSummary(registryRun.provenance)}`,
       );
     }
     io.stdout(`run session: ${result.value.session.sessionId}`);

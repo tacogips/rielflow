@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
@@ -177,6 +178,153 @@ async function addWorkflowLocalIdentityFiles(input: {
     "# Package Skill\n\nUsed by package checkout identity metadata tests.\n",
     "utf8",
   );
+}
+
+interface FakeGitHubFile {
+  readonly repoPath: string;
+  readonly content: string;
+}
+
+async function collectWorkflowFiles(input: {
+  readonly workflowRoot: string;
+  readonly workflowName: string;
+  readonly repoDirectoryPath: string;
+}): Promise<readonly FakeGitHubFile[]> {
+  const workflowDirectory = path.join(input.workflowRoot, input.workflowName);
+  const files: FakeGitHubFile[] = [];
+  async function visit(directory: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      files.push({
+        repoPath: `${input.repoDirectoryPath}/${path
+          .relative(workflowDirectory, entryPath)
+          .split(path.sep)
+          .join("/")}`,
+        content: await readFile(entryPath, "utf8"),
+      });
+    }
+  }
+  await visit(workflowDirectory);
+  return files;
+}
+
+function createFakeGitHubFetch(input: {
+  readonly owner?: string;
+  readonly repository?: string;
+  readonly ref?: string;
+  readonly defaultBranch?: string;
+  readonly files: readonly FakeGitHubFile[];
+}): typeof fetch {
+  const owner = input.owner ?? "org";
+  const repository = input.repository ?? "repo";
+  const ref = input.ref ?? "main";
+  const directoryEntries = new Map<
+    string,
+    { type: "dir" | "file"; path: string; download_url?: string }[]
+  >();
+  const fileContents = new Map<string, string>();
+  for (const file of input.files) {
+    fileContents.set(file.repoPath, file.content);
+    const segments = file.repoPath.split("/");
+    for (let index = 1; index < segments.length; index += 1) {
+      const directory = segments.slice(0, index).join("/");
+      if (!directoryEntries.has(directory)) {
+        directoryEntries.set(directory, []);
+      }
+    }
+  }
+  for (const file of input.files) {
+    const segments = file.repoPath.split("/");
+    for (let index = 1; index < segments.length; index += 1) {
+      const directory = segments.slice(0, index).join("/");
+      const childPath = segments.slice(0, index + 1).join("/");
+      const entries = directoryEntries.get(directory);
+      if (
+        entries === undefined ||
+        entries.some((entry) => entry.path === childPath)
+      ) {
+        continue;
+      }
+      entries.push(
+        index === segments.length - 1
+          ? {
+              type: "file",
+              path: childPath,
+              download_url: `https://download.local/${encodeURIComponent(childPath)}`,
+            }
+          : { type: "dir", path: childPath },
+      );
+    }
+  }
+  return (async (url: string | URL | Request): Promise<Response> => {
+    const urlString =
+      typeof url === "string" || url instanceof URL ? url.toString() : url.url;
+    const parsed = new URL(urlString);
+    if (parsed.hostname === "download.local") {
+      const content = fileContents.get(
+        decodeURIComponent(parsed.pathname.slice(1)),
+      );
+      return content === undefined
+        ? new Response("missing", { status: 404 })
+        : new Response(content);
+    }
+    const repoPathPrefix = `/repos/${owner}/${repository}`;
+    if (
+      parsed.hostname === "api.github.com" &&
+      parsed.pathname === repoPathPrefix
+    ) {
+      return new Response(
+        JSON.stringify({ default_branch: input.defaultBranch ?? ref }),
+      );
+    }
+    const contentsPrefix = `${repoPathPrefix}/contents/`;
+    if (
+      parsed.hostname !== "api.github.com" ||
+      parsed.searchParams.get("ref") !== ref ||
+      !parsed.pathname.startsWith(contentsPrefix)
+    ) {
+      return new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
+      });
+    }
+    const repoPath = decodeURIComponent(
+      parsed.pathname.slice(contentsPrefix.length),
+    );
+    const entries = directoryEntries.get(repoPath);
+    return entries === undefined
+      ? new Response(JSON.stringify({ message: "Not Found" }), { status: 404 })
+      : new Response(JSON.stringify(entries), {
+          headers: { "content-type": "application/json" },
+        });
+  }) as typeof fetch;
+}
+
+async function createRemoteWorkflowFiles(input: {
+  readonly root: string;
+  readonly workflowName: string;
+  readonly repoDirectoryPath?: string;
+}): Promise<readonly FakeGitHubFile[]> {
+  const created = await createWorkflowTemplate(input.workflowName, {
+    workflowRoot: input.root,
+    templateMode: "worker-only",
+  });
+  if (!created.ok) {
+    throw new Error(created.error.message);
+  }
+  return collectWorkflowFiles({
+    workflowRoot: input.root,
+    workflowName: input.workflowName,
+    repoDirectoryPath:
+      input.repoDirectoryPath ?? `.rielflow/workflows/${input.workflowName}`,
+  });
 }
 
 async function refreshPackageManifestDigests(input: {
@@ -610,8 +758,12 @@ describe("workflow package registry", () => {
         ),
       ),
     ).toBe(true);
-    expect(checkedOut.value.provenance.packageId).toBe("temp-run-flow");
-    expect(checkedOut.value.provenance.registryId).toBe("local");
+    expect(checkedOut.value.provenance.targetKind).toBe("package-id");
+    if (checkedOut.value.provenance.targetKind !== "package-id") {
+      throw new Error("expected package-id provenance");
+    }
+    expect(checkedOut.value.provenance.package.packageId).toBe("temp-run-flow");
+    expect(checkedOut.value.provenance.package.registryId).toBe("local");
     expect(
       await pathExists(path.join(userRoot, "workflow-registry", "checkouts")),
     ).toBe(false);
@@ -629,6 +781,365 @@ describe("workflow package registry", () => {
     expect(await pathExists(checkedOut.value.packageStagingDirectory)).toBe(
       false,
     );
+  });
+
+  test("temporary run checkout accepts raw GitHub tree URL with reduced provenance", async () => {
+    const root = await makeTempDir();
+    const userRoot = await makeTempDir();
+    const files = await createRemoteWorkflowFiles({
+      root,
+      workflowName: "raw-flow",
+    });
+
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      target:
+        "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-flow",
+      options: { userRoot },
+      fetchImpl: createFakeGitHubFetch({ files }),
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error(checkedOut.error.message);
+    }
+    expect(checkedOut.value.targetKind).toBe("github-directory-url");
+    expect(checkedOut.value.provenance).toMatchObject({
+      targetKind: "github-directory-url",
+      github: {
+        originalTarget:
+          "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-flow",
+        owner: "org",
+        repository: "repo",
+        ref: "main",
+        directoryPath: ".rielflow/workflows/raw-flow",
+        verification: "workflow-bundle-only",
+      },
+    });
+    expect(
+      await pathExists(
+        path.join(checkedOut.value.workflowDefinitionDir, "raw-flow"),
+      ),
+    ).toBe(true);
+    const cleanup = await checkedOut.value.cleanup();
+    expect(cleanup.ok).toBe(true);
+  });
+
+  test("temporary run checkout reports slash-containing GitHub refs in provenance", async () => {
+    const root = await makeTempDir();
+    const userRoot = await makeTempDir();
+    const files = await createRemoteWorkflowFiles({
+      root,
+      workflowName: "slash-ref-flow",
+    });
+
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      target:
+        "https://github.com/org/repo/tree/feature/topic/.rielflow/workflows/slash-ref-flow",
+      options: { userRoot },
+      fetchImpl: createFakeGitHubFetch({ ref: "feature/topic", files }),
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error(checkedOut.error.message);
+    }
+    expect(checkedOut.value.provenance.targetKind).toBe("github-directory-url");
+    if (checkedOut.value.provenance.targetKind !== "github-directory-url") {
+      throw new Error("expected GitHub provenance");
+    }
+    expect(checkedOut.value.provenance.github).toMatchObject({
+      ref: "feature/topic",
+      directoryPath: ".rielflow/workflows/slash-ref-flow",
+      sourcePath: ".rielflow/workflows/slash-ref-flow",
+      sourceUrl:
+        "https://github.com/org/repo/tree/feature/topic/.rielflow/workflows/slash-ref-flow",
+    });
+    await checkedOut.value.cleanup();
+  });
+
+  test("temporary run checkout reports invalid GitHub directory URLs before package lookup", async () => {
+    const userRoot = await makeTempDir();
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      target: "https://github.com/org/repo/tree/main",
+      options: { userRoot },
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ message: "unexpected fetch" }), {
+          status: 500,
+        }),
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("FETCH_FAILED");
+      expect(checkedOut.error.message).toContain(
+        "invalid GitHub directory URL",
+      );
+    }
+  });
+
+  test("temporary run checkout reports malformed GitHub default branch metadata", async () => {
+    const userRoot = await makeTempDir();
+    let contentsFetches = 0;
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      target: "https://github.com/org/repo/.rielflow/workflows/raw-flow",
+      options: { userRoot },
+      fetchImpl: async (url: string | URL | Request) => {
+        const urlString =
+          typeof url === "string" || url instanceof URL
+            ? url.toString()
+            : url.url;
+        const parsed = new URL(urlString);
+        if (
+          parsed.hostname === "api.github.com" &&
+          parsed.pathname === "/repos/org/repo"
+        ) {
+          return new Response("{not-json", { status: 200 });
+        }
+        if (
+          parsed.hostname === "api.github.com" &&
+          parsed.pathname.startsWith("/repos/org/repo/contents/")
+        ) {
+          contentsFetches += 1;
+        }
+        return new Response(JSON.stringify({ message: "unexpected fetch" }), {
+          status: 500,
+        });
+      },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("FETCH_FAILED");
+      expect(checkedOut.error.message).toContain(
+        "GitHub repository metadata response is not JSON",
+      );
+    }
+    expect(contentsFetches).toBe(0);
+  });
+
+  test("temporary run checkout rejects invalid registry selectors before branchless GitHub fallback", async () => {
+    const userRoot = await makeTempDir();
+    let fetches = 0;
+    const checkedOut = await checkoutWorkflowPackageForTemporaryRun({
+      target: "https://github.com/org/repo/.rielflow/workflows/raw-flow",
+      registry: "missing",
+      options: { userRoot },
+      fetchImpl: async () => {
+        fetches += 1;
+        return new Response(JSON.stringify({ default_branch: "main" }));
+      },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("INVALID_REGISTRY");
+      expect(checkedOut.error.message).toContain("missing");
+    }
+    expect(fetches).toBe(0);
+  });
+
+  test("temporary run checkout resolves branchless GitHub URL from branch, registry default branch, and GitHub metadata", async () => {
+    const root = await makeTempDir();
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const files = await createRemoteWorkflowFiles({
+      root,
+      workflowName: "branchless-flow",
+    });
+    const byBranch = await checkoutWorkflowPackageForTemporaryRun({
+      target: "https://github.com/org/repo/.rielflow/workflows/branchless-flow",
+      branch: "feature",
+      options: { userRoot },
+      fetchImpl: createFakeGitHubFetch({ ref: "feature", files }),
+    });
+    expect(byBranch.ok).toBe(true);
+    if (byBranch.ok) {
+      expect(byBranch.value.provenance.targetKind).toBe("github-directory-url");
+      if (byBranch.value.provenance.targetKind !== "github-directory-url") {
+        throw new Error("expected GitHub provenance");
+      }
+      expect(byBranch.value.provenance.github.ref).toBe("feature");
+      await byBranch.value.cleanup();
+    }
+
+    const byBranchWithInvalidRegistry =
+      await checkoutWorkflowPackageForTemporaryRun({
+        target:
+          "https://github.com/org/repo/.rielflow/workflows/branchless-flow",
+        branch: "feature",
+        registry: "missing",
+        options: { userRoot },
+        fetchImpl: createFakeGitHubFetch({ ref: "feature", files }),
+      });
+    expect(byBranchWithInvalidRegistry.ok).toBe(true);
+    if (byBranchWithInvalidRegistry.ok) {
+      expect(byBranchWithInvalidRegistry.value.provenance.targetKind).toBe(
+        "github-directory-url",
+      );
+      if (
+        byBranchWithInvalidRegistry.value.provenance.targetKind !==
+        "github-directory-url"
+      ) {
+        throw new Error("expected GitHub provenance");
+      }
+      expect(byBranchWithInvalidRegistry.value.provenance.github.ref).toBe(
+        "feature",
+      );
+      await byBranchWithInvalidRegistry.value.cleanup();
+    }
+
+    const registered = await registerWorkflowPackageRegistry({
+      id: "remote",
+      url: "https://github.com/org/repo",
+      localPath: registryRoot,
+      branch: "trunk",
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const byRegistry = await checkoutWorkflowPackageForTemporaryRun({
+      target: "https://github.com/org/repo/.rielflow/workflows/branchless-flow",
+      registry: "remote",
+      options: { userRoot },
+      fetchImpl: createFakeGitHubFetch({ ref: "trunk", files }),
+    });
+    expect(byRegistry.ok).toBe(true);
+    if (byRegistry.ok) {
+      expect(byRegistry.value.provenance.targetKind).toBe(
+        "github-directory-url",
+      );
+      if (byRegistry.value.provenance.targetKind !== "github-directory-url") {
+        throw new Error("expected GitHub provenance");
+      }
+      expect(byRegistry.value.provenance.github.ref).toBe("trunk");
+      await byRegistry.value.cleanup();
+    }
+
+    const byMetadata = await checkoutWorkflowPackageForTemporaryRun({
+      target:
+        "https://github.com/other/repo/.rielflow/workflows/branchless-flow",
+      options: { userRoot },
+      fetchImpl: createFakeGitHubFetch({
+        owner: "other",
+        ref: "default",
+        defaultBranch: "default",
+        files,
+      }),
+    });
+    expect(byMetadata.ok).toBe(true);
+    if (byMetadata.ok) {
+      expect(byMetadata.value.provenance.targetKind).toBe(
+        "github-directory-url",
+      );
+      if (byMetadata.value.provenance.targetKind !== "github-directory-url") {
+        throw new Error("expected GitHub provenance");
+      }
+      expect(byMetadata.value.provenance.github.ref).toBe("default");
+      await byMetadata.value.cleanup();
+    }
+  });
+
+  test("temporary run checkout preserves scoped package-id behavior", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "@scope/scoped-flow",
+      workflowName: "scoped-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const resolved = await checkoutWorkflowPackageForTemporaryRun({
+      target: "@scope/scoped-flow",
+      registry: "local",
+      options: { userRoot },
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) {
+      expect(resolved.value.targetKind).toBe("package-id");
+      expect(resolved.value.provenance.targetKind).toBe("package-id");
+      if (resolved.value.provenance.targetKind !== "package-id") {
+        throw new Error("expected package provenance");
+      }
+      expect(resolved.value.provenance.package.packageId).toBe(
+        "@scope/scoped-flow",
+      );
+      await resolved.value.cleanup();
+    }
+  });
+
+  test("temporary run checkout resolves registered shorthand and rejects missing or ambiguous matches", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "alpha-package",
+      workflowName: "alpha-flow",
+    });
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "ambiguous-a",
+      workflowName: "ambiguous-flow",
+    });
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "ambiguous-b",
+      workflowName: "ambiguous-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const resolved = await checkoutWorkflowPackageForTemporaryRun({
+      target: "example/alpha-flow",
+      registry: "local",
+      options: { userRoot },
+    });
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) {
+      expect(resolved.value.targetKind).toBe("registered-shorthand");
+      expect(resolved.value.provenance.targetKind).toBe("registered-shorthand");
+      if (resolved.value.provenance.targetKind !== "registered-shorthand") {
+        throw new Error("expected package provenance");
+      }
+      expect(resolved.value.provenance.package.originalTarget).toBe(
+        "example/alpha-flow",
+      );
+      expect(resolved.value.provenance.package.packageId).toBe("alpha-package");
+      await resolved.value.cleanup();
+    }
+
+    const missing = await checkoutWorkflowPackageForTemporaryRun({
+      target: "example/missing-flow",
+      registry: "local",
+      options: { userRoot },
+    });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.error.code).toBe("MISSING_PACKAGE");
+    }
+
+    const ambiguous = await checkoutWorkflowPackageForTemporaryRun({
+      target: "example/ambiguous-flow",
+      registry: "local",
+      options: { userRoot },
+    });
+    expect(ambiguous.ok).toBe(false);
+    if (!ambiguous.ok) {
+      expect(ambiguous.error.code).toBe("DUPLICATE_PACKAGE");
+      expect(ambiguous.error.message).toContain("ambiguous-a");
+      expect(ambiguous.error.message).toContain("ambiguous-b");
+    }
   });
 
   test("checkout installs packaged skills and projects project-scope vendor files", async () => {

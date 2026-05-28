@@ -247,19 +247,42 @@ custom workflow collection directory from unexpectedly receiving `AGENTS.md`,
 
 ## Temporary Registry Run Checkout
 
-`workflow run --from-registry <package-id>` uses the package checkout resolver
-and validation flow without creating a persistent project or user installation.
-It is an npx-like execution path for a package workflow that should behave like
-an ordinary local `workflow run` after the temporary bundle has been prepared.
+`workflow run --from-registry <target>` uses the package checkout resolver,
+GitHub directory checkout support, and validation flow without creating a
+persistent project or user installation. It is an npx-like execution path for
+online workflow content that should behave like an ordinary local `workflow run`
+after the temporary bundle has been prepared.
+
+Supported targets:
+
+- package id, preserving existing `workflow run <package-id> --from-registry`
+  behavior
+- GitHub workflow directory URL, including
+  `https://github.com/<owner>/<repo>/tree/<ref>/<workflow-dir>` and
+  `https://github.com/<owner>/<repo>/<workflow-dir>`
+- registered shorthand, written as `<registry-owner>/<workflow-dir>` and
+  resolved from configured registries only
 
 Temporary run checkout data flow:
 
+- classify the target as a package id, GitHub directory URL, or registered
+  shorthand before any network or filesystem mutation
 - resolve package id through registry metadata using optional `--registry` and
-  `--branch`
+  `--branch`; resolve shorthand by filtering registered GitHub registries by
+  owner and requiring a single matching package name, workflow name, or source
+  path terminal segment
+- resolve GitHub URL targets through the existing GitHub directory fetcher;
+  branchless URL targets use `--branch` when supplied, then a matching
+  registered registry default branch, then the repository default branch from
+  GitHub metadata; fail with a usage error before staging if no ref can be
+  resolved
 - fetch or copy the package root into a command-owned temporary staging root
 - validate `rielflow-package.json`, checksum/integrity metadata, and the
   selected workflow bundle through the same validation path used by persistent
-  package checkout
+  package checkout when package metadata exists
+- for direct GitHub directory URL targets without `rielflow-package.json`,
+  validate only the workflow bundle and mark provenance as reduced because
+  package checksum, integrity, and signature verification did not run
 - copy only the workflow bundle into a temporary workflow-definition directory
   whose shape is `<temp-workflow-root>/<workflow-name>/workflow.json`
 - execute the existing local `workflow run` path with
@@ -279,15 +302,26 @@ Execution artifacts should record source provenance separately from checkout
 provenance so a removed temporary directory remains auditable. Required
 provenance fields are:
 
+- `targetKind`: `package-id`, `github-directory-url`, or
+  `registered-shorthand`
+- `originalTarget`
 - `packageId`
 - `workflowName`
+- `registryId`
 - `registryUrl`
 - `registryRef`
+- `repositoryUrl`
 - `sourceDirectory`
 - `metadataPath`
 - `checksum`
 - `checksumAlgorithm`
+- `integrityVerified`
 - `temporaryWorkflowDirectory`
+
+Fields that are not available for raw GitHub directory URL targets should be
+omitted or reported as `null` in JSON output. The output must not synthesize a
+package id, checksum, or integrity result for content that was validated only as
+a workflow bundle.
 
 Temporary cleanup is best-effort after terminal run completion. If cleanup
 fails, the command must report the remaining temporary path and cleanup error in
@@ -304,18 +338,23 @@ provenance record is execution metadata, not normal checkout catalog metadata,
 and must remain separate from `~/.rielflow/workflow-registry/checkouts/`.
 
 Required retained-run provenance records contain a top-level session id and a
-registry package payload with:
+registry package or directory payload with the same nullable-field rules as
+execution output provenance:
 
+- `targetKind`
+- `originalTarget`
 - `packageId`
 - `workflowName`
 - `registryId`
 - `registryUrl`
 - `registryRef`
+- `repositoryUrl`
 - `sourcePath`
 - `sourceDirectory`
 - `metadataPath`
 - `checksum`
 - `checksumAlgorithm`
+- `integrityVerified`
 - `temporaryWorkflowDirectory`
 
 `session resume <session-id>` and local `session continue <session-id> ...`
@@ -354,6 +393,12 @@ The positional run target remains unambiguous: `workflow run <name>` resolves
 local project/user/direct workflows only. The caller must pass
 `--from-registry` to trigger registry resolution, so an unknown local workflow
 does not unexpectedly fetch and execute remote package content.
+
+Package-id resolution keeps the current behavior and output shape except for
+the added `targetKind` and `originalTarget` provenance fields. Slash-containing
+registered shorthand values are never treated as bare local workflow names, and
+they are never fetched unless `--from-registry` is present. Ambiguous shorthand
+matches across registries or packages fail before checkout staging begins.
 
 ## Package Resolution Input
 
@@ -621,9 +666,9 @@ Tracked in `design-docs/user-qa/qa-workflow-package-checkout.md`.
 - Some vendors do not expose safe user-level projection targets; managed-only
   install records avoid unsafe writes while still enabling package update and
   audit.
-- Temporary registry-backed runs cannot be resumed from a deleted workflow
-  bundle unless the execution records enough registry provenance to rehydrate or
-  diagnose the source later.
+- Retained temporary registry-backed checkouts must be cleaned only by the
+  lifecycle command that observes a terminal result; cleaning at pause time
+  breaks resume/continue, while never cleaning leaks package staging data.
 - Package skill projection during temporary execution could unexpectedly mutate
   user or project vendor state, so the first implementation rejects that
   behavior.

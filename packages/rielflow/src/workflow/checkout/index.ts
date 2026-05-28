@@ -25,8 +25,15 @@ export type {
   WorkflowCheckoutRegistryRecord,
 } from "./registry";
 export {
+  buildGitHubTreeDirectoryUrl,
+  fetchGitHubDefaultBranch,
   parseGitHubDirectoryUrl,
+  parseBranchlessGitHubDirectoryUrl,
   fetchGitHubDirectoryToStaging,
+} from "./github-directory";
+export type {
+  BranchlessGitHubDirectoryUrl,
+  GitHubDirectoryUrl,
 } from "./github-directory";
 export {
   resolveWorkflowCheckoutDestination,

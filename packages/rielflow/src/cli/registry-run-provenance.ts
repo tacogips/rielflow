@@ -1,6 +1,12 @@
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { WorkflowPackageRunProvenance } from "../workflow/packages";
+import type {
+  GitHubDirectoryRunProvenance,
+  RetainedRegistryRunProvenance,
+  WorkflowPackageRunProvenance,
+  WorkflowRegistryRunProvenance,
+} from "../workflow/packages";
+import { workflowRegistryRunTemporaryWorkflowDirectory } from "../workflow/packages";
 import { resolveRootDataDir } from "../workflow/paths";
 import type { RunCliSharedOptions } from "./storage-and-options";
 
@@ -18,12 +24,21 @@ export type RegistryRunCleanupOutput =
     };
 
 export function registryRunSourceJson(input: {
-  readonly provenance: WorkflowPackageRunProvenance;
+  readonly provenance: WorkflowRegistryRunProvenance;
   readonly cleanup?: RegistryRunCleanupOutput;
+  readonly retained?: RetainedRegistryRunProvenance;
 }): Readonly<Record<string, unknown>> {
   return {
     source: "registry",
-    package: input.provenance,
+    originalTarget:
+      input.provenance.targetKind === "github-directory-url"
+        ? input.provenance.github.originalTarget
+        : input.provenance.package.originalTarget,
+    targetKind: input.provenance.targetKind,
+    ...(input.provenance.targetKind === "github-directory-url"
+      ? { github: input.provenance.github }
+      : { package: input.provenance.package }),
+    ...(input.retained === undefined ? {} : { retained: input.retained }),
     ...(input.cleanup === undefined ? {} : { cleanup: input.cleanup }),
   };
 }
@@ -31,21 +46,34 @@ export function registryRunSourceJson(input: {
 export async function persistRegistryRunProvenance(input: {
   readonly options: RunCliSharedOptions;
   readonly sessionId: string;
-  readonly provenance: WorkflowPackageRunProvenance;
+  readonly provenance: WorkflowRegistryRunProvenance;
+  readonly retainedForStatus?: "paused" | "running" | "waiting";
 }): Promise<string | undefined> {
   try {
     const directory = registryRunProvenanceDirectory(input.options);
+    const provenancePath = registryRunProvenancePath({
+      options: input.options,
+      sessionId: input.sessionId,
+    });
     await mkdir(directory, { recursive: true });
     await writeFile(
-      registryRunProvenancePath({
-        options: input.options,
-        sessionId: input.sessionId,
-      }),
+      provenancePath,
       `${JSON.stringify(
         {
           source: "registry",
           sessionId: input.sessionId,
-          package: input.provenance,
+          targetKind: input.provenance.targetKind,
+          retained: {
+            sessionId: input.sessionId,
+            retainedForStatus: input.retainedForStatus ?? "paused",
+            temporaryWorkflowDirectory:
+              workflowRegistryRunTemporaryWorkflowDirectory(input.provenance),
+            retainedProvenancePath: provenancePath,
+            cleanupOwner: "workflow-run",
+          },
+          ...(input.provenance.targetKind === "github-directory-url"
+            ? { github: input.provenance.github }
+            : { package: input.provenance.package }),
         },
         null,
         2,
@@ -58,10 +86,22 @@ export async function persistRegistryRunProvenance(input: {
   }
 }
 
+export async function removeRegistryRunProvenance(input: {
+  readonly options: RunCliSharedOptions;
+  readonly sessionId: string;
+}): Promise<string | undefined> {
+  try {
+    await rm(registryRunProvenancePath(input), { force: true });
+    return undefined;
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : "unknown error";
+  }
+}
+
 export async function readRegistryRunProvenance(input: {
   readonly options: RunCliSharedOptions;
   readonly sessionId: string;
-}): Promise<WorkflowPackageRunProvenance | undefined> {
+}): Promise<WorkflowRegistryRunProvenance | undefined> {
   let raw: string;
   try {
     raw = await readFile(registryRunProvenancePath(input), "utf8");
@@ -87,34 +127,52 @@ export async function readRegistryRunProvenance(input: {
   ) {
     return undefined;
   }
+  if (parsed["targetKind"] === "github-directory-url") {
+    const githubPayload = parsed["github"];
+    return isGitHubDirectoryRunProvenance(githubPayload)
+      ? { targetKind: "github-directory-url", github: githubPayload }
+      : undefined;
+  }
   const packagePayload = parsed["package"];
-  return isWorkflowPackageRunProvenance(packagePayload)
-    ? packagePayload
-    : undefined;
+  const packageProvenance =
+    normalizeWorkflowPackageRunProvenance(packagePayload);
+  return packageProvenance === undefined
+    ? undefined
+    : {
+        targetKind:
+          parsed["targetKind"] === "registered-shorthand"
+            ? "registered-shorthand"
+            : "package-id",
+        package: packageProvenance,
+      };
 }
 
 export function registryRunWorkflowRoot(
-  provenance: WorkflowPackageRunProvenance,
+  provenance: WorkflowRegistryRunProvenance,
 ): string {
-  return path.dirname(provenance.temporaryWorkflowDirectory);
+  return path.dirname(
+    workflowRegistryRunTemporaryWorkflowDirectory(provenance),
+  );
 }
 
 export function skippedRetainedRegistryRunCleanup(
-  provenance: WorkflowPackageRunProvenance,
+  provenance: WorkflowRegistryRunProvenance,
   reason: string,
 ): RegistryRunCleanupOutput {
   return {
     ok: false,
     skipped: true,
     reason,
-    remainingPaths: [provenance.temporaryWorkflowDirectory],
+    remainingPaths: [workflowRegistryRunTemporaryWorkflowDirectory(provenance)],
   };
 }
 
-export async function cleanupRetainedRegistryRunCheckout(
-  provenance: WorkflowPackageRunProvenance,
-): Promise<RegistryRunCleanupOutput> {
-  const temporaryRoot = retainedRegistryTemporaryRoot(provenance);
+export async function cleanupRetainedRegistryRunCheckout(input: {
+  readonly options: RunCliSharedOptions;
+  readonly sessionId: string;
+  readonly provenance: WorkflowRegistryRunProvenance;
+}): Promise<RegistryRunCleanupOutput> {
+  const temporaryRoot = retainedRegistryTemporaryRoot(input.provenance);
   if (temporaryRoot === undefined) {
     return {
       ok: false,
@@ -125,6 +183,10 @@ export async function cleanupRetainedRegistryRunCheckout(
 
   try {
     await rm(temporaryRoot, { recursive: true, force: true });
+    const provenanceError = await removeRegistryRunProvenance(input);
+    if (provenanceError !== undefined) {
+      return { ok: false, error: provenanceError };
+    }
     return {
       ok: true,
       remainingPaths: (await pathExists(temporaryRoot)) ? [temporaryRoot] : [],
@@ -150,10 +212,10 @@ function registryRunProvenancePath(input: {
 }
 
 function retainedRegistryTemporaryRoot(
-  provenance: WorkflowPackageRunProvenance,
+  provenance: WorkflowRegistryRunProvenance,
 ): string | undefined {
   const workflowsDirectory = path.dirname(
-    provenance.temporaryWorkflowDirectory,
+    workflowRegistryRunTemporaryWorkflowDirectory(provenance),
   );
   const temporaryRoot = path.dirname(workflowsDirectory);
   if (path.basename(workflowsDirectory) !== "workflows") {
@@ -184,6 +246,50 @@ function isWorkflowPackageRunProvenance(
   }
   return (
     typeof value["packageId"] === "string" &&
+    typeof value["originalTarget"] === "string" &&
+    typeof value["workflowName"] === "string" &&
+    typeof value["registryId"] === "string" &&
+    typeof value["registryUrl"] === "string" &&
+    typeof value["registryRef"] === "string" &&
+    typeof value["sourcePath"] === "string" &&
+    typeof value["sourceDirectory"] === "string" &&
+    typeof value["metadataPath"] === "string" &&
+    typeof value["checksum"] === "string" &&
+    value["checksumAlgorithm"] === "md5" &&
+    value["integrityVerified"] === true &&
+    value["verification"] === "package-integrity" &&
+    typeof value["temporaryWorkflowDirectory"] === "string"
+  );
+}
+
+function normalizeWorkflowPackageRunProvenance(
+  value: unknown,
+): WorkflowPackageRunProvenance | undefined {
+  if (isWorkflowPackageRunProvenance(value)) {
+    return value;
+  }
+  if (!isLegacyWorkflowPackageRunProvenance(value)) {
+    return undefined;
+  }
+  return {
+    ...value,
+    originalTarget: value.packageId,
+    integrityVerified: true,
+    verification: "package-integrity",
+  };
+}
+
+function isLegacyWorkflowPackageRunProvenance(
+  value: unknown,
+): value is Omit<
+  WorkflowPackageRunProvenance,
+  "originalTarget" | "integrityVerified" | "verification"
+> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value["packageId"] === "string" &&
     typeof value["workflowName"] === "string" &&
     typeof value["registryId"] === "string" &&
     typeof value["registryUrl"] === "string" &&
@@ -194,6 +300,26 @@ function isWorkflowPackageRunProvenance(
     typeof value["checksum"] === "string" &&
     value["checksumAlgorithm"] === "md5" &&
     typeof value["temporaryWorkflowDirectory"] === "string"
+  );
+}
+
+function isGitHubDirectoryRunProvenance(
+  value: unknown,
+): value is GitHubDirectoryRunProvenance {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value["originalTarget"] === "string" &&
+    typeof value["owner"] === "string" &&
+    typeof value["repository"] === "string" &&
+    typeof value["ref"] === "string" &&
+    typeof value["directoryPath"] === "string" &&
+    typeof value["sourceUrl"] === "string" &&
+    typeof value["sourcePath"] === "string" &&
+    typeof value["sourceDirectory"] === "string" &&
+    typeof value["temporaryWorkflowDirectory"] === "string" &&
+    value["verification"] === "workflow-bundle-only"
   );
 }
 
