@@ -521,9 +521,9 @@ export function normalizeNodePayload(input: {
           return;
         }
 
-        const sourceRef = entry["sourceRef"];
-        const sourcePath = entry["sourcePath"];
-        const required = entry["required"];
+        const sourceRef = entry["sourceRef"],
+          sourcePath = entry["sourcePath"],
+          required = entry["required"];
 
         parsed.push({
           targetPath,

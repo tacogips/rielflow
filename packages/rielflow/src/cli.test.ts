@@ -11,13 +11,17 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { runCli, type CliDependencies } from "./cli";
 import { parseArgs } from "./cli/argument-parser";
+import {
+  persistRegistryRunProvenance,
+  readRegistryRunProvenance,
+} from "./cli/registry-run-provenance";
 import { createWorkflowTemplate } from "./workflow/create";
 import { computeWorkflowPackageChecksum } from "./workflow/packages/checksum";
 import { WORKFLOW_PACKAGE_MANIFEST_FILE } from "./workflow/packages/types";
 import { mockAgentCliCommands } from "./workflow/runtime-readiness-agent-probes-test-helpers";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
-import { ok } from "./workflow/result";
+import { err, ok } from "./workflow/result";
 import type {
   NodeAddonDefinition,
   ResolvedWorkflowSource,
@@ -42,6 +46,82 @@ async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "rielflow-cli-test-"));
   tempDirs.push(directory);
   return directory;
+}
+
+async function writeRetainedRegistryRunProvenance(input: {
+  readonly rootDataDir: string;
+  readonly userRoot: string;
+  readonly sessionStoreRoot: string;
+  readonly sessionId: string;
+  readonly temporaryRoot: string;
+  readonly temporaryWorkflowDirectory: string;
+}): Promise<void> {
+  const error = await persistRegistryRunProvenance({
+    options: {
+      rootDataDir: input.rootDataDir,
+      userRoot: input.userRoot,
+      sessionStoreRoot: input.sessionStoreRoot,
+      env: process.env,
+    },
+    sessionId: input.sessionId,
+    provenance: {
+      targetKind: "package-id",
+      package: {
+        originalTarget: "demo-package",
+        packageId: "demo-package",
+        workflowName: "demo",
+        registryId: "local",
+        registryUrl: "https://github.com/example/rielflow-packages",
+        registryRef: "main",
+        sourcePath: "packages/demo-package",
+        sourceDirectory: path.join(input.temporaryRoot, "package", "demo"),
+        metadataPath: "packages/demo-package/rielflow-package.json",
+        checksum: "abc123",
+        checksumAlgorithm: "md5",
+        integrityVerified: true,
+        verification: "package-integrity",
+        temporaryWorkflowDirectory: input.temporaryWorkflowDirectory,
+      },
+    },
+  });
+  if (error !== undefined) {
+    throw new Error(error);
+  }
+}
+
+async function writeLegacyRetainedRegistryRunProvenance(input: {
+  readonly rootDataDir: string;
+  readonly sessionId: string;
+  readonly temporaryRoot: string;
+  readonly temporaryWorkflowDirectory: string;
+}): Promise<void> {
+  const provenanceDirectory = path.join(input.rootDataDir, "registry-runs");
+  await mkdir(provenanceDirectory, { recursive: true });
+  await writeFile(
+    path.join(provenanceDirectory, `${input.sessionId}.json`),
+    `${JSON.stringify(
+      {
+        source: "registry",
+        sessionId: input.sessionId,
+        package: {
+          packageId: "demo-package",
+          workflowName: "demo",
+          registryId: "local",
+          registryUrl: "https://github.com/example/rielflow-packages",
+          registryRef: "main",
+          sourcePath: "packages/demo-package",
+          sourceDirectory: path.join(input.temporaryRoot, "package", "demo"),
+          metadataPath: "packages/demo-package/rielflow-package.json",
+          checksum: "abc123",
+          checksumAlgorithm: "md5",
+          temporaryWorkflowDirectory: input.temporaryWorkflowDirectory,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 /** `runCli` loads workflows like the production CLI; legacy disk fixtures opt in via the same env knob as `isStrictWorkflowAuthorshipValidation`. */
@@ -713,6 +793,24 @@ describe("runCli", () => {
     expect(parsed.options.preInstallCheckContainer).toBe("auto");
   });
 
+  test("parses explicit registry-backed workflow run flags", () => {
+    const parsed = parseArgs([
+      "workflow",
+      "run",
+      "cli-flow",
+      "--from-registry",
+      "--registry",
+      "local",
+      "--branch",
+      "feature/test",
+    ]);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.options.fromRegistry).toBe(true);
+    expect(parsed.options.registry).toBe("local");
+    expect(parsed.options.branch).toBe("feature/test");
+  });
+
   test("rejects conflicting pre-install check CLI flags", () => {
     const parsed = parseArgs([
       "workflow",
@@ -733,6 +831,7 @@ describe("runCli", () => {
     expect(code).toBe(0);
     expect(capture.stdout.join("\n")).toContain("workflow registry list");
     expect(capture.stdout.join("\n")).toContain("--pre-install-check");
+    expect(capture.stdout.join("\n")).toContain("--from-registry");
     expect(capture.stdout.join("\n")).toContain(
       "--pre-install-check-container docker|podman|auto",
     );
@@ -1435,6 +1534,750 @@ describe("runCli", () => {
     );
     expect(updateCode).toBe(0);
     expect(updateCapture.stdout.join("\n")).toContain('"updated": false');
+  });
+
+  test("workflow run executes registry packages through temporary checkout", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-cli-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-cli-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-cli-flow",
+          version: "1.0.0",
+          description: "Temporary CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-cli-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-cli-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeFile(
+      mockScenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-cli-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--variables",
+          JSON.stringify({ run: "registry" }),
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(0);
+    const payload = JSON.parse(runCapture.stdout.join("\n")) as {
+      sessionId: string;
+      workflowName: string;
+      registrySource: {
+        package: {
+          packageId: string;
+          temporaryWorkflowDirectory: string;
+        };
+        cleanup: { ok: boolean };
+      };
+    };
+    expect(payload.workflowName).toBe("temp-cli-flow");
+    expect(payload.registrySource.package.packageId).toBe("temp-cli-flow");
+    expect(payload.registrySource.cleanup.ok).toBe(true);
+    await expect(
+      readRegistryRunProvenance({
+        options: { userRoot, env: process.env },
+        sessionId: payload.sessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      readFile(
+        payload.registrySource.package.temporaryWorkflowDirectory,
+        "utf8",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(userRoot, "workflow-registry", "checkouts"), "utf8"),
+    ).rejects.toThrow();
+  });
+
+  test("workflow run from registry accepts GitHub directory URL target", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const sourceRoot = path.join(root, "source");
+    await mkdir(sourceRoot, { recursive: true });
+    const created = await createWorkflowTemplate("raw-cli-flow", {
+      workflowRoot: sourceRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const fetchImpl = await createWorkflowCheckoutFetch({
+      sourceRoot,
+      workflowName: "raw-cli-flow",
+    });
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeFile(
+      mockScenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-cli-flow",
+          "--from-registry",
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps({ fetchImpl }),
+      ),
+    );
+
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(0);
+    const payload = JSON.parse(runCapture.stdout.join("\n")) as {
+      workflowName: string;
+      registrySource: {
+        targetKind: string;
+        github: {
+          originalTarget: string;
+          verification: string;
+          temporaryWorkflowDirectory: string;
+        };
+        cleanup: { ok: boolean };
+      };
+    };
+    expect(payload.workflowName).toBe("raw-cli-flow");
+    expect(payload.registrySource.targetKind).toBe("github-directory-url");
+    expect(payload.registrySource.github).toMatchObject({
+      originalTarget:
+        "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-cli-flow",
+      verification: "workflow-bundle-only",
+    });
+    expect(payload.registrySource.cleanup.ok).toBe(true);
+    await expect(
+      readFile(
+        payload.registrySource.github.temporaryWorkflowDirectory,
+        "utf8",
+      ),
+    ).rejects.toThrow();
+  });
+
+  test("workflow run keeps registry temporary checkout for paused sessions", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-paused-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-paused-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    await writeFile(
+      path.join(
+        created.value.workflowDirectory,
+        "nodes",
+        "node-main-worker.json",
+      ),
+      `${JSON.stringify(
+        {
+          id: "main-worker",
+          nodeType: "user-action",
+          promptTemplate: "Approve the registry-backed run.",
+          variables: {},
+          userAction: {
+            messageToolIds: ["matrix-primary"],
+            notificationToolIds: ["desktop-notify"],
+            replyPolicy: "first-valid-reply-wins",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-paused-flow",
+          version: "1.0.0",
+          description: "Temporary paused CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary paused CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-paused-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-paused-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-paused-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(4);
+    const payload = JSON.parse(runCapture.stdout.join("\n")) as {
+      sessionId: string;
+      status: string;
+      registrySource: {
+        package: {
+          temporaryWorkflowDirectory: string;
+        };
+        cleanup: {
+          ok: boolean;
+          skipped?: boolean;
+          reason?: string;
+        };
+      };
+    };
+    expect(payload.status).toBe("paused");
+    expect(payload.registrySource.cleanup).toMatchObject({
+      ok: false,
+      skipped: true,
+      reason: "workflow session status 'paused' is not terminal",
+    });
+    await expect(
+      realpath(payload.registrySource.package.temporaryWorkflowDirectory),
+    ).resolves.toEqual(expect.any(String));
+    await expect(
+      readRegistryRunProvenance({
+        options: { userRoot, env: process.env },
+        sessionId: payload.sessionId,
+      }),
+    ).resolves.toMatchObject({
+      targetKind: "package-id",
+      package: {
+        packageId: "temp-paused-flow",
+        temporaryWorkflowDirectory:
+          payload.registrySource.package.temporaryWorkflowDirectory,
+      },
+    });
+    await expect(
+      readFile(
+        path.join(
+          payload.registrySource.package.temporaryWorkflowDirectory,
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("temp-paused-flow");
+  });
+
+  test("session resume restores and cleans paused registry temporary checkout", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "temp-resume-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("temp-resume-flow", {
+      workflowRoot: packageRoot,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("failed to create workflow");
+    }
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "temp-resume-flow",
+          version: "1.0.0",
+          description: "Temporary resumable CLI run package",
+          tags: ["cli"],
+          workflow: {
+            description: "Temporary resumable CLI run package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "temp-resume-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "temp-resume-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "workflow",
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const mockScenarioPath = path.join(root, "mock-scenario.json");
+    await writeFile(
+      mockScenarioPath,
+      `${JSON.stringify(makeDefaultTemplateScenario(), null, 2)}\n`,
+      "utf8",
+    );
+
+    const runCapture = createIoCapture();
+    const runCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "workflow",
+          "run",
+          "temp-resume-flow",
+          "--from-registry",
+          "--registry",
+          "local",
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--max-steps",
+          "1",
+          "--output",
+          "json",
+        ],
+        runCapture.io,
+        createCliDeps(),
+      ),
+    );
+    expect(
+      runCode,
+      `stdout:\n${runCapture.stdout.join("\n")}\nstderr:\n${runCapture.stderr.join("\n")}`,
+    ).toBe(4);
+    const runPayload = JSON.parse(runCapture.stdout.join("\n")) as {
+      sessionId: string;
+      status: string;
+      registrySource: {
+        package: {
+          temporaryWorkflowDirectory: string;
+        };
+      };
+    };
+    expect(runPayload.status).toBe("paused");
+    const temporaryWorkflowDirectory =
+      runPayload.registrySource.package.temporaryWorkflowDirectory;
+    const temporaryRoot = path.dirname(
+      path.dirname(temporaryWorkflowDirectory),
+    );
+    await expect(realpath(temporaryWorkflowDirectory)).resolves.toEqual(
+      expect.any(String),
+    );
+
+    const resumeCapture = createIoCapture();
+    const resumeCode = await withLegacyWorkflowAuthorshipForCli(() =>
+      runCli(
+        [
+          "session",
+          "resume",
+          runPayload.sessionId,
+          "--user-root",
+          userRoot,
+          "--mock-scenario",
+          mockScenarioPath,
+          "--output",
+          "json",
+        ],
+        resumeCapture.io,
+        createCliDeps(),
+      ),
+    );
+    expect(
+      resumeCode,
+      `stdout:\n${resumeCapture.stdout.join("\n")}\nstderr:\n${resumeCapture.stderr.join("\n")}`,
+    ).toBe(0);
+    const resumePayload = JSON.parse(resumeCapture.stdout.join("\n")) as {
+      status: string;
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(resumePayload.status).toBe("completed");
+    expect(resumePayload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: { userRoot, env: process.env },
+        sessionId: runPayload.sessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
+  test("session resume reads and cleans legacy retained registry provenance", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    const session = createSessionState({
+      sessionId: "sess-legacy-registry-resume",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeLegacyRetainedRegistryRunProvenance({
+      rootDataDir,
+      sessionId: session.sessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: { ...session, status: "completed" },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "resume",
+        session.sessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy.mock.calls[0]?.[1]).toMatchObject({
+      workflowRoot: path.join(temporaryRoot, "workflows"),
+    });
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      registrySource: {
+        package: {
+          originalTarget: string;
+          integrityVerified: boolean;
+          verification: string;
+        };
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(payload.registrySource.package).toMatchObject({
+      originalTarget: "demo-package",
+      integrityVerified: true,
+      verification: "package-integrity",
+    });
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: { rootDataDir, userRoot, sessionStoreRoot, env: process.env },
+        sessionId: session.sessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
+  test("session resume cleans retained registry checkout after terminal failure", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(temporaryWorkflowDirectory, "workflow.json"),
+      "{}\n",
+      "utf8",
+    );
+    const sessionId = "sess-registry-resume-failed";
+    const session = createSessionState({
+      sessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    vi.spyOn(workflowEngine, "runWorkflow").mockImplementation(async () => {
+      await saveSession({ ...session, status: "failed" }, { sessionStoreRoot });
+      return err({
+        exitCode: 1,
+        message: "resume failed after session update",
+        sessionId,
+      } satisfies workflowEngine.WorkflowRunFailure);
+    });
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "resume",
+        sessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(1);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: { rootDataDir, userRoot, sessionStoreRoot, env: process.env },
+        sessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
+  test("workflow run rejects registry packages over endpoint transport", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "temp-cli-flow",
+        "--from-registry",
+        "--endpoint",
+        "http://127.0.0.1:4317/graphql",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain("--from-registry");
+    expect(capture.stderr.join("\n")).toContain("--endpoint");
   });
 
   test("rielflow publish accepts explicit registry URL and local path", async () => {
@@ -2288,7 +3131,7 @@ describe("runCli", () => {
       workflowRoot,
     });
     expect(created.ok).toBe(true);
-    const rootDataDir = path.join(userRoot, "artifacts");
+    const rootDataDir = root;
     const sessionId =
       "div-design-and-implement-review-loop-1777861733-fe70502e";
     const saved = await saveSession(
@@ -6053,6 +6896,154 @@ describe("runCli", () => {
     expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty("autoImprove");
   });
 
+  test("local session resume keeps explicit workflow definition dir ahead of retained registry checkout", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const explicitWorkflowRoot = path.join(root, "explicit-workflows");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await mkdir(path.join(explicitWorkflowRoot, "demo"), { recursive: true });
+    const session = createSessionState({
+      sessionId: "sess-registry-resume-explicit",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId: session.sessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: {
+            ...session,
+            status: "completed",
+          },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "resume",
+        session.sessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--workflow-definition-dir",
+        explicitWorkflowRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        sessionStoreRoot,
+        workflowRoot: explicitWorkflowRoot,
+        resumeSessionId: session.sessionId,
+      }),
+    );
+  });
+
+  test("local session resume reports retained registry cleanup failure without changing result", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const unmanagedRoot = path.join(root, "not-managed-registry-run");
+    const temporaryWorkflowDirectory = path.join(
+      unmanagedRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    const session = createSessionState({
+      sessionId: "sess-registry-resume-cleanup-failure",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId: session.sessionId,
+      temporaryRoot: unmanagedRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    vi.spyOn(workflowEngine, "runWorkflow").mockResolvedValue(
+      ok({
+        session: { ...session, status: "completed" },
+        exitCode: 0,
+      } satisfies workflowEngine.WorkflowRunResult),
+    );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "resume",
+        session.sessionId,
+        "--user-root",
+        userRoot,
+        "--session-store",
+        sessionStoreRoot,
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      registrySource: { cleanup: { ok: boolean; error: string } };
+    };
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: false,
+      error:
+        "registry run provenance does not point to a managed temporary checkout",
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: { rootDataDir, userRoot, sessionStoreRoot, env: process.env },
+        sessionId: session.sessionId,
+      }),
+    ).resolves.toBeDefined();
+  });
+
   test("local session rerun forwards normalized workflow run overrides", async () => {
     const root = await makeTempDir();
     const sessionStoreRoot = path.join(root, "sessions");
@@ -6278,6 +7269,324 @@ describe("runCli", () => {
       continuedStartStepId: "step-2",
       exitCode: 0,
     });
+  });
+
+  test("local session continue uses retained registry checkout and cleans terminal result", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(temporaryWorkflowDirectory, "workflow.json"),
+      "{}\n",
+      "utf8",
+    );
+    const sourceSessionId = "sess-registry-continue-src";
+    const session = createSessionState({
+      sessionId: sourceSessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId: sourceSessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    const continuedSessionState = createSessionState({
+      sessionId: "sess-registry-continue-new",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "step-2",
+      runtimeVariables: {},
+    });
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: {
+            ...continuedSessionState,
+            status: "completed",
+          },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "continue",
+        sourceSessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--start-step",
+        "step-2",
+        "--after-step-run",
+        "exec-anchor",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      {
+        startServe: async () => ({
+          host: "127.0.0.1",
+          port: 43173,
+          stop: () => {},
+        }),
+        isInteractiveTerminal: () => true,
+      },
+    );
+
+    expect(
+      code,
+      `stdout:\n${capture.stdout.join("\n")}\nstderr:\n${capture.stderr.join("\n")}`,
+    ).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        sessionStoreRoot,
+        workflowRoot: path.join(temporaryRoot, "workflows"),
+        continueFromWorkflowExecutionId: sourceSessionId,
+        continueAfterStepRunId: "exec-anchor",
+        continueStartStepId: "step-2",
+      }),
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      status: string;
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(payload.status).toBe("completed");
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: {
+          userRoot,
+          rootDataDir,
+          sessionStoreRoot,
+          env: process.env,
+        },
+        sessionId: sourceSessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
+  test("local session continue cleans retained registry checkout after terminal failure", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(temporaryWorkflowDirectory, "workflow.json"),
+      "{}\n",
+      "utf8",
+    );
+    const sourceSessionId = "sess-registry-continue-failed-src";
+    const failedSessionId = "sess-registry-continue-failed-new";
+    const session = createSessionState({
+      sessionId: sourceSessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId: sourceSessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    const failedSession = createSessionState({
+      sessionId: failedSessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "step-2",
+      runtimeVariables: {},
+    });
+    vi.spyOn(workflowEngine, "runWorkflow").mockImplementation(async () => {
+      await saveSession(
+        { ...failedSession, status: "failed" },
+        { sessionStoreRoot },
+      );
+      return err({
+        exitCode: 7,
+        message: "continue failed after session update",
+        sessionId: failedSessionId,
+      } satisfies workflowEngine.WorkflowRunFailure);
+    });
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "continue",
+        sourceSessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--start-step",
+        "step-2",
+        "--after-step-run",
+        "exec-anchor",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(7);
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      registrySource: {
+        cleanup: { ok: boolean; remainingPaths: readonly string[] };
+      };
+    };
+    expect(payload.registrySource.cleanup).toEqual({
+      ok: true,
+      remainingPaths: [],
+    });
+    await expect(
+      readRegistryRunProvenance({
+        options: { rootDataDir, userRoot, sessionStoreRoot, env: process.env },
+        sessionId: sourceSessionId,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(realpath(temporaryRoot)).rejects.toThrow();
+  });
+
+  test("local session continue keeps explicit workflow definition dir ahead of retained registry checkout", async () => {
+    const root = await makeTempDir();
+    const userRoot = path.join(root, "user", ".rielflow");
+    const rootDataDir = root;
+    const sessionStoreRoot = path.join(root, "sessions");
+    const explicitWorkflowRoot = path.join(root, "explicit-workflows");
+    const temporaryRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-registry-run-"),
+    );
+    tempDirs.push(temporaryRoot);
+    const temporaryWorkflowDirectory = path.join(
+      temporaryRoot,
+      "workflows",
+      "demo",
+    );
+    await mkdir(temporaryWorkflowDirectory, { recursive: true });
+    await mkdir(path.join(explicitWorkflowRoot, "demo"), { recursive: true });
+    const sourceSessionId = "sess-registry-continue-explicit";
+    const session = createSessionState({
+      sessionId: sourceSessionId,
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "main-worker",
+      runtimeVariables: {},
+    });
+    await saveSession(session, { sessionStoreRoot });
+    await writeRetainedRegistryRunProvenance({
+      rootDataDir,
+      userRoot,
+      sessionStoreRoot,
+      sessionId: sourceSessionId,
+      temporaryRoot,
+      temporaryWorkflowDirectory,
+    });
+
+    const continuedSessionState = createSessionState({
+      sessionId: "sess-registry-continue-explicit-new",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "step-2",
+      runtimeVariables: {},
+    });
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: {
+            ...continuedSessionState,
+            status: "completed",
+          },
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "session",
+        "continue",
+        sourceSessionId,
+        "--user-root",
+        userRoot,
+        "--root-data-dir",
+        rootDataDir,
+        "--session-store",
+        sessionStoreRoot,
+        "--workflow-definition-dir",
+        explicitWorkflowRoot,
+        "--start-step",
+        "step-2",
+        "--after-step-run",
+        "exec-anchor",
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({
+        sessionStoreRoot,
+        workflowRoot: explicitWorkflowRoot,
+        continueFromWorkflowExecutionId: sourceSessionId,
+        continueAfterStepRunId: "exec-anchor",
+        continueStartStepId: "step-2",
+      }),
+    );
   });
 
   test("workflow run forwards --max-concurrency to runWorkflow options", async () => {

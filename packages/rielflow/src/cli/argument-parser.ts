@@ -986,6 +986,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       createPr,
       preInstallCheck,
       noPreInstallCheck,
+      fromRegistry: argv.includes("--from-registry"),
       ...(preInstallCheckMode === undefined ? {} : { preInstallCheckMode }),
       ...(preInstallCheckContainer === undefined
         ? {}

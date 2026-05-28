@@ -44,6 +44,57 @@ rielflow <command>
 
 Use `--workflow-definition-dir <path>` when the workflow definition bundles are not coming from scoped project/user lookup. This option points at a directory containing `<workflow-name>/workflow.json` bundles; it does not control logs, sessions, or artifacts. In this repository, examples use `--workflow-definition-dir ./examples`.
 
+Run a registry workflow without installing it into a scoped catalog by adding
+`--from-registry` to `workflow run`. The target can be a package id, including
+scoped package ids such as `@scope/name`, a GitHub workflow directory URL, or a
+registered shorthand like `<github-owner>/<workflow-dir>` when configured
+registries resolve it unambiguously:
+
+```bash
+bun run src/main.ts workflow run <package-id> \
+  --from-registry \
+  --registry default \
+  --branch main \
+  --output json
+```
+
+```bash
+bun run src/main.ts workflow run \
+  https://github.com/<owner>/<repo>/tree/main/.rielflow/workflows/<workflow-name> \
+  --from-registry \
+  --output json
+```
+
+Branchless GitHub directory URLs, such as
+`https://github.com/<owner>/<repo>/.rielflow/workflows/<workflow-name>`, resolve
+the checkout ref from `--branch`, then a matching registered registry default
+branch, then the GitHub repository default branch.
+
+```bash
+bun run src/main.ts workflow run <owner>/<workflow-dir> \
+  --from-registry \
+  --registry default \
+  --output json
+```
+
+Registry-backed runs are explicit and local-only. Bare `workflow run <name>`
+never fetches from a registry, and `--from-registry` cannot be combined with
+`--endpoint`. Rielflow resolves package ids and shorthands through configured
+registries, validates package metadata, checksum/integrity, and the workflow
+bundle, stages the workflow under a command-owned temporary workflow-definition
+directory, then uses the normal local run path. Raw GitHub directory URLs are
+allowed without package metadata after workflow-bundle validation and report
+reduced `workflow-bundle-only` provenance. JSON output includes
+`registrySource` provenance. Temporary registry runs do not write normal
+checkout catalog records, mutate project/user catalogs, or install package
+skills. Cleanup runs after a terminal session or pre-start failure; paused or
+otherwise non-terminal sessions retain the temporary checkout, store retained
+run provenance for the session, and report skipped cleanup metadata. Local
+`session resume` and `session continue` automatically use the retained checkout
+when no explicit `--workflow-definition-dir` is supplied, then remove it and the
+retained provenance record after the resumed or continued execution reaches a
+terminal status.
+
 Install a public GitHub workflow directory into a scoped catalog with:
 
 ```bash

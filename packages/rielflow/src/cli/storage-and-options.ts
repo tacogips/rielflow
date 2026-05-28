@@ -365,6 +365,7 @@ export interface ParsedOptions {
   readonly noPreInstallCheck: boolean;
   readonly preInstallCheckMode?: "warn" | "reject";
   readonly preInstallCheckContainer?: "docker" | "podman" | "auto";
+  readonly fromRegistry: boolean;
 }
 export interface ParsedArgs {
   readonly positionals: string[];

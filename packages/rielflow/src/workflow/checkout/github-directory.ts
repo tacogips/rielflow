@@ -12,6 +12,13 @@ export interface GitHubDirectoryUrl {
   readonly workflowName: string;
 }
 
+export interface BranchlessGitHubDirectoryUrl {
+  readonly owner: string;
+  readonly repository: string;
+  readonly directoryPath: string;
+  readonly workflowName: string;
+}
+
 export interface GitHubDirectoryFetch {
   readonly sourceUrl: string;
   readonly destinationDirectory: string;
@@ -97,6 +104,54 @@ function parseUrlParts(
   return ok({ owner, repository, pathSegments, workflowName });
 }
 
+function parseSupportedGitHubUrl(sourceUrl: string): Result<
+  {
+    readonly owner: string;
+    readonly repository: string;
+    readonly segments: readonly string[];
+  },
+  WorkflowCheckoutFailure
+> {
+  let parsed: URL;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    return err(checkoutFailure("INVALID_SOURCE_URL", "source URL is invalid"));
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
+    return err(
+      checkoutFailure(
+        "UNSUPPORTED_SOURCE_URL",
+        "workflow checkout supports only https://github.com directory URLs",
+      ),
+    );
+  }
+  let segments: string[];
+  try {
+    segments = parsed.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .map((segment) => decodeURIComponent(segment));
+  } catch {
+    return err(
+      checkoutFailure(
+        "INVALID_SOURCE_URL",
+        "source URL path contains invalid percent encoding",
+      ),
+    );
+  }
+  const [owner, repository, ...rest] = segments;
+  if (owner === undefined || repository === undefined || rest.length === 0) {
+    return err(
+      checkoutFailure(
+        "INVALID_SOURCE_URL",
+        "expected https://github.com/<owner>/<repo>/<workflow-directory-path>",
+      ),
+    );
+  }
+  return ok({ owner, repository, segments: rest });
+}
+
 export function parseGitHubDirectoryUrl(
   sourceUrl: string,
 ): Result<GitHubDirectoryUrl, WorkflowCheckoutFailure> {
@@ -122,6 +177,91 @@ export function parseGitHubDirectoryUrl(
     directoryPath: directorySegments.join("/"),
     workflowName: parts.value.workflowName,
   });
+}
+
+export function parseBranchlessGitHubDirectoryUrl(
+  sourceUrl: string,
+): Result<BranchlessGitHubDirectoryUrl, WorkflowCheckoutFailure> {
+  const parsed = parseSupportedGitHubUrl(sourceUrl);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  if (parsed.value.segments[0] === "tree") {
+    return err(
+      checkoutFailure(
+        "INVALID_SOURCE_URL",
+        "GitHub tree URL already includes a ref",
+      ),
+    );
+  }
+  const workflowName = parsed.value.segments.at(-1);
+  if (workflowName === undefined || !isSafeWorkflowName(workflowName)) {
+    return err({
+      code: "INVALID_WORKFLOW_NAME",
+      message: `invalid workflow name '${workflowName ?? ""}'`,
+    });
+  }
+  return ok({
+    owner: parsed.value.owner,
+    repository: parsed.value.repository,
+    directoryPath: parsed.value.segments.join("/"),
+    workflowName,
+  });
+}
+
+export async function fetchGitHubDefaultBranch(input: {
+  readonly owner: string;
+  readonly repository: string;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<Result<string, WorkflowCheckoutFailure>> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  let response: Response;
+  try {
+    response = await fetchImpl(
+      `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}`,
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return err(
+      checkoutFailure(
+        "FETCH_FAILED",
+        `GitHub repository metadata fetch failed: ${message}`,
+      ),
+    );
+  }
+  if (!response.ok) {
+    return err(
+      checkoutFailure(
+        "FETCH_FAILED",
+        `GitHub repository metadata API returned HTTP ${String(response.status)}`,
+      ),
+    );
+  }
+  let payload: unknown;
+  try {
+    payload = (await response.json()) as unknown;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return err(
+      checkoutFailure(
+        "FETCH_FAILED",
+        `GitHub repository metadata response is not JSON: ${message}`,
+      ),
+    );
+  }
+  if (!isRecord(payload) || typeof payload["default_branch"] !== "string") {
+    return err(
+      checkoutFailure(
+        "FETCH_FAILED",
+        "GitHub repository metadata did not include default_branch",
+      ),
+    );
+  }
+  return ok(payload["default_branch"]);
+}
+
+export function buildGitHubTreeDirectoryUrl(input: GitHubDirectoryUrl): string {
+  return `https://github.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/tree/${encodeGitHubPath(input.ref)}/${encodeGitHubPath(input.directoryPath)}`;
 }
 
 function encodeGitHubPath(value: string): string {
