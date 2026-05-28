@@ -477,6 +477,18 @@ worktree.
 `bun test packages/rielflow/src/cli.test.ts packages/rielflow/src/workflow/packages/packages.test.ts`,
 and `git diff --check`.
 
+### Session: 2026-05-28 21:24
+
+**Tasks Completed**: Step 6 self-review feedback follow-up.
+**Tasks In Progress**: None.
+**Blockers**: None.
+**Notes**: Reviewed the unrelated formatting/code-shape self-review finding.
+Attempted to remove the non-feature formatting files from the branch diff by
+restoring them to the parent revision, but `bun run lint:biome` then failed on
+those parent versions. Kept the Biome-only formatting changes because they are
+required for the repository post-TypeScript-modification lint gate; no feature
+behavior was added to those files.
+
 ## Related Plans
 
 - **Depends On**: `impl-plans/active/workflow-package-registry.md`
