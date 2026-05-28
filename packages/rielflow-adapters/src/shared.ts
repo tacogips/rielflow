@@ -40,10 +40,35 @@ export function normalizeAdapterFailure(
   if (error instanceof AdapterExecutionError) {
     return error;
   }
+  if (error instanceof Error) {
+    return new AdapterExecutionError("provider_error", error.message);
+  }
+  const detail = formatUnknownAdapterFailure(error);
   return new AdapterExecutionError(
     "provider_error",
-    error instanceof Error ? error.message : fallbackMessage,
+    detail === undefined ? fallbackMessage : `${fallbackMessage}: ${detail}`,
   );
+}
+
+function formatUnknownAdapterFailure(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error.length > 0 ? error : undefined;
+  }
+  if (typeof error === "number" || typeof error === "boolean") {
+    return String(error);
+  }
+  if (typeof error === "object" && error !== null) {
+    try {
+      const text = JSON.stringify(error);
+      return text === undefined || text === "{}" ? undefined : text;
+    } catch {
+      return String(error);
+    }
+  }
+  return undefined;
 }
 
 function waitForRetryDelay(

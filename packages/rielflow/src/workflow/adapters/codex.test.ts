@@ -487,4 +487,26 @@ describe("CodexAgentAdapter", () => {
       ),
     ).rejects.toHaveProperty("code", "invalid_output");
   });
+
+  test("preserves non-Error startup diagnostics in provider failures", async () => {
+    const adapter = new CodexAgentAdapter({
+      maxAttempts: 1,
+      createRunner: vi.fn(() => {
+        throw {
+          command: "codex exec --json",
+          exitCode: 2,
+          stderr: "unsupported model: gpt-5.5",
+        };
+      }),
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "provider_error",
+        message: expect.stringContaining(
+          '"stderr":"unsupported model: gpt-5.5"',
+        ),
+      },
+    );
+  });
 });

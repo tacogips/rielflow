@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AdapterExecutionError } from "../adapter";
-import { executeWithRetry } from "./shared";
+import { executeWithRetry, normalizeAdapterFailure } from "./shared";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -35,5 +35,31 @@ describe("executeWithRetry", () => {
       message: "adapter retry delay aborted",
     });
     expect(attempts).toBe(1);
+  });
+});
+
+describe("normalizeAdapterFailure", () => {
+  test("preserves diagnostic fields from non-Error thrown values", () => {
+    const error = normalizeAdapterFailure(
+      {
+        command: "codex exec --json",
+        exitCode: 2,
+        stderr: "unsupported model",
+      },
+      "unknown codex adapter failure",
+    );
+
+    const message = error.message;
+    expect(error.code).toBe("provider_error");
+    expect(message).toEqual(
+      expect.stringContaining("unknown codex adapter failure"),
+    );
+    expect(message).toEqual(
+      expect.stringContaining('"command":"codex exec --json"'),
+    );
+    expect(message).toEqual(expect.stringContaining('"exitCode":2'));
+    expect(message).toEqual(
+      expect.stringContaining('"stderr":"unsupported model"'),
+    );
   });
 });

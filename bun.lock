@@ -12,7 +12,7 @@
         "@opentelemetry/sdk-node": "0.218.0",
         "@opentelemetry/semantic-conventions": "1.41.1",
         "claude-code-agent": "github:tacogips/claude-code-agent#eb3d81d3499df77695cc3b0ed92da73fc5b21f4e",
-        "codex-agent": "github:tacogips/codex-agent#793c098c27e26d1aca53ed46d77dc4c3c4eb0ffb",
+        "codex-agent": "github:tacogips/codex-agent#ab30bfd2ef208ccc323536d6d500625427f7f461",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#827b5a09403e78935de721a89fdbcad770de000c",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
@@ -46,7 +46,7 @@
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "claude-code-agent": "github:tacogips/claude-code-agent#eb3d81d3499df77695cc3b0ed92da73fc5b21f4e",
-        "codex-agent": "github:tacogips/codex-agent#793c098c27e26d1aca53ed46d77dc4c3c4eb0ffb",
+        "codex-agent": "github:tacogips/codex-agent#ab30bfd2ef208ccc323536d6d500625427f7f461",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#827b5a09403e78935de721a89fdbcad770de000c",
         "openai": "6.27.0",
         "rielflow-core": "workspace:*",
@@ -368,7 +368,7 @@
 
     "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#793c098", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./src/bin.ts" } }, "tacogips-codex-agent-793c098", "sha512-q8mKX/4HXn7uYXJldkD0pNbEjsCliay5iJLh3JTzy1wmZnTXHEIir3i1orpyP/KdLLe8OLTC4boTAnBvdeJtTA=="],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#ab30bfd", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./src/bin.ts" } }, "tacogips-codex-agent-ab30bfd"],
 
     "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
 
