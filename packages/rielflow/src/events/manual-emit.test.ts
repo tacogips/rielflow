@@ -17,6 +17,26 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+async function readReceiptArtifact(input: {
+  readonly rootDataDir: string;
+  readonly ref:
+    | { readonly root: "artifact"; readonly path: string }
+    | undefined;
+}): Promise<string> {
+  expect(input.ref).toBeDefined();
+  if (input.ref === undefined) {
+    return "";
+  }
+  return await readFile(path.join(input.rootDataDir, input.ref.path), "utf8");
+}
+
+function expectNoChatSdkAttachmentSecrets(value: string): void {
+  expect(value).not.toContain("secret-token");
+  expect(value).not.toContain("signed-url-token");
+  expect(value).not.toContain("private-bucket");
+  expect(value).not.toContain("https://files.example.test/private");
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
@@ -299,7 +319,25 @@ describe("manual event emit", () => {
       eventId: "evt-chat-sdk",
       actor: { id: "U123", displayName: "Operator" },
       conversation: { id: "C123", threadId: "T123" },
-      message: { text: "run release workflow" },
+      message: {
+        text: "run release workflow",
+        attachments: [
+          {
+            id: "img-1",
+            kind: "image",
+            filename: "release.png",
+            mediaType: "image/png",
+            contentRef: "chat-sdk/evt-chat-sdk/release.png",
+            imageDescription: "green release dashboard",
+            source: {
+              downloadUrl:
+                "https://files.example.test/private/release.png?signed=signed-url-token",
+              token: "secret-token",
+              bucket: "private-bucket",
+            },
+          },
+        ],
+      },
     });
 
     const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
@@ -316,19 +354,38 @@ describe("manual event emit", () => {
     });
 
     expect(results[0]?.receipt.status).toBe("skipped");
+    const rawArtifact = await readReceiptArtifact({
+      rootDataDir,
+      ref: results[0]?.receipt.rawRef,
+    });
+    const normalizedArtifact = await readReceiptArtifact({
+      rootDataDir,
+      ref: results[0]?.receipt.normalizedRef,
+    });
     const inputRef = results[0]?.receipt.inputRef;
     expect(inputRef).toBeDefined();
     if (inputRef === undefined) {
       return;
     }
-    expect(
-      JSON.parse(await readFile(path.join(rootDataDir, inputRef.path), "utf8")),
-    ).toMatchObject({
+    const inputArtifact = await readFile(
+      path.join(rootDataDir, inputRef.path),
+      "utf8",
+    );
+    expect(JSON.parse(inputArtifact)).toMatchObject({
       workflowInput: {
         request: "run release workflow",
         provider: "slack",
         conversationId: "C123",
       },
     });
+    expect(JSON.parse(rawArtifact)).toMatchObject({
+      message: { attachments: [{ source: { redacted: true } }] },
+    });
+    expect(JSON.parse(normalizedArtifact)).toMatchObject({
+      input: { attachments: [{ source: { redacted: true } }] },
+    });
+    expectNoChatSdkAttachmentSecrets(rawArtifact);
+    expectNoChatSdkAttachmentSecrets(normalizedArtifact);
+    expectNoChatSdkAttachmentSecrets(inputArtifact);
   });
 });

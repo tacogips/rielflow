@@ -65,7 +65,22 @@ export interface ChatSdkConversationPayload extends JsonObject {
 export interface ChatSdkMessagePayload extends JsonObject {
   readonly text: string;
   readonly format?: "plain" | "markdown";
-  readonly attachments?: readonly JsonObject[];
+  readonly attachments?: readonly ChatSdkAttachmentDescriptor[];
+}
+
+export type ChatSdkAttachmentKind = "image" | "pdf" | "other";
+
+export interface ChatSdkAttachmentDescriptor extends JsonObject {
+  readonly id?: string;
+  readonly kind?: ChatSdkAttachmentKind;
+  readonly mediaType?: string;
+  readonly filename?: string;
+  readonly sizeBytes?: number;
+  readonly source?: JsonObject | string;
+  readonly contentRef?: string;
+  readonly textContent?: string;
+  readonly imageDescription?: string;
+  readonly classificationHints?: readonly string[] | JsonObject;
 }
 
 export interface ChatSdkGenericInboundPayload extends JsonObject {
@@ -83,7 +98,7 @@ export interface ChatSdkMessageInput extends JsonObject {
   readonly provider: ChatSdkProvider;
   readonly text: string;
   readonly format: "plain" | "markdown";
-  readonly attachments: readonly JsonObject[];
+  readonly attachments: readonly ChatSdkAttachmentDescriptor[];
   readonly action?: JsonObject | null;
   readonly rawEventType?: string;
 }

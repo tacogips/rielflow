@@ -185,6 +185,78 @@ Attachments are passed as data-root-relative refs only after explicit download
 configuration. The first iteration may preserve attachment metadata without
 downloading content.
 
+### Attachment Judgement Workflow Extension
+
+The chat attachment judgement issue extends the first Chat SDK implementation
+without changing the provider-neutral boundary. A Chat SDK generic inbound
+payload may include deterministic attachment descriptors for images and PDFs,
+and the adapter must preserve the descriptor fields needed by workflow examples
+to classify content without network access or live provider credentials.
+
+Normalized attachment descriptors should remain plain JSON objects under
+`event.input.attachments[]`. The stable cross-provider fields are:
+
+- `id`: provider or fixture attachment id when available.
+- `kind`: `image`, `pdf`, or `other`.
+- `mediaType`: MIME type such as `image/png` or `application/pdf`.
+- `filename`: display filename when available.
+- `sizeBytes`: provider-reported or fixture byte size when available.
+- `source`: provider metadata such as URL, provider file id, or message-local
+  reference, redacted when it contains credentials.
+- `contentRef`: optional data-root-relative file ref for downloaded or fixture
+  content.
+- `textContent`: optional deterministic text extracted from a PDF or supplied
+  by a fixture.
+- `imageDescription`: optional deterministic description, OCR text, or fixture
+  annotation for an image.
+- `classificationHints`: optional fixture or upstream bot hints used only as
+  classifier input, not as trusted final classification.
+
+The generic boundary must not fetch remote attachment URLs by default. Live
+download support requires an explicit source-level download configuration and
+must store content under the rielflow data root before passing only refs to
+workflows. Deterministic tests and examples should use checked-in fixture
+payloads with inline `textContent` or `imageDescription` fields, or
+data-root-relative `contentRef` values created by the test harness.
+
+The example workflow `chat-event-attachment-judgement` should receive
+`chat.message` input via `mode: "event-input"` and classify each attachment into
+provider-neutral judgement fields such as:
+
+- attachment identity and display name
+- normalized kind and media type
+- extracted textual evidence used for the decision
+- classification label, confidence band, and rationale
+- explicit `needsManualReview` flag when evidence is absent, unsupported, or
+  ambiguous
+
+This workflow is an example classifier, not a provider SDK integration. It must
+not assume Slack-specific or Discord-specific fields beyond the normalized
+descriptor shape. The prompt should live in `prompts/*.md` and reference
+`{{event.input.attachments}}` or workflow input attachments directly so the same
+fixture can be replayed through `events emit` and unit tests.
+
+Input mapping must preserve attachment arrays in both `workflowInput` and
+`runtimeVariables.event.input`. Template mappings may select
+`{{event.input.attachments}}`, including array traversal, but must not silently
+drop attachment descriptors when `mode: "event-input"` is used. Chat SDK
+`mirrorToHumanInput` behavior should match other chat sources when explicitly
+enabled by the binding.
+
+Attachment validation rules for this extension:
+
+- reject attachment entries that are not JSON objects
+- preserve unknown safe metadata fields without requiring provider-specific
+  schema knowledge
+- reject absolute, traversing, or non-data-root `contentRef` paths when refs
+  are present
+- bound accepted inline deterministic evidence fields by configured or default
+  size limits before receipt persistence
+- redact credential-bearing URLs and headers from `source`, raw artifacts, logs,
+  receipts, and dispatch records
+- classify unsupported attachments as requiring manual review rather than
+  failing the whole workflow run
+
 ## Provider Capability Matrix
 
 Capability metadata is table-driven per provider and lives with the adapter.
@@ -296,6 +368,11 @@ Expected repository updates:
 - `examples/event-sources/.rielflow-events/bindings/chat-sdk-slack-to-workflow.json`
 - `examples/event-sources/.rielflow-events/destinations/chat-sdk-slack-replies.json`
 - `examples/event-sources/payloads/chat-sdk-slack-message.json`
+- `examples/event-sources/payloads/chat-sdk-attachment-judgement-message.json`
+- `examples/chat-event-attachment-judgement/workflow.json`
+- `examples/chat-event-attachment-judgement/nodes/node-*.json`
+- `examples/chat-event-attachment-judgement/prompts/*.md`
+- `examples/chat-event-attachment-judgement/EXPECTED_RESULTS.md`
 - `examples/event-sources/README.md`
 
 The Slack example can stand in for the shared adapter family as long as config
@@ -315,20 +392,30 @@ chat and Matrix examples:
 - it does not introduce direct `@chat-adapter/*` dependencies in rielflow runtime
   code for the generic-boundary implementation
 
+The attachment judgement example must add deterministic image and PDF fixtures.
+At minimum, one payload includes an image descriptor with `imageDescription` or
+OCR-like text, one payload includes a PDF descriptor with `textContent`, and one
+negative payload includes an unsupported or evidence-free attachment that
+returns `needsManualReview: true`. Unit tests should prove that normalization
+preserves the descriptors, event input mapping forwards them unchanged, and the
+example workflow can be validated and inspected from `./examples`.
+
 Review closure for this source should include the shared event source
 validation command and the focused Chat SDK adapter test:
 
 ```bash
-bun run src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
-bun test src/events/adapters/chat-sdk.test.ts
+bun run packages/rielflow/src/main.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+bun run packages/rielflow/src/main.ts workflow validate chat-event-attachment-judgement --workflow-root ./examples
+bun run packages/rielflow/src/main.ts workflow inspect chat-event-attachment-judgement --workflow-root ./examples --output json
+bun test packages/rielflow/src/events/adapters/chat-sdk.test.ts packages/rielflow/src/events/input-mapping.test.ts packages/rielflow/src/events/chat-reply-example.test.ts
 ```
 
 Verification commands for the implementation plan:
 
 ```bash
-rg -n "chat-sdk|chat\\.message|Chat SDK|outputDestinations" design-docs examples src README.md
+rg -n "chat-sdk|chat\\.message|attachments|attachment judgement|outputDestinations" design-docs examples packages/rielflow/src README.md
 bun run typecheck
-bun test src/events/adapter-registry.test.ts src/events/config.test.ts src/events/listener-service.test.ts src/events/manual-emit.test.ts src/events/reply-dispatcher.test.ts
+bun test packages/rielflow/src/events/adapter-registry.test.ts packages/rielflow/src/events/config.test.ts packages/rielflow/src/events/listener-service.test.ts packages/rielflow/src/events/manual-emit.test.ts packages/rielflow/src/events/reply-dispatcher.test.ts
 ```
 
 ## Codex Reference Mapping
@@ -352,6 +439,10 @@ contracts.
   implementation, examples, tests, review, commit, and push workflow steps.
 - Keep the provider work as one shared adapter family because config schema,
   normalization, listener routing, reply dispatch, docs, and tests are shared.
+- Keep attachment judgement in the Chat SDK generic boundary for the first pass:
+  deterministic fixture descriptors are sufficient for unit tests and avoid
+  adding OCR, PDF parsing, or provider download dependencies before the safe ref
+  contract is implemented.
 - Prefer a generic Chat SDK deployment boundary for the first implementation to
   reduce dependency and credential blast radius.
 - Treat `web` as a Chat SDK provider for browser conversation ingress and reply

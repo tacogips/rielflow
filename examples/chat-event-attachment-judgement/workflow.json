@@ -1,0 +1,25 @@
+{
+  "workflowId": "chat-event-attachment-judgement",
+  "description": "Judge deterministic Chat SDK image and PDF attachment descriptors without live provider downloads, OCR, or PDF parsing.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 120000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise business JSON only. Classify only from deterministic attachment descriptor fields."
+  },
+  "entryStepId": "judge-attachments",
+  "nodes": [
+    {
+      "id": "judge-attachments",
+      "nodeFile": "nodes/node-judge-attachments.json"
+    }
+  ],
+  "steps": [
+    {
+      "id": "judge-attachments",
+      "nodeId": "judge-attachments",
+      "role": "worker"
+    }
+  ]
+}

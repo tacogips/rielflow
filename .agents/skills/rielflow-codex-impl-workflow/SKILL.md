@@ -98,6 +98,12 @@ prompt into resumed user prompt text when the backend runner already appends
 while still forwarding the stable system prompt option. Verification should
 include the focused Codex and Cursor adapter tests and `bun run typecheck`.
 
+Event-source or example-workflow issue-resolution runs should keep the shipped
+behavior discoverable from user-facing docs. Refresh the root `README.md`, the
+directly affected example README such as `examples/README.md` or
+`examples/event-sources/README.md`, and workflow-local `EXPECTED_RESULTS.md`
+when deterministic fixtures, event payloads, or validation commands change.
+
 ## Reporting
 
 After the workflow finishes, report:

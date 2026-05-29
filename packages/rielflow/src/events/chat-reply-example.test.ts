@@ -2,7 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { loadEventConfiguration } from "./config";
 import { emitEventFile } from "./manual-emit";
+import { loadWorkflowFromDisk } from "../workflow/load";
 
 const tempDirs: string[] = [];
 
@@ -24,6 +26,42 @@ afterEach(async () => {
 });
 
 describe("chat reply event example", () => {
+  test("validates the checked-in Chat SDK attachment judgement example", async () => {
+    const loaded = await loadWorkflowFromDisk(
+      "chat-event-attachment-judgement",
+      {
+        workflowRoot: path.resolve("examples"),
+        cwd: process.cwd(),
+      },
+    );
+
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      throw new Error(loaded.error.message);
+    }
+    expect(loaded.value.bundle.workflow.workflowId).toBe(
+      "chat-event-attachment-judgement",
+    );
+    expect(loaded.value.bundle.workflow.entryStepId).toBe("judge-attachments");
+    expect(loaded.value.bundle.workflow.steps.map((step) => step.id)).toEqual([
+      "judge-attachments",
+    ]);
+
+    const config = await loadEventConfiguration({
+      workflowRoot: path.resolve("examples"),
+      eventRoot: path.resolve("examples/event-sources/.rielflow-events"),
+      cwd: process.cwd(),
+    });
+    expect(
+      config.bindings.find(
+        (binding) => binding.id === "chat-sdk-slack-to-workflow",
+      ),
+    ).toMatchObject({
+      workflowName: "chat-event-attachment-judgement",
+      inputMapping: { mode: "event-input", mirrorToHumanInput: true },
+    });
+  });
+
   test("dispatches the checked-in add-on workflow to a webhook reply endpoint", async () => {
     const root = await makeTempDir();
     const calls: Array<{ readonly url: string; readonly init?: RequestInit }> =

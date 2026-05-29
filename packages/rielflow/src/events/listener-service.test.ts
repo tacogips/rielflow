@@ -1,5 +1,12 @@
 import { createHmac } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -26,6 +33,28 @@ async function makeTempDir(): Promise<string> {
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
+async function readFilesRecursively(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const contents: string[] = [];
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      contents.push(...(await readFilesRecursively(entryPath)));
+      continue;
+    }
+    contents.push(await readFile(entryPath, "utf8"));
+  }
+  return contents;
+}
+
+function expectNoChatSdkAttachmentSecrets(value: string): void {
+  expect(value).not.toContain("secret-token");
+  expect(value).not.toContain("signed-url-token");
+  expect(value).not.toContain("private-bucket");
+  expect(value).not.toContain("https://files.example.test/private");
+  expect(value).not.toContain("Bearer secret");
 }
 
 async function writeMinimalWebhookFixture(input: {
@@ -73,7 +102,6 @@ describe("event listener service", () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".rielflow");
     const eventRoot = path.join(root, ".rielflow-events");
-    const rootDataDir = path.join(root, "data");
     await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
       workflowId: "demo",
     });
@@ -115,6 +143,7 @@ describe("event listener service", () => {
       },
     };
     const fetchImpl = vi.fn(async (_request, init) => {
+      expectNoChatSdkAttachmentSecrets(String(init?.body));
       const payload = JSON.parse(String(init?.body)) as {
         variables: {
           input: {
@@ -150,7 +179,7 @@ describe("event listener service", () => {
       {
         workflowRoot,
         eventRoot,
-        rootDataDir,
+        rootDataDir: path.join(root, "data"),
         endpoint: "http://example.test/graphql",
         fetchImpl,
         cwd: root,
@@ -352,6 +381,7 @@ describe("event listener service", () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".rielflow");
     const eventRoot = path.join(root, ".rielflow-events");
+    const rootDataDir = path.join(root, "data");
     await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
       workflowId: "demo",
     });
@@ -425,7 +455,7 @@ describe("event listener service", () => {
       {
         workflowRoot,
         eventRoot,
-        rootDataDir: path.join(root, "data"),
+        rootDataDir,
         endpoint: "http://example.test/graphql",
         env: { CHAT_SDK_TOKEN: "secret" },
         fetchImpl,
@@ -443,7 +473,25 @@ describe("event listener service", () => {
       eventId: "evt-chat-sdk-1",
       actor: { id: "U123", displayName: "Operator" },
       conversation: { id: "C123", threadId: "T123" },
-      message: { text: "ship it" },
+      message: {
+        text: "ship it",
+        attachments: [
+          {
+            id: "img-1",
+            kind: "image",
+            filename: "release.png",
+            mediaType: "image/png",
+            contentRef: "chat-sdk/evt-chat-sdk-1/release.png",
+            imageDescription: "green release dashboard",
+            source: {
+              downloadUrl:
+                "https://files.example.test/private/release.png?signed=signed-url-token",
+              token: "secret-token",
+              bucket: "private-bucket",
+            },
+          },
+        ],
+      },
     };
     const unauthorized = await capturedFetch(
       new Request("http://127.0.0.1/events/chat-sdk/team-slack", {
@@ -489,6 +537,14 @@ describe("event listener service", () => {
     expect(duplicateBody.receipts[0]?.duplicate).toBe(true);
     expect(limited.status).toBe(429);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expectNoChatSdkAttachmentSecrets(JSON.stringify(firstBody));
+    const persistedArtifacts = await readFilesRecursively(
+      path.join(rootDataDir, "events"),
+    );
+    expect(persistedArtifacts.length).toBeGreaterThan(0);
+    for (const artifact of persistedArtifacts) {
+      expectNoChatSdkAttachmentSecrets(artifact);
+    }
     await listener.stop();
   });
 

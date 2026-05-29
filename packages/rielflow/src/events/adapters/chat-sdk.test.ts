@@ -133,6 +133,128 @@ describe("Chat SDK event source adapter", () => {
     expect(first.dedupeKey).toBe(second.dedupeKey);
   });
 
+  test("normalizes deterministic image and PDF attachment descriptors", async () => {
+    const adapter = createChatSdkEventSourceAdapter();
+    const event = await adapter.normalize({
+      sourceId: "team-slack",
+      source,
+      receivedAt: "2026-05-14T00:00:00.000Z",
+      body: {
+        provider: "slack",
+        eventId: "evt-attachments",
+        message: {
+          text: "judge these attachments",
+          attachments: [
+            {
+              id: "img-1",
+              kind: "image",
+              mediaType: "image/png",
+              filename: "dashboard.png",
+              sizeBytes: 2048,
+              source: {
+                url: "https://files.example.test/private/dashboard.png",
+                token: "secret-token",
+              },
+              contentRef: "chat-sdk/evt-attachments/dashboard.png",
+              imageDescription:
+                "Screenshot shows a green deployment dashboard with all checks passing.",
+              classificationHints: ["deployment", "healthy"],
+              customMetadata: { channel: "release" },
+            },
+            {
+              id: "pdf-1",
+              kind: "pdf",
+              mediaType: "application/pdf",
+              filename: "incident-report.pdf",
+              sizeBytes: 4096,
+              source: "s3://private-bucket/incident-report.pdf?token=secret",
+              contentRef: "chat-sdk/evt-attachments/incident-report.pdf",
+              textContent:
+                "Incident report: customer data exposure was not observed.",
+              classificationHints: { documentType: "incident-report" },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(event.input["attachments"]).toEqual([
+      {
+        id: "img-1",
+        kind: "image",
+        mediaType: "image/png",
+        filename: "dashboard.png",
+        sizeBytes: 2048,
+        source: { redacted: true },
+        contentRef: "chat-sdk/evt-attachments/dashboard.png",
+        imageDescription:
+          "Screenshot shows a green deployment dashboard with all checks passing.",
+        classificationHints: ["deployment", "healthy"],
+        customMetadata: { channel: "release" },
+      },
+      {
+        id: "pdf-1",
+        kind: "pdf",
+        mediaType: "application/pdf",
+        filename: "incident-report.pdf",
+        sizeBytes: 4096,
+        source: { redacted: true },
+        contentRef: "chat-sdk/evt-attachments/incident-report.pdf",
+        textContent:
+          "Incident report: customer data exposure was not observed.",
+        classificationHints: { documentType: "incident-report" },
+      },
+    ]);
+    expect(JSON.stringify(event.input)).not.toContain("secret-token");
+    expect(JSON.stringify(event.input)).not.toContain("private-bucket");
+  });
+
+  test("rejects invalid attachment entries and unsafe evidence fields", async () => {
+    const adapter = createChatSdkEventSourceAdapter();
+    const normalizeWithAttachment = (attachment: unknown) =>
+      adapter.normalize({
+        sourceId: "team-slack",
+        source,
+        receivedAt: "2026-05-14T00:00:00.000Z",
+        body: {
+          provider: "slack",
+          eventId: "evt-invalid-attachment",
+          message: {
+            text: "judge this attachment",
+            attachments: [attachment],
+          },
+        },
+      });
+
+    await expect(normalizeWithAttachment("not-an-object")).rejects.toThrow(
+      "message.attachments[0] must be a JSON object",
+    );
+    await expect(
+      normalizeWithAttachment({
+        kind: "pdf",
+        filename: 123,
+      }),
+    ).rejects.toThrow("filename must be a string");
+    await expect(
+      normalizeWithAttachment({
+        kind: "pdf",
+        contentRef: 123,
+      }),
+    ).rejects.toThrow("contentRef must be a string");
+    await expect(
+      normalizeWithAttachment({
+        kind: "pdf",
+        contentRef: "../secret.pdf",
+      }),
+    ).rejects.toThrow("contentRef must be data-root-relative");
+    await expect(
+      normalizeWithAttachment({
+        kind: "pdf",
+        textContent: "x".repeat(16_385),
+      }),
+    ).rejects.toThrow("textContent exceeds 16384 characters");
+  });
+
   test("keeps checked-in Chat SDK fixtures on the generic secure boundary", async () => {
     const adapter = createChatSdkEventSourceAdapter();
     const fixtureSource = (await readFixtureJson(
@@ -146,6 +268,12 @@ describe("Chat SDK event source adapter", () => {
     );
     const payload = await readFixtureJson(
       "examples/event-sources/payloads/chat-sdk-slack-message.json",
+    );
+    const attachmentJudgementPayload = await readFixtureJson(
+      "examples/event-sources/payloads/chat-sdk-attachment-judgement-message.json",
+    );
+    const unsupportedPayload = await readFixtureJson(
+      "examples/event-sources/payloads/chat-sdk-attachment-judgement-unsupported.json",
     );
 
     expect(fixtureSource).toMatchObject({
@@ -170,7 +298,7 @@ describe("Chat SDK event source adapter", () => {
       sourceId: "chat-sdk-slack",
       outputDestinations: ["chat-sdk-slack-replies"],
       match: { eventType: "chat.message" },
-      workflowName: "first-four-arithmetic-pipeline",
+      workflowName: "chat-event-attachment-judgement",
     });
     expect(destination).toMatchObject({
       id: "chat-sdk-slack-replies",
@@ -200,6 +328,41 @@ describe("Chat SDK event source adapter", () => {
       },
       rawRef: { root: "artifact", path: "events/redacted-chat-sdk.json" },
     });
+
+    const attachmentEnvelope = await adapter.normalize({
+      sourceId: "chat-sdk-slack",
+      source: fixtureSource,
+      receivedAt: "2026-05-15T00:00:00.000Z",
+      body: attachmentJudgementPayload,
+    });
+    expect(attachmentEnvelope.input["attachments"]).toEqual([
+      expect.objectContaining({
+        id: "img-release-dashboard",
+        kind: "image",
+        imageDescription: expect.stringContaining("green deployment dashboard"),
+      }),
+      expect.objectContaining({
+        id: "pdf-incident-summary",
+        kind: "pdf",
+        textContent: expect.stringContaining(
+          "customer data exposure was not observed",
+        ),
+      }),
+    ]);
+
+    const unsupportedEnvelope = await adapter.normalize({
+      sourceId: "chat-sdk-slack",
+      source: fixtureSource,
+      receivedAt: "2026-05-15T00:00:00.000Z",
+      body: unsupportedPayload,
+    });
+    expect(unsupportedEnvelope.input["attachments"]).toEqual([
+      expect.objectContaining({
+        id: "archive-unknown",
+        kind: "other",
+        mediaType: "application/zip",
+      }),
+    ]);
   });
 
   test("verifies generic webhook signatures before normalization", () => {

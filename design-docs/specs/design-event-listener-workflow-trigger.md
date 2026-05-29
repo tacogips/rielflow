@@ -832,6 +832,13 @@ Minimum first-iteration event support:
 - text plus structured fields
 - file attachments as data-root file refs when downloaded
 
+The `chat-event-attachment-judgement` example extends this surface with
+deterministic image and PDF attachment descriptors. The event trigger contract
+still passes attachments through `event.input.attachments[]`; tests and example
+fixtures may provide bounded `textContent`, `imageDescription`, or safe
+`contentRef` values so workflows can classify attachment contents without live
+provider downloads.
+
 Provider-specific capabilities should stay in adapter capability metadata, not
 in workflow bindings. For example, Slack scheduled messages or native streaming
 support should not change the event trigger contract.

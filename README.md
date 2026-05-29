@@ -830,6 +830,26 @@ the webhook path must remain relative and provider-scoped, such as
 this boundary; direct provider SDK integration remains future scope after
 dependency and credential review.
 
+Chat SDK payloads may include deterministic attachment descriptors under
+`message.attachments[]`. Valid image and PDF descriptors are preserved as
+`event.input.attachments[]` with safe data-root-relative `contentRef` values,
+bounded inline evidence fields such as `imageDescription` and `textContent`,
+and redacted provider `source` metadata. Non-object attachments, unsafe
+`contentRef` values, and oversized inline evidence are rejected before dispatch.
+The `chat-event-attachment-judgement` example classifies image and PDF
+descriptors from those deterministic fields and marks unsupported or
+evidence-free attachments for manual review:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit chat-sdk-slack \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-attachment-judgement-message.json \
+  --mock-scenario ./examples/chat-event-attachment-judgement/mock-scenario.json \
+  --output json
+```
+
 Local file change sources use `kind: "file-change"` and are served by
 `events serve`. Configure `directory` with an absolute path or a path relative
 to the source JSON file, and set `changeTypes` to the non-empty subset of
@@ -1074,6 +1094,8 @@ Recommended starting points:
 - `scheduled-sleep`: minimal workflow that waits with `nodeType: "sleep"` before continuing to a worker step.
 - `supervised-mock-retry`: deterministic example for `--auto-improve` retry behavior.
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
+- `chat-event-attachment-judgement`: Chat SDK image/PDF attachment judgement
+  workflow using deterministic descriptors and `codex-agent`.
 - `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
 
 ## Repository Workflows

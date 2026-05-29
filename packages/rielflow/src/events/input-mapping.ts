@@ -68,7 +68,7 @@ function shouldMirrorToHumanInput(
   if (explicit !== undefined) {
     return explicit;
   }
-  return source?.kind === "webhook";
+  return source?.kind === "webhook" || source?.kind === "chat-sdk";
 }
 
 export function mapEventToWorkflowInput(
