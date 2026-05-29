@@ -259,86 +259,83 @@ describe("Chat SDK event source adapter", () => {
   test.each([
     "slack",
     "telegram",
-  ] as const)(
-    "reloads persisted %s history after adapter restart",
-    async (provider) => {
-      const dataRoot = await mkdtemp(
-        path.join(os.tmpdir(), `rielflow-chat-sdk-${provider}-history-`),
-      );
-      const sourceWithHistory: ChatSdkSourceConfig = {
-        ...source,
-        id: `${provider}-chat`,
+  ] as const)("reloads persisted %s history after adapter restart", async (provider) => {
+    const dataRoot = await mkdtemp(
+      path.join(os.tmpdir(), `rielflow-chat-sdk-${provider}-history-`),
+    );
+    const sourceWithHistory: ChatSdkSourceConfig = {
+      ...source,
+      id: `${provider}-chat`,
+      provider,
+      webhook: {
+        path: `chat-sdk/${provider}`,
+        signingSecretEnv: "CHAT_SDK_SECRET",
+      },
+      history: {
+        maxMessages: 5,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-conversation",
+      },
+    };
+    const firstAdapter = createChatSdkEventSourceAdapter();
+    const first = await firstAdapter.normalize({
+      sourceId: sourceWithHistory.id,
+      source: sourceWithHistory,
+      receivedAt: "2026-05-14T00:00:00.000Z",
+      eventDataRoot: dataRoot,
+      body: {
         provider,
-        webhook: {
-          path: `chat-sdk/${provider}`,
-          signingSecretEnv: "CHAT_SDK_SECRET",
-        },
-        history: {
-          maxMessages: 5,
-          maxBytes: 32768,
-          maxAgeMs: 86400000,
-          scope: "thread-or-conversation",
-        },
-      };
-      const firstAdapter = createChatSdkEventSourceAdapter();
-      const first = await firstAdapter.normalize({
-        sourceId: sourceWithHistory.id,
-        source: sourceWithHistory,
-        receivedAt: "2026-05-14T00:00:00.000Z",
-        eventDataRoot: dataRoot,
-        body: {
-          provider,
-          eventId: "evt-1",
-          occurredAt: "2026-05-13T23:59:00.000Z",
-          actor: { id: "user-1", displayName: "Operator" },
-          conversation: { id: "conv-1", threadId: "thread-1" },
-          message: { text: "remember this" },
-        },
-      });
+        eventId: "evt-1",
+        occurredAt: "2026-05-13T23:59:00.000Z",
+        actor: { id: "user-1", displayName: "Operator" },
+        conversation: { id: "conv-1", threadId: "thread-1" },
+        message: { text: "remember this" },
+      },
+    });
 
-      expect(first.input["history"]).toEqual([]);
-      await firstAdapter.recordAcceptedEvent?.({
-        source: sourceWithHistory,
-        event: first,
-        eventDataRoot: dataRoot,
-        now: () => new Date("2026-05-14T00:00:00.000Z"),
-      });
+    expect(first.input["history"]).toEqual([]);
+    await firstAdapter.recordAcceptedEvent?.({
+      source: sourceWithHistory,
+      event: first,
+      eventDataRoot: dataRoot,
+      now: () => new Date("2026-05-14T00:00:00.000Z"),
+    });
 
-      const restartedAdapter = createChatSdkEventSourceAdapter();
-      const second = await restartedAdapter.normalize({
-        sourceId: sourceWithHistory.id,
-        source: sourceWithHistory,
-        receivedAt: "2026-05-14T00:01:00.000Z",
-        eventDataRoot: dataRoot,
-        body: {
-          provider,
-          eventId: "evt-2",
-          occurredAt: "2026-05-14T00:01:00.000Z",
-          actor: { id: "user-2", displayName: "Reviewer" },
-          conversation: { id: "conv-1", threadId: "thread-1" },
-          message: { text: "what was remembered?" },
-        },
-      });
+    const restartedAdapter = createChatSdkEventSourceAdapter();
+    const second = await restartedAdapter.normalize({
+      sourceId: sourceWithHistory.id,
+      source: sourceWithHistory,
+      receivedAt: "2026-05-14T00:01:00.000Z",
+      eventDataRoot: dataRoot,
+      body: {
+        provider,
+        eventId: "evt-2",
+        occurredAt: "2026-05-14T00:01:00.000Z",
+        actor: { id: "user-2", displayName: "Reviewer" },
+        conversation: { id: "conv-1", threadId: "thread-1" },
+        message: { text: "what was remembered?" },
+      },
+    });
 
-      expect(second.input["historySource"]).toMatchObject({
-        mode: "persisted",
-        messageCount: 1,
-      });
-      expect(second.input["history"]).toEqual([
-        expect.objectContaining({
-          messageId: "evt-1",
-          authorId: "user-1",
-          text: "remember this",
-          conversationId: "conv-1",
-          threadId: "thread-1",
-          provider,
-        }),
-      ]);
-      expect(JSON.stringify(second.input["history"])).not.toContain(
-        "CHAT_SDK_SECRET",
-      );
-    },
-  );
+    expect(second.input["historySource"]).toMatchObject({
+      mode: "persisted",
+      messageCount: 1,
+    });
+    expect(second.input["history"]).toEqual([
+      expect.objectContaining({
+        messageId: "evt-1",
+        authorId: "user-1",
+        text: "remember this",
+        conversationId: "conv-1",
+        threadId: "thread-1",
+        provider,
+      }),
+    ]);
+    expect(JSON.stringify(second.input["history"])).not.toContain(
+      "CHAT_SDK_SECRET",
+    );
+  });
 
   test("keeps checked-in Chat SDK fixtures on the generic secure boundary", async () => {
     const adapter = createChatSdkEventSourceAdapter();
