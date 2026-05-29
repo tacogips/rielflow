@@ -37,6 +37,7 @@ flowchart TD
 - Start workflows with supervisor-backed execution by default; `--no-auto-improve` disables workflow patching but keeps deterministic supervision.
 - Start a local GraphQL control plane for remote execution and manager/control-plane operations.
 - Receive external events, replay event receipts, inspect reply dispatch records, and register chat-created workflow schedules.
+- Run built-in Discord Gateway chat ingestion with bounded channel or thread history for persona workflows, distinct from generic Chat SDK webhooks.
 - Install shell hooks/snippets for Claude Code, Codex, and Gemini.
 
 ## Install
@@ -881,8 +882,17 @@ var names in source config, for example `RIEL_MATRIX_HOMESERVER_URL` and
 `RIEL_MATRIX_ACCESS_TOKEN`. Matrix receive normalizes text-like
 `m.room.message` events to `chat.message`; chat replies send through the Matrix
 Client-Server room send API with the reply idempotency key as the transaction
-id. The first slice excludes encrypted rooms, attachments, reactions, edits,
-redactions, and Application Service transactions.
+id. Matrix sources may enable bounded room/thread history; during `events serve`
+accepted messages are persisted under the event data root as compact normalized
+history, reloaded after restart, and exposed through `event.input.history` and
+`event.input.historySource`. Persisted Matrix history excludes access tokens,
+raw sync payloads, workflow inboxes, and agent transcripts. Matrix sources may
+also opt into bounded text-compatible attachment downloads with
+`attachments.downloadText`; extracted text is appended to `event.input.text` and
+also exposed as `event.input.attachmentText` plus `event.input.attachments`
+metadata. Binary OCR, audio/video transcription, encrypted rooms, encrypted
+attachments, reactions, edits, redactions, and Application Service transactions
+remain out of scope.
 
 Chat SDK chat sources use `kind: "chat-sdk"` with the first-pass generic
 webhook/send boundary. Supported providers are `slack`, `teams`, `gchat`,
@@ -892,8 +902,32 @@ through a configured send endpoint referenced by env-var names. Each served
 chat-sdk webhook must configure a bearer token or signing secret env var, and
 the webhook path must remain relative and provider-scoped, such as
 `chat-sdk/slack`. rielflow does not import direct `@chat-adapter/*` packages in
-this boundary; direct provider SDK integration remains future scope after
-dependency and credential review.
+this boundary. Slack and Telegram Chat SDK sources may enable bounded
+conversation/thread history. Accepted messages are persisted under the event
+data root after dispatch and reloaded after restart so workflows can inspect
+`event.input.history` and `event.input.historySource` without reading raw
+provider payloads, secrets, workflow inboxes, or agent transcripts. Direct
+provider SDK integration remains future scope after dependency and credential
+review.
+
+Discord Gateway chat sources use `kind: "discord-gateway"` for rielflow-owned
+Discord Gateway ingestion. Configure bot credentials with env-var names such as
+`RIEL_DISCORD_BOT_TOKEN` and `RIEL_DISCORD_APPLICATION_ID`, then list the
+Discord channels or threads the runner should listen to. The adapter ignores
+bot and self messages by default, normalizes accepted `MESSAGE_CREATE` events
+to `chat.message`, attaches bounded recent channel or thread messages to
+`event.input.history`, persists compact normalized history under the event data
+root for restart reload, and sends replies through the same provider-neutral
+`rielflow/chat-reply-worker` destination boundary. If `events serve` has no
+event data root or runs read-only, the adapter keeps in-memory plus optional
+REST history behavior and emits a diagnostic instead of writing elsewhere.
+Persisted history files contain only bounded normalized Discord conversation
+items and bounds metadata; they are not workflow inbox, agent transcript, raw
+Gateway payload, credential, or long-term memory storage. This path is separate
+from the generic `chat-sdk-discord` webhook path and does not require an
+external Chat SDK Discord deployment. The first slice excludes sharding, slash
+commands, components, moderation events, and attachment ingestion; enable
+Discord Message Content intent when workflow prompts need message text.
 
 Chat SDK payloads may include deterministic attachment descriptors under
 `message.attachments[]`. Valid image and PDF descriptors are preserved as
@@ -1161,7 +1195,8 @@ Recommended starting points:
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
 - `chat-event-attachment-judgement`: Chat SDK image/PDF attachment judgement
   workflow using deterministic descriptors and `codex-agent`.
-- `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
+- `discord-persona-chat`: Discord Gateway persona replies with bounded channel or thread history.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK Slack/Telegram, and Discord Gateway source fixtures.
 
 ## Repository Workflows
 
@@ -1300,14 +1335,11 @@ Issue-resolution runs that audit real backend behavior should run without
 `--mock-scenario`, then use the runtime artifact records above to verify the
 configured backend/model, mailbox `latestOutputs`, request, candidate, and
 validation evidence. Its required documentation targets are `README.md` and
-`.agents/skills/rielflow-impl-workflow/SKILL.md` so shipped behavior and the
-LLM-facing workflow skill stay aligned. When implementation changes CLI,
-GraphQL, library, or workflow-operation behavior, the matching user-facing
-workflow skills under `.agents/skills/` should be refreshed in the same step.
-For Codex-agent workflow runs, the Codex-specific workflow skill target is
-`.agents/skills/rielflow-codex-impl-workflow/SKILL.md` when present; if that
-repository-local alias is not installed, refresh the active workflow skill that
-routes to `codex-design-and-implement-review-loop`.
+`.agents/skills/rielflow-codex-impl-workflow/SKILL.md` for Codex-agent runs so
+shipped behavior and the LLM-facing workflow skill stay aligned. When
+implementation changes CLI, GraphQL, library, event-source, chat-reply, or
+workflow-operation behavior, refresh the matching user-facing workflow skills
+under `.agents/skills/` in the same step.
 
 For active implementation-plan completion handoffs, this documentation refresh
 should preserve the accepted review decision: unresolved blocker tasks stay

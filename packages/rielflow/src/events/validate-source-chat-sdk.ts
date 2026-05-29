@@ -1,4 +1,5 @@
 import { isJsonObject } from "../shared/json";
+import { CHAT_HISTORY_LIMITS } from "./adapters/chat-history-persistence";
 import {
   CHAT_SDK_PROVIDERS,
   getChatSdkProviderCapability,
@@ -172,6 +173,90 @@ export function validateChatSdkSource(
         `${base}.providerConfig.eventType`,
         "providerConfig cannot bypass normalized event type mapping",
       ),
+    );
+  }
+  validateChatSdkHistory(source, issues);
+}
+
+function validateChatSdkHistory(
+  source: EventSourceConfig,
+  issues: EventConfigValidationIssue[],
+): void {
+  const base = `sources.${source.id}`;
+  const history = source["history"];
+  if (history === undefined) {
+    return;
+  }
+  if (!isJsonObject(history)) {
+    issues.push(error(`${base}.history`, "must be an object"));
+    return;
+  }
+  if (source["provider"] !== "slack" && source["provider"] !== "telegram") {
+    issues.push(
+      error(
+        `${base}.history`,
+        "chat-sdk history is currently supported only for slack and telegram providers",
+      ),
+    );
+  }
+  const maxMessages = history["maxMessages"];
+  if (
+    maxMessages !== undefined &&
+    (!isPositiveInteger(maxMessages) ||
+      Number(maxMessages) > CHAT_HISTORY_LIMITS.maxMessages)
+  ) {
+    issues.push(
+      error(
+        `${base}.history.maxMessages`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxMessages)}`,
+      ),
+    );
+  }
+  const maxBytes = history["maxBytes"];
+  if (
+    maxBytes !== undefined &&
+    (!isPositiveInteger(maxBytes) ||
+      Number(maxBytes) > CHAT_HISTORY_LIMITS.maxBytes)
+  ) {
+    issues.push(
+      error(
+        `${base}.history.maxBytes`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxBytes)}`,
+      ),
+    );
+  }
+  const maxAgeMs = history["maxAgeMs"];
+  if (
+    maxAgeMs !== undefined &&
+    (!isPositiveInteger(maxAgeMs) ||
+      Number(maxAgeMs) > CHAT_HISTORY_LIMITS.maxAgeMs)
+  ) {
+    issues.push(
+      error(
+        `${base}.history.maxAgeMs`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxAgeMs)}`,
+      ),
+    );
+  }
+  const scope = history["scope"];
+  if (
+    scope !== undefined &&
+    scope !== "conversation" &&
+    scope !== "thread-or-conversation"
+  ) {
+    issues.push(
+      error(
+        `${base}.history.scope`,
+        "must be 'conversation' or 'thread-or-conversation'",
+      ),
+    );
+  }
+  if (
+    history["includeBotMessages"] !== undefined &&
+    typeof history["includeBotMessages"] !== "boolean"
+  ) {
+    issues.push(
+      error(`${base}.history.includeBotMessages`, "must be a boolean"),
     );
   }
 }

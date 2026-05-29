@@ -1,4 +1,5 @@
 import { isJsonObject } from "../shared/json";
+import { CHAT_HISTORY_LIMITS } from "./adapters/chat-history-persistence";
 import {
   eventConfigError as error,
   isNonEmptyString,
@@ -10,6 +11,7 @@ import type { EventConfigValidationIssue, EventSourceConfig } from "./types";
 
 const MATRIX_ROOM_ID_PATTERN = /^![^\s:]+:[^\s:]+$/;
 const MATRIX_USER_ID_PATTERN = /^@[^\s:]+:[^\s:]+$/;
+const MAX_MATRIX_ATTACHMENT_BYTES = 1_048_576;
 
 export function validateMatrixSource(
   source: EventSourceConfig,
@@ -57,6 +59,8 @@ export function validateMatrixSource(
   }
   validateMatrixRooms(source, issues);
   validateMatrixSync(source, issues);
+  validateMatrixHistory(source, issues);
+  validateMatrixAttachments(source, issues);
   if (
     source["ignoreOwnMessages"] !== undefined &&
     typeof source["ignoreOwnMessages"] !== "boolean"
@@ -65,6 +69,132 @@ export function validateMatrixSource(
       error(
         `sources.${source.id}.ignoreOwnMessages`,
         "ignoreOwnMessages must be a boolean when set",
+      ),
+    );
+  }
+}
+
+function validateMatrixAttachments(
+  source: EventSourceConfig,
+  issues: EventConfigValidationIssue[],
+): void {
+  const attachments = source["attachments"];
+  if (attachments === undefined) {
+    return;
+  }
+  if (!isJsonObject(attachments)) {
+    issues.push(error(`sources.${source.id}.attachments`, "must be an object"));
+    return;
+  }
+  if (
+    attachments["downloadText"] !== undefined &&
+    typeof attachments["downloadText"] !== "boolean"
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.attachments.downloadText`,
+        "must be a boolean",
+      ),
+    );
+  }
+  const maxBytes = attachments["maxBytes"];
+  if (
+    maxBytes !== undefined &&
+    (!isPositiveInteger(maxBytes) ||
+      Number(maxBytes) > MAX_MATRIX_ATTACHMENT_BYTES)
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.attachments.maxBytes`,
+        `must be a positive integer no greater than ${String(MAX_MATRIX_ATTACHMENT_BYTES)}`,
+      ),
+    );
+  }
+  const allowedMimeTypes = attachments["allowedMimeTypes"];
+  if (allowedMimeTypes !== undefined) {
+    if (
+      !Array.isArray(allowedMimeTypes) ||
+      allowedMimeTypes.length === 0 ||
+      !allowedMimeTypes.every(isNonEmptyString)
+    ) {
+      issues.push(
+        error(
+          `sources.${source.id}.attachments.allowedMimeTypes`,
+          "must be a non-empty array of MIME type strings",
+        ),
+      );
+    }
+  }
+}
+
+function validateMatrixHistory(
+  source: EventSourceConfig,
+  issues: EventConfigValidationIssue[],
+): void {
+  const history = source["history"];
+  if (history === undefined) {
+    return;
+  }
+  if (!isJsonObject(history)) {
+    issues.push(error(`sources.${source.id}.history`, "must be an object"));
+    return;
+  }
+  const maxMessages = history["maxMessages"];
+  if (
+    maxMessages !== undefined &&
+    (!isPositiveInteger(maxMessages) ||
+      Number(maxMessages) > CHAT_HISTORY_LIMITS.maxMessages)
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.history.maxMessages`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxMessages)}`,
+      ),
+    );
+  }
+  const maxBytes = history["maxBytes"];
+  if (
+    maxBytes !== undefined &&
+    (!isPositiveInteger(maxBytes) ||
+      Number(maxBytes) > CHAT_HISTORY_LIMITS.maxBytes)
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.history.maxBytes`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxBytes)}`,
+      ),
+    );
+  }
+  const maxAgeMs = history["maxAgeMs"];
+  if (
+    maxAgeMs !== undefined &&
+    (!isPositiveInteger(maxAgeMs) ||
+      Number(maxAgeMs) > CHAT_HISTORY_LIMITS.maxAgeMs)
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.history.maxAgeMs`,
+        `must be a positive integer no greater than ${String(CHAT_HISTORY_LIMITS.maxAgeMs)}`,
+      ),
+    );
+  }
+  const scope = history["scope"];
+  if (scope !== undefined && scope !== "room" && scope !== "thread-or-room") {
+    issues.push(
+      error(
+        `sources.${source.id}.history.scope`,
+        "must be 'room' or 'thread-or-room'",
+      ),
+    );
+  }
+  if (
+    history["includeOwnMessages"] !== undefined &&
+    typeof history["includeOwnMessages"] !== "boolean"
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.history.includeOwnMessages`,
+        "must be a boolean",
       ),
     );
   }

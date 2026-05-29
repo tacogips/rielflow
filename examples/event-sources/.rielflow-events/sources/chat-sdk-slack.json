@@ -15,5 +15,12 @@
   "send": {
     "endpointUrlEnv": "RIEL_CHAT_SDK_SLACK_SEND_URL",
     "tokenEnv": "RIEL_CHAT_SDK_SLACK_SEND_TOKEN"
+  },
+  "history": {
+    "maxMessages": 20,
+    "maxBytes": 32768,
+    "maxAgeMs": 86400000,
+    "scope": "thread-or-conversation",
+    "includeBotMessages": false
   }
 }

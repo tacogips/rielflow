@@ -10,6 +10,8 @@ export interface EventArtifactRef {
 export interface EventActor {
   readonly id: string;
   readonly displayName?: string;
+  readonly username?: string;
+  readonly isBot?: boolean;
 }
 
 export interface EventConversation {
@@ -87,6 +89,14 @@ export interface ChatSdkSendConfig extends JsonObject {
   readonly tokenEnv?: string;
 }
 
+export interface ChatSdkHistoryConfig extends JsonObject {
+  readonly maxMessages?: number;
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly scope?: "conversation" | "thread-or-conversation";
+  readonly includeBotMessages?: boolean;
+}
+
 export interface ChatSdkSourceConfig extends EventSourceConfigBase {
   readonly kind: "chat-sdk";
   readonly provider: ChatSdkProvider;
@@ -94,6 +104,49 @@ export interface ChatSdkSourceConfig extends EventSourceConfigBase {
   readonly webhook: ChatSdkWebhookConfig;
   readonly send?: ChatSdkSendConfig;
   readonly providerConfig?: JsonObject;
+  readonly history?: ChatSdkHistoryConfig;
+}
+
+export interface DiscordGatewayChannelConfig extends JsonObject {
+  readonly id: string;
+  readonly includeThreads?: boolean;
+  readonly personas?: readonly string[];
+}
+
+export interface DiscordGatewayHistoryConfig extends JsonObject {
+  readonly maxMessages?: number;
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly scope?: "channel" | "thread-or-channel";
+  readonly includeBotMessages?: boolean;
+  readonly fetchOnStart?: boolean;
+  readonly fetchOnMessage?: "never" | "when-cache-empty" | "always";
+}
+
+export interface DiscordGatewayFiltersConfig extends JsonObject {
+  readonly ignoreBots?: boolean;
+  readonly ignoreSelf?: boolean;
+  readonly requireMention?: boolean;
+}
+
+export interface DiscordGatewayReplyBotConfig extends JsonObject {
+  readonly tokenEnv: string;
+}
+
+export interface DiscordGatewaySourceConfig extends EventSourceConfigBase {
+  readonly kind: "discord-gateway";
+  readonly provider?: "discord";
+  readonly tokenEnv: string;
+  readonly applicationIdEnv: string;
+  readonly guildIds?: readonly string[];
+  readonly channels: readonly DiscordGatewayChannelConfig[];
+  readonly history?: DiscordGatewayHistoryConfig;
+  readonly filters?: DiscordGatewayFiltersConfig;
+  readonly replyBots?: Readonly<Record<string, DiscordGatewayReplyBotConfig>>;
+  readonly gatewayUrl?: string;
+  readonly restBaseUrl?: string;
+  readonly intents?: number;
+  readonly configFilePath?: string;
 }
 
 export interface MatrixSourceRoomConfig extends JsonObject {
@@ -106,6 +159,20 @@ export interface MatrixSourceSyncConfig extends JsonObject {
   readonly sinceTokenPath?: string;
 }
 
+export interface MatrixHistoryConfig extends JsonObject {
+  readonly maxMessages?: number;
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly scope?: "room" | "thread-or-room";
+  readonly includeOwnMessages?: boolean;
+}
+
+export interface MatrixAttachmentsConfig extends JsonObject {
+  readonly downloadText?: boolean;
+  readonly maxBytes?: number;
+  readonly allowedMimeTypes?: readonly string[];
+}
+
 export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly kind: "matrix";
   readonly provider?: "matrix" | string;
@@ -115,6 +182,8 @@ export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly rooms: readonly MatrixSourceRoomConfig[];
   readonly sync?: MatrixSourceSyncConfig;
   readonly ignoreOwnMessages?: boolean;
+  readonly history?: MatrixHistoryConfig;
+  readonly attachments?: MatrixAttachmentsConfig;
 }
 
 export interface S3RepositoryEventReceiverConfig extends JsonObject {
@@ -166,6 +235,7 @@ export interface SequentialListSourceConfig extends EventSourceConfigBase {
 export type EventSourceConfig =
   | CronSourceConfig
   | ChatSdkSourceConfig
+  | DiscordGatewaySourceConfig
   | MatrixSourceConfig
   | WebhookSourceConfig
   | S3RepositorySourceConfig
@@ -180,8 +250,7 @@ export interface EventOutputDestinationConfigBase extends JsonObject {
   readonly provider?: string;
 }
 
-export interface ChatOutputDestinationConfig
-  extends EventOutputDestinationConfigBase {
+export interface ChatOutputDestinationConfig extends EventOutputDestinationConfigBase {
   readonly kind: "chat";
   /**
    * Source adapter used for transport delivery until chat providers have
@@ -202,8 +271,7 @@ export interface ChatOutputDestinationConfig
   };
 }
 
-export interface S3BackupOutputDestinationConfig
-  extends EventOutputDestinationConfigBase {
+export interface S3BackupOutputDestinationConfig extends EventOutputDestinationConfigBase {
   readonly kind: "s3-backup";
   readonly provider: "aws-s3" | "s3-compatible";
   readonly endpointUrlEnv?: string;
@@ -345,8 +413,7 @@ export type EventSupervisorAction =
   | "submit"
   | "resume";
 
-export interface EventSupervisorIntentMappingStructuredOrCommand
-  extends JsonObject {
+export interface EventSupervisorIntentMappingStructuredOrCommand extends JsonObject {
   readonly mode: "structured-or-command";
   readonly defaultAction?: EventSupervisorAction;
 }

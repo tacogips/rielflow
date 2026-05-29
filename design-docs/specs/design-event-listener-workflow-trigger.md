@@ -683,9 +683,10 @@ The first implementation slice should support plain Matrix room messages only:
 
 - include `m.room.message` events with text-like `msgtype` values such as
   `m.text`, `m.notice`, and `m.emote`
-- ignore membership events, reactions, redactions, edits, encrypted events,
-  state events, and attachment-only messages unless a later design explicitly
-  expands the adapter contract
+- ignore membership events, reactions, redactions, edits, encrypted events, and
+  state events. Text-compatible Matrix attachment messages are supported only
+  when the source opts into bounded attachment text download; see
+  `design-docs/specs/design-matrix-attachment-text.md`.
 - filter messages sent by the configured bot user by default so reply dispatch
   does not trigger a workflow loop
 - map the Matrix room id to `conversation.id`
@@ -703,6 +704,8 @@ Normalized input should include:
 - `eventId`
 - `sender`
 - `msgtype`
+- optional `attachmentText`
+- optional `attachments`
 - optional `replyToEventId`
 - optional `threadRootEventId`
 
@@ -1360,6 +1363,9 @@ Event config validation should fail when:
 - Matrix sync timing fields such as `pollTimeoutMs` are non-positive or exceed
   the adapter's supported long-poll bounds
 - Matrix `sync.sinceTokenPath` is absolute, empty, or contains path traversal
+- Matrix `attachments` is non-object, uses a non-boolean `downloadText`, sets a
+  non-positive or oversized `maxBytes`, or provides an empty/non-string
+  `allowedMimeTypes` entry
 - `match.eventType` is unsupported by the source adapter capability metadata
 - `inputMapping` references paths not present in the normalized event schema
   when the schema is statically known

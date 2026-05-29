@@ -145,6 +145,7 @@ export function buildChatReplyDispatchRequest(input: {
   readonly outputDestinationId?: string;
   readonly outputDestinationIds?: readonly string[];
   readonly text: string;
+  readonly replyAs?: string;
   readonly addon: ResolvedChatReplyWorkerAddon;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
@@ -160,7 +161,10 @@ export function buildChatReplyDispatchRequest(input: {
     ...(input.outputDestinationIds === undefined
       ? {}
       : { outputDestinationIds: input.outputDestinationIds }),
-    message: { text: input.text },
+    message: {
+      text: input.text,
+      ...(input.replyAs === undefined ? {} : { replyAs: input.replyAs }),
+    },
     visibility: input.addon.config.visibility ?? "public",
     threadPolicy: input.addon.config.threadPolicy ?? "same-thread",
     idempotencyKey: input.idempotencyKey,
@@ -206,6 +210,10 @@ export async function executeChatReplyAddonNode(
     addon.config.textTemplate,
     variables,
   ).trim();
+  const renderedReplyAs =
+    addon.config.replyAsTemplate === undefined
+      ? undefined
+      : renderPromptTemplate(addon.config.replyAsTemplate, variables).trim();
   if (renderedText.length === 0) {
     throw new AdapterExecutionError(
       "invalid_output",
@@ -248,6 +256,9 @@ export async function executeChatReplyAddonNode(
               ? {}
               : { outputDestinationIds }),
             text: renderedText,
+            ...(renderedReplyAs === undefined || renderedReplyAs.length === 0
+              ? {}
+              : { replyAs: renderedReplyAs }),
             addon,
             workflowId: input.workflowId,
             workflowExecutionId: input.workflowExecutionId,
@@ -277,7 +288,12 @@ export async function executeChatReplyAddonNode(
       reply: {
         status,
         target: targetToJson(effectiveTarget),
-        message: { text: renderedText },
+        message: {
+          text: renderedText,
+          ...(renderedReplyAs === undefined || renderedReplyAs.length === 0
+            ? {}
+            : { replyAs: renderedReplyAs }),
+        },
         visibility: addon.config.visibility ?? "public",
         threadPolicy: addon.config.threadPolicy ?? "same-thread",
         idempotencyKey,

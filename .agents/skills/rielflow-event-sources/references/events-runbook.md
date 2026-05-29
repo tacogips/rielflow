@@ -5,14 +5,14 @@
 Validate:
 
 ```bash
-rielflow events validate --workflow-root ./examples --event-root ./examples/event-sources/.rielflow-events
+rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 Emit fixture:
 
 ```bash
 rielflow events emit <source-id> \
-  --workflow-root ./examples \
+  --workflow-definition-dir ./examples \
   --event-root ./examples/event-sources/.rielflow-events \
   --event-file ./examples/event-sources/payloads/chat-message.json \
   --mock-scenario ./examples/<workflow-name>/mock-scenario.json
@@ -21,7 +21,7 @@ rielflow events emit <source-id> \
 Serve listeners:
 
 ```bash
-rielflow events serve --workflow-root ./examples --event-root ./examples/event-sources/.rielflow-events
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
 List receipts:
@@ -55,6 +55,35 @@ Local command dispatch can start workflow execution directly.
 With `--endpoint`, event dispatch goes through GraphQL and can run as a lightweight listener process.
 
 Read-only mode validates and records incoming events without dispatching workflow execution.
+
+## Discord Gateway
+
+Use `kind: "discord-gateway"` when rielflow should own Discord Gateway
+ingestion instead of receiving generic Chat SDK Discord webhooks. Configure
+`tokenEnv`, `applicationIdEnv`, `channels`, `history`, and `filters` in the
+source JSON. The runner listens to configured channels or threads, filters bot
+and self messages by default, normalizes accepted Discord messages to
+`chat.message`, and attaches bounded channel or thread context to
+`event.input.history`.
+
+Example local validation:
+
+```bash
+rielflow events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+rielflow events emit discord-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --event-file ./examples/event-sources/payloads/discord-gateway-message-with-history.json \
+  --read-only \
+  --output json
+```
+
+For live serving, provide the env vars named by the source config, such as
+`RIEL_DISCORD_BOT_TOKEN` and `RIEL_DISCORD_APPLICATION_ID`. Enable Discord
+Message Content intent when persona workflows need message text. The first
+slice keeps history bounded by count, age, and byte limits; durable
+cross-restart history, sharding, slash commands, components, moderation events,
+and attachment ingestion are outside the current contract.
 
 ## Sequential Lists
 

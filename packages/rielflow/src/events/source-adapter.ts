@@ -50,6 +50,9 @@ export interface RawExternalEvent {
   readonly headers?: Readonly<Record<string, string>>;
   readonly body: unknown;
   readonly rawRef?: EventArtifactRef;
+  readonly eventDataRoot?: string;
+  readonly readOnly?: boolean;
+  readonly diagnosticSink?: EventSourceDiagnosticSink;
 }
 
 export interface EventSourceCapabilities {
@@ -98,11 +101,22 @@ export interface EventSourceChatReplyInput {
   readonly fetchImpl: typeof fetch;
 }
 
+export interface EventSourceAcceptedEventInput {
+  readonly source: EventSourceConfig;
+  readonly event: ExternalEventEnvelope;
+  readonly raw?: unknown;
+  readonly eventDataRoot?: string;
+  readonly readOnly?: boolean;
+  readonly diagnosticSink?: EventSourceDiagnosticSink;
+  readonly now: () => Date;
+}
+
 export interface EventSourceAdapter {
   readonly kind: string;
   readonly capabilities: EventSourceCapabilities;
   start(input: EventSourceStartInput): Promise<EventSourceHandle>;
   normalize(input: RawExternalEvent): Promise<ExternalEventEnvelope>;
+  recordAcceptedEvent?(input: EventSourceAcceptedEventInput): Promise<void>;
   dispatchChatReply?(
     input: EventSourceChatReplyInput,
   ): Promise<ChatReplyDispatchResult>;

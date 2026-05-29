@@ -55,6 +55,19 @@ Current direction:
   terminal state before dispatching the next item. Sequence cursor state lives
   with event runtime state and receipts, not in workflow bundles. See
   `design-docs/specs/design-event-listener-workflow-trigger.md`.
+- Discord Gateway chat ingestion is a rielflow-owned event source, distinct
+  from the generic Chat SDK Discord webhook boundary. It listens to configured
+  Discord channels and threads, filters bot/self messages by default, attaches
+  bounded recent channel or thread history to the normalized chat event,
+  persists compact normalized history under the event data root so `events
+  serve` restarts preserve channel/thread context, and reuses the
+  provider-neutral chat reply worker and output destination boundary for
+  same-conversation replies. See
+  `design-docs/specs/design-discord-gateway-chat-history.md`.
+- Matrix chat ingestion may opt into bounded, text-compatible attachment media
+  downloads during `/sync`; extracted text is appended to normalized
+  `chat.message` input while binary OCR, transcription, and decryption remain
+  out of scope. See `design-docs/specs/design-matrix-attachment-text.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `rielflow superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 - dedicated workflow self-improve is a separate retrospective analysis and
   optional canonical workflow-edit service; it reads recent workflow run

@@ -67,10 +67,11 @@ rielflow events emit team-matrix \
 The binding `matrix-release-chat-to-workflow` runs the `matrix-chat-reply`
 workflow and sends workflow replies through the explicit
 `release-matrix-chat` chat destination. Matrix support currently
-handles text-like `m.room.message` events from configured rooms and Matrix
-Client-Server room sends; encrypted rooms, attachments, reactions, edits,
-redactions, and Application Service transactions are out of scope for this
-fixture.
+handles text-like `m.room.message` events from configured rooms, optional
+bounded text-compatible attachment downloads, and Matrix Client-Server room
+sends; encrypted rooms, encrypted attachments, binary OCR, audio/video
+transcription, reactions, edits, redactions, and Application Service
+transactions are out of scope for this fixture.
 
 For an end-to-end local Matrix verification, run the dedicated sample workflow
 against a Docker Compose Synapse homeserver:
@@ -84,12 +85,24 @@ starting the homeserver, registering two users, creating a room, serving
 rielflow Matrix events, sending an Alice message, and waiting for the rielflow
 bot reply in the same room.
 
-The `chat-sdk-slack` source demonstrates the shared Chat SDK generic boundary.
+The Matrix source fixture enables bounded room/thread history. During
+`events serve`, accepted Matrix messages are persisted as compact normalized
+history under the event data root and reloaded after restart. Workflows can read
+that context from `event.input.history` and `event.input.historySource`;
+persisted files do not store Matrix access tokens or raw `/sync` payloads.
+The fixture also enables bounded text attachment downloads for text, markdown,
+and JSON files. Extracted text is appended to `event.input.text` and exposed as
+`event.input.attachmentText` plus `event.input.attachments` metadata.
+
+The `chat-sdk-slack` and `chat-sdk-telegram` sources demonstrate the shared
+Chat SDK generic boundary.
 The provider allow-list is `slack`, `teams`, `gchat`, `discord`, `telegram`,
 `github`, `linear`, `whatsapp`, `messenger`, and `web`. This first pass does
 not import `@chat-adapter/*` packages directly; an operator-owned Chat SDK
 deployment posts normalized webhook payloads to rielflow and receives replies
-through the configured send endpoint.
+through the configured send endpoint. Slack and Telegram fixtures enable
+bounded conversation/thread history with the same `event.input.history` and
+`event.input.historySource` workflow contract.
 
 Serve the source with env-var references only:
 
@@ -128,6 +141,22 @@ rielflow events emit chat-sdk-slack \
   --output json
 ```
 
+Telegram uses the same Chat SDK contract:
+
+```bash
+export RIEL_CHAT_SDK_TELEGRAM_WEBHOOK_SECRET=<shared-webhook-secret>
+export RIEL_CHAT_SDK_TELEGRAM_BEARER_TOKEN=<inbound-bearer-token>
+export RIEL_CHAT_SDK_TELEGRAM_SEND_URL=https://chat-sdk.example.test/send
+export RIEL_CHAT_SDK_TELEGRAM_SEND_TOKEN=<outbound-send-token>
+rielflow events emit chat-sdk-telegram \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-telegram-message.json \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
 The `chat-sdk-discord` source uses the same generic boundary for Discord and
 dispatches messages to the `discord-codex-chat` workflow, which generates a
 reply with `codex-agent` model `gpt-5.4-mini` before sending it back to the same
@@ -160,6 +189,52 @@ rielflow events emit chat-sdk-discord \
   --mock-scenario ./examples/discord-codex-chat/mock-scenario.json \
   --output json
 ```
+
+The `discord-gateway-personas` source demonstrates rielflow-owned Discord
+Gateway ingestion. It is separate from the `chat-sdk-discord` generic webhook
+path and does not require an external Chat SDK Discord deployment. The Gateway
+runner uses Discord bot credentials from environment-variable names in the
+source config, listens to configured channels and threads, ignores bot and self
+messages by default, and attaches bounded recent channel or thread history to
+`event.input.history`. During normal `events serve` operation, accepted
+messages are also written as compact bounded normalized history under the event
+data root, so a restart with the same root can reload prior channel or thread
+context without requiring a Discord REST history fetch.
+
+Serve the Gateway source with a Discord bot token and application id. The bot
+must have access to the configured channels and the Discord Message Content
+intent must be enabled when workflows need message text:
+
+```bash
+export RIEL_DISCORD_BOT_TOKEN=<discord-bot-token>
+export RIEL_DISCORD_APPLICATION_ID=<discord-application-id>
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit the checked-in Gateway payload without
+contacting Discord. The payload includes bounded prior Discord history so the
+`discord-persona-chat` workflow can answer as Yui, Mika, or Rina with context:
+
+```bash
+rielflow events emit discord-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/discord-gateway-message-with-history.json \
+  --read-only \
+  --output json
+```
+
+If `events serve` has no event data root or runs with `--read-only`, the
+Gateway adapter keeps its in-memory plus optional REST history behavior and
+emits a diagnostic instead of writing fallback files. Persisted files contain
+only bounded normalized Discord conversation items and history bounds; they are
+not workflow inbox, agent transcript, raw Gateway payload, credential, or
+long-term memory storage. The first Gateway slice does not provide multi-shard
+coordination, slash commands, components, moderation events, or attachment
+ingestion. History is bounded by `maxMessages`, `maxBytes`, and `maxAgeMs`,
+and it is Discord channel/thread context rather than workflow inbox or agent
+transcript history.
 
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and

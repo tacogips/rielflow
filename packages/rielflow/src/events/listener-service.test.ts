@@ -24,6 +24,26 @@ import type { EventSourceAdapter } from "./source-adapter";
 
 const tempDirs: string[] = [];
 
+type WebSocketMessageListener = (event: { readonly data: string }) => void;
+
+class ListenerFakeWebSocket {
+  static instances: ListenerFakeWebSocket[] = [];
+
+  closed = false;
+
+  constructor(readonly url: string) {
+    ListenerFakeWebSocket.instances.push(this);
+  }
+
+  addEventListener(_type: string, _listener: WebSocketMessageListener): void {}
+
+  send(_value: string): void {}
+
+  close(): void {
+    this.closed = true;
+  }
+}
+
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "rielflow-listener-"));
   tempDirs.push(directory);
@@ -876,6 +896,9 @@ describe("event listener service", () => {
   test("serves the checked-in chat reply webhook example through HTTP", async () => {
     const root = await makeTempDir();
     const rootDataDir = path.join(root, "data");
+    const originalWebSocket = globalThis.WebSocket;
+    globalThis.WebSocket = ListenerFakeWebSocket as unknown as typeof WebSocket;
+    ListenerFakeWebSocket.instances = [];
     let capturedFetch:
       | ((request: Request) => Response | Promise<Response>)
       | undefined;
@@ -924,6 +947,8 @@ describe("event listener service", () => {
           RIEL_EXAMPLE_REPLY_ENDPOINT: "https://reply.example.test/listener",
           RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
           RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
+          RIEL_DISCORD_BOT_TOKEN: "discord-token",
+          RIEL_DISCORD_APPLICATION_ID: "999999999999999999",
         },
         fetchImpl,
         cwd: process.cwd(),
@@ -982,5 +1007,7 @@ describe("event listener service", () => {
       await listEventReplyDispatchesFromRuntimeDb({}, { rootDataDir }),
     ).toHaveLength(4);
     await listener.stop();
+    expect(ListenerFakeWebSocket.instances[0]?.closed).toBe(true);
+    globalThis.WebSocket = originalWebSocket;
   });
 });

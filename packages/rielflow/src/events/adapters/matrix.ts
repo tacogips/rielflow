@@ -2,11 +2,28 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isJsonObject, type JsonObject } from "../../shared/json";
 import {
+  chatHistoryBounds,
+  ChatHistoryCache,
+  createChatHistoryPersistence,
+  trimChatHistory,
+  type ChatHistoryPersistence,
+  type GenericChatHistoryItem,
+} from "./chat-history-persistence";
+import {
   chatReplyDispatchResultFromResponse,
   readOptionalChatReplyJson,
 } from "./chat-reply-response";
+import {
+  downloadMatrixAttachmentText,
+  isMatrixAttachmentMessageType,
+  readMatrixAttachmentMetadata,
+  textWithMatrixAttachment,
+  type MatrixAttachmentInput,
+} from "./matrix-attachments";
 import type {
+  EventSourceAcceptedEventInput,
   EventSourceDiagnostic,
+  EventSourceDiagnosticSink,
   EventSourceAdapter,
   EventSourceChatReplyInput,
   EventSourceHandle,
@@ -133,6 +150,169 @@ function readFormattedHtml(content: JsonObject): string | undefined {
   return optionalString(content["formatted_body"]);
 }
 
+function matrixHistoryBounds(source: MatrixSourceConfig) {
+  return chatHistoryBounds({
+    history: isJsonObject(source.history) ? source.history : undefined,
+    scope: "thread-or-room",
+    includeBotMessagesKey: "includeOwnMessages",
+  });
+}
+
+function matrixHistoryKey(input: {
+  readonly source: MatrixSourceConfig;
+  readonly roomId: string;
+  readonly threadId?: string | undefined;
+}): string {
+  const bounds = matrixHistoryBounds(input.source);
+  const threadComponent =
+    bounds.scope === "thread-or-room" && input.threadId !== undefined
+      ? input.threadId
+      : "root";
+  return `${input.source.id}:${input.roomId}:${threadComponent}`;
+}
+
+function matrixHistoryItem(input: {
+  readonly source: MatrixSourceConfig;
+  readonly event: ExternalEventEnvelope;
+}): GenericChatHistoryItem | null {
+  const roomId = input.event.conversation?.id;
+  const sender = input.event.actor?.id;
+  const text = input.event.input["text"];
+  const msgtype = input.event.input["msgtype"];
+  if (
+    roomId === undefined ||
+    sender === undefined ||
+    typeof text !== "string"
+  ) {
+    return null;
+  }
+  return {
+    messageId: input.event.eventId,
+    authorId: sender,
+    displayName: input.event.actor?.displayName ?? sender,
+    isBot: sender === input.source.userId,
+    createdAt: input.event.occurredAt ?? input.event.receivedAt,
+    text,
+    conversationId: roomId,
+    ...(input.event.conversation?.threadId === undefined
+      ? {}
+      : { threadId: input.event.conversation.threadId }),
+    provider: input.event.provider,
+    ...(typeof msgtype === "string" ? { msgtype } : {}),
+  };
+}
+
+async function seedMatrixHistory(input: {
+  readonly source: MatrixSourceConfig;
+  readonly key: string;
+  readonly receivedAt: string;
+  readonly cache: ChatHistoryCache;
+  readonly persistence: ChatHistoryPersistence;
+}): Promise<void> {
+  if (input.cache.has(input.key)) {
+    return;
+  }
+  const persisted = await input.persistence.load(input.key);
+  input.cache.seed({
+    key: input.key,
+    history: persisted,
+    receivedAt: input.receivedAt,
+    mode: input.persistence.enabled ? "persisted" : "memory",
+  });
+}
+
+function attachMatrixHistory(input: {
+  readonly source: MatrixSourceConfig;
+  readonly event: ExternalEventEnvelope;
+  readonly cache: ChatHistoryCache;
+  readonly key: string;
+}): ExternalEventEnvelope {
+  const bounds = matrixHistoryBounds(input.source);
+  const history = input.cache.recent(input.key);
+  return {
+    ...input.event,
+    input: {
+      ...input.event.input,
+      history,
+      historySource: {
+        mode: input.cache.sourceMode(input.key),
+        historyKey: input.key,
+        maxMessages: bounds.maxMessages,
+        maxBytes: bounds.maxBytes,
+        maxAgeMs: bounds.maxAgeMs,
+        messageCount: history.length,
+      },
+    },
+  };
+}
+
+async function appendAcceptedMatrixHistory(input: {
+  readonly source: MatrixSourceConfig;
+  readonly event: ExternalEventEnvelope;
+  readonly cache: ChatHistoryCache;
+  readonly persistence: ChatHistoryPersistence;
+}): Promise<void> {
+  if (input.source.history === undefined) {
+    return;
+  }
+  const roomId = input.event.conversation?.id;
+  if (roomId === undefined) {
+    return;
+  }
+  const key = matrixHistoryKey({
+    source: input.source,
+    roomId,
+    threadId: input.event.conversation?.threadId,
+  });
+  await seedMatrixHistory({
+    source: input.source,
+    key,
+    receivedAt: input.event.receivedAt,
+    cache: input.cache,
+    persistence: input.persistence,
+  });
+  const item = matrixHistoryItem({ source: input.source, event: input.event });
+  if (item === null) {
+    return;
+  }
+  const next = input.cache.append({
+    key,
+    item,
+    receivedAt: input.event.receivedAt,
+  });
+  await input.persistence.save(key, next);
+}
+
+function createMatrixHistoryCache(
+  source: MatrixSourceConfig,
+): ChatHistoryCache {
+  const bounds = matrixHistoryBounds(source);
+  return new ChatHistoryCache((input) =>
+    trimChatHistory({
+      history: input.history,
+      bounds,
+      receivedAt: input.receivedAt,
+    }),
+  );
+}
+
+function createMatrixHistoryPersistence(input: {
+  readonly source: MatrixSourceConfig;
+  readonly eventDataRoot?: string | undefined;
+  readonly readOnly?: boolean | undefined;
+  readonly diagnosticSink?: EventSourceDiagnosticSink | undefined;
+}): ChatHistoryPersistence {
+  return createChatHistoryPersistence({
+    adapterKind: "matrix",
+    eventDataRoot: input.eventDataRoot,
+    readOnly: input.readOnly,
+    sourceId: input.source.id,
+    bounds: matrixHistoryBounds(input.source),
+    diagnosticPrefix: "Matrix",
+    diagnosticSink: input.diagnosticSink,
+  });
+}
+
 function configuredRoomIds(source: MatrixSourceConfig): ReadonlySet<string> {
   return new Set(
     source.rooms.map((room: MatrixSourceRoomConfig) => room.roomId),
@@ -190,6 +370,7 @@ function normalizeMatrixRoomEvent(input: {
   readonly event: JsonObject;
   readonly receivedAt: string;
   readonly rawRef: RawExternalEvent["rawRef"];
+  readonly attachment?: MatrixAttachmentInput;
 }): ExternalEventEnvelope | null {
   if (!configuredRoomIds(input.source).has(input.roomId)) {
     return null;
@@ -210,14 +391,26 @@ function normalizeMatrixRoomEvent(input: {
     return null;
   }
   const msgtype = optionalString(content["msgtype"]);
-  const text = optionalString(content["body"]);
+  const bodyText = optionalString(content["body"]);
+  const attachment = input.attachment ?? readMatrixAttachmentMetadata(content);
+  const isTextMessage =
+    msgtype !== undefined && TEXT_MESSAGE_TYPES.has(msgtype);
+  const isAttachmentMessage =
+    msgtype !== undefined &&
+    attachment !== null &&
+    isMatrixAttachmentMessageType(msgtype) &&
+    input.source.attachments !== undefined;
   if (
     msgtype === undefined ||
-    !TEXT_MESSAGE_TYPES.has(msgtype) ||
-    text === undefined
+    bodyText === undefined ||
+    (!isTextMessage && !isAttachmentMessage)
   ) {
     return null;
   }
+  const text = textWithMatrixAttachment({
+    text: bodyText,
+    ...(attachment === null ? {} : { attachment }),
+  });
   const relation = readRelation(content);
   const replyToEventId = readReplyToEventId(relation);
   const threadRootEventId = readThreadRootEventId(relation);
@@ -250,6 +443,12 @@ function normalizeMatrixRoomEvent(input: {
     },
     input: {
       text,
+      ...(attachment === null
+        ? {}
+        : {
+            attachments: [attachment],
+            attachmentText: attachment.contentText ?? "",
+          }),
       ...(html === undefined ? {} : { html }),
       roomId: input.roomId,
       eventId,
@@ -270,9 +469,9 @@ function sourceFromRaw(raw: RawExternalEvent): MatrixSourceConfig {
   return raw.source;
 }
 
-function normalizeOneMatrixRawEvent(
+async function normalizeOneMatrixRawEvent(
   raw: RawExternalEvent,
-): ExternalEventEnvelope {
+): Promise<ExternalEventEnvelope> {
   const source = sourceFromRaw(raw);
   const directEvent = readRoomEvent(raw.body);
   const candidates =
@@ -286,7 +485,33 @@ function normalizeOneMatrixRawEvent(
       rawRef: raw.rawRef,
     });
     if (normalized !== null) {
-      return normalized;
+      if (source.history === undefined) {
+        return normalized;
+      }
+      const roomId = normalized.conversation?.id;
+      if (roomId === undefined) {
+        return normalized;
+      }
+      const cache = createMatrixHistoryCache(source);
+      const persistence = createMatrixHistoryPersistence({
+        source,
+        eventDataRoot: raw.eventDataRoot,
+        readOnly: raw.readOnly,
+        diagnosticSink: raw.diagnosticSink,
+      });
+      const key = matrixHistoryKey({
+        source,
+        roomId,
+        threadId: normalized.conversation?.threadId,
+      });
+      await seedMatrixHistory({
+        source,
+        key,
+        receivedAt: raw.receivedAt,
+        cache,
+        persistence,
+      });
+      return attachMatrixHistory({ source, event: normalized, cache, key });
     }
   }
   throw new Error("matrix raw event did not contain a supported room message");
@@ -429,6 +654,19 @@ export function createMatrixEventSourceAdapter(): EventSourceAdapter {
         sourceId: source.id,
       });
       const sinceTokenPath = source.sync?.sinceTokenPath;
+      const historyCache =
+        source.history === undefined
+          ? undefined
+          : createMatrixHistoryCache(source);
+      const historyPersistence =
+        source.history === undefined
+          ? undefined
+          : createMatrixHistoryPersistence({
+              source,
+              eventDataRoot: input.eventDataRoot,
+              readOnly: input.readOnly,
+              diagnosticSink: input.diagnosticSink,
+            });
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
       let since = await readSinceToken(sinceTokenPath);
@@ -467,15 +705,73 @@ export function createMatrixEventSourceAdapter(): EventSourceAdapter {
           const body = (await response.json()) as unknown;
           const receivedAt = input.now().toISOString();
           for (const candidate of collectSyncRoomEvents(body)) {
+            const content = candidate.event["content"];
+            const attachmentMetadata = isJsonObject(content)
+              ? readMatrixAttachmentMetadata(content)
+              : null;
+            const attachment =
+              attachmentMetadata === null
+                ? undefined
+                : await downloadMatrixAttachmentText({
+                    source,
+                    attachment: attachmentMetadata,
+                    homeserver,
+                    accessToken,
+                    fetchImpl,
+                    diagnosticSink: input.diagnosticSink,
+                  });
             const event = normalizeMatrixRoomEvent({
               source,
               roomId: candidate.roomId,
               event: candidate.event,
               receivedAt,
               rawRef: undefined,
+              ...(attachment === undefined ? {} : { attachment }),
             });
             if (event !== null) {
-              await input.dispatch(event, candidate.event);
+              let eventWithHistory = event;
+              if (
+                historyCache !== undefined &&
+                historyPersistence !== undefined
+              ) {
+                const historyKey = matrixHistoryKey({
+                  source,
+                  roomId: candidate.roomId,
+                  threadId: event.conversation?.threadId,
+                });
+                await seedMatrixHistory({
+                  source,
+                  key: historyKey,
+                  receivedAt,
+                  cache: historyCache,
+                  persistence: historyPersistence,
+                });
+                eventWithHistory = attachMatrixHistory({
+                  source,
+                  event,
+                  cache: historyCache,
+                  key: historyKey,
+                });
+              }
+              const outcome = await input.dispatch(
+                eventWithHistory,
+                candidate.event,
+              );
+              const accepted =
+                outcome === undefined ||
+                outcome.receipts.some((receipt) => !receipt.duplicate);
+              if (
+                accepted &&
+                historyCache !== undefined &&
+                historyPersistence !== undefined
+              ) {
+                await appendAcceptedMatrixHistory({
+                  source,
+                  event: eventWithHistory,
+                  cache: historyCache,
+                  persistence: historyPersistence,
+                });
+              }
             }
           }
           since = isJsonObject(body)
@@ -518,6 +814,27 @@ export function createMatrixEventSourceAdapter(): EventSourceAdapter {
     },
     async normalize(raw): Promise<ExternalEventEnvelope> {
       return normalizeOneMatrixRawEvent(raw);
+    },
+    async recordAcceptedEvent(
+      input: EventSourceAcceptedEventInput,
+    ): Promise<void> {
+      if (!isMatrixSource(input.source)) {
+        return;
+      }
+      const source = input.source;
+      const cache = createMatrixHistoryCache(source);
+      const persistence = createMatrixHistoryPersistence({
+        source,
+        eventDataRoot: input.eventDataRoot,
+        readOnly: input.readOnly,
+        diagnosticSink: input.diagnosticSink,
+      });
+      await appendAcceptedMatrixHistory({
+        source,
+        event: input.event,
+        cache,
+        persistence,
+      });
     },
     dispatchChatReply: dispatchMatrixChatReply,
   };

@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/discord-gateway-chat-history` | Ready | `design-discord-gateway-chat-history` |
 | `active/opentelemetry-instrumentation` | Ready | `architecture#opentelemetry-runtime-instrumentation`, `command#telemetry-and-jaeger-verification` |
 | `active/package-checkout-content-digest-metadata` | In Progress | `architecture#workflow-checkout-boundary` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
@@ -37,6 +38,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat-source-restart-history` | 2026-05-29 | `design-matrix-chat-history`, `design-chat-sdk-chat-history`, `design-matrix-attachment-text` |
 | `adapter-reused-session-prompt-splitting` | 2026-05-29 | `architecture#adapter-layer`, `command` |
 | `refactoring-graphql-runtime-node-execution-ordinal` | 2026-05-29 | `codex-refactoring-divide-and-conquer` slice reviews |
 | `workflow-registry-list-command` | 2026-05-29 | `design-workflow-package-commands#registry-list-issue-addendum` |
