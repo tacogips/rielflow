@@ -2,18 +2,12 @@
   "id": "chat-sdk-slack-to-workflow",
   "sourceId": "chat-sdk-slack",
   "outputDestinations": ["chat-sdk-slack-replies"],
-  "workflowName": "first-four-arithmetic-pipeline",
+  "workflowName": "chat-event-attachment-judgement",
   "match": {
     "eventType": "chat.message"
   },
   "inputMapping": {
-    "mode": "template",
-    "template": {
-      "request": "{{event.input.text}}",
-      "provider": "{{event.input.provider}}",
-      "conversationId": "{{event.conversation.id}}",
-      "threadId": "{{event.conversation.threadId}}"
-    },
+    "mode": "event-input",
     "mirrorToHumanInput": true
   },
   "execution": {

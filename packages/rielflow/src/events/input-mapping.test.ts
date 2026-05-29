@@ -15,6 +15,16 @@ function makeEvent(): ExternalEventEnvelope {
     input: {
       text: "hello",
       file: { path: "plans/release.md" },
+      attachments: [
+        {
+          id: "img-1",
+          kind: "image",
+          mediaType: "image/png",
+          filename: "release.png",
+          imageDescription: "green release dashboard",
+          extra: { preserved: true },
+        },
+      ],
     },
   };
 }
@@ -78,5 +88,130 @@ describe("event input mapping", () => {
         makeEvent(),
       ),
     ).toBe(false);
+  });
+
+  test("event-input mode preserves attachments in workflow and runtime event input", () => {
+    const binding: EventBinding = {
+      id: "binding",
+      sourceId: "chat",
+      workflowName: "demo",
+      inputMapping: { mode: "event-input" },
+    };
+    const source = {
+      id: "chat",
+      kind: "chat-sdk",
+      provider: "slack",
+      mode: "generic-webhook",
+      webhook: { path: "chat-sdk/slack" },
+    } as const;
+
+    const mapped = mapEventToWorkflowInput(binding, makeEvent(), source);
+
+    expect(mapped.workflowInput["attachments"]).toEqual([
+      {
+        id: "img-1",
+        kind: "image",
+        mediaType: "image/png",
+        filename: "release.png",
+        imageDescription: "green release dashboard",
+        extra: { preserved: true },
+      },
+    ]);
+    expect(
+      (
+        mapped.runtimeVariables["event"] as {
+          input: { attachments: unknown };
+        }
+      ).input.attachments,
+    ).toEqual(mapped.workflowInput["attachments"]);
+    expect(mapped.runtimeVariables["humanInput"]).toEqual(mapped.workflowInput);
+  });
+
+  test("template mode can select attachments arrays and array members", () => {
+    const binding: EventBinding = {
+      id: "binding",
+      sourceId: "chat",
+      workflowName: "demo",
+      inputMapping: {
+        mode: "template",
+        template: {
+          attachments: "{{event.input.attachments}}",
+          firstFilename: "{{event.input.attachments.0.filename}}",
+          firstAttachment: "{{event.input.attachments.0}}",
+        },
+        mirrorToHumanInput: false,
+      },
+    };
+
+    const mapped = mapEventToWorkflowInput(binding, makeEvent(), {
+      id: "chat",
+      kind: "chat-sdk",
+      provider: "slack",
+      mode: "generic-webhook",
+      webhook: { path: "chat-sdk/slack" },
+    });
+
+    expect(mapped.workflowInput).toEqual({
+      attachments: [
+        {
+          id: "img-1",
+          kind: "image",
+          mediaType: "image/png",
+          filename: "release.png",
+          imageDescription: "green release dashboard",
+          extra: { preserved: true },
+        },
+      ],
+      firstFilename: "release.png",
+      firstAttachment: {
+        id: "img-1",
+        kind: "image",
+        mediaType: "image/png",
+        filename: "release.png",
+        imageDescription: "green release dashboard",
+        extra: { preserved: true },
+      },
+    });
+    expect(mapped.runtimeVariables["humanInput"]).toBeUndefined();
+  });
+
+  test("honors explicit mirrorToHumanInput overrides for chat-sdk sources", () => {
+    const source = {
+      id: "chat",
+      kind: "chat-sdk",
+      provider: "slack",
+      mode: "generic-webhook",
+      webhook: { path: "chat-sdk/slack" },
+    } as const;
+    const disabled = mapEventToWorkflowInput(
+      {
+        id: "disabled",
+        sourceId: "chat",
+        workflowName: "demo",
+        inputMapping: { mode: "event-input", mirrorToHumanInput: false },
+      },
+      makeEvent(),
+      source,
+    );
+    const enabled = mapEventToWorkflowInput(
+      {
+        id: "enabled",
+        sourceId: "chat",
+        workflowName: "demo",
+        inputMapping: { mode: "event-input", mirrorToHumanInput: true },
+      },
+      makeEvent(),
+      {
+        id: "file",
+        kind: "file-change",
+        directory: ".",
+        changeTypes: ["create"],
+      },
+    );
+
+    expect(disabled.runtimeVariables["humanInput"]).toBeUndefined();
+    expect(enabled.runtimeVariables["humanInput"]).toEqual(
+      enabled.workflowInput,
+    );
   });
 });

@@ -156,6 +156,37 @@ bun run packages/rielflow/src/bin.ts events emit chat-sdk-discord \
   --output json
 ```
 
+### `chat-event-attachment-judgement`
+
+Chat SDK attachment judgement workflow using deterministic image and PDF
+descriptors:
+
+- receives normalized Slack Chat SDK messages from the `chat-sdk-slack` event
+  source
+- preserves safe `event.input.attachments[]` descriptor fields for judgement
+- uses one `codex-agent` worker to classify image/PDF evidence
+- marks unsupported or evidence-free attachments for manual review
+- avoids provider downloads, OCR, PDF parsing, and direct `@chat-adapter/*`
+  dependencies
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate chat-event-attachment-judgement --workflow-definition-dir ./examples
+```
+
+Run it through the deterministic attachment fixture:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit chat-sdk-slack \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-attachment-judgement-message.json \
+  --mock-scenario ./examples/chat-event-attachment-judgement/mock-scenario.json \
+  --output json
+```
+
 ### `matrix-chat-reply`
 
 Element/Matrix worker-only workflow showing the same built-in reply add-on

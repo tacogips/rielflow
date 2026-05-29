@@ -10,6 +10,7 @@ import {
 } from "./trigger-runner";
 import { loadAndValidateEventConfiguration } from "./validate";
 import { normalizeS3RepositoryRawEvent } from "./adapters/s3-repository";
+import { redactChatSdkRawPayloadForPersistence } from "./adapters/chat-sdk/redaction";
 import { verifyWebhookRequest } from "./adapters/webhook";
 import {
   buildWebhookVerificationSource,
@@ -248,6 +249,7 @@ async function handleEventHttpRequestInternal(
   }
   const requestNow = input.now();
   let body: unknown;
+  let redactedRaw: unknown;
   let event: Awaited<ReturnType<typeof normalizeRouteEvent>>;
   try {
     const bodyText = await request.text();
@@ -283,6 +285,10 @@ async function handleEventHttpRequestInternal(
       return json({ error: "event source rate limit exceeded" }, 429);
     }
     body = parseRequestJsonBody(bodyText);
+    redactedRaw = redactChatSdkRawPayloadForPersistence({
+      source: route.source,
+      body,
+    });
     const raw: RawExternalEvent = {
       sourceId: route.source.id,
       source: route.source,
@@ -316,7 +322,7 @@ async function handleEventHttpRequestInternal(
       {
         configuration: input.configuration,
         event,
-        raw: body,
+        raw: redactedRaw,
         runner,
       },
       triggerOptions,

@@ -101,15 +101,30 @@ export RIEL_CHAT_SDK_SLACK_SEND_TOKEN=<outbound-send-token>
 rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
-For deterministic local checks, emit the generic-boundary payload fixture:
+The Slack Chat SDK binding dispatches attachment descriptors to
+`chat-event-attachment-judgement`. The example classifies deterministic image
+and PDF evidence fields without provider downloads, OCR, PDF parsing, or direct
+`@chat-adapter/*` dependencies:
 
 ```bash
 rielflow events emit chat-sdk-slack \
   --workflow-definition-dir ./examples \
   --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
-  --event-file ./examples/event-sources/payloads/chat-sdk-slack-message.json \
-  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --event-file ./examples/event-sources/payloads/chat-sdk-attachment-judgement-message.json \
+  --mock-scenario ./examples/chat-event-attachment-judgement/mock-scenario.json \
+  --output json
+```
+
+Use the unsupported fixture to verify manual-review routing:
+
+```bash
+rielflow events emit chat-sdk-slack \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-attachment-judgement-unsupported.json \
+  --mock-scenario ./examples/chat-event-attachment-judgement/mock-scenario-unsupported.json \
   --output json
 ```
 

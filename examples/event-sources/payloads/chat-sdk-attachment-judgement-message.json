@@ -1,0 +1,51 @@
+{
+  "provider": "slack",
+  "eventId": "chat-sdk-attachment-judgement-evt-1",
+  "eventType": "message",
+  "occurredAt": "2026-05-14T00:05:00.000Z",
+  "actor": {
+    "id": "U456",
+    "displayName": "Release Operator"
+  },
+  "conversation": {
+    "id": "C123",
+    "threadId": "1720000000.000200"
+  },
+  "message": {
+    "text": "Classify the attached dashboard screenshot and PDF incident summary.",
+    "format": "plain",
+    "attachments": [
+      {
+        "id": "img-release-dashboard",
+        "kind": "image",
+        "mediaType": "image/png",
+        "filename": "release-dashboard.png",
+        "sizeBytes": 184932,
+        "contentRef": "chat-sdk/chat-sdk-attachment-judgement-evt-1/release-dashboard.png",
+        "imageDescription": "The screenshot shows a green deployment dashboard with all checks passing and no active alerts.",
+        "classificationHints": ["release", "healthy-dashboard"],
+        "source": {
+          "providerFileId": "F-RELEASE-DASHBOARD",
+          "downloadUrl": "https://files.example.test/release-dashboard.png"
+        }
+      },
+      {
+        "id": "pdf-incident-summary",
+        "kind": "pdf",
+        "mediaType": "application/pdf",
+        "filename": "incident-summary.pdf",
+        "sizeBytes": 284000,
+        "contentRef": "chat-sdk/chat-sdk-attachment-judgement-evt-1/incident-summary.pdf",
+        "textContent": "Incident summary: customer data exposure was not observed. The incident is closed after rollback verification.",
+        "classificationHints": {
+          "documentType": "incident-summary",
+          "expectedLabel": "incident-summary-no-exposure"
+        },
+        "source": {
+          "providerFileId": "F-INCIDENT-SUMMARY",
+          "downloadUrl": "https://files.example.test/incident-summary.pdf"
+        }
+      }
+    ]
+  }
+}

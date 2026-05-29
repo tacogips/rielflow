@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { isEventSourceEnabled } from "./config";
 import { createDefaultEventSourceRegistry } from "./adapter-registry";
 import { normalizeS3RepositoryRawEvent } from "./adapters/s3-repository";
+import { redactChatSdkRawPayloadForPersistence } from "./adapters/chat-sdk/redaction";
 import { createEventReplyDispatcher } from "./reply-dispatcher";
 import {
   createWorkflowTriggerRunner,
@@ -51,6 +52,7 @@ export async function emitEventFile(
   }
   const content = await readFile(input.eventFile, "utf8");
   const body = JSON.parse(content) as unknown;
+  const redactedRaw = redactChatSdkRawPayloadForPersistence({ source, body });
   const raw: RawExternalEvent = {
     sourceId: source.id,
     source,
@@ -82,7 +84,7 @@ export async function emitEventFile(
     {
       configuration,
       event,
-      raw: body,
+      raw: redactedRaw,
       runner: createWorkflowTriggerRunner(triggerOptions),
     },
     triggerOptions,
