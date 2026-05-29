@@ -283,12 +283,16 @@ async function handleEventHttpRequestInternal(
       return json({ error: "event source rate limit exceeded" }, 429);
     }
     body = parseRequestJsonBody(bodyText);
+    const eventDataRoot = resolveRootDataDir(input.triggerOptions);
     const raw: RawExternalEvent = {
       sourceId: route.source.id,
       source: route.source,
       receivedAt: requestNow.toISOString(),
       headers,
       body,
+      eventDataRoot,
+      readOnly: input.triggerOptions.readOnly === true,
+      diagnosticSink: writeEventSourceDiagnostic,
     };
     event = await normalizeRouteEvent({ route, raw });
   } catch (error: unknown) {
@@ -321,6 +325,17 @@ async function handleEventHttpRequestInternal(
       },
       triggerOptions,
     );
+    if (results.some((result) => !result.duplicate)) {
+      await route.adapter.recordAcceptedEvent?.({
+        source: route.source,
+        event,
+        raw: body,
+        eventDataRoot: resolveRootDataDir(input.triggerOptions),
+        readOnly: input.triggerOptions.readOnly === true,
+        diagnosticSink: writeEventSourceDiagnostic,
+        now: input.now,
+      });
+    }
     return json(
       {
         accepted: true,

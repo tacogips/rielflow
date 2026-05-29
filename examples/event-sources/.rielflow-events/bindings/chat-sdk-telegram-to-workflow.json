@@ -1,7 +1,7 @@
 {
-  "id": "chat-sdk-slack-to-workflow",
-  "sourceId": "chat-sdk-slack",
-  "outputDestinations": ["chat-sdk-slack-replies"],
+  "id": "chat-sdk-telegram-to-workflow",
+  "sourceId": "chat-sdk-telegram",
+  "outputDestinations": ["chat-sdk-telegram-replies"],
   "workflowName": "first-four-arithmetic-pipeline",
   "match": {
     "eventType": "chat.message"

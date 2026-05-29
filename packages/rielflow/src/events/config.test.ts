@@ -549,6 +549,12 @@ describe("event configuration", () => {
         pollTimeoutMs: 30000,
         sinceTokenPath: "matrix/team-matrix-sync.json",
       },
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-room",
+      },
     });
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
       id: "to-demo",
@@ -794,6 +800,13 @@ describe("event configuration", () => {
       providerConfig: {
         eventType: "chat.action",
       },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeBotMessages: "sometimes",
+      },
     });
     await writeJson(path.join(eventRoot, "bindings", "bad.json"), {
       id: "bad-to-demo",
@@ -821,6 +834,12 @@ describe("event configuration", () => {
         "sources.bad-chat-sdk.send.endpointUrlEnv",
         "sources.bad-chat-sdk.send.tokenEnv",
         "sources.bad-chat-sdk.providerConfig.eventType",
+        "sources.bad-chat-sdk.history",
+        "sources.bad-chat-sdk.history.maxMessages",
+        "sources.bad-chat-sdk.history.maxBytes",
+        "sources.bad-chat-sdk.history.maxAgeMs",
+        "sources.bad-chat-sdk.history.scope",
+        "sources.bad-chat-sdk.history.includeBotMessages",
       ]),
     );
   });
@@ -1157,6 +1176,13 @@ describe("event configuration", () => {
         pollTimeoutMs: 10,
         sinceTokenPath: "../token.json",
       },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeOwnMessages: "sometimes",
+      },
       ignoreOwnMessages: "yes",
     });
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
@@ -1184,6 +1210,11 @@ describe("event configuration", () => {
         "sources.bad-matrix.rooms[0].alias",
         "sources.bad-matrix.sync.pollTimeoutMs",
         "sources.bad-matrix.sync.sinceTokenPath",
+        "sources.bad-matrix.history.maxMessages",
+        "sources.bad-matrix.history.maxBytes",
+        "sources.bad-matrix.history.maxAgeMs",
+        "sources.bad-matrix.history.scope",
+        "sources.bad-matrix.history.includeOwnMessages",
         "sources.bad-matrix.ignoreOwnMessages",
       ]),
     );

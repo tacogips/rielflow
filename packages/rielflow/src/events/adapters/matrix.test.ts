@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { createMatrixEventSourceAdapter } from "./matrix";
@@ -351,6 +352,119 @@ describe("matrix event source adapter", () => {
       eventId: "$event-1",
       eventType: "chat.message",
     });
+  });
+
+  test("reloads persisted Matrix room history after source restart", async () => {
+    const dataRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-matrix-history-"),
+    );
+    const source = matrixSource({
+      history: {
+        maxMessages: 5,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-room",
+      },
+      sync: { pollTimeoutMs: 1000 },
+    });
+
+    async function dispatchOne(
+      event: Record<string, unknown>,
+    ): Promise<unknown> {
+      const adapter = createMatrixEventSourceAdapter();
+      const abortController = new AbortController();
+      let dispatched: unknown;
+      let resolveDispatch: (() => void) | undefined;
+      const dispatchSeen = new Promise<void>((resolve) => {
+        resolveDispatch = resolve;
+      });
+      const handle = await adapter.start({
+        source,
+        signal: abortController.signal,
+        now: () => new Date("2026-05-13T00:00:00.000Z"),
+        env: {
+          RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+          RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
+        },
+        eventDataRoot: dataRoot,
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              next_batch: "sync-token-2",
+              rooms: {
+                join: {
+                  "!release:matrix.example": {
+                    timeline: { events: [event] },
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        dispatch: async (envelope) => {
+          dispatched = envelope;
+          resolveDispatch?.();
+        },
+      });
+      await dispatchSeen;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await handle.stop();
+      abortController.abort();
+      return dispatched;
+    }
+
+    const first = await dispatchOne(
+      roomMessage({
+        event_id: "$event-1",
+        content: {
+          msgtype: "m.text",
+          body: "remember the Matrix marker",
+          "m.relates_to": {
+            rel_type: "m.thread",
+            event_id: "$thread-root",
+          },
+        },
+      }),
+    );
+    expect(first).toMatchObject({
+      input: {
+        history: [],
+        historySource: { mode: "empty", messageCount: 0 },
+      },
+    });
+
+    const second = await dispatchOne(
+      roomMessage({
+        event_id: "$event-2",
+        content: {
+          msgtype: "m.text",
+          body: "what was the Matrix marker?",
+          "m.relates_to": {
+            rel_type: "m.thread",
+            event_id: "$thread-root",
+          },
+        },
+      }),
+    );
+
+    expect(second).toMatchObject({
+      input: {
+        historySource: { mode: "persisted", messageCount: 1 },
+        history: [
+          expect.objectContaining({
+            messageId: "$event-1",
+            authorId: "@alice:matrix.example",
+            text: "remember the Matrix marker",
+            conversationId: "!release:matrix.example",
+            threadId: "$thread-root",
+            provider: "matrix",
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify((second as { input: unknown }).input)).not.toContain(
+      "secret-token",
+    );
   });
 
   test("emits sanitized diagnostics for rejected Matrix sync responses", async () => {

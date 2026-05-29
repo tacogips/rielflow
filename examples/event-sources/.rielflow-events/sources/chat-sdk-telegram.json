@@ -1,20 +1,20 @@
 {
-  "id": "chat-sdk-slack",
+  "id": "chat-sdk-telegram",
   "kind": "chat-sdk",
-  "provider": "slack",
+  "provider": "telegram",
   "mode": "generic-webhook",
   "webhook": {
-    "path": "chat-sdk/slack",
-    "signingSecretEnv": "RIEL_CHAT_SDK_SLACK_WEBHOOK_SECRET",
-    "bearerTokenEnv": "RIEL_CHAT_SDK_SLACK_BEARER_TOKEN",
+    "path": "chat-sdk/telegram",
+    "signingSecretEnv": "RIEL_CHAT_SDK_TELEGRAM_WEBHOOK_SECRET",
+    "bearerTokenEnv": "RIEL_CHAT_SDK_TELEGRAM_BEARER_TOKEN",
     "rateLimit": {
       "windowMs": 60000,
       "maxRequests": 60
     }
   },
   "send": {
-    "endpointUrlEnv": "RIEL_CHAT_SDK_SLACK_SEND_URL",
-    "tokenEnv": "RIEL_CHAT_SDK_SLACK_SEND_TOKEN"
+    "endpointUrlEnv": "RIEL_CHAT_SDK_TELEGRAM_SEND_URL",
+    "tokenEnv": "RIEL_CHAT_SDK_TELEGRAM_SEND_TOKEN"
   },
   "history": {
     "maxMessages": 20,

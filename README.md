@@ -882,8 +882,13 @@ var names in source config, for example `RIEL_MATRIX_HOMESERVER_URL` and
 `RIEL_MATRIX_ACCESS_TOKEN`. Matrix receive normalizes text-like
 `m.room.message` events to `chat.message`; chat replies send through the Matrix
 Client-Server room send API with the reply idempotency key as the transaction
-id. The first slice excludes encrypted rooms, attachments, reactions, edits,
-redactions, and Application Service transactions.
+id. Matrix sources may enable bounded room/thread history; during `events serve`
+accepted messages are persisted under the event data root as compact normalized
+history, reloaded after restart, and exposed through `event.input.history` and
+`event.input.historySource`. Persisted Matrix history excludes access tokens,
+raw sync payloads, workflow inboxes, and agent transcripts. The first slice
+excludes encrypted rooms, attachments, reactions, edits, redactions, and
+Application Service transactions.
 
 Chat SDK chat sources use `kind: "chat-sdk"` with the first-pass generic
 webhook/send boundary. Supported providers are `slack`, `teams`, `gchat`,
@@ -893,8 +898,13 @@ through a configured send endpoint referenced by env-var names. Each served
 chat-sdk webhook must configure a bearer token or signing secret env var, and
 the webhook path must remain relative and provider-scoped, such as
 `chat-sdk/slack`. rielflow does not import direct `@chat-adapter/*` packages in
-this boundary; direct provider SDK integration remains future scope after
-dependency and credential review.
+this boundary. Slack and Telegram Chat SDK sources may enable bounded
+conversation/thread history. Accepted messages are persisted under the event
+data root after dispatch and reloaded after restart so workflows can inspect
+`event.input.history` and `event.input.historySource` without reading raw
+provider payloads, secrets, workflow inboxes, or agent transcripts. Direct
+provider SDK integration remains future scope after dependency and credential
+review.
 
 Discord Gateway chat sources use `kind: "discord-gateway"` for rielflow-owned
 Discord Gateway ingestion. Configure bot credentials with env-var names such as
@@ -1160,7 +1170,7 @@ Recommended starting points:
 - `supervised-mock-retry`: deterministic example for `--auto-improve` retry behavior.
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
 - `discord-persona-chat`: Discord Gateway persona replies with bounded channel or thread history.
-- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK, and Discord Gateway source fixtures.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK Slack/Telegram, and Discord Gateway source fixtures.
 
 ## Repository Workflows
 

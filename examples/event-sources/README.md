@@ -84,12 +84,21 @@ starting the homeserver, registering two users, creating a room, serving
 rielflow Matrix events, sending an Alice message, and waiting for the rielflow
 bot reply in the same room.
 
-The `chat-sdk-slack` source demonstrates the shared Chat SDK generic boundary.
+The Matrix source fixture enables bounded room/thread history. During
+`events serve`, accepted Matrix messages are persisted as compact normalized
+history under the event data root and reloaded after restart. Workflows can read
+that context from `event.input.history` and `event.input.historySource`;
+persisted files do not store Matrix access tokens or raw `/sync` payloads.
+
+The `chat-sdk-slack` and `chat-sdk-telegram` sources demonstrate the shared
+Chat SDK generic boundary.
 The provider allow-list is `slack`, `teams`, `gchat`, `discord`, `telegram`,
 `github`, `linear`, `whatsapp`, `messenger`, and `web`. This first pass does
 not import `@chat-adapter/*` packages directly; an operator-owned Chat SDK
 deployment posts normalized webhook payloads to rielflow and receives replies
-through the configured send endpoint.
+through the configured send endpoint. Slack and Telegram fixtures enable
+bounded conversation/thread history with the same `event.input.history` and
+`event.input.historySource` workflow contract.
 
 Serve the source with env-var references only:
 
@@ -109,6 +118,22 @@ rielflow events emit chat-sdk-slack \
   --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/chat-sdk-slack-message.json \
+  --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
+  --output json
+```
+
+Telegram uses the same Chat SDK contract:
+
+```bash
+export RIEL_CHAT_SDK_TELEGRAM_WEBHOOK_SECRET=<shared-webhook-secret>
+export RIEL_CHAT_SDK_TELEGRAM_BEARER_TOKEN=<inbound-bearer-token>
+export RIEL_CHAT_SDK_TELEGRAM_SEND_URL=https://chat-sdk.example.test/send
+export RIEL_CHAT_SDK_TELEGRAM_SEND_TOKEN=<outbound-send-token>
+rielflow events emit chat-sdk-telegram \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/chat-sdk-telegram-message.json \
   --mock-scenario ./examples/first-four-arithmetic-pipeline/mock-scenario.json \
   --output json
 ```
