@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { graphql } from "graphql";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { MockNodeScenario } from "../workflow/scenario-adapter";
+import { createExecutableGraphqlSchema } from "../server/graphql-executable-schema";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
 import * as workflowEngine from "../workflow/engine";
@@ -598,6 +600,32 @@ describe("createGraphqlSchema", () => {
     );
     expect(workflowExecution?.session.sessionId).toBe(session.sessionId);
     expect(workflowExecution?.nodeExecutions.length).toBeGreaterThan(0);
+
+    const executableResult = await graphql({
+      schema: createExecutableGraphqlSchema(),
+      source: `
+        query WorkflowExecutionNodeOrdinals($workflowExecutionId: String!) {
+          workflowExecution(workflowExecutionId: $workflowExecutionId) {
+            nodeExecutions {
+              nodeExecId
+              executionOrdinal
+            }
+          }
+        }
+      `,
+      variableValues: { workflowExecutionId: session.sessionId },
+      contextValue: options,
+    });
+    expect(executableResult.errors).toBeUndefined();
+    expect(executableResult.data?.["workflowExecution"]).toMatchObject({
+      nodeExecutions: expect.arrayContaining([
+        expect.objectContaining({
+          nodeExecId: workflowExecution?.nodeExecutions[0]?.nodeExecId,
+          executionOrdinal:
+            workflowExecution?.nodeExecutions[0]?.executionOrdinal,
+        }),
+      ]),
+    });
 
     const communicationRecord = session.communications.at(-1);
     expect(communicationRecord).toBeDefined();

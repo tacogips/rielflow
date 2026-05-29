@@ -187,6 +187,32 @@ bun run packages/rielflow/src/bin.ts events emit chat-sdk-slack \
   --output json
 ```
 
+### `discord-agent-trio-chat`
+
+Discord chat workflow for three named bot personas in one channel:
+
+- `Yui Codex` runs on `codex-agent` and is the default responder when no bot is named
+- `Mika Trend` runs on `claude-code-agent` and covers entertainment, trends, and gyaru-style audience sense
+- `Rina Cursor` runs on `cursor-cli-agent` and covers intellectual otaku and technical analysis
+- persona icons are checked in under `assets/icons/`
+- a selected persona can set handoff flags such as `handoff_mika` when the user explicitly asks to hear another persona too
+- Discord replies use `rielflow/chat-reply-worker` and dry-run when a direct local run has no chat target
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate discord-agent-trio-chat --workflow-definition-dir ./examples
+```
+
+Run the bundled deterministic handoff scenario:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run discord-agent-trio-chat \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/discord-agent-trio-chat/mock-scenario.json \
+  --input '{"request":"Yui, give your opinion and ask Mika too"}'
+```
+
 ### `matrix-chat-reply`
 
 Element/Matrix worker-only workflow showing the same built-in reply add-on

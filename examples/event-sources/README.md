@@ -133,6 +133,12 @@ dispatches messages to the `discord-codex-chat` workflow, which generates a
 reply with `codex-agent` model `gpt-5.4-mini` before sending it back to the same
 Discord thread through `rielflow/chat-reply-worker`.
 
+The companion binding `chat-sdk-discord-to-agent-trio` dispatches the
+`agent-trio-chat` Discord channel to `discord-agent-trio-chat`, where Yui Codex,
+Mika Trend, and Rina Cursor are routed as separate named personas. Use
+`examples/discord-agent-trio-chat/assets/icons/` as the Discord application icon
+source files for the three bot applications.
+
 Serve the Discord source with env-var references only:
 
 ```bash

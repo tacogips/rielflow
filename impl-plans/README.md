@@ -38,6 +38,7 @@ impl-plans/
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `adapter-reused-session-prompt-splitting` | 2026-05-29 | `architecture#adapter-layer`, `command` |
+| `refactoring-graphql-runtime-node-execution-ordinal` | 2026-05-29 | `codex-refactoring-divide-and-conquer` slice reviews |
 | `workflow-registry-list-command` | 2026-05-29 | `design-workflow-package-commands#registry-list-issue-addendum` |
 | `product-rename-rielflow` | 2026-05-26 | `architecture#product-rename-to-rielflow`, `command#product-rename-command-surface` |
 | `homebrew-deployment-support` | 2026-05-20 | `architecture`, `command` |

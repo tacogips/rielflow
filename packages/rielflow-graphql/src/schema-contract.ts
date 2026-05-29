@@ -188,6 +188,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
     backendSessionMode: String
     backendSessionId: String
     restartedFromNodeExecId: String
+    executionOrdinal: Int
     inputHash: String!
     outputHash: String!
     inputJson: String!
