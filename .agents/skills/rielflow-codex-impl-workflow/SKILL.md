@@ -90,6 +90,21 @@ event-source or chat-reply built-in changes should refresh `README.md`,
 `examples/*` README coverage, and `.agents/skills/rielflow-event-sources/`
 guidance before commit-message generation.
 
+Chat gateway trio issue-resolution runs should keep the provider boundary
+visible in user-facing docs. Telegram Bot API polling, history, photo
+descriptors, and replies belong in rielflow event adapters and built-in
+add-ons, not workflow prompt nodes or `codex-agent` persona behavior. Discord,
+Telegram, and Matrix examples should remain authorable through normalized
+`chat.message` input, `rielflow/chat-persona-router` when persona selection is
+needed, persona workers such as `codex-agent`, and `rielflow/chat-reply-worker`.
+Documentation refresh should cover `README.md`, `examples/README.md`,
+`examples/event-sources/README.md`, and this skill when those surfaces change,
+and should keep verification commands explicit:
+`workflow validate discord-agent-trio-chat`, `workflow validate
+telegram-agent-trio-chat`, `workflow validate matrix-chat-reply`, `events
+validate`, focused adapter/add-on tests, `bun run typecheck`, `bun run
+lint:biome`, `bun run build`, and any deterministic redaction audit script.
+
 Because the workflow ends with commit/push, do not use it when the user has
 explicitly asked to avoid workflow-driven commits or wants manual local edits
 only.

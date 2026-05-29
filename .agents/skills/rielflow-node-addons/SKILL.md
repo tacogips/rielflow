@@ -55,3 +55,7 @@ Read `references/addons-reference.md` for field contracts and resolver guidance.
 - `addon.inputs` becomes resolved node `variables`.
 - `addon.config` is validated by the add-on descriptor.
 - `addon.env` is explicit; ambient environment variables are not forwarded implicitly.
+- Use `rielflow/chat-persona-router` for provider-neutral chat persona
+  selection instead of Discord-, Telegram-, or Matrix-specific routing prompts.
+- Use `rielflow/chat-reply-worker` for chat replies so provider destinations own
+  Discord Gateway, Telegram Gateway, Matrix, or Chat SDK send behavior.
