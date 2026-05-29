@@ -1195,6 +1195,18 @@ describe("event configuration", () => {
       },
       ignoreOwnMessages: "yes",
     });
+    await writeJson(
+      path.join(eventRoot, "sources", "bad-matrix-attachments.json"),
+      {
+        id: "bad-matrix-attachments",
+        kind: "matrix",
+        homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
+        accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
+        userId: "@rielflow:matrix.example",
+        rooms: [{ roomId: "!release:matrix.example" }],
+        attachments: true,
+      },
+    );
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
       id: "to-demo",
       sourceId: "bad-matrix",
@@ -1229,6 +1241,7 @@ describe("event configuration", () => {
         "sources.bad-matrix.attachments.maxBytes",
         "sources.bad-matrix.attachments.allowedMimeTypes",
         "sources.bad-matrix.ignoreOwnMessages",
+        "sources.bad-matrix-attachments.attachments",
       ]),
     );
   });

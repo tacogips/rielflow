@@ -888,9 +888,12 @@ history, reloaded after restart, and exposed through `event.input.history` and
 `event.input.historySource`. Persisted Matrix history excludes access tokens,
 raw sync payloads, workflow inboxes, and agent transcripts. Matrix sources may
 also opt into bounded text-compatible attachment downloads with
-`attachments.downloadText`; extracted text is appended to `event.input.text` and
-also exposed as `event.input.attachmentText` plus `event.input.attachments`
-metadata. Binary OCR, audio/video transcription, encrypted rooms, encrypted
+`attachments.downloadText`, `attachments.maxBytes`, and
+`attachments.allowedMimeTypes`; extracted text is appended to
+`event.input.text` and also exposed as `event.input.attachmentText` plus
+`event.input.attachments` metadata. The attachment path runs during Matrix
+`/sync` only, not manual `events emit` normalization. Binary OCR,
+audio/video transcription, encrypted rooms, encrypted
 attachments, reactions, edits, redactions, and Application Service transactions
 remain out of scope.
 

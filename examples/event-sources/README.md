@@ -92,7 +92,8 @@ that context from `event.input.history` and `event.input.historySource`;
 persisted files do not store Matrix access tokens or raw `/sync` payloads.
 The fixture also enables bounded text attachment downloads for text, markdown,
 and JSON files. Extracted text is appended to `event.input.text` and exposed as
-`event.input.attachmentText` plus `event.input.attachments` metadata.
+`event.input.attachmentText` plus `event.input.attachments` metadata during
+Matrix `/sync`; manual fixture emits keep attachment handling metadata-only.
 
 The `chat-sdk-slack` and `chat-sdk-telegram` sources demonstrate the shared
 Chat SDK generic boundary.

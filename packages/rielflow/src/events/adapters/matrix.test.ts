@@ -310,7 +310,7 @@ describe("matrix event source adapter", () => {
         method: "GET",
         headers: {
           authorization: "Bearer secret-token",
-          range: "bytes=0-64",
+          range: "bytes=0-63",
         },
       },
     });
@@ -334,6 +334,237 @@ describe("matrix event source adapter", () => {
       },
     });
     expect(JSON.stringify(dispatched[0])).not.toContain("secret-token");
+  });
+
+  test("keeps attachment metadata during manual normalization without downloading media", async () => {
+    const adapter = createMatrixEventSourceAdapter();
+
+    const event = await adapter.normalize({
+      sourceId: "team-matrix",
+      source: matrixSource({
+        attachments: {
+          downloadText: true,
+          maxBytes: 64,
+          allowedMimeTypes: ["text/plain"],
+        },
+      }),
+      receivedAt: "2026-05-13T00:00:00.000Z",
+      body: {
+        room_id: "!release:matrix.example",
+        ...roomMessage({
+          content: {
+            msgtype: "m.file",
+            body: "manual-notes.txt",
+            url: "mxc://matrix.example/manual-media",
+            info: { mimetype: "text/plain", size: 21 },
+          },
+        }),
+      },
+    });
+
+    expect(event).toMatchObject({
+      input: {
+        text: "manual-notes.txt",
+        attachmentText: "",
+        attachments: [
+          {
+            name: "manual-notes.txt",
+            msgtype: "m.file",
+            mediaUrl: "mxc://matrix.example/manual-media",
+            mimetype: "text/plain",
+            size: 21,
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(event.input["attachments"])).not.toContain(
+      "contentText",
+    );
+  });
+
+  test("keeps Matrix attachment failures encrypted media and binary media non-fatal", async () => {
+    const adapter = createMatrixEventSourceAdapter();
+    const abortController = new AbortController();
+    const dispatched: unknown[] = [];
+    const diagnostics: EventSourceDiagnostic[] = [];
+    let resolveDispatches: (() => void) | undefined;
+    const dispatchesSeen = new Promise<void>((resolve) => {
+      resolveDispatches = resolve;
+    });
+    const fetchCalls: Array<{
+      readonly url: string;
+      readonly init: RequestInit | undefined;
+    }> = [];
+
+    const handle = await adapter.start({
+      source: matrixSource({
+        sync: { pollTimeoutMs: 1000 },
+        attachments: {
+          downloadText: true,
+          maxBytes: 16,
+          allowedMimeTypes: ["text/*"],
+        },
+      }),
+      signal: abortController.signal,
+      now: () => new Date("2026-05-13T00:00:00.000Z"),
+      env: {
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
+      },
+      fetchImpl: async (url, init) => {
+        fetchCalls.push({ url: String(url), init });
+        if (String(url).includes("/_matrix/client/v1/media/download/")) {
+          return new Response("provider failure with secret-token", {
+            status: 503,
+            headers: { "content-type": "text/plain" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            next_batch: "sync-token-2",
+            rooms: {
+              join: {
+                "!release:matrix.example": {
+                  timeline: {
+                    events: [
+                      roomMessage({
+                        event_id: "$attachment-fail",
+                        content: {
+                          msgtype: "m.file",
+                          body: "bad.txt",
+                          url: "mxc://matrix.example/bad-media",
+                          info: { mimetype: "text/plain", size: 40 },
+                        },
+                      }),
+                      roomMessage({
+                        event_id: "$attachment-encrypted",
+                        content: {
+                          msgtype: "m.file",
+                          body: "secret.txt",
+                          file: { url: "mxc://matrix.example/encrypted" },
+                          info: { mimetype: "text/plain", size: 40 },
+                        },
+                      }),
+                      roomMessage({
+                        event_id: "$attachment-binary",
+                        content: {
+                          msgtype: "m.image",
+                          body: "diagram.png",
+                          url: "mxc://matrix.example/image",
+                          info: { mimetype: "image/png", size: 40 },
+                        },
+                      }),
+                      roomMessage({
+                        event_id: "$attachment-invalid-url",
+                        content: {
+                          msgtype: "m.file",
+                          body: "invalid.txt",
+                          url: "https://matrix.example/media",
+                          info: { mimetype: "text/plain", size: 40 },
+                        },
+                      }),
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+      dispatch: async (event) => {
+        dispatched.push(event);
+        if (dispatched.length === 4) {
+          resolveDispatches?.();
+        }
+      },
+      diagnosticSink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
+    });
+
+    await dispatchesSeen;
+    await handle.stop();
+    abortController.abort();
+
+    expect(
+      fetchCalls.filter((call) =>
+        call.url.includes("/_matrix/client/v1/media/download/"),
+      ),
+    ).toHaveLength(1);
+    expect(dispatched).toHaveLength(4);
+    expect(dispatched).toEqual([
+      expect.objectContaining({
+        eventId: "$attachment-fail",
+        input: expect.objectContaining({
+          text: "bad.txt",
+          attachmentText: "",
+          attachments: [
+            expect.objectContaining({
+              name: "bad.txt",
+              downloadError: "MatrixAttachmentDownloadHttpError",
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        eventId: "$attachment-encrypted",
+        input: expect.objectContaining({
+          text: "secret.txt",
+          attachmentText: "",
+          attachments: [
+            expect.objectContaining({
+              name: "secret.txt",
+              mediaUrl: "mxc://matrix.example/encrypted",
+              encrypted: true,
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        eventId: "$attachment-binary",
+        input: expect.objectContaining({
+          text: "diagram.png",
+          attachmentText: "",
+          attachments: [
+            expect.objectContaining({
+              name: "diagram.png",
+              mimetype: "image/png",
+            }),
+          ],
+        }),
+      }),
+      expect.objectContaining({
+        eventId: "$attachment-invalid-url",
+        input: expect.objectContaining({
+          text: "invalid.txt",
+          attachmentText: "",
+          attachments: [
+            expect.objectContaining({
+              name: "invalid.txt",
+              downloadError: "MatrixAttachmentInvalidMediaUrl",
+            }),
+          ],
+        }),
+      }),
+    ]);
+    expect(diagnostics).toEqual([
+      {
+        sourceId: "team-matrix",
+        httpStatus: 503,
+        errorClass: "MatrixAttachmentDownloadHttpError",
+      },
+      {
+        sourceId: "team-matrix",
+        errorClass: "MatrixAttachmentInvalidMediaUrl",
+      },
+    ]);
+    expect(JSON.stringify({ dispatched, diagnostics })).not.toContain(
+      "secret-token",
+    );
+    expect(JSON.stringify({ dispatched, diagnostics })).not.toContain(
+      "provider failure",
+    );
   });
 
   test("ignores Matrix formatted_body without the custom HTML format marker", async () => {
