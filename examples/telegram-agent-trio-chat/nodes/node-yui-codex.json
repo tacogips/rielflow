@@ -13,7 +13,7 @@
     "peerSummary": "Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent. Rina Cursor is an intellectual otaku and technical analyst."
   },
   "output": {
-    "description": "Return Yui's Telegram reply; optional handoff flags are adapter-level when values.",
+    "description": "Return Yui's chat reply; optional handoff flags are adapter-level when values.",
     "jsonSchema": {
       "type": "object",
       "required": ["replyText"],

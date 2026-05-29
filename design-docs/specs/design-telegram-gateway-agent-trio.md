@@ -21,6 +21,11 @@ workflow:
 - Mika Trend: gyaru entertainment and trends specialist, `claude-code-agent`.
 - Rina Cursor: intellectual otaku technical analyst, `cursor-cli-agent`.
 
+Initial persona selection is owned by the provider-neutral
+`rielflow/chat-persona-router` built-in add-on. Transport-specific ingestion,
+history, attachments, and reply targets stay in event adapters; the workflow
+only configures persona ids, display names, and aliases.
+
 ## Technical Details
 
 `telegram-gateway` normalizes Telegram updates into the shared

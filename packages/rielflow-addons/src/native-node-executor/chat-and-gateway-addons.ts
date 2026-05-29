@@ -15,6 +15,7 @@ import type {
   ContainerRunnerKind,
   JsonObject,
   ResolvedChatReplyWorkerAddon,
+  ResolvedChatPersonaRouterAddon,
   ResolvedMailGatewayAddon,
   ResolvedMailGatewayReadAddon,
   ResolvedXGatewayAddon,
@@ -313,6 +314,84 @@ export async function executeChatReplyAddonNode(
             }),
       },
     },
+  };
+}
+
+function normalizePersonaMatchText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+function readRuntimeChatText(
+  runtimeVariables: Readonly<Record<string, unknown>>,
+): string {
+  const event = runtimeVariables["event"];
+  if (isRecord(event)) {
+    const input = event["input"];
+    if (isRecord(input) && typeof input["text"] === "string") {
+      return input["text"];
+    }
+  }
+  const input = runtimeVariables["input"];
+  if (isRecord(input) && typeof input["request"] === "string") {
+    return input["request"];
+  }
+  return "";
+}
+
+function personaAliases(
+  persona: ResolvedChatPersonaRouterAddon["config"]["personas"][number],
+): readonly string[] {
+  return [persona.id, persona.name, ...(persona.aliases ?? [])];
+}
+
+export async function executeChatPersonaRouterAddonNode(
+  input: NativeNodeExecutionInput,
+  addon: ResolvedChatPersonaRouterAddon,
+): Promise<AdapterExecutionOutput> {
+  const variables = resolveTemplateVariables(input);
+  const text =
+    addon.config.textTemplate === undefined
+      ? readRuntimeChatText(input.runtimeVariables)
+      : renderPromptTemplate(addon.config.textTemplate, variables);
+  const normalizedText = normalizePersonaMatchText(text);
+  let selectedId = addon.config.defaultPersonaId;
+  let selectedIndex = Number.POSITIVE_INFINITY;
+  let matchedAlias: string | undefined;
+
+  for (const persona of addon.config.personas) {
+    for (const alias of personaAliases(persona)) {
+      const normalizedAlias = normalizePersonaMatchText(alias);
+      const index = normalizedText.indexOf(normalizedAlias);
+      if (index >= 0 && index < selectedIndex) {
+        selectedId = persona.id;
+        selectedIndex = index;
+        matchedAlias = alias;
+      }
+    }
+  }
+
+  const when: Record<string, boolean> = { always: true };
+  const payload: Record<string, unknown> = {
+    target: selectedId,
+    reason:
+      matchedAlias === undefined
+        ? `No persona was named; routed to default persona '${selectedId}'.`
+        : `Matched persona alias '${matchedAlias}'.`,
+  };
+  for (const persona of addon.config.personas) {
+    const flag = `target_${persona.id}`;
+    const selected = persona.id === selectedId;
+    when[flag] = selected;
+    payload[flag] = selected;
+  }
+
+  return {
+    provider: "native-addon",
+    model: `${addon.name}@${addon.version}`,
+    promptText: text,
+    completionPassed: true,
+    when,
+    payload,
   };
 }
 export function resolveAddonEnv(input: {

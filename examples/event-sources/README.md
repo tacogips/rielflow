@@ -165,7 +165,8 @@ Discord thread through `rielflow/chat-reply-worker`.
 
 The companion binding `chat-sdk-discord-to-agent-trio` dispatches the
 `agent-trio-chat` Discord channel to `discord-agent-trio-chat`, where Yui Codex,
-Mika Trend, and Rina Cursor are routed as separate named personas. Use
+Mika Trend, and Rina Cursor are routed as separate named personas by
+`rielflow/chat-persona-router`. Use
 `examples/discord-agent-trio-chat/assets/icons/` as the Discord application icon
 source files for the three bot applications.
 
@@ -214,7 +215,7 @@ rielflow events serve --workflow-definition-dir ./examples --event-root ./exampl
 
 For deterministic local checks, emit the checked-in Gateway payload without
 contacting Discord. The payload includes bounded prior Discord history so the
-`discord-persona-chat` workflow can answer as Yui, Mika, or Rina with context:
+`discord-agent-trio-chat` workflow can answer as Yui, Mika, or Rina with context:
 
 ```bash
 rielflow events emit discord-gateway-personas \

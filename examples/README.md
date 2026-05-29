@@ -195,6 +195,7 @@ Discord chat workflow for three named bot personas in one channel:
 - `Mika Trend` runs on `claude-code-agent` and covers entertainment, trends, and gyaru-style audience sense
 - `Rina Cursor` runs on `cursor-cli-agent` and covers intellectual otaku and technical analysis
 - persona icons are checked in under `assets/icons/`
+- initial persona selection uses the provider-neutral `rielflow/chat-persona-router` add-on, so the workflow does not need a Discord-specific routing prompt
 - a selected persona can set handoff flags such as `handoff_mika` when the user explicitly asks to hear another persona too
 - Discord replies use `rielflow/chat-reply-worker` and dry-run when a direct local run has no chat target
 
@@ -222,7 +223,8 @@ ingestion:
   event source
 - includes persisted bounded chat history in `event.input.history`
 - preserves Telegram photo metadata in `event.input.attachments`
-- routes replies as Yui, Mika, or Rina with the same persona specs as the
+- routes replies as Yui, Mika, or Rina through the provider-neutral
+  `rielflow/chat-persona-router` add-on with the same persona specs as the
   Discord trio
 - sends replies through `rielflow/chat-reply-worker` and the
   `telegram-gateway-persona-replies` chat destination

@@ -12,7 +12,7 @@
     "peerSummary": "Yui Codex is a refined secretary and default coordinator. Rina Cursor is an intellectual otaku and technical analyst."
   },
   "output": {
-    "description": "Return Mika's Telegram reply; optional handoff flags are adapter-level when values.",
+    "description": "Return Mika's chat reply; optional handoff flags are adapter-level when values.",
     "jsonSchema": {
       "type": "object",
       "required": ["replyText"],

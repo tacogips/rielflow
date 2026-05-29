@@ -1,4 +1,5 @@
 import type { NodeValidationResult } from "./validate/node-validation-result";
+import type { ResolvedChatPersonaRouterAddon } from "./chat-persona-router-types";
 
 export type CliAgentBackend =
   | "codex-agent"
@@ -796,6 +797,7 @@ export interface ResolvedSuperviserControlAddon {
 
 export type ResolvedNodeAddon =
   | ResolvedChatReplyWorkerAddon
+  | ResolvedChatPersonaRouterAddon
   | ResolvedXGatewayReadAddon
   | ResolvedXGatewayAddon
   | ResolvedMailGatewayReadAddon
@@ -987,6 +989,11 @@ export const ROOT_DATA_FILES_SUBDIR = "files";
 
 export const NODE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
+export type {
+  ChatPersonaRouterConfig,
+  ChatPersonaRouterPersonaConfig,
+  ResolvedChatPersonaRouterAddon,
+} from "./chat-persona-router-types";
 export type {
   AutoImprovePolicy,
   GetWorkflowExecutionDetailsAddonInput,

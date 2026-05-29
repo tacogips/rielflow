@@ -14,6 +14,7 @@ Use this skill for add-on-backed workflow node registry entries.
 Current built-ins, version `1`:
 
 - `rielflow/chat-reply-worker`
+- `rielflow/chat-persona-router`
 - `rielflow/codex-worker`
 - `rielflow/claude-code-worker`
 - `rielflow/workflow-package-sandbox-review`

@@ -368,6 +368,73 @@ describe("executeNativeNode", () => {
     ).toBeGreaterThan(0);
   });
 
+  test("routes chat personas with provider-neutral built-in router", async () => {
+    const workflowDirectory = await makeTempDir();
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: workflowDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "route",
+        nodeExecId: "exec-1",
+        node: {
+          id: "route",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "rielflow/chat-persona-router",
+            version: "1",
+            config: {
+              defaultPersonaId: "yui",
+              personas: [
+                { id: "yui", name: "Yui Codex", aliases: ["codex"] },
+                { id: "mika", name: "Mika Trend", aliases: ["gyaru"] },
+                { id: "rina", name: "Rina Cursor", aliases: ["cursor"] },
+              ],
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {
+          event: {
+            provider: "telegram",
+            input: {
+              text: "Yui, give your view and ask Mika too",
+            },
+          },
+        },
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "route"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.provider).toBe("native-addon");
+    expect(output.model).toBe("rielflow/chat-persona-router@1");
+    expect(output.when).toMatchObject({
+      target_yui: true,
+      target_mika: false,
+      target_rina: false,
+    });
+    expect(output.payload).toMatchObject({
+      target: "yui",
+      target_yui: true,
+      target_mika: false,
+      target_rina: false,
+    });
+  });
+
   test("renders built-in chat reply add-on output from inbox and event target", async () => {
     const workflowDirectory = await makeTempDir();
     const output = await executeNativeNode(

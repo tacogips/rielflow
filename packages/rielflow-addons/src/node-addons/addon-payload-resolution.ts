@@ -33,6 +33,12 @@ import {
   normalizeThirdPartyResolverResult,
 } from "./addon-constants-and-agent-config";
 import {
+  CHAT_PERSONA_ROUTER_ADDON_NAME,
+  CHAT_PERSONA_ROUTER_ADDON_VERSION,
+  CHAT_PERSONA_ROUTER_OUTPUT,
+  normalizeChatPersonaRouterConfig,
+} from "./chat-persona-router-config";
+import {
   rejectUnsupportedAddonEnv,
   resolveAgentWorkerPayload,
   resolveGitCommitPayload,
@@ -215,6 +221,63 @@ export function resolveBuiltinNodeAddonPayload(
     gitPushPayload.issues.length > 0
   ) {
     return gitPushPayload;
+  }
+
+  if (input.addon.name === CHAT_PERSONA_ROUTER_ADDON_NAME) {
+    if (version !== CHAT_PERSONA_ROUTER_ADDON_VERSION) {
+      return {
+        issues: [
+          makeIssue(
+            `${input.path}.version`,
+            `unsupported version '${version}' for ${CHAT_PERSONA_ROUTER_ADDON_NAME}`,
+          ),
+        ],
+      };
+    }
+    if (input.addon.config !== undefined && !isRecord(input.addon.config)) {
+      return {
+        issues: [makeIssue(`${input.path}.config`, "must be an object")],
+      };
+    }
+    if (input.addon.inputs !== undefined && !isRecord(input.addon.inputs)) {
+      return {
+        issues: [makeIssue(`${input.path}.inputs`, "must be an object")],
+      };
+    }
+    const unsupportedEnvIssues = rejectUnsupportedAddonEnv(
+      input.addon,
+      input.path,
+    );
+    if (unsupportedEnvIssues.length > 0) {
+      return { issues: unsupportedEnvIssues };
+    }
+    const normalized = normalizeChatPersonaRouterConfig(
+      input.addon.config,
+      `${input.path}.config`,
+    );
+    if (normalized.config === undefined) {
+      return { issues: normalized.issues };
+    }
+    const addon: ResolvedNodeAddon = {
+      name: CHAT_PERSONA_ROUTER_ADDON_NAME,
+      version: CHAT_PERSONA_ROUTER_ADDON_VERSION,
+      config: normalized.config,
+      ...(input.addon.inputs === undefined
+        ? {}
+        : { inputs: input.addon.inputs }),
+    };
+    return {
+      payload: {
+        id: input.nodeId,
+        description:
+          "Built-in worker that routes a provider-neutral chat event to one configured persona.",
+        nodeType: "addon",
+        variables: input.addon.inputs ?? {},
+        addon,
+        output: CHAT_PERSONA_ROUTER_OUTPUT,
+      },
+      issues: [],
+    };
   }
 
   if (input.addon.name !== CHAT_REPLY_WORKER_ADDON_NAME) {

@@ -12,7 +12,7 @@
     "peerSummary": "Yui Codex is a refined secretary and default coordinator. Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent."
   },
   "output": {
-    "description": "Return Rina's Discord reply; optional handoff flags are adapter-level when values.",
+    "description": "Return Rina's chat reply; optional handoff flags are adapter-level when values.",
     "jsonSchema": {
       "type": "object",
       "required": ["replyText"],

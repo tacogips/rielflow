@@ -1,18 +1,41 @@
 {
   "workflowId": "discord-agent-trio-chat",
-  "description": "Route Discord chat messages to one of three named female bot personas: Yui Codex by default, Mika Trend when called, or Rina Cursor when called. Persona nodes can hand off to another named persona when the user explicitly asks one bot to hear another bot's opinion.",
+  "description": "Route provider-neutral chat messages, including attachment descriptors, to one of three named female bot personas: Yui Codex by default, Mika Trend when called, or Rina Cursor when called. Persona nodes can hand off to another named persona when the user explicitly asks one bot to hear another bot's opinion.",
   "defaults": {
     "maxLoopIterations": 3,
     "nodeTimeoutMs": 180000
   },
   "prompts": {
-    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing Discord text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics."
+    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing chat text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics."
   },
   "entryStepId": "route-message",
   "nodes": [
     {
       "id": "route-message",
-      "nodeFile": "nodes/node-route-message.json"
+      "addon": {
+        "name": "rielflow/chat-persona-router",
+        "version": "1",
+        "config": {
+          "defaultPersonaId": "yui",
+          "personas": [
+            {
+              "id": "yui",
+              "name": "Yui Codex",
+              "aliases": ["yui", "codex", "default bot"]
+            },
+            {
+              "id": "mika",
+              "name": "Mika Trend",
+              "aliases": ["mika", "claude", "gyaru", "trend", "entertainment", "pop culture"]
+            },
+            {
+              "id": "rina",
+              "name": "Rina Cursor",
+              "aliases": ["rina", "cursor", "otaku", "nerd", "technical analyst"]
+            }
+          ]
+        }
+      }
     },
     {
       "id": "yui-codex",
@@ -31,12 +54,12 @@
       "addon": {
         "name": "rielflow/chat-reply-worker",
         "version": "1",
-          "config": {
-            "textTemplate": "{{inbox.latest.output.payload.replyText}}",
-            "replyAsTemplate": "yui",
-            "visibility": "public",
-            "threadPolicy": "same-thread",
-            "onMissingTarget": "dry-run"
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "yui",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
         }
       }
     },
@@ -45,12 +68,12 @@
       "addon": {
         "name": "rielflow/chat-reply-worker",
         "version": "1",
-          "config": {
-            "textTemplate": "{{inbox.latest.output.payload.replyText}}",
-            "replyAsTemplate": "mika",
-            "visibility": "public",
-            "threadPolicy": "same-thread",
-            "onMissingTarget": "dry-run"
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "mika",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
         }
       }
     },
@@ -59,12 +82,12 @@
       "addon": {
         "name": "rielflow/chat-reply-worker",
         "version": "1",
-          "config": {
-            "textTemplate": "{{inbox.latest.output.payload.replyText}}",
-            "replyAsTemplate": "rina",
-            "visibility": "public",
-            "threadPolicy": "same-thread",
-            "onMissingTarget": "dry-run"
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "rina",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
         }
       }
     }

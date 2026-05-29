@@ -20,6 +20,11 @@
 
 Built-in `rielflow/*` add-ons resolve from the runtime catalog.
 
+`rielflow/chat-persona-router` is a native provider-neutral router for chat
+workflows. Configure `defaultPersonaId` and `personas[]` with `id`, `name`, and
+optional `aliases`; it reads the normalized chat text and emits `target_<id>`
+flags for transition labels.
+
 Non-`rielflow/` add-ons may resolve from:
 
 - scoped local add-on roots under `<scope-root>/addons`

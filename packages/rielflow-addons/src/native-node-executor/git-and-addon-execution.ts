@@ -34,6 +34,7 @@ import {
 } from "./template-env-and-containers";
 import {
   executeChatReplyAddonNode,
+  executeChatPersonaRouterAddonNode,
   executeMailGatewayAddonNode,
   executeMailGatewayReadAddonNode,
   executeXGatewayAddonNode,
@@ -488,6 +489,8 @@ export async function executeAddonNode(
   switch (addon.name) {
     case "rielflow/chat-reply-worker":
       return await executeChatReplyAddonNode(input, addon);
+    case "rielflow/chat-persona-router":
+      return await executeChatPersonaRouterAddonNode(input, addon);
     case "rielflow/x-gateway-read":
       return await executeXGatewayReadAddonNode(input, addon, context);
     case "rielflow/x-gateway":
