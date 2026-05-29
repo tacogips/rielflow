@@ -67,10 +67,11 @@ rielflow events emit team-matrix \
 The binding `matrix-release-chat-to-workflow` runs the `matrix-chat-reply`
 workflow and sends workflow replies through the explicit
 `release-matrix-chat` chat destination. Matrix support currently
-handles text-like `m.room.message` events from configured rooms and Matrix
-Client-Server room sends; encrypted rooms, attachments, reactions, edits,
-redactions, and Application Service transactions are out of scope for this
-fixture.
+handles text-like `m.room.message` events from configured rooms, optional
+bounded text-compatible attachment downloads, and Matrix Client-Server room
+sends; encrypted rooms, encrypted attachments, binary OCR, audio/video
+transcription, reactions, edits, redactions, and Application Service
+transactions are out of scope for this fixture.
 
 For an end-to-end local Matrix verification, run the dedicated sample workflow
 against a Docker Compose Synapse homeserver:
@@ -89,6 +90,9 @@ The Matrix source fixture enables bounded room/thread history. During
 history under the event data root and reloaded after restart. Workflows can read
 that context from `event.input.history` and `event.input.historySource`;
 persisted files do not store Matrix access tokens or raw `/sync` payloads.
+The fixture also enables bounded text attachment downloads for text, markdown,
+and JSON files. Extracted text is appended to `event.input.text` and exposed as
+`event.input.attachmentText` plus `event.input.attachments` metadata.
 
 The `chat-sdk-slack` and `chat-sdk-telegram` sources demonstrate the shared
 Chat SDK generic boundary.

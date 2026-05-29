@@ -147,3 +147,18 @@ stalled, then implementation continued manually from those generated designs.
 **Notes**: Added compact shared persistence mechanics, Matrix start-time
 history handling, Chat SDK HTTP normalization/accepted-record hooks, source
 validation, example fixtures, and regression tests for restart reload behavior.
+
+### Session: 2026-05-29 Matrix attachment follow-up
+
+**Tasks Completed**: Confirmed Matrix attachments were not read: the adapter
+accepted only text-like `msgtype` values and rejected `m.image`/attachment
+messages. Added `design-docs/specs/design-matrix-attachment-text.md`, Matrix
+source attachment config, bounded Matrix media download for text-compatible
+attachments, event payload fields `attachmentText` and `attachments`, example
+config, and focused tests.
+
+**Notes**: Attachment extraction is opt-in through
+`source.attachments.downloadText`, bounded by `maxBytes`, and limited to text
+MIME types or conservative text-like extensions. Binary OCR, audio/video
+transcription, encrypted attachment decrypt, and manual emit media downloads
+remain out of scope.

@@ -167,6 +167,12 @@ export interface MatrixHistoryConfig extends JsonObject {
   readonly includeOwnMessages?: boolean;
 }
 
+export interface MatrixAttachmentsConfig extends JsonObject {
+  readonly downloadText?: boolean;
+  readonly maxBytes?: number;
+  readonly allowedMimeTypes?: readonly string[];
+}
+
 export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly kind: "matrix";
   readonly provider?: "matrix" | string;
@@ -177,6 +183,7 @@ export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly sync?: MatrixSourceSyncConfig;
   readonly ignoreOwnMessages?: boolean;
   readonly history?: MatrixHistoryConfig;
+  readonly attachments?: MatrixAttachmentsConfig;
 }
 
 export interface S3RepositoryEventReceiverConfig extends JsonObject {

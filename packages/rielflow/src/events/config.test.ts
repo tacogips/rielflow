@@ -555,6 +555,11 @@ describe("event configuration", () => {
         maxAgeMs: 86400000,
         scope: "thread-or-room",
       },
+      attachments: {
+        downloadText: true,
+        maxBytes: 65536,
+        allowedMimeTypes: ["text/plain", "application/json"],
+      },
     });
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
       id: "to-demo",
@@ -1183,6 +1188,11 @@ describe("event configuration", () => {
         scope: "global",
         includeOwnMessages: "sometimes",
       },
+      attachments: {
+        downloadText: "yes",
+        maxBytes: 999999999,
+        allowedMimeTypes: [],
+      },
       ignoreOwnMessages: "yes",
     });
     await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
@@ -1215,6 +1225,9 @@ describe("event configuration", () => {
         "sources.bad-matrix.history.maxAgeMs",
         "sources.bad-matrix.history.scope",
         "sources.bad-matrix.history.includeOwnMessages",
+        "sources.bad-matrix.attachments.downloadText",
+        "sources.bad-matrix.attachments.maxBytes",
+        "sources.bad-matrix.attachments.allowedMimeTypes",
         "sources.bad-matrix.ignoreOwnMessages",
       ]),
     );

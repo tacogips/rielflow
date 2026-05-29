@@ -13,6 +13,13 @@ import {
   chatReplyDispatchResultFromResponse,
   readOptionalChatReplyJson,
 } from "./chat-reply-response";
+import {
+  downloadMatrixAttachmentText,
+  isMatrixAttachmentMessageType,
+  readMatrixAttachmentMetadata,
+  textWithMatrixAttachment,
+  type MatrixAttachmentInput,
+} from "./matrix-attachments";
 import type {
   EventSourceAcceptedEventInput,
   EventSourceDiagnostic,
@@ -363,6 +370,7 @@ function normalizeMatrixRoomEvent(input: {
   readonly event: JsonObject;
   readonly receivedAt: string;
   readonly rawRef: RawExternalEvent["rawRef"];
+  readonly attachment?: MatrixAttachmentInput;
 }): ExternalEventEnvelope | null {
   if (!configuredRoomIds(input.source).has(input.roomId)) {
     return null;
@@ -383,14 +391,26 @@ function normalizeMatrixRoomEvent(input: {
     return null;
   }
   const msgtype = optionalString(content["msgtype"]);
-  const text = optionalString(content["body"]);
+  const bodyText = optionalString(content["body"]);
+  const attachment = input.attachment ?? readMatrixAttachmentMetadata(content);
+  const isTextMessage =
+    msgtype !== undefined && TEXT_MESSAGE_TYPES.has(msgtype);
+  const isAttachmentMessage =
+    msgtype !== undefined &&
+    attachment !== null &&
+    isMatrixAttachmentMessageType(msgtype) &&
+    input.source.attachments !== undefined;
   if (
     msgtype === undefined ||
-    !TEXT_MESSAGE_TYPES.has(msgtype) ||
-    text === undefined
+    bodyText === undefined ||
+    (!isTextMessage && !isAttachmentMessage)
   ) {
     return null;
   }
+  const text = textWithMatrixAttachment({
+    text: bodyText,
+    ...(attachment === null ? {} : { attachment }),
+  });
   const relation = readRelation(content);
   const replyToEventId = readReplyToEventId(relation);
   const threadRootEventId = readThreadRootEventId(relation);
@@ -423,6 +443,12 @@ function normalizeMatrixRoomEvent(input: {
     },
     input: {
       text,
+      ...(attachment === null
+        ? {}
+        : {
+            attachments: [attachment],
+            attachmentText: attachment.contentText ?? "",
+          }),
       ...(html === undefined ? {} : { html }),
       roomId: input.roomId,
       eventId,
@@ -679,12 +705,28 @@ export function createMatrixEventSourceAdapter(): EventSourceAdapter {
           const body = (await response.json()) as unknown;
           const receivedAt = input.now().toISOString();
           for (const candidate of collectSyncRoomEvents(body)) {
+            const content = candidate.event["content"];
+            const attachmentMetadata = isJsonObject(content)
+              ? readMatrixAttachmentMetadata(content)
+              : null;
+            const attachment =
+              attachmentMetadata === null
+                ? undefined
+                : await downloadMatrixAttachmentText({
+                    source,
+                    attachment: attachmentMetadata,
+                    homeserver,
+                    accessToken,
+                    fetchImpl,
+                    diagnosticSink: input.diagnosticSink,
+                  });
             const event = normalizeMatrixRoomEvent({
               source,
               roomId: candidate.roomId,
               event: candidate.event,
               receivedAt,
               rawRef: undefined,
+              ...(attachment === undefined ? {} : { attachment }),
             });
             if (event !== null) {
               let eventWithHistory = event;

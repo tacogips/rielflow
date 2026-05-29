@@ -232,6 +232,110 @@ describe("matrix event source adapter", () => {
     ).rejects.toThrow("supported room message");
   });
 
+  test("downloads text-compatible Matrix attachment content during sync", async () => {
+    const adapter = createMatrixEventSourceAdapter();
+    const abortController = new AbortController();
+    const dispatched: unknown[] = [];
+    let resolveDispatch: (() => void) | undefined;
+    const dispatchSeen = new Promise<void>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    const fetchCalls: Array<{
+      readonly url: string;
+      readonly init: RequestInit | undefined;
+    }> = [];
+
+    const handle = await adapter.start({
+      source: matrixSource({
+        sync: { pollTimeoutMs: 1000 },
+        attachments: {
+          downloadText: true,
+          maxBytes: 64,
+          allowedMimeTypes: ["text/plain"],
+        },
+      }),
+      signal: abortController.signal,
+      now: () => new Date("2026-05-13T00:00:00.000Z"),
+      env: {
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
+      },
+      fetchImpl: async (url, init) => {
+        fetchCalls.push({ url: String(url), init });
+        if (String(url).includes("/_matrix/client/v1/media/download/")) {
+          return new Response("attachment content for the workflow", {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            next_batch: "sync-token-2",
+            rooms: {
+              join: {
+                "!release:matrix.example": {
+                  timeline: {
+                    events: [
+                      roomMessage({
+                        event_id: "$attachment-event-1",
+                        content: {
+                          msgtype: "m.file",
+                          body: "notes.txt",
+                          url: "mxc://matrix.example/media-1",
+                          info: { mimetype: "text/plain", size: 35 },
+                        },
+                      }),
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+      dispatch: async (event) => {
+        dispatched.push(event);
+        resolveDispatch?.();
+      },
+    });
+
+    await dispatchSeen;
+    await handle.stop();
+    abortController.abort();
+
+    expect(fetchCalls[1]).toMatchObject({
+      url: "https://matrix.example/_matrix/client/v1/media/download/matrix.example/media-1",
+      init: {
+        method: "GET",
+        headers: {
+          authorization: "Bearer secret-token",
+          range: "bytes=0-64",
+        },
+      },
+    });
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      eventId: "$attachment-event-1",
+      input: {
+        text: "notes.txt\n\nattachment content for the workflow",
+        attachmentText: "attachment content for the workflow",
+        attachments: [
+          {
+            name: "notes.txt",
+            msgtype: "m.file",
+            mediaUrl: "mxc://matrix.example/media-1",
+            mimetype: "text/plain",
+            size: 35,
+            contentText: "attachment content for the workflow",
+            truncated: false,
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(dispatched[0])).not.toContain("secret-token");
+  });
+
   test("ignores Matrix formatted_body without the custom HTML format marker", async () => {
     const adapter = createMatrixEventSourceAdapter();
 

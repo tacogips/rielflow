@@ -21,5 +21,10 @@
     "maxAgeMs": 86400000,
     "scope": "thread-or-room",
     "includeOwnMessages": false
+  },
+  "attachments": {
+    "downloadText": true,
+    "maxBytes": 65536,
+    "allowedMimeTypes": ["text/plain", "text/markdown", "application/json"]
   }
 }

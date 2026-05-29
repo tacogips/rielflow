@@ -886,9 +886,13 @@ id. Matrix sources may enable bounded room/thread history; during `events serve`
 accepted messages are persisted under the event data root as compact normalized
 history, reloaded after restart, and exposed through `event.input.history` and
 `event.input.historySource`. Persisted Matrix history excludes access tokens,
-raw sync payloads, workflow inboxes, and agent transcripts. The first slice
-excludes encrypted rooms, attachments, reactions, edits, redactions, and
-Application Service transactions.
+raw sync payloads, workflow inboxes, and agent transcripts. Matrix sources may
+also opt into bounded text-compatible attachment downloads with
+`attachments.downloadText`; extracted text is appended to `event.input.text` and
+also exposed as `event.input.attachmentText` plus `event.input.attachments`
+metadata. Binary OCR, audio/video transcription, encrypted rooms, encrypted
+attachments, reactions, edits, redactions, and Application Service transactions
+remain out of scope.
 
 Chat SDK chat sources use `kind: "chat-sdk"` with the first-pass generic
 webhook/send boundary. Supported providers are `slack`, `teams`, `gchat`,

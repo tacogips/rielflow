@@ -64,6 +64,10 @@ Current direction:
   provider-neutral chat reply worker and output destination boundary for
   same-conversation replies. See
   `design-docs/specs/design-discord-gateway-chat-history.md`.
+- Matrix chat ingestion may opt into bounded, text-compatible attachment media
+  downloads during `/sync`; extracted text is appended to normalized
+  `chat.message` input while binary OCR, transcription, and decryption remain
+  out of scope. See `design-docs/specs/design-matrix-attachment-text.md`.
 - `auto improve mode` persists incidents, remediations, and mutable-workspace audit data on the target session; phase 2 optionally runs a paired `rielflow superviser` workflow (`nestedSuperviserDriver` / `--nested-superviser`) using the same audit model
 - dedicated workflow self-improve is a separate retrospective analysis and
   optional canonical workflow-edit service; it reads recent workflow run
