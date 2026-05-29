@@ -61,6 +61,7 @@ describe("event source registry", () => {
     expect(registry.list().map((adapter) => adapter.kind)).toEqual([
       "chat-sdk",
       "cron",
+      "discord-gateway",
       "file-change",
       "matrix",
       "s3-repository",
@@ -68,6 +69,11 @@ describe("event source registry", () => {
       "webhook",
     ]);
     expect(registry.get("chat-sdk")?.capabilities.chatReply).toBe(true);
+    expect(registry.get("discord-gateway")?.capabilities).toMatchObject({
+      supportsStart: true,
+      webhook: false,
+      chatReply: true,
+    });
     expect(registry.get("matrix")?.capabilities.chatReply).toBe(true);
   });
 });

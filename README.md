@@ -37,6 +37,7 @@ flowchart TD
 - Start workflows with supervisor-backed execution by default; `--no-auto-improve` disables workflow patching but keeps deterministic supervision.
 - Start a local GraphQL control plane for remote execution and manager/control-plane operations.
 - Receive external events, replay event receipts, inspect reply dispatch records, and register chat-created workflow schedules.
+- Run built-in Discord Gateway chat ingestion with bounded channel or thread history for persona workflows, distinct from generic Chat SDK webhooks.
 - Install shell hooks/snippets for Claude Code, Codex, and Gemini.
 
 ## Install
@@ -895,6 +896,20 @@ the webhook path must remain relative and provider-scoped, such as
 this boundary; direct provider SDK integration remains future scope after
 dependency and credential review.
 
+Discord Gateway chat sources use `kind: "discord-gateway"` for rielflow-owned
+Discord Gateway ingestion. Configure bot credentials with env-var names such as
+`RIEL_DISCORD_BOT_TOKEN` and `RIEL_DISCORD_APPLICATION_ID`, then list the
+Discord channels or threads the runner should listen to. The adapter ignores
+bot and self messages by default, normalizes accepted `MESSAGE_CREATE` events
+to `chat.message`, attaches bounded recent channel or thread messages to
+`event.input.history`, and sends replies through the same provider-neutral
+`rielflow/chat-reply-worker` destination boundary. This path is separate from
+the generic `chat-sdk-discord` webhook path and does not require an external
+Chat SDK Discord deployment. The first slice excludes durable cross-restart
+history, sharding, slash commands, components, moderation events, and
+attachment ingestion; enable Discord Message Content intent when workflow
+prompts need message text.
+
 Local file change sources use `kind: "file-change"` and are served by
 `events serve`. Configure `directory` with an absolute path or a path relative
 to the source JSON file, and set `changeTypes` to the non-empty subset of
@@ -1139,7 +1154,8 @@ Recommended starting points:
 - `scheduled-sleep`: minimal workflow that waits with `nodeType: "sleep"` before continuing to a worker step.
 - `supervised-mock-retry`: deterministic example for `--auto-improve` retry behavior.
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
-- `event-sources`: includes webhook, cron, S3, Element/Matrix, and Chat SDK source fixtures.
+- `discord-persona-chat`: Discord Gateway persona replies with bounded channel or thread history.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK, and Discord Gateway source fixtures.
 
 ## Repository Workflows
 
@@ -1278,14 +1294,11 @@ Issue-resolution runs that audit real backend behavior should run without
 `--mock-scenario`, then use the runtime artifact records above to verify the
 configured backend/model, mailbox `latestOutputs`, request, candidate, and
 validation evidence. Its required documentation targets are `README.md` and
-`.agents/skills/rielflow-impl-workflow/SKILL.md` so shipped behavior and the
-LLM-facing workflow skill stay aligned. When implementation changes CLI,
-GraphQL, library, or workflow-operation behavior, the matching user-facing
-workflow skills under `.agents/skills/` should be refreshed in the same step.
-For Codex-agent workflow runs, the Codex-specific workflow skill target is
-`.agents/skills/rielflow-codex-impl-workflow/SKILL.md` when present; if that
-repository-local alias is not installed, refresh the active workflow skill that
-routes to `codex-design-and-implement-review-loop`.
+`.agents/skills/rielflow-codex-impl-workflow/SKILL.md` for Codex-agent runs so
+shipped behavior and the LLM-facing workflow skill stay aligned. When
+implementation changes CLI, GraphQL, library, event-source, chat-reply, or
+workflow-operation behavior, refresh the matching user-facing workflow skills
+under `.agents/skills/` in the same step.
 
 For active implementation-plan completion handoffs, this documentation refresh
 should preserve the accepted review decision: unresolved blocker tasks stay

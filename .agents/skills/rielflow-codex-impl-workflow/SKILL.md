@@ -84,6 +84,12 @@ The workflow is responsible for:
 13. commit-message generation
 14. built-in git commit and git push add-on steps
 
+During documentation refresh, keep issue-resolution behavior visible at the
+same surface where users or future agents would discover it. For example,
+event-source or chat-reply built-in changes should refresh `README.md`,
+`examples/*` README coverage, and `.agents/skills/rielflow-event-sources/`
+guidance before commit-message generation.
+
 Because the workflow ends with commit/push, do not use it when the user has
 explicitly asked to avoid workflow-driven commits or wants manual local edits
 only.

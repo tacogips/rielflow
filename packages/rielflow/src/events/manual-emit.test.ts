@@ -262,6 +262,99 @@ describe("manual event emit", () => {
     });
   });
 
+  test("emits Discord Gateway fixtures with bounded history", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    const rootDataDir = path.join(root, "data");
+    const eventFile = path.join(root, "discord-event.json");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "discord.json"), {
+      id: "discord-gateway-personas",
+      kind: "discord-gateway",
+      tokenEnv: "RIEL_DISCORD_BOT_TOKEN",
+      applicationIdEnv: "RIEL_DISCORD_APPLICATION_ID",
+      channels: [{ id: "234567890123456789", includeThreads: true }],
+      history: { maxMessages: 2, maxBytes: 4096 },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "discord.json"), {
+      id: "discord-gateway-demo",
+      sourceId: "discord-gateway-personas",
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          history: "{{event.input.history}}",
+          threadId: "{{event.conversation.threadId}}",
+        },
+      },
+    });
+    await writeJson(eventFile, {
+      id: "345678901234567890",
+      channel_id: "567890123456789012",
+      parent_channel_id: "234567890123456789",
+      timestamp: "2026-05-29T10:02:00.000Z",
+      content: "Mika, what do you think?",
+      author: {
+        id: "456789012345678901",
+        username: "operator",
+        global_name: "Operator",
+        bot: false,
+      },
+      historySourceMode: "memory",
+      history: [
+        {
+          messageId: "111111111111111111",
+          authorId: "222222222222222222",
+          displayName: "Yui",
+          isBot: false,
+          createdAt: "2026-05-29T10:00:00.000Z",
+          text: "We need to pick between option one and two.",
+          conversationId: "234567890123456789",
+          threadId: "567890123456789012",
+        },
+      ],
+    });
+
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const results = await emitEventFile({
+      sourceId: "discord-gateway-personas",
+      eventFile,
+      workflowRoot,
+      eventRoot,
+      rootDataDir,
+      endpoint: "http://example.test/graphql",
+      fetchImpl,
+      cwd: root,
+      readOnly: true,
+    });
+
+    expect(results[0]?.receipt.status).toBe("skipped");
+    const inputRef = results[0]?.receipt.inputRef;
+    expect(inputRef).toBeDefined();
+    if (inputRef === undefined) {
+      return;
+    }
+    expect(
+      JSON.parse(await readFile(path.join(rootDataDir, inputRef.path), "utf8")),
+    ).toMatchObject({
+      workflowInput: {
+        request: "Mika, what do you think?",
+        history: [
+          {
+            messageId: "111111111111111111",
+            text: "We need to pick between option one and two.",
+          },
+        ],
+        threadId: "567890123456789012",
+      },
+    });
+  });
+
   test("emits Chat SDK generic payloads through normalization", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".rielflow");

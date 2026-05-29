@@ -1,4 +1,5 @@
 import { isJsonObject } from "../shared/json";
+import { isDiscordSnowflake } from "./adapters/discord-gateway";
 import {
   eventConfigError as error,
   isNonEmptyString,
@@ -104,6 +105,17 @@ function validateChatDestination(
         ),
       );
     }
+    if (
+      source?.kind === "discord-gateway" &&
+      !isNonEmptyString(source["tokenEnv"])
+    ) {
+      issues.push(
+        error(
+          `destinations.${destination.id}.sourceId`,
+          `discord-gateway source '${sourceId}' does not configure tokenEnv`,
+        ),
+      );
+    }
   }
 
   const target = destination["target"];
@@ -132,6 +144,29 @@ function validateChatDestination(
         error(
           `destinations.${destination.id}.target.${key}`,
           "chat destination target fields must be non-empty strings",
+        ),
+      );
+    }
+  }
+  const source =
+    isNonEmptyString(sourceId) && sourcesById.has(sourceId)
+      ? sourcesById.get(sourceId)
+      : undefined;
+  if (source?.kind !== "discord-gateway") {
+    return;
+  }
+  for (const key of [
+    "eventId",
+    "conversationId",
+    "threadId",
+    "actorId",
+  ] as const) {
+    const value = target[key];
+    if (typeof value === "string" && !isDiscordSnowflake(value)) {
+      issues.push(
+        error(
+          `destinations.${destination.id}.target.${key}`,
+          "Discord chat destination target fields must be snowflake strings",
         ),
       );
     }

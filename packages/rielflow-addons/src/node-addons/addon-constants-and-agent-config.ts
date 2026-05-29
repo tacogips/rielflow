@@ -579,6 +579,7 @@ export function normalizeChatReplyWorkerConfig(
   const config: Readonly<Record<string, unknown>> = value ?? {};
   const allowedKeys = new Set([
     "textTemplate",
+    "replyAsTemplate",
     "visibility",
     "threadPolicy",
     "onMissingTarget",
@@ -594,6 +595,17 @@ export function normalizeChatReplyWorkerConfig(
   if (typeof textTemplate !== "string" || textTemplate.trim().length === 0) {
     issues.push(
       makeIssue(`${path}.textTemplate`, "must be a non-empty string"),
+    );
+  }
+
+  const replyAsTemplate = config["replyAsTemplate"];
+  if (
+    replyAsTemplate !== undefined &&
+    (typeof replyAsTemplate !== "string" ||
+      replyAsTemplate.trim().length === 0)
+  ) {
+    issues.push(
+      makeIssue(`${path}.replyAsTemplate`, "must be a non-empty string"),
     );
   }
 
@@ -658,6 +670,9 @@ export function normalizeChatReplyWorkerConfig(
   return {
     config: {
       textTemplate,
+      ...(typeof replyAsTemplate === "string"
+        ? { replyAsTemplate }
+        : {}),
       ...(normalizedVisibility === undefined
         ? {}
         : { visibility: normalizedVisibility }),

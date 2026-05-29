@@ -140,6 +140,44 @@ rielflow events emit chat-sdk-discord \
   --output json
 ```
 
+The `discord-gateway-personas` source demonstrates rielflow-owned Discord
+Gateway ingestion. It is separate from the `chat-sdk-discord` generic webhook
+path and does not require an external Chat SDK Discord deployment. The Gateway
+runner uses Discord bot credentials from environment-variable names in the
+source config, listens to configured channels and threads, ignores bot and self
+messages by default, and attaches bounded recent channel or thread history to
+`event.input.history`.
+
+Serve the Gateway source with a Discord bot token and application id. The bot
+must have access to the configured channels and the Discord Message Content
+intent must be enabled when workflows need message text:
+
+```bash
+export RIEL_DISCORD_BOT_TOKEN=<discord-bot-token>
+export RIEL_DISCORD_APPLICATION_ID=<discord-application-id>
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit the checked-in Gateway payload without
+contacting Discord. The payload includes bounded prior Discord history so the
+`discord-persona-chat` workflow can answer as Yui, Mika, or Rina with context:
+
+```bash
+rielflow events emit discord-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/discord-gateway-message-with-history.json \
+  --read-only \
+  --output json
+```
+
+The first Gateway slice does not provide durable cross-restart history,
+multi-shard coordination, slash commands, components, moderation events, or
+attachment ingestion. History is bounded by `maxMessages`, `maxBytes`, and
+`maxAgeMs`, and it is Discord channel/thread context rather than workflow inbox
+or agent transcript history.
+
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and
 `delete` changes to `.md` and `.json` files. The source emits

@@ -156,6 +156,36 @@ bun run packages/rielflow/src/bin.ts events emit chat-sdk-discord \
   --output json
 ```
 
+### `discord-persona-chat`
+
+Discord Gateway persona workflow using rielflow-owned Gateway ingestion:
+
+- receives normalized Discord Gateway `MESSAGE_CREATE` events from the
+  `discord-gateway-personas` event source
+- includes bounded channel or thread history in `event.input.history`
+- routes replies as Yui, Mika, or Rina with `codex-agent` model `gpt-5.4-mini`
+- sends replies through `rielflow/chat-reply-worker` and the
+  `discord-gateway-persona-replies` chat destination
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate discord-persona-chat --workflow-definition-dir ./examples
+```
+
+Run it through the deterministic Discord Gateway fixture without contacting
+Discord:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit discord-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/discord-gateway-message-with-history.json \
+  --read-only \
+  --output json
+```
+
 ### `matrix-chat-reply`
 
 Element/Matrix worker-only workflow showing the same built-in reply add-on

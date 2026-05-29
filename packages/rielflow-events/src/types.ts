@@ -10,6 +10,8 @@ export interface EventArtifactRef {
 export interface EventActor {
   readonly id: string;
   readonly displayName?: string;
+  readonly username?: string;
+  readonly isBot?: boolean;
 }
 
 export interface EventConversation {
@@ -96,6 +98,48 @@ export interface ChatSdkSourceConfig extends EventSourceConfigBase {
   readonly providerConfig?: JsonObject;
 }
 
+export interface DiscordGatewayChannelConfig extends JsonObject {
+  readonly id: string;
+  readonly includeThreads?: boolean;
+  readonly personas?: readonly string[];
+}
+
+export interface DiscordGatewayHistoryConfig extends JsonObject {
+  readonly maxMessages?: number;
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly scope?: "channel" | "thread-or-channel";
+  readonly includeBotMessages?: boolean;
+  readonly fetchOnStart?: boolean;
+  readonly fetchOnMessage?: "never" | "when-cache-empty" | "always";
+}
+
+export interface DiscordGatewayFiltersConfig extends JsonObject {
+  readonly ignoreBots?: boolean;
+  readonly ignoreSelf?: boolean;
+  readonly requireMention?: boolean;
+}
+
+export interface DiscordGatewayReplyBotConfig extends JsonObject {
+  readonly tokenEnv: string;
+}
+
+export interface DiscordGatewaySourceConfig extends EventSourceConfigBase {
+  readonly kind: "discord-gateway";
+  readonly provider?: "discord";
+  readonly tokenEnv: string;
+  readonly applicationIdEnv: string;
+  readonly guildIds?: readonly string[];
+  readonly channels: readonly DiscordGatewayChannelConfig[];
+  readonly history?: DiscordGatewayHistoryConfig;
+  readonly filters?: DiscordGatewayFiltersConfig;
+  readonly replyBots?: Readonly<Record<string, DiscordGatewayReplyBotConfig>>;
+  readonly gatewayUrl?: string;
+  readonly restBaseUrl?: string;
+  readonly intents?: number;
+  readonly configFilePath?: string;
+}
+
 export interface MatrixSourceRoomConfig extends JsonObject {
   readonly roomId: string;
   readonly alias?: string;
@@ -166,6 +210,7 @@ export interface SequentialListSourceConfig extends EventSourceConfigBase {
 export type EventSourceConfig =
   | CronSourceConfig
   | ChatSdkSourceConfig
+  | DiscordGatewaySourceConfig
   | MatrixSourceConfig
   | WebhookSourceConfig
   | S3RepositorySourceConfig

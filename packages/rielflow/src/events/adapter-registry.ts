@@ -1,6 +1,7 @@
 import { createCronEventSourceAdapter } from "./adapters/cron";
 import { createChatSdkEventSourceAdapter } from "./adapters/chat-sdk";
 import { createFileChangeEventSourceAdapter } from "./adapters/file-change";
+import { createDiscordGatewayEventSourceAdapter } from "./adapters/discord-gateway";
 import { createMatrixEventSourceAdapter } from "./adapters/matrix";
 import { createS3RepositoryEventSourceAdapter } from "./adapters/s3-repository";
 import { createSequentialListEventSourceAdapter } from "./adapters/sequential-list";
@@ -43,6 +44,7 @@ export function createDefaultEventSourceRegistry(): EventSourceRegistry {
   const registry = createEventSourceRegistry();
   registry.register(createChatSdkEventSourceAdapter());
   registry.register(createCronEventSourceAdapter());
+  registry.register(createDiscordGatewayEventSourceAdapter());
   registry.register(createFileChangeEventSourceAdapter());
   registry.register(createMatrixEventSourceAdapter());
   registry.register(createSequentialListEventSourceAdapter());

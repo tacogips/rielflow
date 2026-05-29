@@ -25,6 +25,7 @@ import {
   validateChatSdkBindingCapabilities,
   validateChatSdkSource,
 } from "./validate-source-chat-sdk";
+import { validateDiscordGatewaySource } from "./validate-source-discord-gateway";
 import { validateScheduleRegistrationBinding } from "./validate-schedule-registration";
 import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
@@ -53,6 +54,7 @@ import type {
 const SUPPORTED_SOURCE_KINDS = new Set([
   "chat-sdk",
   "cron",
+  "discord-gateway",
   "file-change",
   "matrix",
   "webhook",
@@ -168,6 +170,8 @@ function validateSource(
   if (source.kind === "chat-sdk") {
     validateChatSdkSource(source, issues);
   }
+
+  validateDiscordGatewaySource(source, issues);
 
   validateFileChangeSource(source, issues);
   validateSequentialListSource(source, issues);

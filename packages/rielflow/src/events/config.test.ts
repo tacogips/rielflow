@@ -571,6 +571,144 @@ describe("event configuration", () => {
     ).toEqual([]);
   });
 
+  test("validates Discord Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "discord.json"), {
+      id: "discord-gateway-personas",
+      kind: "discord-gateway",
+      tokenEnv: "RIEL_DISCORD_BOT_TOKEN",
+      applicationIdEnv: "RIEL_DISCORD_APPLICATION_ID",
+      guildIds: ["123456789012345678"],
+      channels: [
+        {
+          id: "234567890123456789",
+          includeThreads: true,
+          personas: ["yui", "mika", "rina"],
+        },
+      ],
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "thread-or-channel",
+        fetchOnMessage: "when-cache-empty",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "discord.json"), {
+      id: "discord-gateway-persona-replies",
+      kind: "chat",
+      sourceId: "discord-gateway-personas",
+      target: {
+        provider: "discord",
+        conversationId: "234567890123456789",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "discord.json"), {
+      id: "discord-gateway-personas-to-demo",
+      sourceId: "discord-gateway-personas",
+      outputDestinations: ["discord-gateway-persona-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          history: "{{event.input.history}}",
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Discord Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-discord.json"), {
+      id: "bad-discord",
+      kind: "discord-gateway",
+      tokenEnv: "discord.token.literal",
+      applicationIdEnv: "",
+      guildIds: ["1234567890123456"],
+      channels: [
+        {
+          id: "12345",
+          includeThreads: "yes",
+          personas: ["mika", ""],
+        },
+      ],
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        fetchOnMessage: "every-time",
+      },
+      filters: {
+        ignoreSelf: false,
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-discord.json"), {
+      id: "bad-discord-replies",
+      kind: "chat",
+      sourceId: "bad-discord",
+      target: {
+        conversationId: "1234567890123456",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-discord.json"), {
+      id: "bad-discord-to-demo",
+      sourceId: "bad-discord",
+      outputDestinations: ["bad-discord-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-discord.tokenEnv",
+        "sources.bad-discord.applicationIdEnv",
+        "sources.bad-discord.guildIds[0]",
+        "sources.bad-discord.channels[0].id",
+        "sources.bad-discord.channels[0].includeThreads",
+        "sources.bad-discord.channels[0].personas",
+        "sources.bad-discord.history.maxMessages",
+        "sources.bad-discord.history.maxBytes",
+        "sources.bad-discord.history.maxAgeMs",
+        "sources.bad-discord.history.scope",
+        "sources.bad-discord.history.fetchOnMessage",
+        "sources.bad-discord.filters.ignoreSelf",
+        "destinations.bad-discord-replies.target.conversationId",
+      ]),
+    );
+  });
+
   test.each([
     "slack",
     "teams",

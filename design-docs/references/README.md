@@ -16,6 +16,10 @@ This directory contains reference materials for system design and implementation
 | Vercel Chat SDK Adapter Catalog   | https://chat-sdk.dev/adapters                                                                               | Current package catalog for Slack, Teams, Google Chat, Discord, GitHub, Linear, Telegram, WhatsApp, Messenger, and Web adapters |
 | Vercel Chat SDK Contributing      | https://chat-sdk.dev/docs/contributing                                                                      | Adapter interface and community adapter guidance for evaluating direct integration risk   |
 | Vercel AI Elements                | https://vercel.com/changelog/introducing-ai-elements                                                        | Official Vercel AI Elements announcement and integration notes with the Vercel AI SDK     |
+| Discord Gateway Events            | https://docs.discord.com/developers/events/gateway-events                                                   | Official Discord Gateway event list, including message create and thread event behavior   |
+| Discord Gateway                   | https://docs.discord.com/developers/topics/gateway                                                          | Official Discord Gateway connection, intents, and lifecycle documentation                 |
+| Discord Message Resource          | https://docs.discord.com/developers/resources/message                                                       | Official Discord message object and content intent behavior documentation                 |
+| Discord Threads                   | https://docs.discord.com/developers/topics/threads                                                          | Official Discord thread behavior and Gateway event delivery documentation                 |
 
 ## Reference Documents
 

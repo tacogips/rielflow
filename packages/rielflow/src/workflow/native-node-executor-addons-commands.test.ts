@@ -657,6 +657,7 @@ describe("executeNativeNode", () => {
             version: "1",
             config: {
               textTemplate: "Reply text",
+              replyAsTemplate: "{{event.input.persona}}",
             },
           },
         },
@@ -670,6 +671,7 @@ describe("executeNativeNode", () => {
             provider: "webhook",
             eventId: "evt-1",
             conversation: { id: "conv-1" },
+            input: { persona: "mika" },
           },
         },
         mergedVariables: {},
@@ -702,12 +704,13 @@ describe("executeNativeNode", () => {
         eventId: "evt-1",
         conversationId: "conv-1",
       },
-      message: { text: "Reply text" },
+      message: { text: "Reply text", replyAs: "mika" },
       idempotencyKey: "chat-reply:wf:sess-1:reply:exec-1",
     });
     expect(output.payload).toMatchObject({
       reply: {
         status: "sent",
+        message: { text: "Reply text", replyAs: "mika" },
         dispatch: {
           provider: "webhook",
           status: "sent",

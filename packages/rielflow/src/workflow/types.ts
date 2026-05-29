@@ -500,6 +500,7 @@ export interface UserActionNodeConfig {
 
 export interface ChatReplyWorkerConfig {
   readonly textTemplate: string;
+  readonly replyAsTemplate?: string;
   readonly visibility?: "public" | "ephemeral";
   readonly threadPolicy?: "same-thread" | "conversation-root";
   readonly onMissingTarget?: "fail" | "intent-only" | "dry-run";
@@ -583,6 +584,7 @@ export interface ChatReplyDispatchRequest {
   readonly outputDestinationIds?: readonly string[];
   readonly message: {
     readonly text: string;
+    readonly replyAs?: string;
   };
   readonly visibility: "public" | "ephemeral";
   readonly threadPolicy: "same-thread" | "conversation-root";

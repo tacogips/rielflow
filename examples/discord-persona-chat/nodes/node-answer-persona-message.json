@@ -1,0 +1,11 @@
+{
+  "id": "answer-persona-message",
+  "description": "Choose a Discord persona and generate a history-aware reply from the normalized Gateway event.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.4-mini",
+  "promptTemplateFile": "prompts/answer-persona-message.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with payload.persona and payload.replyText."
+  }
+}
