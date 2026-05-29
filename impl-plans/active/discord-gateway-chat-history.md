@@ -1,7 +1,7 @@
 # Discord Gateway Chat History Implementation Plan
 
 **Status**: Completed
-**Design Reference**: `design-docs/specs/design-discord-gateway-chat-history.md#overview`; `design-docs/specs/design-discord-gateway-chat-history.md#source-configuration`; `design-docs/specs/design-discord-gateway-chat-history.md#normalized-event-contract`; `design-docs/specs/design-discord-gateway-chat-history.md#history-model`; `design-docs/specs/design-discord-gateway-chat-history.md#reply-behavior`; `design-docs/specs/design-discord-gateway-chat-history.md#examples-and-tests`
+**Design Reference**: `design-docs/specs/design-discord-gateway-chat-history.md#overview`; `design-docs/specs/design-discord-gateway-chat-history.md#source-configuration`; `design-docs/specs/design-discord-gateway-chat-history.md#normalized-event-contract`; `design-docs/specs/design-discord-gateway-chat-history.md#persistent-history-model`; `design-docs/specs/design-discord-gateway-chat-history.md#reply-behavior`; `design-docs/specs/design-discord-gateway-chat-history.md#examples-and-tests`
 **Created**: 2026-05-29
 **Last Updated**: 2026-05-29
 
@@ -23,18 +23,20 @@
 Add `kind: "discord-gateway"` as a rielflow-owned event source that listens to
 configured Discord channels and threads, filters bot and self messages by
 default, attaches bounded channel or thread history to normalized `chat.message`
-events, and sends replies through the existing provider-neutral chat reply
-worker and chat output destination path.
+events, persists bounded normalized history under the event data root across
+`rielflow events serve` restarts, and sends replies through the existing
+provider-neutral chat reply worker and chat output destination path.
 
 ### Scope
 
 **Included**: Discord Gateway source types, validation, default adapter
-registration, bounded in-memory history with optional REST fetch, Gateway
+registration, bounded in-memory history with optional REST fetch, persistent
+bounded normalized history under `EventSourceStartInput.eventDataRoot`, Gateway
 message normalization, bot/self filtering, Discord REST reply dispatch, example
 persona workflow/event binding, fixtures, README updates, and focused tests.
 
-**Excluded**: external chat-gateway Discord support, durable cross-restart
-history storage, multi-shard or multi-process Gateway coordination, slash
+**Excluded**: external chat-gateway Discord support, multi-shard or
+multi-process Gateway coordination, slash
 commands, interactions, components, moderation events, attachments, long-term
 persona memory, and Discord-specific workflow.json fields.
 
@@ -52,6 +54,10 @@ persona memory, and Discord-specific workflow.json fields.
   events and dispatches replies.
 - Codex-agent references are process and workflow references only; provider
   behavior remains in rielflow event source adapters.
+- Step 3 accepted the restart-persistence design revision for
+  `EventSourceStartInput.eventDataRoot`, bounded reload, accepted-message
+  append timing, REST merge/dedupe, and Discord-only adapter ownership with no
+  high or mid findings.
 
 ### Codex-Agent Reference Mapping
 
@@ -75,6 +81,9 @@ Intentional divergences from the references:
   messages or agent session transcripts.
 - Discord-specific transport details stay under
   the repository's Discord Gateway adapter module.
+- Durable restart history intentionally diverges from the earlier completed
+  slice, which kept Discord history in memory and excluded cross-restart
+  storage.
 
 ### Repository State Decision
 
@@ -86,6 +95,10 @@ single-file adapter module. Do not create a sibling
 `packages/rielflow/src/events/adapters/discord-gateway/` directory during this
 implementation unless a separate module-split task first moves the existing
 file, updates imports, and updates tests.
+
+The current issue-resolution slice extends that completed module in place. It
+must not move persistence into `chat-gateway`, workflow inbox storage, agent
+session transcript storage, or provider-neutral chat reply modules.
 
 ---
 
@@ -367,6 +380,196 @@ completion criteria updates
 - [x] Update this plan's task statuses, module status table, completion
       criteria, and progress log.
 
+### TASK-007: Persistent History Store Contract
+
+**Status**: Completed
+**Parallelizable**: Yes
+**Deliverables**: `packages/rielflow/src/events/adapters/discord-gateway.ts`,
+`packages/rielflow/src/events/adapters/discord-gateway.test.ts`
+**Dependencies**: accepted Step 3 design review
+
+```typescript
+interface DiscordGatewayPersistedHistoryFile extends JsonObject {
+  readonly version: 1;
+  readonly sourceId: string;
+  readonly historyKey: string;
+  readonly conversationId: string;
+  readonly threadId?: string;
+  readonly bounds: DiscordGatewayPersistedHistoryBounds;
+  readonly messages: readonly DiscordGatewayHistoryItem[];
+}
+
+interface DiscordGatewayPersistedHistoryBounds extends JsonObject {
+  readonly maxMessages: number;
+  readonly maxBytes: number;
+  readonly maxAgeMs: number;
+  readonly scope: "thread-or-channel" | "channel";
+  readonly includeBotMessages: boolean;
+}
+
+interface DiscordGatewayHistoryPersistence {
+  load(key: string, receivedAt: string): Promise<readonly DiscordGatewayHistoryItem[]>;
+  save(
+    key: string,
+    history: readonly DiscordGatewayHistoryItem[],
+    receivedAt: string,
+  ): Promise<void>;
+  readonly enabled: boolean;
+}
+```
+
+**Description**:
+Define the adapter-owned persistent history file shape and helper boundary for
+bounded normalized history under
+`<eventDataRoot>/discord-gateway/history/<sourceId>/<encoded-conversation-key>.json`.
+
+**Completion Criteria**:
+
+- [x] Define internal persisted history file and bounds types in the Discord
+      Gateway adapter module or an adapter-local helper without exporting them
+      through provider-neutral event APIs.
+- [x] Derive a filesystem-safe source id directory and encoded conversation key
+      filename without allowing path traversal.
+- [x] Persist only normalized `DiscordGatewayHistoryItem[]`, bounds metadata,
+      source id, effective history key, and conversation identifiers.
+- [x] Exclude bot tokens, authorization headers, raw Gateway payloads, workflow
+      inbox data, agent transcript data, and unbounded receipts from the file
+      schema.
+- [x] Add unit coverage for path derivation and JSON shape using a temporary
+      event data root.
+
+### TASK-008: Startup Reload And REST Merge
+
+**Status**: Completed
+**Parallelizable**: No
+**Deliverables**: `packages/rielflow/src/events/adapters/discord-gateway.ts`,
+`packages/rielflow/src/events/adapters/discord-gateway.test.ts`
+**Dependencies**: TASK-007
+
+```typescript
+interface DiscordGatewayHistorySeedResult extends JsonObject {
+  readonly mode: "persisted" | "rest" | "mixed" | "empty";
+  readonly count: number;
+}
+
+interface DiscordGatewayHistoryPersistenceOptions {
+  readonly eventDataRoot?: string;
+  readonly readOnly?: boolean;
+  readonly source: DiscordGatewaySourceConfig;
+  readonly diagnosticSink?: EventSourceStartInput["diagnosticSink"];
+}
+```
+
+**Description**:
+Load persisted history before Gateway messages are processed and before optional
+REST seeding. Merge persisted, in-memory, and REST entries by Discord
+`messageId`, sort chronologically when timestamps exist, then trim using the
+existing history bounds.
+
+**Completion Criteria**:
+
+- [x] Build persistence only when `eventDataRoot` is present and `readOnly` is
+      not true; otherwise keep current memory plus REST behavior and emit a
+      sanitized diagnostic.
+- [x] Reload known configured channel conversation files on source start before
+      optional `history.fetchOnStart` REST seeding.
+- [x] Support lazy reload for a conversation key when the first accepted
+      Gateway message references a persisted file that was not eagerly known at
+      startup.
+- [x] Merge persisted and REST history by `messageId` and preserve chronological
+      ordering before trim.
+- [x] Validate corrupt or wrong-version persisted files and ignore them with a
+      sanitized diagnostic rather than failing source startup.
+- [x] Add tests proving a second adapter start with the same event data root can
+      dispatch a message whose `event.input.history` includes a prior accepted
+      message without REST history.
+
+### TASK-009: Append, Trim, And Atomic Write
+
+**Status**: Completed
+**Parallelizable**: No
+**Deliverables**: `packages/rielflow/src/events/adapters/discord-gateway.ts`,
+`packages/rielflow/src/events/adapters/discord-gateway.test.ts`
+**Dependencies**: TASK-007, TASK-008
+
+```typescript
+interface DiscordGatewayHistoryWriteInput {
+  readonly key: string;
+  readonly history: readonly DiscordGatewayHistoryItem[];
+  readonly source: DiscordGatewaySourceConfig;
+  readonly receivedAt: string;
+}
+```
+
+**Description**:
+Persist the bounded compact cache after each accepted-message append, inside the
+existing same-conversation serialization boundary, using temp-file plus rename
+atomic writes.
+
+**Completion Criteria**:
+
+- [x] Append the current accepted message to memory after normalized event
+      construction and before awaiting dispatch completion, preserving existing
+      prompt-history current-message exclusion.
+- [x] Rewrite the compact persisted file after trimming by `maxMessages`,
+      `maxBytes`, `maxAgeMs`, `scope`, and `includeBotMessages`.
+- [x] Keep writes inside the existing effective-history-key queue so concurrent
+      same-conversation messages cannot lose updates.
+- [x] Write to a temporary file in the target directory and rename into place.
+- [x] Surface write failures through sanitized diagnostics without leaking
+      credentials and without writing outside `eventDataRoot`.
+- [x] Add tests for maxMessages, maxBytes, maxAgeMs, bot-message filtering,
+      same-conversation concurrent append ordering, and no write in read-only
+      mode.
+
+### TASK-010: Documentation And Example Alignment
+
+**Status**: Completed
+**Parallelizable**: Yes
+**Deliverables**: `README.md`, `examples/event-sources/README.md`,
+`examples/discord-persona-chat/EXPECTED_RESULTS.md`
+**Dependencies**: TASK-007
+
+**Description**:
+Align user-facing docs and examples with durable bounded restart history while
+keeping the existing `chat-sdk` Discord path distinct.
+
+**Completion Criteria**:
+
+- [x] Update docs to say Discord Gateway history persists under the event data
+      root during normal `events serve` operation.
+- [x] Document degradation when `eventDataRoot` is absent or `readOnly` is true.
+- [x] Document that persisted files contain bounded normalized conversation
+      history only and are not workflow inbox, agent transcript, or long-term
+      memory.
+- [x] Keep `chat-sdk` Discord compatibility wording unchanged except where
+      clarifying that it is separate from `discord-gateway`.
+- [x] Refresh example expected-results notes to mention restart/reload coverage
+      and persistence bounds.
+
+### TASK-011: Verification And Plan Progress Update
+
+**Status**: Completed
+**Parallelizable**: No
+**Deliverables**: verification command results, this plan progress-log update,
+completion criteria updates
+**Dependencies**: TASK-008, TASK-009, TASK-010
+
+**Description**:
+Run focused and regression verification after the persistence implementation and
+documentation updates, then update this plan's task statuses and progress log.
+
+**Completion Criteria**:
+
+- [x] Run `bun test packages/rielflow/src/events/adapters/discord-gateway.test.ts`.
+- [x] Run `bun test packages/rielflow/src/events/manual-emit.test.ts packages/rielflow/src/events/config.test.ts`.
+- [x] Run `bun test packages/rielflow/src/events/adapters/chat-sdk.test.ts packages/rielflow/src/events/reply-dispatcher.test.ts`.
+- [x] Run `bun run typecheck`.
+- [x] Run `git diff --check`.
+- [x] Update TASK-007 through TASK-011 statuses, module status rows, completion
+      criteria, and progress log with verification results or documented
+      blockers.
+
 ---
 
 ## Module Status
@@ -378,6 +581,10 @@ completion criteria updates
 | History and normalization | `packages/rielflow/src/events/adapters/discord-gateway.ts` | COMPLETED | `packages/rielflow/src/events/adapters/discord-gateway.test.ts`, `packages/rielflow/src/events/manual-emit.test.ts` |
 | Reply dispatch and registry | `packages/rielflow/src/events/adapters/discord-gateway.ts`, `packages/rielflow/src/events/adapter-registry.ts` | COMPLETED | `packages/rielflow/src/events/reply-dispatcher.test.ts`, `packages/rielflow/src/events/adapter-registry.test.ts` |
 | Examples and docs | `examples/event-sources/**`, `examples/discord-persona-chat/**`, `examples/event-sources/README.md`, `README.md` | COMPLETED | `packages/rielflow/src/events/chat-reply-example.test.ts`, CLI validation commands |
+| Persistent history store contract | `packages/rielflow/src/events/adapters/discord-gateway.ts`, `packages/rielflow/src/events/adapters/discord-gateway-history-persistence.ts` | COMPLETED | `packages/rielflow/src/events/adapters/discord-gateway.test.ts` |
+| Startup reload and REST merge | `packages/rielflow/src/events/adapters/discord-gateway.ts`, `packages/rielflow/src/events/adapters/discord-gateway-history-persistence.ts` | COMPLETED | `packages/rielflow/src/events/adapters/discord-gateway.test.ts` |
+| Atomic append and compact persistence | `packages/rielflow/src/events/adapters/discord-gateway.ts`, `packages/rielflow/src/events/adapters/discord-gateway-history-persistence.ts` | COMPLETED | `packages/rielflow/src/events/adapters/discord-gateway.test.ts` |
+| Persistence docs and examples | `README.md`, `examples/event-sources/README.md`, `examples/discord-persona-chat/EXPECTED_RESULTS.md` | COMPLETED | `git diff --check` |
 
 ## Dependencies
 
@@ -389,6 +596,11 @@ completion criteria updates
 | TASK-004 | TASK-002, TASK-003 | COMPLETED |
 | TASK-005 | TASK-001 | COMPLETED |
 | TASK-006 | TASK-001, TASK-002, TASK-003, TASK-004, TASK-005 | COMPLETED |
+| TASK-007 | accepted Step 3 design review | COMPLETED |
+| TASK-008 | TASK-007 | COMPLETED |
+| TASK-009 | TASK-007, TASK-008 | COMPLETED |
+| TASK-010 | TASK-007 | COMPLETED |
+| TASK-011 | TASK-008, TASK-009, TASK-010 | COMPLETED |
 
 ## Parallelization Rules
 
@@ -400,6 +612,14 @@ completion criteria updates
   runtime integration behavior.
 - `TASK-006` is serial and must run after all implementation and documentation
   changes are complete.
+- `TASK-007` can start immediately because it defines the persistence contract
+  in the Discord Gateway adapter test scope.
+- `TASK-010` can run after `TASK-007` in parallel with `TASK-008` and
+  `TASK-009` because its write scope is docs and examples.
+- `TASK-008` and `TASK-009` are serial because both modify the same adapter
+  history load, merge, append, and queue behavior.
+- `TASK-011` is serial and must run after persistence implementation and docs
+  are complete.
 
 ## Verification Plan
 
@@ -408,6 +628,7 @@ completion criteria updates
 - `bun test packages/rielflow/src/events/adapters/discord-gateway.test.ts packages/rielflow/src/events/reply-dispatcher.test.ts packages/rielflow/src/events/manual-emit.test.ts`
 - `bun test packages/rielflow/src/events/adapters/chat-sdk.test.ts packages/rielflow/src/events/adapters/matrix.test.ts`
 - `bun test packages/rielflow/src/events/chat-reply-example.test.ts`
+- `bun test packages/rielflow/src/events/manual-emit.test.ts packages/rielflow/src/events/config.test.ts`
 - `bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events`
 - `bun run packages/rielflow/src/bin.ts workflow validate discord-persona-chat --workflow-definition-dir ./examples`
 - `git diff --check`
@@ -432,8 +653,67 @@ completion criteria updates
 - [x] Verification commands in this plan pass or any failures are documented
       with concrete follow-up.
 - [x] Progress log records each implementation session and task status updates.
+- [x] Discord Gateway reloads persisted bounded normalized history from
+      `EventSourceStartInput.eventDataRoot` before processing accepted Gateway
+      messages.
+- [x] A new `events serve` process using the same event data root can include a
+      prior accepted Discord message in `event.input.history` without requiring
+      REST history.
+- [x] Persisted history writes are compact, atomic, per-conversation serialized,
+      and trimmed by `maxMessages`, `maxBytes`, `maxAgeMs`, `scope`, and
+      `includeBotMessages`.
+- [x] Absence of `eventDataRoot` or `readOnly: true` keeps current in-memory and
+      REST behavior with sanitized diagnostics and no fallback writes elsewhere.
+- [x] Persistent files contain no credentials, raw Gateway payloads, workflow
+      inbox data, agent transcripts, or unbounded receipts.
 
 ## Progress Log
+
+### Session: 2026-05-29 18:10 +0900
+
+**Tasks Completed**: TASK-007, TASK-008, TASK-009, TASK-010, TASK-011
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Implemented adapter-local Discord Gateway history persistence under
+`EventSourceStartInput.eventDataRoot` using filesystem-safe source/key paths,
+versioned compact JSON files, corrupt-file diagnostics, lazy conversation-key
+reload, persisted/REST merge by `messageId`, existing per-history-key
+serialization, and temp-file plus rename writes. Added restart/reload,
+read-only no-write, corrupt-file, and persisted JSON shape coverage in
+`packages/rielflow/src/events/adapters/discord-gateway.test.ts`. Updated
+README and example notes for durable bounded restart history, read-only and
+missing-root degradation, and the boundary between Discord history, workflow
+inbox, agent transcripts, and long-term memory. Verification passed for Biome,
+typecheck, targeted Discord Gateway tests, manual emit/config regressions,
+chat-sdk/reply-dispatcher regressions, Matrix/chat-reply example regressions,
+example event-source validation, workflow validation, and `git diff --check`.
+
+### Session: 2026-05-29 18:25 +0900
+
+**Tasks Completed**: Manual recovery verification after interrupted Step 6
+worker
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: The `codex-design-and-implement-review-loop` Step 6 worker stalled
+after writing the implementation and docs, so the parent workflow was stopped
+and the current worktree was reviewed manually. Verification passed for focused
+Discord Gateway tests, typecheck, Biome lint, related event/config/add-on tests,
+example event-source validation, Discord workflow validation, build, `git diff
+--check`, and the full suite via GNU Bash 5, with 1392 tests passing.
+
+### Session: 2026-05-29 17:20 +0900
+
+**Tasks Completed**: Implementation plan revised for
+`codex-design-and-implement-review-loop` Step 4 persistence issue-resolution
+handoff
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Step 3 accepted the design revision with no high or mid findings.
+The previous completed Discord Gateway plan has been reopened as `Ready` for a
+focused persistent history addendum. New tasks TASK-007 through TASK-011 cover
+the persistent file contract, startup reload and REST merge, atomic append and
+trimmed writes, user-facing docs, and verification. No Step 5 rerun feedback is
+present in mailbox input for this node.
 
 ### Session: 2026-05-29 16:02 +0900
 
@@ -538,5 +818,4 @@ thread-parent lookup ordering, Discord `replyBots` token selection through
   `impl-plans/completed/matrix-event-source.md`,
   `impl-plans/node-addon-chat-reply-worker.md`,
   `impl-plans/event-reply-dispatcher.md`
-- **Next**: Implementation step for
-  `codex-design-and-implement-review-loop` issue-resolution mode
+- **Next**: None for this completed persistent Discord Gateway history slice

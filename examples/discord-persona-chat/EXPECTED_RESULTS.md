@@ -8,6 +8,11 @@ Expected behavior:
 - `discord-gateway-message-with-history.json` normalizes to `chat.message` with
   `event.input.history` containing bounded Discord channel or thread history.
 - The current message is excluded from `event.input.history`.
+- During `events serve`, accepted Gateway messages persist as bounded
+  normalized history under the event data root and can be reloaded by a later
+  serve process using the same root.
+- `--read-only` and missing event data roots keep in-memory/REST history only
+  and do not write fallback files.
 - `discord-persona-chat` receives `workflowInput.history` through the event
   binding and can route replies as `yui`, `mika`, or `rina`.
 - `rielflow/chat-reply-worker` sends replies through

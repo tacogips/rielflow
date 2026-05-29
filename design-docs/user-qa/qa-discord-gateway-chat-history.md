@@ -16,9 +16,15 @@ local and narrow.
 
 Should Discord channel/thread history survive process restarts?
 
-Recommended default: keep bounded in-memory history plus optional REST
-fetch-on-start/fetch-on-message for the first slice. Durable rielflow-owned
-history storage can be added later if operational use requires it.
+Decision for issue "Persist Discord gateway chat history across event server
+restarts": yes. Bounded normalized Discord history must persist under the event
+data root, reload on source start, and append accepted messages as they arrive.
+
+Recommended default for implementation: use writable `eventDataRoot` storage
+when available. If the adapter is started without an event data root or with
+`readOnly: true`, keep bounded in-memory history plus optional REST
+fetch-on-start/fetch-on-message and emit a diagnostic instead of writing outside
+the event source data root.
 
 ## 3. Message Content Intent
 

@@ -14,7 +14,8 @@ persona workflows through the existing event binding and trigger-runner path.
 
 The core workflow engine remains provider-neutral. Discord-specific Gateway,
 REST, history, reconnect, rate-limit, and token handling stay inside
-`packages/rielflow/src/events/adapters/discord-gateway/` and validation modules.
+`packages/rielflow/src/events/adapters/discord-gateway.ts` and validation
+modules.
 Workflows receive only normalized `runtimeVariables.event` and mapped
 `workflowInput` data.
 
@@ -25,7 +26,8 @@ Design status for the workflow `codex-design-and-implement-review-loop`:
   issue number was provided
 - target feature area: event sources and chat reply built-ins
 - primary implementation boundary: rielflow event source adapter, validation,
-  reply dispatch, examples, tests, and user-facing docs
+  bounded history persistence under the event data root, examples, tests, and
+  user-facing docs
 
 ## Goals
 
@@ -37,7 +39,12 @@ Design status for the workflow `codex-design-and-implement-review-loop`:
 - Normalize each accepted `MESSAGE_CREATE` into `chat.message` with current
   message text, author, channel, thread, and reply target metadata.
 - Attach bounded recent channel or thread history to the normalized event so
-  persona workers can answer with context.
+  persona workers can answer with context across `rielflow events serve`
+  restarts.
+- Persist normalized bounded history under the event data root, reload it when
+  the source starts, and append accepted messages after normalized event
+  construction without waiting for dispatch completion or changing
+  provider-neutral chat reply contracts.
 - Support reply dispatch through the existing `rielflow/chat-reply-worker`,
   output destinations, idempotency, and reply dispatch records.
 - Preserve backward compatibility for existing `chat-sdk` sources and examples.
@@ -54,6 +61,8 @@ Design status for the workflow `codex-design-and-implement-review-loop`:
   moderation event in the first slice.
 - Implementing multi-shard, multi-process Gateway coordination beyond a
   single bounded runner process.
+- Persisting raw Gateway payloads, bot tokens, authorization headers, workflow
+  inbox contents, or agent transcript history as Discord conversation history.
 
 ## Source Configuration
 
@@ -105,6 +114,9 @@ Rules:
 - `history.fetchOnMessage` may be `never`, `when-cache-empty`, or `always`; the
   first implementation should prefer `when-cache-empty` to avoid per-message
   REST calls in ordinary operation.
+- `history.fetchOnStart` controls Discord REST seeding only. The adapter must
+  still load local persisted history first when a writable event data root is
+  available.
 - `filters.ignoreBots` and `filters.ignoreSelf` default to true.
 - `filters.requireMention` defaults to false so configured channels can operate
   as ordinary persona rooms; bindings may still filter mentions or persona
@@ -130,8 +142,9 @@ The adapter emits `ExternalEventEnvelope` with:
 - `input.text`: current message content.
 - `input.history`: bounded recent messages in chronological order, excluding
   the current message unless the implementation explicitly marks it as current.
-- `input.historySource`: metadata describing whether history came from memory,
-  REST fetch, or a mixed source, plus the effective bounds used.
+- `input.historySource`: metadata describing whether history came from
+  persisted storage, memory, REST fetch, or a mixed source, plus the effective
+  bounds used.
 - `input.provider`: `"discord"`.
 - `input.discord`: provider metadata needed for routing and audit, without raw
   token-bearing request data.
@@ -159,33 +172,70 @@ Normalization must distinguish Discord channel or thread history from:
 - session-local conversation transcript, which belongs to workflow or agent
   session continuation rather than external Discord channel context
 
-## History Model
+## Persistent History Model
 
-The adapter maintains a bounded per-source history cache keyed by effective
-conversation key:
+The adapter maintains a bounded per-source history cache backed by normalized
+JSON files under `EventSourceStartInput.eventDataRoot`. The effective
+conversation key remains:
 
 ```text
 sourceId:channelId:threadId-or-root
 ```
 
+The persisted file layout is adapter-owned and must stay below the event data
+root, for example:
+
+```text
+<eventDataRoot>/discord-gateway/history/<sourceId>/<encoded-conversation-key>.json
+```
+
+Rules:
+
+- The file contains only the source id, effective conversation key, bounds
+  metadata, and normalized `DiscordGatewayHistoryItem[]`.
+- It must not contain bot tokens, authorization headers, raw Gateway payloads,
+  workflow inbox data, agent transcript history, or unbounded receipts.
+- The adapter loads persisted history before Gateway messages are processed and
+  before optional REST seeding.
+- Persisted and REST histories are merged by Discord `messageId`, sorted
+  chronologically when timestamps are available, and trimmed by the existing
+  `maxMessages`, `maxBytes`, `maxAgeMs`, `scope`, and `includeBotMessages`
+  settings.
+- Writes are serialized with the existing per-conversation queue and must use an
+  atomic temp-file plus rename pattern so an interrupted process cannot leave a
+  partially written history file as the next startup state.
+- Every append rewrites the bounded compact file after trimming. Startup may
+  compact stale or oversized files as part of reload.
+- If `eventDataRoot` is unavailable or `readOnly` is true, the adapter keeps the
+  current in-memory plus optional REST behavior and emits a diagnostic rather
+  than writing outside the event source data root.
+
 On accepted inbound messages, the adapter:
 
 1. resolves the effective history key from the Discord channel and thread
    metadata
-2. reads recent cached messages for the key
+2. reads recent cached messages for the key, seeded from persisted storage on
+   source start when available
 3. optionally fetches recent messages from Discord REST when the cache is empty,
    stale, or `history.fetchOnStart`/`history.fetchOnMessage` requires it
-4. trims by `maxMessages`, `maxBytes`, `maxAgeMs`, and `includeBotMessages`
-5. emits the normalized event with `input.history`
-6. appends the current accepted message to the cache after emitting
+4. merges persisted, cached, and REST entries by `messageId`
+5. trims by `maxMessages`, `maxBytes`, `maxAgeMs`, and `includeBotMessages`
+6. builds and dispatches the normalized event with `input.history`
+7. appends the current accepted message to the cache after the event is built
+   and before waiting for dispatch completion
+8. persists the bounded compact cache for the conversation when persistence is
+   writable
 
 This order prevents the current message from appearing twice in prompts while
-still making it available as `input.text`.
+still making it available as `input.text`, and preserves the existing behavior
+where a following same-conversation message can see an accepted prior message
+even if the prior dispatch is still blocked.
 
-Restart behavior is explicitly bounded. The first implementation may use
-in-memory cache plus REST fetch when configured; durable cross-restart Discord
-history is a later enhancement unless the user chooses persistence in
-`design-docs/user-qa/qa-discord-gateway-chat-history.md`.
+Restart behavior is now part of the issue-resolution scope. Restarting
+`rielflow events serve` with the same event data root must reload prior accepted
+Discord messages for the same source and conversation without requiring a REST
+fetch. REST fetch remains an optional supplement controlled by the existing
+fetch settings.
 
 The cache belongs to the event-source runtime, not the workflow session. It must
 not reuse workflow inbox contents or agent transcript continuation as Discord
@@ -296,6 +346,9 @@ Validation fails when:
 - Keep message history normalization deterministic enough for fixture tests:
   chronological order, current message exclusion, bot/self filtering, and
   history-bound metadata must be observable in the normalized event.
+- Keep persistent history bounded and compact after every write and startup
+  reload. The durable store is not long-term memory and must obey the same
+  history limits as `event.input.history`.
 
 ## Examples and Tests
 
@@ -313,9 +366,11 @@ Verification commands for the implementation plan:
 bun run typecheck
 bun test packages/rielflow/src/events/config.test.ts packages/rielflow/src/events/adapter-registry.test.ts packages/rielflow/src/events/reply-dispatcher.test.ts
 bun test packages/rielflow/src/events/adapters/discord-gateway.test.ts packages/rielflow/src/events/adapters/chat-sdk.test.ts
+bun test packages/rielflow/src/events/manual-emit.test.ts packages/rielflow/src/events/config.test.ts
 bun test packages/rielflow/src/events/chat-reply-example.test.ts
 bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 bun run packages/rielflow/src/bin.ts workflow validate discord-persona-chat --workflow-definition-dir ./examples
+git diff --check
 ```
 
 ## Codex Reference Mapping
@@ -337,6 +392,9 @@ Relevant repository-local references:
   for receive and reply behavior.
 - `packages/rielflow/src/events/adapters/chat-sdk/normalization.ts`: provider
   chat normalization reference for envelope shape.
+- `../../codex-agent`: preferred local Codex reference root from the workflow
+  instructions, but it is unavailable in this worktree; no external
+  codex-agent behavior is required for this Discord persistence design.
 
 ## Review Decisions and Issue Mapping
 
@@ -350,11 +408,18 @@ Relevant repository-local references:
 - Bounded Discord channel/thread history is external event context. It must be
   supplied through `event.input.history` and mapped workflow input, not through
   workflow inbox or agent transcript history.
+- Bounded Discord channel/thread history now persists under the event data root
+  so `rielflow events serve` restarts preserve context. This supersedes the
+  earlier design decision that treated durable history as a later enhancement.
 - Persona behavior for Yui, Mika, and Rina belongs in example workflow prompts,
   binding input mapping, or supervisor composition; Discord adapter code only
   normalizes messages and replies.
 - Bot-aware replies use the existing provider-neutral chat reply worker and
   output destination layer. Discord REST send details remain adapter-owned.
+- When persistence cannot be used because the adapter was started without an
+  event data root or with `readOnly: true`, the adapter must keep current
+  in-memory/REST semantics and surface that persistence was disabled through
+  diagnostics.
 
 ## Cursor CLI Behavior Mapping
 
@@ -374,6 +439,9 @@ reply dispatch contracts.
   continuation.
 - Diverges from Codex-agent references by keeping provider-specific chat
   behavior in rielflow event adapters rather than in agent sessions.
+- Diverges from the earlier local Discord Gateway design by making bounded
+  durable history required for normal `events serve` operation instead of a
+  deferred enhancement.
 
 ## Open Questions
 
@@ -389,7 +457,11 @@ Tracked in `design-docs/user-qa/qa-discord-gateway-chat-history.md`.
 - Thread target ambiguity can send replies to the wrong channel if parent and
   thread ids are not explicit.
 - History can leak excessive context unless count, age, byte, and redaction
-  limits are enforced.
+  limits are enforced on reload, merge, append, and write.
+- Corrupt or partial files can break source startup unless reload validates the
+  normalized shape and ignores or quarantines invalid files with diagnostics.
+- Concurrent same-conversation messages can lose updates unless persistent
+  writes stay inside the existing per-conversation serialization boundary.
 - A new Discord dependency may require lockfile, license, and supply-chain
   review before implementation.
 

@@ -3,6 +3,18 @@ import {
   chatReplyDispatchResultFromResponse,
   readOptionalChatReplyJson,
 } from "./chat-reply-response";
+import {
+  createDiscordGatewayHistoryPersistence,
+  discordGatewayHistoryConfig as historyConfig,
+  discordGatewayChannelHistoryKey,
+  discordGatewayHistoryConversationId,
+  discordGatewayHistoryKey,
+  DiscordGatewayHistoryCache,
+  mergeDiscordGatewayHistoryEntries,
+  persistedHistoryBounds,
+  readDiscordGatewayHistorySourceMode,
+  type DiscordGatewayHistoryPersistence,
+} from "./discord-gateway-history-persistence";
 import type {
   EventSourceAdapter,
   EventSourceChatReplyInput,
@@ -12,7 +24,6 @@ import type {
 } from "../source-adapter";
 import type {
   DiscordGatewayChannelConfig,
-  DiscordGatewayHistoryConfig,
   DiscordGatewaySourceConfig,
   ExternalEventEnvelope,
 } from "../types";
@@ -21,10 +32,6 @@ import type { ChatReplyDispatchResult } from "../../workflow/types";
 const DISCORD_PROVIDER = "discord";
 const DEFAULT_GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json";
 const DEFAULT_REST_BASE_URL = "https://discord.com/api/v10";
-const DEFAULT_HISTORY_MAX_MESSAGES = 20;
-const DEFAULT_HISTORY_MAX_BYTES = 32_768;
-const DEFAULT_HISTORY_MAX_AGE_MS = 86_400_000;
-const MAX_HISTORY_MESSAGES = 100;
 const DEFAULT_INTENTS = 512 | 32_768;
 
 interface DiscordAuthor {
@@ -85,10 +92,6 @@ function sourceFromRaw(raw: RawExternalEvent): DiscordGatewaySourceConfig {
     );
   }
   return raw.source;
-}
-
-function isSnowflake(value: string): boolean {
-  return /^\d{17,20}$/.test(value);
 }
 
 function displayName(author: DiscordAuthor): string | undefined {
@@ -164,34 +167,6 @@ function readMessageBody(body: unknown): DiscordMessage {
     content,
     ...(timestamp === undefined ? {} : { timestamp }),
     mentions: readMentionIds(message["mentions"]),
-  };
-}
-
-function historyConfig(source: DiscordGatewaySourceConfig): Required<
-  Pick<
-    DiscordGatewayHistoryConfig,
-    "maxMessages" | "maxBytes" | "maxAgeMs" | "scope" | "includeBotMessages"
-  >
-> & {
-  readonly fetchOnMessage: "never" | "when-cache-empty" | "always";
-} {
-  const history = source.history ?? {};
-  return {
-    maxMessages:
-      typeof history.maxMessages === "number"
-        ? Math.min(history.maxMessages, MAX_HISTORY_MESSAGES)
-        : DEFAULT_HISTORY_MAX_MESSAGES,
-    maxBytes:
-      typeof history.maxBytes === "number"
-        ? history.maxBytes
-        : DEFAULT_HISTORY_MAX_BYTES,
-    maxAgeMs:
-      typeof history.maxAgeMs === "number"
-        ? history.maxAgeMs
-        : DEFAULT_HISTORY_MAX_AGE_MS,
-    scope: history.scope ?? "thread-or-channel",
-    includeBotMessages: history.includeBotMessages ?? false,
-    fetchOnMessage: history.fetchOnMessage ?? "when-cache-empty",
   };
 }
 
@@ -310,20 +285,6 @@ function readHistory(
     const normalized = normalizeHistoryEntry(entry, current);
     return normalized === null ? [] : [normalized];
   });
-}
-
-function readHistorySourceMode(
-  body: unknown,
-): "memory" | "rest" | "mixed" | "empty" {
-  if (!isJsonObject(body)) {
-    return "empty";
-  }
-  const mode = body["historySourceMode"];
-  return mode === "memory" || mode === "rest" || mode === "mixed"
-    ? mode
-    : Array.isArray(body["history"]) && body["history"].length > 0
-      ? "memory"
-      : "empty";
 }
 
 function conversationFor(message: DiscordMessage): {
@@ -472,7 +433,7 @@ export function normalizeDiscordGatewayRawEvent(
       text: message.content,
       history,
       historySource: {
-        mode: readHistorySourceMode(raw.body),
+        mode: readDiscordGatewayHistorySourceMode(raw.body),
         maxMessages: historyConfig(source).maxMessages,
         maxBytes: historyConfig(source).maxBytes,
         maxAgeMs: historyConfig(source).maxAgeMs,
@@ -580,33 +541,6 @@ export async function dispatchDiscordGatewayReply(
   });
 }
 
-class DiscordHistoryCache {
-  private readonly entries = new Map<string, DiscordGatewayHistoryItem[]>();
-
-  recent(key: string): readonly DiscordGatewayHistoryItem[] {
-    return this.entries.get(key) ?? [];
-  }
-
-  append(
-    key: string,
-    item: DiscordGatewayHistoryItem,
-    source: DiscordGatewaySourceConfig,
-  ): void {
-    const config = historyConfig(source);
-    const current = this.entries.get(key) ?? [];
-    this.entries.set(key, [...current, item].slice(-config.maxMessages));
-  }
-
-  seed(
-    key: string,
-    history: readonly DiscordGatewayHistoryItem[],
-    source: DiscordGatewaySourceConfig,
-    receivedAt: string,
-  ): void {
-    this.entries.set(key, [...trimHistory({ history, source, receivedAt })]);
-  }
-}
-
 async function fetchDiscordHistory(input: {
   readonly source: DiscordGatewaySourceConfig;
   readonly token: string;
@@ -665,23 +599,6 @@ function sendGatewayJson(socket: WebSocket, value: JsonObject): void {
   socket.send(JSON.stringify(value));
 }
 
-function historyConversationId(
-  source: DiscordGatewaySourceConfig,
-  message: DiscordMessage,
-): string {
-  const scope = historyConfig(source).scope;
-  return scope === "thread-or-channel" && message.parentChannelId !== undefined
-    ? message.channelId
-    : (message.parentChannelId ?? message.channelId);
-}
-
-function historyKey(
-  source: DiscordGatewaySourceConfig,
-  message: DiscordMessage,
-): string {
-  return `${source.id}:${historyConversationId(source, message)}`;
-}
-
 function enqueueSerialized(
   queues: Map<string, Promise<void>>,
   key: string,
@@ -700,27 +617,35 @@ function enqueueSerialized(
   return run;
 }
 
-function channelHistoryKey(
-  source: DiscordGatewaySourceConfig,
-  channelId: string,
-): string {
-  return `${source.id}:${channelId}`;
-}
-
 async function seedHistoryOnStart(input: {
   readonly source: DiscordGatewaySourceConfig;
   readonly token: string;
-  readonly cache: DiscordHistoryCache;
+  readonly cache: DiscordGatewayHistoryCache;
   readonly fetchImpl: typeof fetch;
   readonly receivedAt: string;
+  readonly persistence: DiscordGatewayHistoryPersistence;
   readonly diagnosticSink?: EventSourceStartInput["diagnosticSink"];
 }): Promise<void> {
-  if (input.source.history?.fetchOnStart !== true) {
-    return;
-  }
   await Promise.all(
     input.source.channels.map(async (channel) => {
       try {
+        const key = discordGatewayChannelHistoryKey(
+          input.source.id,
+          channel.id,
+        );
+        const persisted = await input.persistence.load(key, input.receivedAt);
+        if (persisted.length > 0 || input.persistence.enabled) {
+          input.cache.seed({
+            key,
+            history: persisted,
+            source: input.source,
+            receivedAt: input.receivedAt,
+            mode: "persisted",
+          });
+        }
+        if (input.source.history?.fetchOnStart !== true) {
+          return;
+        }
         const current: DiscordMessage = {
           id: "",
           channelId: channel.id,
@@ -735,12 +660,28 @@ async function seedHistoryOnStart(input: {
           current,
           fetchImpl: input.fetchImpl,
         });
-        input.cache.seed(
-          channelHistoryKey(input.source, channel.id),
-          history,
-          input.source,
-          input.receivedAt,
-        );
+        const merged = mergeDiscordGatewayHistoryEntries(persisted, history);
+        input.cache.seed({
+          key,
+          history: merged,
+          source: input.source,
+          receivedAt: input.receivedAt,
+          mode:
+            persisted.length > 0 && history.length > 0
+              ? "mixed"
+              : history.length > 0
+                ? "rest"
+                : persisted.length > 0
+                  ? "persisted"
+                  : "empty",
+        });
+        if (input.persistence.enabled) {
+          await input.persistence.save(
+            key,
+            input.cache.recent(key),
+            input.receivedAt,
+          );
+        }
       } catch (error: unknown) {
         input.diagnosticSink?.({
           sourceId: input.source.id,
@@ -806,13 +747,25 @@ export async function startDiscordGatewaySource(
           sourceId: source.id,
           label: "application id",
         });
-  const cache = new DiscordHistoryCache();
+  const cache = new DiscordGatewayHistoryCache(trimHistory);
+  const persistence = createDiscordGatewayHistoryPersistence({
+    ...(input.eventDataRoot === undefined
+      ? {}
+      : { eventDataRoot: input.eventDataRoot }),
+    ...(input.readOnly === undefined ? {} : { readOnly: input.readOnly }),
+    sourceId: source.id,
+    bounds: persistedHistoryBounds(historyConfig(source)),
+    ...(input.diagnosticSink === undefined
+      ? {}
+      : { diagnosticSink: input.diagnosticSink }),
+  });
   await seedHistoryOnStart({
     source,
     token,
     cache,
     fetchImpl,
     receivedAt: input.now().toISOString(),
+    persistence,
     ...(input.diagnosticSink === undefined
       ? {}
       : { diagnosticSink: input.diagnosticSink }),
@@ -884,11 +837,30 @@ export async function startDiscordGatewaySource(
           ) {
             return;
           }
-          const key = historyKey(source, message);
+          const key = discordGatewayHistoryKey({
+            sourceId: source.id,
+            channelId: message.channelId,
+            ...(message.parentChannelId === undefined
+              ? {}
+              : { parentChannelId: message.parentChannelId }),
+            scope: historyConfig(source).scope,
+          });
           await enqueueSerialized(messageQueues, `history:${key}`, async () => {
+            if (!cache.has(key)) {
+              const persisted = await persistence.load(
+                key,
+                input.now().toISOString(),
+              );
+              cache.seed({
+                key,
+                history: persisted,
+                source,
+                receivedAt: input.now().toISOString(),
+                mode: "persisted",
+              });
+            }
             let history = cache.recent(key);
-            let historySourceMode: "memory" | "rest" | "mixed" | "empty" =
-              history.length > 0 ? "memory" : "empty";
+            let historySourceMode = cache.sourceMode(key);
             const fetchMode = historyConfig(source).fetchOnMessage;
             if (
               fetchMode === "always" ||
@@ -897,14 +869,20 @@ export async function startDiscordGatewaySource(
               const fetchedHistory = await fetchDiscordHistory({
                 source,
                 token,
-                channelId: historyConversationId(source, message),
+                channelId: discordGatewayHistoryConversationId({
+                  channelId: message.channelId,
+                  ...(message.parentChannelId === undefined
+                    ? {}
+                    : { parentChannelId: message.parentChannelId }),
+                  scope: historyConfig(source).scope,
+                }),
                 current: message,
                 fetchImpl,
               });
-              history =
-                history.length > 0
-                  ? [...history, ...fetchedHistory]
-                  : fetchedHistory;
+              history = mergeDiscordGatewayHistoryEntries(
+                history,
+                fetchedHistory,
+              );
               historySourceMode =
                 history.length === 0
                   ? "empty"
@@ -913,6 +891,13 @@ export async function startDiscordGatewaySource(
                     : fetchedHistory.length > 0
                       ? "rest"
                       : historySourceMode;
+              cache.seed({
+                key,
+                history,
+                source,
+                receivedAt: input.now().toISOString(),
+                mode: historySourceMode,
+              });
             }
             const rawBody = isJsonObject(payload.d)
               ? {
@@ -939,7 +924,9 @@ export async function startDiscordGatewaySource(
             });
             const currentItem = toHistoryItem(message, { ...message, id: "" });
             if (currentItem !== null) {
-              cache.append(key, currentItem, source);
+              const receivedAt = input.now().toISOString();
+              cache.append({ key, item: currentItem, source, receivedAt });
+              await persistence.save(key, cache.recent(key), receivedAt);
             }
             await input.dispatch(eventEnvelope, rawBody);
           });
@@ -980,13 +967,7 @@ export function createDiscordGatewayEventSourceAdapter(): EventSourceAdapter {
   };
 }
 
-export const DISCORD_GATEWAY_HISTORY_LIMITS = {
-  maxMessages: MAX_HISTORY_MESSAGES,
-  defaultMaxMessages: DEFAULT_HISTORY_MAX_MESSAGES,
-  defaultMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
-  defaultMaxAgeMs: DEFAULT_HISTORY_MAX_AGE_MS,
-};
-
-export function isDiscordSnowflake(value: string): boolean {
-  return isSnowflake(value);
-}
+export {
+  DISCORD_GATEWAY_HISTORY_LIMITS,
+  isDiscordSnowflake,
+} from "./discord-gateway-history-persistence";

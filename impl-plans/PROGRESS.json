@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-27T14:08:00+09:00",
+  "lastUpdated": "2026-05-29T18:10:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -552,6 +552,96 @@
     }
   },
   "plans": {
+    "active/discord-gateway-chat-history": {
+      "phase": 186,
+      "status": "Completed",
+      "path": "impl-plans/active/discord-gateway-chat-history.md",
+      "designReference": "design-docs/specs/design-discord-gateway-chat-history.md#persistent-history-model",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005"
+          ]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-008": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-007"
+          ]
+        },
+        "TASK-009": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-007",
+            "TASK-008"
+          ]
+        },
+        "TASK-010": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-007"
+          ]
+        },
+        "TASK-011": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-008",
+            "TASK-009",
+            "TASK-010"
+          ]
+        }
+      }
+    },
     "active/workflow-package-registry": {
       "phase": 186,
       "status": "In Progress",

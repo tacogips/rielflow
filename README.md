@@ -902,13 +902,18 @@ Discord Gateway ingestion. Configure bot credentials with env-var names such as
 Discord channels or threads the runner should listen to. The adapter ignores
 bot and self messages by default, normalizes accepted `MESSAGE_CREATE` events
 to `chat.message`, attaches bounded recent channel or thread messages to
-`event.input.history`, and sends replies through the same provider-neutral
-`rielflow/chat-reply-worker` destination boundary. This path is separate from
-the generic `chat-sdk-discord` webhook path and does not require an external
-Chat SDK Discord deployment. The first slice excludes durable cross-restart
-history, sharding, slash commands, components, moderation events, and
-attachment ingestion; enable Discord Message Content intent when workflow
-prompts need message text.
+`event.input.history`, persists compact normalized history under the event data
+root for restart reload, and sends replies through the same provider-neutral
+`rielflow/chat-reply-worker` destination boundary. If `events serve` has no
+event data root or runs read-only, the adapter keeps in-memory plus optional
+REST history behavior and emits a diagnostic instead of writing elsewhere.
+Persisted history files contain only bounded normalized Discord conversation
+items and bounds metadata; they are not workflow inbox, agent transcript, raw
+Gateway payload, credential, or long-term memory storage. This path is separate
+from the generic `chat-sdk-discord` webhook path and does not require an
+external Chat SDK Discord deployment. The first slice excludes sharding, slash
+commands, components, moderation events, and attachment ingestion; enable
+Discord Message Content intent when workflow prompts need message text.
 
 Local file change sources use `kind: "file-change"` and are served by
 `events serve`. Configure `directory` with an absolute path or a path relative

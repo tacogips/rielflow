@@ -146,7 +146,10 @@ path and does not require an external Chat SDK Discord deployment. The Gateway
 runner uses Discord bot credentials from environment-variable names in the
 source config, listens to configured channels and threads, ignores bot and self
 messages by default, and attaches bounded recent channel or thread history to
-`event.input.history`.
+`event.input.history`. During normal `events serve` operation, accepted
+messages are also written as compact bounded normalized history under the event
+data root, so a restart with the same root can reload prior channel or thread
+context without requiring a Discord REST history fetch.
 
 Serve the Gateway source with a Discord bot token and application id. The bot
 must have access to the configured channels and the Discord Message Content
@@ -172,11 +175,16 @@ rielflow events emit discord-gateway-personas \
   --output json
 ```
 
-The first Gateway slice does not provide durable cross-restart history,
-multi-shard coordination, slash commands, components, moderation events, or
-attachment ingestion. History is bounded by `maxMessages`, `maxBytes`, and
-`maxAgeMs`, and it is Discord channel/thread context rather than workflow inbox
-or agent transcript history.
+If `events serve` has no event data root or runs with `--read-only`, the
+Gateway adapter keeps its in-memory plus optional REST history behavior and
+emits a diagnostic instead of writing fallback files. Persisted files contain
+only bounded normalized Discord conversation items and history bounds; they are
+not workflow inbox, agent transcript, raw Gateway payload, credential, or
+long-term memory storage. The first Gateway slice does not provide multi-shard
+coordination, slash commands, components, moderation events, or attachment
+ingestion. History is bounded by `maxMessages`, `maxBytes`, and `maxAgeMs`,
+and it is Discord channel/thread context rather than workflow inbox or agent
+transcript history.
 
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and
