@@ -1926,14 +1926,11 @@ status with `docker compose -f compose.jaeger.yaml ps`, and confirm
 traces through the UI or Jaeger API where practical before cleanup with
 `docker compose -f compose.jaeger.yaml down`.
 
-Codex-agent reference mapping: Step 1 inspected
-`/Users/taco/gits/tacogips/codex-agent` and
-`/Users/taco/gits/tacogips/worktrees/codex-agent` for OpenTelemetry, OTEL,
-telemetry, trace, and Jaeger behavior. No relevant implementation was found in
-either reference root. The relative default `../../codex-agent` is not the
-effective reference root for this worktree; later planning should use the
-absolute paths above when citing the Codex-agent audit trail. Codex-agent
-therefore remains only the worker backend identity included in telemetry
+Codex-agent reference mapping: Step 1 inspected the sibling `codex-agent`
+checkout and its managed worktree for OpenTelemetry, OTEL, telemetry, trace,
+and Jaeger behavior. No relevant implementation was found in either reference
+root. Codex-agent therefore remains only the worker backend identity included
+in telemetry
 attributes such as `agent.backend = "codex-agent"`. No Codex-reference behavior
 is being copied, and Cursor CLI behavior remains isolated behind any existing
 Cursor adapter.
@@ -1945,6 +1942,18 @@ Cursor adapter.
 - some supporting materials still assume node-centric naming even though authored execution is step-addressed
 - some compatibility facades remain while package ownership continues to
   converge, but root source files are no longer an allowed compatibility layer
+
+## Telegram Gateway Agent Trio
+
+Detailed design: `design-docs/specs/design-telegram-gateway-agent-trio.md`.
+
+The `telegram-gateway` event source is the native Telegram counterpart to the
+Discord Gateway path. It uses Telegram Bot API polling and send APIs directly
+instead of routing through the generic Chat SDK boundary. Normalized Telegram
+messages share the `chat.message`, `replyTarget`, bounded history, and chat
+reply-worker contracts used by the other chat event sources. Photo updates are
+exposed as deterministic attachment descriptors for workflows without storing
+bot credentials or downloading binary image content.
 
 ## References
 

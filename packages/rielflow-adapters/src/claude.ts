@@ -17,6 +17,7 @@ import {
   buildCombinedPromptText,
   buildLocalAdapterOutput,
   createWatchedLocalAgentSession,
+  resolveAdapterImagePaths,
   throwIfAborted,
 } from "./local-agent";
 import {
@@ -31,6 +32,11 @@ interface ClaudeSessionConfig {
   readonly prompt: string;
   readonly projectPath?: string;
   readonly systemPrompt?: string;
+  readonly attachments?: readonly ClaudeSessionAttachment[];
+}
+
+interface ClaudeSessionAttachment {
+  readonly path: string;
 }
 
 interface ClaudeSessionRunnerOptions {
@@ -68,6 +74,7 @@ interface ClaudeSessionRunnerLike {
     sessionId: string,
     prompt?: string,
     systemPrompt?: string,
+    attachments?: readonly ClaudeSessionAttachment[],
   ): Promise<ClaudeRunningSessionLike>;
 }
 
@@ -215,6 +222,7 @@ function resolveLocalSessionConfig(
   readonly runnerOptions: ClaudeSessionRunnerOptions;
 } {
   const promptText = buildCombinedPromptText(input);
+  const images = resolveAdapterImagePaths(input);
   const env = buildAmbientProcessEnv(
     config.env,
     input.rielflowHookContext === undefined
@@ -233,6 +241,9 @@ function resolveLocalSessionConfig(
       ...(input.systemPromptText === undefined
         ? {}
         : { systemPrompt: input.systemPromptText }),
+      ...(images.length === 0
+        ? {}
+        : { attachments: images.map((imagePath) => ({ path: imagePath })) }),
     },
     runnerOptions: {
       cwd: config.cwd ?? input.workingDirectory,
@@ -268,6 +279,7 @@ async function executeLocalClaudeCodeAgent(
           input.backendSession.sessionId,
           input.promptText,
           input.systemPromptText,
+          sessionConfig.attachments,
         )
       : await runner.startSession(sessionConfig);
 
@@ -298,6 +310,7 @@ async function executeLocalClaudeCodeAgent(
         targetSessionId,
         prompt,
         input.systemPromptText,
+        sessionConfig.attachments,
       ),
     isResultSuccess: (result) => result.success,
     describeResult: (result) =>

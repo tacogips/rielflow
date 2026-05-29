@@ -2,7 +2,7 @@
   "id": "discord-gateway-personas-to-workflow",
   "sourceId": "discord-gateway-personas",
   "outputDestinations": ["discord-gateway-persona-replies"],
-  "workflowName": "discord-persona-chat",
+  "workflowName": "discord-agent-trio-chat",
   "match": {
     "eventType": "chat.message"
   },
@@ -12,6 +12,9 @@
       "request": "{{event.input.text}}",
       "history": "{{event.input.history}}",
       "historySource": "{{event.input.historySource}}",
+      "attachments": "{{event.input.attachments}}",
+      "imagePaths": "{{event.input.imagePaths}}",
+      "attachmentText": "{{event.input.attachmentText}}",
       "personaCandidates": ["yui", "mika", "rina"],
       "conversationId": "{{event.conversation.id}}",
       "threadId": "{{event.conversation.threadId}}"

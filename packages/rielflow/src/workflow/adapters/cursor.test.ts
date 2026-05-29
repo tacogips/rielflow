@@ -212,6 +212,37 @@ describe("CursorCliAgentAdapter", () => {
     );
   });
 
+  test("forwards image attachments discovered in workflow input", async () => {
+    const runner = makeMockCursorRunner({});
+    const adapter = new CursorCliAgentAdapter({
+      createRunner: vi.fn(() => runner),
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        mergedVariables: {
+          workflowInput: {
+            attachments: [
+              {
+                kind: "image",
+                mediaType: "image/png",
+                localPath: "/tmp/rina-image.png",
+              },
+            ],
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(runner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: ["/tmp/rina-image.png"],
+      }),
+    );
+  });
+
   test("falls back to rawText when displayText is empty", async () => {
     const sessionId = "cursor-session-raw";
     const startSession = makeMockCursorSession({

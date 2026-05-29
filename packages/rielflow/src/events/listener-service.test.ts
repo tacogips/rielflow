@@ -925,6 +925,12 @@ describe("event listener service", () => {
           },
         );
       }
+      if (String(url).includes("api.telegram.org")) {
+        return new Response(JSON.stringify({ ok: true, result: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       replyCalls.push({
         url: String(url),
         ...(init === undefined ? {} : { init }),
@@ -949,6 +955,8 @@ describe("event listener service", () => {
           RIEL_MATRIX_ACCESS_TOKEN: "secret-token",
           RIEL_DISCORD_BOT_TOKEN: "discord-token",
           RIEL_DISCORD_APPLICATION_ID: "999999999999999999",
+          RIEL_TELEGRAM_BOT_TOKEN: "telegram-token",
+          RIEL_TELEGRAM_BOT_ID: "8888888888",
         },
         fetchImpl,
         cwd: process.cwd(),

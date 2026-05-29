@@ -5,6 +5,7 @@ import { createDiscordGatewayEventSourceAdapter } from "./adapters/discord-gatew
 import { createMatrixEventSourceAdapter } from "./adapters/matrix";
 import { createS3RepositoryEventSourceAdapter } from "./adapters/s3-repository";
 import { createSequentialListEventSourceAdapter } from "./adapters/sequential-list";
+import { createTelegramGatewayEventSourceAdapter } from "./adapters/telegram-gateway";
 import { createWebhookEventSourceAdapter } from "./adapters/webhook";
 import type { EventSourceAdapter } from "./source-adapter";
 
@@ -48,6 +49,7 @@ export function createDefaultEventSourceRegistry(): EventSourceRegistry {
   registry.register(createFileChangeEventSourceAdapter());
   registry.register(createMatrixEventSourceAdapter());
   registry.register(createSequentialListEventSourceAdapter());
+  registry.register(createTelegramGatewayEventSourceAdapter());
   registry.register(createWebhookEventSourceAdapter());
   registry.register(createS3RepositoryEventSourceAdapter());
   return registry;

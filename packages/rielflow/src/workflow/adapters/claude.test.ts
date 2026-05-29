@@ -190,6 +190,41 @@ describe("ClaudeCodeAgentAdapter", () => {
     );
   });
 
+  test("forwards image attachments discovered in workflow input", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        mergedVariables: {
+          workflowInput: {
+            imagePaths: ["/tmp/photo-a.png"],
+            attachments: [
+              {
+                kind: "image",
+                mediaType: "image/jpeg",
+                localPath: "/tmp/photo-b.jpg",
+              },
+            ],
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          { path: "/tmp/photo-a.png" },
+          { path: "/tmp/photo-b.jpg" },
+        ],
+      }),
+    );
+  });
+
   test("reuses backend sessions for local execution", async () => {
     const fixture = makeClaudeRunnerFixture({
       sessionId: "backend-claude-1",
@@ -226,6 +261,7 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(fixture.resumeSession).toHaveBeenCalledWith(
       "backend-claude-1",
       "hello",
+      undefined,
       undefined,
     );
     expect(output.payload).toEqual({ summary: "ok" });
@@ -269,6 +305,7 @@ describe("ClaudeCodeAgentAdapter", () => {
     expect(resumeSession).toHaveBeenCalledWith(
       "claude-stall-1",
       "continue now",
+      undefined,
       undefined,
     );
     expect(output.payload).toEqual({ text: "resumed claude reply" });

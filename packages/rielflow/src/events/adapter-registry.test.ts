@@ -66,6 +66,7 @@ describe("event source registry", () => {
       "matrix",
       "s3-repository",
       "sequential-list",
+      "telegram-gateway",
       "webhook",
     ]);
     expect(registry.get("chat-sdk")?.capabilities.chatReply).toBe(true);
@@ -75,5 +76,10 @@ describe("event source registry", () => {
       chatReply: true,
     });
     expect(registry.get("matrix")?.capabilities.chatReply).toBe(true);
+    expect(registry.get("telegram-gateway")?.capabilities).toMatchObject({
+      supportsStart: true,
+      webhook: false,
+      chatReply: true,
+    });
   });
 });

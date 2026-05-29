@@ -1,0 +1,162 @@
+{
+  "workflowId": "telegram-agent-trio-chat",
+  "description": "Route Telegram Gateway chat messages, including photo attachment descriptors, to one of three named female bot personas: Yui Codex by default, Mika Trend when called, or Rina Cursor when called. Persona nodes can hand off to another named persona when the user explicitly asks one bot to hear another bot's opinion.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 180000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing Telegram text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics."
+  },
+  "entryStepId": "route-message",
+  "nodes": [
+    {
+      "id": "route-message",
+      "nodeFile": "nodes/node-route-message.json"
+    },
+    {
+      "id": "yui-codex",
+      "nodeFile": "nodes/node-yui-codex.json"
+    },
+    {
+      "id": "mika-claude",
+      "nodeFile": "nodes/node-mika-claude.json"
+    },
+    {
+      "id": "rina-cursor",
+      "nodeFile": "nodes/node-rina-cursor.json"
+    },
+    {
+      "id": "send-yui-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "yui",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-mika-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "mika",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-rina-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.replyText}}",
+          "replyAsTemplate": "rina",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "route-message",
+      "nodeId": "route-message",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "yui-codex",
+          "label": "target_yui"
+        },
+        {
+          "toStepId": "mika-claude",
+          "label": "target_mika"
+        },
+        {
+          "toStepId": "rina-cursor",
+          "label": "target_rina"
+        }
+      ]
+    },
+    {
+      "id": "yui-codex",
+      "nodeId": "yui-codex",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-yui-reply"
+        },
+        {
+          "toStepId": "mika-claude",
+          "label": "handoff_mika"
+        },
+        {
+          "toStepId": "rina-cursor",
+          "label": "handoff_rina"
+        }
+      ]
+    },
+    {
+      "id": "send-yui-reply",
+      "nodeId": "send-yui-reply",
+      "role": "worker"
+    },
+    {
+      "id": "mika-claude",
+      "nodeId": "mika-claude",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-mika-reply"
+        },
+        {
+          "toStepId": "yui-codex",
+          "label": "handoff_yui"
+        },
+        {
+          "toStepId": "rina-cursor",
+          "label": "handoff_rina"
+        }
+      ]
+    },
+    {
+      "id": "send-mika-reply",
+      "nodeId": "send-mika-reply",
+      "role": "worker"
+    },
+    {
+      "id": "rina-cursor",
+      "nodeId": "rina-cursor",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-rina-reply"
+        },
+        {
+          "toStepId": "yui-codex",
+          "label": "handoff_yui"
+        },
+        {
+          "toStepId": "mika-claude",
+          "label": "handoff_mika"
+        }
+      ]
+    },
+    {
+      "id": "send-rina-reply",
+      "nodeId": "send-rina-reply",
+      "role": "worker"
+    }
+  ]
+}

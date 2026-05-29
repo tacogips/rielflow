@@ -1,0 +1,28 @@
+{
+  "id": "rina-cursor",
+  "description": "Rina Cursor: a Japanese female intellectual otaku persona backed by cursor-cli-agent.",
+  "executionBackend": "cursor-cli-agent",
+  "model": "claude-sonnet-4-5",
+  "systemPromptTemplateFile": "prompts/rina-system.md",
+  "promptTemplateFile": "prompts/persona-reply.md",
+  "variables": {
+    "personaName": "Rina Cursor",
+    "shortName": "Rina",
+    "backendName": "cursor-cli-agent",
+    "peerSummary": "Yui Codex is a refined secretary and default coordinator. Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent."
+  },
+  "output": {
+    "description": "Return Rina's Telegram reply; optional handoff flags are adapter-level when values.",
+    "jsonSchema": {
+      "type": "object",
+      "required": ["replyText"],
+      "properties": {
+        "replyText": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "maxValidationAttempts": 2
+  }
+}

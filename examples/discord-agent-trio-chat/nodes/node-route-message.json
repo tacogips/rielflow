@@ -4,12 +4,15 @@
   "executionBackend": "codex-agent",
   "model": "gpt-5.4-mini",
   "promptTemplateFile": "prompts/route-message.md",
-  "variables": {},
+  "variables": {
+    "codexAdditionalArgs": ["--ignore-rules"],
+    "forwardImageAttachments": false
+  },
   "output": {
     "description": "Return payload.target plus adapter-level when flags used by transition labels.",
     "jsonSchema": {
       "type": "object",
-      "required": ["target"],
+      "required": ["target", "target_yui", "target_mika", "target_rina"],
       "properties": {
         "target": {
           "type": "string",
@@ -17,6 +20,15 @@
         },
         "reason": {
           "type": "string"
+        },
+        "target_yui": {
+          "type": "boolean"
+        },
+        "target_mika": {
+          "type": "boolean"
+        },
+        "target_rina": {
+          "type": "boolean"
         }
       },
       "additionalProperties": true

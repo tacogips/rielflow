@@ -16,6 +16,7 @@ import {
   buildCombinedPromptText,
   buildLocalAdapterOutput,
   createWatchedLocalAgentSession,
+  resolveAdapterImagePaths,
   throwIfAborted,
   withProcessEnvOverride,
 } from "./local-agent";
@@ -119,6 +120,26 @@ function buildCodexReasoningEffortOverride(
     : `model_reasoning_effort="${effort}"`;
 }
 
+function readStringArrayVariable(
+  variables: Readonly<Record<string, unknown>>,
+  key: string,
+): readonly string[] | undefined {
+  const value = variables[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = value.filter((entry) => typeof entry === "string");
+  return entries.length === 0 ? undefined : entries;
+}
+
+function mergeAdditionalArgs(
+  configArgs: readonly string[] | undefined,
+  nodeArgs: readonly string[] | undefined,
+): readonly string[] | undefined {
+  const merged = [...(configArgs ?? []), ...(nodeArgs ?? [])];
+  return merged.length === 0 ? undefined : merged;
+}
+
 const importUnknownModule = new Function(
   "specifier",
   "return import(specifier);",
@@ -157,6 +178,11 @@ function resolveLocalSessionConfig(
   const reasoningEffortOverride = buildCodexReasoningEffortOverride(
     input.node.effort,
   );
+  const images = resolveAdapterImagePaths(input);
+  const additionalArgs = mergeAdditionalArgs(
+    config.additionalArgs,
+    readStringArrayVariable(input.node.variables, "codexAdditionalArgs"),
+  );
   return {
     promptText,
     sessionConfig: {
@@ -171,12 +197,11 @@ function resolveLocalSessionConfig(
         ? {}
         : { approvalMode: config.approvalMode }),
       ...(config.fullAuto === undefined ? {} : { fullAuto: config.fullAuto }),
-      ...(config.additionalArgs === undefined
-        ? {}
-        : { additionalArgs: config.additionalArgs }),
+      ...(additionalArgs === undefined ? {} : { additionalArgs }),
       ...(reasoningEffortOverride === undefined
         ? {}
         : { configOverrides: [reasoningEffortOverride] }),
+      ...(images.length === 0 ? {} : { images }),
       streamGranularity: "event",
     },
   };

@@ -6,6 +6,7 @@ Incoming event:
 - Discord conversation id: {{event.conversation.id}}
 - Discord thread id: {{event.conversation.threadId}}
 - User message: {{event.input.text}}
+- Image attachments: {{event.input.attachments}}
 - Workflow input: {{input}}
 
 Available personas:

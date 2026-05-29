@@ -237,6 +237,55 @@ ingestion. History is bounded by `maxMessages`, `maxBytes`, and `maxAgeMs`,
 and it is Discord channel/thread context rather than workflow inbox or agent
 transcript history.
 
+The `telegram-gateway-personas` source demonstrates rielflow-owned Telegram
+Bot API ingestion. It is separate from the `chat-sdk-telegram` generic webhook
+path and does not require an external Chat SDK Telegram deployment. The Gateway
+runner polls Telegram `getUpdates`, filters to configured chats when `chats` is
+set, ignores bot and self messages by default, attaches bounded persisted chat
+history to `event.input.history`, and sends workflow replies through Telegram
+`sendMessage`.
+
+Serve the Gateway source with a Telegram bot token and bot id. Add the bot to
+the configured Telegram chat before serving:
+
+```bash
+export RIEL_TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+export RIEL_TELEGRAM_BOT_ID=<telegram-bot-id>
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit the checked-in Telegram payload without
+contacting Telegram:
+
+```bash
+rielflow events emit telegram-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/telegram-gateway-message.json \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --output json
+```
+
+The photo fixture verifies image attachment metadata:
+
+```bash
+rielflow events emit telegram-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/telegram-gateway-photo-message.json \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --output json
+```
+
+Telegram photo handling is metadata-only in this fixture. The adapter exposes
+the largest photo size as `event.input.attachments[0]` with dimensions,
+provider file ids, caption, and optional `getFile` path. It does not download
+image bytes, OCR images, transcribe media, process commands, or handle inline
+keyboard callbacks in this slice. Persisted history stores only bounded
+normalized chat items and never stores bot tokens.
+
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and
 `delete` changes to `.md` and `.json` files. The source emits

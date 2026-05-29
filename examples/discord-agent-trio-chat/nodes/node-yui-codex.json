@@ -9,6 +9,7 @@
     "personaName": "Yui Codex",
     "shortName": "Yui",
     "backendName": "codex-agent",
+    "codexAdditionalArgs": ["--ignore-rules"],
     "peerSummary": "Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent. Rina Cursor is an intellectual otaku and technical analyst."
   },
   "output": {

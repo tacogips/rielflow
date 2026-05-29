@@ -20,6 +20,7 @@ This directory contains reference materials for system design and implementation
 | Discord Gateway                   | https://docs.discord.com/developers/topics/gateway                                                          | Official Discord Gateway connection, intents, and lifecycle documentation                 |
 | Discord Message Resource          | https://docs.discord.com/developers/resources/message                                                       | Official Discord message object and content intent behavior documentation                 |
 | Discord Threads                   | https://docs.discord.com/developers/topics/threads                                                          | Official Discord thread behavior and Gateway event delivery documentation                 |
+| Telegram Bot API                  | https://core.telegram.org/bots/api                                                                          | Official Telegram Bot API documentation for `getUpdates`, `sendMessage`, `getFile`, and photo message payloads |
 
 ## Reference Documents
 

@@ -1,0 +1,5 @@
+{
+  "id": "telegram-gateway-persona-replies",
+  "kind": "chat",
+  "sourceId": "telegram-gateway-personas"
+}

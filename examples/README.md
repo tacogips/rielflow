@@ -213,6 +213,35 @@ bun run packages/rielflow/src/bin.ts workflow run discord-agent-trio-chat \
   --input '{"request":"Yui, give your opinion and ask Mika too"}'
 ```
 
+### `telegram-agent-trio-chat`
+
+Telegram Gateway persona workflow using rielflow-owned Telegram Bot API
+ingestion:
+
+- receives normalized Telegram messages from the `telegram-gateway-personas`
+  event source
+- includes persisted bounded chat history in `event.input.history`
+- preserves Telegram photo metadata in `event.input.attachments`
+- routes replies as Yui, Mika, or Rina with the same persona specs as the
+  Discord trio
+- sends replies through `rielflow/chat-reply-worker` and the
+  `telegram-gateway-persona-replies` chat destination
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-chat --workflow-definition-dir ./examples
+```
+
+Run the bundled deterministic handoff scenario:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run telegram-agent-trio-chat \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --input '{"request":"Yui, give your opinion and ask Mika too"}'
+```
+
 ### `discord-persona-chat`
 
 Discord Gateway persona workflow using rielflow-owned Gateway ingestion:

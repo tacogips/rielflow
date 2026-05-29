@@ -227,6 +227,77 @@ describe("discord gateway event source adapter", () => {
     ).toEqual(["111111111111111111", "333333333333333333"]);
   });
 
+  test("normalizes and downloads Discord image attachments", async () => {
+    const originalFetch = globalThis.fetch;
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-discord-attachments-"),
+    );
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      expect(String(url)).toBe("https://cdn.discord.test/yui.png");
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }) as typeof fetch;
+    try {
+      const adapter = createDiscordGatewayEventSourceAdapter();
+      const event = await adapter.normalize({
+        sourceId: "discord-gateway-personas",
+        source: discordSource({
+          attachments: {
+            includeImages: true,
+            resolveFilePaths: true,
+            maxBytes: 1024,
+          },
+        }),
+        receivedAt: "2026-05-29T10:03:00.000Z",
+        eventDataRoot: root,
+        body: messagePayload({
+          content: "この画像に写っている内容を短く説明して。",
+          attachments: [
+            {
+              id: "999999999999999998",
+              filename: "yui.png",
+              url: "https://cdn.discord.test/yui.png",
+              proxy_url: "https://media.discord.test/yui.png",
+              content_type: "image/png",
+              size: 3,
+              width: 512,
+              height: 512,
+            },
+          ],
+        }),
+      });
+
+      const attachments = event.input["attachments"] as readonly [
+        {
+          readonly localPath: string;
+          readonly contentRef: string;
+          readonly source: { readonly localPath: string };
+        },
+      ];
+      expect(attachments[0]).toMatchObject({
+        id: "999999999999999998",
+        kind: "image",
+        mediaType: "image/png",
+        filename: "yui.png",
+        contentRef:
+          "attachments/discord-gateway/discord-gateway-personas/345678901234567890-999999999999999998-yui.png",
+      });
+      expect(event.input).toMatchObject({
+        attachmentText: "この画像に写っている内容を短く説明して。",
+        imagePaths: [attachments[0].localPath],
+      });
+      expect(attachments[0].source.localPath).toBe(attachments[0].localPath);
+      expect(await readFile(attachments[0].localPath)).toEqual(
+        new Uint8Array([1, 2, 3]),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("drops a history entry that exceeds maxBytes by itself", () => {
     const event = normalizeDiscordGatewayRawEvent({
       sourceId: "discord-gateway-personas",
@@ -337,6 +408,106 @@ describe("discord gateway event source adapter", () => {
     await handle.stop();
     expect(socket?.closed).toBe(true);
     globalThis.WebSocket = originalWebSocket;
+  });
+
+  test("downloads image attachments in Gateway receive path", async () => {
+    const originalWebSocket = globalThis.WebSocket;
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    FakeWebSocket.instances = [];
+    const dataRoot = await mkdtemp(
+      path.join(os.tmpdir(), "rielflow-discord-gateway-images-"),
+    );
+    const diagnostics: EventSourceDiagnostic[] = [];
+    let handle:
+      | Awaited<ReturnType<typeof startDiscordGatewaySource>>
+      | undefined;
+    let resolveDispatched:
+      | ((event: ReturnType<typeof normalizeDiscordGatewayRawEvent>) => void)
+      | undefined;
+    const dispatched = new Promise<
+      ReturnType<typeof normalizeDiscordGatewayRawEvent>
+    >((resolve) => {
+      resolveDispatched = resolve;
+    });
+
+    try {
+      handle = await startDiscordGatewaySource({
+        source: discordSource({
+          history: { fetchOnMessage: "never" },
+          attachments: {
+            includeImages: true,
+            resolveFilePaths: true,
+            maxBytes: 1024,
+          },
+        }),
+        signal: new AbortController().signal,
+        now: () => new Date("2026-05-29T10:03:00.000Z"),
+        env: {
+          RIEL_DISCORD_BOT_TOKEN: "bot-token",
+          RIEL_DISCORD_APPLICATION_ID: "999999999999999999",
+        },
+        eventDataRoot: dataRoot,
+        fetchImpl: async (url) => {
+          expect(String(url)).toContain("cdn.discordapp.com");
+          return new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: { "content-type": "image/png" },
+          });
+        },
+        diagnosticSink: (diagnostic) => diagnostics.push(diagnostic),
+        dispatch: async (event): Promise<EventSourceDispatchOutcome> => {
+          resolveDispatched?.(event);
+          return { receipts: [] };
+        },
+      });
+
+      const socket = FakeWebSocket.instances[0];
+      expect(socket).toBeDefined();
+      socket?.emitMessage({
+        op: 10,
+        d: { heartbeat_interval: 100000 },
+      });
+      socket?.emitMessage({
+        t: "MESSAGE_CREATE",
+        d: messagePayload({
+          content: "",
+          attachments: [
+            {
+              id: "777777777777777777",
+              filename: "profile.png",
+              url: "https://cdn.discordapp.com/attachments/channel/file/profile.png",
+              content_type: "image/png",
+              size: 3,
+              width: 64,
+              height: 64,
+            },
+          ],
+        }),
+      });
+
+      const event = await dispatched;
+      const imagePaths = event.input["imagePaths"] as readonly string[];
+      expect(event.input["text"]).toBe("[Image attachment]");
+      expect(imagePaths).toHaveLength(1);
+      expect(imagePaths[0]?.startsWith(path.resolve(dataRoot))).toBe(true);
+      await access(imagePaths[0] ?? "");
+      expect(await readFile(imagePaths[0] ?? "")).toEqual(
+        Buffer.from([1, 2, 3]),
+      );
+      expect(event.input["attachments"]).toMatchObject([
+        {
+          id: "777777777777777777",
+          kind: "image",
+          mediaType: "image/png",
+          localPath: imagePaths[0],
+        },
+      ]);
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await handle?.stop();
+      globalThis.WebSocket = originalWebSocket;
+      await rm(dataRoot, { recursive: true, force: true });
+    }
   });
 
   test("persists bounded normalized history files below the event data root", async () => {
