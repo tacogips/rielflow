@@ -1,16 +1,16 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: Telegram gateway keeps normalization, polling, history, and attachments together until the adapter is split.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isJsonObject, type JsonObject } from "../../shared/json";
 import {
-  chatHistoryBounds,
-  ChatHistoryCache,
-  createChatHistoryPersistence,
-  trimChatHistory,
-  type ChatHistoryPersistence,
-  type GenericChatHistoryItem,
-} from "./chat-history-persistence";
+  appendAcceptedTelegramHistory,
+  attachTelegramHistory,
+  createTelegramHistoryCache,
+  createTelegramHistoryPersistence,
+  seedTelegramHistory,
+  telegramHistoryKey,
+} from "./telegram-gateway-history";
 import { dispatchTelegramGatewayReply } from "./telegram-gateway-reply";
+import type { ChatHistoryCache } from "./chat-history-persistence";
 import type {
   EventSourceAcceptedEventInput,
   EventSourceAdapter,
@@ -384,156 +384,6 @@ function imagePathsFromAttachments(
   return attachments.flatMap((attachment) =>
     attachment.localPath === undefined ? [] : [attachment.localPath],
   );
-}
-
-function telegramHistoryBounds(source: TelegramGatewaySourceConfig) {
-  return chatHistoryBounds({
-    history: isJsonObject(source.history) ? source.history : undefined,
-    scope: "chat",
-  });
-}
-
-function telegramHistoryKey(input: {
-  readonly source: TelegramGatewaySourceConfig;
-  readonly chatId: string;
-}): string {
-  return `${input.source.id}:${input.chatId}`;
-}
-
-function createTelegramHistoryCache(
-  source: TelegramGatewaySourceConfig,
-): ChatHistoryCache {
-  const bounds = telegramHistoryBounds(source);
-  return new ChatHistoryCache((input) =>
-    trimChatHistory({
-      history: input.history,
-      bounds,
-      receivedAt: input.receivedAt,
-    }),
-  );
-}
-
-function createTelegramHistoryPersistence(input: {
-  readonly source: TelegramGatewaySourceConfig;
-  readonly eventDataRoot?: string | undefined;
-  readonly readOnly?: boolean | undefined;
-  readonly diagnosticSink?: EventSourceDiagnosticSink | undefined;
-}): ChatHistoryPersistence {
-  return createChatHistoryPersistence({
-    adapterKind: "telegram-gateway",
-    eventDataRoot: input.eventDataRoot,
-    readOnly: input.readOnly,
-    sourceId: input.source.id,
-    bounds: telegramHistoryBounds(input.source),
-    diagnosticPrefix: "Telegram",
-    diagnosticSink: input.diagnosticSink,
-  });
-}
-
-async function seedTelegramHistory(input: {
-  readonly key: string;
-  readonly receivedAt: string;
-  readonly cache: ChatHistoryCache;
-  readonly persistence: ChatHistoryPersistence;
-}): Promise<void> {
-  if (input.cache.has(input.key)) {
-    return;
-  }
-  const persisted = await input.persistence.load(input.key);
-  input.cache.seed({
-    key: input.key,
-    history: persisted,
-    receivedAt: input.receivedAt,
-    mode: input.persistence.enabled ? "persisted" : "memory",
-  });
-}
-
-function telegramHistoryItem(input: {
-  readonly source: TelegramGatewaySourceConfig;
-  readonly event: ExternalEventEnvelope;
-}): GenericChatHistoryItem | null {
-  const chatId = input.event.conversation?.id;
-  const actorId = input.event.actor?.id;
-  const text = input.event.input["text"];
-  if (
-    chatId === undefined ||
-    actorId === undefined ||
-    typeof text !== "string"
-  ) {
-    return null;
-  }
-  return {
-    messageId: input.event.eventId,
-    authorId: actorId,
-    displayName: input.event.actor?.displayName ?? actorId,
-    ...(input.event.actor?.isBot === undefined
-      ? {}
-      : { isBot: input.event.actor.isBot }),
-    createdAt: input.event.occurredAt ?? input.event.receivedAt,
-    text,
-    conversationId: chatId,
-    provider: input.event.provider,
-  };
-}
-
-function attachTelegramHistory(input: {
-  readonly source: TelegramGatewaySourceConfig;
-  readonly event: ExternalEventEnvelope;
-  readonly cache: ChatHistoryCache;
-  readonly key: string;
-}): ExternalEventEnvelope {
-  const bounds = telegramHistoryBounds(input.source);
-  const history = input.cache.recent(input.key);
-  return {
-    ...input.event,
-    input: {
-      ...input.event.input,
-      history,
-      historySource: {
-        mode: input.cache.sourceMode(input.key),
-        historyKey: input.key,
-        maxMessages: bounds.maxMessages,
-        maxBytes: bounds.maxBytes,
-        maxAgeMs: bounds.maxAgeMs,
-        messageCount: history.length,
-      },
-    },
-  };
-}
-
-async function appendAcceptedTelegramHistory(input: {
-  readonly source: TelegramGatewaySourceConfig;
-  readonly event: ExternalEventEnvelope;
-  readonly cache: ChatHistoryCache;
-  readonly persistence: ChatHistoryPersistence;
-}): Promise<void> {
-  if (input.source.history === undefined) {
-    return;
-  }
-  const chatId = input.event.conversation?.id;
-  if (chatId === undefined) {
-    return;
-  }
-  const key = telegramHistoryKey({ source: input.source, chatId });
-  await seedTelegramHistory({
-    key,
-    receivedAt: input.event.receivedAt,
-    cache: input.cache,
-    persistence: input.persistence,
-  });
-  const item = telegramHistoryItem({
-    source: input.source,
-    event: input.event,
-  });
-  if (item === null) {
-    return;
-  }
-  const next = input.cache.append({
-    key,
-    item,
-    receivedAt: input.event.receivedAt,
-  });
-  await input.persistence.save(key, next);
 }
 
 function normalizeTelegramUpdate(input: {

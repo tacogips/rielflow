@@ -1,7 +1,8 @@
-# Telegram Gateway Agent Trio
+# Telegram Gateway Agent Trio and Chat Workflow Simplification
 
-This document records the design for native Telegram chat ingestion and the
-three-person Telegram persona workflow.
+This document records the design for native Telegram chat ingestion, the
+three-person Telegram persona workflow, and the cross-provider authoring
+boundary shared by the Discord, Telegram, and Matrix chat examples.
 
 ## Overview
 
@@ -26,6 +27,46 @@ Initial persona selection is owned by the provider-neutral
 history, attachments, and reply targets stay in event adapters; the workflow
 only configures persona ids, display names, and aliases.
 
+Design status for the workflow `codex-design-and-implement-review-loop`:
+
+- `workflowMode`: `issue-resolution`
+- issue reference: GitHub PR #39,
+  `https://github.com/tacogips/rielflow/pull/39`, branch
+  `feature/telegram-agent-trio`
+- target feature area: Telegram/Discord/Matrix chat gateway trio workflows and
+  built-in chat persona routing
+- primary review question: whether provider complexity has moved into rielflow
+  adapters and built-in add-ons while workflow authors keep a small,
+  provider-neutral JSON surface
+
+## Goals
+
+- Keep Telegram Bot API polling, offset persistence, history bounds, photo
+  metadata/file resolution, and reply dispatch inside the `telegram-gateway`
+  event adapter and validation layer.
+- Keep Discord Gateway and Matrix receive/send behavior inside their own event
+  adapters while sharing provider-neutral event, destination, and reply
+  contracts.
+- Let Discord and Telegram trio workflows use the same graph shape:
+  `rielflow/chat-persona-router`, three persona workers, and
+  `rielflow/chat-reply-worker`.
+- Let the Matrix sample remain a minimal reply workflow that demonstrates the
+  same chat reply worker and destination boundary without requiring trio
+  routing.
+- Make validation catch provider-specific configuration errors at the event
+  source or add-on descriptor boundary rather than inside persona prompts.
+
+## Non-Goals
+
+- Adding Telegram-specific fields to `workflow.json` or persona node payloads.
+- Replacing the existing Chat SDK provider path for providers that still use it.
+- Turning workflow prompts into transport parsers, history stores, attachment
+  downloaders, or reply target mappers.
+- Implementing OCR, image understanding, encrypted Matrix media decryption, or
+  unbounded chat memory in this slice.
+- Making Codex-agent, Cursor-agent, or Claude-agent adapters responsible for
+  provider receive/send behavior.
+
 ## Technical Details
 
 `telegram-gateway` normalizes Telegram updates into the shared
@@ -49,6 +90,168 @@ bytes, perform OCR, or infer image content; persona prompts are instructed to
 use only deterministic descriptors unless another workflow stage provides image
 analysis.
 
+When photo download is explicitly enabled by source configuration, downloaded
+files remain event-adapter artifacts referenced through normalized attachment
+descriptors. Agent adapters may consume local paths only through the normal
+attachment forwarding contract; workflow authors do not write Telegram Bot API
+file URLs or token-bearing paths into prompts.
+
+## Cross-provider Authoring Boundary
+
+The Discord and Telegram trio examples should remain intentionally parallel:
+
+- inbound providers emit `chat.message`
+- binding input maps provider-neutral text, history, attachments, and persona
+  candidates into workflow input
+- `rielflow/chat-persona-router` selects one initial persona from configured
+  ids, names, and aliases
+- persona nodes produce JSON with `payload.replyText`
+- `rielflow/chat-reply-worker` sends the reply through the event destination
+  publisher and the source-specific adapter
+
+The Matrix sample uses the same reply boundary without the persona router. It
+proves that a provider can participate in the shared destination/reply contract
+without copying the Discord/Telegram trio graph.
+
+Workflow JSON should describe business routing and persona composition only.
+The following provider details are adapter-owned and must not appear in
+workflow prompts or node JSON except as normalized `event` or `workflowInput`
+fields:
+
+- Telegram update ids, chat ids, Bot API method names, file ids, offset files,
+  and bot token environment variables
+- Discord Gateway opcodes, intents, channel/thread REST behavior, snowflakes,
+  and bot token environment variables
+- Matrix homeserver URLs, access tokens, sync tokens, room event relation
+  payloads, and transaction ids
+
+## Built-in Add-on Responsibilities
+
+`rielflow/chat-persona-router` owns reusable initial persona selection. It
+accepts provider-neutral text plus configured persona ids, display names, and
+aliases. It must not inspect Telegram, Discord, or Matrix raw provider payloads.
+
+`rielflow/chat-reply-worker` owns reusable reply construction from inbox output
+and runtime event context. It creates a provider-neutral dispatch request,
+including reply text, visibility, thread policy, optional `replyAsTemplate`,
+destination ids, and idempotency metadata. Provider adapters convert that
+request into Telegram `sendMessage`, Discord REST send, or Matrix Client-Server
+API calls.
+
+Add-on descriptors must validate authored config before execution. Workflow
+validation should report bad persona definitions, invalid reply templates, or
+unsupported add-on env bindings without requiring live provider credentials.
+
+## Validation and Rollout Rules
+
+Validation should fail when:
+
+- a `telegram-gateway` source uses literal credentials instead of environment
+  variable names
+- Telegram polling, history, attachment, reply-bot, or provider fields exceed
+  supported bounds or use unsupported values
+- a chat destination references a provider source that cannot dispatch replies
+- an add-on node omits an explicit compatible version or supplies provider
+  config to an add-on schema that does not accept it
+
+Rollout constraints:
+
+- Keep `examples/telegram-agent-trio-chat` and
+  `examples/discord-agent-trio-chat` structurally parallel so authors can copy
+  the business workflow pattern between providers.
+- Keep `examples/matrix-chat-reply` smaller by design; Matrix parity means
+  shared reply/destination behavior, not necessarily trio persona routing.
+- Keep live provider smoke tests optional because credentials may be absent, but
+  keep deterministic adapter, validation, and workflow validation tests required.
+- Redact bot tokens, access tokens, authorization headers, raw provider payloads,
+  and token-bearing file URLs from receipts, dispatch records, logs, and
+  examples.
+- Treat trio workflows that duplicate provider parsing or reply dispatch in
+  prompts as review failures; deterministic validation should cover the
+  adapter, destination, add-on, and example-structure surfaces.
+
+## Codex Reference Mapping
+
+The active workflow is `codex-design-and-implement-review-loop` in
+`issue-resolution` mode, using `codex-agent` workers. Codex-agent is a worker
+backend and adapter-behavior reference only; it does not define Telegram,
+Discord, or Matrix provider behavior.
+
+Relevant repository-local references:
+
+- `packages/rielflow-adapters/src/codex.ts`: attachment/image forwarding and
+  passthrough argument behavior for Codex-backed persona nodes.
+- `packages/rielflow/src/workflow/adapters/codex.test.ts`: regression coverage
+  for Codex adapter behavior that can receive normalized attachment local paths.
+- `examples/telegram-agent-trio-chat/nodes/node-yui-codex.json`: Telegram trio
+  Codex persona node, which should stay provider-neutral.
+- `examples/discord-agent-trio-chat/nodes/node-yui-codex.json`: Discord trio
+  Codex persona node, which should stay provider-neutral.
+- `packages/rielflow/src/events/adapters/telegram-gateway.ts`: Telegram
+  provider boundary for receive, history, attachments, polling, and offset
+  handling.
+- `packages/rielflow/src/events/adapters/telegram-gateway-reply.ts`: Telegram
+  provider boundary for reply dispatch.
+- `packages/rielflow-addons/src/native-node-executor/chat-and-gateway-addons.ts`:
+  native add-on execution boundary for chat persona routing and chat replies.
+
+## Review Decisions and Issue Mapping
+
+- PR #39 remains a single issue-resolution path because Telegram receive,
+  reply, history, attachment handling, add-on routing, examples, docs, and
+  verification all share one provider-neutral chat workflow contract.
+- Telegram support is a native rielflow adapter capability, not a workflow
+  prompt pattern and not a dependency on an external chat gateway.
+- Discord/Telegram trio workflows should be easy to author by editing persona
+  ids, aliases, prompts, and reply templates; provider setup belongs in
+  `.rielflow-events` source, destination, and binding config.
+- Matrix stays intentionally simpler in this PR. Its authoring goal is to prove
+  the same `rielflow/chat-reply-worker` and explicit chat destination path.
+- Low-risk review improvements should prefer docs, examples, validation
+  diagnostics, and narrow tests over changes to live provider semantics.
+
+Concrete low-risk review targets for the follow-up implementation/review steps:
+
+- Confirm `examples/telegram-agent-trio-chat/workflow.json` and
+  `examples/discord-agent-trio-chat/workflow.json` keep the same authored graph
+  shape: router add-on, three persona workers, and one reply-worker add-on per
+  persona.
+- Confirm provider credentials, raw provider ids, Telegram Bot API method
+  details, Discord Gateway details, and Matrix Client-Server details appear only
+  in event source, destination, adapter, or validation files, not in persona
+  prompts.
+- Confirm Telegram and Discord attachment paths enter agent adapters through
+  normalized attachment descriptors and Codex/local-agent attachment forwarding,
+  not token-bearing provider URLs.
+- Prefer missing validation diagnostics, example docs, or focused regression
+  tests as fixes before changing live polling, reply dispatch, or agent adapter
+  behavior.
+
+## Cursor CLI Behavior Mapping
+
+Rina Cursor is a persona worker in the trio examples, but Cursor-specific
+session, transcript, or CLI behavior is isolated behind the Cursor agent
+adapter. The event layer must not special-case Cursor, and Cursor-agent
+behavior must not alter Telegram/Discord/Matrix event normalization, reply
+target mapping, destination publishing, or chat add-on validation.
+
+## Intentional Divergences
+
+- Diverges from Chat SDK Telegram by using a native `telegram-gateway` event
+  source for Bot API long polling, offset persistence, photo descriptors, and
+  replies.
+- Diverges from workflow inbox history because provider chat history is external
+  event context supplied through `event.input.history` or mapped workflow input.
+- Diverges from agent transcript continuation because persona context must come
+  from bounded provider conversation history rather than a backend-specific
+  session transcript.
+- Diverges from Codex-agent references by keeping provider-specific receive/send
+  behavior in rielflow adapters and built-in add-ons rather than in agent
+  prompts or sessions.
+- Diverges from the Matrix sample by not requiring every chat provider example
+  to demonstrate all trio routing behavior; Matrix validates the shared reply
+  contract with a smaller workflow.
+
 ## Usage Examples
 
 Validate the example workflow and event configuration:
@@ -66,6 +269,47 @@ export RIEL_TELEGRAM_BOT_ID=<telegram-bot-id>
 bun run packages/rielflow/src/bin.ts events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
 
+## Verification Commands
+
+Review and implementation steps should run or explicitly report inability to
+run these commands:
+
+```bash
+bun test packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts packages/rielflow/src/events/adapters/discord-gateway.test.ts packages/rielflow/src/events/adapters/telegram-gateway.test.ts packages/rielflow/src/events/adapters/matrix.test.ts packages/rielflow/src/workflow/adapters/codex.test.ts
+bun run packages/rielflow/src/bin.ts workflow validate discord-agent-trio-chat --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-chat --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+bun run typecheck
+bun run lint:biome
+bun run build
+git diff --check
+bun run scripts/audit-chat-redaction-literals.ts
+```
+
+## Open Questions
+
+No unresolved user decisions are required for this design update. Live Telegram,
+Discord, or Matrix smoke testing remains environment-dependent and should be
+reported as verification availability rather than a design decision.
+
+## Risks
+
+- Telegram offset, history, and photo handling can hide edge cases if tests only
+  validate text messages.
+- Discord, Telegram, and Matrix examples can drift if provider-neutral authoring
+  rules are documented in only one example.
+- Agent attachment forwarding can accidentally become provider-specific unless
+  local paths and metadata continue to flow through normalized attachment
+  descriptors.
+- Live-provider fixes can widen PR scope; prefer low-risk validation, docs, and
+  deterministic test improvements unless review finds a correctness bug.
+
 ## References
 
-See `design-docs/references/README.md` for external references.
+- `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`
+- `design-docs/specs/design-discord-gateway-chat-history.md`
+- `design-docs/specs/design-output-destinations-and-supervisor-memory.md`
+- `design-docs/specs/design-matrix-attachment-text.md`
+- `design-docs/specs/design-chat-sdk-chat-history.md`
+- `design-docs/references/README.md`

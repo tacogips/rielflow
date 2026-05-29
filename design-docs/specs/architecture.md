@@ -1165,6 +1165,7 @@ Initial scope:
   resolution during workflow load
 - no network resolution at workflow load time
 - `rielflow/chat-reply-worker` for provider-neutral event replies
+- `rielflow/chat-persona-router` for provider-neutral initial persona selection
 - `rielflow/codex-worker` and `rielflow/claude-code-worker` for reusable
   agent-backed worker nodes
 - `rielflow/x-gateway-read` for read-only x-gateway GraphQL inspection through
@@ -1179,10 +1180,13 @@ Initial scope:
 - `rielflow/` is reserved for runtime-provided add-ons; third-party add-ons use
   non-`rielflow/` names such as `vendor/name`
 
-The chat reply worker creates provider-neutral reply requests from
-`runtimeVariables.event` and dispatches them through the event reply adapter
-registry. Provider SDKs and credentials remain in the event layer, not in the
-workflow engine. Add-ons that need invocation-specific values use
+The chat persona router selects one initial responder from configured persona
+ids, display names, and aliases using provider-neutral chat text. It must not
+inspect Discord, Telegram, Matrix, or other raw provider payloads. The chat
+reply worker creates provider-neutral reply requests from `runtimeVariables.event`
+and dispatches them through the event reply adapter registry. Provider SDKs and
+credentials remain in the event layer, not in the workflow engine. Add-ons that
+need invocation-specific values use
 `addon.inputs`, and only descriptors that explicitly consume environment
 bindings accept `addon.env`. Host applications can pass add-on resolvers through
 workflow load, validation, save, and execution options to materialize
