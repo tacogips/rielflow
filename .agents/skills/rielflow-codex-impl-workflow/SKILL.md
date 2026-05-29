@@ -98,6 +98,18 @@ prompt into resumed user prompt text when the backend runner already appends
 while still forwarding the stable system prompt option. Verification should
 include the focused Codex and Cursor adapter tests and `bun run typecheck`.
 
+Built-in add-on package boundary issue-resolution runs should keep
+source-tree-versus-dist behavior explicit in design, implementation plans,
+tests, and user-facing docs. When `rielflow` executes from
+`packages/rielflow/src`, validation must resolve built-in `rielflow/*` add-ons
+from `packages/rielflow-addons/src/index.ts` before stale
+`packages/rielflow-addons/dist/index.js`; packaged or dist execution keeps built
+output first with source fallback for missing local development artifacts.
+Verification should include
+`bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`,
+`bun test packages/rielflow/src/workflow/validate.test.ts`, and
+`bun run typecheck`.
+
 ## Reporting
 
 After the workflow finishes, report:

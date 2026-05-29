@@ -317,6 +317,32 @@ Rules:
 - save/edit surfaces preserve the authored `addon` reference rather than writing
   generated node payload JSON
 
+### Built-in Add-on Package Boundary
+
+The `rielflow/*` add-on catalog is runtime-owned and resolved through the
+boundary package loader before workflow validation materializes add-on-backed
+nodes. Source-tree execution and packaged execution have different freshness
+constraints:
+
+- when `rielflow` is executing from `packages/rielflow/src`, the boundary loader
+  must prefer `packages/rielflow-addons/src/index.ts` for built-in add-on
+  resolution, because local development can add catalog entries before
+  `packages/rielflow-addons/dist/index.js` is rebuilt
+- when `rielflow` is executing from `packages/rielflow/dist` or a published
+  package layout, the loader may use `packages/rielflow-addons/dist/index.js`
+  first and fall back to source only for missing local development artifacts
+- an existing dist entrypoint is not sufficient evidence that the catalog is
+  fresh during source-tree validation; stale dist must not hide newly added
+  built-in add-ons such as `rielflow/workflow-package-sandbox-review`
+- third-party and scoped local add-on lookup remain outside this boundary:
+  `rielflow/` names are reserved for built-ins, and non-`rielflow/` names still
+  resolve through local add-on roots or host-provided resolvers
+
+Validation acceptance signal: `validateWorkflowBundleDetailedAsync` must resolve
+new source-tree built-in add-ons even when a stale
+`packages/rielflow-addons/dist/index.js` is present, while preserving installed
+package behavior that uses built artifacts.
+
 Initial built-in add-ons:
 
 - `rielflow/chat-reply-worker`: worker node that replies to the chat event target

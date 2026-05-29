@@ -111,6 +111,11 @@ typecheck commands for the workspace.
   satisfy Docker CLI requirements (`podman`, `docker`, and `nerdctl`). It
   depends inward on `rielflow-core`; core does not export native add-on
   execution or add-on registry construction.
+  During source-tree development, workflow validation resolves built-in
+  `rielflow/*` add-ons from `packages/rielflow-addons/src/index.ts` before any
+  stale `packages/rielflow-addons/dist/index.js` output. Packaged and dist
+  executions keep built output first, with source fallback for missing local
+  development artifacts.
 - `packages/rielflow` is the compatibility facade named `rielflow`; it preserves
   the current `import "rielflow"` library surface, `./cli` export, and CLI binary
   behavior. The `rielflow/cli` export is import-safe and exposes `runCli` without
@@ -514,6 +519,12 @@ results for loaded workflows, so CLI `workflow validate`, GraphQL
 `validateWorkflowDefinition`, submitted-bundle validation, and library detailed
 validation expose consistent add-on `nodeValidationResults` before any
 agent-backend preflight entries are appended.
+For built-in `rielflow/*` node add-ons, source-tree validation from
+`packages/rielflow/src` uses the add-ons package source entrypoint before built
+output so newly added built-ins, such as
+`rielflow/workflow-package-sandbox-review`, are visible even when local dist
+output is stale. Installed or bundled execution keeps the built add-ons package
+entrypoint first.
 
 Backend names are normalized through the core-owned constants and helpers
 exported from `rielflow-core` and re-exported by the `rielflow` compatibility

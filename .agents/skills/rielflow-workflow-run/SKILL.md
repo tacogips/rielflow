@@ -251,7 +251,7 @@ Remote-capable operations include `workflow run`, `session resume`, and `session
 
 ## Troubleshooting
 
-- If a workflow is not found, check `--workflow-definition-dir`, `DIVEDRA_WORKFLOW_DEFINITION_DIR`, and scope lookup.
+- If a workflow is not found, check `--workflow-definition-dir`, `RIEL_WORKFLOW_DEFINITION_DIR`, and scope lookup.
 - If an AI cannot tell how to call a workflow, run `workflow usage --output json` and inspect the description, compact `steps`, and callable input/output contract.
 - If validation fails, fix the workflow bundle before running; do not bypass schema errors for normal usage.
 - If a run fails, inspect `session status`, `session progress`, and GraphQL detail queries.

@@ -55,14 +55,14 @@ https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>
 <cwd>/.rielflow/workflows/<workflow-name>
 ```
 
-- `--project-root <path>` or `DIVEDRA_PROJECT_ROOT` can make the project scope explicit.
+- `--project-root <path>` or `RIEL_PROJECT_ROOT` can make the project scope explicit.
 - Add `--user-scope` to install under:
 
 ```text
 <user-root>/workflows/<workflow-name>
 ```
 
-- `--user-root <path>` or `DIVEDRA_USER_ROOT` can override the user root. The checkout registry is always written under the resolved user root, including project-scope checkouts.
+- `--user-root <path>` or `RIEL_USER_ROOT` can override the user root. The checkout registry is always written under the resolved user root, including project-scope checkouts.
 - Add `--workflow-definition-dir <path>` to bypass scoped workflow catalogs and install directly under:
 
 ```text

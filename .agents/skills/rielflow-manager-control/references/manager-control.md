@@ -8,12 +8,12 @@ Without `--endpoint`, it executes against the local in-process GraphQL schema
 using project-scoped workflow/session storage. Remote transport uses:
 
 1. `--endpoint`
-2. `DIVEDRA_GRAPHQL_ENDPOINT`
+2. `RIEL_GRAPHQL_ENDPOINT`
 
 Auth:
 
-- `Authorization: Bearer <token>` from `--auth-token` or `DIVEDRA_MANAGER_AUTH_TOKEN`
-- manager-session header from `DIVEDRA_MANAGER_SESSION_ID`
+- `Authorization: Bearer <token>` from `--auth-token` or `RIEL_MANAGER_AUTH_TOKEN`
+- manager-session header from `RIEL_MANAGER_SESSION_ID`
 
 ## Control Actions
 
