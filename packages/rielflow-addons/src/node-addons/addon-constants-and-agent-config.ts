@@ -63,6 +63,7 @@ export const CHAT_REPLY_WORKER_OUTPUT: NodeOutputContract = {
             additionalProperties: false,
             properties: {
               text: { type: "string", minLength: 1 },
+              replyAs: { type: "string", minLength: 1 },
             },
           },
           idempotencyKey: { type: "string", minLength: 1 },

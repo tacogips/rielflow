@@ -10,8 +10,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { AdapterExecutionError } from "./adapter";
+import { validateJsonValueAgainstSchema } from "./json-schema";
 import { executeNativeNode } from "./native-node-executor";
 import { ok } from "./result";
+import { CHAT_REPLY_WORKER_OUTPUT } from "../../../rielflow-addons/src/node-addons/addon-constants-and-agent-config";
 import type { SuperviserRuntimeControl } from "./superviser-control";
 import type { ChatReplyDispatchRequest } from "./types";
 
@@ -719,6 +721,12 @@ describe("executeNativeNode", () => {
         },
       },
     });
+    expect(
+      validateJsonValueAgainstSchema({
+        schema: CHAT_REPLY_WORKER_OUTPUT.jsonSchema ?? {},
+        value: output.payload,
+      }),
+    ).toEqual([]);
   });
 
   test("defaults command cwd to the workflow execution working directory", async () => {
