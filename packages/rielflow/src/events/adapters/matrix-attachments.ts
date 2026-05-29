@@ -11,6 +11,8 @@ const ATTACHMENT_MESSAGE_TYPES = new Set([
 const DEFAULT_ATTACHMENT_MAX_BYTES = 65_536;
 const MATRIX_ATTACHMENT_DOWNLOAD_HTTP_ERROR_CLASS =
   "MatrixAttachmentDownloadHttpError";
+const MATRIX_ATTACHMENT_INVALID_MEDIA_URL_ERROR_CLASS =
+  "MatrixAttachmentInvalidMediaUrl";
 
 export interface MatrixAttachmentInput extends JsonObject {
   readonly name: string;
@@ -134,16 +136,20 @@ export function readMatrixAttachmentMetadata(
     return null;
   }
   const info = isJsonObject(content["info"]) ? content["info"] : undefined;
+  const encryptedFile = isJsonObject(content["file"])
+    ? content["file"]
+    : undefined;
   const mimetype = optionalString(info?.["mimetype"]);
   const size = typeof info?.["size"] === "number" ? info["size"] : undefined;
-  const mediaUrl = optionalString(content["url"]);
+  const mediaUrl =
+    optionalString(content["url"]) ?? optionalString(encryptedFile?.["url"]);
   return {
     name,
     msgtype,
     ...(mediaUrl === undefined ? {} : { mediaUrl }),
     ...(mimetype === undefined ? {} : { mimetype }),
     ...(size === undefined ? {} : { size }),
-    ...(isJsonObject(content["file"]) ? { encrypted: true } : {}),
+    ...(encryptedFile === undefined ? {} : { encrypted: true }),
   };
 }
 
@@ -171,6 +177,16 @@ export async function downloadMatrixAttachmentText(input: {
     input.attachment.mediaUrl,
   );
   if (url === undefined) {
+    if (input.attachment.mediaUrl !== undefined) {
+      input.diagnosticSink?.({
+        sourceId: input.source.id,
+        errorClass: MATRIX_ATTACHMENT_INVALID_MEDIA_URL_ERROR_CLASS,
+      });
+      return {
+        ...input.attachment,
+        downloadError: MATRIX_ATTACHMENT_INVALID_MEDIA_URL_ERROR_CLASS,
+      };
+    }
     return input.attachment;
   }
   const maxBytes = attachmentMaxBytes(input.source);
@@ -179,7 +195,7 @@ export async function downloadMatrixAttachmentText(input: {
       method: "GET",
       headers: {
         authorization: `Bearer ${input.accessToken}`,
-        range: `bytes=0-${String(maxBytes)}`,
+        range: `bytes=0-${String(maxBytes - 1)}`,
       },
     });
     if (!response.ok) {
