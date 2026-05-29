@@ -6,7 +6,7 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in payload.replyText and selected persona in payload.persona."
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in replyText and selected persona in persona."
   },
   "entryStepId": "answer-persona-message",
   "nodes": [

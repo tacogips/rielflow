@@ -6,7 +6,7 @@
     "nodeTimeoutMs": 120000
   },
   "prompts": {
-    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in payload.replyText and avoid exposing internal workflow details."
+    "workerSystemPromptTemplate": "Return concise business JSON only. Keep the Discord reply text in replyText and avoid exposing internal workflow details."
   },
   "entryStepId": "answer-discord-message",
   "nodes": [

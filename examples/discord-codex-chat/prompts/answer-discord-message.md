@@ -23,7 +23,5 @@ Write a helpful, concise reply suitable for the same Discord thread.
 Return only JSON in this shape:
 
 {
-  "payload": {
-    "replyText": "message to send back to Discord"
-  }
+  "replyText": "message to send back to Discord"
 }

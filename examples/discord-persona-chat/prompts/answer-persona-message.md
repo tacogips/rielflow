@@ -22,8 +22,6 @@ internal workflow details, inboxes, transcripts, or implementation mechanics.
 Return only JSON in this shape:
 
 {
-  "payload": {
-    "persona": "mika",
-    "replyText": "message to send back to Discord"
-  }
+  "persona": "mika",
+  "replyText": "message to send back to Discord"
 }

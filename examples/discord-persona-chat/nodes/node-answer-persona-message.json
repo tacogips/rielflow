@@ -6,6 +6,6 @@
   "promptTemplateFile": "prompts/answer-persona-message.md",
   "variables": {},
   "output": {
-    "description": "Return JSON with payload.persona and payload.replyText."
+    "description": "Return JSON with persona and replyText fields."
   }
 }

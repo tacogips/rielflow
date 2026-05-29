@@ -6,6 +6,6 @@
   "promptTemplateFile": "prompts/answer-discord-message.md",
   "variables": {},
   "output": {
-    "description": "Return JSON with payload.replyText containing the exact Discord reply text to send."
+    "description": "Return JSON with replyText containing the exact Discord reply text to send."
   }
 }
