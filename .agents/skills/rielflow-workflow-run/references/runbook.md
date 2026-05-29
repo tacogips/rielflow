@@ -296,20 +296,20 @@ Important options:
 
 Important environment variables:
 
-- `DIVEDRA_WORKFLOW_DEFINITION_DIR`
-- `DIVEDRA_WORKFLOW_SCOPE`
-- `DIVEDRA_ARTIFACT_ROOT`
-- `DIVEDRA_SESSION_STORE`
-- `DIVEDRA_ARTIFACT_DIR`
-- `DIVEDRA_GRAPHQL_ENDPOINT`
-- `DIVEDRA_MANAGER_AUTH_TOKEN`
-- `DIVEDRA_MANAGER_SESSION_ID`
+- `RIEL_WORKFLOW_DEFINITION_DIR`
+- `RIEL_WORKFLOW_SCOPE`
+- `RIEL_ARTIFACT_ROOT`
+- `RIEL_SESSION_STORE`
+- `RIEL_ARTIFACT_DIR`
+- `RIEL_GRAPHQL_ENDPOINT`
+- `RIEL_MANAGER_AUTH_TOKEN`
+- `RIEL_MANAGER_SESSION_ID`
 
 Resolution priority for workflow definitions:
 
 1. `--workflow-definition-dir`
-2. `DIVEDRA_WORKFLOW_DEFINITION_DIR`
-3. `--scope` or `DIVEDRA_WORKFLOW_SCOPE`
+2. `RIEL_WORKFLOW_DEFINITION_DIR`
+3. `--scope` or `RIEL_WORKFLOW_SCOPE`
 4. scoped project/user catalog lookup
 
 ## Failure Triage
@@ -336,5 +336,5 @@ Remote execution fails:
 
 - Check `serve` is running.
 - Check `/healthz`.
-- Pass `--endpoint` explicitly or set `DIVEDRA_GRAPHQL_ENDPOINT`.
+- Pass `--endpoint` explicitly or set `RIEL_GRAPHQL_ENDPOINT`.
 - Do not use `--mock-scenario` with `--endpoint`.

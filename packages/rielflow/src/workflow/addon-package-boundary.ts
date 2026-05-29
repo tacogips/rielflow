@@ -38,6 +38,7 @@ export type AddonPackageLoader = () => Promise<AddonPackageModule>;
 interface BoundaryAddonPackageEntrypoints {
   readonly builtEntrypoint: URL;
   readonly sourceEntrypoint: URL;
+  readonly importOrder: readonly URL[];
 }
 
 interface BoundaryAsyncNodeAddonResolveInput
@@ -76,16 +77,26 @@ async function importAddonPackageEntrypoint(
 export function createBoundaryAddonPackageLoader(input: {
   readonly builtEntrypoint: URL;
   readonly sourceEntrypoint: URL;
+  readonly importOrder?: readonly URL[];
 }): AddonPackageLoader {
   return async () => {
-    try {
-      return await importAddonPackageEntrypoint(input.builtEntrypoint);
-    } catch (error: unknown) {
-      if (!isMissingPackageEntrypoint(error)) {
-        throw error;
+    const importOrder = input.importOrder ?? [
+      input.builtEntrypoint,
+      input.sourceEntrypoint,
+    ];
+
+    for (const [index, entrypoint] of importOrder.entries()) {
+      try {
+        return await importAddonPackageEntrypoint(entrypoint);
+      } catch (error: unknown) {
+        const isLastEntrypoint = index === importOrder.length - 1;
+        if (isLastEntrypoint || !isMissingPackageEntrypoint(error)) {
+          throw error;
+        }
       }
-      return await importAddonPackageEntrypoint(input.sourceEntrypoint);
     }
+
+    throw new Error("add-on package loader has no entrypoints");
   };
 }
 
@@ -93,17 +104,23 @@ export function resolveDefaultBoundaryAddonPackageEntrypoints(
   entrypointUrl: URL,
 ): BoundaryAddonPackageEntrypoints {
   const pathname = entrypointUrl.pathname.replaceAll("\\", "/");
+  const isSourceTreeEntrypoint = pathname.includes("/packages/rielflow/src/");
   const packageBaseUrl = pathname.includes("/packages/rielflow/dist/")
     ? new URL("../../rielflow-addons/", entrypointUrl)
-    : pathname.includes("/packages/rielflow/src/")
+    : isSourceTreeEntrypoint
       ? new URL("../../../rielflow-addons/", entrypointUrl)
       : pathname.includes("/dist/")
         ? new URL("../packages/rielflow-addons/", entrypointUrl)
         : new URL("packages/rielflow-addons/", entrypointUrl);
+  const builtEntrypoint = new URL("dist/index.js", packageBaseUrl);
+  const sourceEntrypoint = new URL("src/index.ts", packageBaseUrl);
 
   return {
-    builtEntrypoint: new URL("dist/index.js", packageBaseUrl),
-    sourceEntrypoint: new URL("src/index.ts", packageBaseUrl),
+    builtEntrypoint,
+    sourceEntrypoint,
+    importOrder: isSourceTreeEntrypoint
+      ? [sourceEntrypoint, builtEntrypoint]
+      : [builtEntrypoint, sourceEntrypoint],
   };
 }
 

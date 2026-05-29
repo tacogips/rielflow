@@ -104,6 +104,18 @@ directly affected example README such as `examples/README.md` or
 `examples/event-sources/README.md`, and workflow-local `EXPECTED_RESULTS.md`
 when deterministic fixtures, event payloads, or validation commands change.
 
+Built-in add-on package boundary issue-resolution runs should keep
+source-tree-versus-dist behavior explicit in design, implementation plans,
+tests, and user-facing docs. When `rielflow` executes from
+`packages/rielflow/src`, validation must resolve built-in `rielflow/*` add-ons
+from `packages/rielflow-addons/src/index.ts` before stale
+`packages/rielflow-addons/dist/index.js`; packaged or dist execution keeps built
+output first with source fallback for missing local development artifacts.
+Verification should include
+`bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`,
+`bun test packages/rielflow/src/workflow/validate.test.ts`, and
+`bun run typecheck`.
+
 ## Reporting
 
 After the workflow finishes, report:

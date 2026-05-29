@@ -6,6 +6,13 @@ import {
 } from "./addon-package-boundary";
 
 describe("add-on package boundary", () => {
+  const sourceModuleUrl = new URL(
+    'data:text/javascript,export const selected = "source";',
+  );
+  const builtModuleUrl = new URL(
+    'data:text/javascript,export const selected = "built";',
+  );
+
   test("falls back to the package source entrypoint before dist is built", async () => {
     const module = await loadBoundaryAddonPackage(
       createBoundaryAddonPackageLoader({
@@ -22,6 +29,52 @@ describe("add-on package boundary", () => {
 
     expect(typeof module["resolveNodeAddonPayloadAsync"]).toBe("function");
     expect(typeof module["executeNativeNode"]).toBe("function");
+  });
+
+  test("prefers source before built output for source-tree package entrypoints", async () => {
+    const entrypoints = resolveDefaultBoundaryAddonPackageEntrypoints(
+      new URL("addon-package-boundary.ts", import.meta.url),
+    );
+
+    expect(
+      entrypoints.importOrder.map((entrypoint) => entrypoint.pathname),
+    ).toEqual([
+      entrypoints.sourceEntrypoint.pathname,
+      entrypoints.builtEntrypoint.pathname,
+    ]);
+
+    const module = await loadBoundaryAddonPackage(
+      createBoundaryAddonPackageLoader({
+        builtEntrypoint: builtModuleUrl,
+        sourceEntrypoint: sourceModuleUrl,
+        importOrder: [sourceModuleUrl, builtModuleUrl],
+      }),
+    );
+
+    expect(module["selected"]).toBe("source");
+  });
+
+  test("prefers built output before source for bundled package entrypoints", async () => {
+    const entrypoints = resolveDefaultBoundaryAddonPackageEntrypoints(
+      new URL("../../dist/main.js", import.meta.url),
+    );
+
+    expect(
+      entrypoints.importOrder.map((entrypoint) => entrypoint.pathname),
+    ).toEqual([
+      entrypoints.builtEntrypoint.pathname,
+      entrypoints.sourceEntrypoint.pathname,
+    ]);
+
+    const module = await loadBoundaryAddonPackage(
+      createBoundaryAddonPackageLoader({
+        builtEntrypoint: builtModuleUrl,
+        sourceEntrypoint: sourceModuleUrl,
+        importOrder: [builtModuleUrl, sourceModuleUrl],
+      }),
+    );
+
+    expect(module["selected"]).toBe("built");
   });
 
   test("loads the add-ons package through an injected dev source resolver", async () => {

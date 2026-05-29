@@ -26,6 +26,20 @@ export interface ContinueWorkflowFromHistoryInput
   readonly nestedSuperviserDriver?: boolean;
 }
 
+export class ContinueWorkflowFromHistoryError extends Error {
+  readonly exitCode: number;
+  readonly sessionId?: string;
+
+  constructor(message: string, exitCode: number, sessionId?: string) {
+    super(message);
+    this.name = "ContinueWorkflowFromHistoryError";
+    this.exitCode = exitCode;
+    if (sessionId !== undefined) {
+      this.sessionId = sessionId;
+    }
+  }
+}
+
 export async function continueWorkflowFromHistory(
   input: ContinueWorkflowFromHistoryInput,
 ): Promise<{
@@ -53,7 +67,11 @@ export async function continueWorkflowFromHistory(
     continueStartStepId: input.startStepId,
   });
   if (!result.ok) {
-    throw new Error(result.error.message);
+    throw new ContinueWorkflowFromHistoryError(
+      result.error.message,
+      result.error.exitCode,
+      result.error.sessionId,
+    );
   }
   return {
     sessionId: result.value.session.sessionId,

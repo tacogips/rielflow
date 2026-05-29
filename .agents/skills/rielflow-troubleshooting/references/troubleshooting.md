@@ -5,8 +5,8 @@
 Check:
 
 - `<workflow-root>/<workflow-name>/workflow.json`
-- `--workflow-root`
-- `DIVEDRA_WORKFLOW_ROOT`
+- `--workflow-definition-dir`
+- `RIEL_WORKFLOW_DEFINITION_DIR`
 - `workflow list`
 - project/user scope shadowing
 
@@ -60,9 +60,9 @@ Check:
 
 - `--artifact-root`
 - `--session-store`
-- `DIVEDRA_ARTIFACT_ROOT`
-- `DIVEDRA_SESSION_STORE`
-- `DIVEDRA_ARTIFACT_DIR`
+- `RIEL_ARTIFACT_ROOT`
+- `RIEL_SESSION_STORE`
+- `RIEL_ARTIFACT_DIR`
 
 Use GraphQL detail queries for portable diagnostic snapshots, logs, and
 communication state.

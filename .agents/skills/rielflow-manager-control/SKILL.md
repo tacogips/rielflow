@@ -30,8 +30,8 @@ Read `references/manager-control.md` for auth, idempotency, attachments, and act
 ## Rules
 
 - Manager-scoped mutations require a manager session id and bearer auth token.
-- `DIVEDRA_MANAGER_SESSION_ID` is forwarded by `rielflow graphql`.
-- `DIVEDRA_MANAGER_AUTH_TOKEN` is the default auth token source.
+- `RIEL_MANAGER_SESSION_ID` is forwarded by `rielflow graphql`.
+- `RIEL_MANAGER_AUTH_TOKEN` is the default auth token source.
 - Use idempotency keys for manager mutations.
 - Do not mix GraphQL manager messages with payload `managerControl` in the same manager execution.
 - Use step ids for retry and optional-step actions; node-id action aliases are removed.

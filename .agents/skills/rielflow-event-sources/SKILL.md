@@ -43,6 +43,6 @@ Read `references/events-runbook.md` for event roots, local fixtures, receipts, a
 - Use `--event-root` explicitly unless the repository convention is obvious.
 - Use `--mock-scenario` for deterministic local event dispatch.
 - Do not combine local mock scenarios with remote `--endpoint`.
-- Use `DIVEDRA_EVENTS_READ_ONLY=true` or `--read-only` to validate and persist receipts without dispatch.
+- Use `RIEL_EVENTS_READ_ONLY=true` or `--read-only` to validate and persist receipts without dispatch.
 - Use `events list` and `events replay` for operator receipt workflows.
 - For `sequential-list`, inspect sequence metadata in normalized receipts; `events replay <receipt-id>` replays one persisted item and does not reset the sequence cursor.

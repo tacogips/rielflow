@@ -815,6 +815,7 @@ describe("package boundaries", () => {
         "packages/rielflow-addons/dist/node-addons/addon-constants-and-agent-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/addon-payload-resolution.d.ts",
         "packages/rielflow-addons/dist/node-addons/gateway-and-git-config.d.ts",
+        "packages/rielflow-addons/dist/node-addons/package-sanitize-review-config.d.ts",
         "packages/rielflow-addons/dist/runtime-readiness.d.ts",
       ].sort((a, b) => a.localeCompare(b)),
     );
@@ -976,6 +977,7 @@ describe("package boundaries", () => {
       "NODE_EXECUTION_BACKEND",
       "NODE_EXECUTION_BACKENDS",
       "NODE_EXECUTION_BACKEND_LIST_TEXT",
+      "NODE_REASONING_EFFORTS",
       "NODE_TEMPLATE_FIELD_SPECS",
       "NodeValidationResult",
       "SUPERVISION_STALL_ERROR_PREFIX",

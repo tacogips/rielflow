@@ -172,7 +172,7 @@ The default release asset URL base is:
 https://github.com/tacogips/rielflow/releases/download/v<version>
 ```
 
-Override `DIVEDRA_RELEASE_BASE_URL` only when the archives are hosted somewhere
+Override `RIEL_RELEASE_BASE_URL` only when the archives are hosted somewhere
 else.
 
 Review the rendered formula before committing:
@@ -252,7 +252,7 @@ Report back with:
 
 - Missing checksum: rebuild the missing target before rendering the formula.
 - Formula points at the wrong host: re-render with the intended
-  `DIVEDRA_RELEASE_BASE_URL`.
+  `RIEL_RELEASE_BASE_URL`.
 - Homebrew cannot fetch an asset: verify `gh release view` lists the exact
   archive name and that the release is public.
 - Formula audit complains about generated fields: inspect

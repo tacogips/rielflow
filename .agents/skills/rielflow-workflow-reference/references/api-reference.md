@@ -84,9 +84,9 @@ import { createWorkflowExecutionClient } from "rielflow";
 const client = createWorkflowExecutionClient({
   workflowName: "my-workflow",
   workflowRoot: "./examples",
-  endpoint: process.env.DIVEDRA_GRAPHQL_ENDPOINT,
-  authToken: process.env.DIVEDRA_MANAGER_AUTH_TOKEN,
-  managerSessionId: process.env.DIVEDRA_MANAGER_SESSION_ID,
+  endpoint: process.env.RIEL_GRAPHQL_ENDPOINT,
+  authToken: process.env.RIEL_MANAGER_AUTH_TOKEN,
+  managerSessionId: process.env.RIEL_MANAGER_SESSION_ID,
   env: process.env,
 });
 
@@ -189,8 +189,8 @@ const response = await executeGraphqlRequest({
   variables: {
     input: {},
   },
-  authToken: process.env.DIVEDRA_MANAGER_AUTH_TOKEN,
-  managerSessionId: process.env.DIVEDRA_MANAGER_SESSION_ID,
+  authToken: process.env.RIEL_MANAGER_AUTH_TOKEN,
+  managerSessionId: process.env.RIEL_MANAGER_SESSION_ID,
 });
 
 if (response.errors?.length) {
@@ -238,14 +238,14 @@ Endpoint resolution:
 
 Without `--endpoint`, the command executes in-process against local
 project-scoped workflow/session storage. Remote transport uses `--endpoint`,
-then `DIVEDRA_GRAPHQL_ENDPOINT`.
+then `RIEL_GRAPHQL_ENDPOINT`.
 3. `http://127.0.0.1:43173/graphql`
 
 Manager auth resolution:
 
 - `--auth-token`
-- `--auth-token-env`, defaulting to `DIVEDRA_MANAGER_AUTH_TOKEN`
-- `DIVEDRA_MANAGER_SESSION_ID` is forwarded as ambient manager session scope.
+- `--auth-token-env`, defaulting to `RIEL_MANAGER_AUTH_TOKEN`
+- `RIEL_MANAGER_SESSION_ID` is forwarded as ambient manager session scope.
 
 ## In-Process GraphQL
 
@@ -340,7 +340,7 @@ mutation SendManagerMessage($input: SendManagerMessageInput!) {
 ## File And Attachment Rules
 
 - GraphQL file/image parameters use data-root-relative paths.
-- Data-root-relative paths resolve under `DIVEDRA_ARTIFACT_DIR`.
+- Data-root-relative paths resolve under `RIEL_ARTIFACT_DIR`.
 - Manager attachments must stay inside `files/{workflowId}/{workflowExecutionId}/...`.
 - Attachment files must already exist before the GraphQL request.
 - There is no upload mutation in the current first-iteration API.

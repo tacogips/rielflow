@@ -111,6 +111,11 @@ typecheck commands for the workspace.
   satisfy Docker CLI requirements (`podman`, `docker`, and `nerdctl`). It
   depends inward on `rielflow-core`; core does not export native add-on
   execution or add-on registry construction.
+  During source-tree development, workflow validation resolves built-in
+  `rielflow/*` add-ons from `packages/rielflow-addons/src/index.ts` before any
+  stale `packages/rielflow-addons/dist/index.js` output. Packaged and dist
+  executions keep built output first, with source fallback for missing local
+  development artifacts.
 - `packages/rielflow` is the compatibility facade named `rielflow`; it preserves
   the current `import "rielflow"` library surface, `./cli` export, and CLI binary
   behavior. The `rielflow/cli` export is import-safe and exposes `runCli` without
@@ -300,6 +305,60 @@ destinations with `--user-scope`:
 bun run packages/rielflow/src/bin.ts workflow package checkout worker-only-single-step
 ```
 
+Run a registry workflow without installing it first by adding `--from-registry`
+to `workflow run`. The target can be an existing package id, including scoped
+package ids such as `@scope/name`, a GitHub workflow directory URL, or a
+registered shorthand like `<github-owner>/<workflow-dir>` when that shorthand
+resolves unambiguously through configured registries.
+Rielflow stages the workflow bundle in a command-owned temporary
+workflow-definition directory, runs the normal local workflow path, reports
+registry provenance in JSON output, and removes the temporary checkout after a
+terminal run or a pre-start failure:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run worker-only-single-step \
+  --from-registry \
+  --registry default \
+  --branch main \
+  --mock-scenario ./path/to/mock-scenario.json \
+  --output json
+```
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run \
+  https://github.com/<owner>/<repo>/tree/main/.rielflow/workflows/<workflow-name> \
+  --from-registry \
+  --output json
+```
+
+Branchless GitHub directory URLs, such as
+`https://github.com/<owner>/<repo>/.rielflow/workflows/<workflow-name>`, resolve
+the checkout ref from `--branch`, then a matching registered registry default
+branch, then the GitHub repository default branch.
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run <owner>/<workflow-dir> \
+  --from-registry \
+  --registry default \
+  --output json
+```
+
+Registry-backed runs are explicit and local-only: bare `workflow run <name>`
+never fetches from the registry, and `--from-registry` cannot be combined with
+`--endpoint`. Temporary runs validate package metadata, checksum/integrity, and
+the workflow bundle for package-backed targets. Raw GitHub directory URL runs
+validate the workflow bundle and report reduced `workflow-bundle-only`
+provenance because package checksum metadata may not exist. Temporary runs do
+not write normal checkout catalog records, mutate project/user catalogs, or
+install package skills. If a registry-backed run pauses or otherwise returns a
+non-terminal session status, rielflow keeps the temporary checkout in place,
+stores retained run provenance for the session, and reports skipped cleanup
+metadata so later local `session resume` or `session continue` operations can
+still read workflow-local files. Those lifecycle commands use the retained
+checkout automatically when no explicit `--workflow-definition-dir` is supplied
+and remove the retained checkout and provenance record after the resumed or
+continued execution reaches a terminal status.
+
 Package skills are accepted only under the package skill directory for the
 supported vendors and current vendor layouts:
 
@@ -460,6 +519,12 @@ results for loaded workflows, so CLI `workflow validate`, GraphQL
 `validateWorkflowDefinition`, submitted-bundle validation, and library detailed
 validation expose consistent add-on `nodeValidationResults` before any
 agent-backend preflight entries are appended.
+For built-in `rielflow/*` node add-ons, source-tree validation from
+`packages/rielflow/src` uses the add-ons package source entrypoint before built
+output so newly added built-ins, such as
+`rielflow/workflow-package-sandbox-review`, are visible even when local dist
+output is stale. Installed or bundled execution keeps the built add-ons package
+entrypoint first.
 
 Backend names are normalized through the core-owned constants and helpers
 exported from `rielflow-core` and re-exported by the `rielflow` compatibility

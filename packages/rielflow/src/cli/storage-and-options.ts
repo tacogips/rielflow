@@ -223,6 +223,15 @@ function storageOptionsForProjectScopeRoot(
     }),
   };
 }
+function storageOptionsForDirectWorkflowRoot(
+  options: CliStorageOptions,
+  workflowRoot: string,
+): CliStorageOptions {
+  return {
+    ...options,
+    rootDataDir: path.dirname(resolveCliPath(workflowRoot, process.cwd())),
+  };
+}
 export async function resolveSessionCommandStorageOptions(
   options: CliStorageOptions,
 ): Promise<CliStorageOptions> {
@@ -232,11 +241,21 @@ export async function resolveSessionCommandStorageOptions(
 
   const projectScopeRoot =
     await resolveProjectScopeRootForSessionCommand(options);
-  if (projectScopeRoot === undefined) {
-    return options;
+  if (projectScopeRoot !== undefined) {
+    return storageOptionsForProjectScopeRoot(options, projectScopeRoot);
   }
 
-  return storageOptionsForProjectScopeRoot(options, projectScopeRoot);
+  const env = options.env ?? process.env;
+  const configuredWorkflowRoot =
+    options.workflowRoot ?? env["RIEL_WORKFLOW_DEFINITION_DIR"];
+  if (
+    configuredWorkflowRoot !== undefined &&
+    configuredWorkflowRoot.length > 0
+  ) {
+    return storageOptionsForDirectWorkflowRoot(options, configuredWorkflowRoot);
+  }
+
+  return options;
 }
 
 export async function resolveWorkflowOverviewStorageOptions(
@@ -258,7 +277,7 @@ export async function resolveWorkflowOverviewStorageOptions(
       process.cwd(),
     );
     return projectScopeRoot === undefined
-      ? options
+      ? storageOptionsForDirectWorkflowRoot(options, configuredWorkflowRoot)
       : storageOptionsForProjectScopeRoot(options, projectScopeRoot);
   }
 
@@ -365,6 +384,7 @@ export interface ParsedOptions {
   readonly noPreInstallCheck: boolean;
   readonly preInstallCheckMode?: "warn" | "reject";
   readonly preInstallCheckContainer?: "docker" | "podman" | "auto";
+  readonly fromRegistry: boolean;
 }
 export interface ParsedArgs {
   readonly positionals: string[];

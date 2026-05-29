@@ -1,3 +1,5 @@
+import type { Result } from "../result";
+
 export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_ID = "default";
 export const DEFAULT_WORKFLOW_PACKAGE_REGISTRY_URL =
   "https://github.com/tacogips/rielflow-packages";
@@ -194,6 +196,102 @@ export interface WorkflowPackageFailure {
     | "USAGE"
     | "VALIDATION";
   readonly message: string;
+}
+
+export interface WorkflowPackageTemporaryRunCleanupResult {
+  readonly removed: boolean;
+  readonly temporaryRoot: string;
+  readonly remainingPaths: readonly string[];
+}
+
+export type RegistryRunTargetKind =
+  | "package-id"
+  | "github-directory-url"
+  | "registered-shorthand";
+
+export interface WorkflowPackageRunProvenance {
+  readonly originalTarget: string;
+  readonly packageId: string;
+  readonly workflowName: string;
+  readonly registryId: string;
+  readonly registryUrl: string;
+  readonly registryRef: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly metadataPath: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly integrityVerified: boolean;
+  readonly verification: "package-integrity";
+  readonly temporaryWorkflowDirectory: string;
+}
+
+export interface GitHubDirectoryRunProvenance {
+  readonly originalTarget: string;
+  readonly owner: string;
+  readonly repository: string;
+  readonly ref: string;
+  readonly directoryPath: string;
+  readonly sourceUrl: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly temporaryWorkflowDirectory: string;
+  readonly verification: "workflow-bundle-only";
+}
+
+export type WorkflowRegistryRunProvenance =
+  | {
+      readonly targetKind: "package-id" | "registered-shorthand";
+      readonly package: WorkflowPackageRunProvenance;
+    }
+  | {
+      readonly targetKind: "github-directory-url";
+      readonly github: GitHubDirectoryRunProvenance;
+    };
+
+export function workflowRegistryRunTemporaryWorkflowDirectory(
+  provenance: WorkflowRegistryRunProvenance,
+): string {
+  return provenance.targetKind === "github-directory-url"
+    ? provenance.github.temporaryWorkflowDirectory
+    : provenance.package.temporaryWorkflowDirectory;
+}
+
+export function workflowRegistryRunTextSummary(
+  provenance: WorkflowRegistryRunProvenance,
+): string {
+  if (provenance.targetKind === "github-directory-url") {
+    return `${provenance.github.originalTarget} ${provenance.github.sourceUrl}`;
+  }
+  return `${provenance.package.packageId} ${provenance.package.registryUrl}#${provenance.package.registryRef}`;
+}
+
+export interface RetainedRegistryRunProvenance {
+  readonly sessionId: string;
+  readonly retainedForStatus: "paused" | "running" | "waiting";
+  readonly temporaryWorkflowDirectory: string;
+  readonly retainedProvenancePath: string;
+  readonly cleanupOwner: "workflow-run" | "session-resume" | "session-continue";
+}
+
+export interface WorkflowPackageTemporaryRunCheckoutInput {
+  readonly target?: string;
+  readonly packageName?: string;
+  readonly registry?: string;
+  readonly branch?: string;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+  readonly fetchImpl?: typeof fetch;
+}
+
+export interface WorkflowPackageTemporaryRunCheckoutResult {
+  readonly targetKind: RegistryRunTargetKind;
+  readonly workflowName: string;
+  readonly workflowDefinitionDir: string;
+  readonly packageStagingDirectory: string;
+  readonly provenance: WorkflowRegistryRunProvenance;
+  cleanup(): Promise<
+    Result<WorkflowPackageTemporaryRunCleanupResult, WorkflowPackageFailure>
+  >;
 }
 
 export interface WorkflowPackageSkillSelection {
