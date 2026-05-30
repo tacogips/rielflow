@@ -3503,7 +3503,7 @@ describe("createGraphqlSchema", () => {
     expect(runWorkflowSpy).toHaveBeenCalled();
     const activeSessionId =
       dispatchPayload.supervisedRun.activeTargetExecutionId;
-    expect(activeSessionId).toMatch(/^div-demo-/);
+    expect(activeSessionId).toMatch(/^riel-demo-/);
     if (activeSessionId === undefined) {
       return;
     }
@@ -3605,7 +3605,7 @@ describe("createGraphqlSchema", () => {
       );
     const secondActiveSessionId =
       secondDispatchPayload.supervisedRun.activeTargetExecutionId;
-    expect(secondActiveSessionId).toMatch(/^div-demo-/);
+    expect(secondActiveSessionId).toMatch(/^riel-demo-/);
     if (secondActiveSessionId === undefined) {
       return;
     }

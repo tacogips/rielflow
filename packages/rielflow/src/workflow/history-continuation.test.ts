@@ -34,20 +34,20 @@ describe("history-continuation", () => {
   test("normalizes continuation metadata through JSON round-trip", () => {
     const session = normalizeSessionState({
       ...createSessionState({
-        sessionId: "div-wf-00000000-abc",
+        sessionId: "riel-wf-00000000-abc",
         workflowName: "demo",
         workflowId: "wf-1",
         initialNodeId: "step-1",
         runtimeVariables: {},
       }),
-      continuedFromWorkflowExecutionId: "div-src-00000000-src",
+      continuedFromWorkflowExecutionId: "riel-src-00000000-src",
       continuedAfterStepRunId: "exec-anchor",
       continuedAfterExecutionOrdinal: 2,
       continuedStartStepId: "step-2",
       continuationMode: "rerun-from-history",
       historyImports: [
         {
-          sourceWorkflowExecutionId: "div-src-00000000-src",
+          sourceWorkflowExecutionId: "riel-src-00000000-src",
           throughStepRunId: "exec-anchor",
           throughExecutionOrdinal: 2,
         },
@@ -57,7 +57,7 @@ describe("history-continuation", () => {
       JSON.parse(JSON.stringify(session)) as WorkflowSessionState,
     );
     expect(roundTrip.continuedFromWorkflowExecutionId).toBe(
-      "div-src-00000000-src",
+      "riel-src-00000000-src",
     );
     expect(roundTrip.historyImports).toEqual(session.historyImports);
     expect(roundTrip.continuationMode).toBe("rerun-from-history");
@@ -66,7 +66,7 @@ describe("history-continuation", () => {
   test("strips invalid history import rows while keeping valid segments", () => {
     const raw = {
       ...createSessionState({
-        sessionId: "div-wf-00000000-bad",
+        sessionId: "riel-wf-00000000-bad",
         workflowName: "demo",
         workflowId: "wf-1",
         initialNodeId: "step-1",
@@ -79,7 +79,7 @@ describe("history-continuation", () => {
           throughExecutionOrdinal: 1,
         },
         {
-          sourceWorkflowExecutionId: "div-src-00000000-ok",
+          sourceWorkflowExecutionId: "riel-src-00000000-ok",
           throughStepRunId: "exec-1",
           throughExecutionOrdinal: 1,
         },
@@ -88,7 +88,7 @@ describe("history-continuation", () => {
     const normalized = normalizeSessionState(raw);
     expect(normalized.historyImports).toEqual([
       {
-        sourceWorkflowExecutionId: "div-src-00000000-ok",
+        sourceWorkflowExecutionId: "riel-src-00000000-ok",
         throughStepRunId: "exec-1",
         throughExecutionOrdinal: 1,
       },
@@ -97,7 +97,7 @@ describe("history-continuation", () => {
 
   test("resolves a plain-source anchor and summarizes history imports", () => {
     const source = makeCompletedSession({
-      sessionId: "div-src-plain-00000001",
+      sessionId: "riel-src-plain-00000001",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -151,7 +151,7 @@ describe("history-continuation", () => {
 
   test("rejects non-terminal anchors", () => {
     const source = makeCompletedSession({
-      sessionId: "div-src-fail-00000002",
+      sessionId: "riel-src-fail-00000002",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -181,7 +181,7 @@ describe("history-continuation", () => {
 
   test("rejects unknown anchor step run ids", () => {
     const source = makeCompletedSession({
-      sessionId: "div-src-unknown-00000005",
+      sessionId: "riel-src-unknown-00000005",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -211,7 +211,7 @@ describe("history-continuation", () => {
 
   test("rejects ambiguous anchors when stepRunId repeats across merged owners", () => {
     const parent = makeCompletedSession({
-      sessionId: "div-parent-dup-exec-id",
+      sessionId: "riel-parent-dup-exec-id",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -227,7 +227,7 @@ describe("history-continuation", () => {
       nodeExecutionCounter: 1,
     });
     const child = makeCompletedSession({
-      sessionId: "div-child-dup-exec-id",
+      sessionId: "riel-child-dup-exec-id",
       historyImports: [
         {
           sourceWorkflowExecutionId: parent.sessionId,
@@ -267,7 +267,7 @@ describe("history-continuation", () => {
 
   test("rejects anchors when the workflow id does not match the expected bundle id", () => {
     const source = makeCompletedSession({
-      sessionId: "div-src-wf-mismatch-00000006",
+      sessionId: "riel-src-wf-mismatch-00000006",
       workflowId: "wf-other",
       nodeExecutions: [
         {
@@ -298,7 +298,7 @@ describe("history-continuation", () => {
 
   test("merges imported segments before local rows", () => {
     const upstream = makeCompletedSession({
-      sessionId: "div-upstream-00000003",
+      sessionId: "riel-upstream-00000003",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -314,7 +314,7 @@ describe("history-continuation", () => {
       nodeExecutionCounter: 1,
     });
     const continued = makeCompletedSession({
-      sessionId: "div-continued-00000004",
+      sessionId: "riel-continued-00000004",
       historyImports: [
         {
           sourceWorkflowExecutionId: upstream.sessionId,
@@ -356,7 +356,7 @@ describe("history-continuation", () => {
 
   test("deduplicates timeline rows when history import segments overlap", () => {
     const grandparent = makeCompletedSession({
-      sessionId: "div-gp-00000005",
+      sessionId: "riel-gp-00000005",
       nodeExecutions: [
         {
           nodeId: "step-1",
@@ -372,7 +372,7 @@ describe("history-continuation", () => {
       nodeExecutionCounter: 1,
     });
     const parent = makeCompletedSession({
-      sessionId: "div-par-00000006",
+      sessionId: "riel-par-00000006",
       historyImports: [
         {
           sourceWorkflowExecutionId: grandparent.sessionId,
@@ -395,7 +395,7 @@ describe("history-continuation", () => {
       nodeExecutionCounter: 1,
     });
     const child = makeCompletedSession({
-      sessionId: "div-ch-00000007",
+      sessionId: "riel-ch-00000007",
       historyImports: [
         {
           sourceWorkflowExecutionId: grandparent.sessionId,

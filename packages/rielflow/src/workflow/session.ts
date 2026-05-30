@@ -817,8 +817,8 @@ export function createSessionId(
     .slice(0, 8);
   const maxWorkflowSlugLength = Math.max(
     1,
-    128 - `div--${unixTime}-${hash}`.length,
+    128 - `riel--${unixTime}-${hash}`.length,
   );
   const safeWorkflowSlug = workflowSlug.slice(0, maxWorkflowSlugLength);
-  return `div-${safeWorkflowSlug}-${unixTime}-${hash}`;
+  return `riel-${safeWorkflowSlug}-${unixTime}-${hash}`;
 }

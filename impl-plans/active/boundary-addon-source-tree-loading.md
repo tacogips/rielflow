@@ -28,7 +28,7 @@ Workflow mode: `issue-resolution`
 Parent review workflow: `codex-recent-change-quality-loop`
 
 Parent review execution:
-`div-codex-recent-change-quality-loop-1780013847-84379cb0`
+`riel-codex-recent-change-quality-loop-1780013847-84379cb0`
 
 Blocking finding:
 `packages/rielflow/src/workflow/addon-package-boundary.ts:82` imports

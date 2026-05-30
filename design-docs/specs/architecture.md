@@ -1279,7 +1279,7 @@ engine-level schema, completion, and manager-control validation.
 #### Local Agent Prompt Splitting on Reused Sessions
 
 Issue-resolution handoff:
-`codex-recent-change-quality-loop/div-codex-recent-change-quality-loop-1779948622-fae615cb`
+`codex-recent-change-quality-loop/riel-codex-recent-change-quality-loop-1779948622-fae615cb`
 reported two mid-severity findings against
 `packages/rielflow-adapters/src/codex.ts` and
 `packages/rielflow-adapters/src/cursor.ts`: the backend-session reuse path sent

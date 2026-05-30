@@ -513,10 +513,10 @@ describe("buildWorkflowCatalogOverview", () => {
     const sessionStoreRoot = path.join(rootDataDir, "sessions");
     const baseOptions = { workflowRoot: root, rootDataDir, cwd: root };
     const staleSessionIds = [
-      "div-alpha-1777861733-fe70502e",
-      "div-alpha-1777861657-715d97aa",
-      "div-alpha-1777861530-89aee9e0",
-      "div-alpha-1777859505-fdeb86d3",
+      "riel-alpha-1777861733-fe70502e",
+      "riel-alpha-1777861657-715d97aa",
+      "riel-alpha-1777861530-89aee9e0",
+      "riel-alpha-1777859505-fdeb86d3",
     ] as const;
 
     for (const sessionId of staleSessionIds) {

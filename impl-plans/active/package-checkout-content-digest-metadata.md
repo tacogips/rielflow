@@ -27,7 +27,7 @@ checkout identity metadata. Package-root paths must not be recorded as checkout
 - Workflow ID: design-and-implement-review-loop
 - Parent workflow ID: recent-change-quality-loop
 - Parent workflow execution ID:
-  `div-recent-change-quality-loop-1779938481-5b0f9154`
+  `riel-recent-change-quality-loop-1779938481-5b0f9154`
 - Caller node ID: step3-handoff
 - Review finding: mid severity at
   `packages/rielflow/src/workflow/packages/checkout.ts:268`

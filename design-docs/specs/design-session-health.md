@@ -70,7 +70,7 @@ marking which sources were unavailable.
 
 ```json
 {
-  "sessionId": "div-review-...",
+  "sessionId": "riel-review-...",
   "workflowId": "review",
   "workflowName": "review",
   "status": "running",

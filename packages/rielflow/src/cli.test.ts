@@ -3133,7 +3133,7 @@ describe("runCli", () => {
     expect(created.ok).toBe(true);
     const rootDataDir = root;
     const sessionId =
-      "div-design-and-implement-review-loop-1777861733-fe70502e";
+      "riel-design-and-implement-review-loop-1777861733-fe70502e";
     const saved = await saveSession(
       {
         ...createSessionState({
@@ -3211,10 +3211,10 @@ describe("runCli", () => {
       userRoot,
     });
     const staleSessionIds = [
-      "div-design-and-implement-review-loop-1777861733-fe70502e",
-      "div-design-and-implement-review-loop-1777861657-715d97aa",
-      "div-design-and-implement-review-loop-1777861530-89aee9e0",
-      "div-design-and-implement-review-loop-1777859505-fdeb86d3",
+      "riel-design-and-implement-review-loop-1777861733-fe70502e",
+      "riel-design-and-implement-review-loop-1777861657-715d97aa",
+      "riel-design-and-implement-review-loop-1777861530-89aee9e0",
+      "riel-design-and-implement-review-loop-1777859505-fdeb86d3",
     ] as const;
 
     for (const [index, sessionId] of staleSessionIds.entries()) {
@@ -8533,7 +8533,7 @@ describe("runCli", () => {
       expect(code).toBe(0);
       expect(capture.stderr).toEqual([]);
       expect(payload.receipts[0]?.status).toBe("dispatched");
-      expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^div-demo-/);
+      expect(payload.receipts[0]?.workflowExecutionId).toMatch(/^riel-demo-/);
       expect(fetchImpl).not.toHaveBeenCalled();
     });
   });
