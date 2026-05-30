@@ -1,5 +1,6 @@
 export * from "./cache";
 export * from "./checkout";
+export * from "./checkout-records";
 export * from "./checksum";
 export * from "./integrity";
 export * from "./manifest";

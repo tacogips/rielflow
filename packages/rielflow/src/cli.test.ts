@@ -1315,16 +1315,26 @@ describe("runCli", () => {
     await mkdir(path.join(packageRoot, "cli-flow", "scripts"), {
       recursive: true,
     });
-    await mkdir(path.join(packageRoot, "cli-flow", "skills", "cli-skill"), {
-      recursive: true,
-    });
+    await mkdir(
+      path.join(packageRoot, "cli-flow", "skills", "codex", "cli-skill"),
+      {
+        recursive: true,
+      },
+    );
     await writeFile(
       path.join(packageRoot, "cli-flow", "scripts", "preflight.sh"),
       "#!/usr/bin/env bash\nprintf 'cli preflight\\n'\n",
       "utf8",
     );
     await writeFile(
-      path.join(packageRoot, "cli-flow", "skills", "cli-skill", "SKILL.md"),
+      path.join(
+        packageRoot,
+        "cli-flow",
+        "skills",
+        "codex",
+        "cli-skill",
+        "SKILL.md",
+      ),
       "# CLI Skill\n\nUsed by package checkout CLI metadata tests.\n",
       "utf8",
     );
@@ -1346,6 +1356,7 @@ describe("runCli", () => {
           checksum: "pending",
           checksumAlgorithm: "md5",
           workflowDirectory: "cli-flow",
+          skillDirectory: "cli-flow/skills",
           backends: ["codex-agent"],
         },
         null,
@@ -1459,6 +1470,9 @@ describe("runCli", () => {
       contentDigest: string;
       includedFiles: readonly string[];
       installId: string;
+      destinationDirectory: string;
+      packageVersion: string;
+      packageHash: string;
     };
     expect(payload.packageId).toBe("cli-flow");
     expect(payload.registryUrl).toBe(
@@ -1471,11 +1485,48 @@ describe("runCli", () => {
         "workflow.json",
         "prompts/main-worker.md",
         "scripts/preflight.sh",
-        "skills/cli-skill/SKILL.md",
+        "skills/codex/cli-skill/SKILL.md",
       ]),
     );
     expect(payload.includedFiles).not.toContain(WORKFLOW_PACKAGE_MANIFEST_FILE);
     expect(payload.installId).toContain("package-");
+
+    const listCapture = createIoCapture();
+    const listCode = await runCli(
+      [
+        "package",
+        "list",
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      listCapture.io,
+      createCliDeps(),
+    );
+    expect(listCode).toBe(0);
+    const listed = JSON.parse(listCapture.stdout.join("\n")) as {
+      packages: readonly {
+        installId: string;
+        packageId: string;
+        packageVersion: string;
+        packageHash: string;
+        workflowName: string;
+        skills: readonly unknown[];
+      }[];
+    };
+    expect(listed.packages).toEqual([
+      expect.objectContaining({
+        installId: payload.installId,
+        packageId: "cli-flow",
+        packageVersion: "1.0.0",
+        packageHash: payload.packageHash,
+        workflowName: "cli-flow",
+      }),
+    ]);
+    expect(listed.packages[0]?.skills.length).toBeGreaterThan(0);
 
     const statusCapture = createIoCapture();
     const statusCode = await runCli(
@@ -1534,6 +1585,59 @@ describe("runCli", () => {
     );
     expect(updateCode).toBe(0);
     expect(updateCapture.stdout.join("\n")).toContain('"updated": false');
+
+    const removeCapture = createIoCapture();
+    const removeCode = await runCli(
+      [
+        "package",
+        "remove",
+        "--install-id",
+        payload.installId,
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      removeCapture.io,
+      createCliDeps(),
+    );
+    expect(removeCode).toBe(0);
+    const removed = JSON.parse(removeCapture.stdout.join("\n")) as {
+      installId: string;
+      removedPaths: readonly string[];
+    };
+    expect(removed.installId).toBe(payload.installId);
+    expect(removed.removedPaths).toEqual(
+      expect.arrayContaining([payload.destinationDirectory]),
+    );
+    await expect(
+      readFile(
+        path.join(payload.destinationDirectory, "workflow.json"),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+
+    const listAfterRemoveCapture = createIoCapture();
+    const listAfterRemoveCode = await runCli(
+      [
+        "package",
+        "list",
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      listAfterRemoveCapture.io,
+      createCliDeps(),
+    );
+    expect(listAfterRemoveCode).toBe(0);
+    expect(JSON.parse(listAfterRemoveCapture.stdout.join("\n"))).toEqual({
+      packages: [],
+    });
   });
 
   test("workflow run executes registry packages through temporary checkout", async () => {

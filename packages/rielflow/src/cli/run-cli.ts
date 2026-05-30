@@ -147,6 +147,12 @@ export async function runCli(
     target === undefined &&
     !(
       (scope === "workflow" && (command === "list" || command === "usage")) ||
+      (scope === "package" &&
+        (command === "list" ||
+          command === "status" ||
+          command === "update" ||
+          command === "remove" ||
+          command === "uninstall")) ||
       (scope === "publish" && command !== undefined)
     )
   ) {
@@ -158,11 +164,12 @@ export async function runCli(
   if (
     parsed.options.output === "table" &&
     !(
-      scope === "workflow" &&
-      (command === "list" ||
-        command === "status" ||
-        command === "search" ||
-        (command === "package" && target === "search"))
+      (scope === "workflow" &&
+        (command === "list" ||
+          command === "status" ||
+          command === "search" ||
+          (command === "package" && target === "search"))) ||
+      (scope === "package" && (command === "search" || command === "list"))
     )
   ) {
     io.stderr(
@@ -173,6 +180,22 @@ export async function runCli(
 
   if (scope === "workflow") {
     return runCliWorkflowScope(runCliContext);
+  }
+
+  if (scope === "package") {
+    const packageCommand = command === "checkout" ? "install" : command;
+    return runCliWorkflowPackageScope({
+      ...runCliContext,
+      scope: "workflow",
+      command: "package",
+      target: packageCommand,
+      positionals: [
+        "workflow",
+        "package",
+        packageCommand,
+        ...positionals.slice(2),
+      ],
+    });
   }
 
   if (scope === "publish") {

@@ -7,8 +7,8 @@ and context files.
 
 Workflow package checkout must support packages that contain both rielflow
 workflow bundles and vendor guidance assets. Packages separate runtime
-workflows from skill/context assets so checkout can validate, install, update,
-and remove each artifact type independently.
+workflows from skill/context assets so checkout can validate, install, list,
+update, and remove each artifact type independently.
 
 This feature owns the package skill layout and vendor format mapping. Adjacent
 package checkout, registry, integrity, command, and publish designs remain the
@@ -53,6 +53,8 @@ input title/body as the authoritative issue source for this workflow run.
   metadata so checkout can detect changed packages.
 - Support clean-install update behavior for changed package content while
   requiring confirmation by default.
+- Support package removal by deleting only recorded package-owned managed skill
+  files and projections.
 - Keep vendor guidance assets inert until projected; never execute bundled
   scripts during checkout validation.
 
@@ -67,6 +69,8 @@ input title/body as the authoritative issue source for this workflow run.
 - Installing MCP servers, browser extensions, plugins, or executable
   dependencies as part of skill projection.
 - Merging package content into existing hand-written vendor files.
+- Removing vendor files that are not listed as package-owned artifacts in
+  checkout metadata.
 
 ## Package Layout
 
@@ -240,6 +244,27 @@ Codex user-scope overrides are allowed only for explicitly configured and
 allowlisted roots; the implementation must still report the effective
 projection path in checkout metadata.
 
+## Skill Listing And Removal Metadata
+
+Package list output should expose installed skill records exactly as stored in
+checkout metadata. Each listed skill should include vendor, name, source path,
+managed path, projection path, projection status, version when available, hash
+or checksum, integrity fields, and install mode. List must not inspect vendor
+global state to infer extra skills; the checkout catalog is the source of
+truth.
+
+Package removal must treat recorded skill artifacts as an allow-list:
+
+- Managed skill copies under `.rielflow/managed` or `~/.rielflow-managed` may be
+  removed only when their paths are recorded for the selected install id.
+- Projected vendor files may be removed only when their paths are recorded for
+  the selected checkout record.
+- Managed-only skills are removed from managed storage and reported with
+  `projection.status: skipped` or equivalent in remove output.
+- Shared vendor directories, such as `.codex/skills` or `.claude/skills`, are
+  never removed as a whole; only the package-owned skill entry directory or file
+  may be removed.
+
 ## Checkout And Update Behavior
 
 Checkout extends the package install flow after package resolution:
@@ -304,6 +329,8 @@ Expected implementation verification:
 
 ```bash
 bun test packages/rielflow/src/workflow/packages/*.test.ts packages/rielflow/src/workflow/checkout/*.test.ts packages/rielflow/src/cli.test.ts
+bun run packages/rielflow/src/bin.ts package list --output json
+bun run packages/rielflow/src/bin.ts package remove --install-id <install-id> --output json
 bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --output json
 bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --user-scope --yes --output json
 git diff --check -- design-docs/specs/design-workflow-package-skills.md

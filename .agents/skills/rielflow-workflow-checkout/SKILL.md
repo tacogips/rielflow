@@ -9,6 +9,21 @@ metadata:
 
 Use this skill when the user wants to install, import, check out, replace, or troubleshoot a rielflow workflow bundle from GitHub with `workflow checkout`.
 
+When the target is a registry package id rather than a raw GitHub workflow
+directory URL, prefer the package lifecycle commands:
+
+```bash
+bun run packages/rielflow/src/bin.ts package install <package-id>
+bun run packages/rielflow/src/bin.ts package list
+bun run packages/rielflow/src/bin.ts package remove <workflow-name-or-package-id>
+```
+
+Use `package list --output json` to show installed package versions, package
+hashes/checksums, install ids, workflow destinations, and installed skill
+metadata. Use `package remove --install-id <install-id>` when multiple package
+records may match the same package or workflow name; removal deletes the
+recorded workflow install plus managed/projected package skills.
+
 For running, listing, validating, inspecting, or monitoring existing workflows, use `rielflow-workflow-run` instead.
 
 ## Command

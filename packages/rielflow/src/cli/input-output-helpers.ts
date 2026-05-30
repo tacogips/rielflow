@@ -49,6 +49,9 @@ export function printHelp(io: CliIo): void {
     "  rielflow cli workflow <create|checkout|registry|package|validate|inspect|usage|list|status|run> <name-or-url?> [options]",
   );
   io.stdout(
+    "  rielflow package <install|list|status|update|remove|search|registry|publish> [package-or-workflow] [options]",
+  );
+  io.stdout(
     "  rielflow cli workflow manifest validate [<manifest-path>] [--workflow-manifest <path>] [--executable] [--output json|text]",
   );
   io.stdout(
@@ -95,7 +98,7 @@ export function printHelp(io: CliIo): void {
   io.stdout("");
   io.stdout("Checkout options:");
   io.stdout(
-    "  workflow checkout <github-url>  Install a GitHub workflow directory into project scope",
+    "  workflow checkout <github-url>  Install a raw GitHub workflow directory into project scope",
   );
   io.stdout("  --user-scope   Install checkout under the user scope root");
   io.stdout(
@@ -106,6 +109,20 @@ export function printHelp(io: CliIo): void {
   );
   io.stdout("");
   io.stdout("Package options:");
+  io.stdout(
+    "  package install <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--yes] [--pre-install-check]",
+  );
+  io.stdout(
+    "  package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
+  );
+  io.stdout(
+    "  package registry add <id> --registry-url <url> [--local-path <path>] [--branch <name>]",
+  );
+  io.stdout("  package registry list [--output json|text]");
+  io.stdout("  package list [--scope project|user|auto] [--output json|text]");
+  io.stdout(
+    "  package remove <workflow-name>|--install-id <id> [--scope project|user|auto]",
+  );
   io.stdout("  workflow registry list [--output json|text]");
   io.stdout("  workflow package registry list [--output json|text]");
   io.stdout(
@@ -115,7 +132,7 @@ export function printHelp(io: CliIo): void {
     "  workflow package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
   );
   io.stdout(
-    "  workflow package checkout <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--yes] [--pre-install-check]",
+    "  workflow package install <package> (legacy alias: workflow package checkout <package>)",
   );
   io.stdout(
     "  workflow run <package> --from-registry [--registry <id-or-url>] [--branch <name>]",

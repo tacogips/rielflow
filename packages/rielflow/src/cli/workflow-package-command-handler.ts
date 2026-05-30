@@ -1,9 +1,11 @@
 import {
   checkoutWorkflowPackage,
   getWorkflowPackageCheckoutStatus,
+  listWorkflowPackageCheckouts,
   loadWorkflowPackageRegistryConfig,
   publishWorkflowPackage,
   registerWorkflowPackageRegistry,
+  removeWorkflowPackageCheckout,
   searchWorkflowPackages,
   updateWorkflowPackageCheckout,
 } from "../workflow/packages";
@@ -138,9 +140,52 @@ export async function runCliWorkflowPackageScope(
     return 0;
   }
 
-  if (packageCommand === "checkout") {
+  if (packageCommand === "list") {
+    if (packageTarget !== undefined) {
+      io.stderr("package list accepts no positional arguments");
+      return 2;
+    }
+    const scope =
+      parsed.options.userScope || parsed.options.workflowScope === "user"
+        ? "user"
+        : parsed.options.workflowScope === "project"
+          ? "project"
+          : undefined;
+    const listed = await listWorkflowPackageCheckouts({
+      ...(scope === undefined ? {} : { scope }),
+      options: packageOptions,
+    });
+    if (!listed.ok) {
+      io.stderr(`package list failed: ${listed.error.message}`);
+      return listed.error.code === "IO" ? 1 : 2;
+    }
+    if (parsed.options.output === "json") {
+      emitJson(io, listed.value);
+    } else {
+      for (const installedPackage of listed.value.packages) {
+        io.stdout(
+          [
+            installedPackage.installId,
+            installedPackage.packageId,
+            installedPackage.packageVersion ?? installedPackage.version ?? "",
+            installedPackage.packageHash ??
+              installedPackage.checksum ??
+              installedPackage.contentDigest ??
+              "",
+            installedPackage.workflowName,
+            installedPackage.scope,
+            String(installedPackage.skills.length),
+            installedPackage.destinationDirectory,
+          ].join("\t"),
+        );
+      }
+    }
+    return 0;
+  }
+
+  if (packageCommand === "checkout" || packageCommand === "install") {
     if (packageTarget === undefined) {
-      io.stderr("workflow package checkout requires a package name");
+      io.stderr(`package ${packageCommand} requires a package name`);
       return 2;
     }
     const checkedOut = await checkoutWorkflowPackage({
@@ -261,6 +306,48 @@ export async function runCliWorkflowPackageScope(
     return 0;
   }
 
+  if (packageCommand === "remove" || packageCommand === "uninstall") {
+    if (packageTarget === undefined && parsed.options.installId === undefined) {
+      io.stderr(
+        `package ${packageCommand} requires a workflow name or --install-id`,
+      );
+      return 2;
+    }
+    const scope =
+      parsed.options.userScope || parsed.options.workflowScope === "user"
+        ? "user"
+        : parsed.options.workflowScope === "project"
+          ? "project"
+          : undefined;
+    const removed = await removeWorkflowPackageCheckout({
+      ...(packageTarget === undefined ? {} : { workflowName: packageTarget }),
+      ...(parsed.options.installId === undefined
+        ? {}
+        : { installId: parsed.options.installId }),
+      ...(scope === undefined ? {} : { scope }),
+      options: packageOptions,
+    });
+    if (!removed.ok) {
+      io.stderr(`package ${packageCommand} failed: ${removed.error.message}`);
+      return removed.error.code === "IO" ? 1 : 2;
+    }
+    if (parsed.options.output === "json") {
+      emitJson(io, removed.value);
+    } else {
+      io.stdout(`removed package: ${removed.value.packageId}`);
+      io.stdout(`workflow: ${removed.value.workflowName}`);
+      io.stdout(`scope: ${removed.value.scope}`);
+      io.stdout(`installId: ${removed.value.installId}`);
+      io.stdout(`removed paths: ${String(removed.value.removedPaths.length)}`);
+      if (removed.value.skippedPaths.length > 0) {
+        io.stdout(
+          `skipped paths: ${String(removed.value.skippedPaths.length)}`,
+        );
+      }
+    }
+    return 0;
+  }
+
   if (packageCommand === "publish") {
     if (packageTarget === undefined) {
       io.stderr("workflow package publish requires a workflow directory");
@@ -311,7 +398,7 @@ export async function runCliWorkflowPackageScope(
   }
 
   io.stderr(
-    "workflow package supports: registry, search, checkout, status, update, publish",
+    "package supports: registry, search, install, checkout, list, status, update, remove, uninstall, publish",
   );
   return 2;
 }

@@ -1,15 +1,16 @@
 # Workflow Package CLI Commands
 
-Feature-local design for the user-facing rielflow workflow package command
-surface that ties registry registration, package search, checkout, publish,
-refresh, and metadata inspection together.
+Feature-local design for the user-facing rielflow package command surface that
+ties registry registration, package search, package install/list/remove,
+checkout compatibility, publish, refresh, and metadata inspection together.
 
 ## Overview
 
-Rielflow workflow packages are workflow bundle directories published through
-GitHub-backed registries. The command layer must expose package operations
-without breaking the existing workflow catalog and direct GitHub directory
-checkout behavior.
+Rielflow packages are installable bundles published through GitHub-backed
+registries. A package can contain workflows and vendor-scoped skill/context
+assets, so the command layer must expose package operations without implying
+that checkout only manages workflows. Existing workflow catalog commands and
+direct GitHub directory checkout behavior remain backward compatible.
 
 The default public registry is
 `https://github.com/tacogips/rielflow-packages`. The developer-local checkout for
@@ -29,26 +30,42 @@ for data contracts and implementation internals.
 - Workflow mode: `issue-resolution`
 - Implementation plan target:
   `impl-plans/active/workflow-package-commands.md`
+- Issue addendum: `workflowInput: Add package listing and removal for
+  checkout-installed workflows and skills`
 - Primary source touchpoints:
   - `packages/rielflow/src/cli.ts`
   - `packages/rielflow/src/cli/workflow-command-handler.ts`
+  - `packages/rielflow/src/cli/workflow-package-command-handler.ts`
+  - `packages/rielflow/src/cli/input-output-helpers.ts`
+  - `packages/rielflow/src/workflow/packages/checkout.ts`
+  - `packages/rielflow/src/workflow/packages/status.ts`
+  - `packages/rielflow/src/workflow/packages/skills.ts`
+  - `packages/rielflow/src/workflow/packages/types.ts`
   - `README.md`
 
 ## Command Map
 
-Package functionality should live under `workflow` unless the action is a
-top-level publish operation required by existing issue wording.
+Package lifecycle functionality should live under top-level `package` commands
+because package installs can include workflows and skills. Workflow-scoped
+commands remain for discovery, direct checkout compatibility, and existing
+script compatibility.
 
 Required command forms:
 
 ```bash
-rielflow workflow registry add <registry-url> [--name <alias>] [--branch <branch>] [--local-path <path>] [--output json|text]
+rielflow package install <package-id> [--registry <registry-url-or-alias>] [--branch <branch>] [--user-scope] [--workflow-definition-dir <path>] [--overwrite] [--yes] [--output json|text]
+rielflow package search [query] [--registry <registry-url-or-alias>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh] [--output table|json|text]
+rielflow package registry add <id> --registry-url <url> [--local-path <path>] [--branch <branch>] [--output json|text]
+rielflow package registry list [--output json|text]
+rielflow package list [--scope project|user|auto] [--workflow-definition-dir <path>] [--output json|text]
+rielflow package remove <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
 rielflow workflow registry list [--output json|text]
-rielflow workflow registry remove <registry-url-or-alias> [--output json|text]
-rielflow workflow registry refresh [<registry-url-or-alias>] [--branch <branch>] [--cache json|sqlite] [--output json|text]
-rielflow workflow search [query] [--registry <registry-url-or-alias>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh] [--cache json|sqlite] [--output table|json|text]
+rielflow workflow search [query] [--registry <registry-url-or-alias>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh] [--output table|json|text]
 rielflow workflow checkout <github-directory-url-or-package-id> [--registry <registry-url-or-alias>] [--branch <branch>] [--user-scope] [--overwrite] [--output json|text]
-rielflow workflow package show <package-id> [--registry <registry-url-or-alias>] [--branch <branch>] [--output json|text]
+rielflow workflow package checkout <package-id> [...]
+rielflow workflow package install <package-id> [...]
+rielflow workflow package list [...]
+rielflow workflow package remove <package-id-or-workflow-name> [...]
 rielflow publish <workflow-name-or-path> [--registry <registry-url>] [--registry-local-path <path>] [--branch <branch>] [--package-id <id>] [--source-workflow-dir <path>] [--message <text>] [--create-pr] [--pr-base <branch>] [--dry-run] [--output json|text]
 ```
 
@@ -56,6 +73,8 @@ Current compatibility command forms:
 
 ```bash
 rielflow workflow package registry list [--output json|text]
+rielflow workflow checkout <github-directory-url-or-package-id> [...]
+rielflow workflow package checkout <package-id> [...]
 ```
 
 The top-level `workflow registry list` form is the expected user-facing surface
@@ -87,15 +106,6 @@ output renderer. JSON output must include stable fields for automation:
 - `configPath`
 - `cacheRoot`
 
-`workflow registry remove` removes only user-configured records. It must reject
-removal of the implicit default registry unless the implementation introduces an
-explicit disable flag in a later design.
-
-`workflow registry refresh` updates registry metadata and search cache for the
-selected registry or all enabled registries. It should use the registry
-metadata/cache contract rather than duplicating index parsing in the command
-handler.
-
 ### Registry List Issue Addendum
 
 Issue-resolution request: support `workflow registry list --output json` while
@@ -112,8 +122,9 @@ Behavioral boundary for this issue:
   list forms cannot drift in validation, config loading, default registry
   inclusion, or JSON rendering.
 - `workflow registry add`, `workflow registry remove`, and
-  `workflow registry refresh` remain part of the broader package-command design,
-  but this issue only requires the top-level `list` surface.
+  `workflow registry refresh` are not first-release workflow-scoped commands.
+  Registry mutation lives under `package registry add`; registry listing remains
+  available through both `package registry list` and `workflow registry list`.
 - Help and user-facing docs should mention `workflow registry list` as the
   expected discovery surface and may keep `workflow package registry list` as a
   compatibility form.
@@ -134,12 +145,85 @@ Search behavior:
 - JSON output includes package records, match metadata, cache metadata, and
   enough source information for a later checkout call
 
-`workflow package show` displays one normalized package record plus its manifest
-path, workflow directory, checksum, registry URL, branch/ref, and searchable
-metadata. It should resolve the package using the same resolver as checkout so
-ambiguous package identifiers fail consistently.
+## Package Lifecycle Commands
 
-## Checkout Command
+`package install` is the canonical command for persistent package installation.
+It calls the same installer as the compatibility checkout commands but renders
+package-oriented help, summaries, and JSON field names.
+
+Install behavior:
+
+- Package install targets resolve as package ids through the configured
+  registries. Raw GitHub directory URLs remain a direct workflow checkout
+  concern under `workflow checkout <github-url>`.
+- Project scope is the default installation destination.
+- `--user-scope` installs package workflows under `~/.rielflow/workflows` and
+  package-managed skill data under `~/.rielflow-managed`.
+- `--workflow-definition-dir` is allowed as a project-scope workflow
+  destination override; skill projection and package ownership checks still use
+  the current project root.
+- `--overwrite` permits replacing an existing package-owned install after
+  confirmation.
+- `--yes` bypasses overwrite/update confirmation for automation.
+
+`package list` reads the local checkout catalog only; it must not refresh
+registries or require network access. It lists package checkout records with
+enough metadata to make update, audit, and removal decisions without loading
+remote package contents.
+
+Required list JSON fields:
+
+- `installId`
+- `packageId`
+- `packageName`
+- `workflowName`
+- `scope`
+- `destinationDirectory`
+- `packageVersion`
+- `packageHash`
+- `checksum`
+- `checksumAlgorithm`
+- `integrityDigest`
+- `registryUrl`
+- `registryRef`
+- `checkoutRecordPath`
+- `skills`
+- `checkedOutAt`
+
+Text output should use compact columns for `INSTALL ID`, `PACKAGE`, `WORKFLOW`,
+`SCOPE`, `VERSION`, `HASH`, and `DESTINATION`. It may truncate long ids and
+hashes only in text output; JSON output must keep full values.
+
+`package remove` removes only package-owned artifacts recorded in checkout
+catalog metadata. It accepts `--install-id` as the exact selector. Without an
+install id, the selector may match package id, package name, or workflow name,
+then scope and project-root filters are applied. Ambiguous matches fail with a
+usage error and require retrying with `--install-id`. Missing records fail
+without mutating files.
+
+Removal behavior:
+
+- Removal reports the workflow destination, workflow-local provenance file,
+  checkout record, managed skill root, and projected skill files that were
+  deleted or already absent.
+- Removal deletes the catalog record only after package-owned workflow and
+  skill artifacts are deleted or confirmed absent.
+- Direct URL checkout records are not removed by `package remove` unless the
+  command explicitly identifies a package checkout record. The command should
+  report `not-package-checkout` for legacy direct records.
+
+Required remove JSON fields:
+
+- `installId`
+- `packageId`
+- `packageName`
+- `workflowName`
+- `scope`
+- `checkoutRecordPath`
+- `removedPaths`
+- `skippedPaths`
+
+## Checkout Compatibility Commands
 
 The existing command remains valid:
 
@@ -148,15 +232,18 @@ rielflow workflow checkout https://github.com/<owner>/<repo>/tree/<ref>/<workflo
 ```
 
 When the checkout target is not a GitHub directory URL, the command treats it as
-a package id and resolves it through the configured registries.
+a package id and resolves it through the configured registries. New help should
+present this as a compatibility path and direct users to `rielflow package
+install` for new package automation.
 
 Required checkout decisions:
 
 - project scope is the default installation destination
 - `--user-scope` installs under `~/.rielflow/workflows`
 - duplicate destinations fail unless `--overwrite` is set
-- `--workflow-definition-dir` remains incompatible with checkout because
-  checkout mutates managed project or user catalog roots
+- `--workflow-definition-dir` follows the package installer contract for
+  package targets and remains a workflow destination override, not a project
+  root override
 - `--endpoint` remains unsupported because checkout is a local filesystem write
 - direct GitHub directory checkout keeps the existing behavior and provenance
   record shape
@@ -202,6 +289,10 @@ applicable:
 - `workflowDirectory`
 - `checksum`
 - `checksumAlgorithm`
+- `installId`
+- `packageVersion`
+- `packageHash`
+- `skills`
 - `cache`
 - `provenancePath`
 
@@ -210,7 +301,9 @@ permission, or filesystem errors return exit code `1`. Successful dry-run
 publish returns exit code `0` and includes `dryRun: true` in JSON output.
 
 Errors must name the rejected command option and the relevant registry, package,
-or path. Ambiguous package resolution must include candidate package ids.
+install id, or path. Ambiguous package resolution must include candidate
+package ids. Ambiguous installed-package removal must include candidate install
+ids and destination directories.
 
 ## CLI Integration
 
@@ -240,8 +333,14 @@ provided the parser keeps returning the existing package-registry behavior for
 
 Help output and README examples must make these distinctions explicit:
 
+- `package install <package-id>` installs a registry package and is the
+  canonical package lifecycle command
+- `package list` lists locally installed package records without network access
+- `package remove` removes package-owned workflows and skills by install id or
+  unambiguous package/workflow selector
 - `workflow checkout <github-url>` installs a direct GitHub workflow directory
-- `workflow checkout <package-id>` installs a registry package
+- `workflow checkout <package-id>` remains a compatibility alias for package
+  install
 - `workflow search` searches package metadata, not session state
 - `rielflow publish` writes to a GitHub registry and may push or create a PR
 
@@ -249,8 +348,16 @@ Help output and README examples must make these distinctions explicit:
 
 - This feature id is `package-commands`; older wording that called the slice
   `package-cli-commands` is normalized to the fanout contract.
-- Package discovery commands are scoped under `workflow` because they install
-  and describe workflow bundles.
+- Package lifecycle commands are top-level `package` commands because packages
+  can include workflows and skills.
+- Workflow-scoped checkout commands remain backward-compatible aliases for
+  package installation and direct GitHub workflow checkout.
+- `package list` reads installed checkout records locally and never refreshes
+  remote registries.
+- `package remove` requires exact install-id targeting when a
+  package/workflow selector is ambiguous.
+- `package remove` deletes only package-owned artifacts recorded in the checkout
+  catalog for the selected install.
 - The canonical publish command is top-level `rielflow publish`, with optional
   `workflow publish` alias left to implementation convenience.
 - The default registry is implicit even when the user has not created a personal
@@ -264,7 +371,9 @@ Help output and README examples must make these distinctions explicit:
   resolution only for non-URL targets.
 - Checkout defaults to project scope and requires `--user-scope` for user
   catalog installation.
-- `--workflow-definition-dir` remains incompatible with checkout.
+- `--workflow-definition-dir` is allowed for package install and package
+  checkout as a workflow destination override, while remaining separate from
+  project-root selection for skill projection.
 - Search may use sqlite cache when available, but command correctness cannot
   depend on sqlite.
 - Checksums in command output include the algorithm, initially `md5`.
@@ -277,8 +386,9 @@ Help output and README examples must make these distinctions explicit:
   owner/repository names or only stored when the user supplies `--name`.
 - Whether `rielflow workflow publish` should be implemented as a documented
   alias in the first release or deferred until users ask for it.
-- Whether `workflow package show` should support an explicit `--version` option
-  later, or rely on branch/ref plus checksum for the first implementation.
+- Whether a future `package show` command should expose one normalized package
+  record plus manifest path, workflow directory, checksum, registry URL, and
+  searchable metadata.
 
 ## Risks
 

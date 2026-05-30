@@ -276,7 +276,7 @@ checkout. Registries are GitHub repositories recorded in
 `/Users/taco/gits/tacogips/rielflow-packages`. Register another registry with:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow package registry add personal \
+bun run packages/rielflow/src/bin.ts package registry add personal \
   --registry-url https://github.com/<owner>/<repo> \
   --local-path /path/to/local/clone
 ```
@@ -284,11 +284,12 @@ bun run packages/rielflow/src/bin.ts workflow package registry add personal \
 Display configured registries, including the built-in default registry, with:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow registry list --output json
+bun run packages/rielflow/src/bin.ts package registry list --output json
 ```
 
-The existing `workflow package registry list --output json` form remains
-available for compatibility.
+The existing `workflow registry list --output json` and
+`workflow package registry list --output json` forms remain available for
+compatibility.
 
 Each package contains `rielflow-package.json` plus a workflow bundle directory
 and may also contain a separate skill directory. The manifest stores package
@@ -302,17 +303,37 @@ Search reads registry metadata and uses the cache under
 `~/.rielflow/workflow-packages/cache` unless `--refresh` or `--no-cache` is set:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow package search review --refresh
+bun run packages/rielflow/src/bin.ts package search review --refresh
 ```
 
-Checkout installs a package workflow into project scope by default, or user
-scope with `--user-scope`. When `--workflow-definition-dir <path>` is supplied,
-package checkout writes the workflow directly to
+`package install` installs a package workflow into project scope by default, or
+user scope with `--user-scope`. When `--workflow-definition-dir <path>` is
+supplied, package install writes the workflow directly to
 `<path>/<workflow-name>`; do not combine direct workflow-definition
 destinations with `--user-scope`:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow package checkout worker-only-single-step
+bun run packages/rielflow/src/bin.ts package install worker-only-single-step
+```
+
+The older `workflow package checkout <package>` and `workflow checkout
+<package>` forms remain compatibility aliases for package install. Use
+`package list` to inspect locally installed packages without refreshing remote
+registries; output includes the install id, package/workflow names, scope,
+installed version, package hash/checksum, skill count, and destination:
+
+```bash
+bun run packages/rielflow/src/bin.ts package list
+bun run packages/rielflow/src/bin.ts package list --scope user --output json
+```
+
+Use `package remove` to remove an installed package workflow plus the managed
+and projected skills recorded in that install record. Prefer `--install-id`
+when multiple installs may share a package or workflow name:
+
+```bash
+bun run packages/rielflow/src/bin.ts package remove worker-only-single-step
+bun run packages/rielflow/src/bin.ts package remove --install-id <install-id>
 ```
 
 Run a registry workflow without installing it first by adding `--from-registry`
@@ -395,7 +416,7 @@ Add `--pre-install-check-container docker|podman|auto` to request an additional
 container inspection with network disabled and the staged package mounted
 read-only.
 
-Each successful package checkout persists a package record with the registry
+Each successful package install persists a package record with the registry
 URL/ref, workflow name, package version, package hash/checksum, integrity
 metadata, install id, destination, direct `--workflow-definition-dir` override
 when used, and installed skill metadata. Use status to compare the installed
@@ -405,9 +426,9 @@ mutating updates require `--yes`, while up-to-date updates return without
 rewriting files:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow package status worker-only-single-step
-bun run packages/rielflow/src/bin.ts workflow package update worker-only-single-step --yes
-bun run packages/rielflow/src/bin.ts workflow package status --install-id <install-id> --output json
+bun run packages/rielflow/src/bin.ts package status worker-only-single-step
+bun run packages/rielflow/src/bin.ts package update worker-only-single-step --yes
+bun run packages/rielflow/src/bin.ts package status --install-id <install-id> --output json
 ```
 
 Publish stages a workflow directory into the selected registry local clone,

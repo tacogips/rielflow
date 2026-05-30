@@ -1,17 +1,19 @@
 # Workflow And Skill Package Checkout Install
 
-Design for installing workflow packages that may contain both workflow bundles
-and vendor-scoped skills resolved from Git-backed rielflow package registries.
+Design for installing, listing, and removing workflow packages that may contain
+both workflow bundles and vendor-scoped skills resolved from Git-backed
+rielflow package registries.
 
 ## Overview
 
 The package checkout install feature extends the existing scoped workflow
 checkout implementation so `rielflow` can install package-selected workflow
 bundles and package-selected skills from a registry entry, not only from a
-direct GitHub directory URL. Package registries are GitHub repositories, with
-`https://github.com/tacogips/rielflow-packages` as the default public registry
-and `/Users/taco/gits/tacogips/rielflow-packages` as the local development
-checkout for that registry.
+direct GitHub directory URL. The package lifecycle also needs local listing and
+removal because installed package records can own both workflow files and
+projected or managed skill files. Package registries are GitHub repositories,
+with `https://github.com/tacogips/rielflow-packages` as the default public
+registry and an operator-provided local checkout path for development.
 
 This feature owns the install path after a package has been selected by package
 id, search result, or explicit registry filter. Registry configuration,
@@ -28,6 +30,8 @@ managed install record for both workflows and skills.
 - Workflow mode: `issue-resolution`
 - Issue reference: `workflowInput: Package workflows with vendor-scoped skills
   and checkout update metadata`
+- Issue addendum: `workflowInput: Add package listing and removal for
+  checkout-installed workflows and skills`
 - GitHub issue inspection: `https://github.com/tacogips/rielflow/issues/35`
   was inspected and found unrelated to this package checkout request; the
   workflow input title/body remain authoritative for this design update.
@@ -43,6 +47,10 @@ managed install record for both workflows and skills.
 
 - Install workflow bundles selected from registry package metadata.
 - Install whitelisted vendor skill/context entries from package metadata.
+- List locally installed package checkouts with version, hash, registry, scope,
+  destination, workflow, and skill metadata.
+- Remove installed package checkouts by install id or unambiguous
+  package/workflow selector.
 - Separate package workflow directories from package skill directories.
 - Preserve the current direct GitHub directory checkout compatibility path.
 - Default package checkout to project scope.
@@ -59,6 +67,8 @@ managed install record for both workflows and skills.
 - Keep installation deterministic by recording registry URL, branch/ref, source
   directory, package id, workflow name, installed skills, package integrity,
   version, and checksum.
+- Keep removal deterministic by deleting only package-owned artifacts recorded
+  in checkout metadata.
 - Detect changed package metadata after checkout and support clean-install
   update semantics.
 - Require confirmation before overwrite/update by default, with a noninteractive
@@ -77,6 +87,9 @@ managed install record for both workflows and skills.
 - Replacing direct URL checkout behavior.
 - Treating skill content as trusted merely because it came from a known vendor
   directory.
+- Removing arbitrary workflow directories or vendor skill files that are not
+  recorded as package-owned artifacts.
+- Refreshing remote registry metadata during local package listing.
 
 ## Package Layout
 
@@ -173,13 +186,19 @@ workflow, skill, or provenance write fails.
 
 ## Command Behavior
 
-The checkout command keeps the current direct URL form:
+The package installer is the canonical persistent install command:
+
+```bash
+rielflow package install <package-id> [--registry <registry-url-or-id>] [--branch <branch>] [--user-scope] [--workflow-definition-dir <path>] [--overwrite] [--yes] [--output json|text]
+```
+
+The checkout command keeps the current direct URL form as a compatibility path:
 
 ```bash
 rielflow cli workflow checkout https://github.com/<owner>/<repo>/tree/<ref>/<workflow-dir>
 ```
 
-Registry package checkout adds package targets:
+Registry package checkout compatibility adds package targets:
 
 ```bash
 rielflow cli workflow checkout <package-id> [--registry <registry-url-or-id>] [--branch <branch>] [--user-scope] [--overwrite] [--yes] [--output json|text]
@@ -191,6 +210,8 @@ Behavior:
   checkout path.
 - Otherwise treat the target as a package id and resolve it through selected
   registry metadata.
+- `package install` and workflow checkout compatibility commands share the same
+  installer and record format.
 - `--registry` restricts resolution to a registered registry id or GitHub URL.
 - `--branch` selects the registry branch/ref used for metadata and content.
 - Project scope is the default destination.
@@ -209,6 +230,17 @@ Behavior:
   first implementation because user scope already has a fixed workflow root.
 - `--endpoint` remains unsupported because package checkout is a local
   filesystem mutation.
+
+Local package lifecycle commands:
+
+```bash
+rielflow package list [--scope project|user|auto] [--workflow-definition-dir <path>] [--output json|text]
+rielflow package remove <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
+```
+
+`workflow package list` and `workflow package remove` may remain supported as
+compatibility aliases, but help and README content should direct new users to
+the top-level `package` commands.
 
 ## Direct Workflow Destination Override
 
@@ -307,7 +339,6 @@ provenance fields are:
 - `originalTarget`
 - `packageId`
 - `workflowName`
-- `registryId`
 - `registryUrl`
 - `registryRef`
 - `repositoryUrl`
@@ -499,10 +530,15 @@ destination directory, package id, and workflow name; legacy
 
 Additional package fields:
 
+- `checkoutKind`: `package`
+- `installId`
 - `packageId`
+- `packageName`
 - `version`
+- `packageVersion`
 - `registryUrl`
 - `registryRef`
+- `sourcePath`
 - `sourceDirectory`
 - `metadataPath`
 - `checksum`
@@ -511,6 +547,8 @@ Additional package fields:
 - `checkedOutAt`
 - `destinationDirectory`
 - `workflowDirectory`
+- `workflowDefinitionDirOverride`
+- `projectRootIdentity`
 - `managedSkillRoot`
 - `skills`
 - `packageHash`
@@ -519,6 +557,17 @@ Each skill record includes `vendor`, `name`, `sourcePath`, `managedPath`,
 `projectionPath`, `installMode`, and the copied entry checksum. The record is
 stored under the user root even for project-scope installs so users have one
 provenance catalog for all package checkouts.
+
+The checkout record fields for destination, managed skill root, and each
+installed skill's managed/projection path are the removal and clean-update
+source of truth.
+- `scope`
+- `destinationPath`
+- `sourcePath`
+- `checksum`
+- `checksumAlgorithm`
+- `contentDigestAlgorithm`
+- `contentDigest`
 
 ## Update Detection And Clean Install
 
@@ -566,7 +615,9 @@ updated: true|false
 
 JSON output should include:
 
+- `installId`
 - `packageId`
+- `packageName`
 - `workflowName`
 - `scope`
 - `destinationDirectory`
@@ -582,6 +633,84 @@ JSON output should include:
 - `skills`
 - `managedSkillRoot`
 - `packageHash`
+
+## Installed Package Listing
+
+Installed package listing reads checkout catalog records from
+`~/.rielflow/workflow-registry/checkouts/` and does not contact registries.
+This keeps list output fast, deterministic, and available offline. The listing
+service should expose all package checkout records by default and allow command
+filters for project scope, user scope, current project root identity, and
+`--workflow-definition-dir`.
+
+List must include package version and hash data from the installed record, not
+from current registry metadata. If a legacy package record lacks a field, JSON
+output should report `null` or omit the field consistently rather than
+refreshing the registry to backfill it.
+
+Required list result fields:
+
+- `installId`
+- `packageId`
+- `packageName`
+- `workflowName`
+- `scope`
+- `destinationDirectory`
+- `packageVersion`
+- `packageHash`
+- `checksum`
+- `checksumAlgorithm`
+- `integrityDigest`
+- `registryUrl`
+- `registryRef`
+- `checkoutRecordPath`
+- `skills`
+- `checkedOutAt`
+
+Text output should show at least install id, package id/name, workflow name,
+scope, version, hash/checksum, and destination. Long hashes may be shortened in
+text output only.
+
+## Package Removal
+
+Package removal is a local cleanup operation for checkout-installed packages.
+It must not remove remote registry records, source package files, or legacy
+direct URL checkouts unless the selected record has `checkoutKind: "package"`.
+
+Selector rules:
+
+- `--install-id` selects one exact checkout catalog record and bypasses
+  package/workflow name ambiguity.
+- Without `--install-id`, the positional selector may match `packageId`,
+  `packageName`, or `workflowName`.
+- Scope, project root identity, and workflow-definition-dir filters apply
+  before ambiguity checks.
+- Zero matches return a usage error without mutation.
+- Multiple matches return a usage error and require retrying with
+  `--install-id`.
+
+Deletion rules:
+
+- Use destination, provenance, managed skill, and skill projection paths from
+  the checkout record as the deletion allow-list.
+- Delete workflow-local `.rielflow-package-provenance.json` with the workflow
+  directory.
+- Delete the checkout catalog record only after package-owned artifacts are
+  deleted or already absent.
+
+Required remove JSON fields:
+
+- `installId`
+- `packageId`
+- `packageName`
+- `workflowName`
+- `scope`
+- `checkoutRecordPath`
+- `removedPaths`
+- `skippedPaths`
+
+Removal should tolerate absent package-owned paths so interrupted previous
+removals can be retried. Ambiguous selectors remain hard failures.
 
 ## Error Cases
 
@@ -601,6 +730,12 @@ Package checkout should surface explicit failure codes for:
 - update requires confirmation
 - unsafe skill projection
 - unsafe destination
+- ambiguous installed package selector
+- package checkout record not found
+- selected checkout is not a package checkout
+- removal confirmation required
+- package-owned artifact digest mismatch
+- unsafe package removal path
 - temporary run checkout failure
 - temporary run cleanup failure
 - unsupported endpoint with registry-backed run
@@ -611,8 +746,9 @@ has not changed.
 
 ## Decisions
 
-- Keep package checkout under `rielflow cli workflow checkout` rather than
-  adding a separate install command.
+- Add `rielflow package install` as the canonical package install command while
+  keeping `rielflow cli workflow checkout` and related workflow package checkout
+  forms as compatibility routes.
 - Detect direct GitHub directory URLs first to preserve current behavior.
 - Use `workflows/` and `skills/` as the package-level content separation.
 - Allow only `agents`, `claude`, `codex`, `cursor`, and `gemini` under package
@@ -626,6 +762,12 @@ has not changed.
   projection as a safe secondary copy.
 - Store package checkout provenance under
   `~/.rielflow/workflow-registry/checkouts/`.
+- Make `rielflow package install` the canonical package lifecycle command while
+  preserving workflow checkout commands for compatibility.
+- Make `rielflow package list` a local catalog read that reports installed
+  version and hash metadata without registry refresh.
+- Make `rielflow package remove` a checkout-record-driven deletion operation
+  that requires `--install-id` when selectors are ambiguous.
 - Require checksum verification when package metadata provides a checksum.
 - Persist registry URL, workflow name, package version, package hash/integrity,
   and installed skill entries for update detection.
@@ -672,6 +814,9 @@ Tracked in `design-docs/user-qa/qa-workflow-package-checkout.md`.
 - Package skill projection during temporary execution could unexpectedly mutate
   user or project vendor state, so the first implementation rejects that
   behavior.
+- Package removal can become destructive if records are incomplete or stale;
+  checkout-record-scoped deletion and install-id disambiguation are required
+  safeguards.
 
 ## Verification Commands
 
@@ -680,8 +825,12 @@ bun test packages/rielflow/src/workflow/packages/packages.test.ts
 bun test packages/rielflow/src/workflow/checkout/checkout.test.ts
 bun test packages/rielflow/src/workflow/packages/checkout.test.ts
 bun test packages/rielflow/src/cli.test.ts
+bun test packages/rielflow/src/cli.test.ts -t "package list"
+bun test packages/rielflow/src/cli.test.ts -t "package remove"
 bun test packages/rielflow/src/cli.test.ts -t "registry"
 bun run typecheck
+bun run packages/rielflow/src/bin.ts package list --output json
+bun run packages/rielflow/src/bin.ts package remove --install-id <install-id> --output json
 bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --mock-scenario <fixture> --output json
 bunx biome check packages/rielflow/src/workflow/packages packages/rielflow/src/cli
 git diff --check -- design-docs/specs/design-workflow-package-checkout.md design-docs/specs/design-workflow-package-skills.md design-docs/specs/design-workflow-package-update.md
