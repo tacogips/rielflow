@@ -9,6 +9,10 @@
     {
       "roomId": "!release:matrix.example",
       "alias": "#release:matrix.example"
+    },
+    {
+      "roomId": "!persona:matrix.example",
+      "alias": "#persona:matrix.example"
     }
   ],
   "sync": {
@@ -26,5 +30,16 @@
     "downloadText": true,
     "maxBytes": 65536,
     "allowedMimeTypes": ["text/plain", "text/markdown", "application/json"]
+  },
+  "replyBots": {
+    "yui": {
+      "accessTokenEnv": "RIEL_MATRIX_YUI_ACCESS_TOKEN"
+    },
+    "mika": {
+      "accessTokenEnv": "RIEL_MATRIX_MIKA_ACCESS_TOKEN"
+    },
+    "rina": {
+      "accessTokenEnv": "RIEL_MATRIX_RINA_ACCESS_TOKEN"
+    }
   }
 }

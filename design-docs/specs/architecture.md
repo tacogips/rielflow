@@ -1959,6 +1959,16 @@ reply-worker contracts used by the other chat event sources. Photo updates are
 exposed as deterministic attachment descriptors for workflows without storing
 bot credentials or downloading binary image content.
 
+The chat trio example contract applies to Discord, Telegram, and Matrix:
+`discord-agent-trio-chat`, `telegram-agent-trio-chat`, and
+`matrix-agent-trio-chat` should share the same provider-neutral graph shape
+with `rielflow/chat-persona-router`, Yui Codex, Mika Trend, Rina Cursor, and
+one `rielflow/chat-reply-worker` step per persona. Matrix trio parity uses the
+existing `matrix` event source and Matrix chat reply destination adapter rather
+than adding Matrix-specific workflow fields; optional Matrix `replyBots`
+select per-persona access-token env vars from `replyAsTemplate`. The smaller
+`matrix-chat-reply` example remains a reply-worker smoke fixture.
+
 ## References
 
 - `README.md`

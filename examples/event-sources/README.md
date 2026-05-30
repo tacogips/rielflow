@@ -50,6 +50,9 @@ or replying to real rooms:
 ```bash
 export RIEL_MATRIX_HOMESERVER_URL=https://matrix.example
 export RIEL_MATRIX_ACCESS_TOKEN=<matrix-bot-access-token>
+export RIEL_MATRIX_YUI_ACCESS_TOKEN=<matrix-yui-access-token>
+export RIEL_MATRIX_MIKA_ACCESS_TOKEN=<matrix-mika-access-token>
+export RIEL_MATRIX_RINA_ACCESS_TOKEN=<matrix-rina-access-token>
 ```
 
 For deterministic local receive tests, emit the checked-in Matrix room-message
@@ -66,7 +69,10 @@ rielflow events emit team-matrix \
 
 The binding `matrix-release-chat-to-workflow` runs the `matrix-chat-reply`
 workflow and sends workflow replies through the explicit
-`release-matrix-chat` chat destination. Matrix support currently
+`release-matrix-chat` chat destination. The binding
+`matrix-agent-trio-to-workflow` runs `matrix-agent-trio-chat` for the
+`!persona:matrix.example` room and sends Yui, Mika, or Rina replies through
+`matrix-persona-replies`. Matrix support currently
 handles text-like `m.room.message` events from configured rooms, optional
 bounded text-compatible attachment downloads, and Matrix Client-Server room
 sends; encrypted rooms, encrypted attachments, binary OCR, audio/video

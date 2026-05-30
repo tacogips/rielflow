@@ -55,8 +55,9 @@ Intentional divergences accepted in design:
 - Codex-agent and Cursor-agent adapters remain persona backends only; they do
   not own chat provider normalization, destination publishing, or reply target
   mapping.
-- Matrix parity means shared `rielflow/chat-reply-worker` destination behavior,
-  not mandatory trio persona routing.
+- Matrix parity now includes a dedicated `matrix-agent-trio-chat` workflow with
+  the same trio persona routing graph as Discord and Telegram. The smaller
+  `matrix-chat-reply` fixture remains a focused reply-worker smoke example.
 
 ## Modules
 
@@ -175,7 +176,8 @@ interface ChatWorkflowAuthoringSurface {
   readonly workflowName:
     | "discord-agent-trio-chat"
     | "telegram-agent-trio-chat"
-    | "matrix-chat-reply";
+    | "matrix-chat-reply"
+    | "matrix-agent-trio-chat";
   readonly inboundEventKind: "chat.message";
   readonly providerSpecificConfigLocation: ".rielflow-events";
   readonly providerSpecificPromptLogicAllowed: false;
@@ -187,7 +189,8 @@ interface ChatWorkflowAuthoringSurface {
 **Checklist**:
 
 - [x] Compare Discord and Telegram trio workflow graph shape
-- [x] Verify Matrix remains intentionally smaller while using shared reply flow
+- [x] Add `matrix-agent-trio-chat` for full trio parity while keeping
+      `matrix-chat-reply` as the smaller reply-only fixture
 - [x] Fix docs/examples only where provider-neutral authoring is unclear
 
 ### 5. Codex-agent Attachment Contract And Cursor Boundary

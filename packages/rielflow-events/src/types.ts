@@ -228,6 +228,10 @@ export interface MatrixAttachmentsConfig extends JsonObject {
   readonly allowedMimeTypes?: readonly string[];
 }
 
+export interface MatrixReplyBotConfig extends JsonObject {
+  readonly accessTokenEnv: string;
+}
+
 export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly kind: "matrix";
   readonly provider?: "matrix" | string;
@@ -239,6 +243,7 @@ export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly ignoreOwnMessages?: boolean;
   readonly history?: MatrixHistoryConfig;
   readonly attachments?: MatrixAttachmentsConfig;
+  readonly replyBots?: Readonly<Record<string, MatrixReplyBotConfig>>;
 }
 
 export interface S3RepositoryEventReceiverConfig extends JsonObject {

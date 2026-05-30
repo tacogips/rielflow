@@ -591,10 +591,20 @@ export async function dispatchMatrixChatReply(
     label: "homeserver URL",
     sourceId: input.source.id,
   });
+  const replyAs = input.request.message.replyAs;
+  const accessTokenEnv =
+    replyAs === undefined
+      ? input.source.accessTokenEnv
+      : (input.source.replyBots?.[replyAs]?.accessTokenEnv ??
+        input.source.accessTokenEnv);
   const accessToken = requiredEnv({
     env: input.env,
-    name: input.source.accessTokenEnv,
-    label: "access token",
+    name: accessTokenEnv,
+    label:
+      replyAs === undefined ||
+      input.source.replyBots?.[replyAs]?.accessTokenEnv === undefined
+        ? "access token"
+        : `reply bot '${replyAs}' access token`,
     sourceId: input.source.id,
   });
   const roomId = input.request.target.conversationId;

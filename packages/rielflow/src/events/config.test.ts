@@ -1362,6 +1362,11 @@ describe("event configuration", () => {
         maxBytes: 999999999,
         allowedMimeTypes: [],
       },
+      replyBots: {
+        "Bad Bot": {
+          accessTokenEnv: "not-loud-enough",
+        },
+      },
       ignoreOwnMessages: "yes",
     });
     await writeJson(
@@ -1409,6 +1414,8 @@ describe("event configuration", () => {
         "sources.bad-matrix.attachments.downloadText",
         "sources.bad-matrix.attachments.maxBytes",
         "sources.bad-matrix.attachments.allowedMimeTypes",
+        "sources.bad-matrix.replyBots.Bad Bot",
+        "sources.bad-matrix.replyBots.Bad Bot.accessTokenEnv",
         "sources.bad-matrix.ignoreOwnMessages",
         "sources.bad-matrix-attachments.attachments",
       ]),

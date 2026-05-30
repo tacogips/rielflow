@@ -61,6 +61,7 @@ export function validateMatrixSource(
   validateMatrixSync(source, issues);
   validateMatrixHistory(source, issues);
   validateMatrixAttachments(source, issues);
+  validateMatrixReplyBots(source, issues);
   if (
     source["ignoreOwnMessages"] !== undefined &&
     typeof source["ignoreOwnMessages"] !== "boolean"
@@ -70,6 +71,41 @@ export function validateMatrixSource(
         `sources.${source.id}.ignoreOwnMessages`,
         "ignoreOwnMessages must be a boolean when set",
       ),
+    );
+  }
+}
+
+function validateMatrixReplyBots(
+  source: EventSourceConfig,
+  issues: EventConfigValidationIssue[],
+): void {
+  const replyBots = source["replyBots"];
+  if (replyBots === undefined) {
+    return;
+  }
+  if (!isJsonObject(replyBots)) {
+    issues.push(error(`sources.${source.id}.replyBots`, "must be an object"));
+    return;
+  }
+  for (const [botId, config] of Object.entries(replyBots)) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(botId)) {
+      issues.push(
+        error(
+          `sources.${source.id}.replyBots.${botId}`,
+          "reply bot id must be lowercase alphanumeric or hyphenated",
+        ),
+      );
+    }
+    if (!isJsonObject(config)) {
+      issues.push(
+        error(`sources.${source.id}.replyBots.${botId}`, "must be an object"),
+      );
+      continue;
+    }
+    validateSecretEnvName(
+      config["accessTokenEnv"],
+      `sources.${source.id}.replyBots.${botId}.accessTokenEnv`,
+      issues,
     );
   }
 }

@@ -154,8 +154,18 @@ describe("matrix event source adapter", () => {
       kind: "matrix",
       homeserverUrlEnv: "RIEL_MATRIX_HOMESERVER_URL",
       accessTokenEnv: "RIEL_MATRIX_ACCESS_TOKEN",
-      rooms: [{ roomId: "!release:matrix.example" }],
+      replyBots: {
+        yui: { accessTokenEnv: "RIEL_MATRIX_YUI_ACCESS_TOKEN" },
+        mika: { accessTokenEnv: "RIEL_MATRIX_MIKA_ACCESS_TOKEN" },
+        rina: { accessTokenEnv: "RIEL_MATRIX_RINA_ACCESS_TOKEN" },
+      },
     });
+    expect(source["rooms"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ roomId: "!release:matrix.example" }),
+        expect.objectContaining({ roomId: "!persona:matrix.example" }),
+      ]),
+    );
     expect(binding).toMatchObject({
       id: "matrix-release-chat-to-workflow",
       sourceId: "team-matrix",
@@ -635,6 +645,42 @@ describe("matrix event source adapter", () => {
         is_falling_back: true,
         "m.in_reply_to": { event_id: "$event-1" },
       },
+    });
+  });
+
+  test("dispatches Matrix persona replies with reply bot access tokens", async () => {
+    const adapter = createMatrixEventSourceAdapter();
+    const calls: Array<{ readonly url: string; readonly init: RequestInit }> =
+      [];
+
+    const result = await adapter.dispatchChatReply?.({
+      source: matrixSource({
+        replyBots: { mika: { accessTokenEnv: "RIEL_MATRIX_MIKA_TOKEN" } },
+      }),
+      request: replyRequest({
+        message: { text: "Mika reply.", replyAs: "mika" },
+      }),
+      env: {
+        RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
+        RIEL_MATRIX_ACCESS_TOKEN: "default-token",
+        RIEL_MATRIX_MIKA_TOKEN: "mika-token",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return new Response(JSON.stringify({ event_id: "$mika-reply" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    expect(result?.providerMessageId).toBe("$mika-reply");
+    expect(calls[0]?.init.headers).toMatchObject({
+      authorization: "Bearer mika-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
+      body: "Mika reply.",
     });
   });
 

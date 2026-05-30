@@ -26,5 +26,15 @@
     "dedupeWindowMs": 86400000,
     "maxConcurrentPerKey": 1,
     "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}:{{event.conversation.threadId}}"
+  },
+  "taskPlanning": {
+    "enabled": false
+  },
+  "mailboxBridge": {
+    "output": {
+      "progress": {
+        "mode": "none"
+      }
+    }
   }
 }
