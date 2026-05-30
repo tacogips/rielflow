@@ -814,6 +814,7 @@ describe("package boundaries", () => {
         "packages/rielflow-addons/dist/node-addons.d.ts",
         "packages/rielflow-addons/dist/node-addons/addon-constants-and-agent-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/addon-payload-resolution.d.ts",
+        "packages/rielflow-addons/dist/node-addons/chat-persona-router-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/gateway-and-git-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/package-sanitize-review-config.d.ts",
         "packages/rielflow-addons/dist/runtime-readiness.d.ts",

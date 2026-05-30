@@ -297,7 +297,7 @@ describe("manual event emit", () => {
       tokenEnv: "RIEL_DISCORD_BOT_TOKEN",
       applicationIdEnv: "RIEL_DISCORD_APPLICATION_ID",
       channels: [{ id: "234567890123456789", includeThreads: true }],
-      history: { maxMessages: 2, maxBytes: 4096 },
+      history: { maxMessages: 2, maxBytes: 4096, maxAgeMs: 172800000 },
     });
     await writeJson(path.join(eventRoot, "bindings", "discord.json"), {
       id: "discord-gateway-demo",
