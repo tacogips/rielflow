@@ -1,0 +1,19 @@
+{
+  "room_id": "!persona:matrix.example",
+  "type": "m.room.message",
+  "event_id": "$persona-event-1",
+  "sender": "@alice:matrix.example",
+  "origin_server_ts": 1778641000000,
+  "content": {
+    "msgtype": "m.text",
+    "body": "Yui, give your opinion and ask Mika too.",
+    "formatted_body": "<p>Yui, give your opinion and ask Mika too.</p>",
+    "m.relates_to": {
+      "rel_type": "m.thread",
+      "event_id": "$persona-thread-root",
+      "m.in_reply_to": {
+        "event_id": "$persona-parent"
+      }
+    }
+  }
+}

@@ -20,6 +20,36 @@ describe("parseAgentToolVersionsOutput", () => {
     });
   });
 
+  test("marks cursor-cli-agent available with current tool versions array output", () => {
+    expect(
+      parseAgentToolVersionsOutput({
+        stdout: JSON.stringify({
+          packageVersion: "0.1.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "2026.05.24-dda726e",
+              status: "available",
+            },
+            {
+              name: "git",
+              command: "git",
+              version: "git version 2.53.0",
+              status: "available",
+            },
+          ],
+        }),
+        requiredTool: "cursor-agent",
+        agentLabel: "cursor-cli-agent",
+      }),
+    ).toEqual({
+      available: true,
+      commandSummary:
+        "agent=0.1.0, cursor-agent=2026.05.24-dda726e, git=git version 2.53.0",
+    });
+  });
+
   test("marks claude-code-agent unavailable when claude tool reports an error", () => {
     expect(
       parseAgentToolVersionsOutput({

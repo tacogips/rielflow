@@ -1,8 +1,16 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: Discord gateway still owns Gateway lifecycle, REST history, and reply dispatch; attachment handling was split separately.
 import { isJsonObject, type JsonObject } from "../../shared/json";
 import {
   chatReplyDispatchResultFromResponse,
   readOptionalChatReplyJson,
 } from "./chat-reply-response";
+import {
+  buildDiscordImageAttachments,
+  discordImagePathsFromAttachments,
+  readDiscordMessageAttachments,
+  resolveDiscordImageFiles,
+  type DiscordGatewayRawAttachment,
+} from "./discord-gateway-attachments";
 import {
   createDiscordGatewayHistoryPersistence,
   discordGatewayHistoryConfig as historyConfig,
@@ -62,6 +70,7 @@ interface DiscordMessage {
   readonly content: string;
   readonly timestamp?: string;
   readonly mentions: readonly string[];
+  readonly attachments: readonly DiscordGatewayRawAttachment[];
 }
 
 interface DiscordGatewayPayload {
@@ -167,6 +176,7 @@ function readMessageBody(body: unknown): DiscordMessage {
     content,
     ...(timestamp === undefined ? {} : { timestamp }),
     mentions: readMentionIds(message["mentions"]),
+    attachments: readDiscordMessageAttachments(message["attachments"]),
   };
 }
 
@@ -395,9 +405,14 @@ function shouldAcceptMessage(input: {
   return true;
 }
 
-export function normalizeDiscordGatewayRawEvent(
-  raw: RawExternalEvent,
-): ExternalEventEnvelope {
+function normalizeDiscordGatewayEvent(input: {
+  readonly raw: RawExternalEvent;
+  readonly files?: ReadonlyMap<
+    string,
+    { readonly localPath?: string; readonly contentRef?: string }
+  >;
+}): ExternalEventEnvelope {
+  const raw = input.raw;
   const source = sourceFromRaw(raw);
   const message = readMessageBody(raw.body);
   const conversation = conversationFor(message);
@@ -407,6 +422,18 @@ export function normalizeDiscordGatewayRawEvent(
     source,
     receivedAt: raw.receivedAt,
   });
+  const attachments = buildDiscordImageAttachments({
+    source,
+    attachments: message.attachments,
+    ...(input.files === undefined ? {} : { files: input.files }),
+  });
+  const imagePaths = discordImagePathsFromAttachments(attachments);
+  const text =
+    message.content.length > 0
+      ? message.content
+      : attachments.length > 0
+        ? "[Image attachment]"
+        : "";
   return {
     sourceId: source.id,
     eventId: message.id,
@@ -430,7 +457,14 @@ export function normalizeDiscordGatewayRawEvent(
     conversation,
     input: {
       provider: DISCORD_PROVIDER,
-      text: message.content,
+      text,
+      ...(attachments.length === 0
+        ? {}
+        : {
+            attachments,
+            attachmentText: message.content,
+            ...(imagePaths.length === 0 ? {} : { imagePaths }),
+          }),
       history,
       historySource: {
         mode: readDiscordGatewayHistorySourceMode(raw.body),
@@ -462,6 +496,32 @@ export function normalizeDiscordGatewayRawEvent(
       ? {}
       : { rawRef: { root: raw.rawRef.root, path: raw.rawRef.path } }),
   };
+}
+
+export function normalizeDiscordGatewayRawEvent(
+  raw: RawExternalEvent,
+): ExternalEventEnvelope {
+  return normalizeDiscordGatewayEvent({ raw });
+}
+
+async function normalizeOneDiscordGatewayRawEvent(
+  raw: RawExternalEvent,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ExternalEventEnvelope> {
+  const source = sourceFromRaw(raw);
+  const message = readMessageBody(raw.body);
+  const files = await resolveDiscordImageFiles({
+    source,
+    messageId: message.id,
+    attachments: message.attachments,
+    eventDataRoot: raw.eventDataRoot,
+    fetchImpl,
+    diagnosticSink: raw.diagnosticSink,
+  });
+  return normalizeDiscordGatewayEvent({
+    raw,
+    files,
+  });
 }
 
 function requiredEnv(input: {
@@ -652,6 +712,7 @@ async function seedHistoryOnStart(input: {
           author: { id: "" },
           content: "",
           mentions: [],
+          attachments: [],
         };
         const history = await fetchDiscordHistory({
           source: input.source,
@@ -916,12 +977,21 @@ export async function startDiscordGatewaySource(
                   history,
                   historySourceMode,
                 };
-            const eventEnvelope = normalizeDiscordGatewayRawEvent({
-              sourceId: source.id,
-              source,
-              receivedAt: input.now().toISOString(),
-              body: rawBody,
-            });
+            const eventEnvelope = await normalizeOneDiscordGatewayRawEvent(
+              {
+                sourceId: source.id,
+                source,
+                receivedAt: input.now().toISOString(),
+                body: rawBody,
+                ...(input.eventDataRoot === undefined
+                  ? {}
+                  : { eventDataRoot: input.eventDataRoot }),
+                ...(input.diagnosticSink === undefined
+                  ? {}
+                  : { diagnosticSink: input.diagnosticSink }),
+              },
+              fetchImpl,
+            );
             const currentItem = toHistoryItem(message, { ...message, id: "" });
             if (currentItem !== null) {
               const receivedAt = input.now().toISOString();
@@ -961,7 +1031,7 @@ export function createDiscordGatewayEventSourceAdapter(): EventSourceAdapter {
     },
     start: startDiscordGatewaySource,
     async normalize(raw) {
-      return normalizeDiscordGatewayRawEvent(raw);
+      return normalizeOneDiscordGatewayRawEvent(raw);
     },
     dispatchChatReply: dispatchDiscordGatewayReply,
   };

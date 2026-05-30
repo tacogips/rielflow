@@ -1165,6 +1165,7 @@ Initial scope:
   resolution during workflow load
 - no network resolution at workflow load time
 - `rielflow/chat-reply-worker` for provider-neutral event replies
+- `rielflow/chat-persona-router` for provider-neutral initial persona selection
 - `rielflow/codex-worker` and `rielflow/claude-code-worker` for reusable
   agent-backed worker nodes
 - `rielflow/x-gateway-read` for read-only x-gateway GraphQL inspection through
@@ -1179,10 +1180,13 @@ Initial scope:
 - `rielflow/` is reserved for runtime-provided add-ons; third-party add-ons use
   non-`rielflow/` names such as `vendor/name`
 
-The chat reply worker creates provider-neutral reply requests from
-`runtimeVariables.event` and dispatches them through the event reply adapter
-registry. Provider SDKs and credentials remain in the event layer, not in the
-workflow engine. Add-ons that need invocation-specific values use
+The chat persona router selects one initial responder from configured persona
+ids, display names, and aliases using provider-neutral chat text. It must not
+inspect Discord, Telegram, Matrix, or other raw provider payloads. The chat
+reply worker creates provider-neutral reply requests from `runtimeVariables.event`
+and dispatches them through the event reply adapter registry. Provider SDKs and
+credentials remain in the event layer, not in the workflow engine. Add-ons that
+need invocation-specific values use
 `addon.inputs`, and only descriptors that explicitly consume environment
 bindings accept `addon.env`. Host applications can pass add-on resolvers through
 workflow load, validation, save, and execution options to materialize
@@ -1926,14 +1930,11 @@ status with `docker compose -f compose.jaeger.yaml ps`, and confirm
 traces through the UI or Jaeger API where practical before cleanup with
 `docker compose -f compose.jaeger.yaml down`.
 
-Codex-agent reference mapping: Step 1 inspected
-`/Users/taco/gits/tacogips/codex-agent` and
-`/Users/taco/gits/tacogips/worktrees/codex-agent` for OpenTelemetry, OTEL,
-telemetry, trace, and Jaeger behavior. No relevant implementation was found in
-either reference root. The relative default `../../codex-agent` is not the
-effective reference root for this worktree; later planning should use the
-absolute paths above when citing the Codex-agent audit trail. Codex-agent
-therefore remains only the worker backend identity included in telemetry
+Codex-agent reference mapping: Step 1 inspected the sibling `codex-agent`
+checkout and its managed worktree for OpenTelemetry, OTEL, telemetry, trace,
+and Jaeger behavior. No relevant implementation was found in either reference
+root. Codex-agent therefore remains only the worker backend identity included
+in telemetry
 attributes such as `agent.backend = "codex-agent"`. No Codex-reference behavior
 is being copied, and Cursor CLI behavior remains isolated behind any existing
 Cursor adapter.
@@ -1945,6 +1946,28 @@ Cursor adapter.
 - some supporting materials still assume node-centric naming even though authored execution is step-addressed
 - some compatibility facades remain while package ownership continues to
   converge, but root source files are no longer an allowed compatibility layer
+
+## Telegram Gateway Agent Trio
+
+Detailed design: `design-docs/specs/design-telegram-gateway-agent-trio.md`.
+
+The `telegram-gateway` event source is the native Telegram counterpart to the
+Discord Gateway path. It uses Telegram Bot API polling and send APIs directly
+instead of routing through the generic Chat SDK boundary. Normalized Telegram
+messages share the `chat.message`, `replyTarget`, bounded history, and chat
+reply-worker contracts used by the other chat event sources. Photo updates are
+exposed as deterministic attachment descriptors for workflows without storing
+bot credentials or downloading binary image content.
+
+The chat trio example contract applies to Discord, Telegram, and Matrix:
+`discord-agent-trio-chat`, `telegram-agent-trio-chat`, and
+`matrix-agent-trio-chat` should share the same provider-neutral graph shape
+with `rielflow/chat-persona-router`, Yui Codex, Mika Trend, Rina Cursor, and
+one `rielflow/chat-reply-worker` step per persona. Matrix trio parity uses the
+existing `matrix` event source and Matrix chat reply destination adapter rather
+than adding Matrix-specific workflow fields; optional Matrix `replyBots`
+select per-persona access-token env vars from `replyAsTemplate`. The smaller
+`matrix-chat-reply` example remains a reply-worker smoke fixture.
 
 ## References
 

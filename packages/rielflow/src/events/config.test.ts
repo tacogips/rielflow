@@ -720,6 +720,175 @@ describe("event configuration", () => {
     );
   });
 
+  test("validates Telegram Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "telegram.json"), {
+      id: "telegram-gateway-personas",
+      kind: "telegram-gateway",
+      provider: "telegram",
+      tokenEnv: "RIEL_TELEGRAM_BOT_TOKEN",
+      botIdEnv: "RIEL_TELEGRAM_BOT_ID",
+      chats: [
+        {
+          id: "-1001234567890",
+          personas: ["yui", "mika", "rina"],
+        },
+      ],
+      polling: {
+        timeoutSeconds: 30,
+        limit: 100,
+        offsetPath: "telegram/telegram-gateway-personas-offset.json",
+      },
+      history: {
+        maxMessages: 20,
+        maxBytes: 32768,
+        maxAgeMs: 86400000,
+        scope: "chat",
+        includeBotMessages: false,
+      },
+      filters: {
+        ignoreBots: true,
+        ignoreSelf: true,
+      },
+      attachments: {
+        includePhotos: true,
+        resolveFilePaths: true,
+      },
+      replyBots: {
+        mika: { tokenEnv: "RIEL_TELEGRAM_MIKA_BOT_TOKEN" },
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "telegram.json"), {
+      id: "telegram-gateway-persona-replies",
+      kind: "chat",
+      sourceId: "telegram-gateway-personas",
+      target: {
+        provider: "telegram",
+        conversationId: "-1001234567890",
+      },
+    });
+    await writeJson(path.join(eventRoot, "bindings", "telegram.json"), {
+      id: "telegram-gateway-personas-to-demo",
+      sourceId: "telegram-gateway-personas",
+      outputDestinations: ["telegram-gateway-persona-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: {
+        mode: "template",
+        template: {
+          request: "{{event.input.text}}",
+          history: "{{event.input.history}}",
+          attachments: "{{event.input.attachments}}",
+        },
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
+  test("rejects malformed Telegram Gateway source configuration", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "bad-telegram.json"), {
+      id: "bad-telegram",
+      kind: "telegram-gateway",
+      provider: "discord",
+      tokenEnv: "telegram.token.literal",
+      botIdEnv: "telegram.bot.id",
+      chats: [
+        {
+          id: "chat-name",
+          personas: ["yui", ""],
+        },
+      ],
+      polling: {
+        timeoutSeconds: 99,
+        limit: 101,
+        offsetPath: "",
+      },
+      history: {
+        maxMessages: 1000,
+        maxBytes: 999999999,
+        maxAgeMs: 999999999999,
+        scope: "global",
+        includeBotMessages: "no",
+      },
+      filters: {
+        ignoreSelf: false,
+      },
+      attachments: {
+        includePhotos: "yes",
+        resolveFilePaths: "yes",
+      },
+      replyBots: {
+        "Bad Bot": { tokenEnv: "bad.token" },
+      },
+      restBaseUrl: "",
+    });
+    await writeJson(path.join(eventRoot, "destinations", "bad-telegram.json"), {
+      id: "bad-telegram-replies",
+      kind: "chat",
+      sourceId: "bad-telegram",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "bad-telegram.json"), {
+      id: "bad-telegram-to-demo",
+      sourceId: "bad-telegram",
+      outputDestinations: ["bad-telegram-replies"],
+      workflowName: "demo",
+      match: { eventType: "chat.message" },
+      inputMapping: { mode: "event-input" },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.issues.map((issue) => issue.path)).toEqual(
+      expect.arrayContaining([
+        "sources.bad-telegram.tokenEnv",
+        "sources.bad-telegram.botIdEnv",
+        "sources.bad-telegram.chats[0].id",
+        "sources.bad-telegram.chats[0].personas",
+        "sources.bad-telegram.polling.timeoutSeconds",
+        "sources.bad-telegram.polling.limit",
+        "sources.bad-telegram.polling.offsetPath",
+        "sources.bad-telegram.history.maxMessages",
+        "sources.bad-telegram.history.maxBytes",
+        "sources.bad-telegram.history.maxAgeMs",
+        "sources.bad-telegram.history.scope",
+        "sources.bad-telegram.history.includeBotMessages",
+        "sources.bad-telegram.filters.ignoreSelf",
+        "sources.bad-telegram.attachments.includePhotos",
+        "sources.bad-telegram.attachments.resolveFilePaths",
+        "sources.bad-telegram.replyBots.Bad Bot",
+        "sources.bad-telegram.replyBots.Bad Bot.tokenEnv",
+        "sources.bad-telegram.provider",
+        "sources.bad-telegram.restBaseUrl",
+      ]),
+    );
+  });
+
   test.each([
     "slack",
     "teams",
@@ -1193,6 +1362,11 @@ describe("event configuration", () => {
         maxBytes: 999999999,
         allowedMimeTypes: [],
       },
+      replyBots: {
+        "Bad Bot": {
+          accessTokenEnv: "not-loud-enough",
+        },
+      },
       ignoreOwnMessages: "yes",
     });
     await writeJson(
@@ -1240,6 +1414,8 @@ describe("event configuration", () => {
         "sources.bad-matrix.attachments.downloadText",
         "sources.bad-matrix.attachments.maxBytes",
         "sources.bad-matrix.attachments.allowedMimeTypes",
+        "sources.bad-matrix.replyBots.Bad Bot",
+        "sources.bad-matrix.replyBots.Bad Bot.accessTokenEnv",
         "sources.bad-matrix.ignoreOwnMessages",
         "sources.bad-matrix-attachments.attachments",
       ]),

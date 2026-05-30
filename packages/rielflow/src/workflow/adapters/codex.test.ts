@@ -231,6 +231,93 @@ describe("CodexAgentAdapter", () => {
     );
   });
 
+  test("merges node-level Codex passthrough args", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      additionalArgs: ["--skip-git-repo-check"],
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: {
+            codexAdditionalArgs: ["--ignore-rules"],
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        additionalArgs: ["--skip-git-repo-check", "--ignore-rules"],
+      }),
+    );
+  });
+
+  test("forwards image attachments discovered in workflow input", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        mergedVariables: {
+          workflowInput: {
+            attachments: [
+              {
+                kind: "image",
+                mediaType: "image/jpeg",
+                localPath: "/tmp/telegram-photo.jpg",
+              },
+            ],
+          },
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: ["/tmp/telegram-photo.jpg"],
+      }),
+    );
+  });
+
+  test("does not forward image attachments when node opts out", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+    });
+
+    await adapter.execute(
+      {
+        ...baseInput,
+        node: {
+          ...baseInput.node,
+          variables: {
+            forwardImageAttachments: false,
+          },
+        },
+        mergedVariables: {
+          imagePaths: ["/tmp/router-should-not-read-image.jpg"],
+        },
+      },
+      baseContext,
+    );
+
+    expect(fixture.startSession).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        images: ["/tmp/router-should-not-read-image.jpg"],
+      }),
+    );
+  });
+
   test("reuses backend sessions for local execution", async () => {
     const fixture = makeCodexRunnerFixture({
       sessionId: "backend-codex-1",

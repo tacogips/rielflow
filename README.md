@@ -37,7 +37,12 @@ flowchart TD
 - Start workflows with supervisor-backed execution by default; `--no-auto-improve` disables workflow patching but keeps deterministic supervision.
 - Start a local GraphQL control plane for remote execution and manager/control-plane operations.
 - Receive external events, replay event receipts, inspect reply dispatch records, and register chat-created workflow schedules.
-- Run built-in Discord Gateway chat ingestion with bounded channel or thread history for persona workflows, distinct from generic Chat SDK webhooks.
+- Run built-in Discord Gateway and Telegram Gateway chat ingestion with
+  bounded provider history for persona workflows, distinct from generic Chat
+  SDK webhooks.
+- Route provider-neutral chat persona workflows with the built-in
+  `rielflow/chat-persona-router` add-on and publish replies through
+  `rielflow/chat-reply-worker`.
 - Install shell hooks/snippets for Claude Code, Codex, and Gemini.
 
 ## Install
@@ -110,6 +115,10 @@ typecheck commands for the workspace.
   add-on execution helpers, including the package-owned
   `isContainerRunnerWithDockerCli` predicate for container runners that can
   satisfy Docker CLI requirements (`podman`, `docker`, and `nerdctl`). It
+  also owns provider-neutral chat add-ons such as
+  `rielflow/chat-persona-router` and `rielflow/chat-reply-worker`, so
+  Discord, Telegram, and Matrix workflows can keep persona routing and reply
+  publishing out of provider-specific prompt nodes.
   depends inward on `rielflow-core`; core does not export native add-on
   execution or add-on registry construction.
   During source-tree development, workflow validation resolves built-in
@@ -523,9 +532,10 @@ agent-backend preflight entries are appended.
 For built-in `rielflow/*` node add-ons, source-tree validation from
 `packages/rielflow/src` uses the add-ons package source entrypoint before built
 output so newly added built-ins, such as
-`rielflow/workflow-package-sandbox-review`, are visible even when local dist
-output is stale. Installed or bundled execution keeps the built add-ons package
-entrypoint first.
+`rielflow/workflow-package-sandbox-review` and
+`rielflow/chat-persona-router`, are visible even when local dist output is
+stale. Installed or bundled execution keeps the built add-ons package entrypoint
+first.
 
 Backend names are normalized through the core-owned constants and helpers
 exported from `rielflow-core` and re-exported by the `rielflow` compatibility
@@ -932,6 +942,21 @@ external Chat SDK Discord deployment. The first slice excludes sharding, slash
 commands, components, moderation events, and attachment ingestion; enable
 Discord Message Content intent when workflow prompts need message text.
 
+Telegram Gateway chat sources use `kind: "telegram-gateway"` for rielflow-owned
+Telegram Bot API ingestion. Configure bot credentials with env-var names such
+as `RIEL_TELEGRAM_BOT_TOKEN` and `RIEL_TELEGRAM_BOT_ID`, then optionally list
+the Telegram chats the runner should listen to. The adapter polls
+`getUpdates`, filters configured chats, ignores bot and self messages by
+default, normalizes accepted text and photo messages to `chat.message`, attaches
+bounded persisted chat history to `event.input.history`, and exposes Telegram
+photo descriptors through `event.input.attachments`. Replies use the same
+provider-neutral `rielflow/chat-reply-worker` destination boundary and are sent
+through Telegram `sendMessage`. Persisted Telegram history contains compact
+normalized chat items and bounds metadata, not bot tokens, raw Bot API payloads,
+workflow inboxes, or agent transcripts. This path is separate from the generic
+`chat-sdk-telegram` webhook path and does not require an external Chat SDK
+Telegram deployment.
+
 Chat SDK payloads may include deterministic attachment descriptors under
 `message.attachments[]`. Valid image and PDF descriptors are preserved as
 `event.input.attachments[]` with safe data-root-relative `contentRef` values,
@@ -1198,8 +1223,17 @@ Recommended starting points:
 - `chat-reply-webhook`: event-driven chat reply workflow using the built-in reply worker add-on.
 - `chat-event-attachment-judgement`: Chat SDK image/PDF attachment judgement
   workflow using deterministic descriptors and `codex-agent`.
-- `discord-persona-chat`: Discord Gateway persona replies with bounded channel or thread history.
-- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK Slack/Telegram, and Discord Gateway source fixtures.
+- `discord-agent-trio-chat`: Discord Gateway trio workflow using
+  `rielflow/chat-persona-router`, `codex-agent`, `claude-code-agent`,
+  `cursor-cli-agent`, and `rielflow/chat-reply-worker`.
+- `telegram-agent-trio-chat`: Telegram Gateway trio workflow with the same
+  provider-neutral persona routing and reply-worker shape as the Discord trio.
+- `matrix-chat-reply`: Matrix receive/send sample for the shared
+  `chat.message` and `rielflow/chat-reply-worker` contract.
+- `discord-persona-chat`: Discord Gateway persona replies with bounded channel
+  or thread history.
+- `event-sources`: includes webhook, cron, S3, Element/Matrix, Chat SDK
+  Slack/Telegram, Discord Gateway, and Telegram Gateway source fixtures.
 
 ## Repository Workflows
 

@@ -17,6 +17,7 @@ import {
   buildCombinedPromptText,
   buildLocalAdapterOutput,
   createWatchedLocalAgentSession,
+  resolveAdapterImagePaths,
   throwIfAborted,
   withProcessEnvOverride,
 } from "./local-agent";
@@ -38,6 +39,7 @@ interface CursorAgentRequest {
   readonly effort?: string;
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
+  readonly images?: readonly string[];
 }
 
 interface CursorAgentRunResult {
@@ -188,6 +190,7 @@ function resolveLocalSessionConfig(
   const promptText = buildCombinedPromptText(input);
   const cwd = config.cwd ?? input.workingDirectory;
   const streamMode: CursorAgentStreamMode = config.streamMode ?? "event";
+  const images = resolveAdapterImagePaths(input);
   const baseRequest: Omit<CursorAgentRequest, "prompt" | "sessionId"> = {
     cwd,
     ...(input.systemPromptText === undefined
@@ -196,6 +199,7 @@ function resolveLocalSessionConfig(
     model: input.node.model,
     ...(input.node.effort === undefined ? {} : { effort: input.node.effort }),
     ...(config.mode === undefined ? {} : { mode: config.mode }),
+    ...(images.length === 0 ? {} : { images }),
     streamMode,
   };
   return {

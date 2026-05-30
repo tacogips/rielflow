@@ -1,0 +1,9 @@
+{
+  "id": "matrix-persona-replies",
+  "kind": "chat",
+  "sourceId": "team-matrix",
+  "target": {
+    "provider": "matrix",
+    "conversationId": "!persona:matrix.example"
+  }
+}

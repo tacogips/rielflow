@@ -50,6 +50,9 @@ or replying to real rooms:
 ```bash
 export RIEL_MATRIX_HOMESERVER_URL=https://matrix.example
 export RIEL_MATRIX_ACCESS_TOKEN=<matrix-bot-access-token>
+export RIEL_MATRIX_YUI_ACCESS_TOKEN=<matrix-yui-access-token>
+export RIEL_MATRIX_MIKA_ACCESS_TOKEN=<matrix-mika-access-token>
+export RIEL_MATRIX_RINA_ACCESS_TOKEN=<matrix-rina-access-token>
 ```
 
 For deterministic local receive tests, emit the checked-in Matrix room-message
@@ -66,7 +69,10 @@ rielflow events emit team-matrix \
 
 The binding `matrix-release-chat-to-workflow` runs the `matrix-chat-reply`
 workflow and sends workflow replies through the explicit
-`release-matrix-chat` chat destination. Matrix support currently
+`release-matrix-chat` chat destination. The binding
+`matrix-agent-trio-to-workflow` runs `matrix-agent-trio-chat` for the
+`!persona:matrix.example` room and sends Yui, Mika, or Rina replies through
+`matrix-persona-replies`. Matrix support currently
 handles text-like `m.room.message` events from configured rooms, optional
 bounded text-compatible attachment downloads, and Matrix Client-Server room
 sends; encrypted rooms, encrypted attachments, binary OCR, audio/video
@@ -165,7 +171,8 @@ Discord thread through `rielflow/chat-reply-worker`.
 
 The companion binding `chat-sdk-discord-to-agent-trio` dispatches the
 `agent-trio-chat` Discord channel to `discord-agent-trio-chat`, where Yui Codex,
-Mika Trend, and Rina Cursor are routed as separate named personas. Use
+Mika Trend, and Rina Cursor are routed as separate named personas by
+`rielflow/chat-persona-router`. Use
 `examples/discord-agent-trio-chat/assets/icons/` as the Discord application icon
 source files for the three bot applications.
 
@@ -214,7 +221,7 @@ rielflow events serve --workflow-definition-dir ./examples --event-root ./exampl
 
 For deterministic local checks, emit the checked-in Gateway payload without
 contacting Discord. The payload includes bounded prior Discord history so the
-`discord-persona-chat` workflow can answer as Yui, Mika, or Rina with context:
+`discord-agent-trio-chat` workflow can answer as Yui, Mika, or Rina with context:
 
 ```bash
 rielflow events emit discord-gateway-personas \
@@ -236,6 +243,55 @@ coordination, slash commands, components, moderation events, or attachment
 ingestion. History is bounded by `maxMessages`, `maxBytes`, and `maxAgeMs`,
 and it is Discord channel/thread context rather than workflow inbox or agent
 transcript history.
+
+The `telegram-gateway-personas` source demonstrates rielflow-owned Telegram
+Bot API ingestion. It is separate from the `chat-sdk-telegram` generic webhook
+path and does not require an external Chat SDK Telegram deployment. The Gateway
+runner polls Telegram `getUpdates`, filters to configured chats when `chats` is
+set, ignores bot and self messages by default, attaches bounded persisted chat
+history to `event.input.history`, and sends workflow replies through Telegram
+`sendMessage`.
+
+Serve the Gateway source with a Telegram bot token and bot id. Add the bot to
+the configured Telegram chat before serving:
+
+```bash
+export RIEL_TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+export RIEL_TELEGRAM_BOT_ID=<telegram-bot-id>
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit the checked-in Telegram payload without
+contacting Telegram:
+
+```bash
+rielflow events emit telegram-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/telegram-gateway-message.json \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --output json
+```
+
+The photo fixture verifies image attachment metadata:
+
+```bash
+rielflow events emit telegram-gateway-personas \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/telegram-gateway-photo-message.json \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --output json
+```
+
+Telegram photo handling is metadata-only in this fixture. The adapter exposes
+the largest photo size as `event.input.attachments[0]` with dimensions,
+provider file ids, caption, and optional `getFile` path. It does not download
+image bytes, OCR images, transcribe media, process commands, or handle inline
+keyboard callbacks in this slice. Persisted history stores only bounded
+normalized chat items and never stores bot tokens.
 
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and

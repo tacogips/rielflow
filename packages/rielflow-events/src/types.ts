@@ -133,6 +133,12 @@ export interface DiscordGatewayReplyBotConfig extends JsonObject {
   readonly tokenEnv: string;
 }
 
+export interface DiscordGatewayAttachmentsConfig extends JsonObject {
+  readonly includeImages?: boolean;
+  readonly resolveFilePaths?: boolean;
+  readonly maxBytes?: number;
+}
+
 export interface DiscordGatewaySourceConfig extends EventSourceConfigBase {
   readonly kind: "discord-gateway";
   readonly provider?: "discord";
@@ -142,10 +148,59 @@ export interface DiscordGatewaySourceConfig extends EventSourceConfigBase {
   readonly channels: readonly DiscordGatewayChannelConfig[];
   readonly history?: DiscordGatewayHistoryConfig;
   readonly filters?: DiscordGatewayFiltersConfig;
+  readonly attachments?: DiscordGatewayAttachmentsConfig;
   readonly replyBots?: Readonly<Record<string, DiscordGatewayReplyBotConfig>>;
   readonly gatewayUrl?: string;
   readonly restBaseUrl?: string;
   readonly intents?: number;
+  readonly configFilePath?: string;
+}
+
+export interface TelegramGatewayChatConfig extends JsonObject {
+  readonly id: string;
+  readonly personas?: readonly string[];
+}
+
+export interface TelegramGatewayPollingConfig extends JsonObject {
+  readonly timeoutSeconds?: number;
+  readonly limit?: number;
+  readonly offsetPath?: string;
+}
+
+export interface TelegramGatewayHistoryConfig extends JsonObject {
+  readonly maxMessages?: number;
+  readonly maxBytes?: number;
+  readonly maxAgeMs?: number;
+  readonly scope?: "chat";
+  readonly includeBotMessages?: boolean;
+}
+
+export interface TelegramGatewayFiltersConfig extends JsonObject {
+  readonly ignoreBots?: boolean;
+  readonly ignoreSelf?: boolean;
+}
+
+export interface TelegramGatewayAttachmentsConfig extends JsonObject {
+  readonly includePhotos?: boolean;
+  readonly resolveFilePaths?: boolean;
+}
+
+export interface TelegramGatewayReplyBotConfig extends JsonObject {
+  readonly tokenEnv: string;
+}
+
+export interface TelegramGatewaySourceConfig extends EventSourceConfigBase {
+  readonly kind: "telegram-gateway";
+  readonly provider?: "telegram";
+  readonly tokenEnv: string;
+  readonly botIdEnv?: string;
+  readonly chats?: readonly TelegramGatewayChatConfig[];
+  readonly polling?: TelegramGatewayPollingConfig;
+  readonly history?: TelegramGatewayHistoryConfig;
+  readonly filters?: TelegramGatewayFiltersConfig;
+  readonly attachments?: TelegramGatewayAttachmentsConfig;
+  readonly replyBots?: Readonly<Record<string, TelegramGatewayReplyBotConfig>>;
+  readonly restBaseUrl?: string;
   readonly configFilePath?: string;
 }
 
@@ -173,6 +228,10 @@ export interface MatrixAttachmentsConfig extends JsonObject {
   readonly allowedMimeTypes?: readonly string[];
 }
 
+export interface MatrixReplyBotConfig extends JsonObject {
+  readonly accessTokenEnv: string;
+}
+
 export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly kind: "matrix";
   readonly provider?: "matrix" | string;
@@ -184,6 +243,7 @@ export interface MatrixSourceConfig extends EventSourceConfigBase {
   readonly ignoreOwnMessages?: boolean;
   readonly history?: MatrixHistoryConfig;
   readonly attachments?: MatrixAttachmentsConfig;
+  readonly replyBots?: Readonly<Record<string, MatrixReplyBotConfig>>;
 }
 
 export interface S3RepositoryEventReceiverConfig extends JsonObject {
@@ -236,6 +296,7 @@ export type EventSourceConfig =
   | CronSourceConfig
   | ChatSdkSourceConfig
   | DiscordGatewaySourceConfig
+  | TelegramGatewaySourceConfig
   | MatrixSourceConfig
   | WebhookSourceConfig
   | S3RepositorySourceConfig

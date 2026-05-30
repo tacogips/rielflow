@@ -116,6 +116,17 @@ function validateChatDestination(
         ),
       );
     }
+    if (
+      source?.kind === "telegram-gateway" &&
+      !isNonEmptyString(source["tokenEnv"])
+    ) {
+      issues.push(
+        error(
+          `destinations.${destination.id}.sourceId`,
+          `telegram-gateway source '${sourceId}' does not configure tokenEnv`,
+        ),
+      );
+    }
   }
 
   const target = destination["target"];

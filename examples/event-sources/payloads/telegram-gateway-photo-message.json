@@ -1,0 +1,35 @@
+{
+  "update_id": 2002,
+  "message": {
+    "message_id": 77,
+    "date": 1780048860,
+    "chat": {
+      "id": -1001234567890,
+      "type": "supergroup",
+      "title": "Persona Lab"
+    },
+    "from": {
+      "id": 2001,
+      "is_bot": false,
+      "first_name": "Operator",
+      "username": "operator"
+    },
+    "caption": "Yui, summarize this image and ask Mika too.",
+    "photo": [
+      {
+        "file_id": "telegram-small-photo",
+        "file_unique_id": "telegram-small-unique",
+        "width": 90,
+        "height": 90,
+        "file_size": 2048
+      },
+      {
+        "file_id": "telegram-large-photo",
+        "file_unique_id": "telegram-large-unique",
+        "width": 1280,
+        "height": 720,
+        "file_size": 123456
+      }
+    ]
+  }
+}

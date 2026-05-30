@@ -195,6 +195,7 @@ Discord chat workflow for three named bot personas in one channel:
 - `Mika Trend` runs on `claude-code-agent` and covers entertainment, trends, and gyaru-style audience sense
 - `Rina Cursor` runs on `cursor-cli-agent` and covers intellectual otaku and technical analysis
 - persona icons are checked in under `assets/icons/`
+- initial persona selection uses the provider-neutral `rielflow/chat-persona-router` add-on, so the workflow does not need a Discord-specific routing prompt
 - a selected persona can set handoff flags such as `handoff_mika` when the user explicitly asks to hear another persona too
 - Discord replies use `rielflow/chat-reply-worker` and dry-run when a direct local run has no chat target
 
@@ -210,6 +211,64 @@ Run the bundled deterministic handoff scenario:
 bun run packages/rielflow/src/bin.ts workflow run discord-agent-trio-chat \
   --workflow-definition-dir ./examples \
   --mock-scenario ./examples/discord-agent-trio-chat/mock-scenario.json \
+  --input '{"request":"Yui, give your opinion and ask Mika too"}'
+```
+
+### `telegram-agent-trio-chat`
+
+Telegram Gateway persona workflow using rielflow-owned Telegram Bot API
+ingestion:
+
+- receives normalized Telegram messages from the `telegram-gateway-personas`
+  event source
+- includes persisted bounded chat history in `event.input.history`
+- preserves Telegram photo metadata in `event.input.attachments`
+- routes replies as Yui, Mika, or Rina through the provider-neutral
+  `rielflow/chat-persona-router` add-on with the same persona specs as the
+  Discord trio
+- sends replies through `rielflow/chat-reply-worker` and the
+  `telegram-gateway-persona-replies` chat destination
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-chat --workflow-definition-dir ./examples
+```
+
+Run the bundled deterministic handoff scenario:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run telegram-agent-trio-chat \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/telegram-agent-trio-chat/mock-scenario.json \
+  --input '{"request":"Yui, give your opinion and ask Mika too"}'
+```
+
+### `matrix-agent-trio-chat`
+
+Matrix persona workflow using the same provider-neutral trio authoring shape as
+the Discord and Telegram examples:
+
+- receives normalized Matrix `m.room.message` events from the `team-matrix`
+  event source
+- routes replies as Yui, Mika, or Rina through `rielflow/chat-persona-router`
+- can select separate Matrix access tokens with `replyAsTemplate` and
+  `team-matrix.replyBots`
+- sends replies through `rielflow/chat-reply-worker` and the
+  `matrix-persona-replies` chat destination
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate matrix-agent-trio-chat --workflow-definition-dir ./examples
+```
+
+Run the bundled deterministic handoff scenario:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run matrix-agent-trio-chat \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/matrix-agent-trio-chat/mock-scenario.json \
   --input '{"request":"Yui, give your opinion and ask Mika too"}'
 ```
 

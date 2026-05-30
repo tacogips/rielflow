@@ -26,6 +26,7 @@ impl-plans/
 
 | Plan | Status | Design Reference |
 | ---- | ------ | ---------------- |
+| `active/chat-gateway-trio-review-improvements` | Completed | `design-telegram-gateway-agent-trio#review-decisions-and-issue-mapping` |
 | `active/discord-gateway-chat-history` | Ready | `design-discord-gateway-chat-history` |
 | `active/matrix-attachment-text` | Completed | `design-matrix-attachment-text`, `design-event-listener-workflow-trigger`, `architecture` |
 | `active/opentelemetry-instrumentation` | Ready | `architecture#opentelemetry-runtime-instrumentation`, `command#telemetry-and-jaeger-verification` |

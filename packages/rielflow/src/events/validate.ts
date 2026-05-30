@@ -26,6 +26,7 @@ import {
   validateChatSdkSource,
 } from "./validate-source-chat-sdk";
 import { validateDiscordGatewaySource } from "./validate-source-discord-gateway";
+import { validateTelegramGatewaySource } from "./validate-source-telegram-gateway";
 import { validateScheduleRegistrationBinding } from "./validate-schedule-registration";
 import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
@@ -60,6 +61,7 @@ const SUPPORTED_SOURCE_KINDS = new Set([
   "webhook",
   "s3-repository",
   "sequential-list",
+  "telegram-gateway",
 ]);
 
 function validateUniqueIds(
@@ -172,6 +174,7 @@ function validateSource(
   }
 
   validateDiscordGatewaySource(source, issues);
+  validateTelegramGatewaySource(source, issues);
 
   validateFileChangeSource(source, issues);
   validateSequentialListSource(source, issues);

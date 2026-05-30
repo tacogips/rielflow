@@ -1,0 +1,40 @@
+{
+  "id": "telegram-gateway-personas-to-workflow",
+  "sourceId": "telegram-gateway-personas",
+  "outputDestinations": ["telegram-gateway-persona-replies"],
+  "workflowName": "telegram-agent-trio-chat",
+  "match": {
+    "eventType": "chat.message"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "{{event.input.text}}",
+      "history": "{{event.input.history}}",
+      "historySource": "{{event.input.historySource}}",
+      "attachments": "{{event.input.attachments}}",
+      "imagePaths": "{{event.input.imagePaths}}",
+      "attachmentText": "{{event.input.attachmentText}}",
+      "personaCandidates": ["yui", "mika", "rina"],
+      "conversationId": "{{event.conversation.id}}",
+      "threadId": "{{event.conversation.threadId}}"
+    },
+    "mirrorToHumanInput": true
+  },
+  "execution": {
+    "async": false,
+    "dedupeWindowMs": 86400000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}:{{event.conversation.id}}"
+  },
+  "taskPlanning": {
+    "enabled": false
+  },
+  "mailboxBridge": {
+    "output": {
+      "progress": {
+        "mode": "none"
+      }
+    }
+  }
+}

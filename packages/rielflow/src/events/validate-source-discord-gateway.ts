@@ -223,6 +223,42 @@ function validateReplyBots(
   }
 }
 
+function validateAttachments(
+  source: EventSourceConfig,
+  issues: EventConfigValidationIssue[],
+): void {
+  const attachments = source["attachments"];
+  if (attachments === undefined) {
+    return;
+  }
+  if (!isJsonObject(attachments)) {
+    issues.push(error(`sources.${source.id}.attachments`, "must be an object"));
+    return;
+  }
+  for (const key of ["includeImages", "resolveFilePaths"]) {
+    if (
+      attachments[key] !== undefined &&
+      typeof attachments[key] !== "boolean"
+    ) {
+      issues.push(
+        error(`sources.${source.id}.attachments.${key}`, "must be a boolean"),
+      );
+    }
+  }
+  const maxBytes = attachments["maxBytes"];
+  if (
+    maxBytes !== undefined &&
+    (!isPositiveInteger(maxBytes) || Number(maxBytes) > 20 * 1024 * 1024)
+  ) {
+    issues.push(
+      error(
+        `sources.${source.id}.attachments.maxBytes`,
+        "must be a positive integer no greater than 20971520",
+      ),
+    );
+  }
+}
+
 export function validateDiscordGatewaySource(
   source: EventSourceConfig,
   issues: EventConfigValidationIssue[],
@@ -260,6 +296,7 @@ export function validateDiscordGatewaySource(
   validateChannels(source, issues);
   validateHistory(source, issues);
   validateFilters(source, issues);
+  validateAttachments(source, issues);
   validateReplyBots(source, issues);
   const intents = source["intents"];
   if (

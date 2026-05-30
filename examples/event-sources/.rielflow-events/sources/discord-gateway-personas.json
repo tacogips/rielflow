@@ -25,5 +25,21 @@
     "ignoreBots": true,
     "ignoreSelf": true,
     "requireMention": false
+  },
+  "attachments": {
+    "includeImages": true,
+    "resolveFilePaths": true,
+    "maxBytes": 10485760
+  },
+  "replyBots": {
+    "yui": {
+      "tokenEnv": "DISCORD_BOT_TOKEN_YUI_CODEX"
+    },
+    "mika": {
+      "tokenEnv": "DISCORD_BOT_TOKEN_MIKA_TREND"
+    },
+    "rina": {
+      "tokenEnv": "DISCORD_BOT_TOKEN_RINA_CURSOR"
+    }
   }
 }
