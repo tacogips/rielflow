@@ -288,6 +288,9 @@ describe("manual event emit", () => {
     const eventRoot = path.join(root, ".rielflow-events");
     const rootDataDir = path.join(root, "data");
     const eventFile = path.join(root, "discord-event.json");
+    const eventCreatedAtMs = Date.now();
+    const eventTimestamp = new Date(eventCreatedAtMs).toISOString();
+    const historyTimestamp = new Date(eventCreatedAtMs - 120_000).toISOString();
     await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
       workflowId: "demo",
     });
@@ -317,7 +320,7 @@ describe("manual event emit", () => {
       id: "345678901234567890",
       channel_id: "567890123456789012",
       parent_channel_id: "234567890123456789",
-      timestamp: "2026-05-29T10:02:00.000Z",
+      timestamp: eventTimestamp,
       content: "Mika, what do you think?",
       author: {
         id: "456789012345678901",
@@ -332,7 +335,7 @@ describe("manual event emit", () => {
           authorId: "222222222222222222",
           displayName: "Yui",
           isBot: false,
-          createdAt: "2026-05-29T10:00:00.000Z",
+          createdAt: historyTimestamp,
           text: "We need to pick between option one and two.",
           conversationId: "234567890123456789",
           threadId: "567890123456789012",

@@ -88,9 +88,9 @@ Before publishing, confirm:
 - GitHub CLI authentication can publish to `tacogips/rielflow`
 - Homebrew is available for smoke tests
 
-If a version bump is needed, make and verify that change before starting this
-release flow. Keep version-bump commits separate from tap formula commits unless
-the user explicitly asks for a combined change.
+If a version bump is needed, use `rielflow-version-bump` first and verify that
+change before starting this release flow. Keep version-bump commits separate
+from tap formula commits unless the user explicitly asks for a combined change.
 
 ## Build And Test
 
