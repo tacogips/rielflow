@@ -9,6 +9,7 @@ import {
   searchWorkflowPackages,
   updateWorkflowPackageCheckout,
 } from "../workflow/packages";
+import type { WorkflowCheckoutScope } from "../workflow/checkout";
 import { emitJson } from "./input-output-helpers";
 import type { RunCliScopeContext } from "./storage-and-options";
 
@@ -143,7 +144,7 @@ export async function runCliWorkflowPackageScope(
       io.stderr("package list accepts no positional arguments");
       return 2;
     }
-    const scope =
+    const scope: WorkflowCheckoutScope | undefined =
       parsed.options.userScope || parsed.options.workflowScope === "user"
         ? "user"
         : parsed.options.workflowScope === "project"
@@ -254,34 +255,65 @@ export async function runCliWorkflowPackageScope(
       );
       return 2;
     }
-    const scope =
+    const scope: WorkflowCheckoutScope | undefined =
       parsed.options.userScope || parsed.options.workflowScope === "user"
         ? "user"
         : parsed.options.workflowScope === "project"
           ? "project"
           : undefined;
+    const statusInput = {
+      ...(packageTarget === undefined ? {} : { workflowName: packageTarget }),
+      ...(parsed.options.installId === undefined
+        ? {}
+        : { installId: parsed.options.installId }),
+      ...(scope === undefined ? {} : { scope }),
+      options: packageOptions,
+    };
+    let removalConfirmed = parsed.options.yes;
+    if (packageCommand === "update" && !removalConfirmed) {
+      const status = await getWorkflowPackageCheckoutStatus(statusInput);
+      if (!status.ok) {
+        io.stderr(`package ${packageCommand} failed: ${status.error.message}`);
+        return status.error.code === "IO" ? 1 : 2;
+      }
+      if (status.value["status"] === "missing-source-package") {
+        if (!context.deps.isInteractiveTerminal()) {
+          io.stderr(
+            "package update failed: package was removed from the registry; rerun with --yes to remove the local checkout",
+          );
+          return 2;
+        }
+        const packageLabel = String(
+          status.value["packageId"] ?? status.value["workflowName"] ?? "",
+        );
+        removalConfirmed =
+          (await context.deps.confirm?.(
+            `Package '${packageLabel}' was removed from the registry. Remove the local checkout? [y/N] `,
+          )) ?? false;
+        if (!removalConfirmed) {
+          if (parsed.options.output === "json") {
+            emitJson(io, {
+              ...status.value,
+              updated: false,
+              removed: false,
+              packageMissingFromRegistry: true,
+              removalSkipped: true,
+            });
+          } else {
+            io.stdout(`package: ${packageLabel}`);
+            io.stdout(`removed from registry: true`);
+            io.stdout(`removed local checkout: false`);
+          }
+          return 0;
+        }
+      }
+    }
     const result =
       packageCommand === "status"
-        ? await getWorkflowPackageCheckoutStatus({
-            ...(packageTarget === undefined
-              ? {}
-              : { workflowName: packageTarget }),
-            ...(parsed.options.installId === undefined
-              ? {}
-              : { installId: parsed.options.installId }),
-            ...(scope === undefined ? {} : { scope }),
-            options: packageOptions,
-          })
+        ? await getWorkflowPackageCheckoutStatus(statusInput)
         : await updateWorkflowPackageCheckout({
-            ...(packageTarget === undefined
-              ? {}
-              : { workflowName: packageTarget }),
-            ...(parsed.options.installId === undefined
-              ? {}
-              : { installId: parsed.options.installId }),
-            ...(scope === undefined ? {} : { scope }),
-            ...(parsed.options.yes ? { yes: true } : {}),
-            options: packageOptions,
+            ...statusInput,
+            ...(removalConfirmed ? { yes: true } : {}),
           });
     if (!result.ok) {
       io.stderr(`package ${packageCommand} failed: ${result.error.message}`);
@@ -293,13 +325,22 @@ export async function runCliWorkflowPackageScope(
       io.stdout(`package: ${String(result.value.packageId)}`);
       io.stdout(`workflow: ${String(result.value.workflowName)}`);
       io.stdout(`scope: ${String(result.value.scope)}`);
-      io.stdout(`destination: ${String(result.value.destinationDirectory)}`);
-      io.stdout(`registry: ${String(result.value.registryUrl)}`);
-      io.stdout(`checksum: ${String(result.value.checksum)}`);
+      if ("destinationDirectory" in result.value) {
+        io.stdout(`destination: ${String(result.value.destinationDirectory)}`);
+      }
+      if ("registryUrl" in result.value) {
+        io.stdout(`registry: ${String(result.value.registryUrl)}`);
+      }
+      if ("checksum" in result.value) {
+        io.stdout(`checksum: ${String(result.value.checksum)}`);
+      }
       io.stdout(`installId: ${String(result.value.installId)}`);
       io.stdout(
         `updated: ${String("updated" in result.value ? result.value.updated : false)}`,
       );
+      if ("removed" in result.value) {
+        io.stdout(`removed: ${String(result.value.removed)}`);
+      }
     }
     return 0;
   }
@@ -311,7 +352,7 @@ export async function runCliWorkflowPackageScope(
       );
       return 2;
     }
-    const scope =
+    const scope: WorkflowCheckoutScope | undefined =
       parsed.options.userScope || parsed.options.workflowScope === "user"
         ? "user"
         : parsed.options.workflowScope === "project"

@@ -1668,6 +1668,82 @@ describe("workflow package registry", () => {
     }
   });
 
+  test("package update requires confirmation before removing registry-deleted package", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "deleted-flow",
+      workflowName: "deleted-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "deleted-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error("checkout failed");
+    }
+
+    await rm(packageRoot, { recursive: true, force: true });
+    const refreshed = await searchWorkflowPackages({
+      query: "deleted-flow",
+      registry: "local",
+      refresh: true,
+      options: { userRoot },
+    });
+    expect(refreshed.ok).toBe(true);
+
+    const unconfirmed = await updateWorkflowPackageCheckout({
+      installId: checkedOut.value.installId,
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(unconfirmed.ok).toBe(false);
+    if (!unconfirmed.ok) {
+      expect(unconfirmed.error.code).toBe("UPDATE_CONFIRMATION_REQUIRED");
+    }
+    await expect(
+      readFile(
+        path.join(
+          projectRoot,
+          ".rielflow",
+          "workflows",
+          "deleted-flow",
+          "workflow.json",
+        ),
+        "utf8",
+      ),
+    ).resolves.toContain("deleted-flow");
+
+    const confirmed = await updateWorkflowPackageCheckout({
+      installId: checkedOut.value.installId,
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(confirmed.ok).toBe(true);
+    if (confirmed.ok) {
+      expect(confirmed.value.updated).toBe(true);
+      expect("removed" in confirmed.value && confirmed.value.removed).toBe(
+        true,
+      );
+      expect(
+        "packageMissingFromRegistry" in confirmed.value &&
+          confirmed.value.packageMissingFromRegistry,
+      ).toBe(true);
+    }
+    expect(await pathExists(checkedOut.value.destinationDirectory)).toBe(false);
+    expect(await pathExists(checkedOut.value.checkoutRecordPath)).toBe(false);
+  });
+
   test("package status resolves same workflow name by current project root", async () => {
     const userRoot = await makeTempDir();
     const registryRoot = await makeTempDir();
@@ -1809,7 +1885,10 @@ describe("workflow package registry", () => {
 
     expect(updated.ok).toBe(true);
     if (updated.ok) {
-      expect(updated.value.changedArtifacts).toContain("skills");
+      expect("changedArtifacts" in updated.value).toBe(true);
+      if ("changedArtifacts" in updated.value) {
+        expect(updated.value.changedArtifacts).toContain("skills");
+      }
     }
     await expect(
       readFile(
@@ -1817,6 +1896,90 @@ describe("workflow package registry", () => {
         "utf8",
       ),
     ).rejects.toThrow();
+  });
+
+  test("package-internal skill updates apply without confirmation", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "skill-update-flow",
+      workflowName: "skill-update-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "codex", "review-skill"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "review-skill", "SKILL.md"),
+      "---\nname: review-skill\ndescription: Review skill\n---\n\nOld body\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "skill-update-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "skill-update-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+    if (!checkedOut.ok) {
+      throw new Error("checkout failed");
+    }
+
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "review-skill", "SKILL.md"),
+      "---\nname: review-skill\ndescription: Review skill\n---\n\nNew body\n",
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "skill-update-flow",
+    });
+    const refreshed = await searchWorkflowPackages({
+      query: "skill-update-flow",
+      registry: "local",
+      refresh: true,
+      options: { userRoot },
+    });
+    expect(refreshed.ok).toBe(true);
+
+    const updated = await updateWorkflowPackageCheckout({
+      installId: checkedOut.value.installId,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(updated.ok).toBe(true);
+    if (updated.ok) {
+      expect(updated.value.updated).toBe(true);
+      expect("changedArtifacts" in updated.value).toBe(true);
+    }
+    await expect(
+      readFile(
+        path.join(projectRoot, ".codex", "skills", "review-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).resolves.toContain("New body");
   });
 
   test("package checkout restores workflow and skills when update projection fails", async () => {

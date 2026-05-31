@@ -270,8 +270,14 @@ Check status and update:
 
 ```bash
 rielflow package status worker-only-single-step
-rielflow package update worker-only-single-step --yes
+rielflow package update worker-only-single-step
 ```
+
+Package updates apply changed package contents, including package-installed
+skills, without an extra confirmation prompt. If the selected package has been
+removed from the registry, `package update` asks before removing the local
+checkout; answer `N` to keep it installed, or pass `--yes` for noninteractive
+removal.
 
 Remove a package:
 

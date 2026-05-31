@@ -1650,6 +1650,160 @@ describe("runCli", () => {
     });
   });
 
+  test("package update confirms before removing registry-deleted package through CLI", async () => {
+    const root = await makeTempDir();
+    const registryRoot = path.join(root, "registry");
+    const projectRoot = path.join(root, "project");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const packageRoot = path.join(registryRoot, "packages", "cli-deleted-flow");
+    await mkdir(packageRoot, { recursive: true });
+    const created = await createWorkflowTemplate("cli-deleted-flow", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          name: "cli-deleted-flow",
+          version: "1.0.0",
+          description: "CLI deleted package",
+          tags: ["cli"],
+          workflow: {
+            description: "CLI deleted package",
+            tags: ["cli"],
+            backends: ["codex-agent"],
+          },
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          workflowDirectory: "cli-deleted-flow",
+          backends: ["codex-agent"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const checksum = await computeWorkflowPackageChecksum({
+      packageRoot,
+      workflowDirectory: "cli-deleted-flow",
+    });
+    expect(checksum.ok).toBe(true);
+    if (checksum.ok) {
+      const manifest = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as Record<string, unknown>;
+      manifest["checksum"] = checksum.value.checksum;
+      await writeFile(
+        manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const registryCapture = createIoCapture();
+    const registryCode = await runCli(
+      [
+        "package",
+        "registry",
+        "add",
+        "local",
+        "--registry-url",
+        "https://github.com/example/rielflow-packages",
+        "--local-path",
+        registryRoot,
+        "--user-root",
+        userRoot,
+      ],
+      registryCapture.io,
+      createCliDeps(),
+    );
+    expect(registryCode).toBe(0);
+
+    const checkoutCapture = createIoCapture();
+    const checkoutCode = await runCli(
+      [
+        "package",
+        "install",
+        "cli-deleted-flow",
+        "--registry",
+        "local",
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      checkoutCapture.io,
+      createCliDeps(),
+    );
+    expect(checkoutCode).toBe(0);
+    const payload = JSON.parse(checkoutCapture.stdout.join("\n")) as {
+      installId: string;
+      destinationDirectory: string;
+    };
+    await rm(packageRoot, { recursive: true, force: true });
+
+    const keepCapture = createIoCapture();
+    const keepCode = await runCli(
+      [
+        "package",
+        "update",
+        "--install-id",
+        payload.installId,
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      keepCapture.io,
+      createCliDeps({
+        isInteractiveTerminal: () => true,
+        confirm: async () => false,
+      }),
+    );
+    expect(keepCode).toBe(0);
+    expect(keepCapture.stdout.join("\n")).toContain('"removalSkipped": true');
+    await expect(
+      readFile(
+        path.join(payload.destinationDirectory, "workflow.json"),
+        "utf8",
+      ),
+    ).resolves.toContain("cli-deleted-flow");
+
+    const removeCapture = createIoCapture();
+    const removeCode = await runCli(
+      [
+        "package",
+        "update",
+        "--install-id",
+        payload.installId,
+        "--project-root",
+        path.join(projectRoot, ".rielflow"),
+        "--user-root",
+        userRoot,
+        "--yes",
+        "--output",
+        "json",
+      ],
+      removeCapture.io,
+      createCliDeps(),
+    );
+    expect(removeCode).toBe(0);
+    expect(removeCapture.stdout.join("\n")).toContain('"removed": true');
+    await expect(
+      readFile(
+        path.join(payload.destinationDirectory, "workflow.json"),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+  });
+
   test("workflow run executes registry packages through temporary checkout", async () => {
     const root = await makeTempDir();
     const registryRoot = path.join(root, "registry");

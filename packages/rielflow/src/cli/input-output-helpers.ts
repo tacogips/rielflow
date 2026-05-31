@@ -105,12 +105,15 @@ export function printHelp(io: CliIo): void {
     "  --overwrite    Replace an existing checkout after staged validation",
   );
   io.stdout(
-    "  --yes          Bypass overwrite confirmation for checkout updates",
+    "  --yes          Confirm destructive checkout or registry-deleted package updates",
   );
   io.stdout("");
   io.stdout("Package options:");
   io.stdout(
     "  package install <package> [--registry <id-or-url>] [--user-scope] [--overwrite] [--yes] [--pre-install-check]",
+  );
+  io.stdout(
+    "  package update <workflow-name>|--install-id <id> [--yes to remove registry-deleted package]",
   );
   io.stdout(
     "  package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",

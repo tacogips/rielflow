@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import type { EventListenerHandle } from "../events/listener-service";
 import { createReadHookStdin } from "../hook/index";
 import { SUPPORTED_HOOK_VENDORS } from "../hook/types";
@@ -77,6 +78,7 @@ export interface CliIo {
 export interface CliDependencies {
   readonly startServe: (options: ServeStartOptions) => Promise<StartedServe>;
   readonly isInteractiveTerminal: () => boolean;
+  readonly confirm?: (prompt: string) => Promise<boolean>;
   readonly waitForServeShutdown?: (started: StartedServe) => Promise<void>;
   readonly waitForEventListenerShutdown?: (
     started: EventListenerHandle,
@@ -444,6 +446,19 @@ export const DEFAULT_IO: CliIo = {
   stdout: (line: string) => console.log(line),
   stderr: (line: string) => console.error(line),
 };
+async function confirmOnTerminal(prompt: string): Promise<boolean> {
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+  try {
+    const answer = await readline.question(prompt);
+    const normalized = answer.trim().toLowerCase();
+    return normalized === "y" || normalized === "yes";
+  } finally {
+    readline.close();
+  }
+}
 export async function waitForProcessShutdownSignal(): Promise<void> {
   await new Promise<void>((resolve) => {
     let settled = false;
@@ -466,6 +481,7 @@ export const DEFAULT_DEPS: CliDependencies = {
   startServe,
   isInteractiveTerminal: () =>
     process.stdin.isTTY === true && process.stdout.isTTY === true,
+  confirm: confirmOnTerminal,
   readStdin: createReadHookStdin(process.stdin),
   waitForServeShutdown: async (_started: StartedServe) =>
     waitForProcessShutdownSignal(),

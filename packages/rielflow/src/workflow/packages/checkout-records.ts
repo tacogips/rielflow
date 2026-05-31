@@ -56,6 +56,18 @@ export interface WorkflowPackageRemoveResult {
   readonly checkoutRecordPath: string;
 }
 
+export interface WorkflowPackageMissingRegistryRemovalResult
+  extends WorkflowPackageRemoveResult {
+  readonly updated: true;
+  readonly removed: true;
+  readonly packageMissingFromRegistry: true;
+  readonly removalConfirmed: true;
+}
+
+export type WorkflowPackageUpdateResult =
+  | WorkflowPackageCheckoutResult
+  | WorkflowPackageMissingRegistryRemovalResult;
+
 function packageFailure(
   code: WorkflowPackageFailure["code"],
   message: string,
@@ -525,21 +537,41 @@ export async function updateWorkflowPackageCheckout(input: {
   readonly scope?: WorkflowCheckoutScope;
   readonly yes?: boolean;
   readonly options?: WorkflowPackageRegistryConfigOptions;
-}): Promise<Result<WorkflowPackageCheckoutResult, WorkflowPackageFailure>> {
+}): Promise<Result<WorkflowPackageUpdateResult, WorkflowPackageFailure>> {
   const status = await getWorkflowPackageCheckoutStatus(input);
   if (!status.ok) {
     return status;
   }
+  if (status.value["status"] === "missing-source-package") {
+    if (input.yes !== true) {
+      return err(
+        packageFailure(
+          "UPDATE_CONFIRMATION_REQUIRED",
+          "package was removed from the registry; confirm removal before deleting the local checkout",
+        ),
+      );
+    }
+    const removed = await removeWorkflowPackageCheckout({
+      ...(input.workflowName === undefined
+        ? {}
+        : { workflowName: input.workflowName }),
+      ...(input.installId === undefined ? {} : { installId: input.installId }),
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+      ...(input.options === undefined ? {} : { options: input.options }),
+    });
+    if (!removed.ok) {
+      return removed;
+    }
+    return ok({
+      ...removed.value,
+      updated: true,
+      removed: true,
+      packageMissingFromRegistry: true,
+      removalConfirmed: true,
+    });
+  }
   if (status.value["updateAvailable"] !== true) {
     return ok(createNoopWorkflowPackageUpdateResult(status.value));
-  }
-  if (input.yes !== true) {
-    return err(
-      packageFailure(
-        "UPDATE_CONFIRMATION_REQUIRED",
-        "package update requires --yes for noninteractive clean install",
-      ),
-    );
   }
   const packageName = recordString(status.value, "packageId");
   if (packageName === undefined) {
