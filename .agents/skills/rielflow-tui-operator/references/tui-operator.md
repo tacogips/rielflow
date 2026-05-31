@@ -16,8 +16,8 @@ The UI is for human-facing workflow overview and selected workflow/session statu
 Workflow overview:
 
 ```bash
-rielflow workflow list --workflow-root <root>
-rielflow workflow status <workflow-name> --workflow-root <root>
+rielflow workflow list --workflow-definition-dir <root>
+rielflow workflow status <workflow-name> --workflow-definition-dir <root>
 ```
 
 Session detail:

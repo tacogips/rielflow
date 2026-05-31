@@ -12,7 +12,7 @@ Use this skill when a rielflow workflow does not behave as expected.
 ## First Commands
 
 ```bash
-rielflow workflow validate <workflow-name> --workflow-root <root>
+rielflow workflow validate <workflow-name> --workflow-definition-dir <root>
 ```
 
 ```bash

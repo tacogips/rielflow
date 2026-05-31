@@ -268,17 +268,17 @@ Prefer DRY composition when using add-ons: chain reusable primitive steps in `st
 Inside the rielflow repo:
 
 ```bash
-bun run src/main.ts workflow validate <workflow-name> --workflow-root <workflow-root>
+bun run src/main.ts workflow validate <workflow-name> --workflow-definition-dir <workflow-root>
 ```
 
 When rielflow is installed:
 
 ```bash
-rielflow workflow validate <workflow-name> --workflow-root <workflow-root>
+rielflow workflow validate <workflow-name> --workflow-definition-dir <workflow-root>
 ```
 
 Useful inspection command:
 
 ```bash
-bun run src/main.ts workflow inspect <workflow-name> --workflow-root <workflow-root> --output json
+bun run src/main.ts workflow inspect <workflow-name> --workflow-definition-dir <workflow-root> --output json
 ```

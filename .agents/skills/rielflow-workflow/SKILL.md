@@ -15,7 +15,7 @@ Use this skill to author portable rielflow workflow bundles that validate agains
 2. Create or update `<workflow-root>/<workflow-name>/workflow.json`.
 3. Create `nodes/node-<id>.json` files only for file-backed nodes.
 4. Put long prompts in `prompts/*.md` and reference them with `promptTemplateFile`, `systemPromptTemplateFile`, or `sessionStartPromptTemplateFile`.
-5. Validate with the available rielflow command, usually `bun run src/main.ts workflow validate <workflow-name> --workflow-root <workflow-root>` inside the rielflow repo, or `rielflow workflow validate <workflow-name> --workflow-root <workflow-root>` when installed.
+5. Validate with the available rielflow command, usually `bun run src/main.ts workflow validate <workflow-name> --workflow-definition-dir <workflow-root>` inside the rielflow repo, or `rielflow workflow validate <workflow-name> --workflow-definition-dir <workflow-root>` when installed.
 
 Read `references/workflow-format.md` when authoring anything beyond a one-step worker or when validation errors mention schema, steps, transitions, add-ons, node payloads, or legacy fields.
 
@@ -95,7 +95,7 @@ Agent node payload:
   "id": "worker",
   "description": "Performs the requested worker task.",
   "executionBackend": "codex-agent",
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "promptTemplateFile": "prompts/worker.md",
   "variables": {}
 }

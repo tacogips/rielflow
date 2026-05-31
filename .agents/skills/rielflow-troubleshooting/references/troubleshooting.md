@@ -15,7 +15,7 @@ Check:
 Run:
 
 ```bash
-rielflow workflow validate <workflow-name> --workflow-root <root>
+rielflow workflow validate <workflow-name> --workflow-definition-dir <root>
 ```
 
 Common causes:

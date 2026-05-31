@@ -15,7 +15,7 @@ For important workflow execution, prefer the supervisor-backed path:
 
 ```bash
 rielflow workflow run <workflow-name> \
-  --workflow-root <root> \
+  --workflow-definition-dir <root> \
   --auto-improve \
   --nested-supervisor \
   --max-supervised-attempts 3 \
@@ -29,7 +29,7 @@ This is the recommended mode when the user wants rielflow to monitor the target 
 
 ```bash
 rielflow workflow run <workflow-name> \
-  --workflow-root <root> \
+  --workflow-definition-dir <root> \
   --auto-improve \
   --max-supervised-attempts 3 \
   --output json
@@ -39,7 +39,7 @@ Nested supervisor:
 
 ```bash
 rielflow workflow run <workflow-name> \
-  --workflow-root <root> \
+  --workflow-definition-dir <root> \
   --auto-improve \
   --nested-supervisor \
   --output json

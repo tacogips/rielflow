@@ -18,20 +18,20 @@ examples/<workflow-name>/
 Validate:
 
 ```bash
-bun run src/main.ts workflow validate <workflow-name> --workflow-root ./examples
+bun run src/main.ts workflow validate <workflow-name> --workflow-definition-dir ./examples
 ```
 
 Inspect:
 
 ```bash
-bun run src/main.ts workflow inspect <workflow-name> --workflow-root ./examples --output json
+bun run src/main.ts workflow inspect <workflow-name> --workflow-definition-dir ./examples --output json
 ```
 
 Run deterministic scenario:
 
 ```bash
 bun run src/main.ts workflow run <workflow-name> \
-  --workflow-root ./examples \
+  --workflow-definition-dir ./examples \
   --mock-scenario ./examples/<workflow-name>/mock-scenario.json \
   --output json
 ```

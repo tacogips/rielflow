@@ -36,7 +36,7 @@
   },
   "add-worker": {
     "provider": "scenario-mock",
-    "model": "gpt-5",
+    "model": "gpt-5.5",
     "when": {
       "always": true
     },

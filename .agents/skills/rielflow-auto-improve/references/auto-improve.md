@@ -6,7 +6,7 @@ Recommended supervisor-backed execution:
 
 ```bash
 rielflow workflow run <workflow-name> \
-  --workflow-root <root> \
+  --workflow-definition-dir <root> \
   --auto-improve \
   --nested-supervisor \
   --max-supervised-attempts 3 \

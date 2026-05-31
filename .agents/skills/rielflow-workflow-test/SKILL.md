@@ -14,16 +14,16 @@ Use this skill to verify existing rielflow workflows reproducibly. For authoring
 Run these in order:
 
 ```bash
-bun run src/main.ts workflow validate <workflow-name> --workflow-root <root>
+bun run src/main.ts workflow validate <workflow-name> --workflow-definition-dir <root>
 ```
 
 ```bash
-bun run src/main.ts workflow inspect <workflow-name> --workflow-root <root> --output json
+bun run src/main.ts workflow inspect <workflow-name> --workflow-definition-dir <root> --output json
 ```
 
 ```bash
 bun run src/main.ts workflow run <workflow-name> \
-  --workflow-root <root> \
+  --workflow-definition-dir <root> \
   --mock-scenario <root>/<workflow-name>/mock-scenario.json \
   --output json
 ```
