@@ -41,7 +41,7 @@ The release order is:
 4. run the local self-checkout gate against the current-platform archive
 5. create or update the GitHub release `v<version>` with those archives
 6. render `Formula/rielflow.rb` into the `tacogips/homebrew-tap` checkout
-7. run Homebrew audit, style, local install, and formula tests
+7. run formula-specific Homebrew audit/style, tap-name install, and formula tests
 8. commit and push the tap formula update
 9. verify installation from `tacogips/tap`
 
@@ -68,6 +68,7 @@ git tag --points-at HEAD
 bun --print 'JSON.parse(await Bun.file("packages/rielflow/package.json").text()).version'
 gh auth status
 brew --version
+brew tap-info tacogips/tap --json
 ```
 
 Check the tap checkout separately:
@@ -284,9 +285,15 @@ Review the rendered formula before committing:
 
 ```bash
 git -C ../homebrew-tap diff -- Formula/rielflow.rb
-brew audit --formula ../homebrew-tap/Formula/rielflow.rb
-brew style ../homebrew-tap/Formula/rielflow.rb
+brew audit --formula tacogips/tap/rielflow
+brew style tacogips/tap/rielflow
 ```
+
+Recent Homebrew versions reject path-based formula audit commands such as
+`brew audit --formula ../homebrew-tap/Formula/rielflow.rb`. Use the formula
+name instead. Avoid `brew audit --tap=tacogips/tap` for this release gate
+because unrelated formulae or casks in the tap can fail and obscure the
+rielflow formula result.
 
 The formula should contain `on_macos` and `on_linux` blocks with architecture
 specific URLs and checksums for:
@@ -303,18 +310,23 @@ before editing generated formula content by hand.
 ## Smoke Test
 
 After the GitHub release assets are available, test the formula from the tap
-checkout:
+path users will install from:
 
 ```bash
-brew install --formula ../homebrew-tap/Formula/rielflow.rb
-brew test rielflow
+brew update
+brew tap tacogips/tap
+brew install tacogips/tap/rielflow
+rielflow --version
 rielflow --help
+brew test tacogips/tap/rielflow
 rielflow workflow usage --scope user --output json
 brew uninstall rielflow
 ```
 
-If `rielflow` is already installed, use `brew reinstall --formula
-../homebrew-tap/Formula/rielflow.rb` for the install step.
+If `rielflow` is already installed, use `brew reinstall tacogips/tap/rielflow`
+for the install step. Do not use `brew install --formula <path>` for this
+project; recent Homebrew rejects that path-based install for this tap workflow,
+and it does not verify the public user install path.
 
 The formula should install the archive for the current platform, run
 `rielflow --help`, load built-in add-ons during `workflow usage`, and pass the
@@ -342,6 +354,11 @@ git -C ../homebrew-tap push origin main
 Do not add automated-assistant attribution or co-authorship trailers to commit
 messages.
 
+If the tap checkout has a pre-commit hook installed but no
+`.pre-commit-config.yaml`, and the staged formula has already passed
+`git diff --staged --check` and gitleaks, rerun only that tap commit with
+`PRE_COMMIT_ALLOW_NO_CONFIG=1`.
+
 Stage `README.md` only when it actually changed. Do not stage unrelated tap
 files such as other formulae or casks.
 
@@ -353,6 +370,7 @@ Verify installation through the public tap path:
 brew update
 brew tap tacogips/tap
 brew install tacogips/tap/rielflow
+rielflow --version
 rielflow --help
 brew test tacogips/tap/rielflow
 ```
