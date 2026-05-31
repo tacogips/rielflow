@@ -17,6 +17,23 @@ export {
 } from "./dispatch";
 export { OpenAiSdkAdapter, type OpenAiSdkAdapterConfig } from "./openai-sdk";
 export {
+  checkCodexBackendModelAvailability,
+  checkCursorBackendModelAvailability,
+  getClaudeBackendToolVersion,
+  getCodexBackendLoginStatus,
+  getCodexBackendToolVersions,
+  getCursorBackendToolVersions,
+  verifyClaudeBackendReadiness,
+  type AgentBackendProbeOptions,
+  type AgentBackendToolInfo,
+  type ClaudeBackendReadiness,
+  type CodexBackendLoginStatus,
+  type CodexBackendModelAvailability,
+  type CodexBackendToolVersions,
+  type CursorBackendModelAvailability,
+  type CursorBackendToolVersions,
+} from "./readiness";
+export {
   executeWithRetry,
   normalizeAdapterFailure,
   resolveConfiguredEnvValue,

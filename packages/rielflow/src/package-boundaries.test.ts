@@ -673,6 +673,7 @@ describe("package boundaries", () => {
           "llm-session-stall-watch.d.ts",
           "local-agent.d.ts",
           "openai-sdk.d.ts",
+          "readiness.d.ts",
           "shared.d.ts",
         ],
       },
@@ -883,6 +884,7 @@ describe("package boundaries", () => {
         "packages/rielflow-adapters/dist/index.d.ts",
         "packages/rielflow-adapters/dist/llm-session-stall-watch.d.ts",
         "packages/rielflow-adapters/dist/openai-sdk.d.ts",
+        "packages/rielflow-adapters/dist/readiness.d.ts",
         "packages/rielflow-adapters/dist/shared.d.ts",
       ].sort((a, b) => a.localeCompare(b)),
     );

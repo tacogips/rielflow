@@ -12,7 +12,7 @@
         "@opentelemetry/sdk-node": "0.218.0",
         "@opentelemetry/semantic-conventions": "1.41.1",
         "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
-        "codex-agent": "github:tacogips/codex-agent#0ce12d18c5806d34be0f8afc3a96632588a3767f",
+        "codex-agent": "github:tacogips/codex-agent#a675f21a22772435d17329a969712aaaed6f3689",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
@@ -27,7 +27,7 @@
     },
     "packages/rielflow": {
       "name": "rielflow",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "bin": {
         "rielflow": "dist/main.js",
       },
@@ -42,11 +42,11 @@
     },
     "packages/rielflow-adapters": {
       "name": "rielflow-adapters",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "dependencies": {
         "@anthropic-ai/sdk": "0.78.0",
         "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
-        "codex-agent": "github:tacogips/codex-agent#0ce12d18c5806d34be0f8afc3a96632588a3767f",
+        "codex-agent": "github:tacogips/codex-agent#a675f21a22772435d17329a969712aaaed6f3689",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
         "openai": "6.27.0",
         "rielflow-core": "workspace:*",
@@ -54,39 +54,39 @@
     },
     "packages/rielflow-addons": {
       "name": "rielflow-addons",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-core": {
       "name": "rielflow-core",
-      "version": "0.1.5",
+      "version": "0.1.6",
     },
     "packages/rielflow-events": {
       "name": "rielflow-events",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-graphql": {
       "name": "rielflow-graphql",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "dependencies": {
         "graphql": "16.13.1",
       },
     },
     "packages/rielflow-hook": {
       "name": "rielflow-hook",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "dependencies": {
         "rielflow-core": "workspace:*",
       },
     },
     "packages/rielflow-server": {
       "name": "rielflow-server",
-      "version": "0.1.5",
+      "version": "0.1.6",
     },
   },
   "packages": {
@@ -370,7 +370,7 @@
 
     "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#0ce12d1", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./dist/bin.js" } }, "tacogips-codex-agent-0ce12d1"],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#a675f21", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./dist/bin.js" } }, "tacogips-codex-agent-a675f21"],
 
     "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
 

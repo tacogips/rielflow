@@ -1,6 +1,6 @@
 {
   "name": "rielflow-workspace",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "TypeScript/Bun workflow runtime for cooperative multi-agent execution",
   "private": true,
   "workspaces": [
@@ -56,7 +56,7 @@
     "@opentelemetry/sdk-node": "0.218.0",
     "@opentelemetry/semantic-conventions": "1.41.1",
     "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
-    "codex-agent": "github:tacogips/codex-agent#0ce12d18c5806d34be0f8afc3a96632588a3767f",
+    "codex-agent": "github:tacogips/codex-agent#a675f21a22772435d17329a969712aaaed6f3689",
     "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",

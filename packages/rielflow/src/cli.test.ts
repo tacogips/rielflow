@@ -19,7 +19,7 @@ import {
 import { createWorkflowTemplate } from "./workflow/create";
 import { computeWorkflowPackageChecksum } from "./workflow/packages/checksum";
 import { WORKFLOW_PACKAGE_MANIFEST_FILE } from "./workflow/packages/types";
-import { mockAgentCliCommands } from "./workflow/runtime-readiness-agent-probes-test-helpers";
+import { mockAgentBackendReadinessOperations } from "./workflow/runtime-readiness-agent-probes-test-helpers";
 import * as workflowCallStep from "./workflow/call-step";
 import * as workflowEngine from "./workflow/engine";
 import { err, ok } from "./workflow/result";
@@ -2699,31 +2699,26 @@ describe("runCli", () => {
   test("workflow validate --executable returns invalid node validation results", async () => {
     const root = await makeTempDir();
     agentCliMocks.push(
-      mockAgentCliCommands({
-        codex: (args) => {
-          if (args[0] === "--version") {
-            return { ok: true, stdout: "codex 1.0.0", stderr: "" };
-          }
-          if (args[0] === "login" && args[1] === "status") {
-            return {
-              ok: false,
-              stdout: "",
-              stderr: "not logged in",
-              message: "not logged in",
-            };
-          }
-          return {
-            ok: false,
-            stdout: "",
-            stderr: "",
-            message: `unexpected codex args: ${args.join(" ")}`,
-          };
-        },
-        git: () => ({ ok: true, stdout: "git 2.0", stderr: "" }),
-        "codex-agent": () => ({
-          ok: true,
-          stdout: '{"available":true}',
-          stderr: "",
+      mockAgentBackendReadinessOperations({
+        getCodexBackendToolVersions: async () => ({
+          codex: {
+            name: "codex",
+            command: "codex",
+            version: "codex 1.0.0",
+            status: "available",
+          },
+          git: {
+            name: "git",
+            command: "git",
+            version: "git 2.0",
+            status: "available",
+          },
+        }),
+        getCodexBackendLoginStatus: async () => ({
+          ok: false,
+          status: null,
+          error: "not logged in",
+          exitCode: 1,
         }),
       }),
     );

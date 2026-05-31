@@ -246,6 +246,11 @@ const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
         rewritePackageSourceImports: true,
       },
       {
+        source: "packages/rielflow-adapters/src/readiness.d.ts",
+        target: "readiness.d.ts",
+        rewritePackageSourceImports: true,
+      },
+      {
         source: "packages/rielflow-adapters/src/shared.d.ts",
         target: "shared.d.ts",
         rewritePackageSourceImports: true,

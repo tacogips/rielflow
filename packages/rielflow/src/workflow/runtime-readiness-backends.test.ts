@@ -8,7 +8,7 @@ import {
 } from "./runtime-readiness";
 import { loadWorkflowFromDisk } from "./load";
 import type { NormalizedWorkflowBundle, NodePayload } from "./types";
-import { mockAgentCliCommands } from "./runtime-readiness-agent-probes-test-helpers";
+import { mockAgentBackendReadinessOperations } from "./runtime-readiness-agent-probes-test-helpers";
 
 const tempDirs: string[] = [];
 const agentCliMocks: Array<{ restore: () => void }> = [];
@@ -144,18 +144,19 @@ afterEach(async () => {
 });
 
 describe("inspectWorkflowRuntimeReadiness", () => {
-  test("marks cursor-cli-agent backend available when cursor-cli-agent wrapper reports cursor-agent available", async () => {
+  test("marks cursor-cli-agent backend available when bundled SDK reports cursor-agent available", async () => {
     agentCliMocks.push(
-      mockAgentCliCommands({
-        "cursor-cli-agent": () => ({
-          ok: true,
-          stdout: JSON.stringify({
-            agent: "1.0.0",
-            tools: {
-              "cursor-agent": { version: "0.45.0", error: null },
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "1.0.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
             },
-          }),
-          stderr: "",
+          ],
         }),
       }),
     );
@@ -184,6 +185,7 @@ describe("inspectWorkflowRuntimeReadiness", () => {
     });
     expect(requirement.detail).toContain("cursor-agent");
     expect(requirement.detail).toContain("0.45.0");
+    expect(requirement.detail).not.toContain("cursor-cli-agent tool");
   });
 
   test("runtime readiness observes patched codex-agent to cursor-cli-agent backend", async () => {
@@ -206,16 +208,17 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       variables: {},
     });
     agentCliMocks.push(
-      mockAgentCliCommands({
-        "cursor-cli-agent": () => ({
-          ok: true,
-          stdout: JSON.stringify({
-            agent: "1.0.0",
-            tools: {
-              "cursor-agent": { version: "0.45.0", error: null },
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "1.0.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: "0.45.0",
+              status: "available",
             },
-          }),
-          stderr: "",
+          ],
         }),
       }),
     );
@@ -252,19 +255,18 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
   test("marks cursor-cli-agent backend unavailable when cursor-agent tool reports error", async () => {
     agentCliMocks.push(
-      mockAgentCliCommands({
-        "cursor-cli-agent": () => ({
-          ok: true,
-          stdout: JSON.stringify({
-            agent: "1.0.0",
-            tools: {
-              "cursor-agent": {
-                version: null,
-                error: "cursor binary not found",
-              },
+      mockAgentBackendReadinessOperations({
+        getCursorBackendToolVersions: async () => ({
+          packageVersion: "1.0.0",
+          tools: [
+            {
+              name: "cursor-agent",
+              command: "cursor-agent",
+              version: null,
+              status: "unavailable",
+              error: "cursor binary not found",
             },
-          }),
-          stderr: "",
+          ],
         }),
       }),
     );
@@ -295,28 +297,26 @@ describe("inspectWorkflowRuntimeReadiness", () => {
 
   test("marks codex-agent and claude-code-agent backends available when local tools are runnable", async () => {
     agentCliMocks.push(
-      mockAgentCliCommands({
-        codex: () => ({
-          ok: true,
-          stdout: "codex-cli 0.116.0",
-          stderr: "",
+      mockAgentBackendReadinessOperations({
+        getCodexBackendToolVersions: async () => ({
+          codex: {
+            name: "codex",
+            command: "codex",
+            version: "codex-cli 0.116.0",
+            status: "available",
+          },
+          git: {
+            name: "git",
+            command: "git",
+            version: "git version 2.53.0",
+            status: "available",
+          },
         }),
-        git: () => ({
-          ok: true,
-          stdout: "git version 2.53.0",
-          stderr: "",
-        }),
-        "claude-code-agent": () => ({
-          ok: true,
-          stdout: JSON.stringify({
-            agent: "0.1.0",
-            tools: {
-              claude: { version: "2.1.86", error: null },
-              codex: { version: "0.116.0", error: null },
-              git: { version: "2.53.0", error: null },
-            },
-          }),
-          stderr: "",
+        getClaudeBackendToolVersion: async () => ({
+          name: "claude",
+          command: "claude",
+          version: "2.1.86",
+          status: "available",
         }),
       }),
     );
@@ -359,6 +359,10 @@ describe("inspectWorkflowRuntimeReadiness", () => {
       status: "available",
       sourceStepIds: ["worker"],
     });
+    expect(
+      findRequirement(readiness.requirements, "agent-backend:claude-code-agent")
+        .detail,
+    ).not.toContain("claude-code-agent version");
   });
 
   test("reports container runner problems and container executor availability", async () => {
