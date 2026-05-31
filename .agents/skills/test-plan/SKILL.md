@@ -64,7 +64,7 @@ Test plans bridge the gap between implementation (what was built) and verificati
 
 ## File Size Limits
 
-**CRITICAL**: Large test plan files cause Claude Code OOM errors.
+**CRITICAL**: Large test plan files cause agent OOM errors.
 
 ### Hard Limits
 

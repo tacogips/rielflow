@@ -20,7 +20,7 @@ Apply this skill when:
 
 This skill bridges implementation plans (what to build) and actual code implementation. It provides:
 - Task selection based on dependencies and parallelization markers
-- Execution via Claude subtasks (parallel or sequential)
+- Execution via subtasks (parallel or sequential)
 - Progress tracking via PROGRESS.json and plan updates
 - Completion verification and plan finalization
 
@@ -103,7 +103,7 @@ Two execution modes are available:
 
 **Architecture**: Analysis-only subagent + Main conversation orchestration via `impl-exec-specific`.
 
-Claude Code does not support nested subagent spawning (subagents cannot use Task tool). Therefore:
+Subagents cannot spawn nested subagents because the Task tool is unavailable inside subagents. Therefore:
 - `impl-exec-auto` agent: Analyzes plans and returns executable task list
 - Main conversation: **Invokes `impl-exec-specific`** to execute tasks (NOT direct ts-coding spawning)
 
@@ -145,7 +145,7 @@ Step 2: Main conversation (orchestration via impl-exec-specific):
 
 **Why impl-exec-specific?**
 - Main conversation lacks review cycle logic and plan update format
-- impl-exec-auto cannot spawn subagents (Claude Code limitation)
+- impl-exec-auto cannot spawn subagents (subagent limitation)
 - impl-exec-specific handles the full implementation cycle
 
 ### Specific Mode (`impl-exec-specific`)
@@ -772,7 +772,7 @@ After `impl-exec-auto` returns the executable tasks list, the main conversation 
 | Approach | Problem |
 |----------|---------|
 | Main spawns ts-coding directly | Main lacks review cycle logic, plan update format |
-| impl-exec-auto spawns ts-coding | Claude Code prohibits nested subagent spawning |
+| impl-exec-auto spawns ts-coding | Subagents cannot spawn nested subagents |
 | **Main invokes impl-exec-specific** | Correct - full implementation cycle handled |
 
 ### PROGRESS.json Update (After impl-exec-specific Completes)

@@ -12,7 +12,7 @@ skills: exec-impl-plan-ref, ts-coding-standards
 
 This subagent executes **specific tasks by ID** from implementation plans with a full implementation-review cycle.
 
-**MANDATORY FIRST STEP**: Read `.claude/skills/exec-impl-plan-ref/SKILL.md` for common execution patterns, ts-coding invocation format, sequential execution rules, review cycle guidelines, and response formats.
+**MANDATORY FIRST STEP**: Read `.agents/skills/exec-impl-plan-ref/SKILL.md` for common execution patterns, ts-coding invocation format, sequential execution rules, review cycle guidelines, and response formats.
 
 ## Key Constants
 
@@ -94,7 +94,7 @@ Step 7: Update Plan and Report
 
 ## Step 1: Read Skill and Plan
 
-1. Read `.claude/skills/exec-impl-plan-ref/SKILL.md`
+1. Read `.agents/skills/exec-impl-plan-ref/SKILL.md`
 2. Read the implementation plan file
 3. Identify the design document reference from the plan
 
@@ -338,7 +338,7 @@ Iteration 3 reached with unresolved critical issues.
 
 ## Reference
 
-For common patterns, see `.claude/skills/exec-impl-plan-ref/SKILL.md`:
+For common patterns, see `.agents/skills/exec-impl-plan-ref/SKILL.md`:
 - Task Invocation Format
 - Parallel Execution Pattern
 - Result Collection Pattern

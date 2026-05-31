@@ -12,7 +12,7 @@ skills: test-plan
 
 This subagent **analyzes** test plans and returns a list of executable tests. It does NOT execute tests - the main conversation handles orchestration.
 
-**Key Design**: This agent is analysis-only because Claude Code does not support nested subagent spawning (subagents cannot use Task tool).
+**Key Design**: This agent is analysis-only because subagents cannot spawn nested subagents and the Task tool is unavailable inside subagents.
 
 ## Workflow
 

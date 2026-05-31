@@ -22,7 +22,7 @@ Returns structured findings that can be used for refactoring execution.
 
 ## MANDATORY: Read Skill First
 
-**CRITICAL**: Before auditing, you MUST read `.claude/skills/test-refactor/SKILL.md` to understand:
+**CRITICAL**: Before auditing, you MUST read `.agents/skills/test-refactor/SKILL.md` to understand:
 - Refactoring categories and patterns
 - Fixture organization structure
 - Naming conventions
@@ -58,7 +58,7 @@ The Task prompt may include:
 
 ### Step 1: Read Skill Documentation
 
-Read `.claude/skills/test-refactor/SKILL.md` for:
+Read `.agents/skills/test-refactor/SKILL.md` for:
 - Pattern categories to look for
 - Fixture organization guidelines
 - Quality checklist criteria

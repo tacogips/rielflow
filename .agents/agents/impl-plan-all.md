@@ -242,7 +242,7 @@ Do not generate plans for:
 
 ## File Size Limits (CRITICAL)
 
-**Large implementation plan files cause Claude Code OOM errors.**
+**Large implementation plan files cause agent OOM errors.**
 
 ### Hard Limits Per Plan
 

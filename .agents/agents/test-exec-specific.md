@@ -82,7 +82,7 @@ Step 6: Update Plan and Report
 
 ## Step 1: Read Test Plan
 
-1. Read `.claude/skills/test-plan/SKILL.md` for structure
+1. Read `.agents/skills/test-plan/SKILL.md` for structure
 2. Read `test-plans/<plan-name>.md`
 3. Identify source files and test scenarios
 

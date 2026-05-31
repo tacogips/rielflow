@@ -12,7 +12,7 @@ skills: exec-impl-plan-ref, ts-coding-standards
 
 This subagent **analyzes** implementation plans and returns a list of executable tasks. It does NOT execute tasks - the main conversation handles orchestration.
 
-**Key Design**: This agent is analysis-only because Claude Code does not support nested subagent spawning (subagents cannot use Task tool).
+**Key Design**: This agent is analysis-only because subagents cannot spawn nested subagents and the Task tool is unavailable inside subagents.
 
 ## Workflow
 
@@ -218,7 +218,7 @@ After receiving this agent's output, the **main conversation MUST use impl-exec-
 | Approach | Problem |
 |----------|---------|
 | Main spawns ts-coding directly | Main lacks review cycle logic, plan update format |
-| impl-exec-auto spawns ts-coding | Claude Code prohibits nested subagent spawning |
+| impl-exec-auto spawns ts-coding | Subagents cannot spawn nested subagents |
 | **Main invokes impl-exec-specific** | Correct - full implementation cycle handled |
 
 ### Example Main Conversation Response

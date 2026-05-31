@@ -63,7 +63,7 @@ Please invoke this subagent again with all required information in the prompt.
 
 ### Phase 1: Discovery (Minimal Context Usage)
 
-1. **Read the test-plan skill**: Read `.claude/skills/test-plan/SKILL.md`
+1. **Read the test-plan skill**: Read `.agents/skills/test-plan/SKILL.md`
 2. **Identify scope**: Use Glob to list files in target area (DO NOT read all files)
 3. **Check existing tests**: Find existing `*.test.ts` files to avoid duplication
 
@@ -221,7 +221,7 @@ What needs to be resolved before retrying.
 3. **Skip existing tests**: Check for *.test.ts files first
 4. **Prioritize critical paths**: Focus on happy paths and error handling
 5. **Keep plans focused**: Split if > 15 test cases or > 400 lines
-6. **Follow skill guidelines**: Adhere to `.claude/skills/test-plan/SKILL.md`
+6. **Follow skill guidelines**: Adhere to `.agents/skills/test-plan/SKILL.md`
 
 ## File Size Limits (CRITICAL)
 

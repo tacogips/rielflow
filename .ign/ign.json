@@ -4,12 +4,12 @@
     "path": "bun-ts-v1",
     "ref": "main"
   },
-  "hash": "8c67fa54762e55657b44c856fdebd97199f069359c3af603a5bc9aa61d9d4022",
+  "hash": "d35f1eb130777e7ccbd46c10b351b4d4c4dc9f4c4f151300e737cb29c562976f",
   "metadata": {
-    "generated_at": "2026-05-14T21:34:19.550251871+09:00",
+    "generated_at": "2026-05-30T21:38:37.871208+09:00",
     "generated_by": "ign update",
     "template_name": "bun-ts-v1",
     "template_version": "1.0.0",
-    "ign_version": "0.1.16"
+    "ign_version": "0.2.0"
   }
 }

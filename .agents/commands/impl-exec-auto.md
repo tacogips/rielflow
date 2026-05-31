@@ -84,7 +84,7 @@ Analyzes all active plans, finds all tasks that:
 - Have all task-level dependencies satisfied
 - Are marked as parallelizable
 
-Then executes them sequentially using Claude subtasks.
+Then executes them sequentially using subtasks.
 
 **Execute within a specific plan**:
 ```
@@ -137,7 +137,7 @@ After receiving the executable tasks list from `impl-exec-auto`, the main conver
 5. **Reports completion and newly unblocked tasks**
 
 **Why this architecture?**
-- impl-exec-auto cannot spawn subagents (Claude Code limitation)
+- impl-exec-auto cannot spawn subagents (subagent limitation)
 - impl-exec-specific has the full implementation cycle logic
 - Main conversation coordinates between the two
 

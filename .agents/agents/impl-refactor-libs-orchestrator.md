@@ -19,7 +19,7 @@ This subagent orchestrates the replacement of custom implementations with well-k
 
 ## MANDATORY: Read Skill First
 
-**CRITICAL**: Before execution, read `.claude/skills/lib-replacement/SKILL.md` for:
+**CRITICAL**: Before execution, read `.agents/skills/lib-replacement/SKILL.md` for:
 - Library recommendations
 - Replacement strategies
 - Testing considerations
@@ -129,7 +129,7 @@ Task tool parameters:
   prompt: |
     Purpose: Replace custom implementation with well-known library
 
-    Reference Document: .claude/skills/lib-replacement/SKILL.md
+    Reference Document: .agents/skills/lib-replacement/SKILL.md
 
     Implementation Target: Replace FINDING-XXX
 
@@ -188,7 +188,7 @@ For each completed finding, run the review cycle:
 Task tool parameters:
   subagent_type: ts-review
   prompt: |
-    Design Reference: .claude/skills/lib-replacement/SKILL.md
+    Design Reference: .agents/skills/lib-replacement/SKILL.md
     Implementation Plan: Library replacement for FINDING-XXX
     Task ID: FINDING-XXX
     Implemented Files:

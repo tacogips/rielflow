@@ -33,7 +33,9 @@
     ".agents/commands/test-plan-all.md",
     ".agents/commands/test-plan.md",
     ".agents/commands/test-refactor.md",
+    ".agents/marketplace/.agents-plugin/marketplace.json",
     ".agents/marketplace/.claude-plugin/marketplace.json",
+    ".agents/marketplace/plugins/lsp/.agents-plugin/plugin.json",
     ".agents/marketplace/plugins/lsp/.claude-plugin/plugin.json",
     ".agents/marketplace/plugins/lsp/.lsp.json",
     ".agents/scripts/format-ts.sh",
@@ -68,9 +70,9 @@
     ".agents/skills/ts-coding-standards/type-safety.md",
     ".agents/skills/ts-review/SKILL.md",
     ".claude",
-    ".rielflow/workflows/impl-plan-completion-loop/scripts/archive-completed-plans.sh",
     ".envrc",
     ".gitignore",
+    ".rielflow/workflows/impl-plan-completion-loop/scripts/archive-completed-plans.sh",
     "AGENTS.md",
     "CLAUDE.md",
     "Taskfile.yml",
@@ -90,9 +92,6 @@
     "impl-plans/completed/.gitkeep",
     "impl-plans/templates/plan-template.md",
     "package.json",
-    "src/lib.test.ts",
-    "src/lib.ts",
-    "src/main.ts",
     "tsconfig.json"
   ]
 }

@@ -19,7 +19,7 @@ Returns structured findings that can be used by the `impl-refactor-code-orchestr
 
 ## MANDATORY: Read Skill First
 
-**CRITICAL**: Before auditing, you MUST read `.claude/skills/ts-coding-standards/SKILL.md` to understand:
+**CRITICAL**: Before auditing, you MUST read `.agents/skills/ts-coding-standards/SKILL.md` to understand:
 - Naming conventions
 - Code organization patterns
 - File structure guidelines
@@ -48,7 +48,7 @@ The Task prompt may include:
 
 ### Step 1: Read Skill Documentation
 
-Read `.claude/skills/ts-coding-standards/SKILL.md` for:
+Read `.agents/skills/ts-coding-standards/SKILL.md` for:
 - Naming conventions
 - File organization guidelines
 - Code quality standards

@@ -19,7 +19,7 @@ Returns structured findings that can be used by the `impl-refactor-libs-orchestr
 
 ## MANDATORY: Read Skill First
 
-**CRITICAL**: Before auditing, you MUST read `.claude/skills/lib-replacement/SKILL.md` to understand:
+**CRITICAL**: Before auditing, you MUST read `.agents/skills/lib-replacement/SKILL.md` to understand:
 - Common replacement patterns
 - Library recommendations
 - Bun-specific considerations
@@ -49,7 +49,7 @@ The Task prompt may include:
 
 ### Step 1: Read Skill Documentation
 
-Read `.claude/skills/lib-replacement/SKILL.md` for:
+Read `.agents/skills/lib-replacement/SKILL.md` for:
 - Pattern categories to look for
 - Library recommendations
 - Difficulty assessment criteria

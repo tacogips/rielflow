@@ -19,7 +19,7 @@ This subagent orchestrates code refactoring based on audit findings. It:
 
 ## MANDATORY: Read Skill First
 
-**CRITICAL**: Before execution, read `.claude/skills/ts-coding-standards/SKILL.md` for:
+**CRITICAL**: Before execution, read `.agents/skills/ts-coding-standards/SKILL.md` for:
 - Naming conventions
 - Code organization patterns
 - File structure guidelines
@@ -117,7 +117,7 @@ Task tool parameters:
   prompt: |
     Purpose: Refactor duplicate functions to eliminate code duplication
 
-    Reference Document: .claude/skills/ts-coding-standards/SKILL.md
+    Reference Document: .agents/skills/ts-coding-standards/SKILL.md
 
     Implementation Target: Refactor DUP-XXX
 
@@ -148,7 +148,7 @@ Task tool parameters:
   prompt: |
     Purpose: Fix naming issues (typos, unclear names, convention violations)
 
-    Reference Document: .claude/skills/ts-coding-standards/SKILL.md
+    Reference Document: .agents/skills/ts-coding-standards/SKILL.md
 
     Implementation Target: Fix NAME-XXX
 
@@ -177,7 +177,7 @@ Task tool parameters:
   prompt: |
     Purpose: Split oversized file into smaller, focused modules
 
-    Reference Document: .claude/skills/ts-coding-standards/SKILL.md
+    Reference Document: .agents/skills/ts-coding-standards/SKILL.md
 
     Implementation Target: Split SPLIT-XXX
 
@@ -238,7 +238,7 @@ For each completed finding, run the review cycle:
 Task tool parameters:
   subagent_type: ts-review
   prompt: |
-    Design Reference: .claude/skills/ts-coding-standards/SKILL.md
+    Design Reference: .agents/skills/ts-coding-standards/SKILL.md
     Task ID: [Finding-ID]
     Implemented Files:
       - [file1]
