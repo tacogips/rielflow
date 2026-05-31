@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: the CLI parser is intentionally centralized until the parser split is scheduled.
 import type {
   WorkflowSelfImproveMode,
   WorkflowSelfImproveSourceMode,
@@ -32,6 +33,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let format: "text" | "json" | "jsonl" | undefined;
   let variablesPath: string | undefined;
   let nodePatchPath: string | undefined;
+  let workflowJson: string | undefined;
+  let workflowJsonFile: string | undefined;
   let dryRun = false;
   let verbose = false;
   let debug = false;
@@ -259,6 +262,24 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         }
         nodePatchPath = parsedString.value;
+        break;
+      }
+      case "--workflow-json": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        workflowJson = parsedString.value;
+        break;
+      }
+      case "--workflow-json-file": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        workflowJsonFile = parsedString.value;
         break;
       }
       case "--output": {
@@ -922,6 +943,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(format === undefined ? {} : { format }),
       ...(variablesPath === undefined ? {} : { variablesPath }),
       ...(nodePatchPath === undefined ? {} : { nodePatchPath }),
+      ...(workflowJson === undefined ? {} : { workflowJson }),
+      ...(workflowJsonFile === undefined ? {} : { workflowJsonFile }),
       ...(mockScenarioPath === undefined ? {} : { mockScenarioPath }),
       output,
       dryRun,

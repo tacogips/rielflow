@@ -20,6 +20,10 @@ import {
 import { assembleNodeInput } from "../input-assembly";
 import { validateJsonValueAgainstSchema } from "../json-schema";
 import { loadWorkflowFromDisk } from "../load";
+import {
+  loadPersistedTemporaryWorkflowPayload,
+  persistTemporaryWorkflowPayloadLog,
+} from "../temporary-workflow-payload-log";
 import { appendMailboxPromptGuidance } from "../mailbox-prompt-guidance";
 import { parseManagerControlPayload } from "../manager-control";
 import {
@@ -34,7 +38,7 @@ import {
   writeNodeExecutionMailboxArtifacts,
 } from "../node-execution-mailbox";
 import { describeWorkflowNodeKind, isManagerNodeRef } from "../node-role";
-import { resolveEffectiveRoots } from "../paths";
+import { resolveEffectiveRoots, resolveWorkflowScopedPath } from "../paths";
 import { composeExecutionPrompts } from "../prompt-composition";
 import { err, ok } from "../result";
 import {
@@ -149,6 +153,8 @@ export const workflowRunnerDeps = {
   assembleNodeInput,
   validateJsonValueAgainstSchema,
   loadWorkflowFromDisk,
+  loadPersistedTemporaryWorkflowPayload,
+  persistTemporaryWorkflowPayloadLog,
   appendMailboxPromptGuidance,
   parseManagerControlPayload,
   buildAmbientManagerControlPlaneEnvironment,
@@ -161,6 +167,7 @@ export const workflowRunnerDeps = {
   describeWorkflowNodeKind,
   isManagerNodeRef,
   resolveEffectiveRoots,
+  resolveWorkflowScopedPath,
   composeExecutionPrompts,
   err,
   ok,
@@ -270,8 +277,11 @@ export type WorkflowRunnerAuthoringPort = Pick<
   | "resolveContinuationAnchorPlacement"
   | "validateJsonValueAgainstSchema"
   | "loadWorkflowFromDisk"
+  | "loadPersistedTemporaryWorkflowPayload"
+  | "persistTemporaryWorkflowPayloadLog"
   | "appendMailboxPromptGuidance"
   | "resolveEffectiveRoots"
+  | "resolveWorkflowScopedPath"
   | "composeExecutionPrompts"
   | "inspectWorkflowRuntimeReadiness"
   | "getNormalizedNodePayload"
@@ -293,9 +303,11 @@ export type WorkflowRunnerExecutionPort = Omit<
 export type WorkflowRunSetupPort = Pick<
   WorkflowRunnerDeps,
   | "loadWorkflowFromDisk"
+  | "loadPersistedTemporaryWorkflowPayload"
   | "createManagerSessionStore"
   | "createExecutionCopyMutableWorkspace"
   | "resolveEffectiveRoots"
+  | "resolveWorkflowScopedPath"
   | "err"
   | "ok"
   | "inspectWorkflowRuntimeReadiness"
@@ -308,9 +320,11 @@ export type WorkflowRunSetupPort = Pick<
 
 export const workflowRunSetupPort: WorkflowRunSetupPort = {
   loadWorkflowFromDisk,
+  loadPersistedTemporaryWorkflowPayload,
   createManagerSessionStore,
   createExecutionCopyMutableWorkspace,
   resolveEffectiveRoots,
+  resolveWorkflowScopedPath,
   err,
   ok,
   inspectWorkflowRuntimeReadiness,
@@ -330,6 +344,7 @@ export type WorkflowSessionEntryPort = Pick<
   | "createSessionId"
   | "createSessionState"
   | "saveSession"
+  | "persistTemporaryWorkflowPayloadLog"
   | "resolveWorkflowManagerStepId"
   | "describeAmbiguousFanoutBranchRerunTarget"
   | "hasPendingPausedFanoutBranch"
@@ -358,6 +373,7 @@ export const workflowSessionEntryPort: WorkflowSessionEntryPort = {
   cloneSupervisionForContinuedRun,
   isTerminalStatus,
   persistExternalMailboxInputCommunication,
+  persistTemporaryWorkflowPayloadLog,
 };
 
 export type WorkflowNodeExecutionPort = Pick<

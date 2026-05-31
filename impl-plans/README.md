@@ -40,6 +40,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `temporary-workflow-execution` | 2026-05-31 | `design-temporary-workflow-execution`, `command`, `architecture` |
 | `chat-source-restart-history` | 2026-05-29 | `design-matrix-chat-history`, `design-chat-sdk-chat-history`, `design-matrix-attachment-text` |
 | `adapter-reused-session-prompt-splitting` | 2026-05-29 | `architecture#adapter-layer`, `command` |
 | `refactoring-graphql-runtime-node-execution-ordinal` | 2026-05-29 | `codex-refactoring-divide-and-conquer` slice reviews |

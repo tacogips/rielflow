@@ -397,6 +397,9 @@ export async function runCliWorkflowScope(
   }
 
   const workflowTarget = target;
+  if (command === "run") {
+    return await runCliWorkflowRunCommand(context, workflowTarget);
+  }
   if (workflowTarget === undefined) {
     io.stderr("scope, command, and target are required");
     printHelp(io);
@@ -761,10 +764,6 @@ export async function runCliWorkflowScope(
       }
     }
     return 0;
-  }
-
-  if (command === "run") {
-    return await runCliWorkflowRunCommand(context, workflowTarget);
   }
 
   io.stderr(`unknown workflow command: ${command}`);

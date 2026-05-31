@@ -1,10 +1,11 @@
 import { workflowRunSetupPort } from "./workflow-runner-deps";
 import type { NodeAdapter } from "../adapter";
 import { DispatchingNodeAdapter } from "../adapters/dispatch";
-import type { LoadedWorkflow } from "../load";
+import type { LoadedWorkflow, LoadFailure } from "../load";
 import type { ManagerSessionStore } from "../manager-session-store";
 import type { Result } from "../result";
 import type { WorkflowSessionState } from "../session";
+import type { LoadedTemporaryWorkflow } from "../temporary-workflow";
 import type {
   LoopRule,
   NodePayload,
@@ -24,11 +25,13 @@ const {
   createManagerSessionStore,
   createExecutionCopyMutableWorkspace,
   resolveEffectiveRoots,
+  resolveWorkflowScopedPath,
   err,
   ok,
   inspectWorkflowRuntimeReadiness,
   ScenarioNodeAdapter,
   loadSession,
+  loadPersistedTemporaryWorkflowPayload,
   getStructuralLoops,
   resolveWorkflowExecutionWorkingDirectory,
   createInitialSupervisionRunState,
@@ -47,6 +50,51 @@ export type LoadedWorkflowSuccess = {
   readonly value: LoadedWorkflow;
 };
 
+interface WorkflowForPreparedRun {
+  readonly loaded: Result<LoadedWorkflow, LoadFailure>;
+  readonly temporaryWorkflow?: LoadedTemporaryWorkflow;
+}
+
+async function loadWorkflowForPreparedRun(
+  workflowName: string,
+  options: NormalizedWorkflowRunOptions,
+  preloadedSession: WorkflowSessionState | undefined,
+): Promise<WorkflowForPreparedRun> {
+  if (options.temporaryWorkflow !== undefined) {
+    return {
+      loaded: ok(options.temporaryWorkflow.loadedWorkflow),
+      temporaryWorkflow: options.temporaryWorkflow,
+    };
+  }
+  if (preloadedSession?.temporaryWorkflowSource !== undefined) {
+    const roots = resolveEffectiveRoots(options);
+    const artifactWorkflowRoot = resolveWorkflowScopedPath(
+      roots.artifactRoot,
+      preloadedSession.workflowId,
+    );
+    if (artifactWorkflowRoot === undefined) {
+      return {
+        loaded: err({
+          code: "VALIDATION",
+          message: "temporary workflow source session has invalid workflowId",
+        }),
+      };
+    }
+    const persisted = await loadPersistedTemporaryWorkflowPayload({
+      artifactWorkflowRoot,
+      workflowExecutionId: preloadedSession.sessionId,
+      options,
+    });
+    return persisted.ok
+      ? {
+          loaded: ok(persisted.value.loadedWorkflow),
+          temporaryWorkflow: persisted.value,
+        }
+      : { loaded: err(persisted.error) };
+  }
+  return { loaded: await loadWorkflowFromDisk(workflowName, options) };
+}
+
 export interface PreparedWorkflowRun {
   readonly workflowName: string;
   readonly options: NormalizedWorkflowRunOptions;
@@ -60,6 +108,7 @@ export interface PreparedWorkflowRun {
   readonly isFreshAutoImproveSeed: boolean;
   readonly preloadedForBundlePath: WorkflowSessionState | undefined;
   readonly precomputedSupervision: SupervisionRunState | undefined;
+  readonly temporaryWorkflowForRun: LoadedTemporaryWorkflow | undefined;
   readonly loaded: LoadedWorkflowSuccess;
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
   readonly workflow: WorkflowJson;
@@ -167,7 +216,12 @@ export async function prepareWorkflowRun(
       ? { workflowBundleDirectoryOverride: bundlePathOverrideFromSession }
       : {}),
   };
-  let loaded = await loadWorkflowFromDisk(workflowName, firstLoadOptions);
+  const initialLoad = await loadWorkflowForPreparedRun(
+    workflowName,
+    firstLoadOptions,
+    preloadedForBundlePath,
+  );
+  let loaded = initialLoad.loaded;
   if (!loaded.ok) {
     return err({
       exitCode:
@@ -186,39 +240,53 @@ export async function prepareWorkflowRun(
       targetWorkflowId: loaded.value.bundle.workflow.workflowId,
     });
     const roots = resolveEffectiveRoots(options);
-    const workspace = await createExecutionCopyMutableWorkspace({
-      workflowId: loaded.value.bundle.workflow.workflowId,
-      sourceWorkflowDir: loaded.value.workflowDirectory,
-      artifactRoot: roots.artifactRoot,
-      supervisionRunId: initial.supervisionRunId,
-      mutationMode: policy.workflowMutationMode,
-    });
-    if (!workspace.ok) {
+    if (
+      loaded.value.source?.scope === "temporary" &&
+      policy.maxWorkflowPatches > 0
+    ) {
       return err({
-        exitCode: 1,
-        message: `supervision workspace: ${workspace.error.message}`,
+        exitCode: 2,
+        message:
+          "temporary workflows do not support auto-improve workflow patching; use --no-auto-improve or omit --auto-improve",
       });
     }
-    precomputedSupervision = {
-      ...initial,
-      mutableWorkflowDir: workspace.value.mutableWorkflowDir,
-    };
-    if (workspace.value.mutationMode === "execution-copy") {
-      const reloaded = await loadWorkflowFromDisk(workflowName, {
-        ...options,
-        workflowBundleDirectoryOverride: workspace.value.mutableWorkflowDir,
+    if (loaded.value.source?.scope === "temporary") {
+      precomputedSupervision = initial;
+    } else {
+      const workspace = await createExecutionCopyMutableWorkspace({
+        workflowId: loaded.value.bundle.workflow.workflowId,
+        sourceWorkflowDir: loaded.value.workflowDirectory,
+        artifactRoot: roots.artifactRoot,
+        supervisionRunId: initial.supervisionRunId,
+        mutationMode: policy.workflowMutationMode,
       });
-      if (!reloaded.ok) {
+      if (!workspace.ok) {
         return err({
-          exitCode:
-            reloaded.error.code === "VALIDATION" ||
-            reloaded.error.code === "INVALID_WORKFLOW_NAME"
-              ? 2
-              : 1,
-          message: reloaded.error.message,
+          exitCode: 1,
+          message: `supervision workspace: ${workspace.error.message}`,
         });
       }
-      loaded = reloaded;
+      precomputedSupervision = {
+        ...initial,
+        mutableWorkflowDir: workspace.value.mutableWorkflowDir,
+      };
+      if (workspace.value.mutationMode === "execution-copy") {
+        const reloaded = await loadWorkflowFromDisk(workflowName, {
+          ...options,
+          workflowBundleDirectoryOverride: workspace.value.mutableWorkflowDir,
+        });
+        if (!reloaded.ok) {
+          return err({
+            exitCode:
+              reloaded.error.code === "VALIDATION" ||
+              reloaded.error.code === "INVALID_WORKFLOW_NAME"
+                ? 2
+                : 1,
+            message: reloaded.error.message,
+          });
+        }
+        loaded = reloaded;
+      }
     }
   }
   const runtimeVariables = options.runtimeVariables ?? {};
@@ -275,6 +343,7 @@ export async function prepareWorkflowRun(
     isFreshAutoImproveSeed,
     preloadedForBundlePath,
     precomputedSupervision,
+    temporaryWorkflowForRun: initialLoad.temporaryWorkflow,
     loaded,
     runtimeVariables,
     workflow,

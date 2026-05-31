@@ -49,12 +49,19 @@ import {
   buildLibraryWorkflowRunOptions,
   buildLocalWorkflowExecutionRequestProjection,
   buildRemoteWorkflowExecutionRequestProjection,
+  type TemporaryWorkflowRunInput,
 } from "./lib-workflow-run-options";
+import {
+  normalizeTemporaryWorkflowPayload,
+  type LoadedTemporaryWorkflow,
+} from "./workflow/temporary-workflow";
 
 export type RielflowOptions = LoadOptions & SessionStoreOptions;
 
-export interface ExecuteWorkflowInput extends RielflowOptions {
-  readonly workflowName: string;
+export interface ExecuteWorkflowInput
+  extends RielflowOptions,
+    TemporaryWorkflowRunInput {
+  readonly workflowName?: string;
   readonly workflowWorkingDirectory?: string;
   readonly runtimeVariables?: Readonly<Record<string, unknown>>;
   readonly mockScenario?: MockNodeScenario;
@@ -217,6 +224,39 @@ function resolveRuntimeVariables(
     throw new Error("use only one of input or runtimeVariables");
   }
   return request?.runtimeVariables ?? request?.input;
+}
+
+async function resolveTemporaryWorkflowForLibrary(
+  input: TemporaryWorkflowRunInput & RielflowOptions,
+): Promise<LoadedTemporaryWorkflow | undefined> {
+  const temporaryInputCount = [
+    input.workflowJson,
+    input.workflowJsonPayload,
+    input.workflowJsonFile,
+  ].filter((value) => value !== undefined).length;
+  if (temporaryInputCount === 0) {
+    return undefined;
+  }
+  if (temporaryInputCount > 1) {
+    throw new Error(
+      "use only one of workflowJson, workflowJsonPayload, or workflowJsonFile",
+    );
+  }
+  if (input.workflowJsonFile !== undefined) {
+    throw new Error(
+      "workflowJsonFile is CLI-local; library callers must pass workflowJson or workflowJsonPayload",
+    );
+  }
+  const loaded = await normalizeTemporaryWorkflowPayload(
+    input.workflowJson !== undefined
+      ? { kind: "inline-json", value: input.workflowJson }
+      : { kind: "inline-json", value: input.workflowJsonPayload },
+    input,
+  );
+  if (!loaded.ok) {
+    throw new Error(loaded.error.message);
+  }
+  return loaded.value;
 }
 
 async function resolveWorkflowCatalogOptions<T extends RielflowOptions>(
@@ -424,21 +464,34 @@ export async function executeWorkflow(input: ExecuteWorkflowInput): Promise<{
   readonly status: WorkflowSessionState["status"];
   readonly exitCode: number;
 }> {
+  const temporaryWorkflow = await resolveTemporaryWorkflowForLibrary(input);
+  if (temporaryWorkflow === undefined && input.workflowName === undefined) {
+    throw new Error(
+      "workflowName is required when no temporary workflow is provided",
+    );
+  }
+  const autoImprove = input.disableAutoImprove
+    ? createLifecycleSupervisionPolicyInput()
+    : (input.autoImprove ??
+      (temporaryWorkflow === undefined ? { enabled: true } : undefined));
   const options = buildLibraryWorkflowRunOptions(input, {
     includeWorkflowSourceOptions: true,
     includeRuntimeVariables: true,
     includeExecutionLimits: true,
     includeDryRun: true,
     includeEventReplyDispatcher: true,
-    autoImprove: input.disableAutoImprove
-      ? createLifecycleSupervisionPolicyInput()
-      : (input.autoImprove ?? { enabled: true }),
+    ...(autoImprove === undefined ? {} : { autoImprove }),
   });
-  const executionOptions = await resolveWorkflowCatalogOptions(
-    input.workflowName,
-    options,
-  );
-  const result = await runWorkflow(input.workflowName, executionOptions);
+  const workflowName =
+    input.workflowName ?? temporaryWorkflow?.loadedWorkflow.workflowName;
+  if (workflowName === undefined) {
+    throw new Error("temporary workflow did not provide a workflow name");
+  }
+  const executionOptions =
+    temporaryWorkflow === undefined
+      ? await resolveWorkflowCatalogOptions(workflowName, options)
+      : { ...options, temporaryWorkflow };
+  const result = await runWorkflow(workflowName, executionOptions);
   if (!result.ok) {
     throw new Error(result.error.message);
   }
@@ -855,6 +908,13 @@ export {
   loadWorkflowFromDisk,
   mergeLoadOptionsForSessionMutableBundle,
 } from "rielflow-core";
+export {
+  normalizeTemporaryWorkflowPayload,
+  type LoadedTemporaryWorkflow,
+  type TemporaryWorkflowInputKind,
+  type TemporaryWorkflowPayloadInput,
+} from "./workflow/temporary-workflow";
+export type { TemporaryWorkflowRunInput } from "./lib-workflow-run-options";
 export {
   listWorkflowCatalogSources,
   resolveWorkflowCreateSource,

@@ -1,5 +1,12 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { runWorkflow } from "../workflow/engine";
-import { loadWorkflowFromCatalog } from "../workflow/load";
+import { loadWorkflowFromCatalog, type LoadFailure } from "../workflow/load";
+import type { Result } from "../workflow/result";
+import {
+  normalizeTemporaryWorkflowPayload,
+  type LoadedTemporaryWorkflow,
+} from "../workflow/temporary-workflow";
 import {
   checkoutWorkflowPackageForTemporaryRun,
   type WorkflowPackageTemporaryRunCheckoutResult,
@@ -73,11 +80,92 @@ function skippedTemporaryRegistryRunCleanup(
   };
 }
 
+async function loadTemporaryWorkflowForCli(
+  context: RunCliScopeContext,
+  loadOptions: RunCliScopeContext["sharedOptions"],
+): Promise<Result<LoadedTemporaryWorkflow, LoadFailure>> {
+  const { parsed } = context;
+  if (parsed.options.workflowJson !== undefined) {
+    return await normalizeTemporaryWorkflowPayload(
+      {
+        kind: "inline-json",
+        value: parsed.options.workflowJson,
+      },
+      loadOptions,
+    );
+  }
+
+  const workflowJsonFile = parsed.options.workflowJsonFile;
+  if (workflowJsonFile === undefined) {
+    throw new Error("internal: temporary workflow input missing");
+  }
+  const displayPath = path.resolve(process.cwd(), workflowJsonFile);
+  try {
+    const raw = await readFile(displayPath, "utf8");
+    return await normalizeTemporaryWorkflowPayload(
+      {
+        kind: "json-file",
+        value: JSON.parse(raw) as unknown,
+        displayPath,
+      },
+      loadOptions,
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return {
+      ok: false,
+      error: {
+        code: "IO",
+        message: `failed reading --workflow-json-file '${workflowJsonFile}': ${message}`,
+      },
+    };
+  }
+}
+
 export async function runCliWorkflowRunCommand(
   context: RunCliScopeContext,
-  workflowTarget: string,
+  workflowTarget: string | undefined,
 ): Promise<number> {
   const { parsed, sharedOptions, graphqlCliTransport, io } = context;
+  const hasTemporaryWorkflowJson = parsed.options.workflowJson !== undefined;
+  const hasTemporaryWorkflowJsonFile =
+    parsed.options.workflowJsonFile !== undefined;
+  const hasTemporaryWorkflowInput =
+    hasTemporaryWorkflowJson || hasTemporaryWorkflowJsonFile;
+  if (hasTemporaryWorkflowJson && hasTemporaryWorkflowJsonFile) {
+    io.stderr("--workflow-json cannot be combined with --workflow-json-file");
+    return 2;
+  }
+  if (hasTemporaryWorkflowInput && workflowTarget !== undefined) {
+    io.stderr(
+      "--workflow-json and --workflow-json-file cannot be combined with a positional workflow target",
+    );
+    return 2;
+  }
+  if (hasTemporaryWorkflowInput && parsed.options.workflowRoot !== undefined) {
+    io.stderr(
+      "--workflow-json and --workflow-json-file cannot be combined with --workflow-definition-dir",
+    );
+    return 2;
+  }
+  if (hasTemporaryWorkflowInput && parsed.options.fromRegistry) {
+    io.stderr(
+      "--workflow-json and --workflow-json-file cannot be combined with --from-registry",
+    );
+    return 2;
+  }
+  if (hasTemporaryWorkflowInput && graphqlCliTransport !== null) {
+    io.stderr(
+      "--workflow-json and --workflow-json-file are local-only and cannot be combined with --endpoint",
+    );
+    return 2;
+  }
+  if (!hasTemporaryWorkflowInput && workflowTarget === undefined) {
+    io.stderr(
+      "workflow run requires a workflow target or temporary workflow input",
+    );
+    return 2;
+  }
   if (parsed.options.fromRegistry && graphqlCliTransport !== null) {
     io.stderr(
       "workflow run --from-registry is local-only and cannot be combined with --endpoint",
@@ -96,7 +184,9 @@ export async function runCliWorkflowRunCommand(
       return 1;
     }
   }
-  let nodePatch = undefined;
+  let nodePatch:
+    | Awaited<ReturnType<typeof readWorkflowNodePatchOption>>
+    | undefined;
   if (parsed.options.nodePatchPath !== undefined) {
     try {
       nodePatch = await readWorkflowNodePatchOption(
@@ -127,7 +217,7 @@ export async function runCliWorkflowRunCommand(
             `,
         variables: {
           input: {
-            workflowName: workflowTarget,
+            workflowName: workflowTarget as string,
             runtimeVariables,
             ...(nodePatch === undefined ? {} : { nodePatch }),
             ...buildRemoteExecutionInput(parsed.options),
@@ -178,7 +268,7 @@ export async function runCliWorkflowRunCommand(
 
   const registryCheckout = parsed.options.fromRegistry
     ? await checkoutWorkflowPackageForTemporaryRun({
-        target: workflowTarget,
+        target: workflowTarget as string,
         ...(parsed.options.registry === undefined
           ? {}
           : { registry: parsed.options.registry }),
@@ -207,7 +297,31 @@ export async function runCliWorkflowRunCommand(
   }
   const registryRun =
     registryCheckout === undefined ? undefined : registryCheckout.value;
-  const effectiveWorkflowTarget = registryRun?.workflowName ?? workflowTarget;
+  const temporaryWorkflow = hasTemporaryWorkflowInput
+    ? await loadTemporaryWorkflowForCli(context, {
+        ...sharedOptions,
+        ...(nodePatch === undefined ? {} : { nodePatch }),
+      })
+    : undefined;
+  if (temporaryWorkflow !== undefined && !temporaryWorkflow.ok) {
+    if (parsed.options.output === "json") {
+      emitJson(io, temporaryWorkflow.error);
+    } else {
+      io.stderr(`run failed: ${temporaryWorkflow.error.message}`);
+      if (temporaryWorkflow.error.issues) {
+        io.stderr(formatValidationIssues(temporaryWorkflow.error.issues));
+      }
+    }
+    return temporaryWorkflow.error.code === "VALIDATION" ||
+      temporaryWorkflow.error.code === "INVALID_WORKFLOW_NAME" ||
+      temporaryWorkflow.error.code === "INVALID_SCOPE"
+      ? 2
+      : 1;
+  }
+  const effectiveWorkflowTarget =
+    temporaryWorkflow?.value.loadedWorkflow.workflowName ??
+    registryRun?.workflowName ??
+    (workflowTarget as string);
   const effectiveSharedOptions =
     registryRun === undefined
       ? sharedOptions
@@ -216,13 +330,16 @@ export async function runCliWorkflowRunCommand(
           workflowRoot: registryRun.workflowDefinitionDir,
         };
 
-  const loadedWorkflow = await loadWorkflowFromCatalog(
-    effectiveWorkflowTarget,
-    {
-      ...effectiveSharedOptions,
-      ...(nodePatch === undefined ? {} : { nodePatch }),
-    },
-  );
+  const loadedWorkflow =
+    temporaryWorkflow?.value.loadedWorkflow === undefined
+      ? await loadWorkflowFromCatalog(effectiveWorkflowTarget, {
+          ...effectiveSharedOptions,
+          ...(nodePatch === undefined ? {} : { nodePatch }),
+        })
+      : {
+          ok: true as const,
+          value: temporaryWorkflow.value.loadedWorkflow,
+        };
   if (!loadedWorkflow.ok) {
     const cleanup = await cleanupTemporaryRegistryRun(registryRun);
     if (parsed.options.output === "json") {
@@ -262,8 +379,14 @@ export async function runCliWorkflowRunCommand(
     ...(nodePatch === undefined ? {} : { nodePatch }),
     runtimeVariables,
     ...mockScenarioOptions,
-    ...buildLocalWorkflowRunOverrides(parsed.options, true),
+    ...buildLocalWorkflowRunOverrides(
+      parsed.options,
+      !hasTemporaryWorkflowInput,
+    ),
     ...buildSupervisorProgressEventSink(parsed.options, io),
+    ...(temporaryWorkflow === undefined || !temporaryWorkflow.ok
+      ? {}
+      : { temporaryWorkflow: temporaryWorkflow.value }),
     ...(parsed.options.maxSteps === undefined
       ? {}
       : { maxSteps: parsed.options.maxSteps }),
