@@ -23,6 +23,7 @@ import {
   resolveWorkflowEntryRuntimeId,
   resolveWorkflowManagerStepId,
 } from "./types";
+import { normalizeTemporaryWorkflowPayload } from "./temporary-workflow";
 
 const tempDirs: string[] = [];
 
@@ -113,7 +114,103 @@ function writeWorkflowBundle(input: {
   });
 }
 
+function temporaryWorkflowBundle(
+  overrides: Readonly<Record<string, unknown>> = {},
+): unknown {
+  return {
+    workflow: {
+      workflowId: "temp-demo",
+      description: "temporary demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "main",
+      entryStepId: "main",
+      nodes: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+      steps: [{ id: "main", nodeId: "main", role: "manager" }],
+      ...(overrides["workflow"] as
+        | Readonly<Record<string, unknown>>
+        | undefined),
+    },
+    nodePayloads: {
+      "nodes/node-main.json": {
+        id: "main",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "do the work",
+        variables: {},
+      },
+      ...(overrides["nodePayloads"] as
+        | Readonly<Record<string, unknown>>
+        | undefined),
+    },
+  };
+}
+
 describe("loadWorkflowFromDisk", () => {
+  test("normalizes temporary workflow payloads from embedded bundle JSON", async () => {
+    const artifactRoot = makeTempDir();
+    const loaded = await normalizeTemporaryWorkflowPayload(
+      { kind: "inline-json", value: temporaryWorkflowBundle() },
+      { artifactRoot },
+    );
+
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      throw new Error("temporary workflow failed to load");
+    }
+    expect(loaded.value.loadedWorkflow.source?.scope).toBe("temporary");
+    expect(loaded.value.loadedWorkflow.workflowName).toBe("temp-demo");
+    expect(loaded.value.normalizedPayload.workflow.workflowId).toBe(
+      "temp-demo",
+    );
+  });
+
+  test("rejects temporary workflow payloads with external prompt files", async () => {
+    const loaded = await normalizeTemporaryWorkflowPayload(
+      {
+        kind: "inline-json",
+        value: temporaryWorkflowBundle({
+          nodePayloads: {
+            "nodes/node-main.json": {
+              id: "main",
+              executionBackend: "codex-agent",
+              model: "gpt-5-nano",
+              promptTemplateFile: "prompts/main.md",
+              variables: {},
+            },
+          },
+        }),
+      },
+      {},
+    );
+
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) {
+      throw new Error("temporary workflow unexpectedly loaded");
+    }
+    expect(loaded.error.issues?.[0]?.message).toContain(
+      "temporary workflows must embed prompt",
+    );
+  });
+
+  test("rejects ambiguous temporary single-workflow objects", async () => {
+    const loaded = await normalizeTemporaryWorkflowPayload(
+      {
+        kind: "inline-json",
+        value: {
+          workflowId: "temp-demo",
+          nodes: [],
+        },
+      },
+      {},
+    );
+
+    expect(loaded.ok).toBe(false);
+    if (loaded.ok) {
+      throw new Error("temporary workflow unexpectedly loaded");
+    }
+    expect(loaded.error.message).toContain("{ workflow, nodePayloads }");
+  });
+
   test("loads a step-addressed workflow and derives runtime ids from steps", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({ workflowRoot, workflowName: "demo" });

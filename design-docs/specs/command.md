@@ -325,6 +325,8 @@ may generate a file URL or locally patched formula for smoke testing.
 | `--executable`                                    | boolean       | `false`                                             | For `workflow validate` and `workflow manifest validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                     |
 | `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `rielflow graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |
 | `--node-patch`                                    | string        | none                                                | For `workflow validate` and `workflow run`: non-persistent node settings patch as inline JSON object, existing file path, or `@path/to/patch.json`; patch keys are node ids and values allow only `executionBackend`, `model`, and `effort` |
+| `--workflow-json`                                 | string        | none                                                | For local `workflow run`: temporary workflow payload as inline JSON; mutually exclusive with positional workflow target, `--workflow-json-file`, `--workflow-definition-dir`, and `--from-registry`                       |
+| `--workflow-json-file`                            | string (path) | none                                                | For local `workflow run`: temporary workflow payload read from one JSON file; mutually exclusive with positional workflow target, `--workflow-json`, `--workflow-definition-dir`, and `--from-registry`                 |
 | `--workflow-definition-dir`                       | string (path) | scoped catalog lookup                               | Direct directory containing `<workflow-name>/workflow.json` definition bundles; when supplied, bypasses project/user scope catalog lookup and does not control logs, sessions, or artifacts                               |
 | `--scope`                                         | string        | `auto`                                              | Workflow scope selector for read/write commands: `auto`, `project`, or `user`                                                                                                                                             |
 | `--status`                                        | string        | none                                                | For overview/list commands: filter by aggregate status (`running`, `paused`, `completed`, `failed`, `cancelled`, or `never-run`)                                                                                          |
@@ -465,11 +467,13 @@ Workflow lookup resolution order:
 
 1. `--workflow-manifest` for `serve`
 2. `RIEL_WORKFLOW_MANIFEST` for `serve`
-3. `--workflow-definition-dir`
-4. `RIEL_WORKFLOW_DEFINITION_DIR`
-5. `--scope project|user` / `RIEL_WORKFLOW_SCOPE`
-6. project scope `<project-root>/workflows` when scope is `auto` or `project`
-7. user scope `<user-root>/workflows` when scope is `auto` or `user`
+3. `--workflow-json` for local `workflow run`
+4. `--workflow-json-file` for local `workflow run`
+5. `--workflow-definition-dir`
+6. `RIEL_WORKFLOW_DEFINITION_DIR`
+7. `--scope project|user` / `RIEL_WORKFLOW_SCOPE`
+8. project scope `<project-root>/workflows` when scope is `auto` or `project`
+9. user scope `<user-root>/workflows` when scope is `auto` or `user`
 
 In `auto` mode, project scope is searched before user scope. If the same name
 exists in both scopes, project scope wins for bare workflow names.
@@ -482,6 +486,17 @@ For manifest path fields, `relative` resolves from the current directory unless
 `RIEL_WORKFLOW_MANIFEST_ROOT` supplies an explicit root. Use
 `workflow manifest validate <manifest-path>` to validate manifest shape, path
 resolution, duplicate constraints, and every referenced workflow bundle.
+
+Temporary workflow input for `workflow run` is described in
+`design-docs/specs/design-temporary-workflow-execution.md`. It bypasses catalog
+lookup without installing the workflow into project or user scope. Temporary
+payloads must embed prompt content in JSON. Explicit temporary workflow options
+take precedence over `RIEL_WORKFLOW_DEFINITION_DIR` for workflow source
+resolution; they are rejected only when combined with another explicit source
+selector such as a positional workflow target, `--workflow-definition-dir`, or
+`--from-registry`. Temporary payloads are persisted under the run's artifact
+tree in a `temporary-workflow-payload/` directory; ordinary scoped and
+direct-directory runs must not create that directory.
 
 Invalid values for `--scope` or `RIEL_WORKFLOW_SCOPE` are usage errors. The
 CLI must fail rather than silently treating the value as `auto`.

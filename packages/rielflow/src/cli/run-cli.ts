@@ -158,6 +158,10 @@ export async function runCli(
     target === undefined &&
     !(
       (scope === "workflow" && (command === "list" || command === "usage")) ||
+      (scope === "workflow" &&
+        command === "run" &&
+        (parsed.options.workflowJson !== undefined ||
+          parsed.options.workflowJsonFile !== undefined)) ||
       (scope === "package" &&
         (command === "list" ||
           command === "status" ||

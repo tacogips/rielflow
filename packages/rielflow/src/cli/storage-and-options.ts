@@ -290,6 +290,8 @@ export interface WorkflowSourceOutput {
   readonly workflowRoot: string;
   readonly workflowDirectory: string;
   readonly scopeRoot?: string;
+  readonly input?: "inline-json" | "json-file" | "persisted-normalized";
+  readonly displayPath?: string;
 }
 export type RuntimeVariablesSourceKind =
   | "inline-json"
@@ -324,6 +326,8 @@ export interface ParsedOptions {
   readonly format?: "text" | "json" | "jsonl";
   readonly variablesPath?: string;
   readonly nodePatchPath?: string;
+  readonly workflowJson?: string;
+  readonly workflowJsonFile?: string;
   readonly mockScenarioPath?: string;
   readonly dryRun: boolean;
   readonly verbose: boolean;

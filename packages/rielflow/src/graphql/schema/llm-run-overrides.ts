@@ -397,7 +397,9 @@ export function workflowStatusOverviewInputForFixedMode(
   }
   return {
     workflowName: fixedSource.workflowName,
-    ...(fixedSource.scope === "direct" || fixedSource.scope === "manifest"
+    ...(fixedSource.scope === "direct" ||
+    fixedSource.scope === "manifest" ||
+    fixedSource.scope === "temporary"
       ? {}
       : { workflowScope: fixedSource.scope }),
     ...(input.limit === undefined ? {} : { limit: input.limit }),

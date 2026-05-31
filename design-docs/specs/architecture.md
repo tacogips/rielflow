@@ -753,6 +753,18 @@ Workflow definitions live under `<workflow-definition-dir>/<workflow-name>/` and
 
 The loader resolves those workflow-local prompt files into effective inline template text before validation and execution.
 
+Temporary workflow execution is a separate source boundary for callers that
+provide a complete workflow payload with `--workflow-json`,
+`--workflow-json-file`, or an equivalent local API input. Temporary workflows
+are not installed into project or user workflow roots and must not resolve
+prompt, step, or node content from workflow-local files. Instead, prompt content
+and node payloads are embedded in the supplied JSON and normalized in memory
+before execution.
+
+Supporting design:
+
+- `design-docs/specs/design-temporary-workflow-execution.md`
+
 Authored workflow boundary rules are centralized in `packages/rielflow/src/workflow/authored-workflow.ts`:
 
 - removed top-level authored fields, their rejection messages, and canonical validation issue construction live there
@@ -874,6 +886,19 @@ For direct workflow-definition-dir and other non-scoped runtime entrypoints, the
 `{rootDataDir}` is `<user-root>/artifacts`.
 
 File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI and GraphQL inspection queries.
+
+Temporary workflow runs add one source-specific artifact area under the
+individual run artifact tree:
+
+```text
+<artifactWorkflowRoot>/<workflowExecutionId>/temporary-workflow-payload/
+```
+
+That directory stores the submitted payload, normalized execution bundle, and
+source metadata for temporary runs only. It is the durable reload source for
+resume/rerun of temporary sessions. Normal scoped, direct-directory, manifest,
+and registry-backed runs keep their existing artifact shape and must not receive
+temporary payload directories.
 
 When CLI, API, library, or catalog-aware runtime entrypoints receive explicit
 artifact and/or session-store roots, they infer `rootDataDir` from those

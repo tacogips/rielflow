@@ -13,6 +13,8 @@ can all be described as a reusable workflow.
 
 - Run reusable workflow bundles from a project catalog, user catalog, example
   directory, package registry, or GitHub workflow URL.
+- Run one-off temporary workflow payloads from inline JSON or one JSON file
+  without installing them into a catalog.
 - Use agent backends such as `codex-agent`, `claude-code-agent`,
   `cursor-cli-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
 - Combine agent steps with command, container, sleep, user-action,
@@ -177,6 +179,30 @@ rielflow workflow run design-and-implement-review-loop \
   --output json
 ```
 
+Run a one-off temporary workflow without installing it into the project or user
+catalog:
+
+```bash
+rielflow workflow run \
+  --workflow-json '{"workflow":{"workflowId":"temp-demo","description":"Temporary demo","defaults":{"maxLoopIterations":3,"nodeTimeoutMs":120000},"managerStepId":"main","entryStepId":"main","nodes":[{"id":"main","nodeFile":"nodes/node-main.json"}],"steps":[{"id":"main","nodeId":"main","role":"manager"}]},"nodePayloads":{"nodes/node-main.json":{"id":"main","executionBackend":"codex-agent","model":"gpt-5-nano","promptTemplate":"Return a short status report.","variables":{}}}}' \
+  --output json
+```
+
+For larger payloads, keep the same embedded JSON format in a file and run:
+
+```bash
+rielflow workflow run --workflow-json-file ./temp-workflow.json --output json
+```
+
+Temporary workflow JSON must embed prompt and related prompt content directly in
+the payload. Temporary runs reject `promptTemplateFile`,
+`systemPromptTemplateFile`, `sessionStartPromptTemplateFile`, step files, and
+unresolved external node files because the source is not installed as a workflow
+directory. During a temporary run, Rielflow stores `input.json`,
+`normalized.json`, and `metadata.json` under that run's artifact tree at
+`temporary-workflow-payload/`; normal project, user, explicit-directory,
+manifest, and registry runs do not create this payload directory.
+
 Inspect a session after a run:
 
 ```bash
@@ -219,13 +245,17 @@ Rielflow finds workflows from these places:
 - Project catalog: `./.rielflow/workflows/<workflow-name>/workflow.json`
 - User catalog: `~/.rielflow/workflows/<workflow-name>/workflow.json`
 - Explicit directory: `--workflow-definition-dir ./examples`
+- Temporary inline payload: `workflow run --workflow-json '<json>'`
+- Temporary JSON file: `workflow run --workflow-json-file ./workflow.json`
 - Server manifest: `--workflow-manifest ./workflow-manifest.json`
 - Package registry: `workflow run <package> --from-registry`
 - GitHub workflow URL: `workflow checkout <url>` or
   `workflow run <url> --from-registry`
 
 Use `--workflow-definition-dir ./examples` for examples and tests. Use the
-project or user catalog for workflows you want to keep.
+project or user catalog for workflows you want to keep. Temporary workflow
+payloads are local `workflow run` inputs only; they are not installed,
+listed, or exposed through a server manifest.
 
 ## Package Management
 
@@ -458,6 +488,30 @@ Then:
    --mock-scenario ./examples/<workflow-name>/mock-scenario.json
 6. Inspect the session with session status, progress, logs, and export.
 7. Summarize the final workflow output for the user.
+```
+
+### Run A Temporary Workflow Payload
+
+```text
+Use rielflow to run this one-off workflow payload without installing it.
+
+Temporary workflow rules:
+1. Use --workflow-json for small embedded payloads or --workflow-json-file for
+   one local JSON file.
+2. The payload must use the embedded bundle shape:
+   { "workflow": { ... }, "nodePayloads": { ... } }
+3. Do not use promptTemplateFile, systemPromptTemplateFile,
+   sessionStartPromptTemplateFile, step files, or external node files.
+4. Do not combine temporary workflow flags with a positional workflow target,
+   --workflow-definition-dir, --from-registry, or --endpoint.
+
+Run:
+rielflow workflow run --workflow-json-file ./temp-workflow.json --output json
+
+After the run, inspect the session normally. Temporary runs persist
+temporary-workflow-payload/input.json, normalized.json, and metadata.json under
+the run artifact tree so local resume, rerun, and continue operations do not
+depend on the original inline string or JSON file.
 ```
 
 ### Install Or Run A Workflow Package

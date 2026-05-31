@@ -26,6 +26,12 @@ export {
   mergeLoadOptionsForSessionMutableBundle,
 } from "../../rielflow/src/workflow/load";
 export {
+  normalizeTemporaryWorkflowPayload,
+  type LoadedTemporaryWorkflow,
+  type TemporaryWorkflowInputKind,
+  type TemporaryWorkflowPayloadInput,
+} from "../../rielflow/src/workflow/temporary-workflow";
+export {
   DEFAULT_SELF_IMPROVE_LOG_LIMIT,
   executeWorkflowSelfImprove,
   getWorkflowSelfImproveReport,

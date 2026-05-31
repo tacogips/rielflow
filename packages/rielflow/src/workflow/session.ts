@@ -318,6 +318,14 @@ export interface FanoutGroupRunRecord {
   readonly branches: readonly FanoutBranchRecord[];
 }
 
+export interface TemporaryWorkflowSessionSource {
+  readonly scope: "temporary";
+  readonly input: "inline-json" | "json-file" | "persisted-normalized";
+  readonly payloadDirectory: string;
+  readonly normalizedPayloadPath: string;
+  readonly metadataPath: string;
+}
+
 export interface WorkflowSessionState {
   readonly sessionId: string;
   readonly workflowName: string;
@@ -349,6 +357,7 @@ export interface WorkflowSessionState {
   readonly scheduledEvents?: readonly WorkflowScheduledEventRef[];
   readonly fanoutGroups?: readonly FanoutGroupRunRecord[];
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly temporaryWorkflowSource?: TemporaryWorkflowSessionSource;
   readonly lastError?: string;
   /** Present when the session is part of an auto-improve / superviser cycle. */
   readonly supervision?: SupervisionRunState;
@@ -478,6 +487,40 @@ function coerceHistoryImports(
   return segments.length === 0 ? undefined : segments;
 }
 
+function coerceTemporaryWorkflowSource(
+  raw: unknown,
+): TemporaryWorkflowSessionSource | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+  const source = raw as Record<string, unknown>;
+  const input = source["input"];
+  const payloadDirectory = source["payloadDirectory"];
+  const normalizedPayloadPath = source["normalizedPayloadPath"];
+  const metadataPath = source["metadataPath"];
+  if (
+    source["scope"] !== "temporary" ||
+    (input !== "inline-json" &&
+      input !== "json-file" &&
+      input !== "persisted-normalized") ||
+    typeof payloadDirectory !== "string" ||
+    payloadDirectory.length === 0 ||
+    typeof normalizedPayloadPath !== "string" ||
+    normalizedPayloadPath.length === 0 ||
+    typeof metadataPath !== "string" ||
+    metadataPath.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    scope: "temporary",
+    input,
+    payloadDirectory,
+    normalizedPayloadPath,
+    metadataPath,
+  };
+}
+
 function assignStableExecutionOrdinals(
   executions: readonly NodeExecutionRecord[],
 ): readonly NodeExecutionRecord[] {
@@ -565,9 +608,15 @@ export function normalizeSessionState(
       : isWorkflowContinuationMode(session.continuationMode)
         ? session.continuationMode
         : undefined;
+  const temporaryWorkflowSource = coerceTemporaryWorkflowSource(
+    (session as { temporaryWorkflowSource?: unknown }).temporaryWorkflowSource,
+  );
 
   let next: WorkflowSessionState = {
     ...session,
+    ...(temporaryWorkflowSource === undefined
+      ? {}
+      : { temporaryWorkflowSource }),
     loopIterationCounts: { ...(session.loopIterationCounts ?? {}) },
     restartCounts: { ...(session.restartCounts ?? {}) },
     restartEvents: [...(session.restartEvents ?? [])],
@@ -626,6 +675,21 @@ export function normalizeSessionState(
       : {
           ...next,
           continuationMode,
+        };
+
+  next =
+    temporaryWorkflowSource === undefined
+      ? (() => {
+          const {
+            temporaryWorkflowSource: removedTemporaryWorkflowSource,
+            ...remainder
+          } = next;
+          void removedTemporaryWorkflowSource;
+          return remainder as WorkflowSessionState;
+        })()
+      : {
+          ...next,
+          temporaryWorkflowSource,
         };
 
   return next;

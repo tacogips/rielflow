@@ -184,6 +184,12 @@ export function printHelp(io: CliIo): void {
     "  workflow run <name> --variables <json|@file|file>  Runtime variables as inline JSON object, explicit @file, or bare JSON file path",
   );
   io.stdout(
+    "  workflow run --workflow-json <json>  Run a temporary workflow bundle from embedded JSON",
+  );
+  io.stdout(
+    "  workflow run --workflow-json-file <path>  Run a temporary workflow bundle from one JSON file",
+  );
+  io.stdout(
     "  workflow <validate|run> <name> --node-patch <json|@file|file>  Non-persistent node patch keyed by node id with executionBackend/model/effort",
   );
   io.stdout(

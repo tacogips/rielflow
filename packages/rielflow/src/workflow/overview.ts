@@ -501,7 +501,7 @@ export function workflowStatusOverviewInputFromOverviewRow(
   if (row.sourceScope === "direct") {
     return { workflowName: row.workflowName };
   }
-  if (row.sourceScope === "manifest") {
+  if (row.sourceScope === "manifest" || row.sourceScope === "temporary") {
     return { workflowName: row.workflowName };
   }
   return { workflowName: row.workflowName, workflowScope: row.sourceScope };

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-30T09:15:00+09:00",
+  "lastUpdated": "2026-05-31T23:20:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -552,6 +552,9 @@
     },
     "187": {
       "status": "READY"
+    },
+    "188": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -7106,6 +7109,58 @@
           "parallelizable": false,
           "deps": [
             "TASK-001"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005"
+          ]
+        }
+      }
+    },
+    "completed/temporary-workflow-execution": {
+      "phase": 188,
+      "status": "Completed",
+      "path": "impl-plans/completed/temporary-workflow-execution.md",
+      "designReference": "design-docs/specs/design-temporary-workflow-execution.md; design-docs/specs/command.md#flags-and-options; design-docs/specs/architecture.md#runtime-state-boundary",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-002"
           ]
         },
         "TASK-006": {
