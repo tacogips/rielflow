@@ -89,6 +89,28 @@ describe("add-on package boundary", () => {
     expect(typeof module["executeNativeNode"]).toBe("function");
   });
 
+  test("falls back to the bundled package module when release entrypoints are absent", async () => {
+    const module = await loadBoundaryAddonPackage(
+      createBoundaryAddonPackageLoader({
+        builtEntrypoint: new URL(
+          "file:///missing-rielflow-addons/dist/index.js",
+        ),
+        sourceEntrypoint: new URL(
+          "file:///missing-rielflow-addons/src/index.ts",
+        ),
+        fallbackModule: {
+          selected: "bundled",
+          resolveNodeAddonPayloadAsync: async () => ({ issues: [] }),
+          executeNativeNode: async () => ({ ok: true }),
+        },
+      }),
+    );
+
+    expect(module["selected"]).toBe("bundled");
+    expect(typeof module["resolveNodeAddonPayloadAsync"]).toBe("function");
+    expect(typeof module["executeNativeNode"]).toBe("function");
+  });
+
   test("resolves package entrypoints from bundled root and package CLI locations", async () => {
     const rootCliEntrypoints = resolveDefaultBoundaryAddonPackageEntrypoints(
       new URL("../../../../dist/main.js", import.meta.url),

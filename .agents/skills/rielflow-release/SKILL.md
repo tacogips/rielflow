@@ -27,20 +27,23 @@ when npm package publication is involved.
 ## Homebrew Release Model
 
 Rielflow releases are Homebrew formula releases backed by GitHub release assets.
-The formula installs prebuilt standalone archives for each supported platform;
-it does not build rielflow from source during `brew install`, and it does not
-use Homebrew bottle publishing.
+The formula installs prebuilt standalone archives for each supported platform.
+The archive contains `bin/rielflow`; the Bun runtime and built-in add-on
+implementation are bundled into that binary. The formula does not build
+rielflow from source during `brew install`, and it does not use Homebrew bottle
+publishing.
 
 The release order is:
 
 1. verify the rielflow source version, release commit, and tag intent
 2. run project checks
 3. build the four platform archives and `.sha256` files under `dist/homebrew`
-4. create or update the GitHub release `v<version>` with those archives
-5. render `Formula/rielflow.rb` into the `tacogips/homebrew-tap` checkout
-6. run Homebrew audit, style, local install, and formula tests
-7. commit and push the tap formula update
-8. verify installation from `tacogips/tap`
+4. run the local self-checkout gate against the current-platform archive
+5. create or update the GitHub release `v<version>` with those archives
+6. render `Formula/rielflow.rb` into the `tacogips/homebrew-tap` checkout
+7. run Homebrew audit, style, local install, and formula tests
+8. commit and push the tap formula update
+9. verify installation from `tacogips/tap`
 
 Do not use `brew bump-formula-pr` for this project unless the release process
 has moved to an upstream Homebrew/core formula. For the current tap-based flow,
@@ -116,6 +119,12 @@ dist/homebrew/rielflow-<version>-linux-x64.tar.gz
 Each archive must also have a matching `.sha256` file. Do not render the formula
 until all four checksum files exist.
 
+Each archive should contain the installed binary:
+
+```bash
+tar -tzf dist/homebrew/rielflow-<version>-darwin-arm64.tar.gz | grep -E '^\./bin/rielflow$'
+```
+
 Verify the expected artifact set:
 
 ```bash
@@ -129,6 +138,80 @@ There should be four archives and four checksum files for:
 - `darwin-x64`
 - `linux-arm64`
 - `linux-x64`
+
+## Self-Checkout Gate
+
+Before uploading or replacing GitHub release assets, self-check the current
+platform archive exactly as a user install would see it. This is mandatory for
+normal releases and should be skipped only for an explicitly named emergency
+release.
+
+Resolve the current platform target, extract the archive into a temporary
+directory, and run both a basic CLI smoke and an add-on-backed workflow usage
+smoke:
+
+```bash
+case "$(uname -s):$(uname -m)" in
+  Darwin:arm64) target="darwin-arm64" ;;
+  Darwin:x86_64) target="darwin-x64" ;;
+  Linux:aarch64 | Linux:arm64) target="linux-arm64" ;;
+  Linux:x86_64 | Linux:amd64) target="linux-x64" ;;
+  *) echo "unsupported local platform" >&2; exit 1 ;;
+esac
+
+tmp_dir="$(mktemp -d)"
+smoke_root="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir" "$smoke_root"' EXIT
+
+tar -C "$tmp_dir" -xzf "dist/homebrew/rielflow-<version>-$target.tar.gz"
+test -x "$tmp_dir/bin/rielflow"
+"$tmp_dir/bin/rielflow" --help
+```
+
+Create a temporary workflow that uses a built-in add-on and verify the extracted
+binary can resolve it without any separate add-on package installation:
+
+```bash
+mkdir -p "$smoke_root/addon-smoke"
+cat > "$smoke_root/addon-smoke/workflow.json" <<'JSON'
+{
+  "workflowId": "addon-smoke",
+  "description": "Smoke workflow that requires built-in add-on package resolution.",
+  "defaults": { "maxLoopIterations": 1, "nodeTimeoutMs": 60000 },
+  "entryStepId": "send-reply",
+  "nodes": [
+    {
+      "id": "send-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "ok",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    }
+  ],
+  "steps": [{ "id": "send-reply", "nodeId": "send-reply", "role": "worker" }]
+}
+JSON
+
+"$tmp_dir/bin/rielflow" workflow usage addon-smoke \
+  --workflow-definition-dir "$smoke_root" \
+  --output json | grep '"workflowId": "addon-smoke"'
+```
+
+For releases that change workflow catalog or add-on behavior, also run the
+user-scope workflow usage command from the extracted binary when local user
+workflows are available:
+
+```bash
+"$tmp_dir/bin/rielflow" workflow usage --scope user --output json
+```
+
+Do not upload release assets until this self-checkout gate passes.
 
 ## GitHub Release Assets
 
@@ -226,6 +309,7 @@ checkout:
 brew install --formula ../homebrew-tap/Formula/rielflow.rb
 brew test rielflow
 rielflow --help
+rielflow workflow usage --scope user --output json
 brew uninstall rielflow
 ```
 
@@ -233,9 +317,9 @@ If `rielflow` is already installed, use `brew reinstall --formula
 ../homebrew-tap/Formula/rielflow.rb` for the install step.
 
 The formula should install the archive for the current platform, run
-`rielflow --help`, and pass the formula `test do` block. If an installed older
-formula shadows the local formula, uninstall it and rerun the local formula
-install.
+`rielflow --help`, load built-in add-ons during `workflow usage`, and pass the
+formula `test do` block. If an installed older formula shadows the local
+formula, uninstall it and rerun the local formula install.
 
 ## Commit And Push Tap
 

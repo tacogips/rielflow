@@ -8,10 +8,12 @@
 ## Design Document Reference
 
 Implement a Homebrew deployment path that installs standalone release archives
-containing a Bun-compiled `rielflow` executable. Scope is limited to archive
-build tooling, formula rendering, Taskfile wrappers, and user-facing release
-documentation. It does not add a runtime `rielflow --version` command, publish
-GitHub release assets, or create a new external tap repository.
+containing a Bun-compiled `rielflow` executable. Built-in add-ons are bundled
+into that executable; `rielflow-addons` remains a source/package boundary only.
+Scope is limited to archive build tooling, formula rendering, Taskfile wrappers,
+and user-facing release documentation. It does not add a runtime
+`rielflow --version` command, publish GitHub release assets, or create a new
+external tap repository.
 
 ## Modules
 
@@ -130,6 +132,7 @@ Create standalone Bun-compiled release archives for Homebrew-supported targets.
 - [x] Current-platform default
 - [x] Archive and checksum output
 - [x] Extracted binary `--help` smoke test
+- [x] Extracted binary workflow usage smoke test loads built-in add-ons
 
 ### TASK-002: Homebrew Formula Renderer
 
@@ -170,6 +173,8 @@ Expose the release workflow through repository documentation and task wrappers.
 - [x] Standalone macOS arm64 release archive builds locally
 - [x] Cross-target archives build for macOS x64, Linux arm64, and Linux x64
 - [x] Extracted `bin/rielflow --help` smoke test passes on the local platform
+- [x] Extracted `bin/rielflow workflow usage --scope user --output json` smoke
+      test passes on the local platform
 - [x] Formula renders with non-placeholder SHA-256 values
 - [x] Formula Ruby syntax passes
 - [x] README and packaging docs describe the Homebrew deployment path
@@ -189,3 +194,13 @@ Expose the release workflow through repository documentation and task wrappers.
 **Tasks In Progress**: None
 **Blockers**: Publishing still requires uploading the matching GitHub release archives and committing/pushing the `tacogips/homebrew-tap` formula update.
 **Notes**: Added `task homebrew:tap-formula -- <version>` to render directly into the sibling `../homebrew-tap/Formula/rielflow.rb` checkout and updated the tap README to list `rielflow` alongside the existing `chilla` cask.
+
+### Session: 2026-05-31 17:45
+
+**Tasks Completed**: TASK-001, TASK-002, TASK-003 add-on runtime follow-up
+**Tasks In Progress**: None
+**Blockers**: None for local archive verification.
+**Notes**: Kept the Homebrew artifact as a standalone compiled executable and
+fixed the add-on package boundary to fall back to the bundled `rielflow-addons`
+module when release file-path entrypoints are absent. This preserves the source
+package boundary without making users install a separate add-on runtime package.

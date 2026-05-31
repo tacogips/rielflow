@@ -5,6 +5,7 @@ import type {
   NodeAddonResolveInput,
   NodeAddonResolveResult,
 } from "./types";
+import * as bundledAddonPackage from "rielflow-addons";
 import {
   createAsyncNodeAddonRegistry,
   createNodeAddonRegistry,
@@ -78,6 +79,7 @@ export function createBoundaryAddonPackageLoader(input: {
   readonly builtEntrypoint: URL;
   readonly sourceEntrypoint: URL;
   readonly importOrder?: readonly URL[];
+  readonly fallbackModule?: AddonPackageModule;
 }): AddonPackageLoader {
   return async () => {
     const importOrder = input.importOrder ?? [
@@ -90,6 +92,13 @@ export function createBoundaryAddonPackageLoader(input: {
         return await importAddonPackageEntrypoint(entrypoint);
       } catch (error: unknown) {
         const isLastEntrypoint = index === importOrder.length - 1;
+        if (
+          isLastEntrypoint &&
+          input.fallbackModule !== undefined &&
+          isMissingPackageEntrypoint(error)
+        ) {
+          return input.fallbackModule;
+        }
         if (isLastEntrypoint || !isMissingPackageEntrypoint(error)) {
           throw error;
         }
@@ -124,9 +133,10 @@ export function resolveDefaultBoundaryAddonPackageEntrypoints(
   };
 }
 
-const loadDefaultBoundaryAddonPackage = createBoundaryAddonPackageLoader(
-  resolveDefaultBoundaryAddonPackageEntrypoints(new URL(import.meta.url)),
-);
+const loadDefaultBoundaryAddonPackage = createBoundaryAddonPackageLoader({
+  ...resolveDefaultBoundaryAddonPackageEntrypoints(new URL(import.meta.url)),
+  fallbackModule: bundledAddonPackage,
+});
 
 export async function loadBoundaryAddonPackage(
   loader: AddonPackageLoader = loadDefaultBoundaryAddonPackage,

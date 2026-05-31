@@ -2,8 +2,8 @@
 
 `rielflow` Homebrew releases install a standalone executable built with
 `bun build --compile`. The published archive contains `bin/rielflow`, and the
-Bun runtime is embedded in that binary. Homebrew does not need a runtime
-dependency on Bun.
+Bun runtime plus built-in add-on implementation are bundled into that binary.
+Homebrew does not need a runtime dependency on Bun or a separate add-on package.
 
 Build release archives:
 
@@ -18,6 +18,13 @@ rielflow-<version>-darwin-arm64.tar.gz
 rielflow-<version>-darwin-x64.tar.gz
 rielflow-<version>-linux-arm64.tar.gz
 rielflow-<version>-linux-x64.tar.gz
+```
+
+Each archive contains:
+
+```text
+bin/rielflow
+README.md
 ```
 
 Create or update the GitHub release named `v<version>` with those archives:
@@ -88,6 +95,7 @@ RIEL_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
   scripts/render-homebrew-formula.sh <version> "$tap_root/Formula/rielflow.rb"
 brew install local/rielflow-test/rielflow
 brew test local/rielflow-test/rielflow
+rielflow workflow usage --scope user --output json
 brew uninstall rielflow
 brew untap local/rielflow-test
 ```

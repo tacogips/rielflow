@@ -1,7 +1,7 @@
 class Rielflow < Formula
   desc "TypeScript/Bun workflow runtime for cooperative multi-agent execution"
   homepage "https://github.com/tacogips/rielflow"
-  version "0.1.1"
+  version "0.1.4"
   license "MIT"
 
   livecheck do
@@ -11,21 +11,21 @@ class Rielflow < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.1/rielflow-0.1.1-darwin-arm64.tar.gz"
-      sha256 "9d7a75097a53681a9bd77f7a2533dfdb5c9eb48bd541c01c3241793cb43d9ab0"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-darwin-arm64.tar.gz"
+      sha256 "61f86586f3973c5ffcee085e16b5a0c245b5fc9bea9d5d34400436fb6ffecda6"
     else
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.1/rielflow-0.1.1-darwin-x64.tar.gz"
-      sha256 "c48a36427a1322c2c06311519413c7be7ef602699de231a46d5757959bd0c781"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-darwin-x64.tar.gz"
+      sha256 "129504b9cdab8ac88c373c75546fde100df1d3c53b3c96440c62aca51786c125"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.1/rielflow-0.1.1-linux-arm64.tar.gz"
-      sha256 "03578fd767b3169c0b5b3e3d36866bb1cb7c144a72e93386d9c7f617b3d608cc"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-linux-arm64.tar.gz"
+      sha256 "cae9f0bb291f0ad0b010646ecc258e60bdfdd887c1d515eb2db4c3ab2ead1cc1"
     else
-      url "https://github.com/tacogips/rielflow/releases/download/v0.1.1/rielflow-0.1.1-linux-x64.tar.gz"
-      sha256 "33c97c312b8ad169ba332238784630a421630474923075e01d483913c573b6aa"
+      url "https://github.com/tacogips/rielflow/releases/download/v0.1.4/rielflow-0.1.4-linux-x64.tar.gz"
+      sha256 "4b44700913395ad715fcfe11c0bfb5774dfae838c49f0c689aceb1d9dc4926c2"
     end
   end
 
@@ -35,5 +35,43 @@ class Rielflow < Formula
 
   test do
     assert_match "Usage:", shell_output("#{bin}/rielflow --help")
+    (testpath/"addon-smoke").mkpath
+    (testpath/"addon-smoke/workflow.json").write <<~JSON
+      {
+        "workflowId": "addon-smoke",
+        "description": "Smoke workflow that requires built-in add-on package resolution.",
+        "defaults": {
+          "maxLoopIterations": 1,
+          "nodeTimeoutMs": 60000
+        },
+        "entryStepId": "send-reply",
+        "nodes": [
+          {
+            "id": "send-reply",
+            "addon": {
+              "name": "rielflow/chat-reply-worker",
+              "version": "1",
+              "config": {
+                "textTemplate": "ok",
+                "visibility": "public",
+                "threadPolicy": "same-thread",
+                "onMissingTarget": "dry-run"
+              }
+            }
+          }
+        ],
+        "steps": [
+          {
+            "id": "send-reply",
+            "nodeId": "send-reply",
+            "role": "worker"
+          }
+        ]
+      }
+    JSON
+    usage = shell_output(
+      "#{bin}/rielflow workflow usage addon-smoke --workflow-definition-dir #{testpath} --output json",
+    )
+    assert_match '"workflowId": "addon-smoke"', usage
   end
 end

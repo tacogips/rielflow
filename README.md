@@ -45,6 +45,8 @@ rielflow --help
 ```
 
 The installed binary is `rielflow`.
+Built-in add-ons are bundled into the installed command; they do not require a
+separate add-on package install.
 
 ### Optional LLM Agent Setup
 

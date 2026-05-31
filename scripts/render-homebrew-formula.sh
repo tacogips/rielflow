@@ -98,6 +98,44 @@ class Rielflow < Formula
 
   test do
     assert_match "Usage:", shell_output("#{bin}/rielflow --help")
+    (testpath/"addon-smoke").mkpath
+    (testpath/"addon-smoke/workflow.json").write <<~JSON
+      {
+        "workflowId": "addon-smoke",
+        "description": "Smoke workflow that requires built-in add-on package resolution.",
+        "defaults": {
+          "maxLoopIterations": 1,
+          "nodeTimeoutMs": 60000
+        },
+        "entryStepId": "send-reply",
+        "nodes": [
+          {
+            "id": "send-reply",
+            "addon": {
+              "name": "rielflow/chat-reply-worker",
+              "version": "1",
+              "config": {
+                "textTemplate": "ok",
+                "visibility": "public",
+                "threadPolicy": "same-thread",
+                "onMissingTarget": "dry-run"
+              }
+            }
+          }
+        ],
+        "steps": [
+          {
+            "id": "send-reply",
+            "nodeId": "send-reply",
+            "role": "worker"
+          }
+        ]
+      }
+    JSON
+    usage = shell_output(
+      "#{bin}/rielflow workflow usage addon-smoke --workflow-definition-dir #{testpath} --output json",
+    )
+    assert_match '"workflowId": "addon-smoke"', usage
   end
 end
 EOF

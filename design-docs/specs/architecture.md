@@ -1680,6 +1680,9 @@ Boundary rules:
 - add-on resolution may depend on core workflow types, but core workflow
   validation must access built-in add-ons through explicit registries instead
   of hard-coded package-local imports that prevent package reuse
+- `rielflow-addons` is an implementation ownership boundary, not a separate
+  end-user installation boundary; release artifacts for the `rielflow` CLI must
+  make built-in add-ons available when only `rielflow` is installed
 - backend-specific behavior for `codex-agent`, `claude-code-agent`,
   `official/openai-sdk`, `official/anthropic-sdk`, and `cursor-cli-agent`
   remains behind adapter modules; Cursor CLI behavior must stay isolated to the
@@ -1782,9 +1785,11 @@ template. Runtime behavior stays in the existing CLI entrypoint under
 `packages/rielflow/src/bin.ts`; packaging code must not introduce a second CLI
 dispatcher or change workflow/session storage defaults. The compiled binary
 should be produced with Bun's standalone compile flow so Homebrew users do not
-need Bun installed at runtime. The archive should install only the executable
-and required static runtime assets, such as bundled prompt assets when the
-compiled binary cannot embed or locate them reliably.
+need Bun installed at runtime. Built-in add-ons must be bundled into that
+executable; `rielflow-addons` is a source/package boundary, not a separate user
+install requirement. The archive should install only the executable and required
+static runtime assets, such as bundled prompt assets when the compiled binary
+cannot embed or locate them reliably.
 
 Release artifact data flow:
 
@@ -1830,7 +1835,8 @@ Validation rules:
   to the release smoke test after the CLI exposes a stable version command
 - local verification should install from the generated formula or extracted
   archive where Homebrew is available, otherwise it should perform archive
-  extraction plus binary smoke tests
+  extraction plus binary smoke tests, including a workflow usage command that
+  loads built-in add-ons
 
 Rollout is documentation and packaging focused. Expected implementation
 surfaces are `scripts/`, `package.json`, `Taskfile.yml`, `Formula/rielflow.rb`,

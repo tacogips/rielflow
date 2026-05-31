@@ -290,6 +290,7 @@ scripts/build-homebrew-release.sh
 tmp_dir="$(mktemp -d)"
 tar -C "$tmp_dir" -xzf dist/homebrew/rielflow-<version>-<target>.tar.gz
 "$tmp_dir/bin/rielflow" --help
+"$tmp_dir/bin/rielflow" workflow usage --scope user --output json
 brew tap-new local/rielflow-test
 tap_root="$(brew --repository local/rielflow-test)"
 RIEL_RELEASE_BASE_URL="file://$PWD/dist/homebrew" \
