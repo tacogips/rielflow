@@ -19,6 +19,7 @@ interface PackageManifest {
   readonly main?: string;
   readonly module?: string;
   readonly types?: string;
+  readonly bin?: Readonly<Record<string, string>>;
   readonly exports?: Readonly<Record<string, unknown>>;
   readonly dependencies?: Readonly<Record<string, string>>;
 }
@@ -366,6 +367,9 @@ describe("package boundaries", () => {
     expect(manifest.name).toBe("rielflow-workspace");
     expect(manifest.private).toBe(true);
     expect(manifest.workspaces).toEqual(["packages/*"]);
+    expect(manifest.bin).toEqual({
+      rielflow: "./packages/rielflow/src/bin.ts",
+    });
   });
 
   test("compatibility package preserves the rielflow library and cli exports", async () => {
@@ -1017,6 +1021,7 @@ describe("package boundaries", () => {
       "hasInvalidNodeValidationResult",
       "hashManagerAuthToken",
       "isCliAgentBackend",
+      "isContainerRunnerWithDockerCli",
       "isSuperviserControlAddonName",
       "isSupervisionStallLastError",
       "listEventReplyDispatchesFromRuntimeDb",

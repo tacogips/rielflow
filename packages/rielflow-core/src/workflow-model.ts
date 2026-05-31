@@ -425,6 +425,16 @@ export type ContainerRunnerKind =
   | "nerdctl"
   | "apple-container";
 
+export function isContainerRunnerWithDockerCli(
+  runnerKind: ContainerRunnerKind,
+): runnerKind is "podman" | "docker" | "nerdctl" {
+  return (
+    runnerKind === "podman" ||
+    runnerKind === "docker" ||
+    runnerKind === "nerdctl"
+  );
+}
+
 export interface ContainerRuntimeDefaults {
   readonly runnerKind?: ContainerRunnerKind;
   readonly runnerPath?: string;

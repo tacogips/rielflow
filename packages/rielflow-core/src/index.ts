@@ -8,6 +8,7 @@ export {
   NODE_EXECUTION_BACKEND,
   NODE_EXECUTION_BACKENDS,
   NODE_EXECUTION_BACKEND_LIST_TEXT,
+  isContainerRunnerWithDockerCli,
   normalizeCliAgentBackend,
   normalizeNodeExecutionBackend,
 } from "./workflow-model";

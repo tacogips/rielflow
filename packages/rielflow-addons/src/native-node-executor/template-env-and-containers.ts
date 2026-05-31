@@ -2,7 +2,10 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteTextFile } from "../../../rielflow-core/src/index";
+import {
+  atomicWriteTextFile,
+  isContainerRunnerWithDockerCli,
+} from "../../../rielflow-core/src/index";
 import {
   AdapterExecutionError,
   type AdapterExecutionOutput,
@@ -415,15 +418,7 @@ export async function runLoggedSpawnedProcess(input: {
     throw error;
   }
 }
-export function isContainerRunnerWithDockerCli(
-  runnerKind: ContainerRunnerKind,
-): runnerKind is "podman" | "docker" | "nerdctl" {
-  return (
-    runnerKind === "podman" ||
-    runnerKind === "docker" ||
-    runnerKind === "nerdctl"
-  );
-}
+export { isContainerRunnerWithDockerCli };
 export function resolveContainerRunner(input: {
   readonly container: ContainerExecution;
   readonly defaults: WorkflowDefaults["containerRuntime"];

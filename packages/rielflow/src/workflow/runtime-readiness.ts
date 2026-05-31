@@ -1,8 +1,8 @@
-import { isContainerRunnerWithDockerCli } from "rielflow-addons";
 import { resolveConfiguredEnvValue } from "./adapters/shared";
 import { resolveNodeExecutionBackend } from "./adapters/dispatch";
 import { effectiveCrossWorkflowDispatches } from "./cross-workflow-from-steps";
 import { loadWorkflowByIdFromDisk } from "./load";
+import { isContainerRunnerWithDockerCli } from "../../../rielflow-core/src/workflow-model";
 import {
   asAgentNodePayload,
   DEFAULT_CONTAINER_RUNNER_KIND,
