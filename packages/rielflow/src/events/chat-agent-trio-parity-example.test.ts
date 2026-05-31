@@ -219,4 +219,49 @@ describe("chat agent trio example parity", () => {
       ]),
     );
   });
+
+  test("runs the Telegram trio time-signal cron fixture with a stubbed Telegram send", async () => {
+    const root = await makeTempDir();
+    const calls: Array<{ readonly url: string; readonly init?: RequestInit }> =
+      [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), ...(init === undefined ? {} : { init }) });
+      return new Response(
+        JSON.stringify({ ok: true, result: { message_id: 456 } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const results = await emitEventFile({
+      sourceId: "telegram-time-signal-cron",
+      workflowRoot: path.resolve("examples"),
+      eventRoot: path.resolve("examples/event-sources/.rielflow-events"),
+      rootDataDir: path.join(root, "data"),
+      eventFile: path.resolve(
+        "examples/event-sources/payloads/telegram-time-signal-cron.json",
+      ),
+      env: {
+        RIEL_TELEGRAM_BOT_TOKEN: "telegram-default-token",
+        RIEL_TELEGRAM_YUI_BOT_TOKEN: "telegram-yui-token",
+        RIEL_TELEGRAM_CHAT_ID: "-1009876543210",
+      },
+      fetchImpl,
+      cwd: process.cwd(),
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.receipt.status).toBe("dispatched");
+    expect(results[0]?.workflowName).toBe("telegram-agent-trio-time-signal");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(
+      "https://api.telegram.org/bottelegram-yui-token/sendMessage",
+    );
+    const body = JSON.parse(String(calls[0]?.init?.body)) as {
+      readonly chat_id: string;
+      readonly text: string;
+    };
+    expect(body.chat_id).toBe("-1009876543210");
+    expect(body.text).toContain("Asia/Tokyo");
+    expect(body.text).toContain("2026-05-31 19:05");
+  });
 });

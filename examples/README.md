@@ -244,6 +244,34 @@ bun run packages/rielflow/src/bin.ts workflow run telegram-agent-trio-chat \
   --input '{"request":"Yui, give your opinion and ask Mika too"}'
 ```
 
+### `telegram-agent-trio-time-signal`
+
+Scheduled Telegram reply companion for the Telegram trio chat:
+
+- receives `cron.tick` events from `telegram-time-signal-cron`
+- uses a six-field cron schedule, `*/30 * * * * *`, to evaluate every 30
+  seconds
+- sends a Yui time-signal reply only when the scheduled Asia/Tokyo local time
+  is on a five-minute boundary
+- reuses `telegram-gateway-persona-replies` so delivery stays on the Telegram
+  Gateway reply path
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-time-signal --workflow-definition-dir ./examples
+```
+
+Run the deterministic event fixture with stubbed or live Telegram credentials:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit telegram-time-signal-cron \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --event-file ./examples/event-sources/payloads/telegram-time-signal-cron.json \
+  --output json
+```
+
 ### `matrix-agent-trio-chat`
 
 Matrix persona workflow using the same provider-neutral trio authoring shape as

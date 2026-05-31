@@ -53,6 +53,7 @@ export interface RawExternalEvent {
   readonly eventDataRoot?: string;
   readonly readOnly?: boolean;
   readonly diagnosticSink?: EventSourceDiagnosticSink;
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
 export interface EventSourceCapabilities {

@@ -293,6 +293,29 @@ image bytes, OCR images, transcribe media, process commands, or handle inline
 keyboard callbacks in this slice. Persisted history stores only bounded
 normalized chat items and never stores bot tokens.
 
+The `telegram-time-signal-cron` source demonstrates scheduled Telegram output
+for the trio chat. It uses the six-field cron schedule `*/30 * * * * *`, so the
+event runner wakes every 30 seconds. The companion workflow
+`telegram-agent-trio-time-signal` sends a Yui time-signal reply only when the
+scheduled Asia/Tokyo local time is on a five-minute boundary. Set
+`RIEL_TELEGRAM_CHAT_ID` to the target Telegram chat id for live runs; the
+checked-in placeholder remains deterministic for local validation.
+
+```bash
+rielflow events serve --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+```
+
+For deterministic local checks, emit a five-minute-boundary tick:
+
+```bash
+rielflow events emit telegram-time-signal-cron \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./tmp/event-source-demo/workflow-artifacts \
+  --event-file ./examples/event-sources/payloads/telegram-time-signal-cron.json \
+  --output json
+```
+
 The `local-docs` source demonstrates local filesystem notifications. It
 watches `examples/event-sources/watched-docs` for `create`, `modify`, and
 `delete` changes to `.md` and `.json` files. The source emits
@@ -393,7 +416,7 @@ the binding `inputMapping` block. Do not configure `execution.inputPath` or
 }
 ```
 
-For recurring schedules, return `"kind": "recurring"` with a five-field
+For recurring schedules, return `"kind": "recurring"` with a five- or six-field
 `cron` string and `timezone`. For one-time schedules, `dueAt` may be an
 absolute timestamp with `Z` or a numeric UTC offset, or an offset-less wall
 clock value such as `2026-05-19T09:00:00` that is resolved using the provided

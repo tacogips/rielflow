@@ -1,0 +1,12 @@
+{
+  "id": "telegram-time-signal-cron",
+  "kind": "cron",
+  "schedule": "*/30 * * * * *",
+  "timezone": "Asia/Tokyo",
+  "replyTarget": {
+    "sourceId": "telegram-gateway-personas",
+    "provider": "telegram",
+    "conversationId": "-1001234567890",
+    "conversationIdEnv": "RIEL_TELEGRAM_CHAT_ID"
+  }
+}

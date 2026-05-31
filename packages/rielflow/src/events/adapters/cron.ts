@@ -21,17 +21,21 @@ const WEEKDAY_VALUES = new Map([
 const CRON_NUMBER_PATTERN = /^\d+$/;
 
 interface ParsedCronSchedule {
+  readonly seconds: ReadonlySet<number>;
   readonly minutes: ReadonlySet<number>;
   readonly hours: ReadonlySet<number>;
   readonly days: ReadonlySet<number>;
   readonly months: ReadonlySet<number>;
   readonly weekdays: ReadonlySet<number>;
+  readonly hasExplicitSeconds: boolean;
 }
 
 interface CronDateParts {
+  readonly second: number;
   readonly minute: number;
   readonly hour: number;
   readonly day: number;
+  readonly year: number;
   readonly month: number;
   readonly weekday: number;
 }
@@ -120,17 +124,27 @@ function parseCronField(field: string, min: number, max: number): Set<number> {
   return values;
 }
 
+function exactCronField(value: number): ReadonlySet<number> {
+  return new Set([value]);
+}
+
 export function parseCronSchedule(schedule: string): ParsedCronSchedule {
   const fields = schedule.trim().split(/\s+/);
-  if (fields.length !== 5) {
-    throw new Error("cron schedule must have exactly five fields");
+  if (fields.length !== 5 && fields.length !== 6) {
+    throw new Error("cron schedule must have exactly five or six fields");
   }
+  const hasExplicitSeconds = fields.length === 6;
+  const offset = hasExplicitSeconds ? 1 : 0;
   return {
-    minutes: parseCronField(fields[0] ?? "", 0, 59),
-    hours: parseCronField(fields[1] ?? "", 0, 23),
-    days: parseCronField(fields[2] ?? "", 1, 31),
-    months: parseCronField(fields[3] ?? "", 1, 12),
-    weekdays: parseCronField(fields[4] ?? "", 0, 6),
+    seconds: hasExplicitSeconds
+      ? parseCronField(fields[0] ?? "", 0, 59)
+      : exactCronField(0),
+    minutes: parseCronField(fields[offset] ?? "", 0, 59),
+    hours: parseCronField(fields[offset + 1] ?? "", 0, 23),
+    days: parseCronField(fields[offset + 2] ?? "", 1, 31),
+    months: parseCronField(fields[offset + 3] ?? "", 1, 12),
+    weekdays: parseCronField(fields[offset + 4] ?? "", 0, 6),
+    hasExplicitSeconds,
   };
 }
 
@@ -172,6 +186,7 @@ function createCronDatePartsReader(timeZone: string): CronDatePartsReader {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hourCycle: "h23",
   });
   return {
@@ -183,9 +198,11 @@ function createCronDatePartsReader(timeZone: string): CronDatePartsReader {
         throw new Error(`unsupported cron weekday label '${weekdayLabel}'`);
       }
       return {
+        second: Number(readDatePart(parts, "second")),
         minute: Number(readDatePart(parts, "minute")),
         hour: Number(readDatePart(parts, "hour")),
         day: Number(readDatePart(parts, "day")),
+        year: Number(readDatePart(parts, "year")),
         month: Number(readDatePart(parts, "month")),
         weekday,
       };
@@ -200,6 +217,7 @@ function dateMatchesSchedule(
 ): boolean {
   const parts = datePartsReader.read(date);
   return (
+    schedule.seconds.has(parts.second) &&
     schedule.minutes.has(parts.minute) &&
     schedule.hours.has(parts.hour) &&
     schedule.days.has(parts.day) &&
@@ -219,15 +237,77 @@ export function computeNextCronFireTime(
   const parsed = parseCronSchedule(schedule);
   const datePartsReader = createCronDatePartsReader(timeZone);
   const cursor = new Date(after.getTime());
-  cursor.setUTCSeconds(0, 0);
-  cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
-  for (let attempt = 0; attempt < CRON_LOOKAHEAD_MINUTES; attempt += 1) {
+  if (parsed.hasExplicitSeconds) {
+    cursor.setUTCMilliseconds(0);
+    cursor.setUTCSeconds(cursor.getUTCSeconds() + 1);
+  } else {
+    cursor.setUTCSeconds(0, 0);
+    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+  }
+  const maxAttempts = parsed.hasExplicitSeconds
+    ? CRON_LOOKAHEAD_MINUTES * 60
+    : CRON_LOOKAHEAD_MINUTES;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (dateMatchesSchedule(cursor, parsed, datePartsReader)) {
       return cursor;
     }
-    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+    if (parsed.hasExplicitSeconds) {
+      cursor.setUTCSeconds(cursor.getUTCSeconds() + 1);
+    } else {
+      cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+    }
   }
   throw new Error("cron schedule did not match within one year");
+}
+
+function cronReplyTarget(input: {
+  readonly source: CronSourceConfig;
+  readonly fallbackEventId: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+}): CronSourceConfig["replyTarget"] {
+  const target = input.source.replyTarget;
+  if (target === undefined) {
+    return undefined;
+  }
+  const envConversationId =
+    target.conversationIdEnv === undefined
+      ? undefined
+      : input.env?.[target.conversationIdEnv];
+  const conversationId = envConversationId ?? target.conversationId;
+  if (conversationId === undefined || conversationId.length === 0) {
+    return undefined;
+  }
+  return {
+    sourceId: target.sourceId,
+    provider: target.provider,
+    conversationId,
+    eventId: target.eventId ?? input.fallbackEventId,
+    ...(target.threadId === undefined ? {} : { threadId: target.threadId }),
+    ...(target.actorId === undefined ? {} : { actorId: target.actorId }),
+  };
+}
+
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function formatCronLocalDateTime(
+  scheduledAt: string,
+  timeZone: string,
+): string {
+  const parsed = new Date(scheduledAt);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(
+      `cron scheduledAt must be an ISO timestamp: ${scheduledAt}`,
+    );
+  }
+  const parts = createCronDatePartsReader(timeZone).read(parsed);
+  const dateText = [
+    String(parts.year),
+    padDatePart(parts.month),
+    padDatePart(parts.day),
+  ].join("-");
+  return `${dateText} ${padDatePart(parts.hour)}:${padDatePart(parts.minute)}`;
 }
 
 function buildCronEnvelope(input: {
@@ -235,13 +315,20 @@ function buildCronEnvelope(input: {
   readonly scheduledAt: string;
   readonly firedAt: string;
   readonly receivedAt: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }): ExternalEventEnvelope {
+  const eventId = `${input.source.id}:${input.scheduledAt}`;
+  const replyTarget = cronReplyTarget({
+    source: input.source,
+    fallbackEventId: eventId,
+    ...(input.env === undefined ? {} : { env: input.env }),
+  });
   const dedupeMaterial = [input.source.id, "cron.tick", input.scheduledAt].join(
     ":",
   );
   return {
     sourceId: input.source.id,
-    eventId: `${input.source.id}:${input.scheduledAt}`,
+    eventId,
     provider: "cron",
     eventType: "cron.tick",
     occurredAt: input.scheduledAt,
@@ -250,8 +337,13 @@ function buildCronEnvelope(input: {
     input: {
       scheduleId: input.source.id,
       scheduledAt: input.scheduledAt,
+      scheduledLocalTime: formatCronLocalDateTime(
+        input.scheduledAt,
+        input.source.timezone,
+      ),
       firedAt: input.firedAt,
       timezone: input.source.timezone,
+      ...(replyTarget === undefined ? {} : { replyTarget }),
     },
   };
 }
@@ -306,6 +398,7 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
                   scheduledAt: scheduled.toISOString(),
                   firedAt,
                   receivedAt: firedAt,
+                  ...(input.env === undefined ? {} : { env: input.env }),
                 }),
               );
             } catch {
@@ -342,12 +435,23 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
         typeof raw.body["scheduledAt"] === "string"
           ? raw.body["scheduledAt"]
           : raw.receivedAt;
+      const timezone =
+        typeof raw.body["timezone"] === "string" ? raw.body["timezone"] : "UTC";
+      const eventId =
+        typeof raw.body["eventId"] === "string"
+          ? raw.body["eventId"]
+          : `${raw.sourceId}:${scheduledAt}`;
+      const replyTarget =
+        raw.source !== undefined && isCronSource(raw.source)
+          ? cronReplyTarget({
+              source: raw.source,
+              fallbackEventId: eventId,
+              ...(raw.env === undefined ? {} : { env: raw.env }),
+            })
+          : undefined;
       return {
         sourceId: raw.sourceId,
-        eventId:
-          typeof raw.body["eventId"] === "string"
-            ? raw.body["eventId"]
-            : `${raw.sourceId}:${scheduledAt}`,
+        eventId,
         provider: "cron",
         eventType: "cron.tick",
         occurredAt: scheduledAt,
@@ -359,14 +463,13 @@ export function createCronEventSourceAdapter(): EventSourceAdapter {
         input: {
           scheduleId: raw.sourceId,
           scheduledAt,
+          scheduledLocalTime: formatCronLocalDateTime(scheduledAt, timezone),
           firedAt:
             typeof raw.body["firedAt"] === "string"
               ? raw.body["firedAt"]
               : raw.receivedAt,
-          timezone:
-            typeof raw.body["timezone"] === "string"
-              ? raw.body["timezone"]
-              : "UTC",
+          timezone,
+          ...(replyTarget === undefined ? {} : { replyTarget }),
         },
         ...(raw.rawRef === undefined ? {} : { rawRef: raw.rawRef }),
       };

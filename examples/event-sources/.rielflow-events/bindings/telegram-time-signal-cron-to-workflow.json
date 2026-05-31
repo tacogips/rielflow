@@ -1,0 +1,37 @@
+{
+  "id": "telegram-time-signal-cron-to-workflow",
+  "sourceId": "telegram-time-signal-cron",
+  "outputDestinations": ["telegram-gateway-persona-replies"],
+  "workflowName": "telegram-agent-trio-time-signal",
+  "match": {
+    "eventType": "cron.tick"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "Send a Telegram time signal when this cron tick is on a five-minute boundary.",
+      "scheduledAt": "{{event.input.scheduledAt}}",
+      "replyText": "時報です。{{event.input.timezone}} の現在時刻は {{event.input.scheduledLocalTime}} です。",
+      "firedAt": "{{event.input.firedAt}}",
+      "timezone": "{{event.input.timezone}}",
+      "replyTarget": "{{event.input.replyTarget}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": false,
+    "dedupeWindowMs": 300000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}"
+  },
+  "taskPlanning": {
+    "enabled": false
+  },
+  "mailboxBridge": {
+    "output": {
+      "progress": {
+        "mode": "none"
+      }
+    }
+  }
+}

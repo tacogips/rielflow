@@ -58,6 +58,7 @@ export async function emitEventFile(
     source,
     receivedAt: new Date().toISOString(),
     body,
+    ...(input.env === undefined ? {} : { env: input.env }),
   };
   const registry = createDefaultEventSourceRegistry();
   const adapter = registry.get(source.kind);

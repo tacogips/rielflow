@@ -337,6 +337,8 @@ Useful starting points in `examples/`:
 - `supervised-mock-retry`: deterministic supervised retry example.
 - `discord-agent-trio-chat`, `telegram-agent-trio-chat`,
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
+- `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
+  the Telegram trio chat.
 - `chat-reply-webhook`, `discord-codex-chat`,
   `chat-event-attachment-judgement`: event and chat reply examples.
 - `chat-supervisor-collaboration`: chat-triggered multi-workflow collaboration.

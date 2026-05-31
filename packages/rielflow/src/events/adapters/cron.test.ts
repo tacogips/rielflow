@@ -24,6 +24,20 @@ describe("cron event source adapter", () => {
         new Date("2026-04-20T02:01:00.000Z"),
       ).toISOString(),
     ).toBe("2026-04-20T02:15:00.000Z");
+
+    expect(
+      computeNextCronFireTime(
+        "*/30 * * * * *",
+        new Date("2026-04-20T01:59:59.999Z"),
+      ).toISOString(),
+    ).toBe("2026-04-20T02:00:00.000Z");
+
+    expect(
+      computeNextCronFireTime(
+        "*/30 * * * * *",
+        new Date("2026-04-20T02:00:00.000Z"),
+      ).toISOString(),
+    ).toBe("2026-04-20T02:00:30.000Z");
   });
 
   test("computes fire times against the configured source timezone", () => {
@@ -38,7 +52,9 @@ describe("cron event source adapter", () => {
 
   test("validates the same cron syntax that the scheduler parses", () => {
     expect(isValidCronSchedule("0-10/5 2 * * 1-5")).toBe(true);
+    expect(isValidCronSchedule("*/30 * * * * *")).toBe(true);
     expect(isValidCronSchedule("60 2 * * *")).toBe(false);
+    expect(isValidCronSchedule("60 * * * * *")).toBe(false);
     expect(isValidCronSchedule("*/0 2 * * *")).toBe(false);
     expect(isValidCronSchedule("/5 2 * * *")).toBe(false);
     expect(isValidCronSchedule("-5 2 * * *")).toBe(false);
@@ -67,6 +83,7 @@ describe("cron event source adapter", () => {
       input: {
         scheduleId: "nightly-cron",
         scheduledAt: "2026-04-20T02:00:00.000Z",
+        scheduledLocalTime: "2026-04-20 11:00",
         firedAt: "2026-04-20T02:00:01.000Z",
         timezone: "Asia/Tokyo",
       },
@@ -78,7 +95,7 @@ describe("cron event source adapter", () => {
     const adapter = createCronEventSourceAdapter();
     const abortController = new AbortController();
     let now = new Date("2026-04-20T01:59:59.999Z");
-    const dispatch = vi.fn(async () => {
+    const dispatch = vi.fn(async (_event: unknown) => {
       now = new Date("2026-04-20T02:00:00.000Z");
       throw new Error("dispatch failed");
     });
@@ -89,6 +106,11 @@ describe("cron event source adapter", () => {
         kind: "cron",
         schedule: "* * * * *",
         timezone: "UTC",
+        replyTarget: {
+          sourceId: "telegram-gateway-personas",
+          provider: "telegram",
+          conversationId: "-1001234567890",
+        },
       },
       signal: abortController.signal,
       now: () => now,
@@ -101,6 +123,16 @@ describe("cron event source adapter", () => {
     await Promise.resolve();
 
     expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]?.[0]).toMatchObject({
+      input: {
+        replyTarget: {
+          sourceId: "telegram-gateway-personas",
+          provider: "telegram",
+          eventId: "nightly-cron:2026-04-20T02:00:00.000Z",
+          conversationId: "-1001234567890",
+        },
+      },
+    });
     expect(vi.getTimerCount()).toBe(1);
     await handle.stop();
   });

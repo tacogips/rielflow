@@ -55,7 +55,9 @@ export function resolveChatReplyTarget(
     return null;
   }
 
-  const replyTarget = event["replyTarget"];
+  const input = event["input"];
+  const replyTarget =
+    event["replyTarget"] ?? (isRecord(input) ? input["replyTarget"] : undefined);
   if (isRecord(replyTarget)) {
     const sourceId = readOptionalString(replyTarget, "sourceId");
     const provider = readOptionalString(replyTarget, "provider");

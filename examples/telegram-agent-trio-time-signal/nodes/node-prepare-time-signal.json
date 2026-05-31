@@ -1,0 +1,19 @@
+{
+  "id": "prepare-time-signal",
+  "description": "Checks a 30-second cron tick and emits a Yui Telegram time-signal reply only on five-minute boundaries.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/prepare-time-signal.sh",
+    "argvTemplate": [
+      "{{event.input.scheduledAt}}",
+      "{{event.input.timezone}}"
+    ],
+    "envTemplate": {
+      "RIEL_TIME_SIGNAL_INTERVAL_MINUTES": "5"
+    }
+  },
+  "output": {
+    "description": "Output envelope with when.should_announce and payload.replyText for the chat reply worker."
+  }
+}

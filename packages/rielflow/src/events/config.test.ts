@@ -525,6 +525,57 @@ describe("event configuration", () => {
     );
   });
 
+  test("accepts second-level cron schedules with static reply targets", async () => {
+    const root = await makeTempDir();
+    const workflowRoot = path.join(root, ".rielflow");
+    const eventRoot = path.join(root, ".rielflow-events");
+    await writeJson(path.join(workflowRoot, "demo", "workflow.json"), {
+      workflowId: "demo",
+    });
+    await writeJson(path.join(eventRoot, "sources", "telegram.json"), {
+      id: "telegram-gateway-personas",
+      kind: "telegram-gateway",
+      provider: "telegram",
+      tokenEnv: "RIEL_TELEGRAM_BOT_TOKEN",
+    });
+    await writeJson(path.join(eventRoot, "sources", "cron.json"), {
+      id: "telegram-time-signal-cron",
+      kind: "cron",
+      schedule: "*/30 * * * * *",
+      timezone: "Asia/Tokyo",
+      replyTarget: {
+        sourceId: "telegram-gateway-personas",
+        provider: "telegram",
+        conversationId: "-1001234567890",
+      },
+    });
+    await writeJson(path.join(eventRoot, "destinations", "telegram.json"), {
+      id: "telegram-gateway-persona-replies",
+      kind: "chat",
+      sourceId: "telegram-gateway-personas",
+    });
+    await writeJson(path.join(eventRoot, "bindings", "to-demo.json"), {
+      id: "telegram-time-signal-cron-to-demo",
+      sourceId: "telegram-time-signal-cron",
+      outputDestinations: ["telegram-gateway-persona-replies"],
+      workflowName: "demo",
+      inputMapping: {
+        mode: "event-input",
+      },
+    });
+
+    const validation = await loadAndValidateEventConfiguration({
+      workflowRoot,
+      eventRoot,
+      cwd: root,
+    });
+
+    expect(validation.valid).toBe(true);
+    expect(
+      validation.issues.filter((issue) => issue.severity === "error"),
+    ).toEqual([]);
+  });
+
   test("validates Matrix source configuration", async () => {
     const root = await makeTempDir();
     const workflowRoot = path.join(root, ".rielflow");

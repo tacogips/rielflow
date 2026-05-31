@@ -19,6 +19,7 @@ import {
   validateSecretEnvName,
 } from "./validation-utils";
 import { validateMatrixSource } from "./validate-source-matrix";
+import { validateCronSource } from "./validate-source-cron";
 import { validateFileChangeSource } from "./validate-source-file-change";
 import { validateSequentialListSource } from "./validate-source-sequential-list";
 import {
@@ -28,7 +29,6 @@ import {
 import { validateDiscordGatewaySource } from "./validate-source-discord-gateway";
 import { validateTelegramGatewaySource } from "./validate-source-telegram-gateway";
 import { validateScheduleRegistrationBinding } from "./validate-schedule-registration";
-import { isValidCronSchedule, isValidTimeZone } from "./adapters/cron";
 import {
   isValidEventHttpPath,
   resolveEventSourceHttpPath,
@@ -179,32 +179,7 @@ function validateSource(
   validateFileChangeSource(source, issues);
   validateSequentialListSource(source, issues);
 
-  if (source.kind === "cron") {
-    if (!isNonEmptyString(source["schedule"])) {
-      issues.push(
-        error(`sources.${source.id}.schedule`, "cron schedule is required"),
-      );
-    } else if (!isValidCronSchedule(source["schedule"])) {
-      issues.push(
-        error(
-          `sources.${source.id}.schedule`,
-          "cron schedule must have five valid fields",
-        ),
-      );
-    }
-    if (!isNonEmptyString(source["timezone"])) {
-      issues.push(
-        error(`sources.${source.id}.timezone`, "timezone is required"),
-      );
-    } else if (!isValidTimeZone(source["timezone"])) {
-      issues.push(
-        error(
-          `sources.${source.id}.timezone`,
-          "timezone must be a valid IANA time zone",
-        ),
-      );
-    }
-  }
+  validateCronSource(source, issues);
 
   if (source.kind === "webhook") {
     if (

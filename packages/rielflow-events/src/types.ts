@@ -47,6 +47,15 @@ export interface CronSourceConfig extends EventSourceConfigBase {
   readonly jitterMs?: number;
   readonly missedRunPolicy?: "skip" | "fire-once";
   readonly lockKey?: string;
+  readonly replyTarget?: {
+    readonly sourceId: string;
+    readonly provider: string;
+    readonly conversationId?: string;
+    readonly conversationIdEnv?: string;
+    readonly eventId?: string;
+    readonly threadId?: string;
+    readonly actorId?: string;
+  };
 }
 
 export interface WebhookSourceConfig extends EventSourceConfigBase {

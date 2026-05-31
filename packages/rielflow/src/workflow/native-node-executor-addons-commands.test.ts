@@ -520,6 +520,80 @@ describe("executeNativeNode", () => {
     });
   });
 
+  test("renders built-in chat reply add-on output from event input replyTarget", async () => {
+    const workflowDirectory = await makeTempDir();
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: workflowDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "reply",
+        nodeExecId: "exec-1",
+        node: {
+          id: "reply",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "rielflow/chat-reply-worker",
+            version: "1",
+            config: {
+              textTemplate: "Scheduled: {{workflowInput.replyText}}",
+              replyAsTemplate: "yui",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {
+          workflowInput: {
+            replyText: "19:05",
+          },
+          event: {
+            sourceId: "time-signal-cron",
+            provider: "cron",
+            eventId: "tick-1",
+            input: {
+              replyTarget: {
+                sourceId: "telegram-gateway-personas",
+                provider: "telegram",
+                eventId: "tick-1",
+                conversationId: "-1001234567890",
+              },
+            },
+          },
+        },
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "reply"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.payload).toMatchObject({
+      reply: {
+        target: {
+          sourceId: "telegram-gateway-personas",
+          provider: "telegram",
+          eventId: "tick-1",
+          conversationId: "-1001234567890",
+        },
+        message: {
+          text: "Scheduled: 19:05",
+          replyAs: "yui",
+        },
+      },
+    });
+  });
+
   test("fails chat reply add-on execution when target is missing by default", async () => {
     const workflowDirectory = await makeTempDir();
     await expect(
