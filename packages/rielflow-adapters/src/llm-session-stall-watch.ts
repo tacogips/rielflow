@@ -10,9 +10,9 @@ const STALL_NUDGE_PROMPT_ENV = "RIEL_LLM_STALL_NUDGE_PROMPT";
 
 type WatchedSessionSource = "primary" | "nudge";
 
-interface WatchedSessionLike<TResult> {
+interface WatchedSessionLike<TResult, TMessage = unknown> {
   readonly sessionId: string;
-  messages(): AsyncIterable<unknown>;
+  messages(): AsyncIterable<TMessage>;
   waitForCompletion(): Promise<TResult>;
   cancel(): Promise<void>;
   getState?(): unknown;
@@ -30,8 +30,8 @@ export interface WatchedLlmSessionMessage {
   readonly source: WatchedSessionSource;
 }
 
-export interface WatchedLlmSession<TResult> {
-  readonly messages: AsyncIterable<unknown>;
+export interface WatchedLlmSession<TResult, TMessage = unknown> {
+  readonly messages: AsyncIterable<TMessage>;
   waitForCompletion(): Promise<TResult>;
   stop(): void;
 }
@@ -56,12 +56,12 @@ interface ActivitySnapshot {
   readonly stateSignature: string;
 }
 
-class AsyncMessageQueue {
-  readonly #items: unknown[] = [];
+class AsyncMessageQueue<TMessage> {
+  readonly #items: TMessage[] = [];
   #closed = false;
   #resolveWaiter: (() => void) | undefined;
 
-  push(item: unknown): void {
+  push(item: TMessage): void {
     if (this.#closed) {
       return;
     }
@@ -74,7 +74,7 @@ class AsyncMessageQueue {
     this.#wake();
   }
 
-  async *iterable(): AsyncIterable<unknown> {
+  async *iterable(): AsyncIterable<TMessage> {
     while (!this.#closed || this.#items.length > 0) {
       while (this.#items.length > 0) {
         const item = this.#items.shift();
@@ -99,12 +99,13 @@ class AsyncMessageQueue {
 }
 
 export function createWatchedLlmSession<
-  TSession extends WatchedSessionLike<TResult>,
+  TSession extends WatchedSessionLike<TResult, TMessage>,
   TResult,
+  TMessage = unknown,
 >(
   input: CreateWatchedLlmSessionInput<TSession, TResult>,
-): WatchedLlmSession<TResult> {
-  const queue = new AsyncMessageQueue();
+): WatchedLlmSession<TResult, TMessage> {
+  const queue = new AsyncMessageQueue<TMessage>();
   const checkIntervalMs = resolvePositiveInteger(
     input.stallWatch.stallCheckIntervalMs ??
       readNumberEnvironmentVariable(STALL_CHECK_INTERVAL_ENV),
@@ -149,7 +150,7 @@ export function createWatchedLlmSession<
     resolveCompletion = undefined;
   };
 
-  const recordRawMessage = (session: TSession, value: unknown): void => {
+  const recordRawMessage = (session: TSession, value: TMessage): void => {
     messageCount += 1;
     rawSignature = stringifyUnknown(value) ?? `message-${messageCount}`;
     sessionStates.set(session.sessionId, readSessionStateSignature(session));

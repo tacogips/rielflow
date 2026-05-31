@@ -19,9 +19,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
-    "claude-code-agent": "github:tacogips/claude-code-agent#eb3d81d3499df77695cc3b0ed92da73fc5b21f4e",
-    "codex-agent": "github:tacogips/codex-agent#3f6bbea86a0f4822ff7fdc88079097fd51575bbe",
-    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#b14a00e5008cceae6debb73c986aa793671ff8ef",
+    "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
+    "codex-agent": "github:tacogips/codex-agent#0ce12d18c5806d34be0f8afc3a96632588a3767f",
+    "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
     "openai": "6.27.0",
     "rielflow-core": "workspace:*"
   },

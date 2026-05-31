@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 import {
   AdapterExecutionError,
   type AdapterExecutionContext,
@@ -8,6 +7,7 @@ import {
   type AdapterProcessLog,
   type NodeAdapter,
 } from "rielflow-core";
+import { SessionRunner } from "claude-code-agent/sdk";
 import {
   type LlmSessionStallWatchConfig,
 } from "./llm-session-stall-watch";
@@ -92,23 +92,10 @@ export interface ClaudeAdapterConfig extends LlmSessionStallWatchConfig {
   readonly createRunner?: ClaudeRunnerFactory;
 }
 
-const importUnknownModule = new Function(
-  "specifier",
-  "return import(specifier);",
-) as (specifier: string) => Promise<unknown>;
-
 async function createDefaultRunner(
   options: ClaudeSessionRunnerOptions,
 ): Promise<ClaudeSessionRunnerLike> {
-  const modulePath = pathToFileURL(
-    `${process.cwd()}/node_modules/claude-code-agent/src/sdk/agent.ts`,
-  ).href;
-  const module = (await importUnknownModule(modulePath)) as {
-    readonly SessionRunner: new (
-      options?: ClaudeSessionRunnerOptions,
-    ) => ClaudeSessionRunnerLike;
-  };
-  return new module.SessionRunner(options);
+  return new SessionRunner(options);
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

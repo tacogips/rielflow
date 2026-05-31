@@ -69,6 +69,16 @@ describe("probeAgentBackendAuthReadiness", () => {
               stderr: "",
             };
           }
+          if (args[0] === "exec") {
+            return {
+              ok: false,
+              stdout: "",
+              stderr:
+                "model gpt-5-nano is not enabled for this account because the subscription expired",
+              message:
+                "model gpt-5-nano is not enabled for this account because the subscription expired",
+            };
+          }
           return {
             ok: false,
             stdout: "",
@@ -76,27 +86,6 @@ describe("probeAgentBackendAuthReadiness", () => {
             message: `unexpected codex args: ${args.join(" ")}`,
           };
         },
-        "codex-agent": () => ({
-          ok: false,
-          stdout: JSON.stringify({
-            ok: false,
-            model: "gpt-5-nano",
-            auth: {
-              ok: true,
-              status: "Logged in using ChatGPT",
-              error: null,
-            },
-            probe: {
-              ok: false,
-              model: "gpt-5-nano",
-              error:
-                "model gpt-5-nano is not enabled for this account because the subscription expired",
-            },
-          }),
-          stderr: "",
-          message:
-            "model gpt-5-nano is not enabled for this account because the subscription expired",
-        }),
       }),
     );
 

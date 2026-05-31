@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { SessionStreamChunk } from "codex-agent/sdk";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -22,15 +23,17 @@ function makeCodexRunner() {
     createRunner: vi.fn(() => ({
       startSession: vi.fn(async () => ({
         sessionId: "codex-session-1",
-        async *messages(): AsyncGenerator<unknown, void, undefined> {
+        async *messages(): AsyncGenerator<SessionStreamChunk, void, undefined> {
           yield {
             type: "session_meta",
+            timestamp: "2026-03-30T00:00:00.000Z",
             payload: {
               meta: { id: "codex-session-1" },
             },
           };
           yield {
             type: "response_item",
+            timestamp: "2026-03-30T00:00:01.000Z",
             payload: {
               type: "message",
               role: "assistant",

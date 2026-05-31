@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 import {
   AdapterExecutionError,
   type AdapterExecutionContext,
@@ -8,6 +7,7 @@ import {
   type AdapterProcessLog,
   type NodeAdapter,
 } from "rielflow-core";
+import { createCursorAgentSdk } from "cursor-cli-agent/sdk";
 import {
   type LlmSessionStallWatchConfig,
 } from "./llm-session-stall-watch";
@@ -134,25 +134,10 @@ export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
   readonly createRunner?: CursorRunnerFactory;
 }
 
-const importUnknownModule = new Function(
-  "specifier",
-  "return import(specifier);",
-) as (specifier: string) => Promise<unknown>;
-
 async function createDefaultRunner(
   options: CursorRunnerOptions,
 ): Promise<CursorAgentRunnerLike> {
-  const modulePath = pathToFileURL(
-    `${process.cwd()}/node_modules/cursor-cli-agent/src/sdk/index.ts`,
-  ).href;
-  const module = (await importUnknownModule(modulePath)) as {
-    readonly createCursorAgentSdk: (options?: {
-      readonly cursorBinary?: string;
-    }) => {
-      readonly runner: CursorAgentRunnerLike;
-    };
-  };
-  const sdk = module.createCursorAgentSdk({
+  const sdk = createCursorAgentSdk({
     ...(options.cursorBinary !== undefined
       ? { cursorBinary: options.cursorBinary }
       : {}),

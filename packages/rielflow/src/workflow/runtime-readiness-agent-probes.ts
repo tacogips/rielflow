@@ -37,10 +37,7 @@ function resolveProbeCwd(cwd: string | undefined): string {
   return cwd ?? process.cwd();
 }
 
-type AgentCliBinaryName =
-  | "claude-code-agent"
-  | "cursor-cli-agent"
-  | "codex-agent";
+type AgentCliBinaryName = "claude-code-agent" | "cursor-cli-agent";
 
 function commandCandidatesFor(
   binaryName: AgentCliBinaryName,
@@ -337,9 +334,20 @@ async function checkCodexModel(input: {
   readonly model: string;
   readonly options: Pick<LoadOptions, "cwd" | "env">;
 }): Promise<NodeValidationResult> {
-  const result = await runFirstAvailableCommand(
-    commandCandidatesFor("codex-agent"),
-    ["model", "check", "--model", input.model, "--json"],
+  const result = await runCommand(
+    "codex",
+    [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--color",
+      "never",
+      "--sandbox",
+      "read-only",
+      "--model",
+      input.model,
+      "Reply with exactly OK.",
+    ],
     input.options,
     MODEL_CHECK_COMMAND_TIMEOUT_MS,
   );
@@ -373,8 +381,19 @@ async function checkCodexAccountReadiness(
     );
   }
   const result = await runFirstAvailableCommand(
-    commandCandidatesFor("codex-agent"),
-    ["model", "check", "--model", firstModel, "--json"],
+    ["codex"],
+    [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--color",
+      "never",
+      "--sandbox",
+      "read-only",
+      "--model",
+      firstModel,
+      "Reply with exactly OK.",
+    ],
     options,
     MODEL_CHECK_COMMAND_TIMEOUT_MS,
   );

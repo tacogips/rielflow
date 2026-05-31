@@ -8,6 +8,12 @@ import {
   type NodeAdapter,
 } from "rielflow-core";
 import {
+  type AgentNormalizedChunkEvent,
+  SessionRunner,
+  type SessionStreamChunk,
+  toNormalizedEvents,
+} from "codex-agent/sdk";
+import {
   type LlmSessionStallWatchConfig,
 } from "./llm-session-stall-watch";
 import {
@@ -62,25 +68,9 @@ interface CodexSessionResult {
   };
 }
 
-type CodexNormalizedEvent =
-  | {
-      readonly type: "session.started";
-      readonly sessionId: string;
-    }
-  | {
-      readonly type: "assistant.snapshot";
-      readonly sessionId: string;
-      readonly content: string;
-    }
-  | {
-      readonly type: "session.error";
-      readonly sessionId?: string;
-      readonly error: Error;
-    };
-
 interface CodexRunningSessionLike {
   readonly sessionId: string;
-  messages(): AsyncIterable<unknown>;
+  messages(): AsyncIterable<SessionStreamChunk>;
   waitForCompletion(): Promise<CodexSessionResult>;
   cancel(): Promise<void>;
 }
@@ -140,31 +130,16 @@ function mergeAdditionalArgs(
   return merged.length === 0 ? undefined : merged;
 }
 
-const importUnknownModule = new Function(
-  "specifier",
-  "return import(specifier);",
-) as (specifier: string) => Promise<unknown>;
-
 async function createDefaultRunner(
   options: CodexSessionRunnerOptions,
 ): Promise<CodexSessionRunnerLike> {
-  const module = (await importUnknownModule("codex-agent")) as {
-    readonly SessionRunner: new (
-      options?: CodexSessionRunnerOptions,
-    ) => CodexSessionRunnerLike;
-  };
-  return new module.SessionRunner(options);
+  return new SessionRunner(options);
 }
 
 async function toCodexNormalizedEvents(
-  chunks: AsyncIterable<unknown>,
-): Promise<AsyncIterable<CodexNormalizedEvent>> {
-  const module = (await importUnknownModule("codex-agent")) as {
-    readonly toNormalizedEvents: (
-      input: AsyncIterable<unknown>,
-    ) => AsyncIterable<CodexNormalizedEvent>;
-  };
-  return module.toNormalizedEvents(chunks);
+  chunks: AsyncIterable<SessionStreamChunk>,
+): Promise<AsyncIterable<AgentNormalizedChunkEvent>> {
+  return toNormalizedEvents(chunks);
 }
 
 function resolveLocalSessionConfig(
@@ -242,14 +217,6 @@ function buildResumeSessionOptions(
   };
 }
 
-function isCodexEvent(value: unknown): value is CodexNormalizedEvent {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { readonly type?: unknown }).type === "string"
-  );
-}
-
 function stringifyUnknown(value: unknown): string | undefined {
   try {
     return JSON.stringify(value);
@@ -311,7 +278,8 @@ async function executeLocalCodexAgent(
   });
   const watchedSession = createWatchedLocalAgentSession<
     CodexRunningSessionLike,
-    CodexSessionResult
+    CodexSessionResult,
+    SessionStreamChunk
   >({
     provider: "codex-agent",
     primarySession: session,
@@ -334,9 +302,6 @@ async function executeLocalCodexAgent(
   try {
     const events = await toCodexNormalizedEvents(watchedSession.messages);
     for await (const event of events) {
-      if (!isCodexEvent(event)) {
-        continue;
-      }
       switch (event.type) {
         case "session.started":
           sessionId = event.sessionId;

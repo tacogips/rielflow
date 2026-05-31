@@ -208,17 +208,18 @@ export function bindAbortSignal(
   };
 }
 
-interface WatchedLocalSessionLike<TResult> {
+interface WatchedLocalSessionLike<TResult, TMessage = unknown> {
   readonly sessionId: string;
-  messages(): AsyncIterable<unknown>;
+  messages(): AsyncIterable<TMessage>;
   waitForCompletion(): Promise<TResult>;
   cancel(): Promise<void>;
   getState?(): unknown;
 }
 
 export function createWatchedLocalAgentSession<
-  TSession extends WatchedLocalSessionLike<TResult>,
+  TSession extends WatchedLocalSessionLike<TResult, TMessage>,
   TResult,
+  TMessage = unknown,
 >(input: {
   readonly provider: string;
   readonly primarySession: TSession;
@@ -231,8 +232,8 @@ export function createWatchedLocalAgentSession<
   readonly isResultSuccess: (result: TResult) => boolean;
   readonly describeResult: (result: TResult) => string;
   readonly onProcessLog: (log: import("rielflow-core").AdapterProcessLog) => void;
-}): WatchedLlmSession<TResult> {
-  return createWatchedLlmSession<TSession, TResult>(input);
+}): WatchedLlmSession<TResult, TMessage> {
+  return createWatchedLlmSession<TSession, TResult, TMessage>(input);
 }
 
 export function throwIfAborted(signal: AbortSignal, message: string): void {
