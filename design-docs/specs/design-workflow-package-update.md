@@ -1,11 +1,11 @@
-# Workflow Package Checkout Metadata And Clean Update
+# Workflow Package Install Metadata And Clean Update
 
-Design for checkout metadata, change detection, and clean package updates for
+Design for install metadata, change detection, and clean package updates for
 rielflow workflow packages.
 
 ## Overview
 
-Workflow package checkout already installs a registry-selected workflow bundle
+Workflow package install already installs a registry-selected workflow bundle
 into project or user scope and writes basic provenance. This feature makes that
 provenance package-aware enough to support later update checks and deterministic
 clean reinstalls.
@@ -42,9 +42,9 @@ skill artifacts from a validated package revision.
 
 ## Goals
 
-- Persist enough package checkout metadata to detect whether a checked-out
+- Persist enough package install metadata to detect whether an installed
   package has changed in its source registry.
-- Record workflow and skill artifact identities in the same package checkout
+- Record workflow and skill artifact identities in the same package install
   provenance model.
 - Support update checks for project-scope and user-scope checkouts.
 - Implement clean package update by staging, validating, backing up, removing,
@@ -151,7 +151,7 @@ recorded registry ref.
 Catalog lookup rules:
 
 - If `--install-id` is provided, load that exact package checkout record.
-- If a package checkout was installed with `--workflow-definition-dir`, status
+- If a package install used `--workflow-definition-dir`, status
   and update still treat it as project scope. Lookup by workflow name uses the
   current project root identity plus the recorded workflow destination
   directory; ambiguity requires `--install-id`.
@@ -216,8 +216,8 @@ Update and overwrite operations are destructive because they replace
 package-managed directories. CLI behavior:
 
 ```bash
-rielflow cli workflow package update <workflow-name> [--scope project|user] [--install-id <id>] [--yes] [--output json|text]
-rielflow cli workflow package status <workflow-name> [--scope project|user] [--install-id <id>] [--output json|text]
+rielflow package update <workflow-name> [--scope project|user] [--install-id <id>] [--yes] [--output json|text]
+rielflow package status <workflow-name> [--scope project|user] [--install-id <id>] [--output json|text]
 ```
 
 Rules:
@@ -230,7 +230,7 @@ Rules:
 - `--yes` skips confirmation for automation.
 - Noninteractive update without `--yes` fails with a usage error.
 - Existing `--overwrite` checkout behavior should be aligned with this policy
-  when package checkout is replacing an existing package-managed install.
+  when package install is replacing an existing package-managed install.
 
 ## Skill Artifact Interaction
 
@@ -306,7 +306,7 @@ Use explicit failures for:
   workflow name and current project root identity.
 - Add `checkoutKind` so direct URL records remain distinguishable from package
   records.
-- Treat update as clean reinstall because package checkout owns generated
+- Treat update as clean reinstall because package install owns generated
   artifacts and package content has no template variables.
 - Require confirmation by default for update and overwrite paths.
 - Use `--yes` as the skip-confirmation flag for CLI consistency with common
@@ -337,8 +337,8 @@ Use explicit failures for:
 
 Tracked in `design-docs/user-qa/qa-workflow-package-checkout.md`.
 
-- Whether the update command should live under `workflow package update` only or
-  also be exposed as `workflow checkout --update`.
+- Whether future update behavior should add additional selector forms beyond
+  `package update <workflow-name>|--install-id <id>`.
 - Whether `--scope project|user` should replace or merely supplement existing
   `--user-scope` checkout flags.
 - Whether modified projected user-scope skill files should block clean update by
@@ -353,7 +353,7 @@ Tracked in `design-docs/user-qa/qa-workflow-package-checkout.md`.
   remote registry has changed; status/update commands need a refresh path.
 - Multi-artifact rollback is more complex than current workflow-only checkout
   rollback and must be tested with injected filesystem failures.
-- Direct checkout and package checkout records sharing the same catalog path can
+- Direct checkout and package install records sharing the same catalog path can
   cause migration edge cases unless `checkoutKind`, `installId`, and
   backward-compatible parsing are handled carefully.
 

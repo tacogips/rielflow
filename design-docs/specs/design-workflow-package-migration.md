@@ -126,7 +126,7 @@ contract from the registry design:
 
 The manifest metadata must be useful to both humans and automation. Search
 results should let a codex-agent select a package, identify its workflow id, and
-call package checkout without reading every package file.
+call package install without reading every package file.
 
 Each manifest should include enough searchable terms to distinguish management
 workflows from worker or utility workflows. For migrated codex-agent workflows,
@@ -152,8 +152,8 @@ The example package should include:
   usage inspection, and mock-scenario run commands
 
 The existing `examples/` directory remains a direct workflow-definition fixture
-area. The registry example should be checked out into project or user scope
-through package checkout before validation rather than being copied into
+area. The registry example should be installed into project or user scope
+through `package install` before validation rather than being copied into
 `examples/` as a second source of truth.
 
 The example package is also the acceptance fixture for codex-agent references in
@@ -184,13 +184,13 @@ The implementation should use a deterministic migration procedure:
    files so migration did not silently alter graph, prompt, node, or mock data.
 
 The implementation may leave the repository-local `.rielflow/workflows` content
-in place until package checkout and command documentation are complete. Removing
+in place until package install and command documentation are complete. Removing
 or replacing project-local workflow content should happen only after the
 registry package path is verified, because the current project workflows are
 used to drive this implementation workflow.
 
 After verification, migration may update documentation to point users at package
-checkout for reusable workflow installation. It should not delete active
+install for reusable workflow installation. It should not delete active
 workflow bundles as part of this feature slice unless the implementation plan
 explicitly stages a separate cleanup task and all package commands already pass.
 
@@ -201,7 +201,7 @@ through the package command path:
 
 - package search returns the example package with registry URL, branch, package
   name, workflow id, checksum, and source path
-- package checkout installs into project scope by default and into user scope
+- package install installs into project scope by default and into user scope
   only when explicitly requested
 - checkout provenance records package fields in
   `~/.rielflow/workflow-registry/checkouts/`
@@ -220,7 +220,7 @@ the new package registry path:
 
 - default registry URL and local checkout path
 - package search command examples
-- package checkout command examples for project and user scope
+- package install command examples for project and user scope
 - publish notes that explain direct push and PR-based publication at a high
   level without duplicating the publish-command design
 - migration note explaining that former project-local workflows are available as
@@ -238,9 +238,9 @@ manifest checksums before publishing or opening a PR.
 Expected focused verification commands:
 
 ```bash
-bun run packages/rielflow/src/bin.ts workflow package search --registry https://github.com/tacogips/rielflow-packages --output json
-bun run packages/rielflow/src/bin.ts workflow package search feature-plan --registry default --refresh --output json
-bun run packages/rielflow/src/bin.ts workflow package checkout project-design-and-implement-review-loop-feature-plan --registry default --overwrite --output json
+bun run packages/rielflow/src/bin.ts package search --registry https://github.com/tacogips/rielflow-packages --output json
+bun run packages/rielflow/src/bin.ts package search feature-plan --registry default --refresh --output json
+bun run packages/rielflow/src/bin.ts package install project-design-and-implement-review-loop-feature-plan --registry default --overwrite --output json
 bun run packages/rielflow/src/bin.ts workflow validate design-and-implement-review-loop-feature-plan
 bun run packages/rielflow/src/bin.ts workflow usage design-and-implement-review-loop-feature-plan --output json
 bun run packages/rielflow/src/bin.ts workflow run design-and-implement-review-loop-feature-plan --mock-scenario .rielflow/workflows/design-and-implement-review-loop-feature-plan/mock-scenario.json --output json

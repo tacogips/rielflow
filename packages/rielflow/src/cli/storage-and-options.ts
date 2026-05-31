@@ -391,14 +391,6 @@ export interface ParsedArgs {
   readonly options: ParsedOptions;
   readonly error?: string;
 }
-export function normalizeCliPositionals(
-  positionals: readonly string[],
-): string[] {
-  if (positionals[0] === "cli" && positionals[1] === "workflow") {
-    return positionals.slice(1);
-  }
-  return [...positionals];
-}
 export interface GraphqlCliTransportOptions {
   readonly endpoint: string;
   readonly authToken?: string;

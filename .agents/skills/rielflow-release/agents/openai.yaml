@@ -1,3 +1,4 @@
 interface:
-  display_name: "rielflow-release"
-  short_description: "Use when preparing, publishing, verifying, or troubleshooting a rielflow release through GitHub release assets and the tacogips/tap Homebrew formula."
+  display_name: "Rielflow Release"
+  short_description: "Release rielflow through Homebrew tap assets"
+  default_prompt: "Use $rielflow-release to prepare, publish, and verify this rielflow Homebrew release."

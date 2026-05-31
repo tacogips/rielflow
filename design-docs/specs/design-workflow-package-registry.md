@@ -1,7 +1,7 @@
 # Workflow Package Registry
 
 Design for the feature-local registry metadata and cache contract behind
-workflow package publish, checkout, and search commands.
+workflow package publish, install, and search commands.
 
 ## Overview
 
@@ -468,7 +468,7 @@ git diff --check
 
 Additional implementation tests should cover registry config persistence, package
 manifest validation, checksum stability, JSON cache refresh, sqlite cache parity
-when enabled, search ranking/filtering, and package checkout provenance.
+when enabled, search ranking/filtering, and package install provenance.
 
 ## Decisions
 

@@ -5,8 +5,8 @@ package registries.
 
 ## Overview
 
-`rielflow publish` publishes one validated workflow name or directory path into
-a GitHub registry repository. The default registry is
+`rielflow package publish` publishes one validated workflow name or directory
+path into a GitHub registry repository. The default registry is
 `https://github.com/tacogips/rielflow-packages`; the default local working copy
 for that registry is `/Users/taco/gits/tacogips/rielflow-packages`. Users can
 register additional personal registries under `~/.rielflow` and can publish to
@@ -62,22 +62,21 @@ integration contracts but are not modified by this branch.
 - Validate workflow bundles before registry mutation.
 - Track package changes with deterministic checksums, initially including md5.
 - Store searchable workflow metadata alongside package contents.
-- Reuse the existing `workflow checkout` validation model where possible.
+- Reuse the existing workflow bundle validation model where possible.
 
 ## Non-Goals
 
 - Publishing non-Git registry backends.
 - Executing registry package lifecycle code during publish.
 - Solving package dependency resolution for workflow add-ons.
-- Replacing the existing `workflow checkout` command in the first publish
-  implementation.
+- Adding workflow-scoped or top-level publish aliases.
 
 ## Command Surface
 
 Primary command:
 
 ```bash
-rielflow publish <workflow-name-or-path> [options]
+rielflow package publish <workflow-name-or-path> [options]
 ```
 
 Recommended options:
@@ -111,8 +110,7 @@ Structured JSON output for successful publish should include:
 - `registryUrl`
 - `registryRef`
 - `packageId`
-- `packageName` as a compatibility alias when the nested package command path is
-  used
+- `packageName` as a compatibility alias when needed by existing service output
 - `workflowName`
 - `workflowDirectory`
 - `packageDirectory`
@@ -123,13 +121,10 @@ Structured JSON output for successful publish should include:
 - `prUrl` when a PR is created
 - `dryRun`
 
-The top-level `rielflow publish` command is canonical for the accepted issue and
-the package command design. The existing nested
-`rielflow workflow package publish <workflow-directory> --package-name <name>`
-path may remain as a compatibility route, but it must call the same publish
-service contract and emit the same canonical JSON fields. The nested
-`--package-name` option maps to canonical `packageId` unless implementation
-keeps both names for backward-compatible output.
+`rielflow package publish` is the canonical publish command for the current
+package command surface. Top-level `rielflow publish` and nested
+`rielflow workflow package publish` are unsupported compatibility aliases and
+must not be documented for new automation.
 
 ## Current Implementation Baseline
 
@@ -138,7 +133,7 @@ The repository already contains an initial nested package publish path in
 `packages/rielflow/src/cli/workflow-package-command-handler.ts`. The
 implementation plan should treat the following as existing baseline behavior:
 
-- `workflow package publish <workflow-directory> --package-name <name>` exists.
+- `package publish <workflow-directory> --package-name <name>` exists.
 - It loads the personal registry configuration from the workflow package config
   layer and requires the selected registry to have `localPath`.
 - It validates the source workflow through `loadWorkflowFromDisk`.
@@ -148,13 +143,12 @@ implementation plan should treat the following as existing baseline behavior:
   `--create-pr` is set.
 
 The baseline is incomplete against this design. Required follow-up work includes
-top-level `rielflow publish` routing, workflow name-or-path resolution, registry
-URL and local-path option handling, `--package-id` support with nested
-`--package-name` compatibility mapping, dry-run support, explicit permission
-probing before worktree mutation, dirty registry rejection, direct branch
-checkout/update behavior, deterministic PR branch naming with base selection,
-registry index refresh compatibility, canonical structured output, and tests for
-permission-failure modes.
+workflow name-or-path resolution, registry URL and local-path option handling,
+`--package-id` support with `--package-name` accepted as a package command
+option, dry-run support, explicit permission probing before worktree mutation,
+dirty registry rejection, direct branch checkout/update behavior, deterministic
+PR branch naming with base selection, registry index refresh compatibility,
+canonical structured output, and tests for permission-failure modes.
 
 ## Registry Layout
 
@@ -301,7 +295,7 @@ workflow checkout records under `~/.rielflow/workflow-registry/checkouts/`.
 ## Search Metadata
 
 Published packages must include enough metadata for
-`rielflow workflow package search` to answer without loading every workflow
+`rielflow package search` to answer without loading every workflow
 bundle:
 
 - package id and workflow name;
@@ -321,14 +315,14 @@ index for it.
 
 ## Integration With Checkout
 
-`workflow checkout` already validates a public GitHub workflow directory in a
-temporary staging directory before scoped installation. Publish should produce
-registry URLs and metadata compatible with that installer. A package checkout
-feature can later resolve package ids through `registry/index.json` and install
+`workflow checkout` validates public GitHub workflow directories in a temporary
+staging directory before scoped installation. Publish should produce registry
+URLs and metadata compatible with the package installer. `package install`
+resolves package ids through `registry/index.json` and installs
 `packages/<package-id>/<workflowDirectory>/` using the same scoped destination
 and provenance write behavior.
 
-The published manifest and index must be sufficient for package checkout to
+The published manifest and index must be sufficient for package install to
 resolve these stable fields without loading every workflow bundle:
 
 - registry URL and branch/ref;
@@ -372,7 +366,7 @@ bun run tsc --noEmit
 
 Feature tests should include dry-run publish, direct-push permission failure,
 PR-mode adapter behavior, dirty-registry rejection, manifest/checksum generation,
-and compatibility with package checkout/search metadata.
+and compatibility with package install/search metadata.
 
 ## Decisions
 
@@ -383,10 +377,10 @@ and compatibility with package checkout/search metadata.
   `/Users/taco/gits/tacogips/rielflow-packages`.
 - Personal registry configuration is read from `~/.rielflow` through the
   registry metadata layer.
-- The canonical publish command is top-level `rielflow publish`; nested
-  `workflow package publish` remains only as a compatibility route if retained.
+- The canonical publish command is `rielflow package publish`; top-level
+  `rielflow publish` and nested `workflow package publish` are unsupported.
 - Publish output standardizes on `packageId`, with `packageName` allowed only as
-  a compatibility alias for existing nested package command callers.
+  a compatibility alias for existing service consumers.
 - Direct publish requires push permission to the selected branch.
 - PR publish uses a separate publish branch and a PR adapter, initially allowed
   to wrap `gh pr create`.

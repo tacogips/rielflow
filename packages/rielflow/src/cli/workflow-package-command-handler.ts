@@ -24,7 +24,7 @@ export async function runCliWorkflowPackageScope(
     io,
   } = context;
   if (graphqlCliTransport !== null) {
-    io.stderr("workflow package commands are local-only; omit --endpoint");
+    io.stderr("package commands are local-only; omit --endpoint");
     return 2;
   }
   const packageCommand = target;
@@ -66,14 +66,12 @@ export async function runCliWorkflowPackageScope(
       return 0;
     }
     if (registryCommand !== "add") {
-      io.stderr("workflow package registry supports: add, list");
+      io.stderr("package registry supports: add, list");
       return 2;
     }
     const registryId = positionals[4];
     if (registryId === undefined || parsed.options.registryUrl === undefined) {
-      io.stderr(
-        "workflow package registry add requires <id> and --registry-url <url>",
-      );
+      io.stderr("package registry add requires <id> and --registry-url <url>");
       return 2;
     }
     const registered = await registerWorkflowPackageRegistry({
@@ -94,7 +92,7 @@ export async function runCliWorkflowPackageScope(
     if (parsed.options.output === "json") {
       emitJson(io, registered.value);
     } else {
-      io.stdout(`registered workflow package registry: ${registryId}`);
+      io.stdout(`registered package registry: ${registryId}`);
     }
     return 0;
   }
@@ -183,7 +181,7 @@ export async function runCliWorkflowPackageScope(
     return 0;
   }
 
-  if (packageCommand === "checkout" || packageCommand === "install") {
+  if (packageCommand === "install") {
     if (packageTarget === undefined) {
       io.stderr(`package ${packageCommand} requires a package name`);
       return 2;
@@ -214,7 +212,7 @@ export async function runCliWorkflowPackageScope(
       options: packageOptions,
     });
     if (!checkedOut.ok) {
-      io.stderr(`package checkout failed: ${checkedOut.error.message}`);
+      io.stderr(`package install failed: ${checkedOut.error.message}`);
       return checkedOut.error.code === "IO" ||
         checkedOut.error.code === "FETCH_FAILED"
         ? 1
@@ -223,7 +221,7 @@ export async function runCliWorkflowPackageScope(
     if (parsed.options.output === "json") {
       emitJson(io, checkedOut.value);
     } else {
-      io.stdout(`checked out package: ${checkedOut.value.packageName}`);
+      io.stdout(`installed package: ${checkedOut.value.packageName}`);
       io.stdout(`workflow: ${checkedOut.value.workflowName}`);
       io.stdout(`scope: ${checkedOut.value.scope}`);
       io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
@@ -252,7 +250,7 @@ export async function runCliWorkflowPackageScope(
   if (packageCommand === "status" || packageCommand === "update") {
     if (packageTarget === undefined && parsed.options.installId === undefined) {
       io.stderr(
-        `workflow package ${packageCommand} requires a workflow name or --install-id`,
+        `package ${packageCommand} requires a workflow name or --install-id`,
       );
       return 2;
     }
@@ -306,7 +304,7 @@ export async function runCliWorkflowPackageScope(
     return 0;
   }
 
-  if (packageCommand === "remove" || packageCommand === "uninstall") {
+  if (packageCommand === "remove") {
     if (packageTarget === undefined && parsed.options.installId === undefined) {
       io.stderr(
         `package ${packageCommand} requires a workflow name or --install-id`,
@@ -350,7 +348,7 @@ export async function runCliWorkflowPackageScope(
 
   if (packageCommand === "publish") {
     if (packageTarget === undefined) {
-      io.stderr("workflow package publish requires a workflow directory");
+      io.stderr("package publish requires a workflow directory");
       return 2;
     }
     const packageName = parsed.options.packageId ?? parsed.options.packageName;
@@ -398,7 +396,7 @@ export async function runCliWorkflowPackageScope(
   }
 
   io.stderr(
-    "package supports: registry, search, install, checkout, list, status, update, remove, uninstall, publish",
+    "package supports: registry, search, install, list, status, update, remove, publish",
   );
   return 2;
 }

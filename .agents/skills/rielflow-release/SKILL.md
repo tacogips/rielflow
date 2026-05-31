@@ -24,6 +24,28 @@ This skill covers:
 Do not use this skill for npm publishing; use `supply-chain-secure-publish`
 when npm package publication is involved.
 
+## Homebrew Release Model
+
+Rielflow releases are Homebrew formula releases backed by GitHub release assets.
+The formula installs prebuilt standalone archives for each supported platform;
+it does not build rielflow from source during `brew install`, and it does not
+use Homebrew bottle publishing.
+
+The release order is:
+
+1. verify the rielflow source version, release commit, and tag intent
+2. run project checks
+3. build the four platform archives and `.sha256` files under `dist/homebrew`
+4. create or update the GitHub release `v<version>` with those archives
+5. render `Formula/rielflow.rb` into the `tacogips/homebrew-tap` checkout
+6. run Homebrew audit, style, local install, and formula tests
+7. commit and push the tap formula update
+8. verify installation from `tacogips/tap`
+
+Do not use `brew bump-formula-pr` for this project unless the release process
+has moved to an upstream Homebrew/core formula. For the current tap-based flow,
+render and commit the formula in `tacogips/homebrew-tap`.
+
 ## Path Rule
 
 Keep release instructions portable. Do not write machine-specific absolute
@@ -182,6 +204,18 @@ git -C ../homebrew-tap diff -- Formula/rielflow.rb
 brew audit --formula ../homebrew-tap/Formula/rielflow.rb
 brew style ../homebrew-tap/Formula/rielflow.rb
 ```
+
+The formula should contain `on_macos` and `on_linux` blocks with architecture
+specific URLs and checksums for:
+
+- `darwin-arm64`
+- `darwin-x64`
+- `linux-arm64`
+- `linux-x64`
+
+If Homebrew reports checksum, fetch, or URL errors, inspect the rendered formula
+and `gh release view "v<version>" --repo tacogips/rielflow --json assets`
+before editing generated formula content by hand.
 
 ## Smoke Test
 

@@ -1,4 +1,5 @@
 import { inferRootDataDirFromExplicitStorageRoots } from "../workflow/paths";
+import packageJson from "../../package.json";
 import type {
   CliDependencies,
   CliIo,
@@ -7,7 +8,6 @@ import type {
 import {
   DEFAULT_DEPS,
   DEFAULT_IO,
-  normalizeCliPositionals,
   parseWorkflowScopeOption,
 } from "./storage-and-options";
 import { parseArgs } from "./argument-parser";
@@ -36,12 +36,16 @@ export async function runCli(
     printHelp(io);
     return 0;
   }
+  if (argv.length === 1 && argv[0] === "--version") {
+    io.stdout(packageJson.version);
+    return 0;
+  }
   const parsed = parseArgs(argv);
   if (parsed.error !== undefined) {
     io.stderr(parsed.error);
     return 2;
   }
-  const positionals = normalizeCliPositionals(parsed.positionals);
+  const positionals = [...parsed.positionals];
   const [scope, command, target] = positionals;
   const env = resolveCliEnv(deps);
   const envWorkflowScope = env["RIEL_WORKFLOW_SCOPE"];
@@ -143,6 +147,13 @@ export async function runCli(
     printHelp(io);
     return 2;
   }
+
+  if (scope !== "workflow" && scope !== "package" && scope !== "session") {
+    io.stderr(`unknown scope: ${scope}`);
+    printHelp(io);
+    return 1;
+  }
+
   if (
     target === undefined &&
     !(
@@ -151,9 +162,7 @@ export async function runCli(
         (command === "list" ||
           command === "status" ||
           command === "update" ||
-          command === "remove" ||
-          command === "uninstall")) ||
-      (scope === "publish" && command !== undefined)
+          command === "remove"))
     )
   ) {
     io.stderr("scope, command, and target are required");
@@ -164,16 +173,12 @@ export async function runCli(
   if (
     parsed.options.output === "table" &&
     !(
-      (scope === "workflow" &&
-        (command === "list" ||
-          command === "status" ||
-          command === "search" ||
-          (command === "package" && target === "search"))) ||
+      (scope === "workflow" && (command === "list" || command === "status")) ||
       (scope === "package" && (command === "search" || command === "list"))
     )
   ) {
     io.stderr(
-      "`--output table` is only supported for workflow list, workflow status, and workflow search",
+      "`--output table` is only supported for workflow list, workflow status, package search, and package list",
     );
     return 2;
   }
@@ -183,30 +188,12 @@ export async function runCli(
   }
 
   if (scope === "package") {
-    const packageCommand = command === "checkout" ? "install" : command;
     return runCliWorkflowPackageScope({
       ...runCliContext,
       scope: "workflow",
       command: "package",
-      target: packageCommand,
-      positionals: [
-        "workflow",
-        "package",
-        packageCommand,
-        ...positionals.slice(2),
-      ],
-    });
-  }
-
-  if (scope === "publish") {
-    return runCliWorkflowPackageScope({
-      ...runCliContext,
-      scope: "workflow",
-      command: "package",
-      target: "publish",
-      positionals: ["workflow", "package", "publish", command].filter(
-        (value): value is string => value !== undefined,
-      ),
+      target: command,
+      positionals: ["workflow", "package", command, ...positionals.slice(2)],
     });
   }
 

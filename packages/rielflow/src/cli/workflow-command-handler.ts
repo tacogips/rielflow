@@ -58,9 +58,7 @@ import {
   renderWorkflowManifestValidationLines,
   validateWorkflowManifestForCli,
 } from "./workflow-manifest-validation";
-import { runCliWorkflowPackageScope } from "./workflow-package-command-handler";
 import { runCliWorkflowRunCommand } from "./workflow-run-command";
-import { runCliWorkflowRegistryScope } from "./workflow-registry-command-handler";
 import {
   renderNodeValidationSummaryLines,
   renderWorkflowStructureLines,
@@ -398,28 +396,6 @@ export async function runCliWorkflowScope(
     return 0;
   }
 
-  if (command === "package") {
-    return await runCliWorkflowPackageScope(context);
-  }
-
-  if (command === "registry") {
-    return await runCliWorkflowRegistryScope(context);
-  }
-
-  if (command === "search") {
-    return await runCliWorkflowPackageScope({
-      ...context,
-      command: "package",
-      target: "search",
-      positionals: [
-        positionals[0] ?? "workflow",
-        "package",
-        "search",
-        ...positionals.slice(2),
-      ],
-    });
-  }
-
   const workflowTarget = target;
   if (workflowTarget === undefined) {
     io.stderr("scope, command, and target are required");
@@ -438,17 +414,8 @@ export async function runCliWorkflowScope(
     }
 
     if (!parseGitHubDirectoryUrl(workflowTarget).ok) {
-      return await runCliWorkflowPackageScope({
-        ...context,
-        command: "package",
-        target: "checkout",
-        positionals: [
-          positionals[0] ?? "workflow",
-          "package",
-          "checkout",
-          workflowTarget,
-        ],
-      });
+      io.stderr("workflow checkout requires a GitHub workflow directory URL");
+      return 2;
     }
 
     const checkedOut = await checkoutWorkflow({

@@ -1,6 +1,6 @@
-# Workflow Package Checkout Open Decisions
+# Workflow Package Install Open Decisions
 
-This file tracks user-facing decisions for workflow package checkout with
+This file tracks user-facing decisions for workflow package install with
 vendor-scoped skills. The implementation plan can proceed with the conservative
 defaults listed here unless a user decision overrides them before public API
 stabilization.
@@ -8,17 +8,17 @@ stabilization.
 ## Pending Decisions
 
 1. Scope flag naming:
-   Should checkout keep only `--user-scope`, or add `--scope project|user` for
+   Should install keep only `--user-scope`, or add `--scope project|user` for
    symmetry with package status/update commands?
 
    Default for first implementation: keep `--user-scope` for checkout and allow
    status/update to use `--scope project|user`.
 
 2. Update command alias:
-   Should package update live only under `workflow package update`, or should
-   `workflow checkout --update` also be supported?
+   Should package update gain any alias beyond `package update`, such as
+   `workflow checkout --update`?
 
-   Default for first implementation: expose `workflow package update` only.
+   Default for first implementation: expose `package update` only.
 
 3. Modified projected skill files:
    Should clean update block when a projected user-scope skill file was edited

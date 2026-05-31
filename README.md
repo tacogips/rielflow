@@ -46,6 +46,60 @@ rielflow --help
 
 The installed binary is `rielflow`.
 
+### Optional LLM Agent Setup
+
+After installing `rielflow`, you can install standard registry skill packages
+so an LLM agent can operate rielflow more easily. These commands install from
+the default public registry:
+
+```text
+https://github.com/tacogips/rielflow-packages
+```
+
+For agent-assisted package use, install the package-management skill package.
+It teaches agents how to search and install rielflow packages from registries:
+
+```bash
+rielflow package install rielflow-package-manager-skill \
+  --registry https://github.com/tacogips/rielflow-packages \
+  --user-scope \
+  --pre-install-check
+```
+
+For workflow authors, install the workflow-creator skill package. It helps an
+agent create, modify, validate, and run rielflow workflows for any repeatable
+or tedious process, such as collecting and analyzing posts, checking a Google
+Sheet on a schedule, or notifying a chat channel:
+
+```bash
+rielflow package install rielflow-workflow-creator-skill \
+  --registry https://github.com/tacogips/rielflow-packages \
+  --user-scope \
+  --pre-install-check
+```
+
+Developers working on rielflow itself may also install the larger
+design-and-implement workflow package for their agent. Choose one based on the
+agent you use, not both.
+
+Codex:
+
+```bash
+rielflow package install codex-design-and-implement-review-loop \
+  --registry https://github.com/tacogips/rielflow-packages \
+  --user-scope \
+  --pre-install-check
+```
+
+Claude Code:
+
+```bash
+rielflow package install claude-code-design-and-implement-review-loop \
+  --registry https://github.com/tacogips/rielflow-packages \
+  --user-scope \
+  --pre-install-check
+```
+
 Agent backends need their own credentials and local tools. For example,
 OpenAI-backed nodes use `OPENAI_API_KEY`, Anthropic-backed nodes use
 `ANTHROPIC_API_KEY`, and local CLI-backed nodes depend on the corresponding
@@ -180,6 +234,11 @@ bundles that can also include agent skills. The built-in default registry is:
 https://github.com/tacogips/rielflow-packages
 ```
 
+Use `rielflow package ...` for persistent package lifecycle operations. Direct
+workflow checkout remains limited to public GitHub workflow directory URLs via
+`rielflow workflow checkout <url>`; package ids are installed with
+`rielflow package install <package>`.
+
 Search packages:
 
 ```bash
@@ -246,7 +305,7 @@ rielflow package registry add personal \
 Publish a workflow package:
 
 ```bash
-rielflow workflow package publish .rielflow/workflows/demo \
+rielflow package publish .rielflow/workflows/demo \
   --package-name demo-workflow \
   --registry default \
   --branch main

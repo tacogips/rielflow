@@ -5,21 +5,20 @@ preserving direct GitHub workflow directory checkout.
 
 ## Overview
 
-The package checkout/search feature extends the existing `rielflow workflow
-checkout <github-url>` command with package identifiers resolved through Git
+The package install/search feature keeps direct `rielflow workflow checkout
+<github-url>` behavior separate from package identifiers resolved through Git
 repository registries. A registry is a GitHub repository containing workflow
 package metadata and package workflow directories. The default registry is
 `https://github.com/tacogips/rielflow-packages`, with the developer-local path
 `/Users/taco/gits/tacogips/rielflow-packages` used for local development and
 post-implementation migration of current repository `.rielflow` content.
 
-This feature owns CLI behavior for package checkout and metadata search. It
+This feature owns CLI behavior for package install and metadata search. It
 depends on the registry configuration/publish design for how registries are
 registered and updated, and on the package metadata/cache design for index file
-shape and checksum calculation. The first implementation may expose the
-package-specific surface under `workflow package` while preserving a route for
-the broader `workflow search` and `workflow checkout <package-id>` command
-contracts from the command design.
+shape and checksum calculation. The current command surface exposes persistent
+package lifecycle behavior under top-level `package ...` commands; workflow
+checkout remains direct-URL only.
 
 ## Feature Contract
 
@@ -64,7 +63,7 @@ integration references rather than edit targets for this node.
 
 This document also covers the issue-resolution request from
 `runtimeVariables.workflowInput`: "Add optional sandbox pre-install checks for
-workflow package checkout." The security update is scoped to package checkout
+workflow package checkout." The security update is scoped to package install
 and preserves the existing registry, metadata, md5 checksum, sha256 integrity,
 and signature behavior described by the package registry and integrity designs.
 
@@ -77,7 +76,7 @@ workflow reference rather than a source-code behavior to copy.
 
 ## Goals
 
-- Add registry-aware package checkout without removing direct GitHub directory
+- Add registry-aware package install without removing direct GitHub directory
   checkout.
 - Add an optional checkout-time pre-install security check that can reject a
   suspicious package before destination writes or checkout provenance writes.
@@ -105,7 +104,7 @@ workflow reference rather than a source-code behavior to copy.
 
 ## Command Surface
 
-### Checkout
+### Install
 
 Existing direct GitHub checkout command:
 
@@ -116,30 +115,28 @@ rielflow workflow checkout https://github.com/<owner>/<repo>/tree/<ref>/<workflo
 Registry-aware form:
 
 ```bash
-rielflow workflow checkout <package-id> [--registry <registry-url-or-name>] [--branch <branch>] [--user-scope] [--overwrite] [--output json|text]
-rielflow workflow package checkout <package-id> [--registry <registry-url-or-name>] [--branch <branch>] [--user-scope] [--overwrite] [--output json|text]
+rielflow package install <package-id> [--registry <registry-url-or-name>] [--branch <branch>] [--user-scope] [--workflow-definition-dir <path>] [--overwrite] [--yes] [--pre-install-check] [--output json|text]
 ```
 
-`rielflow workflow checkout <package-id>` is the user-facing contract from the
-command design. `rielflow workflow package checkout <package-id>` is acceptable
-as the first implementation route because the current package command handler is
-scoped under `workflow package`; both routes must call the same resolver and
-renderer before the feature is considered complete.
+`rielflow package install <package-id>` is the user-facing persistent package
+installation command. `rielflow workflow checkout <package-id>` and
+`rielflow workflow package checkout <package-id>` are unsupported compatibility
+aliases.
 
 Behavior:
 
 - If the target parses as an HTTPS GitHub directory URL, keep the current direct
-  checkout path and destination rules.
-- Otherwise treat the target as a package identifier and resolve it through the
-  configured package registries.
+  `workflow checkout` path and destination rules.
+- Package install treats the target as a package identifier and resolves it
+  through the configured package registries.
 - `--registry` narrows package resolution to one registered registry URL or
   local registry alias.
 - `--branch` selects the registry branch/ref to resolve from; default comes from
   registry configuration, then the registry default branch.
 - Project scope remains the default destination. `--user-scope` installs to the
   user scope root.
-- `--workflow-definition-dir` remains unsupported for checkout because checkout
-  writes into managed project/user scope roots.
+- `--workflow-definition-dir` overrides the workflow destination root for
+  package install while provenance stays under the resolved user root.
 - `--endpoint` remains unsupported because checkout is a local filesystem
   mutation.
 - `--pre-install-check` enables the built-in static scanner and rejects packages
@@ -155,7 +152,7 @@ Behavior:
 Expected text output:
 
 ```text
-checked out package: <package-id>
+installed package: <package-id>
 workflow: <workflow-name>
 scope: project|user
 destination: <path>
@@ -183,14 +180,12 @@ Expected JSON output fields:
 New command:
 
 ```bash
-rielflow workflow search [query] [--registry <registry-url-or-name>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh] [--output table|json|text]
-rielflow workflow package search [query] [--registry <registry-url-or-name>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh|--no-cache] [--output table|json|text]
+rielflow package search [query] [--registry <registry-url-or-name>] [--tag <tag>] [--backend <backend>] [--limit <n>] [--refresh|--no-cache] [--output table|json|text]
 ```
 
-`rielflow workflow search` is the canonical discovery command from the package
-command design. The package-scoped form may ship first when it keeps parser
-changes smaller, but it must remain a package metadata search and must not be
-confused with workflow runtime session listing.
+`rielflow package search` is the canonical discovery command from the package
+command design. It remains a package metadata search and must not be confused
+with workflow runtime session listing.
 
 Behavior:
 
@@ -221,10 +216,10 @@ Expected JSON output fields:
 
 ## Resolver Contract
 
-Checkout and package show/search rendering should share a package resolver so
+Package install and package search rendering should share a package resolver so
 ambiguous results fail consistently. Resolver input:
 
-- checkout/search target or empty query
+- package install target or search query
 - optional registry id, alias, or URL
 - optional branch/ref
 - cache backend and refresh/no-cache mode
@@ -252,8 +247,9 @@ ambiguous-package usage error with candidate package ids, registries, and refs.
 ## Package Identifier Resolution
 
 Package identifiers should be normalized as lowercase slugs with `/`, `.`, `_`,
-and `-` allowed only where they are safe for registry lookup. The checkout
-command must reject identifiers that would escape cache or destination roots.
+and `-` allowed only where they are safe for registry lookup. The package
+install command must reject identifiers that would escape cache or destination
+roots.
 In the first release, the public package identifier maps to the package manifest
 `name` field and to search index `packageName`; command JSON must expose this
 identity as `packageId`. Internal service records may continue to use
@@ -263,11 +259,10 @@ alias with the same value, never as an alternative required by automation.
 
 Resolution order:
 
-1. Direct GitHub directory URL.
-2. Exact package id match in selected registry or registries.
-3. Exact workflow name match when package id is absent and only one package
+1. Exact package id match in selected registry or registries.
+2. Exact workflow name match when package id is absent and only one package
    matches.
-4. Ambiguous or missing matches return CLI usage errors with candidate package
+3. Ambiguous or missing matches return CLI usage errors with candidate package
    ids.
 
 Registry records must resolve to a workflow directory that can be validated by
@@ -276,7 +271,7 @@ destination writes, matching the current staged direct checkout behavior.
 
 ## Pre-Install Security Checks
 
-Package checkout has two independent safety gates:
+Package install has two independent safety gates:
 
 1. Existing provenance and integrity checks validate that the selected package
    content matches declared registry metadata, sha256 integrity, and trusted
@@ -285,7 +280,7 @@ Package checkout has two independent safety gates:
    suspicious workflow behavior before the staged bundle is copied to project or
    user scope.
 
-The pre-install check is opt-in for this issue so existing package checkout,
+The pre-install check is opt-in for this issue so existing package install,
 registry metadata, md5 checksum, sha256 integrity, and signature behavior remain
 compatible. The check may later become configurable by registry policy, but the
 first implementation must expose explicit CLI control and must not make existing
@@ -341,10 +336,10 @@ uses a temporary writable work directory, and must run with:
 
 The container check is allowed to run a package inspection command or bundled
 scanner image owned by rielflow. It must not execute workflow nodes through
-their declared agent backends because package checkout security is a
+their declared agent backends because package install security is a
 pre-install inspection step, not a workflow run.
 
-### Checkout Ordering
+### Install Ordering
 
 The checkout path must preserve this order:
 
@@ -403,7 +398,7 @@ output shape.
 
 ## Cache Design
 
-Search and package checkout may use sqlite for registry/search cache when a
+Search and package install may use sqlite for registry/search cache when a
 sqlite dependency is available and acceptable for the package. A JSON-file cache
 is acceptable as a fallback and for unit tests.
 
@@ -427,7 +422,7 @@ filenames.
 Cache invalidation:
 
 - `--refresh` forces a registry fetch before command execution.
-- Checkout may use cache only when the cache entry includes registry ref and
+- Package install may use cache only when the cache entry includes registry ref and
   checksum; otherwise it refreshes selected registry metadata.
 - A changed checksum is treated as a package update, not as an error.
 
@@ -458,13 +453,12 @@ remains the cross-scope provenance catalog.
 
 ## Decisions
 
-- Preserve `rielflow workflow checkout <github-url>` as the compatibility
-  path and branch into package lookup only when the target is not a GitHub
-  directory URL.
-- Keep checkout local-only and reject `--endpoint` for package checkout.
+- Preserve `rielflow workflow checkout <github-url>` as the direct workflow
+  checkout path and keep package ids on `rielflow package install`.
+- Keep package install local-only and reject `--endpoint`.
 - Keep project scope as the default installation destination.
-- Add package search under `workflow search` because users discover installable
-  workflows, not runtime sessions or event sources.
+- Add package search under `package search` because package discovery belongs
+  to the package lifecycle surface.
 - Treat manifest `name`, search index `packageName`, and command-level
   `packageId` as the same package identity for the initial release.
 - Make `packageId` the stable CLI JSON field; `packageName` is an internal
@@ -486,9 +480,9 @@ remains the cross-scope provenance catalog.
 
 - Whether registry aliases are user-defined strings only or should also be
   derived automatically from GitHub owner/repository names.
-- Whether `workflow search --output text` should be a compact list or share the
+- Whether `package search --output text` should be a compact list or share the
   table renderer used by `--output table`.
-- Whether package checkout should support an explicit `--package-version` later
+- Whether package install should support an explicit `--package-version` later
   or rely on branch/ref plus checksum for the first release.
 - Whether registry-level policy should later enable pre-install checks by
   default for selected registries or trusted-signer configurations.
@@ -506,15 +500,14 @@ remains the cross-scope provenance catalog.
   registry location.
 - Branch names and registry URLs are unsafe as raw cache filenames; cache lookup
   must use canonical logical keys and encoded path segments.
-- Direct URL checkout and package checkout share destination/provenance
+- Direct URL checkout and package install share destination/provenance
   behavior; implementation drift between `workflow/checkout` and
   `workflow/packages/checkout` could create inconsistent overwrite semantics.
 - The current package command handler exposes `packageName` in several service
   results; the command JSON contract must normalize this to `packageId` before
   external automation relies on it.
-- `workflow search` and `workflow package search` can diverge if they are wired
-  separately; both should delegate to the same search service and output
-  formatter.
+- `package search` and install-time package resolution can diverge if they are
+  wired separately; both should delegate to the same package metadata services.
 - Static scanner findings are heuristic and may produce false positives or miss
   malicious content.
 - Container checks add host runtime variability; Docker/Podman absence must not
@@ -529,10 +522,10 @@ bun test packages/rielflow/src/workflow/packages/packages.test.ts
 bun test packages/rielflow/src/workflow/packages
 bun test packages/rielflow/src/workflow/checkout/checkout.test.ts
 bun test packages/rielflow/src/cli.test.ts
-bun run packages/rielflow/src/bin.ts workflow package search --registry default --output json
-bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --registry default --output json
-bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --help
-bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --pre-install-check
+bun run packages/rielflow/src/bin.ts package search --registry default --output json
+bun run packages/rielflow/src/bin.ts package install <package-id> --registry default --output json
+bun run packages/rielflow/src/bin.ts package install <package-id> --help
+bun run packages/rielflow/src/bin.ts package install <package-id> --pre-install-check
 bun run tsc --noEmit
 git diff --check
 ```

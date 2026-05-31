@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { runCli, type CliDependencies } from "./cli";
+import packageJson from "../package.json";
 import { parseArgs } from "./cli/argument-parser";
 import {
   persistRegistryRunProvenance,
@@ -774,11 +775,19 @@ async function createCompletedCliWorkflowRun(root: string): Promise<{
 }
 
 describe("runCli", () => {
-  test("parses workflow package checkout pre-install security flags", () => {
+  test("prints package version for --version", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(["--version"], capture.io);
+
+    expect(code).toBe(0);
+    expect(capture.stdout).toEqual([packageJson.version]);
+    expect(capture.stderr).toEqual([]);
+  });
+
+  test("parses package install pre-install security flags", () => {
     const parsed = parseArgs([
-      "workflow",
       "package",
-      "checkout",
+      "install",
       "demo",
       "--pre-install-check",
       "--pre-install-check-mode",
@@ -813,9 +822,8 @@ describe("runCli", () => {
 
   test("rejects conflicting pre-install check CLI flags", () => {
     const parsed = parseArgs([
-      "workflow",
       "package",
-      "checkout",
+      "install",
       "demo",
       "--pre-install-check",
       "--no-pre-install-check",
@@ -824,12 +832,14 @@ describe("runCli", () => {
     expect(parsed.error).toContain("--pre-install-check cannot be combined");
   });
 
-  test("help documents workflow package checkout pre-install security flags", async () => {
+  test("help documents package install pre-install security flags", async () => {
     const capture = createIoCapture();
     const code = await runCli(["--help"], capture.io);
 
     expect(code).toBe(0);
-    expect(capture.stdout.join("\n")).toContain("workflow registry list");
+    expect(capture.stdout.join("\n")).toContain("package registry list");
+    expect(capture.stdout.join("\n")).not.toContain("workflow package");
+    expect(capture.stdout.join("\n")).not.toContain("workflow registry list");
     expect(capture.stdout.join("\n")).toContain("--pre-install-check");
     expect(capture.stdout.join("\n")).toContain("--from-registry");
     expect(capture.stdout.join("\n")).toContain(
@@ -837,28 +847,12 @@ describe("runCli", () => {
     );
   });
 
-  test("workflow registry list reuses package registry list behavior", async () => {
+  test("package registry list reports configured registries", async () => {
     const userRoot = await makeTempDir();
-
-    const registryCapture = createIoCapture();
-    const registryCode = await runCli(
-      [
-        "workflow",
-        "registry",
-        "list",
-        "--output",
-        "json",
-        "--user-root",
-        userRoot,
-      ],
-      registryCapture.io,
-      createCliDeps(),
-    );
 
     const packageRegistryCapture = createIoCapture();
     const packageRegistryCode = await runCli(
       [
-        "workflow",
         "package",
         "registry",
         "list",
@@ -871,69 +865,90 @@ describe("runCli", () => {
       createCliDeps(),
     );
 
-    expect(registryCode).toBe(0);
     expect(packageRegistryCode).toBe(0);
-    const registryPayload = JSON.parse(registryCapture.stdout.join("\n")) as {
-      registries: readonly unknown[];
-      defaultRegistryId: string;
-    };
     const packageRegistryPayload = JSON.parse(
       packageRegistryCapture.stdout.join("\n"),
     ) as {
       registries: readonly unknown[];
       defaultRegistryId: string;
     };
-    expect(registryPayload.registries.length).toBeGreaterThan(0);
-    expect(registryPayload.defaultRegistryId).toBe("default");
-    expect(registryPayload.defaultRegistryId).toBe(
-      packageRegistryPayload.defaultRegistryId,
+    expect(packageRegistryPayload.registries.length).toBeGreaterThan(0);
+    expect(packageRegistryPayload.defaultRegistryId).toBe("default");
+  });
+
+  test("workflow-scoped package compatibility commands are not supported", async () => {
+    const workflowPackageCapture = createIoCapture();
+    const workflowPackageCode = await runCli(
+      ["workflow", "package", "search", "demo"],
+      workflowPackageCapture.io,
+      createCliDeps(),
     );
-    expect(registryPayload.registries).toEqual(
-      packageRegistryPayload.registries,
+
+    expect(workflowPackageCode).toBe(1);
+    expect(workflowPackageCapture.stderr.join("\n")).toContain(
+      "unknown workflow command: package",
+    );
+
+    const workflowRegistryCapture = createIoCapture();
+    const workflowRegistryCode = await runCli(
+      ["workflow", "registry", "list"],
+      workflowRegistryCapture.io,
+      createCliDeps(),
+    );
+
+    expect(workflowRegistryCode).toBe(1);
+    expect(workflowRegistryCapture.stderr.join("\n")).toContain(
+      "unknown workflow command: registry",
+    );
+
+    const workflowSearchCapture = createIoCapture();
+    const workflowSearchCode = await runCli(
+      ["workflow", "search", "demo"],
+      workflowSearchCapture.io,
+      createCliDeps(),
+    );
+
+    expect(workflowSearchCode).toBe(1);
+    expect(workflowSearchCapture.stderr.join("\n")).toContain(
+      "unknown workflow command: search",
+    );
+
+    const workflowCheckoutCapture = createIoCapture();
+    const workflowCheckoutCode = await runCli(
+      ["workflow", "checkout", "demo-package"],
+      workflowCheckoutCapture.io,
+      createCliDeps(),
+    );
+
+    expect(workflowCheckoutCode).toBe(2);
+    expect(workflowCheckoutCapture.stderr.join("\n")).toContain(
+      "workflow checkout requires a GitHub workflow directory URL",
     );
   });
 
-  test("workflow registry rejects unsupported actions and remote endpoints", async () => {
-    const unsupportedCapture = createIoCapture();
-    const unsupportedCode = await runCli(
-      ["workflow", "registry", "add"],
-      unsupportedCapture.io,
+  test("package lifecycle compatibility aliases are not supported", async () => {
+    const checkoutCapture = createIoCapture();
+    const checkoutCode = await runCli(
+      ["package", "checkout", "demo"],
+      checkoutCapture.io,
       createCliDeps(),
     );
 
-    expect(unsupportedCode).toBe(2);
-    expect(unsupportedCapture.stderr.join("\n")).toContain(
-      "workflow registry supports: list",
+    expect(checkoutCode).toBe(2);
+    expect(checkoutCapture.stderr.join("\n")).toContain(
+      "package supports: registry, search, install, list, status, update, remove, publish",
     );
 
-    const extraArgCapture = createIoCapture();
-    const extraArgCode = await runCli(
-      ["workflow", "registry", "list", "extra"],
-      extraArgCapture.io,
+    const uninstallCapture = createIoCapture();
+    const uninstallCode = await runCli(
+      ["package", "uninstall", "demo"],
+      uninstallCapture.io,
       createCliDeps(),
     );
 
-    expect(extraArgCode).toBe(2);
-    expect(extraArgCapture.stderr.join("\n")).toContain(
-      "workflow registry list accepts no positional arguments",
-    );
-
-    const remoteCapture = createIoCapture();
-    const remoteCode = await runCli(
-      [
-        "workflow",
-        "registry",
-        "list",
-        "--endpoint",
-        "http://127.0.0.1:43173/graphql",
-      ],
-      remoteCapture.io,
-      createCliDeps(),
-    );
-
-    expect(remoteCode).toBe(2);
-    expect(remoteCapture.stderr.join("\n")).toContain(
-      "workflow package commands are local-only; omit --endpoint",
+    expect(uninstallCode).toBe(2);
+    expect(uninstallCapture.stderr.join("\n")).toContain(
+      "package supports: registry, search, install, list, status, update, remove, publish",
     );
   });
 
@@ -1300,7 +1315,7 @@ describe("runCli", () => {
     ).toContain('"workflowId": "demo"');
   });
 
-  test("workflow package aliases search and checkout package ids", async () => {
+  test("package commands search and install package ids", async () => {
     const root = await makeTempDir();
     const registryRoot = path.join(root, "registry");
     const projectRoot = path.join(root, "project");
@@ -1335,7 +1350,7 @@ describe("runCli", () => {
         "cli-skill",
         "SKILL.md",
       ),
-      "# CLI Skill\n\nUsed by package checkout CLI metadata tests.\n",
+      "# CLI Skill\n\nUsed by package install CLI metadata tests.\n",
       "utf8",
     );
     const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
@@ -1384,7 +1399,6 @@ describe("runCli", () => {
     const registryCapture = createIoCapture();
     const registryCode = await runCli(
       [
-        "workflow",
         "package",
         "registry",
         "add",
@@ -1404,7 +1418,7 @@ describe("runCli", () => {
     const searchCapture = createIoCapture();
     const searchCode = await runCli(
       [
-        "workflow",
+        "package",
         "search",
         "cli",
         "--registry",
@@ -1426,7 +1440,6 @@ describe("runCli", () => {
     const packageSearchTableCapture = createIoCapture();
     const packageSearchTableCode = await runCli(
       [
-        "workflow",
         "package",
         "search",
         "cli",
@@ -1447,8 +1460,8 @@ describe("runCli", () => {
     const checkoutCapture = createIoCapture();
     const checkoutCode = await runCli(
       [
-        "workflow",
-        "checkout",
+        "package",
+        "install",
         "cli-flow",
         "--registry",
         "local",
@@ -1531,7 +1544,6 @@ describe("runCli", () => {
     const statusCapture = createIoCapture();
     const statusCode = await runCli(
       [
-        "workflow",
         "package",
         "status",
         "--install-id",
@@ -1552,7 +1564,6 @@ describe("runCli", () => {
     const noopUpdateCapture = createIoCapture();
     const noopUpdateCode = await runCli(
       [
-        "workflow",
         "package",
         "update",
         "--install-id",
@@ -1569,7 +1580,6 @@ describe("runCli", () => {
     const updateCapture = createIoCapture();
     const updateCode = await runCli(
       [
-        "workflow",
         "package",
         "update",
         "--install-id",
@@ -1695,7 +1705,6 @@ describe("runCli", () => {
     const registryCapture = createIoCapture();
     const registryCode = await runCli(
       [
-        "workflow",
         "package",
         "registry",
         "add",
@@ -1932,7 +1941,6 @@ describe("runCli", () => {
     const registryCapture = createIoCapture();
     const registryCode = await runCli(
       [
-        "workflow",
         "package",
         "registry",
         "add",
@@ -2077,7 +2085,6 @@ describe("runCli", () => {
     const registryCapture = createIoCapture();
     const registryCode = await runCli(
       [
-        "workflow",
         "package",
         "registry",
         "add",
@@ -2384,7 +2391,7 @@ describe("runCli", () => {
     expect(capture.stderr.join("\n")).toContain("--endpoint");
   });
 
-  test("rielflow publish accepts explicit registry URL and local path", async () => {
+  test("package publish accepts explicit registry URL and local path", async () => {
     const userRoot = await makeTempDir();
     const registryRoot = await makeTempDir();
     const sourceRoot = await makeTempDir();
@@ -2419,6 +2426,7 @@ describe("runCli", () => {
     const capture = createIoCapture();
     const code = await runCli(
       [
+        "package",
         "publish",
         created.value.workflowDirectory,
         "--registry",
@@ -2452,7 +2460,7 @@ describe("runCli", () => {
     expect(payload.dryRun).toBe(true);
   });
 
-  test("rielflow publish resolves project-scoped workflow names", async () => {
+  test("package publish resolves project-scoped workflow names", async () => {
     const root = await makeTempDir();
     const userRoot = path.join(root, "user", ".rielflow");
     const projectScopeRoot = path.join(root, "project", ".rielflow");
@@ -2488,6 +2496,7 @@ describe("runCli", () => {
     const capture = createIoCapture();
     const code = await runCli(
       [
+        "package",
         "publish",
         "catalog-publish-flow",
         "--registry",
@@ -2519,6 +2528,18 @@ describe("runCli", () => {
       path.join(registryRoot, "packages", "catalog-publish-flow"),
     );
     expect(payload.dryRun).toBe(true);
+  });
+
+  test("top-level publish command is not supported", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      ["publish", "catalog-publish-flow"],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("\n")).toContain("unknown scope: publish");
   });
 
   test("workflow validate --executable returns invalid node validation results", async () => {
@@ -4286,7 +4307,7 @@ describe("runCli", () => {
     );
   });
 
-  test("cli workflow run aliases the workflow namespace", async () => {
+  test("cli workflow namespace prefix is not supported", async () => {
     const root = await makeTempDir();
 
     const createCode = await runCli(
@@ -4309,9 +4330,7 @@ describe("runCli", () => {
     }
 
     expect(code).toBe(1);
-    expect(capture.stderr.join("\n")).toContain(
-      "workflow runtime readiness failed",
-    );
+    expect(capture.stderr.join("\n")).toContain("unknown scope: cli");
   });
 
   test("project workflow run stores runtime data in user-root project namespace", async () => {
@@ -4940,7 +4959,7 @@ describe("runCli", () => {
     );
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain(
-      "`--output table` is only supported for workflow list, workflow status, and workflow search",
+      "`--output table` is only supported for workflow list, workflow status, package search, and package list",
     );
   });
 

@@ -28,7 +28,7 @@ Store questions, pending decisions, and items awaiting user approval.
   release archives.
 - `qa-workflow-package-checkout.md`: scope flag naming, package update command
   aliasing, modified projected skill update policy, and skill search metadata
-  decisions for workflow package checkout.
+  decisions for workflow package install.
 - `qa-scheduled-sleep-node-runtime.md`: restart recovery, initial sleep schema,
   and cancellation-scope decisions for scheduled sleep and shared cron
   scheduling.

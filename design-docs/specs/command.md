@@ -39,7 +39,7 @@ compatibility or historical references rather than missed primary examples.
 
 ### Subcommands
 
-- `cli workflow create <name>`
+- `workflow create <name>`
   - Create `<workflow-definition-dir>/<name>/` with `workflow.json`, prompt templates, and default `nodes/node-{id}.json` payload files when a direct definition directory is supplied.
   - In scoped mode, create under `<scope-root>/workflows/<name>/`.
   - Default write scope is project scope when a project `.rielflow` exists, otherwise user scope; `--scope project|user` makes the destination explicit.
@@ -47,19 +47,19 @@ compatibility or historical references rather than missed primary examples.
   - Starter templates use `workflow -> steps[] + nodes[]`, where steps are the execution addresses and `workflow.json.nodes[]` is the reusable node registry.
   - The generated `workflow.json` should contain only authored schema fields from the current model.
   - `--worker-only` switches the starter to a manager-less template whose explicit `entryStepId` points at `main-worker`.
-- `cli workflow checkout <url>`
+- `workflow checkout <url>`
   - Install a workflow bundle from a GitHub directory URL, such as `https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>`.
-  - Registry package checkout is also exposed through `workflow package checkout <package-id>` and may be routed through `workflow checkout <package-id>` when the target is not a GitHub directory URL. Package checkout uses the package resolver, registry metadata, checksum/integrity validation, and the same scoped install rules as direct checkout.
+  - Registry package installation is not exposed through workflow checkout. Use `package install <package-id>` for persistent package installs.
   - The command accepts GitHub web directory URLs for `github.com` repositories. The path must resolve to one workflow directory containing `workflow.json`; the installed workflow name is derived from the final remote directory segment and must pass the normal safe workflow-name rule.
   - Checkout is a scoped write command. The default destination is project scope: `<project-root>/.rielflow/workflows/<workflow-name>`. If no project scope is discovered, the command creates `<cwd>/.rielflow/workflows/<workflow-name>` rather than falling back to user scope. `--user-scope` writes to `<user-root>/workflows/<workflow-name>`.
-  - Checkout does not use `--workflow-definition-dir` as a write destination. Combining `workflow checkout` with `--workflow-definition-dir` is a usage error because checkout registry metadata is scoped by project/user destination.
+  - `--workflow-definition-dir` installs directly under the supplied workflow definition directory instead of the project/user scope workflow root. Checkout registry metadata is still written under the resolved user root.
   - The remote bundle must be fetched into a temporary staging directory first, then loaded and validated through the same workflow bundle validation path as `workflow validate`. Invalid JSON, missing `workflow.json`, invalid step/node references, missing referenced workflow-local prompt files, unsupported authored fields, or unsafe workflow-local file paths fail before the destination directory is created or modified.
-  - Package checkout may run an optional pre-install security check before install. `--pre-install-check` enables the built-in static scanner; `--pre-install-check-mode warn|reject` controls enforcement; `--pre-install-check-container docker|podman|auto` requests an additional no-network container check. Blocking findings in reject mode fail before destination writes or checkout registry updates.
+  - Package install may run an optional pre-install security check before install. `--pre-install-check` enables the built-in static scanner; `--pre-install-check-mode warn|reject` controls enforcement; `--pre-install-check-container docker|podman|auto` requests an additional no-network container check. Blocking findings in reject mode fail before destination writes or checkout registry updates.
   - The recursive download preserves all tracked files below the selected GitHub directory so workflow-local prompt, script, and supporting files remain available after install. Git metadata and files outside the selected directory are not installed.
   - Duplicate checkout is rejected by default when either the destination workflow directory exists or the matching checkout registry record exists. `--overwrite` keeps the existing destination untouched until the staged remote bundle validates, then removes only the resolved destination directory under the selected workflow root and installs the staged bundle.
   - On success, write checkout registry metadata under `<user-root>/workflow-registry/checkouts/<scope>-<workflow-name>.json`. The JSON record includes at least `workflowName`, `sourceUrl`, `scope` (`project` or `user`), `checkedOutAt`, and `destinationDirectory`.
   - Text output should identify the installed workflow name, destination scope, destination directory, and registry record path. `--output json` should emit the same fields plus validation status.
-- `cli workflow validate <name>`
+- `workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.
   - `--node-patch <value>` applies a non-persistent node settings patch before validation. The value follows the same input convention as `workflow run --variables`: inline JSON object, explicit `@path/to/patch.json`, or an existing file path.
@@ -77,7 +77,7 @@ compatibility or historical references rather than missed primary examples.
     workflows must preserve add-on `validate` hook `nodeValidationResults`
     from detailed workflow validation before adding any active backend preflight
     results.
-- `cli workflow manifest validate [<manifest-path>]`
+- `workflow manifest validate [<manifest-path>]`
   - Validate a workflow allowlist manifest without starting `rielflow serve`.
   - The manifest path can come from the positional argument,
     `--workflow-manifest`, or `RIEL_WORKFLOW_MANIFEST`; the positional
@@ -96,13 +96,13 @@ compatibility or historical references rather than missed primary examples.
   - Text output reports the resolved manifest path, relative path root, and
     each manifest entry's validation status. `--output json` emits the same
     machine-readable fields and per-entry errors.
-- `cli workflow list`
+- `workflow list`
   - List catalog-visible workflows for human inspection without entering the TUI.
   - Show only compact overview data: workflow name, resolved source scope, description, aggregate workflow status, active execution count, and latest run summary.
   - Duplicate names from different scopes must remain distinct rows rather than being silently collapsed.
   - In direct `--workflow-definition-dir` mode, list only workflows in that definition directory and label their source scope as `direct`.
   - Supports `--status running|paused|completed|failed|cancelled|never-run`, `--limit <n>`, and `--output table|json`. Default `--output text` renders the same compact table as `--output table` on this command; other commands stay `text` vs `json` only.
-- `cli workflow inspect <name>`
+- `workflow inspect <name>`
   - Print workflow structure, including canonical execution units (`steps`), jump graph, timeout defaults, and reusable node references.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory.
   - `--structure` switches text output to a compact human-facing workflow structure view on the existing inspect surface instead of adding a duplicate command. This mode prints only each canonical step id and its description. Each step id is rendered on its own line at the derived structure indentation, and its description is rendered on the following line one compact indent unit deeper.
@@ -113,13 +113,13 @@ compatibility or historical references rather than missed primary examples.
   - When the derived callable step has an authored `input` contract, text output should also show concrete `workflow run --variables` examples so an operator can copy either inline JSON or file-based invocation without switching to `workflow usage`.
   - The examples should include inline JSON object input, explicit `@./variables.json`, and the historical bare file path form. Inline examples may be schema-shaped best-effort samples, but they are guidance only; execution still validates that `--variables` is a JSON object and does not treat the callable schema as an enforcement gate in this slice.
   - `--output json` must retain the full `callable.input` object, including nested `jsonSchema`, without stringifying or truncating it for display.
-- `cli workflow usage [name]`
+- `workflow usage [name]`
   - List AI-facing workflow purpose, compact step overview, and callable contract metadata without verbose structural detail.
   - Output includes workflow description, step summaries, plus the callable step's input/output contract derived from `managerStepId ?? entryStepId`.
   - Usage output may describe `--variables`, but `workflow inspect` remains the operator-facing place for concrete copyable run examples tied to a single workflow.
   - `workflow usage` lists all visible workflows; `workflow usage <name>` resolves one workflow through normal scope rules.
   - Initial slice is local-only and rejects `--endpoint`.
-- `cli workflow status <name>`
+- `workflow status <name>`
   - Show the selected workflow's compact human-facing status overview rather than raw execution detail.
   - Output includes the resolved source scope, workflow directory, aggregate workflow status, active execution count, latest execution summary, and recent execution summaries.
   - Any execution reported as active (`running` or `paused`) must be loadable by `session status <workflow-execution-id>`, `session progress <workflow-execution-id>`, and `session step-runs <workflow-execution-id>` under the same runtime storage context. `workflow status` must not report stale active rows that exist only in a derived runtime database snapshot, cached overview record, or mismatched storage root.
@@ -129,7 +129,7 @@ compatibility or historical references rather than missed primary examples.
   - In direct `--workflow-definition-dir` mode, resolve only within that definition directory and label the source scope as `direct`.
   - Supports `--limit <n>` and `--output table|json`; default `--output text` matches `--output table` for this command (compact human lines).
   - Detailed execution inspection remains on `session status`, `session progress`, and GraphQL detail queries.
-- `cli workflow self-improve <name>`
+- `workflow self-improve <name>`
   - Run the dedicated retrospective workflow self-improve service for the selected workflow. This command is distinct from `workflow run --auto-improve`; it analyzes existing workflow runs after the fact instead of supervising a live target run.
   - Resolves `<name>` through the same direct/project/user workflow lookup rules as `workflow status` and `workflow run`.
   - Default source selection is runs since the previous successful self-improve marker for the resolved workflow directory, or the latest `defaultLogLimit` runs when no marker exists. The initial global fallback is `10`.
@@ -140,7 +140,7 @@ compatibility or historical references rather than missed primary examples.
   - Before any workflow modification, the complete pre-change workflow directory is backed up under the self-improve execution directory. Backups are required for both git-managed and non-git-managed workflows.
   - If the workflow directory is git-managed, successful modifications must be committed locally with only the self-improve workflow-file changes staged. The command must not push.
   - `--output json` returns the self-improve id, report paths, selected source runs, findings summary, backup path, patch status, validation status, and git commit status.
-- `cli workflow run <name-or-registry-target>`
+- `workflow run <name-or-registry-target>`
   - Execute `<workflow-definition-dir>/<name>/workflow.json` and all referenced workflow-local node payload files when a direct definition directory is supplied.
   - Without a direct `--workflow-definition-dir`, resolve `<name>` from the scoped workflow catalog: project scope first, then user scope.
   - `--from-registry` changes the positional target from a local workflow id into an online registry run target. Supported targets are existing package ids, GitHub workflow directory URLs, and registered shorthand values such as `<registry-owner>/<workflow-dir>`.
@@ -148,7 +148,7 @@ compatibility or historical references rather than missed primary examples.
   - GitHub directory URL targets accept canonical tree URLs such as `https://github.com/<owner>/<repo>/tree/<ref>/<workflow-dir>` and branchless directory URLs such as `https://github.com/<owner>/<repo>/<workflow-dir>`. Branchless URL targets use `--branch` when supplied, otherwise the matching registered registry default branch when the repository is registered, otherwise the repository default branch resolved from GitHub metadata. If no ref can be resolved, the command fails with a usage error before checkout staging begins.
   - Registered shorthand targets use the form `<registry-owner>/<workflow-dir>` and are resolved only through configured registries. `--registry` narrows the candidate registry set; without it, resolution must find exactly one registered registry owned by `<registry-owner>` and exactly one package whose package name, workflow name, or registry source path terminal matches `<workflow-dir>`. Missing or ambiguous shorthand resolution is a usage error.
   - Registry-backed runs are explicit to avoid collisions with project/user workflow names. A bare `workflow run <name>` must never silently fetch from a registry after local lookup fails.
-  - Registry-backed runs accept `--registry <registry-url-or-id>` and `--branch <branch>` with the same meaning as package checkout. The temporary checkout must validate package metadata, checksum/integrity, and the workflow bundle before execution when package metadata is present. Direct GitHub workflow directory URL targets without `rielflow-package.json` run only after workflow-bundle validation and must report reduced provenance instead of pretending package integrity was verified.
+  - Registry-backed runs accept `--registry <registry-url-or-id>` and `--branch <branch>` with the same meaning as package install. The temporary checkout must validate package metadata, checksum/integrity, and the workflow bundle before execution when package metadata is present. Direct GitHub workflow directory URL targets without `rielflow-package.json` run only after workflow-bundle validation and must report reduced provenance instead of pretending package integrity was verified.
   - Registry-backed runs forward ordinary run options unchanged, including `--variables`, `--node-patch`, `--mock-scenario`, `--output json`, `--artifact-root`, `--session-store`, `--working-dir` / `--working-directory`, supervision flags, timeout flags, verbose/debug flags, and node validation behavior.
   - Registry-backed runs are local-only for the first implementation and reject `--endpoint`; remote GraphQL starts should continue to require a workflow already exposed by the remote server or manifest.
   - The temporary checkout must not write normal project/user checkout provenance or install package skills. Execution metadata should record enough source provenance for audit: target kind, original target, package id when package-backed, workflow name, registry URL/id when known, GitHub repository URL, branch/ref, source directory, metadata path when present, checksum, checksum algorithm, and temporary workflow directory.
@@ -318,8 +318,8 @@ may generate a file URL or locally patched formula for smoke testing.
 | `--user-scope`                                    | boolean       | `false`                                             | For `workflow checkout`: install into the resolved user scope workflow root instead of the default project scope destination                                                                                               |
 | `--overwrite`                                     | boolean       | `false`                                             | For `workflow checkout`: after staged remote validation succeeds, remove the existing destination workflow directory and replace its checkout registry record                                                               |
 | `--from-registry`                                 | boolean       | `false`                                             | For `workflow run`: interpret the positional target as an online registry run target: package id, GitHub workflow directory URL, or registered shorthand; stage a temporary non-persistent checkout, run from it, then clean it up |
-| `--registry`                                      | string        | default registry                                    | For workflow package checkout/search and `workflow run --from-registry`: restrict package or shorthand resolution to a registry id or canonical GitHub registry URL                                                        |
-| `--branch`                                        | string        | target-dependent                                    | For workflow package checkout/search and `workflow run --from-registry`: select the registry or GitHub repository branch/ref used for package metadata and content; branchless raw GitHub URLs use this before default-branch discovery |
+| `--registry`                                      | string        | default registry                                    | For package install/search and `workflow run --from-registry`: restrict package or shorthand resolution to a registry id or canonical GitHub registry URL                                                                   |
+| `--branch`                                        | string        | target-dependent                                    | For package install/search and `workflow run --from-registry`: select the registry or GitHub repository branch/ref used for package metadata and content; branchless raw GitHub URLs use this before default-branch discovery |
 | `--structure`                                     | boolean       | `false`                                             | For `workflow inspect`: render a compact indented text structure with each step id on its own line and the description on the next line one indent deeper                                                                 |
 | `--executable`                                    | boolean       | `false`                                             | For `workflow validate` and `workflow manifest validate`: run active node executability preflight and include `NodeValidationResult` records for nodes, add-ons, and backend adapters                                     |
 | `--variables`                                     | string        | none                                                | For `workflow run`: runtime variables as inline JSON object, existing file path, or `@path/to/variables.json`; for `rielflow graphql`: inline GraphQL variables JSON or `@path/to/variables.json`                          |

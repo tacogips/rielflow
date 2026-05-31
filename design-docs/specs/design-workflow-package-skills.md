@@ -5,13 +5,13 @@ and context files.
 
 ## Overview
 
-Workflow package checkout must support packages that contain both rielflow
+Workflow package install must support packages that contain both rielflow
 workflow bundles and vendor guidance assets. Packages separate runtime
-workflows from skill/context assets so checkout can validate, install, list,
+workflows from skill/context assets so install can validate, list,
 update, and remove each artifact type independently.
 
 This feature owns the package skill layout and vendor format mapping. Adjacent
-package checkout, registry, integrity, command, and publish designs remain the
+package install, registry, integrity, command, and publish designs remain the
 source of truth for package resolution, checksum calculation, CLI parsing, and
 clean-install update mechanics.
 
@@ -38,7 +38,7 @@ clean-install update mechanics.
   - `https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html`
 
 Issue #35 in `tacogips/rielflow` was inspected during intake and is unrelated
-to this package checkout feature. This document intentionally uses the workflow
+to this package install feature. This document intentionally uses the workflow
 input title/body as the authoritative issue source for this workflow run.
 
 ## Goals
@@ -153,7 +153,7 @@ Reference: `https://docs.claude.com/en/docs/claude-code/skills`.
 
 Codex consumes skills as `.codex/skills/<skill-name>/SKILL.md` directories with
 optional resources. Codex also uses `AGENTS.md` and `AGENTS.override.md` for
-repository instructions, but package checkout must not project Codex skills
+repository instructions, but package install must not project Codex skills
 into `AGENTS.md` automatically because that would merge untrusted guidance into
 always-loaded project context.
 
@@ -211,7 +211,7 @@ projects vendor files where safe.
 Project scope:
 
 - workflows: `<project>/.rielflow/workflows/<workflow-name>/`, or
-  `<workflow-definition-dir>/<workflow-name>/` when package checkout receives
+  `<workflow-definition-dir>/<workflow-name>/` when package install receives
   `--workflow-definition-dir`
 - managed skills:
   `<project>/.rielflow/managed/packages/<package-name>/skills/<vendor>/<name>/`
@@ -288,7 +288,7 @@ user, checkout should fail with a conflict unless overwrite/update is confirmed.
 
 ## Checkout Metadata
 
-Package checkout records continue under the package checkout provenance root
+Package install records continue under the package install provenance root
 defined by adjacent designs and add skill-specific metadata:
 
 - `packageName`
@@ -331,8 +331,8 @@ Expected implementation verification:
 bun test packages/rielflow/src/workflow/packages/*.test.ts packages/rielflow/src/workflow/checkout/*.test.ts packages/rielflow/src/cli.test.ts
 bun run packages/rielflow/src/bin.ts package list --output json
 bun run packages/rielflow/src/bin.ts package remove --install-id <install-id> --output json
-bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --output json
-bun run packages/rielflow/src/bin.ts workflow package checkout <package-id> --user-scope --yes --output json
+bun run packages/rielflow/src/bin.ts package install <package-id> --output json
+bun run packages/rielflow/src/bin.ts package install <package-id> --user-scope --yes --output json
 git diff --check -- design-docs/specs/design-workflow-package-skills.md
 ```
 

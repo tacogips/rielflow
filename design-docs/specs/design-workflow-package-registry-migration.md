@@ -135,21 +135,20 @@ output.
 
 ## Checkout Verification
 
-The migration is complete only when package checkout can prove the package works
+The migration is complete only when package install can prove the package works
 from a fresh scoped install.
 
 Required verification commands:
 
 ```bash
 bun run packages/rielflow/src/bin.ts package search --registry https://github.com/tacogips/rielflow-packages --output json
-bun run packages/rielflow/src/bin.ts package checkout <package-id> --registry https://github.com/tacogips/rielflow-packages --project-scope --overwrite
+bun run packages/rielflow/src/bin.ts package install <package-id> --registry https://github.com/tacogips/rielflow-packages --overwrite
 bun run packages/rielflow/src/bin.ts workflow validate <workflow-name> --workflow-definition-dir ./.rielflow/workflows
 bun run packages/rielflow/src/bin.ts workflow run <workflow-name> --workflow-definition-dir ./.rielflow/workflows --mock-scenario <path-to-mock-scenario>
 ```
 
-If command naming lands under `workflow package` instead of top-level `package`,
-the implementation plan must update the commands but preserve the same
-verification intent.
+Persistent package commands are top-level `package ...` commands; workflow
+checkout remains direct-URL only.
 
 ## Documentation Updates
 
