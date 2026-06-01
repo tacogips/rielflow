@@ -138,6 +138,7 @@ export interface WorkflowSupervisionDefaults {
 export interface WorkflowPrompts {
   readonly rielflowPromptTemplate?: string;
   readonly workerSystemPromptTemplate?: string;
+  readonly chatFailureMessageTemplate?: string;
 }
 
 export interface WorkflowNodeExecutionPolicy {
@@ -519,6 +520,7 @@ export interface NodePayload {
   readonly systemPromptTemplateFile?: string;
   readonly promptTemplate?: string;
   readonly promptTemplateFile?: string;
+  readonly chatFailureMessageTemplate?: string;
   readonly sessionStartPromptTemplate?: string;
   readonly sessionStartPromptTemplateFile?: string;
   readonly promptVariants?: Readonly<Record<string, NodePromptVariant>>;

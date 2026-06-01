@@ -287,7 +287,6 @@ export async function runOutputAttempts(
           promptText: input.basePromptText,
           error: execution.error.code,
           payload:
-            execution.error.code === "provider_error" &&
             execution.error.message.length > 0
               ? { providerErrorMessage: execution.error.message }
               : {},

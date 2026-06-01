@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import {
   AdapterExecutionError,
   type AdapterExecutionContext,
@@ -25,6 +27,10 @@ import {
   normalizeAdapterFailure,
   resolveRetryPolicy,
 } from "./shared";
+import {
+  getClaudeBackendCliAuthStatus,
+  getClaudeBackendToolVersion,
+} from "./readiness";
 
 type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
@@ -85,17 +91,78 @@ type ClaudeRunnerFactory = (
 export interface ClaudeAdapterConfig extends LlmSessionStallWatchConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly authPreflight?: boolean;
+  readonly authPreflightTimeoutMs?: number;
   readonly cwd?: string;
   readonly permissionMode?: PermissionMode;
   readonly additionalArgs?: readonly string[];
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly createRunner?: ClaudeRunnerFactory;
+  readonly checkAuthPreflight?: (
+    input: AdapterExecutionInput,
+    options: {
+      readonly cwd?: string;
+      readonly env?: Readonly<Record<string, string | undefined>>;
+      readonly timeoutMs?: number;
+    },
+  ) => Promise<void>;
 }
+
+const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 5_000;
+const CLAUDE_PRINT_ABORT_KILL_GRACE_MS = 2_000;
 
 async function createDefaultRunner(
   options: ClaudeSessionRunnerOptions,
 ): Promise<ClaudeSessionRunnerLike> {
   return new SessionRunner(options);
+}
+
+function shouldRunAuthPreflight(config: ClaudeAdapterConfig): boolean {
+  if (config.authPreflight !== undefined) {
+    return config.authPreflight;
+  }
+  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+}
+
+async function runClaudeAuthPreflight(
+  config: ClaudeAdapterConfig,
+  input: AdapterExecutionInput,
+): Promise<void> {
+  if (!shouldRunAuthPreflight(config)) {
+    return;
+  }
+  const env = buildAmbientProcessEnv(
+    config.env,
+    input.rielflowHookContext === undefined
+      ? undefined
+      : { ...input.rielflowHookContext.environment },
+    input.ambientManagerContext === undefined
+      ? undefined
+      : { ...input.ambientManagerContext.environment },
+  );
+  const options = {
+    cwd: config.cwd ?? input.workingDirectory,
+    ...(env === undefined ? {} : { env }),
+    timeoutMs: config.authPreflightTimeoutMs ?? DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS,
+  };
+  if (config.checkAuthPreflight !== undefined) {
+    await config.checkAuthPreflight(input, options);
+    return;
+  }
+  const cli = await getClaudeBackendToolVersion(options);
+  if (cli.status !== "available") {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `claude-code-agent CLI is unavailable: ${cli.error ?? "claude command is unavailable"}`,
+    );
+  }
+  const auth = await getClaudeBackendCliAuthStatus(options);
+  if (!auth.available) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `claude-code-agent authentication is unavailable: ${auth.message ?? "auth verify failed"}`,
+    );
+  }
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -247,12 +314,229 @@ function resolveLocalSessionConfig(
   };
 }
 
+function buildClaudePrintArgs(input: {
+  readonly config: ClaudeAdapterConfig;
+  readonly sessionConfig: ClaudeSessionConfig;
+  readonly model: string;
+  readonly effort?: string;
+}): readonly string[] {
+  const args = ["-p", "--output-format", "text", "--model", input.model];
+  if (input.effort !== undefined) {
+    args.push("--effort", input.effort);
+  }
+  if (input.config.permissionMode !== undefined) {
+    args.push("--permission-mode", input.config.permissionMode);
+  }
+  if (input.sessionConfig.attachments !== undefined) {
+    const directories = new Set<string>();
+    for (const attachment of input.sessionConfig.attachments) {
+      directories.add(resolve(dirname(attachment.path)));
+    }
+    for (const directory of directories) {
+      args.push("--add-dir", directory);
+    }
+  }
+  if (input.config.additionalArgs !== undefined) {
+    args.push(...input.config.additionalArgs);
+  }
+  return args;
+}
+
+function buildClaudePrintPrompt(
+  prompt: string,
+  systemPrompt: string | undefined,
+  attachments: readonly ClaudeSessionAttachment[] | undefined,
+): string {
+  const promptParts =
+    systemPrompt === undefined
+      ? [prompt]
+      : ["System instruction:", systemPrompt, "", "User instruction:", prompt];
+  if (attachments === undefined || attachments.length === 0) {
+    return promptParts.join("\n");
+  }
+  return [
+    ...promptParts,
+    "",
+    "Attached files:",
+    ...attachments.map((attachment) => `- ${attachment.path}`),
+  ].join("\n");
+}
+
+async function runClaudePrintCommand(input: {
+  readonly args: readonly string[];
+  readonly prompt: string;
+  readonly cwd?: string;
+  readonly env?: Readonly<Record<string, string>>;
+  readonly signal: AbortSignal;
+}): Promise<{ readonly stdout: string; readonly stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    if (input.signal.aborted) {
+      reject(new AdapterExecutionError("timeout", "claude adapter aborted"));
+      return;
+    }
+
+    const child = spawn("claude", [...input.args], {
+      cwd: input.cwd,
+      env:
+        input.env === undefined
+          ? process.env
+          : { ...process.env, ...input.env },
+      detached: true,
+      shell: false,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let abortRequested = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const settle = (callback: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      input.signal.removeEventListener("abort", onAbort);
+      if (killTimer !== undefined) {
+        clearTimeout(killTimer);
+      }
+      callback();
+    };
+
+    const onAbort = (): void => {
+      abortRequested = true;
+      killClaudePrintProcess(child.pid, "SIGTERM");
+      killTimer = setTimeout(() => {
+        killClaudePrintProcess(child.pid, "SIGKILL");
+      }, CLAUDE_PRINT_ABORT_KILL_GRACE_MS);
+    };
+
+    input.signal.addEventListener("abort", onAbort, { once: true });
+    if (input.signal.aborted) {
+      onAbort();
+    }
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.stdin.end(input.prompt);
+    child.on("error", (error: unknown) => {
+      settle(() => {
+        reject(error);
+      });
+    });
+    child.on("close", (code, signal) => {
+      settle(() => {
+        if (abortRequested) {
+          reject(
+            new AdapterExecutionError("timeout", "claude adapter aborted"),
+          );
+          return;
+        }
+        if (code === 0) {
+          resolve({ stdout, stderr });
+          return;
+        }
+        const reason =
+          signal === null
+            ? `exit code ${String(code ?? "unknown")}`
+            : `signal ${signal}`;
+        const detail = stderr.trim() || stdout.trim() || reason;
+        reject(
+          new AdapterExecutionError(
+            "provider_error",
+            `claude print command failed (${reason}): ${detail}`,
+          ),
+        );
+      });
+    });
+  });
+}
+
+function killClaudePrintProcess(
+  pid: number | undefined,
+  signal: NodeJS.Signals,
+): void {
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Process may have already exited.
+    }
+  }
+}
+
+async function executeClaudePrintMode(
+  config: ClaudeAdapterConfig,
+  input: AdapterExecutionInput,
+  context: AdapterExecutionContext,
+): Promise<AdapterExecutionOutput> {
+  const { promptText, sessionConfig, runnerOptions } =
+    resolveLocalSessionConfig(config, input);
+  const result = await runClaudePrintCommand({
+    args: buildClaudePrintArgs({
+      config,
+      sessionConfig,
+      model: input.node.model,
+      ...(input.node.effort === undefined
+        ? {}
+        : { effort: input.node.effort }),
+    }),
+    prompt: buildClaudePrintPrompt(
+      sessionConfig.prompt,
+      sessionConfig.systemPrompt,
+      sessionConfig.attachments,
+    ),
+    ...(runnerOptions.cwd === undefined ? {} : { cwd: runnerOptions.cwd }),
+    ...(runnerOptions.env === undefined ? {} : { env: runnerOptions.env }),
+    signal: context.signal,
+  });
+  return buildLocalAdapterOutput(
+    {
+      node: input.node,
+      output: input.output,
+    },
+    {
+      provider: "claude-code-agent",
+      promptText,
+      responseText: result.stdout.trim(),
+      llmMessages: [
+        {
+          ordinal: 1,
+          eventType: "message",
+          role: "assistant",
+          at: new Date().toISOString(),
+          contentText: result.stdout.trim(),
+          rawMessageJson: JSON.stringify({
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }),
+        },
+      ],
+    },
+  );
+}
+
 async function executeLocalClaudeCodeAgent(
   config: ClaudeAdapterConfig,
   input: AdapterExecutionInput,
   context: AdapterExecutionContext,
 ): Promise<AdapterExecutionOutput> {
   throwIfAborted(context.signal, "claude adapter aborted before start");
+
+  if (config.createRunner === undefined && input.backendSession === undefined) {
+    return await executeClaudePrintMode(config, input, context);
+  }
 
   const { promptText, sessionConfig, runnerOptions } =
     resolveLocalSessionConfig(config, input);
@@ -378,14 +662,19 @@ export class ClaudeCodeAgentAdapter implements NodeAdapter {
     input: AdapterExecutionInput,
     context: AdapterExecutionContext,
   ): Promise<AdapterExecutionOutput> {
-    const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
+    const { maxAttempts, retryDelayMs } = resolveRetryPolicy({
+      ...this.#config,
+      defaultMaxAttempts: 1,
+    });
 
     return await executeWithRetry({
       maxAttempts,
       retryDelayMs,
       signal: context.signal,
-      run: async () =>
-        await executeLocalClaudeCodeAgent(this.#config, input, context),
+      run: async () => {
+        await runClaudeAuthPreflight(this.#config, input);
+        return await executeLocalClaudeCodeAgent(this.#config, input, context);
+      },
       normalizeError: (error) =>
         error instanceof DOMException && error.name === "AbortError"
           ? new AdapterExecutionError(

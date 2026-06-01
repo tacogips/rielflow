@@ -87,6 +87,12 @@ export interface ClaudeBackendReadiness {
   readonly model: ClaudeBackendModelReadiness;
 }
 
+export interface ClaudeBackendCliAuthStatus {
+  readonly available: boolean;
+  readonly verified: boolean;
+  readonly message?: string;
+}
+
 export interface CursorBackendToolVersions {
   readonly packageVersion: string;
   readonly tools: readonly AgentBackendToolInfo[];
@@ -512,6 +518,57 @@ export async function getClaudeBackendToolVersion(
   } catch (error) {
     return unavailableTool("claude", "claude", toErrorMessage(error));
   }
+}
+
+function parseClaudeCliAuthStatus(
+  stdout: string,
+): { readonly loggedIn: boolean | null; readonly message?: string } {
+  try {
+    const parsed: unknown = JSON.parse(stdout);
+    if (typeof parsed !== "object" || parsed === null) {
+      return { loggedIn: null };
+    }
+    const record = parsed as Record<string, unknown>;
+    const loggedIn = record["loggedIn"];
+    if (typeof loggedIn === "boolean") {
+      return {
+        loggedIn,
+        ...(loggedIn
+          ? {}
+          : { message: "Claude Code CLI reports loggedIn=false" }),
+      };
+    }
+  } catch {
+    // Older Claude Code versions may print text while still exiting 0.
+  }
+  return { loggedIn: null };
+}
+
+export async function getClaudeBackendCliAuthStatus(
+  options: AgentBackendProbeOptions = {},
+): Promise<ClaudeBackendCliAuthStatus> {
+  const result = await runProbeCommand("claude", ["auth", "status"], options);
+  if (result.exitCode !== 0 || result.timedOut || result.error !== undefined) {
+    return {
+      available: false,
+      verified: true,
+      message: commandFailureMessage(result),
+    };
+  }
+
+  const parsed = parseClaudeCliAuthStatus(result.stdout);
+  if (parsed.loggedIn === false) {
+    return {
+      available: false,
+      verified: true,
+      ...(parsed.message === undefined ? {} : { message: parsed.message }),
+    };
+  }
+
+  return {
+    available: true,
+    verified: parsed.loggedIn === true,
+  };
 }
 
 export async function verifyClaudeBackendReadiness(

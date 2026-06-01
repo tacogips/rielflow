@@ -6,7 +6,8 @@
     "nodeTimeoutMs": 180000
   },
   "prompts": {
-    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing chat text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics."
+    "workerSystemPromptTemplate": "Return concise JSON only. Keep user-facing chat text in payload.replyText. Do not expose internal workflow routing details unless the user asks for diagnostics.",
+    "chatFailureMessageTemplate": "ごめん、{{node.variables.shortName}}はいま少し調子が悪いみたい。少し待ってからもう一度呼んでね。"
   },
   "entryStepId": "route-message",
   "nodes": [
@@ -21,17 +22,34 @@
             {
               "id": "yui",
               "name": "Yui Codex",
-              "aliases": ["yui", "codex", "default bot"]
+              "aliases": [
+                "yui",
+                "codex",
+                "default bot"
+              ]
             },
             {
               "id": "mika",
               "name": "Mika Trend",
-              "aliases": ["mika", "claude", "gyaru", "trend", "entertainment", "pop culture"]
+              "aliases": [
+                "mika",
+                "claude",
+                "gyaru",
+                "trend",
+                "entertainment",
+                "pop culture"
+              ]
             },
             {
               "id": "rina",
               "name": "Rina Cursor",
-              "aliases": ["rina", "cursor", "otaku", "nerd", "technical analyst"]
+              "aliases": [
+                "rina",
+                "cursor",
+                "otaku",
+                "nerd",
+                "technical analyst"
+              ]
             }
           ]
         }

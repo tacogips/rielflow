@@ -23,12 +23,16 @@ export function resolveConfiguredEnvValue(
 export function resolveRetryPolicy(config: {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly defaultMaxAttempts?: number;
 }): {
   readonly maxAttempts: number;
   readonly retryDelayMs: number;
 } {
   return {
-    maxAttempts: Math.max(1, config.maxAttempts ?? DEFAULT_MAX_ATTEMPTS),
+    maxAttempts: Math.max(
+      1,
+      config.maxAttempts ?? config.defaultMaxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+    ),
     retryDelayMs: Math.max(0, config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS),
   };
 }

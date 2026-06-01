@@ -653,6 +653,32 @@ describe("validateWorkflowBundle", () => {
     ).toBe(600000);
   });
 
+  test("preserves node chat failure message templates", () => {
+    const raw = makeStepAddressedRaw();
+    const workerPayload = raw.nodePayloads["nodes/node-worker.json"] as Record<
+      string,
+      unknown
+    >;
+    raw.nodePayloads["nodes/node-worker.json"] = {
+      ...workerPayload,
+      chatFailureMessageTemplate: "node-specific failure",
+    };
+
+    const result = validateWorkflowBundle(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(
+      result.value.nodePayloads["worker"]?.chatFailureMessageTemplate,
+    ).toBe("node-specific failure");
+    expect(
+      result.value.nodePayloads["nodes/node-worker.json"]
+        ?.chatFailureMessageTemplate,
+    ).toBe("node-specific failure");
+  });
+
   test("accepts worker sleep nodes with a relative duration", () => {
     const raw = makeStepAddressedRaw();
     raw.nodePayloads["nodes/node-worker.json"] = {

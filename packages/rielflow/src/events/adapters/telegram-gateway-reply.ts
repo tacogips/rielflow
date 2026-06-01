@@ -71,7 +71,10 @@ export async function dispatchTelegramGatewayReply(
   if (input.request.threadPolicy === "same-thread") {
     const messageId = Number(input.request.target.eventId);
     if (Number.isInteger(messageId) && messageId > 0) {
-      body["reply_parameters"] = { message_id: messageId };
+      body["reply_parameters"] = {
+        message_id: messageId,
+        allow_sending_without_reply: true,
+      };
     }
     const threadId = Number(input.request.target.threadId);
     if (Number.isInteger(threadId) && threadId > 0) {

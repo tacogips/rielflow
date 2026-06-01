@@ -20,7 +20,11 @@ import { listRuntimeNodeExecutions, listRuntimeNodeLogs } from "./runtime-db";
 import { resolveCurrentStepId } from "./session";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 import { isSupervisionStallLastError } from "./superviser";
-import type { WorkflowJson, WorkflowTimeoutPolicy } from "./types";
+import type {
+  ChatReplyDispatchRequest,
+  WorkflowJson,
+  WorkflowTimeoutPolicy,
+} from "./types";
 
 const tempDirs: string[] = [];
 const deterministicAdapter = new DeterministicNodeAdapter();
@@ -4156,6 +4160,83 @@ describe("runWorkflow", () => {
     expect(crossWfParsed["childSessionId"]).toBeUndefined();
   });
 
+  test("publishes chat failure output when cross-workflow callee fails", async () => {
+    const root = await makeTempDir();
+    await createWorkflowCallFixture(root, "workflow-call-failing-callee");
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+    const dispatched: ChatReplyDispatchRequest[] = [];
+    const failingCalleeAdapter: NodeAdapter = {
+      async execute(input, context) {
+        if (input.nodeId === "reviewer") {
+          throw new AdapterExecutionError(
+            "provider_error",
+            "callee failed Authorization: Basic dXNlcjpwYXNz",
+          );
+        }
+        return deterministicAdapter.execute(input, context);
+      },
+    };
+
+    const result = await runWorkflow(
+      "workflow-call-failing-callee",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: {
+          eventBindingId: "binding-1",
+          eventOutputDestinations: ["chat-output"],
+          event: {
+            sourceId: "telegram-source",
+            eventId: "evt-cross-workflow-failure",
+            provider: "telegram",
+            eventType: "chat.message",
+            receivedAt: "2026-04-30T00:00:00.000Z",
+            dedupeKey: "dedupe-cross-workflow-failure",
+            conversation: { id: "conv-1" },
+            actor: { id: "actor-1" },
+            input: {
+              text: "hello",
+              replyTarget: {
+                sourceId: "telegram-source",
+                provider: "telegram",
+                eventId: "evt-cross-workflow-failure",
+                conversationId: "conv-1",
+                actorId: "actor-1",
+              },
+            },
+          },
+        },
+        eventReplyDispatcher: {
+          async dispatchChatReply(request) {
+            dispatched.push(request);
+            return { status: "sent", provider: "telegram" };
+          },
+        },
+      },
+      failingCalleeAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(dispatched).toHaveLength(1);
+    expect(
+      dispatched.every(
+        (request) =>
+          request.outputDestinationIds?.includes("chat-output") === true &&
+          request.target.sourceId === "telegram-source" &&
+          request.target.provider === "telegram" &&
+          request.target.eventId === "evt-cross-workflow-failure" &&
+          request.target.conversationId === "conv-1" &&
+          request.target.actorId === "actor-1",
+      ),
+    ).toBe(true);
+    expect(dispatched[0]?.message.text).toContain(
+      "Workflow step 'writer' failed: cross-workflow dispatch",
+    );
+    expect(dispatched[0]?.message.text).toContain("reviewer");
+  });
+
   test("executes cross-workflow fanout with bounded concurrency and deterministic join aggregation", async () => {
     const root = await makeTempDir();
     await createWorkflowCallFanoutFixture(root, "workflow-call-fanout");
@@ -6472,6 +6553,7 @@ describe("runWorkflow", () => {
   test("preserves reusable backend sessions even when post-execution manager-control parsing fails", async () => {
     const root = await makeTempDir();
     await createWorkflowFixture(root, "manager-session-failure", false);
+    const dispatched: ChatReplyDispatchRequest[] = [];
 
     await writeJson(
       path.join(root, "manager-session-failure", "node-rielflow-manager.json"),
@@ -6496,6 +6578,36 @@ describe("runWorkflow", () => {
         artifactRoot: path.join(root, "artifacts"),
         sessionStoreRoot: path.join(root, "sessions"),
         sessionId: "sess-manager-session-failure",
+        runtimeVariables: {
+          eventBindingId: "binding-1",
+          eventOutputDestinations: ["chat-output"],
+          event: {
+            sourceId: "telegram-source",
+            eventId: "evt-manager-failure",
+            provider: "telegram",
+            eventType: "chat.message",
+            receivedAt: "2026-04-30T00:00:00.000Z",
+            dedupeKey: "dedupe-manager-failure",
+            conversation: { id: "conv-1" },
+            actor: { id: "actor-1" },
+            input: {
+              text: "hello",
+              replyTarget: {
+                sourceId: "telegram-source",
+                provider: "telegram",
+                eventId: "evt-manager-failure",
+                conversationId: "conv-1",
+                actorId: "actor-1",
+              },
+            },
+          },
+        },
+        eventReplyDispatcher: {
+          async dispatchChatReply(request) {
+            dispatched.push(request);
+            return { status: "sent", provider: "telegram" };
+          },
+        },
       },
       adapter,
     );
@@ -6527,6 +6639,20 @@ describe("runWorkflow", () => {
         sessionId: "backend-manager-1",
         lastNodeExecId: "exec-000001",
       },
+    );
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      outputDestinationIds: ["chat-output"],
+      target: {
+        sourceId: "telegram-source",
+        provider: "telegram",
+        eventId: "evt-manager-failure",
+        conversationId: "conv-1",
+        actorId: "actor-1",
+      },
+    });
+    expect(dispatched[0]?.message.text).toContain(
+      "Workflow step 'rielflow-manager' failed: invalid manager control",
     );
   });
 
@@ -10429,6 +10555,188 @@ describe("runWorkflow", () => {
     if (!result.ok) {
       expect(result.error.exitCode).toBe(5);
     }
+  });
+
+  test("publishes chat failure output when a node adapter fails", async () => {
+    const root = await makeTempDir();
+    await createWorkflowFixture(root, "chat-failure-output", false);
+    const dispatched: ChatReplyDispatchRequest[] = [];
+
+    const failingAdapter: NodeAdapter = {
+      async execute(_input) {
+        throw new AdapterExecutionError(
+          "policy_blocked",
+          "claude-code-agent authentication is unavailable: No stored Claude Code credentials were found. token=8902822519:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
+        );
+      },
+    };
+
+    const result = await runWorkflow(
+      "chat-failure-output",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: {
+          eventBindingId: "binding-1",
+          eventOutputDestinations: ["chat-output"],
+          event: {
+            sourceId: "telegram-source",
+            eventId: "evt-1",
+            provider: "telegram",
+            eventType: "chat.message",
+            receivedAt: "2026-04-30T00:00:00.000Z",
+            dedupeKey: "dedupe-1",
+            conversation: { id: "conv-1" },
+            actor: { id: "actor-1" },
+            input: {
+              text: "hello",
+              replyTarget: {
+                sourceId: "telegram-source",
+                provider: "telegram",
+                eventId: "evt-1",
+                conversationId: "conv-1",
+                actorId: "actor-1",
+              },
+            },
+          },
+        },
+        eventReplyDispatcher: {
+          async dispatchChatReply(request) {
+            dispatched.push(request);
+            return { status: "sent", provider: "telegram" };
+          },
+        },
+      },
+      failingAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      outputDestinationIds: ["chat-output"],
+      target: {
+        sourceId: "telegram-source",
+        provider: "telegram",
+        eventId: "evt-1",
+        conversationId: "conv-1",
+        actorId: "actor-1",
+      },
+    });
+    expect(dispatched[0]?.message.text).toContain(
+      "Workflow step 'rielflow-manager' failed: adapter failure",
+    );
+    expect(dispatched[0]?.message.text).toContain(
+      "claude-code-agent authentication is unavailable: No stored Claude Code credentials were found. token=[redacted]",
+    );
+    expect(dispatched[0]?.message.text).not.toContain(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    );
+  });
+
+  test("uses workflow chat failure template for node failure replies", async () => {
+    const root = await makeTempDir();
+    await createWorkflowFixture(root, "templated-chat-failure-output", false);
+    const workflowPath = path.join(
+      root,
+      "templated-chat-failure-output",
+      "workflow.json",
+    );
+    const workflowJson = JSON.parse(
+      await readFile(workflowPath, "utf8"),
+    ) as Record<string, unknown>;
+    await writeJson(workflowPath, {
+      ...workflowJson,
+      prompts: {
+        chatFailureMessageTemplate:
+          "{{node.variables.shortName}} is taking a short break. Please call again later.",
+      },
+    });
+    const nodePath = path.join(
+      root,
+      "templated-chat-failure-output",
+      "node-rielflow-manager.json",
+    );
+    const nodeJson = JSON.parse(await readFile(nodePath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    await writeJson(nodePath, {
+      ...nodeJson,
+      variables: { shortName: "Yui" },
+    });
+    const dispatched: ChatReplyDispatchRequest[] = [];
+
+    const failingAdapter: NodeAdapter = {
+      async execute(_input) {
+        throw new AdapterExecutionError(
+          "policy_blocked",
+          "claude-code-agent authentication is unavailable: No stored Claude Code credentials were found.",
+        );
+      },
+    };
+
+    const result = await runWorkflow(
+      "templated-chat-failure-output",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+        runtimeVariables: {
+          eventBindingId: "binding-1",
+          eventOutputDestinations: ["chat-output"],
+          event: {
+            sourceId: "telegram-source",
+            eventId: "evt-1",
+            provider: "telegram",
+            eventType: "chat.message",
+            receivedAt: "2026-04-30T00:00:00.000Z",
+            dedupeKey: "dedupe-1",
+            conversation: { id: "conv-1" },
+            actor: { id: "actor-1" },
+            input: {
+              text: "hello",
+              replyTarget: {
+                sourceId: "telegram-source",
+                provider: "telegram",
+                eventId: "evt-1",
+                conversationId: "conv-1",
+                actorId: "actor-1",
+              },
+            },
+          },
+        },
+        eventReplyDispatcher: {
+          async dispatchChatReply(request) {
+            dispatched.push(request);
+            return { status: "sent", provider: "telegram" };
+          },
+        },
+      },
+      failingAdapter,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]?.message.text).toBe(
+      "Yui is taking a short break. Please call again later.",
+    );
+    const auditMetadata = dispatched[0]?.dispatchAuditMetadata as
+      | {
+          readonly canonicalExternalOutput?: {
+            readonly payload?: Readonly<Record<string, unknown>>;
+          };
+        }
+      | undefined;
+    expect(
+      auditMetadata?.canonicalExternalOutput?.payload?.["failure"],
+    ).toMatchObject({
+      nodeId: "rielflow-manager",
+      message:
+        "adapter failure for step 'rielflow-manager': claude-code-agent authentication is unavailable: No stored Claude Code credentials were found.",
+    });
   });
 
   test("supports scenario mocks for deterministic branching outputs", async () => {

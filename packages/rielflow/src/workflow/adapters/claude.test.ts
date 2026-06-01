@@ -1,8 +1,19 @@
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   MockClaudeRunningSession,
   createMockClaudeSessionRunner,
 } from "claude-code-agent/sdk/testing";
+import { AdapterExecutionError } from "../adapter";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -72,8 +83,48 @@ const baseContext: AdapterExecutionContext = {
   signal: new AbortController().signal,
 };
 
-afterEach(() => {
+const tempDirs: string[] = [];
+
+async function makeTempDir(): Promise<string> {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "rielflow-claude-adapter-test-"),
+  );
+  tempDirs.push(directory);
+  return directory;
+}
+
+async function writeExecutable(filePath: string, body: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${body}\n`, { mode: 0o755 });
+}
+
+async function waitForTextFile(filePath: string): Promise<string> {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    try {
+      return await readFile(filePath, "utf8");
+    } catch (error) {
+      if (
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  return await readFile(filePath, "utf8");
+}
+
+afterEach(async () => {
   vi.restoreAllMocks();
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 function claudeAssistantText(text: string): object {
@@ -199,6 +250,7 @@ describe("ClaudeCodeAgentAdapter", () => {
     await adapter.execute(
       {
         ...baseInput,
+        systemPromptText: "system",
         mergedVariables: {
           workflowInput: {
             imagePaths: ["/tmp/photo-a.png"],
@@ -394,5 +446,174 @@ describe("ClaudeCodeAgentAdapter", () => {
         baseContext,
       ),
     ).rejects.toHaveProperty("code", "invalid_output");
+  });
+
+  test("fails before creating a runner when auth preflight fails", async () => {
+    const createRunner = vi.fn(() => makeClaudeRunnerFixture().createRunner());
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "claude-code-agent authentication is unavailable: login required",
+      );
+    });
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner,
+      checkAuthPreflight,
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "policy_blocked",
+        message: expect.stringContaining("login required"),
+      },
+    );
+    expect(checkAuthPreflight).toHaveBeenCalledWith(
+      baseInput,
+      expect.objectContaining({
+        cwd: "/tmp/project",
+        timeoutMs: 5000,
+      }),
+    );
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  test("allows auth preflight to be disabled", async () => {
+    const fixture = makeClaudeRunnerFixture();
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "claude-code-agent authentication is unavailable",
+      );
+    });
+    const adapter = new ClaudeCodeAgentAdapter({
+      createRunner: fixture.createRunner,
+      checkAuthPreflight,
+      authPreflight: false,
+    });
+
+    await expect(
+      adapter.execute(baseInput, baseContext),
+    ).resolves.toMatchObject({
+      provider: "claude-code-agent",
+    });
+    expect(checkAuthPreflight).not.toHaveBeenCalled();
+    expect(fixture.createRunner).toHaveBeenCalledTimes(1);
+  });
+
+  test("default print mode forwards attachments in prompt and add-dir args", async () => {
+    const root = await makeTempDir();
+    const binDir = path.join(root, "bin");
+    const projectDir = path.join(root, "project");
+    const capturePath = path.join(root, "capture.json");
+    await mkdir(projectDir, { recursive: true });
+    await writeExecutable(
+      path.join(binDir, "claude"),
+      [
+        "#!/usr/bin/env node",
+        "const fs = require('fs');",
+        "const args = process.argv.slice(2);",
+        "const stdin = fs.readFileSync(0, 'utf8');",
+        "if (args[0] === '--version') { console.log('2.1.149 (Claude Code)'); process.exit(0); }",
+        "if (args[0] === 'auth' && args[1] === 'status') { console.log(JSON.stringify({ loggedIn: true })); process.exit(0); }",
+        `fs.writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify({ args, cwd: process.cwd(), stdin }));`,
+        "console.log('print mode reply');",
+      ].join("\n"),
+    );
+
+    const adapter = new ClaudeCodeAgentAdapter({
+      cwd: projectDir,
+      env: {
+        PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+      },
+    });
+    const output = await adapter.execute(
+      {
+        ...baseInput,
+        systemPromptText: "system",
+        mergedVariables: {
+          workflowInput: {
+            imagePaths: [path.join(root, "photo-a.png")],
+            attachments: [
+              {
+                kind: "image",
+                mediaType: "image/jpeg",
+                localPath: path.join(root, "nested", "photo-b.jpg"),
+              },
+            ],
+          },
+        },
+      },
+      baseContext,
+    );
+
+    const capture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      args: string[];
+      cwd: string;
+      stdin: string;
+    };
+    expect(output.payload).toEqual({ text: "print mode reply" });
+    expect(capture.cwd).toBe(await realpath(projectDir));
+    expect(capture.args).toEqual(
+      expect.arrayContaining([
+        "-p",
+        "--output-format",
+        "text",
+        "--model",
+        "claude-opus-4-1",
+        "--add-dir",
+        root,
+        "--add-dir",
+        path.join(root, "nested"),
+      ]),
+    );
+    expect(capture.args).not.toContain("hello");
+    expect(capture.args).not.toContain("system");
+    expect(capture.args).not.toContain("--system-prompt");
+    const prompt = capture.stdin;
+    expect(prompt).toContain("hello");
+    expect(prompt).toContain("system");
+    expect(prompt).toContain("Attached files:");
+    expect(prompt).toContain(path.join(root, "photo-a.png"));
+    expect(prompt).toContain(path.join(root, "nested", "photo-b.jpg"));
+  });
+
+  test("default print mode waits for aborted subprocess cleanup", async () => {
+    const root = await makeTempDir();
+    const binDir = path.join(root, "bin");
+    const projectDir = path.join(root, "project");
+    const pidPath = path.join(root, "claude.pid");
+    await mkdir(projectDir, { recursive: true });
+    await writeExecutable(
+      path.join(binDir, "claude"),
+      [
+        "#!/usr/bin/env bash",
+        'if [[ "$1" == "--version" ]]; then echo "2.1.149 (Claude Code)"; exit 0; fi',
+        'if [[ "$1 $2" == "auth status" ]]; then echo \'{"loggedIn":true}\'; exit 0; fi',
+        `echo $$ > ${JSON.stringify(pidPath)}`,
+        "trap '' TERM",
+        "sleep 30",
+      ].join("\n"),
+    );
+
+    const controller = new AbortController();
+    const adapter = new ClaudeCodeAgentAdapter({
+      authPreflight: false,
+      cwd: projectDir,
+      env: {
+        PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+      },
+    });
+    const execution = adapter.execute(baseInput, {
+      ...baseContext,
+      signal: controller.signal,
+    });
+    const pid = Number.parseInt(await waitForTextFile(pidPath), 10);
+    controller.abort();
+
+    await expect(execution).rejects.toMatchObject({
+      code: "timeout",
+      message: "claude adapter aborted",
+    });
+    expect(() => process.kill(pid, 0)).toThrow();
   });
 });

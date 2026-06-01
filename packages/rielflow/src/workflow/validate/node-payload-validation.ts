@@ -328,6 +328,22 @@ export function normalizeNodePayload(input: {
     templateField: "sessionStartPromptTemplate",
     templateFileField: "sessionStartPromptTemplateFile",
   });
+  const chatFailureMessageTemplateRaw = payload["chatFailureMessageTemplate"];
+  let chatFailureMessageTemplate: string | undefined;
+  if (
+    typeof chatFailureMessageTemplateRaw === "string" &&
+    chatFailureMessageTemplateRaw.trim().length > 0
+  ) {
+    chatFailureMessageTemplate = chatFailureMessageTemplateRaw;
+  } else if (chatFailureMessageTemplateRaw !== undefined) {
+    issues.push(
+      makeIssue(
+        "error",
+        `${path}.chatFailureMessageTemplate`,
+        "must be a non-empty string",
+      ),
+    );
+  }
 
   const promptTemplate = normalizedPromptTemplate.template;
   const promptTemplateFile = normalizedPromptTemplate.templateFile;
@@ -781,6 +797,9 @@ export function normalizeNodePayload(input: {
       : { systemPromptTemplateFile }),
     ...(promptTemplate === undefined ? {} : { promptTemplate }),
     ...(promptTemplateFile === undefined ? {} : { promptTemplateFile }),
+    ...(chatFailureMessageTemplate === undefined
+      ? {}
+      : { chatFailureMessageTemplate }),
     ...(sessionStartPromptTemplate === undefined
       ? {}
       : { sessionStartPromptTemplate }),

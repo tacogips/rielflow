@@ -26,6 +26,7 @@ import {
   normalizeAdapterFailure,
   resolveRetryPolicy,
 } from "./shared";
+import { checkCursorBackendModelAvailability } from "./readiness";
 
 type CursorAgentMode = "default" | "plan" | "ask";
 type CursorAgentStreamMode = "event" | "normalized";
@@ -126,13 +127,25 @@ type CursorRunnerFactory = (
 export interface CursorAdapterConfig extends LlmSessionStallWatchConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly authPreflight?: boolean;
+  readonly authPreflightTimeoutMs?: number;
   readonly cwd?: string;
   readonly cursorBinary?: string;
   readonly mode?: CursorAgentMode;
   readonly streamMode?: CursorAgentStreamMode;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly createRunner?: CursorRunnerFactory;
+  readonly checkAuthPreflight?: (
+    input: AdapterExecutionInput,
+    options: {
+      readonly cwd?: string;
+      readonly env?: Readonly<Record<string, string | undefined>>;
+      readonly timeoutMs?: number;
+    },
+  ) => Promise<void>;
 }
+
+const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 30_000;
 
 async function createDefaultRunner(
   options: CursorRunnerOptions,
@@ -143,6 +156,63 @@ async function createDefaultRunner(
       : {}),
   });
   return sdk.runner;
+}
+
+function shouldRunAuthPreflight(config: CursorAdapterConfig): boolean {
+  if (config.authPreflight !== undefined) {
+    return config.authPreflight;
+  }
+  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+}
+
+async function runCursorAuthPreflight(
+  config: CursorAdapterConfig,
+  input: AdapterExecutionInput,
+): Promise<void> {
+  if (!shouldRunAuthPreflight(config)) {
+    return;
+  }
+  const env = buildAmbientProcessEnv(
+    config.env,
+    input.rielflowHookContext === undefined
+      ? undefined
+      : { ...input.rielflowHookContext.environment },
+    input.ambientManagerContext === undefined
+      ? undefined
+      : { ...input.ambientManagerContext.environment },
+  );
+  const options = {
+    cwd: config.cwd ?? input.workingDirectory,
+    ...(env === undefined ? {} : { env }),
+    timeoutMs: config.authPreflightTimeoutMs ?? DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS,
+  };
+  if (config.checkAuthPreflight !== undefined) {
+    await config.checkAuthPreflight(input, options);
+    return;
+  }
+  const availability = await checkCursorBackendModelAvailability({
+    model: input.node.model,
+    ...options,
+    probe: true,
+  });
+  if (availability.binary.status !== "available") {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `cursor-cli-agent CLI is unavailable: ${availability.binary.error ?? "cursor-agent command is unavailable"}`,
+    );
+  }
+  if (availability.auth.status === "unavailable") {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `cursor-cli-agent authentication is unavailable: ${availability.auth.detail}`,
+    );
+  }
+  if (availability.modelReachability.status === "unavailable") {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `cursor-cli-agent model '${input.node.model}' is unavailable: ${availability.modelReachability.error ?? availability.modelReachability.output ?? "model probe failed"}`,
+    );
+  }
 }
 
 function stringifyUnknown(value: unknown): string | undefined {
@@ -364,14 +434,19 @@ export class CursorCliAgentAdapter implements NodeAdapter {
     input: AdapterExecutionInput,
     context: AdapterExecutionContext,
   ): Promise<AdapterExecutionOutput> {
-    const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
+    const { maxAttempts, retryDelayMs } = resolveRetryPolicy({
+      ...this.#config,
+      defaultMaxAttempts: 1,
+    });
 
     return await executeWithRetry({
       maxAttempts,
       retryDelayMs,
       signal: context.signal,
-      run: async () =>
-        await executeLocalCursorAgent(this.#config, input, context),
+      run: async () => {
+        await runCursorAuthPreflight(this.#config, input);
+        return await executeLocalCursorAgent(this.#config, input, context);
+      },
       normalizeError: (error) =>
         error instanceof DOMException && error.name === "AbortError"
           ? new AdapterExecutionError(

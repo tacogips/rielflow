@@ -4,6 +4,7 @@ import {
   createMockCodexSessionRunner,
   type MockCodexSessionStreamChunk,
 } from "codex-agent/sdk/testing";
+import { AdapterExecutionError } from "../adapter";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -599,5 +600,57 @@ describe("CodexAgentAdapter", () => {
         ),
       },
     );
+  });
+
+  test("fails before creating a runner when auth preflight fails", async () => {
+    const createRunner = vi.fn(() => makeCodexRunnerFixture().createRunner());
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "codex-agent authentication is unavailable: login required",
+      );
+    });
+    const adapter = new CodexAgentAdapter({
+      createRunner,
+      checkAuthPreflight,
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "policy_blocked",
+        message: expect.stringContaining("login required"),
+      },
+    );
+    expect(checkAuthPreflight).toHaveBeenCalledWith(
+      baseInput,
+      expect.objectContaining({
+        cwd: "/tmp/project",
+        timeoutMs: 5000,
+      }),
+    );
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  test("allows auth preflight to be disabled", async () => {
+    const fixture = makeCodexRunnerFixture();
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "codex-agent authentication is unavailable",
+      );
+    });
+    const adapter = new CodexAgentAdapter({
+      createRunner: fixture.createRunner,
+      checkAuthPreflight,
+      authPreflight: false,
+    });
+
+    await expect(
+      adapter.execute(baseInput, baseContext),
+    ).resolves.toMatchObject({
+      provider: "codex-agent",
+    });
+    expect(checkAuthPreflight).not.toHaveBeenCalled();
+    expect(fixture.createRunner).toHaveBeenCalledTimes(1);
   });
 });

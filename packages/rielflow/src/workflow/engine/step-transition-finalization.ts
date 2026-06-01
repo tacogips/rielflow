@@ -20,6 +20,7 @@ import {
   executeCrossWorkflowDispatchesForNode,
   executeLocalFanoutTransition,
 } from "./fanout-dispatch";
+import { saveFailedSessionAndPublishNodeFailureReply } from "./failure-output-publication";
 import {
   removePendingOptionalNodeDecision,
   type EngineExecutionGuards,
@@ -121,6 +122,20 @@ export async function finalizeStepTransitions(
   } = input;
   let currentFanoutGroups: readonly FanoutGroupRunRecord[] | undefined =
     session.fanoutGroups;
+  const saveFailedSessionAndPublishReply = (
+    failed: WorkflowSessionState,
+    failureMessage: string,
+  ): Promise<void> =>
+    saveFailedSessionAndPublishNodeFailureReply({
+      saveSession,
+      failed,
+      options,
+      workflowId: workflow.workflowId,
+      nodeId,
+      nodeExecId,
+      failureMessage,
+      createdAt: endedAt,
+    });
   const localFanoutQueuedNodeIds: string[] = [];
   const localFanoutTransitions: Array<{
     readonly from: string;
@@ -180,7 +195,10 @@ export async function finalizeStepTransitions(
           : { fanoutGroups: currentFanoutGroups }),
         lastError: localFanoutResult.error,
       };
-      await saveSession(failed, options);
+      await saveFailedSessionAndPublishReply(
+        failed,
+        failed.lastError ?? "local fanout execution failed",
+      );
       return err(
         workflowRunFailure(
           1,
@@ -227,7 +245,10 @@ export async function finalizeStepTransitions(
           lastError:
             "internal: local fanout pause missing paused session state",
         };
-        await saveSession(failed, options);
+        await saveFailedSessionAndPublishReply(
+          failed,
+          failed.lastError ?? "local fanout pause failed",
+        );
         return err(
           workflowRunFailure(
             1,
@@ -264,7 +285,14 @@ export async function finalizeStepTransitions(
           : { fanoutGroups: currentFanoutGroups }),
         lastError: localFanoutResult.value.failureMessage,
       };
-      await saveSession(failed, options);
+      if (failed.status === "failed") {
+        await saveFailedSessionAndPublishReply(
+          failed,
+          failed.lastError ?? "local fanout execution failed",
+        );
+      } else {
+        await saveSession(failed, options);
+      }
       return err(
         workflowRunFailure(
           terminalStatus === "cancelled" ? 130 : 1,
@@ -321,9 +349,13 @@ export async function finalizeStepTransitions(
       communicationCounter: currentCommunicationCounter,
       communications: currentCommunications,
       nodeBackendSessions: currentNodeBackendSessions,
+      runtimeVariables: currentRuntimeVariables,
       lastError: crossWorkflowDispatchResult.error,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? "cross-workflow dispatch execution failed",
+    );
     return err(
       workflowRunFailure(
         1,
@@ -358,7 +390,10 @@ export async function finalizeStepTransitions(
         : { fanoutGroups: crossWorkflowDispatchResult.value.fanoutGroups }),
       lastError: crossWorkflowDispatchResult.value.failureMessage,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? "cross-workflow dispatch execution failed",
+    );
     return err(
       workflowRunFailure(
         1,
@@ -390,7 +425,10 @@ export async function finalizeStepTransitions(
         lastError:
           "internal: cross-workflow fanout pause missing paused session state",
       };
-      await saveSession(failed, options);
+      await saveFailedSessionAndPublishReply(
+        failed,
+        failed.lastError ?? "cross-workflow fanout pause failed",
+      );
       return err(
         workflowRunFailure(
           1,

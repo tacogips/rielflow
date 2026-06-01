@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { AdapterExecutionError } from "../adapter";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -467,5 +468,59 @@ describe("CursorCliAgentAdapter", () => {
         baseContext,
       ),
     ).rejects.toHaveProperty("code", "invalid_output");
+  });
+
+  test("fails before creating a runner when auth preflight fails", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "cursor-cli-agent authentication is unavailable: login required",
+      );
+    });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner,
+      checkAuthPreflight,
+    });
+
+    await expect(adapter.execute(baseInput, baseContext)).rejects.toMatchObject(
+      {
+        code: "policy_blocked",
+        message: expect.stringContaining("login required"),
+      },
+    );
+    expect(checkAuthPreflight).toHaveBeenCalledWith(
+      baseInput,
+      expect.objectContaining({
+        cwd: "/tmp/project",
+        timeoutMs: 30000,
+      }),
+    );
+    expect(createRunner).not.toHaveBeenCalled();
+  });
+
+  test("allows auth preflight to be disabled", async () => {
+    const runner = makeMockCursorRunner({});
+    const createRunner = vi.fn(() => runner);
+    const checkAuthPreflight = vi.fn(async () => {
+      throw new AdapterExecutionError(
+        "policy_blocked",
+        "cursor-cli-agent authentication is unavailable",
+      );
+    });
+    const adapter = new CursorCliAgentAdapter({
+      createRunner,
+      checkAuthPreflight,
+      authPreflight: false,
+    });
+
+    await expect(
+      adapter.execute(baseInput, baseContext),
+    ).resolves.toMatchObject({
+      provider: "cursor-cli-agent",
+    });
+    expect(checkAuthPreflight).not.toHaveBeenCalled();
+    expect(createRunner).toHaveBeenCalledTimes(1);
   });
 });

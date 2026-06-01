@@ -19,6 +19,7 @@ export { OpenAiSdkAdapter, type OpenAiSdkAdapterConfig } from "./openai-sdk";
 export {
   checkCodexBackendModelAvailability,
   checkCursorBackendModelAvailability,
+  getClaudeBackendCliAuthStatus,
   getClaudeBackendToolVersion,
   getCodexBackendLoginStatus,
   getCodexBackendToolVersions,
@@ -26,6 +27,7 @@ export {
   verifyClaudeBackendReadiness,
   type AgentBackendProbeOptions,
   type AgentBackendToolInfo,
+  type ClaudeBackendCliAuthStatus,
   type ClaudeBackendReadiness,
   type CodexBackendLoginStatus,
   type CodexBackendModelAvailability,

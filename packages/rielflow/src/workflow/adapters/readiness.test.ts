@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   checkCodexBackendModelAvailability,
   checkCursorBackendModelAvailability,
+  getClaudeBackendCliAuthStatus,
 } from "./readiness";
 
 const tempDirs: string[] = [];
@@ -105,5 +106,81 @@ describe("agent backend readiness adapters", () => {
     expect(availability.probe.error).toContain(
       "The gpt-5 model is not supported for this account.",
     );
+  });
+
+  test("reads Claude CLI auth status JSON", async () => {
+    const root = await makeTempDir();
+    const binDir = path.join(root, "bin");
+    await writeExecutable(
+      path.join(binDir, "claude"),
+      [
+        "#!/usr/bin/env bash",
+        'if [[ "$1 $2" == "auth status" ]]; then',
+        "  echo '{\"loggedIn\":true}'",
+        "  exit 0",
+        "fi",
+        "exit 1",
+      ].join("\n"),
+    );
+
+    await expect(
+      getClaudeBackendCliAuthStatus({
+        env: {
+          PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+        },
+      }),
+    ).resolves.toEqual({
+      available: true,
+      verified: true,
+    });
+  });
+
+  test("reports Claude CLI logged-out auth status", async () => {
+    const root = await makeTempDir();
+    const binDir = path.join(root, "bin");
+    await writeExecutable(
+      path.join(binDir, "claude"),
+      [
+        "#!/usr/bin/env bash",
+        'if [[ "$1 $2" == "auth status" ]]; then',
+        "  echo '{\"loggedIn\":false}'",
+        "  exit 0",
+        "fi",
+        "exit 1",
+      ].join("\n"),
+    );
+
+    await expect(
+      getClaudeBackendCliAuthStatus({
+        env: {
+          PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+        },
+      }),
+    ).resolves.toEqual({
+      available: false,
+      verified: true,
+      message: "Claude Code CLI reports loggedIn=false",
+    });
+  });
+
+  test("reports Claude CLI auth status command failures", async () => {
+    const root = await makeTempDir();
+    const binDir = path.join(root, "bin");
+    await writeExecutable(
+      path.join(binDir, "claude"),
+      ["#!/usr/bin/env bash", 'echo "login required" >&2', "exit 1"].join("\n"),
+    );
+
+    const status = await getClaudeBackendCliAuthStatus({
+      env: {
+        PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+      },
+    });
+
+    expect(status).toMatchObject({
+      available: false,
+      verified: true,
+    });
+    expect(status.message).toContain("login required");
   });
 });

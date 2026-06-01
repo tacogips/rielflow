@@ -1,5 +1,11 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: Existing monolithic finalizer; this change moved failure-output helpers out without broad refactoring.
 import { workflowStepResultFinalizationPort } from "./workflow-runner-deps";
 
+import {
+  inferFailureReplyAs,
+  renderChatFailureMessage,
+  saveFailedSessionAndPublishNodeFailureReply,
+} from "./failure-output-publication";
 import { finalizeStepTransitions } from "./step-transition-finalization";
 import { publishNodeOutputArtifacts } from "../runtime-execution-contracts";
 import type {
@@ -170,6 +176,42 @@ export async function finalizeExecutedNode(
     ...session.nodeExecutions,
     buildNodeExecutionRecord(status),
   ];
+  const saveFailedSessionAndPublishReply = async (
+    failed: WorkflowSessionState,
+    failureMessage: string,
+  ): Promise<void> => {
+    const replyAs = inferFailureReplyAs(nodeId, executionNodePayload);
+    const chatFailureMessage = renderChatFailureMessage({
+      workflow,
+      workflowExecutionId: failed.sessionId,
+      nodeId,
+      nodeExecId,
+      nodePayload: executionNodePayload,
+      failureMessage,
+      ...(replyAs === undefined ? {} : { replyAs }),
+    });
+    const failurePublicationInput = {
+      saveSession,
+      failed,
+      options,
+      workflowId: workflow.workflowId,
+      nodeId,
+      nodeExecId,
+      failureMessage,
+      ...(chatFailureMessage === undefined ? {} : { chatFailureMessage }),
+      createdAt: endedAt,
+    };
+    if (replyAs === undefined) {
+      await saveFailedSessionAndPublishNodeFailureReply(
+        failurePublicationInput,
+      );
+      return;
+    }
+    await saveFailedSessionAndPublishNodeFailureReply({
+      ...failurePublicationInput,
+      replyAs,
+    });
+  };
   const finalizeManagerSession = async (
     finalStatus: "completed" | "failed" | "cancelled",
   ): Promise<void> => {
@@ -228,7 +270,10 @@ export async function finalizeExecutedNode(
           nodeBackendSessions: nextNodeBackendSessions,
           lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
-        await saveSession(failed, options);
+        await saveFailedSessionAndPublishReply(
+          failed,
+          failed.lastError ?? "failed to finalize manager session",
+        );
         return err({
           exitCode: 1,
           message: failed.lastError ?? "failed to finalize manager session",
@@ -252,7 +297,10 @@ export async function finalizeExecutedNode(
         nodeBackendSessions: nextNodeBackendSessions,
         lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': ${message}`,
       };
-      await saveSession(failed, options);
+      await saveFailedSessionAndPublishReply(
+        failed,
+        failed.lastError ?? "invalid manager control",
+      );
       return err({
         exitCode: 5,
         message: failed.lastError ?? "invalid manager control",
@@ -289,7 +337,10 @@ export async function finalizeExecutedNode(
               nodeBackendSessions: nextNodeBackendSessions,
               lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
             };
-            await saveSession(failed, options);
+            await saveFailedSessionAndPublishReply(
+              failed,
+              failed.lastError ?? "failed to finalize manager session",
+            );
             return err({
               exitCode: 1,
               message: failed.lastError ?? "failed to finalize manager session",
@@ -309,7 +360,10 @@ export async function finalizeExecutedNode(
             nodeBackendSessions: nextNodeBackendSessions,
             lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': manager execution cannot mix GraphQL manager messages with payload managerControl`,
           };
-          await saveSession(failed, options);
+          await saveFailedSessionAndPublishReply(
+            failed,
+            failed.lastError ?? "invalid manager control",
+          );
           return err({
             exitCode: 5,
             message: failed.lastError ?? "invalid manager control",
@@ -339,7 +393,10 @@ export async function finalizeExecutedNode(
             nodeBackendSessions: nextNodeBackendSessions,
             lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
           };
-          await saveSession(failed, options);
+          await saveFailedSessionAndPublishReply(
+            failed,
+            failed.lastError ?? "failed to finalize manager session",
+          );
           return err({
             exitCode: 1,
             message: failed.lastError ?? "failed to finalize manager session",
@@ -363,7 +420,10 @@ export async function finalizeExecutedNode(
           nodeBackendSessions: nextNodeBackendSessions,
           lastError: `invalid manager control for ${executionTargetNoun} '${nodeId}': ${message}`,
         };
-        await saveSession(failed, options);
+        await saveFailedSessionAndPublishReply(
+          failed,
+          failed.lastError ?? "invalid manager control",
+        );
         return err({
           exitCode: 5,
           message: failed.lastError ?? "invalid manager control",
@@ -403,28 +463,32 @@ export async function finalizeExecutedNode(
         nodeBackendSessions: nextNodeBackendSessions,
         lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
       };
-      await saveSession(failed, options);
+      await saveFailedSessionAndPublishReply(
+        failed,
+        failed.lastError ?? "failed to finalize manager session",
+      );
       return err({
         exitCode: 1,
         message: failed.lastError ?? "failed to finalize manager session",
       });
     }
-    await saveSession(
-      {
-        ...session,
-        queue,
-        status: "failed",
-        currentNodeId: nodeId,
-        endedAt,
-        nodeExecutionCounter: nextExecutionCounter,
-        nodeExecutionCounts: updatedCounts,
-        nodeExecutions,
-        communicationCounter: session.communicationCounter,
-        communications: session.communications,
-        nodeBackendSessions: nextNodeBackendSessions,
-        lastError: optionalManagerDecisionsResult.error,
-      },
-      options,
+    const failed: WorkflowSessionState = {
+      ...session,
+      queue,
+      status: "failed",
+      currentNodeId: nodeId,
+      endedAt,
+      nodeExecutionCounter: nextExecutionCounter,
+      nodeExecutionCounts: updatedCounts,
+      nodeExecutions,
+      communicationCounter: session.communicationCounter,
+      communications: session.communications,
+      nodeBackendSessions: nextNodeBackendSessions,
+      lastError: optionalManagerDecisionsResult.error,
+    };
+    await saveFailedSessionAndPublishReply(
+      failed,
+      optionalManagerDecisionsResult.error,
     );
     return err({
       exitCode: 5,
@@ -463,7 +527,10 @@ export async function finalizeExecutedNode(
       nodeBackendSessions: nextNodeBackendSessions,
       lastError: `failed to finalize manager session for ${executionTargetNoun} '${nodeId}': ${message}`,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? "failed to finalize manager session",
+    );
     return err(
       workflowRunFailure(
         1,
@@ -521,7 +588,10 @@ export async function finalizeExecutedNode(
         nodeBackendSessions: nextNodeBackendSessions,
         lastError: `loop transition '${transition}' has no matching edge for ${executionTargetNoun} '${nodeId}'`,
       };
-      await saveSession(failed, options);
+      await saveFailedSessionAndPublishReply(
+        failed,
+        failed.lastError ?? "invalid loop transition",
+      );
       return err({
         exitCode: 4,
         message: failed.lastError ?? "invalid loop transition",
@@ -680,7 +750,10 @@ export async function finalizeExecutedNode(
             nodeBackendSessions: nextNodeBackendSessions,
             lastError: `${executionTargetNoun} timeout at '${nodeId}': timeout policy jump target '${jumpId}' is not a known workflow ${executionTargetNoun}`,
           };
-          await saveSession(failed, options);
+          await saveFailedSessionAndPublishReply(
+            failed,
+            failed.lastError ?? `${executionTargetNoun} timeout`,
+          );
           return err({
             exitCode: 6,
             message: failed.lastError ?? `${executionTargetNoun} timeout`,
@@ -760,7 +833,10 @@ export async function finalizeExecutedNode(
       nodeBackendSessions: nextNodeBackendSessions,
       lastError: `${executionTargetNoun} timeout at '${nodeId}'`,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? `${executionTargetNoun} timeout`,
+    );
     return err(
       workflowRunFailure(
         6,
@@ -789,6 +865,10 @@ export async function finalizeExecutedNode(
           : outputValidationErrors.length > 0
             ? `output validation failed for ${executionTargetNoun} '${nodeId}'`
             : `adapter failure for ${executionTargetNoun} '${nodeId}'`;
+    const chatFailureMessage =
+      providerErrMessage === undefined || providerErrMessage === failureReason
+        ? failureReason
+        : `${failureReason}: ${providerErrMessage}`;
     const failed: WorkflowSessionState = {
       ...session,
       queue,
@@ -803,7 +883,7 @@ export async function finalizeExecutedNode(
       nodeBackendSessions: nextNodeBackendSessions,
       lastError: failureReason,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(failed, chatFailureMessage);
     return err(
       workflowRunFailure(5, failed.lastError ?? "adapter failure", failed),
     );
@@ -831,7 +911,10 @@ export async function finalizeExecutedNode(
           ? `completion condition not met for ${executionTargetNoun} '${nodeId}'`
           : `completion condition not met for ${executionTargetNoun} '${nodeId}': ${completion.reason}`,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? "completion condition not met",
+    );
     return err(
       workflowRunFailure(
         3,
@@ -862,7 +945,10 @@ export async function finalizeExecutedNode(
       nodeBackendSessions: nextNodeBackendSessions,
       lastError: consumedCommunicationsResult.error,
     };
-    await saveSession(failed, options);
+    await saveFailedSessionAndPublishReply(
+      failed,
+      failed.lastError ?? "mailbox consumption persistence failed",
+    );
     return err(
       workflowRunFailure(
         1,

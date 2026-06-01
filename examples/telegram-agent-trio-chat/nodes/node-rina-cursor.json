@@ -5,6 +5,7 @@
   "model": "claude-sonnet-4-5",
   "systemPromptTemplateFile": "prompts/rina-system.md",
   "promptTemplateFile": "prompts/persona-reply.md",
+  "chatFailureMessageTemplate": "今は応答系が落ちている。君の入力のせいではないから、少し待って同じ内容をもう一度投げて。",
   "variables": {
     "personaName": "Rina Cursor",
     "shortName": "Rina",

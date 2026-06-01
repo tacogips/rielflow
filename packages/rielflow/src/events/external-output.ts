@@ -175,6 +175,7 @@ export function buildChatReplyRequestForExternalOutput(input: {
   readonly outputDestinationId?: string;
   readonly outputDestinationIds?: readonly string[];
   readonly transportText: string;
+  readonly replyAs?: string;
   readonly workflowId: string;
   readonly workflowExecutionId: string;
   readonly nodeId: string;
@@ -188,7 +189,10 @@ export function buildChatReplyRequestForExternalOutput(input: {
     ...(input.outputDestinationIds === undefined
       ? {}
       : { outputDestinationIds: input.outputDestinationIds }),
-    message: { text: input.transportText },
+    message: {
+      text: input.transportText,
+      ...(input.replyAs === undefined ? {} : { replyAs: input.replyAs }),
+    },
     visibility: "public",
     threadPolicy: "same-thread",
     idempotencyKey: input.message.idempotencyKey,
@@ -200,6 +204,15 @@ export function buildChatReplyRequestForExternalOutput(input: {
       canonicalExternalOutput: input.message,
     },
   };
+}
+
+function resolveExternalOutputReplyAs(
+  payload: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const replyAs = payload["replyAs"];
+  return typeof replyAs === "string" && replyAs.trim().length > 0
+    ? replyAs.trim()
+    : undefined;
 }
 
 async function persistNoDeliveryTarget(input: {
@@ -295,11 +308,13 @@ export async function publishExternalOutputMessage(input: {
   const outputDestinationIds = resolveOutputDestinationIds(
     input.message.payload,
   );
+  const replyAs = resolveExternalOutputReplyAs(message.payload);
   const request = buildChatReplyRequestForExternalOutput({
     message,
     target: dispatchTargetToChatTarget(target),
     ...(outputDestinationIds === undefined ? {} : { outputDestinationIds }),
     transportText,
+    ...(replyAs === undefined ? {} : { replyAs }),
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.nodeId,
@@ -362,6 +377,112 @@ export function buildBusinessFinalExternalOutputMessage(input: {
     ].join(":"),
     createdAt: input.context.createdAt,
   };
+}
+
+const FAILURE_MESSAGE_MAX_LENGTH = 360;
+const FAILURE_MESSAGE_SENSITIVE_KEY_NAME = String.raw`[A-Za-z0-9_-]*(?:authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|session[-_]?token|private[-_]?key|credential|password|secret|token)[A-Za-z0-9_-]*`;
+const FAILURE_MESSAGE_DOUBLE_QUOTED_SECRET_VALUE_PATTERN = new RegExp(
+  `("${FAILURE_MESSAGE_SENSITIVE_KEY_NAME}"\\s*:\\s*)"[^"]*"`,
+  "gi",
+);
+const FAILURE_MESSAGE_SINGLE_QUOTED_SECRET_VALUE_PATTERN = new RegExp(
+  `('${FAILURE_MESSAGE_SENSITIVE_KEY_NAME}'\\s*:\\s*)'[^']*'`,
+  "gi",
+);
+const FAILURE_MESSAGE_SECRET_ASSIGNMENT_PATTERN = new RegExp(
+  `\\b(${FAILURE_MESSAGE_SENSITIVE_KEY_NAME})(\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&]+)`,
+  "gi",
+);
+
+export function sanitizeWorkflowFailureMessage(message: string): string {
+  const compact = message.replace(/\s+/g, " ").trim();
+  const redacted = compact
+    .replace(/\b\d{6,12}:[A-Za-z0-9_-]{20,}\b/g, "[redacted-token]")
+    .replace(
+      /\b(sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,})\b/g,
+      "[redacted-token]",
+    )
+    .replace(
+      /\b(Authorization)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|(?:[A-Za-z][A-Za-z0-9_-]{2,}\s+)?[A-Za-z0-9._~+/=-]{8,})/gi,
+      "$1$2[redacted]",
+    )
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]{16,}/gi, "$1 [redacted]")
+    .replace(
+      FAILURE_MESSAGE_DOUBLE_QUOTED_SECRET_VALUE_PATTERN,
+      '$1"[redacted]"',
+    )
+    .replace(
+      FAILURE_MESSAGE_SINGLE_QUOTED_SECRET_VALUE_PATTERN,
+      "$1'[redacted]'",
+    )
+    .replace(FAILURE_MESSAGE_SECRET_ASSIGNMENT_PATTERN, "$1$2[redacted]");
+  if (redacted.length === 0) {
+    return "unknown workflow failure";
+  }
+  if (redacted.length <= FAILURE_MESSAGE_MAX_LENGTH) {
+    return redacted;
+  }
+  return `${redacted.slice(0, FAILURE_MESSAGE_MAX_LENGTH - 3)}...`;
+}
+
+export function buildWorkflowFailureExternalOutputMessage(input: {
+  readonly address: ExternalMailboxAddress;
+  readonly context: WorkflowExternalOutputContext;
+  readonly failedNodeId: string;
+  readonly failureMessage: string;
+  readonly idempotencyKey?: string;
+  readonly transportText?: string;
+  readonly replyAs?: string;
+  readonly payload?: Readonly<Record<string, unknown>>;
+}): ExternalOutputMessage {
+  const sanitizedFailureMessage = sanitizeWorkflowFailureMessage(
+    input.failureMessage,
+  );
+  const text =
+    input.transportText === undefined
+      ? `Workflow step '${input.failedNodeId}' failed: ${sanitizedFailureMessage}`
+      : sanitizeWorkflowFailureMessage(input.transportText);
+  return {
+    kind: "external-output",
+    outputKind: "control-status",
+    address: input.address,
+    payload: {
+      ...(input.payload ?? {}),
+      controlStatusText: text,
+      transportText: text,
+      failure: {
+        nodeId: input.failedNodeId,
+        message: sanitizedFailureMessage,
+      },
+      ...(input.replyAs === undefined ? {} : { replyAs: input.replyAs }),
+    },
+    idempotencyKey:
+      input.idempotencyKey ??
+      [
+        "external-output",
+        "failure",
+        input.context.workflowId,
+        input.context.workflowExecutionId,
+        input.context.sourceNodeExecId,
+      ].join(":"),
+    createdAt: input.context.createdAt,
+  };
+}
+
+function buildWorkflowFailureIdempotencyKey(input: {
+  readonly event: ExternalEventEnvelope;
+  readonly workflowId: string;
+  readonly failedNodeId: string;
+}): string {
+  return [
+    "external-output",
+    "failure",
+    "event",
+    input.event.sourceId,
+    input.event.dedupeKey,
+    input.workflowId,
+    input.failedNodeId,
+  ].join(":");
 }
 
 export function parseEventMailboxBridgePolicyFromRuntimeVariables(
@@ -525,5 +646,96 @@ export async function publishWorkflowBusinessFinalExternalOutput(input: {
     workflowExecutionId: input.workflowExecutionId,
     nodeId: input.publishedNodeId,
     nodeExecId: input.publishedNodeExecId,
+  });
+}
+
+export async function publishWorkflowFailureExternalOutput(input: {
+  readonly dispatcher: ChatReplyDispatcher;
+  readonly runtimeOptions: LoadOptions;
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly runtimeVariables: Readonly<Record<string, unknown>>;
+  readonly failedNodeId: string;
+  readonly failedNodeExecId: string;
+  readonly failureMessage: string;
+  readonly transportText?: string;
+  readonly replyAs?: string;
+  readonly createdAt: string;
+}): Promise<ChatReplyDispatchResult | null> {
+  const policy = parseEventMailboxBridgePolicyFromRuntimeVariables(
+    input.runtimeVariables,
+  );
+  if (policy?.output?.reply?.mode === "none") {
+    return null;
+  }
+  const event = parseExternalEventEnvelopeFromRuntimeVariables(
+    input.runtimeVariables,
+  );
+  if (event === null) {
+    return null;
+  }
+  const chatTarget = resolveChatReplyTargetFromEnvelope(event);
+  if (chatTarget === null) {
+    return null;
+  }
+  const bindingIdRaw = input.runtimeVariables["eventBindingId"];
+  const bindingId =
+    typeof bindingIdRaw === "string" && bindingIdRaw.length > 0
+      ? bindingIdRaw
+      : undefined;
+  const address: ExternalMailboxAddress = {
+    sourceId: event.sourceId,
+    ...(bindingId === undefined ? {} : { bindingId }),
+    workflowName: input.workflowId,
+    workflowExecutionId: input.workflowExecutionId,
+    ...(event.conversation?.id === undefined
+      ? {}
+      : { conversationId: event.conversation.id }),
+    ...(event.conversation?.threadId === undefined
+      ? {}
+      : { threadId: event.conversation.threadId }),
+    eventId: event.eventId,
+    providerHint: event.provider,
+    ...(event.actor?.id === undefined ? {} : { actorId: event.actor.id }),
+  };
+  const message = buildWorkflowFailureExternalOutputMessage({
+    address,
+    context: {
+      workflowId: input.workflowId,
+      workflowExecutionId: input.workflowExecutionId,
+      sourceNodeId: input.failedNodeId,
+      sourceNodeExecId: input.failedNodeExecId,
+      createdAt: input.createdAt,
+    },
+    failedNodeId: input.failedNodeId,
+    failureMessage: input.failureMessage,
+    idempotencyKey: buildWorkflowFailureIdempotencyKey({
+      event,
+      workflowId: input.workflowId,
+      failedNodeId: input.failedNodeId,
+    }),
+    ...(input.transportText === undefined
+      ? {}
+      : { transportText: input.transportText }),
+    ...(input.replyAs === undefined ? {} : { replyAs: input.replyAs }),
+    payload: {
+      chatReplyTarget: chatTarget,
+      ...(Array.isArray(input.runtimeVariables["eventOutputDestinations"])
+        ? {
+            eventOutputDestinations:
+              input.runtimeVariables["eventOutputDestinations"],
+          }
+        : {}),
+      eventId: event.eventId,
+    },
+  });
+  return publishExternalOutputMessage({
+    dispatcher: input.dispatcher,
+    runtimeOptions: input.runtimeOptions,
+    message,
+    workflowId: input.workflowId,
+    workflowExecutionId: input.workflowExecutionId,
+    nodeId: input.failedNodeId,
+    nodeExecId: input.failedNodeExecId,
   });
 }

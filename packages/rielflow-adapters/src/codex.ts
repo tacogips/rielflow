@@ -31,6 +31,7 @@ import {
   normalizeAdapterFailure,
   resolveRetryPolicy,
 } from "./shared";
+import { getCodexBackendLoginStatus } from "./readiness";
 
 type CodexSandboxMode = "full" | "network-only" | "none";
 type CodexApprovalMode =
@@ -91,6 +92,8 @@ type CodexRunnerFactory = (
 export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly authPreflight?: boolean;
+  readonly authPreflightTimeoutMs?: number;
   readonly cwd?: string;
   readonly codexBinary?: string;
   readonly codexHome?: string;
@@ -100,7 +103,17 @@ export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly additionalArgs?: readonly string[];
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly createRunner?: CodexRunnerFactory;
+  readonly checkAuthPreflight?: (
+    input: AdapterExecutionInput,
+    options: {
+      readonly cwd?: string;
+      readonly env?: Readonly<Record<string, string | undefined>>;
+      readonly timeoutMs?: number;
+    },
+  ) => Promise<void>;
 }
+
+const DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS = 5_000;
 
 function buildCodexReasoningEffortOverride(
   effort: string | undefined,
@@ -134,6 +147,47 @@ async function createDefaultRunner(
   options: CodexSessionRunnerOptions,
 ): Promise<CodexSessionRunnerLike> {
   return new SessionRunner(options);
+}
+
+function shouldRunAuthPreflight(config: CodexAdapterConfig): boolean {
+  if (config.authPreflight !== undefined) {
+    return config.authPreflight;
+  }
+  return config.checkAuthPreflight !== undefined || config.createRunner === undefined;
+}
+
+async function runCodexAuthPreflight(
+  config: CodexAdapterConfig,
+  input: AdapterExecutionInput,
+): Promise<void> {
+  if (!shouldRunAuthPreflight(config)) {
+    return;
+  }
+  const env = buildAmbientProcessEnv(
+    config.env,
+    input.rielflowHookContext === undefined
+      ? undefined
+      : { ...input.rielflowHookContext.environment },
+    input.ambientManagerContext === undefined
+      ? undefined
+      : { ...input.ambientManagerContext.environment },
+  );
+  const options = {
+    cwd: config.cwd ?? input.workingDirectory,
+    ...(env === undefined ? {} : { env }),
+    timeoutMs: config.authPreflightTimeoutMs ?? DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS,
+  };
+  if (config.checkAuthPreflight !== undefined) {
+    await config.checkAuthPreflight(input, options);
+    return;
+  }
+  const status = await getCodexBackendLoginStatus(options);
+  if (!status.ok) {
+    throw new AdapterExecutionError(
+      "policy_blocked",
+      `codex-agent authentication is unavailable: ${status.error ?? status.status ?? "login status failed"}`,
+    );
+  }
 }
 
 async function toCodexNormalizedEvents(
@@ -373,14 +427,19 @@ export class CodexAgentAdapter implements NodeAdapter {
     input: AdapterExecutionInput,
     context: AdapterExecutionContext,
   ): Promise<AdapterExecutionOutput> {
-    const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
+    const { maxAttempts, retryDelayMs } = resolveRetryPolicy({
+      ...this.#config,
+      defaultMaxAttempts: 1,
+    });
 
     return await executeWithRetry({
       maxAttempts,
       retryDelayMs,
       signal: context.signal,
-      run: async () =>
-        await executeLocalCodexAgent(this.#config, input, context),
+      run: async () => {
+        await runCodexAuthPreflight(this.#config, input);
+        return await executeLocalCodexAgent(this.#config, input, context);
+      },
       normalizeError: (error) =>
         error instanceof DOMException && error.name === "AbortError"
           ? new AdapterExecutionError(

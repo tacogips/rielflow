@@ -344,7 +344,10 @@ describe("telegram gateway event source adapter", () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       chat_id: "-1001234567890",
       text: "Mika thinks this angle will land better.",
-      reply_parameters: { message_id: 42 },
+      reply_parameters: {
+        message_id: 42,
+        allow_sending_without_reply: true,
+      },
     });
   });
 
