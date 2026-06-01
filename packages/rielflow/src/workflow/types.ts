@@ -1,5 +1,6 @@
 import type { NodeValidationResult } from "./validate/node-validation-result";
-import type { ResolvedChatPersonaRouterAddon } from "./chat-persona-router-types";
+import type { ResolvedNodeAddon } from "./addon-types";
+export type * from "./addon-types";
 
 export type CliAgentBackend =
   | "codex-agent"
@@ -9,7 +10,8 @@ export type CliAgentBackend =
 export type NodeExecutionBackend =
   | CliAgentBackend
   | "official/openai-sdk"
-  | "official/anthropic-sdk";
+  | "official/anthropic-sdk"
+  | "official/cursor-sdk";
 
 export const NODE_REASONING_EFFORTS = [
   "low",
@@ -500,219 +502,6 @@ export interface UserActionNodeConfig {
   readonly allowFreeTextReply?: boolean;
 }
 
-export interface ChatReplyWorkerConfig {
-  readonly textTemplate: string;
-  readonly replyAsTemplate?: string;
-  readonly visibility?: "public" | "ephemeral";
-  readonly threadPolicy?: "same-thread" | "conversation-root";
-  readonly onMissingTarget?: "fail" | "intent-only" | "dry-run";
-}
-
-export interface XGatewayReadAddonConfig {
-  readonly queryTemplate: string;
-  readonly image?: string;
-  readonly runnerKind?: "podman" | "docker" | "nerdctl";
-  readonly runnerPath?: string;
-  readonly networkPolicy?: "disabled" | "egress-allowed";
-}
-
-export interface XGatewayAddonConfig {
-  readonly documentTemplate: string;
-  readonly image?: string;
-  readonly runnerKind?: "podman" | "docker" | "nerdctl";
-  readonly runnerPath?: string;
-  readonly networkPolicy?: "disabled" | "egress-allowed";
-}
-
-export interface MailGatewayReadAddonConfig {
-  readonly queryTemplate: string;
-  readonly image?: string;
-  readonly runnerKind?: "podman" | "docker" | "nerdctl";
-  readonly runnerPath?: string;
-  readonly networkPolicy?: "disabled" | "egress-allowed";
-}
-
-export interface MailGatewayAddonConfig {
-  readonly documentTemplate: string;
-  readonly image?: string;
-  readonly runnerKind?: "podman" | "docker" | "nerdctl";
-  readonly runnerPath?: string;
-  readonly networkPolicy?: "disabled" | "egress-allowed";
-}
-
-export interface GitCommitAddonConfig {
-  readonly commitMessageTemplate: string;
-  readonly committedFilesTemplate: string;
-  readonly gitPath?: string;
-}
-
-export interface GitPushAddonConfig {
-  readonly gitPath?: string;
-  readonly remoteTemplate?: string;
-  readonly branchTemplate?: string;
-}
-
-export interface AgentWorkerAddonConfig {
-  readonly model: string;
-  readonly promptTemplate: string;
-  readonly systemPromptTemplate?: string;
-  readonly sessionStartPromptTemplate?: string;
-  readonly sessionPolicy?: NodeSessionPolicy;
-  readonly timeoutMs?: number;
-}
-
-export interface WorkflowPackageSandboxReviewAddonConfig {
-  readonly executionBackend: CliAgentBackend;
-  readonly model: string;
-  readonly decisionPolicy?: "advisory" | "block-on-high";
-  readonly maxEvidenceBytes?: number;
-  readonly systemPromptTemplate?: string;
-  readonly sessionPolicy?: NodeSessionPolicy;
-  readonly timeoutMs?: number;
-}
-
-export interface ChatReplyDispatchTarget {
-  readonly sourceId: string;
-  readonly provider: string;
-  readonly eventId: string;
-  readonly conversationId: string;
-  readonly threadId?: string;
-  readonly actorId?: string;
-}
-
-export interface ChatReplyDispatchRequest {
-  readonly target: ChatReplyDispatchTarget;
-  readonly outputDestinationId?: string;
-  readonly outputDestinationIds?: readonly string[];
-  readonly message: {
-    readonly text: string;
-    readonly replyAs?: string;
-  };
-  readonly visibility: "public" | "ephemeral";
-  readonly threadPolicy: "same-thread" | "conversation-root";
-  readonly idempotencyKey: string;
-  readonly workflowId: string;
-  readonly workflowExecutionId: string;
-  readonly nodeId: string;
-  readonly nodeExecId: string;
-  /**
-   * Optional provider-neutral external-output audit payload persisted in
-   * `event_reply_dispatches.request_json` alongside transport fields.
-   */
-  readonly dispatchAuditMetadata?: Readonly<Record<string, unknown>>;
-}
-
-/** Context for deterministic business-final external mailbox messages. */
-export interface WorkflowExternalOutputContext {
-  readonly workflowId: string;
-  readonly workflowExecutionId: string;
-  readonly sourceNodeId: string;
-  readonly sourceNodeExecId: string;
-  readonly createdAt: string;
-}
-
-export interface ChatReplyDispatchResult {
-  readonly status: "sent" | "queued";
-  readonly provider: string;
-  readonly dispatchId?: string;
-  readonly providerMessageId?: string;
-  readonly destinationResults?: readonly ChatReplyDestinationDispatchResult[];
-}
-
-export interface ChatReplyDestinationDispatchResult {
-  readonly destinationId?: string;
-  readonly sourceId: string;
-  readonly idempotencyKey: string;
-  readonly status: "sent" | "queued";
-  readonly provider: string;
-  readonly dispatchId?: string;
-  readonly providerMessageId?: string;
-}
-
-export interface ChatReplyDispatcher {
-  dispatchChatReply(
-    request: ChatReplyDispatchRequest,
-  ): Promise<ChatReplyDispatchResult>;
-}
-
-export interface ResolvedChatReplyWorkerAddon {
-  readonly name: "rielflow/chat-reply-worker";
-  readonly version: "1";
-  readonly config: ChatReplyWorkerConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedXGatewayReadAddon {
-  readonly name: "rielflow/x-gateway-read";
-  readonly version: "1";
-  readonly config: XGatewayReadAddonConfig;
-  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedXGatewayAddon {
-  readonly name: "rielflow/x-gateway";
-  readonly version: "1";
-  readonly config: XGatewayAddonConfig;
-  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedMailGatewayReadAddon {
-  readonly name: "rielflow/mail-gateway-read";
-  readonly version: "1";
-  readonly config: MailGatewayReadAddonConfig;
-  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedMailGatewayAddon {
-  readonly name: "rielflow/mail-gateway";
-  readonly version: "1";
-  readonly config: MailGatewayAddonConfig;
-  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedGitCommitAddon {
-  readonly name: "rielflow/git-commit";
-  readonly version: "1";
-  readonly config: GitCommitAddonConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedGitPushAddon {
-  readonly name: "rielflow/git-push";
-  readonly version: "1";
-  readonly config: GitPushAddonConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedCodexWorkerAddon {
-  readonly name: "rielflow/codex-worker";
-  readonly version: "1";
-  readonly config: AgentWorkerAddonConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export interface ResolvedClaudeCodeWorkerAddon {
-  readonly name: "rielflow/claude-code-worker";
-  readonly version: "1";
-  readonly config: AgentWorkerAddonConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
-export type ResolvedAgentWorkerAddon =
-  | ResolvedCodexWorkerAddon
-  | ResolvedClaudeCodeWorkerAddon;
-
-export interface ResolvedWorkflowPackageSandboxReviewAddon {
-  readonly name: "rielflow/workflow-package-sandbox-review";
-  readonly version: "1";
-  readonly config: WorkflowPackageSandboxReviewAddonConfig;
-  readonly inputs?: Readonly<Record<string, unknown>>;
-}
-
 /**
  * Phase-2 nested superviser control-plane add-ons. Invoked as `nodeType: "addon"`
  * and executed natively when a {@link import("./superviser-control").SuperviserRuntimeControl}
@@ -790,24 +579,6 @@ export function getSuperviserControlAddonProviderOperationId(
 ): string {
   return SUPERVISER_CONTROL_ADDON_METADATA[name].providerOperationId;
 }
-
-export interface ResolvedSuperviserControlAddon {
-  readonly name: SuperviserControlAddonName;
-  readonly version: "1";
-}
-
-export type ResolvedNodeAddon =
-  | ResolvedChatReplyWorkerAddon
-  | ResolvedChatPersonaRouterAddon
-  | ResolvedXGatewayReadAddon
-  | ResolvedXGatewayAddon
-  | ResolvedMailGatewayReadAddon
-  | ResolvedMailGatewayAddon
-  | ResolvedGitCommitAddon
-  | ResolvedGitPushAddon
-  | ResolvedAgentWorkerAddon
-  | ResolvedWorkflowPackageSandboxReviewAddon
-  | ResolvedSuperviserControlAddon;
 
 export interface NodePayload {
   readonly id: string;

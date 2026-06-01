@@ -8,6 +8,7 @@ export {
 } from "./claude";
 export { CodexAgentAdapter, type CodexAdapterConfig } from "./codex";
 export { CursorCliAgentAdapter, type CursorAdapterConfig } from "./cursor";
+export { CursorSdkAdapter, type CursorSdkAdapterConfig } from "./cursor-sdk";
 export {
   DispatchingNodeAdapter,
   resolveNodeExecutionBackend,

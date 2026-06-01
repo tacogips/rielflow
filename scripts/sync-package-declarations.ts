@@ -226,6 +226,11 @@ const packageDeclarationContracts: readonly PackageDeclarationContract[] = [
         rewritePackageSourceImports: true,
       },
       {
+        source: "packages/rielflow-adapters/src/cursor-sdk.d.ts",
+        target: "cursor-sdk.d.ts",
+        rewritePackageSourceImports: true,
+      },
+      {
         source: "packages/rielflow-adapters/src/dispatch.d.ts",
         target: "dispatch.d.ts",
         rewritePackageSourceImports: true,

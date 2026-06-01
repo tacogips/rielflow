@@ -1,10 +1,10 @@
 import type {
   AgentWorkerAddonConfig,
-  CliAgentBackend,
   GitCommitAddonConfig,
   GitPushAddonConfig,
   MailGatewayAddonConfig,
   MailGatewayReadAddonConfig,
+  NodeExecutionBackend,
   NodeOutputContract,
   NodePayload,
   ResolvedNodeAddon,
@@ -16,7 +16,10 @@ import type {
 import {
   AGENT_WORKER_ADDON_VERSION,
   CLAUDE_CODE_WORKER_ADDON_NAME,
+  CLAUDE_SDK_WORKER_ADDON_NAME,
   CODEX_WORKER_ADDON_NAME,
+  CODEX_SDK_WORKER_ADDON_NAME,
+  CURSOR_SDK_WORKER_ADDON_NAME,
   GIT_COMMIT_ADDON_NAME,
   GIT_COMMIT_ADDON_VERSION,
   GIT_COMMIT_OUTPUT,
@@ -374,19 +377,54 @@ export function isAgentWorkerAddonName(
   name: string,
 ): name is
   | typeof CODEX_WORKER_ADDON_NAME
-  | typeof CLAUDE_CODE_WORKER_ADDON_NAME {
+  | typeof CLAUDE_CODE_WORKER_ADDON_NAME
+  | typeof CODEX_SDK_WORKER_ADDON_NAME
+  | typeof CLAUDE_SDK_WORKER_ADDON_NAME
+  | typeof CURSOR_SDK_WORKER_ADDON_NAME {
   return (
-    name === CODEX_WORKER_ADDON_NAME || name === CLAUDE_CODE_WORKER_ADDON_NAME
+    name === CODEX_WORKER_ADDON_NAME ||
+    name === CLAUDE_CODE_WORKER_ADDON_NAME ||
+    name === CODEX_SDK_WORKER_ADDON_NAME ||
+    name === CLAUDE_SDK_WORKER_ADDON_NAME ||
+    name === CURSOR_SDK_WORKER_ADDON_NAME
   );
 }
 export function resolveAgentWorkerBackend(
-  name: typeof CODEX_WORKER_ADDON_NAME | typeof CLAUDE_CODE_WORKER_ADDON_NAME,
-): CliAgentBackend {
+  name:
+    | typeof CODEX_WORKER_ADDON_NAME
+    | typeof CLAUDE_CODE_WORKER_ADDON_NAME
+    | typeof CODEX_SDK_WORKER_ADDON_NAME
+    | typeof CLAUDE_SDK_WORKER_ADDON_NAME
+    | typeof CURSOR_SDK_WORKER_ADDON_NAME,
+): NodeExecutionBackend {
   switch (name) {
     case CODEX_WORKER_ADDON_NAME:
       return "codex-agent";
     case CLAUDE_CODE_WORKER_ADDON_NAME:
       return "claude-code-agent";
+    case CODEX_SDK_WORKER_ADDON_NAME:
+      return "official/openai-sdk";
+    case CLAUDE_SDK_WORKER_ADDON_NAME:
+      return "official/anthropic-sdk";
+    case CURSOR_SDK_WORKER_ADDON_NAME:
+      return "official/cursor-sdk";
+  }
+}
+
+function describeAgentWorkerAddon(name: string): string {
+  switch (name) {
+    case CODEX_WORKER_ADDON_NAME:
+      return "Built-in worker that runs a Codex agent task.";
+    case CLAUDE_CODE_WORKER_ADDON_NAME:
+      return "Built-in worker that runs a Claude Code agent task.";
+    case CODEX_SDK_WORKER_ADDON_NAME:
+      return "Built-in worker that runs an OpenAI SDK task for Codex-style models.";
+    case CLAUDE_SDK_WORKER_ADDON_NAME:
+      return "Built-in worker that runs an Anthropic SDK task for Claude models.";
+    case CURSOR_SDK_WORKER_ADDON_NAME:
+      return "Built-in worker that runs a Cursor SDK task.";
+    default:
+      return "Built-in agent worker.";
   }
 }
 export function resolveAgentWorkerPayload(input: {
@@ -448,10 +486,7 @@ export function resolveAgentWorkerPayload(input: {
   return {
     payload: {
       id: input.nodeId,
-      description:
-        input.addon.name === CODEX_WORKER_ADDON_NAME
-          ? "Built-in worker that runs a Codex agent task."
-          : "Built-in worker that runs a Claude Code agent task.",
+      description: describeAgentWorkerAddon(input.addon.name),
       model: normalized.config.model,
       executionBackend: resolveAgentWorkerBackend(input.addon.name),
       promptTemplate: normalized.config.promptTemplate,

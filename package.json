@@ -50,6 +50,7 @@
   "trustedDependencies": [],
   "dependencies": {
     "@anthropic-ai/sdk": "0.78.0",
+    "@cursor/sdk": "1.0.17",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.218.0",
     "@opentelemetry/resources": "2.7.1",

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -30,6 +30,16 @@ const baseContext: AdapterExecutionContext = {
   timeoutMs: 1000,
   signal: new AbortController().signal,
 };
+
+const originalOpenAiApiKey = process.env["OPENAI_API_KEY"];
+
+afterEach(() => {
+  if (originalOpenAiApiKey === undefined) {
+    delete process.env["OPENAI_API_KEY"];
+    return;
+  }
+  process.env["OPENAI_API_KEY"] = originalOpenAiApiKey;
+});
 
 describe("OpenAiSdkAdapter", () => {
   test("passes systemPromptText as OpenAI instructions", async () => {

@@ -144,6 +144,33 @@ afterEach(async () => {
 });
 
 describe("inspectWorkflowRuntimeReadiness", () => {
+  test("reports Cursor SDK backend readiness from CURSOR_API_KEY", async () => {
+    const readiness = await inspectWorkflowRuntimeReadiness(
+      makeBundle({
+        worker: {
+          id: "worker",
+          executionBackend: "official/cursor-sdk",
+          model: "composer-2",
+          promptTemplate: "worker",
+          variables: {},
+        },
+      }),
+      { env: { CURSOR_API_KEY: "test-key" } },
+    );
+
+    expect(
+      findRequirement(
+        readiness.requirements,
+        "agent-backend:official/cursor-sdk",
+      ),
+    ).toMatchObject({
+      kind: "agent-backend",
+      status: "available",
+      detail: expect.stringContaining("CURSOR_API_KEY is configured"),
+      sourceStepIds: expect.arrayContaining(["worker"]),
+    });
+  });
+
   test("marks cursor-cli-agent backend available when bundled SDK reports cursor-agent available", async () => {
     agentCliMocks.push(
       mockAgentBackendReadinessOperations({

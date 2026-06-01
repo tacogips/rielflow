@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import type {
   AdapterExecutionContext,
   AdapterExecutionInput,
@@ -30,6 +30,16 @@ const baseContext: AdapterExecutionContext = {
   timeoutMs: 1000,
   signal: new AbortController().signal,
 };
+
+const originalAnthropicApiKey = process.env["ANTHROPIC_API_KEY"];
+
+afterEach(() => {
+  if (originalAnthropicApiKey === undefined) {
+    delete process.env["ANTHROPIC_API_KEY"];
+    return;
+  }
+  process.env["ANTHROPIC_API_KEY"] = originalAnthropicApiKey;
+});
 
 describe("AnthropicSdkAdapter", () => {
   test("passes systemPromptText as Anthropic system content", async () => {

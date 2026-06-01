@@ -699,6 +699,7 @@ export async function probeAgentBackendAuthReadiness(
     case "cursor-cli-agent":
     case "official/openai-sdk":
     case "official/anthropic-sdk":
+    case "official/cursor-sdk":
       return [];
   }
 }
@@ -716,6 +717,7 @@ export async function probeAgentBackendNodeExecutability(
       return await probeCursorNodeExecutability(candidate, options);
     case "official/openai-sdk":
     case "official/anthropic-sdk":
+    case "official/cursor-sdk":
       return [
         unknownResult(
           candidate,
