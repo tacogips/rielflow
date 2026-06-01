@@ -1,0 +1,13 @@
+{
+  "workflowInput": {
+    "accountUsername": "@yu_kawa_taco",
+    "lookbackMinutes": 60,
+    "maxPosts": 50,
+    "stateFile": ".rielflow-data/x-follower-ai-business-digest/mock-state.json",
+    "replyTarget": {
+      "sourceId": "telegram-gateway-personas",
+      "provider": "telegram",
+      "conversationId": "-1001234567890"
+    }
+  }
+}

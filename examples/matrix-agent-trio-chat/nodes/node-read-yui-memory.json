@@ -1,0 +1,16 @@
+{
+  "id": "read-yui-memory",
+  "description": "Read recent Yui Codex memory from the configured local memory root before the persona replies.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/read-persona-memory.sh",
+    "envTemplate": {
+      "RIEL_TRIO_MEMORY_PERSONA_ID": "yui",
+      "RIEL_TRIO_MEMORY_PERSONA_NAME": "Yui Codex"
+    }
+  },
+  "output": {
+    "description": "Return recent Yui Codex memory markdown and the persona-specific memory directory."
+  }
+}

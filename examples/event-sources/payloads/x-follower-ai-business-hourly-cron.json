@@ -1,0 +1,11 @@
+{
+  "scheduledAt": "2026-06-01T00:00:00.000Z",
+  "scheduledLocalTime": "2026-06-01 09:00:00",
+  "firedAt": "2026-06-01T00:00:00.500Z",
+  "timezone": "Asia/Tokyo",
+  "replyTarget": {
+    "sourceId": "telegram-gateway-personas",
+    "provider": "telegram",
+    "conversationId": "-1001234567890"
+  }
+}

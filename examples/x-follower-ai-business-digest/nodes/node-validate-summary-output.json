@@ -1,0 +1,12 @@
+{
+  "id": "validate-summary-output",
+  "description": "Deterministically validates LLM digest output against normalized selected posts and rebuilds Telegram text from allowed records.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/validate-summary-output.sh"
+  },
+  "output": {
+    "description": "Return JSON with when.should_send_telegram, payload.replyText, payload.maxFetchedPostId, and validated payload.topicDigests."
+  }
+}

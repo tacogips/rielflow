@@ -11,6 +11,12 @@
 - Messages that call Rina Cursor route only to Rina.
 - If the selected persona is asked to hear another named persona too, that node
   sets a handoff flag such as `handoff_mika`, allowing a follow-up node response.
+- Each persona reads only its own recent markdown memory before replying, using
+  `workflowInput.memoryRoot`, `RIEL_TRIO_MEMORY_ROOT`, or the example fallback
+  `/tmp/riflow-tribot`.
+- Each persona can return `memoryEntries` for explicit remember requests,
+  corrections, durable preferences, important events, or refreshed old memories;
+  the workflow writes them to `{memoryRoot}/{personaId}/{YYYY-MM-DD_HH}.md`.
 - Matrix replies are sent through `rielflow/chat-reply-worker` to the same
   conversation and thread from the normalized chat event.
 - Matrix event source fixtures validate with `matrix-agent-trio-to-workflow`.

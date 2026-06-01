@@ -10,16 +10,44 @@
     "personaName": "Rina Cursor",
     "shortName": "Rina",
     "backendName": "cursor-cli-agent",
-    "peerSummary": "Yui Codex is a refined secretary and default coordinator. Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent."
+    "peerSummary": "Yui Codex is a refined secretary and default coordinator. Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent.",
+    "personaId": "rina",
+    "memoryRoot": "{{workflowInput.memoryRoot}}"
   },
   "output": {
-    "description": "Return Rina's chat reply; optional handoff flags are adapter-level when values.",
+    "description": "Return Rina's chat reply; optional handoff flags are adapter-level when values; optional memoryEntries are written by the following deterministic memory node.",
     "jsonSchema": {
       "type": "object",
-      "required": ["replyText"],
+      "required": [
+        "replyText"
+      ],
       "properties": {
         "replyText": {
           "type": "string"
+        },
+        "memoryEntries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content"
+            ],
+            "additionalProperties": true
+          }
         }
       },
       "additionalProperties": true

@@ -60,12 +60,36 @@
       "nodeFile": "nodes/node-yui-codex.json"
     },
     {
+      "id": "read-yui-memory",
+      "nodeFile": "nodes/node-read-yui-memory.json"
+    },
+    {
+      "id": "write-yui-memory",
+      "nodeFile": "nodes/node-write-yui-memory.json"
+    },
+    {
       "id": "mika-claude",
       "nodeFile": "nodes/node-mika-claude.json"
     },
     {
+      "id": "read-mika-memory",
+      "nodeFile": "nodes/node-read-mika-memory.json"
+    },
+    {
+      "id": "write-mika-memory",
+      "nodeFile": "nodes/node-write-mika-memory.json"
+    },
+    {
       "id": "rina-cursor",
       "nodeFile": "nodes/node-rina-cursor.json"
+    },
+    {
+      "id": "read-rina-memory",
+      "nodeFile": "nodes/node-read-rina-memory.json"
+    },
+    {
+      "id": "write-rina-memory",
+      "nodeFile": "nodes/node-write-rina-memory.json"
     },
     {
       "id": "send-yui-reply",
@@ -117,16 +141,26 @@
       "role": "worker",
       "transitions": [
         {
-          "toStepId": "yui-codex",
+          "toStepId": "read-yui-memory",
           "label": "target_yui"
         },
         {
-          "toStepId": "mika-claude",
+          "toStepId": "read-mika-memory",
           "label": "target_mika"
         },
         {
-          "toStepId": "rina-cursor",
+          "toStepId": "read-rina-memory",
           "label": "target_rina"
+        }
+      ]
+    },
+    {
+      "id": "read-yui-memory",
+      "nodeId": "read-yui-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "yui-codex"
         }
       ]
     },
@@ -136,14 +170,24 @@
       "role": "worker",
       "transitions": [
         {
+          "toStepId": "write-yui-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-yui-memory",
+      "nodeId": "write-yui-memory",
+      "role": "worker",
+      "transitions": [
+        {
           "toStepId": "send-yui-reply"
         },
         {
-          "toStepId": "mika-claude",
+          "toStepId": "read-mika-memory",
           "label": "handoff_mika"
         },
         {
-          "toStepId": "rina-cursor",
+          "toStepId": "read-rina-memory",
           "label": "handoff_rina"
         }
       ]
@@ -154,19 +198,39 @@
       "role": "worker"
     },
     {
+      "id": "read-mika-memory",
+      "nodeId": "read-mika-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "mika-claude"
+        }
+      ]
+    },
+    {
       "id": "mika-claude",
       "nodeId": "mika-claude",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "write-mika-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-mika-memory",
+      "nodeId": "write-mika-memory",
       "role": "worker",
       "transitions": [
         {
           "toStepId": "send-mika-reply"
         },
         {
-          "toStepId": "yui-codex",
+          "toStepId": "read-yui-memory",
           "label": "handoff_yui"
         },
         {
-          "toStepId": "rina-cursor",
+          "toStepId": "read-rina-memory",
           "label": "handoff_rina"
         }
       ]
@@ -177,19 +241,39 @@
       "role": "worker"
     },
     {
+      "id": "read-rina-memory",
+      "nodeId": "read-rina-memory",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "rina-cursor"
+        }
+      ]
+    },
+    {
       "id": "rina-cursor",
       "nodeId": "rina-cursor",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "write-rina-memory"
+        }
+      ]
+    },
+    {
+      "id": "write-rina-memory",
+      "nodeId": "write-rina-memory",
       "role": "worker",
       "transitions": [
         {
           "toStepId": "send-rina-reply"
         },
         {
-          "toStepId": "yui-codex",
+          "toStepId": "read-yui-memory",
           "label": "handoff_yui"
         },
         {
-          "toStepId": "mika-claude",
+          "toStepId": "read-mika-memory",
           "label": "handoff_mika"
         }
       ]

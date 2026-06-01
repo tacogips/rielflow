@@ -1,0 +1,46 @@
+{
+  "id": "x-follower-ai-business-hourly-to-workflow",
+  "sourceId": "x-follower-ai-business-hourly-cron",
+  "outputDestinations": ["telegram-gateway-persona-replies"],
+  "workflowName": "x-follower-ai-business-digest",
+  "match": {
+    "eventType": "cron.tick"
+  },
+  "inputMapping": {
+    "mode": "template",
+    "template": {
+      "request": "Fetch recent X follower posts, summarize only AI/business items, and post a Telegram digest.",
+      "accountUsername": "@yu_kawa_taco",
+      "lookbackMinutes": 60,
+      "maxPosts": 50,
+      "stateFile": ".rielflow-data/x-follower-ai-business-digest/state.json",
+      "scheduledAt": "{{event.input.scheduledAt}}",
+      "firedAt": "{{event.input.firedAt}}",
+      "timezone": "{{event.input.timezone}}",
+      "replyTarget": "{{event.input.replyTarget}}"
+    },
+    "mirrorToHumanInput": false
+  },
+  "execution": {
+    "async": false,
+    "dedupeWindowMs": 300000,
+    "maxConcurrentPerKey": 1,
+    "concurrencyKey": "{{event.sourceId}}"
+  },
+  "taskPlanning": {
+    "enabled": false
+  },
+  "mailboxBridge": {
+    "output": {
+      "reply": {
+        "mode": "none"
+      },
+      "progress": {
+        "mode": "none"
+      },
+      "control": {
+        "mode": "none"
+      }
+    }
+  }
+}

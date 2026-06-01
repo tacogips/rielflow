@@ -1,0 +1,12 @@
+{
+  "id": "normalize-fetched-posts",
+  "description": "Deterministically applies the one-hour window and cursor filter to raw x-gateway posts before AI summarization.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/normalize-fetched-posts.sh"
+  },
+  "output": {
+    "description": "Output envelope with normalized fetchedPosts, selectedPosts, fetchWindow, and maxFetchedPostId."
+  }
+}

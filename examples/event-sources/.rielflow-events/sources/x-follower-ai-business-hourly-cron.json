@@ -1,0 +1,12 @@
+{
+  "id": "x-follower-ai-business-hourly-cron",
+  "kind": "cron",
+  "schedule": "0 0 * * * *",
+  "timezone": "Asia/Tokyo",
+  "replyTarget": {
+    "sourceId": "telegram-gateway-personas",
+    "provider": "telegram",
+    "conversationId": "-1001234567890",
+    "conversationIdEnv": "RIEL_TELEGRAM_CHAT_ID"
+  }
+}

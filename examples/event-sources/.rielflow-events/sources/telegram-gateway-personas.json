@@ -16,9 +16,9 @@
     "offsetPath": "telegram/telegram-gateway-personas-offset.json"
   },
   "history": {
-    "maxMessages": 20,
-    "maxBytes": 32768,
-    "maxAgeMs": 86400000,
+    "maxMessages": 100,
+    "maxBytes": 131072,
+    "maxAgeMs": 2592000000,
     "scope": "chat",
     "includeBotMessages": false
   },

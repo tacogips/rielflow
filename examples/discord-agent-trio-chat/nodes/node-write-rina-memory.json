@@ -1,0 +1,16 @@
+{
+  "id": "write-rina-memory",
+  "description": "Persist Rina Cursor memory entries proposed by the persona and pass through reply/handoff flags.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/write-persona-memory.sh",
+    "envTemplate": {
+      "RIEL_TRIO_MEMORY_PERSONA_ID": "rina",
+      "RIEL_TRIO_MEMORY_PERSONA_NAME": "Rina Cursor"
+    }
+  },
+  "output": {
+    "description": "Return Rina Cursor replyText and handoff flags after writing any memoryEntries."
+  }
+}

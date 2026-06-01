@@ -197,6 +197,9 @@ Discord chat workflow for three named bot personas in one channel:
 - persona icons are checked in under `assets/icons/`
 - initial persona selection uses the provider-neutral `rielflow/chat-persona-router` add-on, so the workflow does not need a Discord-specific routing prompt
 - a selected persona can set handoff flags such as `handoff_mika` when the user explicitly asks to hear another persona too
+- each persona reads and writes only its own local markdown memory before and
+  after replying. Set `workflowInput.memoryRoot` or `RIEL_TRIO_MEMORY_ROOT` to
+  choose the storage root; examples default to `/tmp/riflow-tribot`
 - Discord replies use `rielflow/chat-reply-worker` and dry-run when a direct local run has no chat target
 
 Validate it:
@@ -226,6 +229,9 @@ ingestion:
 - routes replies as Yui, Mika, or Rina through the provider-neutral
   `rielflow/chat-persona-router` add-on with the same persona specs as the
   Discord trio
+- each persona reads and writes only its own local markdown memory before and
+  after replying. Set `workflowInput.memoryRoot` or `RIEL_TRIO_MEMORY_ROOT` to
+  choose the storage root; examples default to `/tmp/riflow-tribot`
 - sends replies through `rielflow/chat-reply-worker` and the
   `telegram-gateway-persona-replies` chat destination
 
@@ -272,6 +278,65 @@ bun run packages/rielflow/src/bin.ts events emit telegram-time-signal-cron \
   --output json
 ```
 
+### `x-follower-ai-business-digest`
+
+Hourly X follower-post digest for Telegram:
+
+- receives `cron.tick` events from `x-follower-ai-business-hourly-cron`
+- reads `.rielflow-data/x-follower-ai-business-digest/state.json` by default
+  and keeps the saved post id for dedupe/accounting
+- runs `rielflow/x-gateway-read` in Docker with
+  `ghcr.io/tacogips/x-gateway:latest`
+- queries the stable x-gateway `followingTimeline` field for followed-account posts
+- maps X credentials from environment variables only; do not put token values
+  in workflow files
+- uses a Codex worker prompt that treats fetched posts as untrusted data and
+  proposes event/topic digests rather than per-user post summaries, then a
+  deterministic validation step drops any source id that is not one of the
+  normalized selected posts and rebuilds Telegram text from validated
+  post/user links and metrics
+- reports each topic with aggregate views, posting-user count, and up to three
+  linked posting users so the digest explains what happened before who posted it
+- posts through the existing `telegram-gateway-persona-replies` destination
+  only when the digest is non-empty
+- disables automatic event final/error replies so workflow failures are not
+  posted to Telegram
+- never writes fetched post bodies to the workflow bundle; the cursor file keeps
+  only the newest post id and must live under an ignored/private runtime path
+  such as `.rielflow-data/`
+- raw fetched posts can still appear in rielflow runtime artifacts, so live runs
+  must use an ignored artifact root such as
+  `.rielflow-artifact/x-follower-ai-business-digest`
+
+Required live-run environment variables:
+
+```bash
+export X_GW_ACCOUNT_USERNAME=@yu_kawa_taco
+export X_GW_AUTH_MODE=oauth1
+export X_GW_ACCESS_TOKEN=<x-access-token>
+export X_GW_ACCESS_TOKEN_SECRET=<x-access-token-secret>
+export X_GW_CONSUMER_KEY=<x-consumer-key>
+export X_GW_CONSUMER_SECRET=<x-consumer-secret>
+export RIEL_TELEGRAM_CHAT_ID=<telegram-chat-id>
+```
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate x-follower-ai-business-digest --workflow-definition-dir ./examples
+```
+
+Run the deterministic cron fixture:
+
+```bash
+bun run packages/rielflow/src/bin.ts events emit x-follower-ai-business-hourly-cron \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./.rielflow-artifact/x-follower-ai-business-digest \
+  --event-file ./examples/event-sources/payloads/x-follower-ai-business-hourly-cron.json \
+  --output json
+```
+
 ### `matrix-agent-trio-chat`
 
 Matrix persona workflow using the same provider-neutral trio authoring shape as
@@ -282,6 +347,9 @@ the Discord and Telegram examples:
 - routes replies as Yui, Mika, or Rina through `rielflow/chat-persona-router`
 - can select separate Matrix access tokens with `replyAsTemplate` and
   `team-matrix.replyBots`
+- each persona reads and writes only its own local markdown memory before and
+  after replying. Set `workflowInput.memoryRoot` or `RIEL_TRIO_MEMORY_ROOT` to
+  choose the storage root; examples default to `/tmp/riflow-tribot`
 - sends replies through `rielflow/chat-reply-worker` and the
   `matrix-persona-replies` chat destination
 

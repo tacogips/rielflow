@@ -77,8 +77,14 @@ describe("chat agent trio example parity", () => {
       ).toEqual([
         "route-message",
         "yui-codex",
+        "read-yui-memory",
+        "write-yui-memory",
         "mika-claude",
+        "read-mika-memory",
+        "write-mika-memory",
         "rina-cursor",
+        "read-rina-memory",
+        "write-rina-memory",
         "send-yui-reply",
         "send-mika-reply",
         "send-rina-reply",
@@ -87,11 +93,17 @@ describe("chat agent trio example parity", () => {
         arrayAtPath(workflow, ["steps"]).map((step) => step["id"]),
       ).toEqual([
         "route-message",
+        "read-yui-memory",
         "yui-codex",
+        "write-yui-memory",
         "send-yui-reply",
+        "read-mika-memory",
         "mika-claude",
+        "write-mika-memory",
         "send-mika-reply",
+        "read-rina-memory",
         "rina-cursor",
+        "write-rina-memory",
         "send-rina-reply",
       ]);
 

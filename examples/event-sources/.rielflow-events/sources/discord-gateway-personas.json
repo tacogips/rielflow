@@ -13,9 +13,9 @@
     }
   ],
   "history": {
-    "maxMessages": 20,
-    "maxBytes": 32768,
-    "maxAgeMs": 86400000,
+    "maxMessages": 100,
+    "maxBytes": 131072,
+    "maxAgeMs": 2592000000,
     "scope": "thread-or-channel",
     "includeBotMessages": false,
     "fetchOnStart": false,

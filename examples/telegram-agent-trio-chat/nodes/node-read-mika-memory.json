@@ -1,0 +1,16 @@
+{
+  "id": "read-mika-memory",
+  "description": "Read recent Mika Trend memory from the configured local memory root before the persona replies.",
+  "nodeType": "command",
+  "variables": {},
+  "command": {
+    "scriptPath": "scripts/read-persona-memory.sh",
+    "envTemplate": {
+      "RIEL_TRIO_MEMORY_PERSONA_ID": "mika",
+      "RIEL_TRIO_MEMORY_PERSONA_NAME": "Mika Trend"
+    }
+  },
+  "output": {
+    "description": "Return recent Mika Trend memory markdown and the persona-specific memory directory."
+  }
+}

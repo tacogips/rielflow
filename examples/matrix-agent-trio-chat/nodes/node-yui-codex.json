@@ -9,17 +9,47 @@
     "personaName": "Yui Codex",
     "shortName": "Yui",
     "backendName": "codex-agent",
-    "codexAdditionalArgs": ["--ignore-rules"],
-    "peerSummary": "Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent. Rina Cursor is an intellectual otaku and technical analyst."
+    "codexAdditionalArgs": [
+      "--ignore-rules"
+    ],
+    "peerSummary": "Mika Trend is a gyaru entertainment and trend expert backed by claude-code-agent. Rina Cursor is an intellectual otaku and technical analyst.",
+    "personaId": "yui",
+    "memoryRoot": "{{workflowInput.memoryRoot}}"
   },
   "output": {
-    "description": "Return Yui's chat reply; optional handoff flags are adapter-level when values.",
+    "description": "Return Yui's chat reply; optional handoff flags are adapter-level when values; optional memoryEntries are written by the following deterministic memory node.",
     "jsonSchema": {
       "type": "object",
-      "required": ["replyText"],
+      "required": [
+        "replyText"
+      ],
       "properties": {
         "replyText": {
           "type": "string"
+        },
+        "memoryEntries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "content"
+            ],
+            "additionalProperties": true
+          }
         }
       },
       "additionalProperties": true

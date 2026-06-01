@@ -82,7 +82,9 @@ export function dependencyIdentity(input: {
   };
 }
 
-function packageIdentityKey(identity: WorkflowPackageDependencyIdentity): string {
+function packageIdentityKey(
+  identity: WorkflowPackageDependencyIdentity,
+): string {
   return [
     identity.registryUrl,
     identity.sourceBranch,
@@ -377,13 +379,10 @@ export async function installManifestDependencies(input: {
         ? {}
         : { options: input.checkoutInput.options }),
     };
-    const checkedOut = await input.checkoutDependency(
-      dependencyInput,
-      {
-        ...input.context,
-        stack: [...input.context.stack, identity],
-      },
-    );
+    const checkedOut = await input.checkoutDependency(dependencyInput, {
+      ...input.context,
+      stack: [...input.context.stack, identity],
+    });
     if (!checkedOut.ok) {
       return checkedOut;
     }

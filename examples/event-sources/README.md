@@ -72,7 +72,10 @@ workflow and sends workflow replies through the explicit
 `release-matrix-chat` chat destination. The binding
 `matrix-agent-trio-to-workflow` runs `matrix-agent-trio-chat` for the
 `!persona:matrix.example` room and sends Yui, Mika, or Rina replies through
-`matrix-persona-replies`. Matrix support currently
+`matrix-persona-replies`. The trio workflow stores only per-persona local
+markdown memory under `workflowInput.memoryRoot`, `RIEL_TRIO_MEMORY_ROOT`, or
+the fallback `/tmp/riflow-tribot`; this is separate from Matrix event
+history and remains outside the repository. Matrix support currently
 handles text-like `m.room.message` events from configured rooms, optional
 bounded text-compatible attachment downloads, and Matrix Client-Server room
 sends; encrypted rooms, encrypted attachments, binary OCR, audio/video
@@ -174,7 +177,10 @@ The companion binding `chat-sdk-discord-to-agent-trio` dispatches the
 Mika Trend, and Rina Cursor are routed as separate named personas by
 `rielflow/chat-persona-router`. Use
 `examples/discord-agent-trio-chat/assets/icons/` as the Discord application icon
-source files for the three bot applications.
+source files for the three bot applications. Each trio persona also has its own
+local markdown memory. Set `RIEL_TRIO_MEMORY_ROOT` for served examples, or pass
+`workflowInput.memoryRoot` for a single run; the fallback example root is
+`/tmp/riflow-tribot`, outside the repository.
 
 Serve the Discord source with env-var references only:
 
@@ -250,7 +256,10 @@ path and does not require an external Chat SDK Telegram deployment. The Gateway
 runner polls Telegram `getUpdates`, filters to configured chats when `chats` is
 set, ignores bot and self messages by default, attaches bounded persisted chat
 history to `event.input.history`, and sends workflow replies through Telegram
-`sendMessage`.
+`sendMessage`. The paired trio workflow uses the same per-persona local
+markdown memory as the Discord trio; set `RIEL_TRIO_MEMORY_ROOT` for served
+examples or use `workflowInput.memoryRoot` for one run. The default example
+root is `/tmp/riflow-tribot`.
 
 Serve the Gateway source with a Telegram bot token and bot id. Add the bot to
 the configured Telegram chat before serving:
@@ -313,6 +322,31 @@ rielflow events emit telegram-time-signal-cron \
   --event-root ./examples/event-sources/.rielflow-events \
   --artifact-root ./tmp/event-source-demo/workflow-artifacts \
   --event-file ./examples/event-sources/payloads/telegram-time-signal-cron.json \
+  --output json
+```
+
+The `x-follower-ai-business-hourly-cron` source demonstrates a scheduled
+Telegram digest backed by Dockerized x-gateway. It fires hourly with
+`0 0 * * * *`, dispatches `x-follower-ai-business-digest`, and uses
+`.rielflow-data/x-follower-ai-business-digest/state.json` to avoid duplicate
+post processing. The digest is topic-centric: related reposts, quote posts, and
+multiple posts about the same event/article are merged into one item with
+aggregate views, posting-user count, and up to three linked posting users.
+Provide X credentials through `X_GW_*` environment variables and the Telegram
+target through `RIEL_TELEGRAM_CHAT_ID`; keep live token values out of event and
+workflow files. The binding disables automatic final/error mailbox replies, so
+Telegram output should come only from the explicit digest reply step. The cursor
+file stores only the latest post id, but raw fetched posts can appear in
+workflow artifacts; for live runs, keep the artifact root under an ignored path
+such as
+`.rielflow-artifact/x-follower-ai-business-digest`.
+
+```bash
+rielflow events emit x-follower-ai-business-hourly-cron \
+  --workflow-definition-dir ./examples \
+  --event-root ./examples/event-sources/.rielflow-events \
+  --artifact-root ./.rielflow-artifact/x-follower-ai-business-digest \
+  --event-file ./examples/event-sources/payloads/x-follower-ai-business-hourly-cron.json \
   --output json
 ```
 

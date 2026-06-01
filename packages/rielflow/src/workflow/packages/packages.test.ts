@@ -65,7 +65,11 @@ async function createPackagedWorkflow(input: {
   readonly backends?: readonly string[];
   readonly dependencies?: readonly (
     | string
-    | { readonly packageId: string; readonly registry?: string; readonly branch?: string }
+    | {
+        readonly packageId: string;
+        readonly registry?: string;
+        readonly branch?: string;
+      }
   )[];
 }): Promise<string> {
   const packageRoot = path.join(
@@ -2189,10 +2193,14 @@ describe("workflow package registry", () => {
         "cycle-a -> cycle-b -> cycle-a",
       );
       expect(
-        await pathExists(path.join(projectRoot, ".rielflow", "workflows", "cycle-a")),
+        await pathExists(
+          path.join(projectRoot, ".rielflow", "workflows", "cycle-a"),
+        ),
       ).toBe(false);
       expect(
-        await pathExists(path.join(projectRoot, ".rielflow", "workflows", "cycle-b")),
+        await pathExists(
+          path.join(projectRoot, ".rielflow", "workflows", "cycle-b"),
+        ),
       ).toBe(false);
     }
   });
