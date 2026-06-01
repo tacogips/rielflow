@@ -34,6 +34,7 @@ impl-plans/
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 | `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |
+| `active/workflow-package-install-scoped-callee-validation` | Ready | `design-workflow-package-checkout#scoped-cross-workflow-validation-during-install`, `architecture#workflow-checkout-boundary` |
 | `active/workflow-package-registry` | Ready | `design-workflow-package-registry` |
 
 ## Recently Completed

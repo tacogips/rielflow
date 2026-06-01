@@ -859,6 +859,16 @@ payloads and remain validated by the existing node/backend validation layers.
 No Cursor-specific or codex-agent-specific checkout behavior should be added to
 the command layer; backend differences stay behind adapter modules.
 
+Package install validation must also use provider-neutral scoped workflow
+resolution for cross-workflow callees. The staged package workflow is validated
+as the candidate artifact, but `steps[].transitions[].toWorkflowId` targets are
+resolved through the same destination project/user/direct workflow roots that
+runtime execution would use after install. This allows packages whose workers
+run on `codex-agent` to call already installed workflows such as
+`codex-design-and-implement-review-loop` without duplicating those callee
+workflow directories in the package. Missing callees remain validation errors
+before any checkout mutation, and diagnostics should report the searched roots.
+
 ### Runtime State Boundary
 
 The runtime persists three distinct forms of state:

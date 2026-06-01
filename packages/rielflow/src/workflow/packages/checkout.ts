@@ -16,6 +16,10 @@ import { resolveConfiguredRootPath } from "../paths";
 import { err, ok, type Result } from "../result";
 import { packageChangedArtifacts } from "./change-detection";
 import { computeWorkflowPackageChecksum } from "./checksum";
+import {
+  createPackageValidationWorkflowRoot,
+  describePackageValidationFailure,
+} from "./install-validation";
 import { verifyWorkflowPackageIntegrity } from "./integrity";
 import { loadWorkflowPackageManifest } from "./manifest";
 import { runWorkflowPackageContainerCheck } from "./pre-install-container";
@@ -472,19 +476,60 @@ export async function checkoutWorkflowPackage(
   if (!integrity.ok) {
     return integrity;
   }
-  const loaded = await loadWorkflowFromDisk(path.basename(sourceDirectory), {
-    workflowRoot: path.dirname(sourceDirectory),
+  const sourceWorkflowName = path.basename(sourceDirectory);
+  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
+  const validationDestination = resolveWorkflowCheckoutDestination(
+    sourceWorkflowName,
+    {
+      ...(input.options?.cwd === undefined ? {} : { cwd: input.options.cwd }),
+      ...(input.options?.env === undefined ? {} : { env: input.options.env }),
+      ...(input.options?.userRoot === undefined
+        ? {}
+        : { userRoot: input.options.userRoot }),
+      ...(input.options?.projectRoot === undefined
+        ? {}
+        : { projectRoot: input.options.projectRoot }),
+      ...(input.options?.workflowRoot === undefined
+        ? {}
+        : { workflowRoot: input.options.workflowRoot }),
+      ...(input.userScope === undefined ? {} : { userScope: input.userScope }),
+    },
+  );
+  if (!validationDestination.ok) {
+    return err(packageFailure("USAGE", validationDestination.error.message));
+  }
+  const validationWorkflowRoot = await createPackageValidationWorkflowRoot({
+    sourceDirectory,
+    sourceWorkflowRoot: path.dirname(sourceDirectory),
+    destinationWorkflowRoot: validationDestination.value.workflowRoot,
+    userRoot,
+    includeUserScope:
+      workflowDefinitionDirOverride(input.options) === undefined &&
+      validationDestination.value.scope === "project",
+  });
+  const loaded = await loadWorkflowFromDisk(sourceWorkflowName, {
+    workflowRoot: validationWorkflowRoot.workflowRoot,
     ...(input.options?.cwd === undefined ? {} : { cwd: input.options.cwd }),
     ...(input.options?.env === undefined ? {} : { env: input.options.env }),
     ...(input.options?.userRoot === undefined
       ? {}
       : { userRoot: input.options.userRoot }),
+  }).finally(async () => {
+    await removePathIfPresent(validationWorkflowRoot.workflowRoot);
   });
   if (!loaded.ok) {
     return err(
       packageFailure(
         "VALIDATION",
-        `package workflow validation failed: ${loaded.error.message}`,
+        `package workflow validation failed: ${describePackageValidationFailure(
+          {
+            message: loaded.error.message,
+            ...(loaded.error.issues === undefined
+              ? {}
+              : { issues: loaded.error.issues }),
+            searchedRoots: validationWorkflowRoot.searchedRoots,
+          },
+        )}`,
       ),
     );
   }
@@ -550,7 +595,6 @@ export async function checkoutWorkflowPackage(
   const destinationExists = await pathExists(
     destination.value.workflowDirectory,
   );
-  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
   const projectRootIdentity =
     destination.value.scope === "project"
       ? resolveProjectRootForSkillInstall({

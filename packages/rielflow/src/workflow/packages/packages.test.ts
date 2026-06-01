@@ -159,6 +159,59 @@ async function createPackagedWorkflow(input: {
   return packageRoot;
 }
 
+async function addCrossWorkflowTransition(input: {
+  readonly workflowDirectory: string;
+  readonly toWorkflowId: string;
+  readonly toStepId?: string;
+  readonly resumeStepId?: string;
+}): Promise<void> {
+  const workflowJsonPath = path.join(input.workflowDirectory, "workflow.json");
+  const workflowJson = JSON.parse(
+    await readFile(workflowJsonPath, "utf8"),
+  ) as Record<string, unknown>;
+  const steps = workflowJson["steps"];
+  if (!Array.isArray(steps)) {
+    throw new Error("workflow fixture is missing steps[]");
+  }
+  const firstStep = steps[0];
+  if (
+    typeof firstStep !== "object" ||
+    firstStep === null ||
+    Array.isArray(firstStep)
+  ) {
+    throw new Error("workflow fixture first step is invalid");
+  }
+  const firstStepRecord = firstStep as Record<string, unknown>;
+  firstStepRecord["transitions"] = [
+    {
+      toWorkflowId: input.toWorkflowId,
+      toStepId: input.toStepId ?? "main-worker",
+      resumeStepId: input.resumeStepId ?? "main-worker",
+    },
+  ];
+  await writeFile(
+    workflowJsonPath,
+    `${JSON.stringify(workflowJson, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+async function setWorkflowEntryStep(input: {
+  readonly workflowDirectory: string;
+  readonly entryStepId: string;
+}): Promise<void> {
+  const workflowJsonPath = path.join(input.workflowDirectory, "workflow.json");
+  const workflowJson = JSON.parse(
+    await readFile(workflowJsonPath, "utf8"),
+  ) as Record<string, unknown>;
+  workflowJson["entryStepId"] = input.entryStepId;
+  await writeFile(
+    workflowJsonPath,
+    `${JSON.stringify(workflowJson, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 async function addWorkflowLocalIdentityFiles(input: {
   readonly packageRoot: string;
   readonly workflowName: string;
@@ -1458,6 +1511,402 @@ describe("workflow package registry", () => {
           "utf8",
         ),
       ).resolves.toContain("direct-flow");
+    }
+  });
+
+  test("checkout validation resolves installed project-scope cross-workflow callees", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const projectWorkflowRoot = path.join(
+      projectRoot,
+      ".rielflow",
+      "workflows",
+    );
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "project-caller",
+      workflowName: "project-caller",
+    });
+    const callee = await createWorkflowTemplate("installed-callee", {
+      workflowRoot: projectWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(callee.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "project-caller"),
+      toWorkflowId: "installed-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "project-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "project-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.destinationDirectory).toBe(
+        path.join(projectWorkflowRoot, "project-caller"),
+      );
+    }
+  });
+
+  test("user-scope checkout validation uses user callees without project-only callees", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const userWorkflowRoot = path.join(userRoot, "workflows");
+    const projectWorkflowRoot = path.join(
+      projectRoot,
+      ".rielflow",
+      "workflows",
+    );
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "user-caller",
+      workflowName: "user-caller",
+    });
+    const userCallee = await createWorkflowTemplate("user-callee", {
+      workflowRoot: userWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    const projectOnlyCallee = await createWorkflowTemplate("project-only", {
+      workflowRoot: projectWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(userCallee.ok).toBe(true);
+    expect(projectOnlyCallee.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "user-caller"),
+      toWorkflowId: "user-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "user-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "user-caller",
+      registry: "local",
+      userScope: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.destinationDirectory).toBe(
+        path.join(userWorkflowRoot, "user-caller"),
+      );
+    }
+  });
+
+  test("user-scope checkout validation rejects project-only cross-workflow callees", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const projectWorkflowRoot = path.join(
+      projectRoot,
+      ".rielflow",
+      "workflows",
+    );
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "user-project-only-caller",
+      workflowName: "user-project-only-caller",
+    });
+    const projectOnlyCallee = await createWorkflowTemplate("project-only", {
+      workflowRoot: projectWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(projectOnlyCallee.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "user-project-only-caller"),
+      toWorkflowId: "project-only",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "user-project-only-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "user-project-only-caller",
+      registry: "local",
+      userScope: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("project-only");
+      expect(checkedOut.error.message).toContain("searched workflow roots");
+      expect(
+        await pathExists(
+          path.join(userRoot, "workflows", "user-project-only-caller"),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("checkout validation resolves callees from direct workflow definition roots", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const directWorkflowRoot = path.join(projectRoot, "direct-workflows");
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "direct-caller",
+      workflowName: "direct-caller",
+    });
+    const callee = await createWorkflowTemplate("direct-callee", {
+      workflowRoot: directWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(callee.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "direct-caller"),
+      toWorkflowId: "direct-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "direct-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "direct-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot, workflowRoot: directWorkflowRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+  });
+
+  test("checkout validation rejects user-only callees for direct workflow definition roots", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const directWorkflowRoot = path.join(projectRoot, "direct-workflows");
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "direct-user-only-caller",
+      workflowName: "direct-user-only-caller",
+    });
+    const userOnlyCallee = await createWorkflowTemplate("user-only-callee", {
+      workflowRoot: path.join(userRoot, "workflows"),
+      templateMode: "worker-only",
+    });
+    expect(userOnlyCallee.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "direct-user-only-caller"),
+      toWorkflowId: "user-only-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "direct-user-only-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "direct-user-only-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot, workflowRoot: directWorkflowRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("user-only-callee");
+      expect(checkedOut.error.message).toContain(directWorkflowRoot);
+      expect(checkedOut.error.message).not.toContain(
+        path.join(userRoot, "workflows"),
+      );
+      expect(
+        await pathExists(
+          path.join(directWorkflowRoot, "direct-user-only-caller"),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("checkout validation resolves package-local sibling workflow callees", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "sibling-caller",
+      workflowName: "sibling-caller",
+    });
+    const sibling = await createWorkflowTemplate("package-sibling", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    expect(sibling.ok).toBe(true);
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "sibling-caller"),
+      toWorkflowId: "package-sibling",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "sibling-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "sibling-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+  });
+
+  test("checkout validation lets staged package workflows shadow installed workflows", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const projectWorkflowRoot = path.join(
+      projectRoot,
+      ".rielflow",
+      "workflows",
+    );
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "shadow-caller",
+      workflowName: "shadow-caller",
+    });
+    const packageSibling = await createWorkflowTemplate("shadow-callee", {
+      workflowRoot: packageRoot,
+      templateMode: "worker-only",
+    });
+    const installedCallee = await createWorkflowTemplate("shadow-callee", {
+      workflowRoot: projectWorkflowRoot,
+      templateMode: "worker-only",
+    });
+    expect(packageSibling.ok).toBe(true);
+    expect(installedCallee.ok).toBe(true);
+    if (installedCallee.ok) {
+      await setWorkflowEntryStep({
+        workflowDirectory: installedCallee.value.workflowDirectory,
+        entryStepId: "installed-entry",
+      });
+    }
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "shadow-caller"),
+      toWorkflowId: "shadow-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "shadow-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "shadow-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+  });
+
+  test("checkout validation rejects missing callees before destination mutation", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "missing-callee-caller",
+      workflowName: "missing-callee-caller",
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(packageRoot, "missing-callee-caller"),
+      toWorkflowId: "missing-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "missing-callee-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "missing-callee-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("missing-callee");
+      expect(checkedOut.error.message).toContain("searched workflow roots");
+      expect(
+        await pathExists(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "workflows",
+            "missing-callee-caller",
+          ),
+        ),
+      ).toBe(false);
     }
   });
 

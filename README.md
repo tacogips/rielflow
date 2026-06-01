@@ -259,6 +259,14 @@ Install a package into the user catalog:
 rielflow package install worker-only-single-step --user-scope
 ```
 
+Package install validates the staged workflow before it mutates project or user
+scope. Validation uses the same scoped workflow visibility the installed
+workflow will have: package-local sibling workflows remain visible, the staged
+workflow shadows any installed workflow with the same id, project-scope installs
+can resolve already installed project and user callees, and user-scope installs
+must resolve callees from user-visible roots. Missing `toWorkflowId` callees
+still fail before install and report the searched workflow roots.
+
 List installed packages:
 
 ```bash
@@ -339,6 +347,9 @@ Useful starting points in `examples/`:
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
 - `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
   the Telegram trio chat.
+- `x-follower-ai-business-digest`: hourly X follower-post digest that fetches
+  through Dockerized x-gateway, filters AI/business posts, persists a cursor,
+  and posts useful summaries to Telegram.
 - `chat-reply-webhook`, `discord-codex-chat`,
   `chat-event-attachment-judgement`: event and chat reply examples.
 - `chat-supervisor-collaboration`: chat-triggered multi-workflow collaboration.

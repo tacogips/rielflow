@@ -24,7 +24,17 @@ metadata. Use `package remove --install-id <install-id>` when multiple package
 records may match the same package or workflow name; removal deletes the
 recorded workflow install plus managed/projected package skills.
 
-For running, listing, validating, inspecting, or monitoring existing workflows, use `rielflow-workflow-run` instead.
+Package install validation runs before destination mutation and uses the
+workflow roots that the installed workflow will see. Package-local sibling
+workflows are visible, the staged package workflow shadows an installed
+workflow with the same id, project-scope installs can resolve already installed
+project and user `toWorkflowId` callees, and `--user-scope` installs do not
+silently depend on project-only callees. Direct `--workflow-definition-dir`
+installs validate against that direct destination root. Missing callees fail
+with `VALIDATION` and searched workflow roots in the diagnostic.
+
+For running, listing, validating, inspecting, or monitoring existing workflows,
+use `rielflow-workflow-run` instead.
 
 ## Command
 
@@ -184,5 +194,9 @@ bun run packages/rielflow/src/bin.ts workflow checkout \
 - `INVALID_WORKFLOW_NAME`: rename the remote workflow directory to a safe workflow name.
 - `DUPLICATE_CHECKOUT`: rerun with `--overwrite` only if replacement is intended.
 - `USAGE`: remove unsupported checkout options such as `--endpoint`.
-- `VALIDATION`: inspect the remote bundle for invalid `workflow.json`, missing node payloads, missing prompt files, invalid step/node references, or unsafe workflow-local file paths.
+- `VALIDATION`: inspect the remote bundle for invalid `workflow.json`, missing
+  node payloads, missing prompt files, invalid step/node references, unsafe
+  workflow-local file paths, or unresolved cross-workflow `toWorkflowId`
+  callees. Package install validation diagnostics include the workflow roots
+  searched for cross-workflow callees.
 - `FETCH_FAILED`: confirm the repository, ref, directory path, and network access.

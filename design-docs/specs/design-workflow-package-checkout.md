@@ -59,6 +59,8 @@ managed install record for both workflows and skills.
   projection into vendor locations.
 - Support project-scope skill installation under project-local vendor paths.
 - Validate package workflow bundles before mutating project or user scope.
+- Validate package workflow bundles with the same scoped cross-workflow callee
+  visibility they will have after installation.
 - Validate package skill vendors and entry structure before mutating project,
   user, or vendor scope.
 - Verify package checksums, initially supporting `md5`.
@@ -79,7 +81,8 @@ managed install record for both workflows and skills.
 - Implementing registry publish or PR creation.
 - Owning search ranking or sqlite cache internals.
 - Supporting non-GitHub registry backends.
-- Installing workflow package dependencies or add-ons.
+- Fetching or installing missing workflow package dependencies or add-ons
+  automatically.
 - Installing or projecting package skills as part of temporary registry-backed
   workflow execution.
 - Translating arbitrary vendor-specific extensions beyond the documented
@@ -439,6 +442,7 @@ metadata/search layer. Required fields:
 - `checksumAlgorithm`
 - `workflowDirectory`
 - `skillDirectory`
+- `dependencies`
 - `packageHash`
 - `integrity`
 - `skills`
@@ -473,7 +477,9 @@ an injected resolver.
 5. Fail on an existing destination, projection, or checkout record unless the
    operation is an explicit overwrite/update and confirmation is satisfied.
 6. Fetch or copy the selected package root into a temporary staging root.
-7. Validate each staged workflow bundle through the existing workflow loader.
+7. Validate each staged workflow bundle through the existing workflow loader
+   using install-time workflow roots that include the staged package workflow
+   and the destination scoped workflow catalog.
 8. Validate each staged skill entry against the vendor allow-list and
    vendor-specific file requirements.
 9. Compute the staged package checksum and compare it with registry metadata
@@ -487,6 +493,52 @@ an injected resolver.
 
 This mirrors the existing direct checkout safety model: validation happens
 before mutation, overwrite uses a backup, and unsafe destinations are rejected.
+
+## Scoped Cross-Workflow Validation During Install
+
+Package install validation must model the workflow resolution environment that
+will exist after the package is installed. A staged package workflow may call
+another workflow through `steps[].transitions[].toWorkflowId`; that callee may
+already be installed in project or user scope and should not need to be copied
+into the package source directory. The install validator therefore cannot
+validate the package workflow with only `path.dirname(sourceDirectory)` as the
+workflow root.
+
+Install-time validation should use a composite resolver with these ordered
+workflow roots:
+
+1. the staged package workflow root, so the candidate workflow and any
+   package-local sibling workflows remain visible before mutation
+2. the resolved destination workflow root for the selected install scope
+3. the remaining scoped workflow roots that ordinary runtime resolution would
+   consult for the same command context, preserving direct override, project,
+   and user precedence
+
+The staged workflow root must shadow installed workflows with the same
+workflow id during validation because the package candidate is the artifact
+being installed. Other callees should resolve through the scoped catalog exactly
+as they would for a runtime call from the installed workflow. For the default
+project-scope install this means project scope is checked before user scope.
+For `--user-scope`, user scope is the destination and the validator must not
+silently prefer project-local callees that a later user-scope runtime would not
+see when run outside that project. When `--workflow-definition-dir` is supplied,
+that direct destination root participates as the installed root, and skill or
+project-root resolution remains governed by the existing destination override
+rules.
+
+Missing or invalid callees remain hard validation failures before destination
+mutation. The error should name the caller workflow, the unresolved
+`toWorkflowId`, the transition path, and the workflow roots that were searched.
+This keeps install safety intact while allowing package authors to depend on
+already installed workflow packages such as `codex-design-and-implement-review-loop`
+or `codex-refactoring-slice-review` without vendoring those callees into every
+package.
+
+This design does not introduce package dependency installation metadata in the
+current fix. If package dependency metadata is added later, it should build on
+the same install-time resolver by declaring which callees are expected to
+resolve from installed packages, then failing with dependency-oriented
+diagnostics when they do not.
 
 ## Checksum Verification
 
