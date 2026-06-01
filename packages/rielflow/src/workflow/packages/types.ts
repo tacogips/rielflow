@@ -101,12 +101,30 @@ export interface WorkflowPackageManifest {
   readonly examples?: readonly string[];
   readonly minimumRielflowVersion?: string;
   readonly backends?: readonly string[];
+  readonly dependencies?: readonly (
+    | string
+    | WorkflowPackageManifestDependencyEntry
+  )[];
+}
+
+export interface WorkflowPackageManifestDependencyEntry {
+  readonly packageId: string;
+  readonly registry?: string;
+  readonly branch?: string;
+}
+
+export interface WorkflowPackageDependencyIdentity {
+  readonly packageId: string;
+  readonly registryUrl: string;
+  readonly sourceBranch: string;
+  readonly sourcePath: string;
 }
 
 export interface NormalizedWorkflowPackageManifest
   extends WorkflowPackageManifest {
   readonly workflowDirectory: string;
   readonly backends: readonly string[];
+  readonly dependencies: readonly WorkflowPackageManifestDependencyEntry[];
 }
 
 export interface WorkflowPackageWorkflowMetadata {
@@ -160,6 +178,21 @@ export interface WorkflowPackageSearchRecord {
   readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
   readonly integrity?: WorkflowPackageIntegrity;
   readonly updatedAt: string;
+}
+
+export interface WorkflowPackageDependencyEdge {
+  readonly from: WorkflowPackageDependencyIdentity;
+  readonly to: WorkflowPackageDependencyIdentity;
+}
+
+export interface WorkflowPackageDependencyInstallResult {
+  readonly packageId: string;
+  readonly registryUrl: string;
+  readonly registryRef: string;
+  readonly status: "already-installed" | "installed";
+  readonly installId?: string;
+  readonly workflowName?: string;
+  readonly checkoutRecordPath?: string;
 }
 
 export interface WorkflowPackageSearchCliResult {

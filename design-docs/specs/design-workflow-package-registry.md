@@ -152,10 +152,16 @@ Recommended package metadata fields:
 - `examples`
 - `minimumRielflowVersion`
 - `backends`: searchable execution backend ids used by the workflow
+- `dependencies`: package ids, or dependency objects with `packageId`,
+  `registry`, and `branch`, that must be checked out before validating and
+  installing this package
 
 The workflow bundle remains authoritative for runtime behavior. Package metadata
 is discovery and provenance data; loading, validation, and execution continue to
-use the existing workflow bundle validator.
+use the existing workflow bundle validator. Declared dependencies are installed
+into the requested checkout scope first, then the package is validated with
+already installed project and user workflows visible so cross-workflow calls do
+not require duplicating callee bundles inside each package.
 
 Package identity is `(registryUrl, sourceBranch, sourcePath, name)`. `name`
 alone is a display and default checkout name, so search results must preserve
@@ -166,6 +172,23 @@ Manifest validation must reject unsafe relative paths, absolute paths, empty
 names, non-array `tags`, unsupported checksum algorithms, and package roots that
 resolve outside the registry checkout. Metadata fields used for search should be
 normalized to strings and string arrays before indexing.
+
+Dependency entries are part of manifest validation. A dependency may be a safe
+package id string, or an object with:
+
+- `packageId`: required safe package id
+- `registry`: optional registry selector accepted by package install, either a
+  registered id or canonical registry URL
+- `branch`: optional source branch/ref override for that dependency only
+
+Dependency object validation must reject empty package ids, unsafe package ids,
+non-string selectors, non-string branches, self-dependencies after package
+identity normalization, and unknown extra shape that would make install behavior
+ambiguous. String dependencies resolve through the caller's selected registry
+and branch context unless package install was invoked without an explicit branch,
+in which case the dependency uses the selected registry default branch. Object
+overrides apply only to that dependency and its descendants do not inherit the
+parent override unless their own manifest entries declare it.
 
 `backends` is optional in authored package manifests because it can be derived
 from the workflow bundle. Index generation should inspect the validated
@@ -364,6 +387,86 @@ Package checkout must stage the remote package in a temporary directory, validat
 the workflow bundle, verify checksum when available, and only then mutate the
 project or user catalog.
 
+### Issue 43 Dependency Install Contract
+
+Issue #43 requires package install to consume declared manifest dependencies
+before caller validation. The failing packages are:
+
+- `codex-impl-plan-completion-loop` -> `codex-design-and-implement-review-loop`
+- `codex-recent-change-quality-loop` ->
+  `codex-design-and-implement-review-loop`
+- `codex-refactoring-divide-and-conquer` ->
+  `codex-refactoring-slice-review`
+
+These dependencies match the caller workflows' `toWorkflowId` references. In an
+empty project or user scope, validating the caller before installing the callee
+fails because the validation catalog cannot load the referenced workflow.
+
+Persistent `rielflow package install` must therefore use a dependency-aware
+install transaction:
+
+1. Resolve the caller package metadata and normalize its package identity:
+   `(registryUrl, sourceBranch, sourcePath, packageId)`.
+2. Load and validate the caller manifest, including normalized dependency
+   entries.
+3. Recursively resolve dependency manifests depth-first before caller workflow
+   validation.
+4. Before installing a dependency, check whether an equivalent package checkout
+   already exists in the requested scope and destination catalog. An equivalent
+   checkout has the same normalized package identity, scope, and installed
+   workflow name in checkout records, and the destination workflow directory is
+   loadable from the validation catalog.
+5. Treat equivalent installed dependencies as satisfied and do not require
+   `--overwrite` for them.
+6. For missing dependencies, run the same checksum, integrity, optional
+   pre-install scanner, optional container check, workflow validation, skill
+   validation, destination copy, skill install, and provenance write gates used
+   for direct package install.
+7. Validate the caller workflow only after every dependency required by the
+   caller is visible in the destination scope's validation catalog.
+8. Install the caller package through the existing mutation path.
+
+Cycle detection must operate on normalized package identity, not only package
+name. The error should include the package chain in resolution order, for
+example `a -> b -> c -> a`, and fail before any package in the detected cycle is
+installed.
+
+Rollback is scoped to the current install transaction. If the parent install
+fails after installing missing transitive dependencies, rielflow removes only
+the dependency workflow directories, checkout records, managed skill artifacts,
+and skill projections newly created by this transaction. Pre-existing satisfied
+dependencies are never removed. If an installed dependency overwrote a package
+because `--overwrite` was explicitly requested for the transaction, the existing
+checkout mutation backup/restore behavior applies to that dependency. Caller
+failure must restore the destination state for all newly mutated dependency
+packages before returning the parent failure.
+
+Dependency-aware validation must preserve current scope semantics:
+
+- project-scope install validates against project workflows plus user workflows
+  when the normal validation path includes user scope
+- user-scope install validates against user workflows only
+- direct `--workflow-definition-dir` installs validate against that direct root
+  and do not implicitly consult unrelated project-only callees
+- dependency installs target the same effective destination scope/root as the
+  caller unless the caller command itself selected a different scope/root
+
+Package install JSON output should expose dependency activity without changing
+the existing caller result fields:
+
+- `dependencies`: ordered dependency results with `packageId`, `registryUrl`,
+  `registryRef`, `status` (`already-installed` or `installed`), `installId`,
+  `workflowName`, and `checkoutRecordPath` when available
+- `dependencyGraph`: normalized package identity edges used for cycle and
+  rollback diagnostics
+- `rolledBackDependencies`: emitted only on failure paths that return structured
+  JSON before throwing or exiting
+
+Temporary `workflow run --from-registry` is intentionally not included in this
+contract. Temporary runs should continue to avoid persistent checkout records and
+catalog writes; a separate design is needed before temporary runs recursively
+stage dependent workflows.
+
 ## Temporary Run Integration
 
 `workflow run --from-registry <target>` consumes registry metadata like checkout
@@ -438,6 +541,15 @@ should close these gaps before the feature is accepted:
 - temporary registry-backed run should reuse the checkout resolver and checksum
   verification path while avoiding checkout provenance writes and package skill
   projection
+- package manifest normalization currently does not expose `dependencies`, so
+  package install cannot consume dependency metadata
+- package checkout currently validates the caller workflow before dependency
+  installation, causing empty-scope installs of workflow packages with
+  `toWorkflowId` callees to fail
+- checkout records and package provenance already contain enough package
+  identity fields to distinguish newly installed dependencies from pre-existing
+  satisfied dependencies, but the dependency transaction must centralize those
+  records so rollback does not remove unrelated user state
 
 ## Migration
 
@@ -460,6 +572,12 @@ bun test packages/rielflow/src/workflow/usage.test.ts
 bun test packages/rielflow/src/workflow/checkout/checkout.test.ts
 bun test packages/rielflow/src/workflow/runtime-db.test.ts
 bun test packages/rielflow/src/workflow/packages
+bun test packages/rielflow/src/workflow/packages/packages.test.ts packages/rielflow/src/workflow/packages/checkout.test.ts
+bun test packages/rielflow/src/cli.test.ts
+bun run typecheck
+bun run packages/rielflow/src/bin.ts package install codex-impl-plan-completion-loop --registry default --output json
+bun run packages/rielflow/src/bin.ts package install codex-recent-change-quality-loop --registry default --output json
+bun run packages/rielflow/src/bin.ts package install codex-refactoring-divide-and-conquer --registry default --output json
 bun run packages/rielflow/src/bin.ts workflow validate <checked-out-workflow-name>
 bun run packages/rielflow/src/bin.ts workflow usage <checked-out-workflow-name> --output json
 bun run packages/rielflow/src/bin.ts workflow run <package-id> --from-registry --mock-scenario <fixture> --output json
@@ -468,7 +586,10 @@ git diff --check
 
 Additional implementation tests should cover registry config persistence, package
 manifest validation, checksum stability, JSON cache refresh, sqlite cache parity
-when enabled, search ranking/filtering, and package install provenance.
+when enabled, search ranking/filtering, package install provenance, recursive
+dependency install, already-installed dependency satisfaction, dependency object
+overrides, cycle detection, dependency rollback after parent failure, and
+caller validation visibility for cross-workflow callees.
 
 ## Decisions
 
@@ -492,6 +613,15 @@ when enabled, search ranking/filtering, and package install provenance.
   home for metadata, registry config, checksum, cache, and search behavior.
 - Cache keys are logical registry/branch/package keys; filesystem paths are an
   encoded representation and must not be treated as canonical identity.
+- Declared package dependencies are installed before caller workflow validation
+  for persistent package installs.
+- Dependency registry overrides use the same registry selector semantics as
+  package install: registered id or canonical registry URL.
+- Dependency branch overrides are dependency-local; descendants use their own
+  manifest entries or registry defaults.
+- Rollback removes only packages newly installed by the current dependency
+  transaction and restores overwritten dependency packages through the existing
+  mutation backup behavior.
 
 ## Open Questions
 
@@ -500,6 +630,9 @@ when enabled, search ranking/filtering, and package install provenance.
   design slice.
 - The final sqlite dependency choice should be made during implementation based
   on existing Bun/package constraints.
+- Temporary registry-backed runs do not recursively stage package dependencies
+  in this issue; that behavior needs a separate runtime design because it must
+  preserve non-persistent cleanup semantics.
 
 ## Risks
 
@@ -511,3 +644,10 @@ when enabled, search ranking/filtering, and package install provenance.
   workflows if migration does not preserve project catalog behavior.
 - GitHub PR creation can vary by token permission; publish must report clear
   permission failures.
+- Dependency install recursion can partially mutate project/user catalogs unless
+  all dependency mutations are tracked in a single transaction.
+- Cycle detection based only on package names can miss same-name packages across
+  registries or branches; normalized package identity is required.
+- Treating already-installed dependencies as satisfied can mask stale callee
+  workflow content unless the checkout record and destination workflow load are
+  both verified.

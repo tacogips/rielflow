@@ -24,14 +24,24 @@ metadata. Use `package remove --install-id <install-id>` when multiple package
 records may match the same package or workflow name; removal deletes the
 recorded workflow install plus managed/projected package skills.
 
-Package install validation runs before destination mutation and uses the
-workflow roots that the installed workflow will see. Package-local sibling
-workflows are visible, the staged package workflow shadows an installed
-workflow with the same id, project-scope installs can resolve already installed
-project and user `toWorkflowId` callees, and `--user-scope` installs do not
-silently depend on project-only callees. Direct `--workflow-definition-dir`
-installs validate against that direct destination root. Missing callees fail
-with `VALIDATION` and searched workflow roots in the diagnostic.
+Package install resolves declared `rielflow-package.json` dependencies before
+caller validation. Dependency entries may be package id strings or objects with
+`packageId`, optional `registry`, and optional `branch`; missing dependencies are
+installed recursively into the same effective scope. Dependency branch overrides
+are local to the dependency entry, equivalent already-installed dependencies are
+reused when their checkout record and workflow directory match, cycles fail with
+the package chain, and caller install failure rolls back or restores dependency
+mutations created by that install attempt.
+
+Caller validation then uses the workflow roots that the installed workflow will
+see. Package-local sibling workflows are visible, the staged package workflow
+shadows an installed workflow with the same id, project-scope installs can
+resolve already installed project and user `toWorkflowId` callees, and
+`--user-scope` installs do not silently depend on project-only callees. Direct
+`--workflow-definition-dir` installs validate against that direct destination
+root. Missing callees fail with `VALIDATION` and searched workflow roots in the
+diagnostic. `--output json` includes dependency activity such as
+`dependencyGraph` and rolled-back dependency records.
 
 For running, listing, validating, inspecting, or monitoring existing workflows,
 use `rielflow-workflow-run` instead.

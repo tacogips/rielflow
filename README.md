@@ -259,13 +259,24 @@ Install a package into the user catalog:
 rielflow package install worker-only-single-step --user-scope
 ```
 
-Package install validates the staged workflow before it mutates project or user
-scope. Validation uses the same scoped workflow visibility the installed
+Package install resolves declared `rielflow-package.json` dependencies first.
+Dependency entries can be package ids or objects with `packageId`, `registry`,
+and `branch`; missing dependencies are installed into the same effective scope
+before the caller workflow is validated. Dependency branches are local to each
+dependency entry and do not inherit the caller package branch. Already installed
+equivalent dependencies are reused when their checkout record and workflow
+directory still match. Dependency cycles fail with the package chain, and if the
+caller install later fails, dependency mutations created by that install attempt
+are rolled back or restored before the error is reported.
+
+Package validation then uses the same scoped workflow visibility the installed
 workflow will have: package-local sibling workflows remain visible, the staged
 workflow shadows any installed workflow with the same id, project-scope installs
 can resolve already installed project and user callees, and user-scope installs
 must resolve callees from user-visible roots. Missing `toWorkflowId` callees
-still fail before install and report the searched workflow roots.
+still fail before caller install and report the searched workflow roots.
+Machine-readable install output includes dependency activity such as the
+`dependencyGraph` and any rolled-back dependency records.
 
 List installed packages:
 

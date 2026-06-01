@@ -63,6 +63,10 @@ async function createPackagedWorkflow(input: {
   readonly packageName: string;
   readonly workflowName: string;
   readonly backends?: readonly string[];
+  readonly dependencies?: readonly (
+    | string
+    | { readonly packageId: string; readonly registry?: string; readonly branch?: string }
+  )[];
 }): Promise<string> {
   const packageRoot = path.join(
     input.registryRoot,
@@ -120,6 +124,9 @@ async function createPackagedWorkflow(input: {
           digest: "",
         },
         workflowDirectory: input.workflowName,
+        ...(input.dependencies === undefined
+          ? {}
+          : { dependencies: input.dependencies }),
         ...(input.backends === undefined ? {} : { backends: input.backends }),
       },
       null,
@@ -585,6 +592,65 @@ describe("workflow package registry", () => {
     expect(loaded.ok).toBe(false);
     if (!loaded.ok) {
       expect(loaded.error.code).toBe("INVALID_MANIFEST");
+    }
+  });
+
+  test("normalizes string and object package dependencies", async () => {
+    const registryRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "dependency-metadata-flow",
+      workflowName: "dependency-metadata-flow",
+      dependencies: [
+        "plain-dependency",
+        {
+          packageId: "override-dependency",
+          registry: "alternate",
+          branch: "feature/dependency",
+        },
+      ],
+    });
+
+    const loaded = await loadWorkflowPackageManifest(packageRoot);
+
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(loaded.value.dependencies).toEqual([
+        { packageId: "plain-dependency" },
+        {
+          packageId: "override-dependency",
+          registry: "alternate",
+          branch: "feature/dependency",
+        },
+      ]);
+    }
+  });
+
+  test("rejects malformed package dependencies", async () => {
+    const registryRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "invalid-dependency-flow",
+      workflowName: "invalid-dependency-flow",
+    });
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["dependencies"] = [{ packageId: "valid-dependency", extra: true }];
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowPackageManifest(packageRoot);
+
+    expect(loaded.ok).toBe(false);
+    if (!loaded.ok) {
+      expect(loaded.error.code).toBe("INVALID_MANIFEST");
+      expect(loaded.error.message).toContain("unsupported key");
     }
   });
 
@@ -1908,6 +1974,346 @@ describe("workflow package registry", () => {
         ),
       ).toBe(false);
     }
+  });
+
+  test("checkout installs declared dependencies before caller validation", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "dependency-callee",
+      workflowName: "dependency-callee",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "dependency-caller",
+      workflowName: "dependency-caller",
+      dependencies: ["dependency-callee"],
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(callerRoot, "dependency-caller"),
+      toWorkflowId: "dependency-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "dependency-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "dependency-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.dependencies).toEqual([
+        expect.objectContaining({
+          packageId: "dependency-callee",
+          status: "installed",
+          workflowName: "dependency-callee",
+        }),
+      ]);
+      expect(checkedOut.value.dependencyGraph).toEqual([
+        {
+          from: expect.objectContaining({ packageId: "dependency-caller" }),
+          to: expect.objectContaining({ packageId: "dependency-callee" }),
+        },
+      ]);
+      expect(
+        await pathExists(
+          path.join(projectRoot, ".rielflow", "workflows", "dependency-callee"),
+        ),
+      ).toBe(true);
+      expect(
+        await pathExists(
+          path.join(projectRoot, ".rielflow", "workflows", "dependency-caller"),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  test("checkout reuses already installed declared dependencies", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "satisfied-callee",
+      workflowName: "satisfied-callee",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "satisfied-caller",
+      workflowName: "satisfied-caller",
+      dependencies: ["satisfied-callee"],
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(callerRoot, "satisfied-caller"),
+      toWorkflowId: "satisfied-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "satisfied-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const first = await checkoutWorkflowPackage({
+      packageName: "satisfied-callee",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(first.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "satisfied-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.dependencies?.[0]).toEqual(
+        expect.objectContaining({
+          packageId: "satisfied-callee",
+          status: "already-installed",
+          workflowName: "satisfied-callee",
+        }),
+      );
+    }
+  });
+
+  test("checkout does not inherit caller branch for declared dependencies", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "branch-default-callee",
+      workflowName: "branch-default-callee",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "branch-feature-caller",
+      workflowName: "branch-feature-caller",
+      dependencies: ["branch-default-callee"],
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(callerRoot, "branch-feature-caller"),
+      toWorkflowId: "branch-default-callee",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "branch-feature-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "branch-feature-caller",
+      registry: "local",
+      branch: "feature/caller",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.registryRef).toBe("feature/caller");
+      expect(checkedOut.value.dependencyGraph?.[0]?.to.sourceBranch).toBe(
+        "main",
+      );
+      expect(checkedOut.value.dependencies?.[0]?.registryRef).toBe("main");
+    }
+  });
+
+  test("checkout detects declared dependency cycles before mutation", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const firstRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "cycle-a",
+      workflowName: "cycle-a",
+      dependencies: ["cycle-b"],
+    });
+    const secondRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "cycle-b",
+      workflowName: "cycle-b",
+      dependencies: ["cycle-a"],
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: firstRoot,
+      workflowDirectory: "cycle-a",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: secondRoot,
+      workflowDirectory: "cycle-b",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "cycle-a",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain(
+        "cycle-a -> cycle-b -> cycle-a",
+      );
+      expect(
+        await pathExists(path.join(projectRoot, ".rielflow", "workflows", "cycle-a")),
+      ).toBe(false);
+      expect(
+        await pathExists(path.join(projectRoot, ".rielflow", "workflows", "cycle-b")),
+      ).toBe(false);
+    }
+  });
+
+  test("checkout rolls back newly installed dependencies on caller failure", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "rollback-callee",
+      workflowName: "rollback-callee",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "rollback-caller",
+      workflowName: "rollback-caller",
+      dependencies: ["rollback-callee"],
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(callerRoot, "rollback-caller"),
+      toWorkflowId: "missing-after-dependency",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "rollback-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "rollback-caller",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("missing-after-dependency");
+    }
+    expect(
+      await pathExists(
+        path.join(projectRoot, ".rielflow", "workflows", "rollback-callee"),
+      ),
+    ).toBe(false);
+    expect(
+      await pathExists(
+        path.join(projectRoot, ".rielflow", "workflows", "rollback-caller"),
+      ),
+    ).toBe(false);
+  });
+
+  test("checkout restores overwritten dependencies when caller validation fails", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "overwrite-rollback-callee",
+      workflowName: "overwrite-rollback-callee",
+    });
+    const callerRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "overwrite-rollback-caller",
+      workflowName: "overwrite-rollback-caller",
+      dependencies: [
+        {
+          packageId: "overwrite-rollback-callee",
+          branch: "feature/dependency",
+        },
+      ],
+    });
+    await addCrossWorkflowTransition({
+      workflowDirectory: path.join(callerRoot, "overwrite-rollback-caller"),
+      toWorkflowId: "missing-after-overwrite",
+    });
+    await refreshPackageManifestDigests({
+      packageRoot: callerRoot,
+      workflowDirectory: "overwrite-rollback-caller",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    const original = await checkoutWorkflowPackage({
+      packageName: "overwrite-rollback-callee",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(original.ok).toBe(true);
+    if (!original.ok) {
+      throw new Error("initial dependency checkout failed");
+    }
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "overwrite-rollback-caller",
+      registry: "local",
+      overwrite: true,
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("missing-after-overwrite");
+    }
+    const restoredRecord = JSON.parse(
+      await readFile(original.value.checkoutRecordPath, "utf8"),
+    ) as { readonly registryRef?: string };
+    expect(restoredRecord.registryRef).toBe("main");
+    expect(await pathExists(original.value.destinationDirectory)).toBe(true);
   });
 
   test("checkout resolves relative direct workflow definition roots from cwd", async () => {

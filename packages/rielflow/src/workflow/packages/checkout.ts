@@ -17,6 +17,12 @@ import { err, ok, type Result } from "../result";
 import { packageChangedArtifacts } from "./change-detection";
 import { computeWorkflowPackageChecksum } from "./checksum";
 import {
+  dependencyIdentity,
+  installManifestDependencies,
+  resolvePackageCheckoutSearchRecord,
+  type WorkflowPackageDependencyInstallContext,
+} from "./dependencies";
+import {
   createPackageValidationWorkflowRoot,
   describePackageValidationFailure,
 } from "./install-validation";
@@ -24,11 +30,6 @@ import { verifyWorkflowPackageIntegrity } from "./integrity";
 import { loadWorkflowPackageManifest } from "./manifest";
 import { runWorkflowPackageContainerCheck } from "./pre-install-container";
 import { createWorkflowPackageStaticScanner } from "./pre-install-scanner";
-import {
-  loadWorkflowPackageRegistryConfig,
-  resolveWorkflowPackageRegistryEntry,
-} from "./registry-config";
-import { searchWorkflowPackages } from "./search";
 import {
   installWorkflowPackageSkills,
   resolveWorkflowPackageSkillProjectionPath,
@@ -46,6 +47,8 @@ import type {
   WorkflowPackagePreInstallCheckResult,
   WorkflowPackageRegistryConfigOptions,
   WorkflowPackageContainerRuntimeRequest,
+  WorkflowPackageDependencyEdge,
+  WorkflowPackageDependencyInstallResult,
   WorkflowPackageSkillInstallTarget,
   WorkflowPackageSkillSelection,
 } from "./types";
@@ -101,6 +104,9 @@ export interface WorkflowPackageCheckoutResult {
   readonly changedArtifacts?: readonly string[];
   readonly confirmationSkipped?: boolean;
   readonly provenancePath?: string;
+  readonly dependencies?: readonly WorkflowPackageDependencyInstallResult[];
+  readonly dependencyGraph?: readonly WorkflowPackageDependencyEdge[];
+  readonly rolledBackDependencies?: readonly WorkflowPackageDependencyInstallResult[];
 }
 
 function packageFailure(
@@ -382,8 +388,59 @@ async function discardMutationBackups(input: {
   await removePathIfPresent(input.backupRoot);
 }
 
+async function restoreDependencyMutationBackups(
+  context: WorkflowPackageDependencyInstallContext,
+): Promise<void> {
+  for (const mutationBackups of [
+    ...context.dependencyMutationBackups,
+  ].reverse()) {
+    await restoreMutationBackups(mutationBackups);
+  }
+  context.dependencyMutationBackups.length = 0;
+}
+
+async function discardDependencyMutationBackups(
+  context: WorkflowPackageDependencyInstallContext,
+): Promise<void> {
+  for (const mutationBackups of context.dependencyMutationBackups) {
+    await discardMutationBackups({ backupRoot: mutationBackups.backupRoot });
+  }
+  context.dependencyMutationBackups.length = 0;
+}
+
 export async function checkoutWorkflowPackage(
   input: WorkflowPackageCheckoutInput,
+): Promise<Result<WorkflowPackageCheckoutResult, WorkflowPackageFailure>> {
+  const context: WorkflowPackageDependencyInstallContext = {
+    stack: [],
+    dependencies: [],
+    dependencyGraph: [],
+    installedDependencies: [],
+    dependencyMutationBackups: [],
+  };
+  const result = await checkoutWorkflowPackageInternal(input, context);
+  if (result.ok) {
+    await discardDependencyMutationBackups(context);
+    return ok({
+      ...result.value,
+      ...(context.dependencies.length === 0
+        ? {}
+        : { dependencies: context.dependencies }),
+      ...(context.dependencyGraph.length === 0
+        ? {}
+        : { dependencyGraph: context.dependencyGraph }),
+    });
+  }
+  if (context.installedDependencies.length === 0) {
+    return result;
+  }
+  await restoreDependencyMutationBackups(context);
+  return result;
+}
+
+async function checkoutWorkflowPackageInternal(
+  input: WorkflowPackageCheckoutInput,
+  dependencyContext: WorkflowPackageDependencyInstallContext,
 ): Promise<Result<WorkflowPackageCheckoutResult, WorkflowPackageFailure>> {
   if (input.userScope === true && input.options?.workflowRoot !== undefined) {
     return err(
@@ -394,48 +451,43 @@ export async function checkoutWorkflowPackage(
     );
   }
   const packageId = input.packageId ?? input.packageName;
-  const config = await loadWorkflowPackageRegistryConfig(input.options);
-  if (!config.ok) {
-    return config;
-  }
-  const registry = resolveWorkflowPackageRegistryEntry(
-    config.value,
-    input.registry,
-  );
-  if (!registry.ok) {
-    return registry;
-  }
-  if (registry.value.localPath === undefined) {
-    return err(
-      packageFailure(
-        "FETCH_FAILED",
-        `registry '${registry.value.id}' has no localPath for checkout`,
-      ),
-    );
-  }
-  const searched = await searchWorkflowPackages({
-    query: packageId,
-    registry: registry.value.id,
-    refresh: false,
+  const resolvedPackage = await resolvePackageCheckoutSearchRecord({
+    packageId,
+    ...(input.registry === undefined ? {} : { registry: input.registry }),
     ...(input.branch === undefined ? {} : { branch: input.branch }),
     ...(input.options === undefined ? {} : { options: input.options }),
   });
-  if (!searched.ok) {
-    return searched;
+  if (!resolvedPackage.ok) {
+    return resolvedPackage;
   }
-  const record = searched.value.records.find(
-    (candidate) => candidate.packageName === packageId,
-  );
-  if (record === undefined) {
-    return err(
-      packageFailure("MISSING_PACKAGE", `package '${packageId}' not found`),
-    );
-  }
-  const packageRoot = path.join(registry.value.localPath, record.sourcePath);
+  const registry = resolvedPackage.value.registry;
+  const record = resolvedPackage.value.record;
+  const packageRoot = path.join(registry.localPath, record.sourcePath);
   const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
   const manifest = await loadWorkflowPackageManifest(packageRoot);
   if (!manifest.ok) {
     return manifest;
+  }
+  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
+  const currentIdentity = dependencyIdentity({
+    packageId: record.packageName,
+    registryUrl: record.registryUrl,
+    sourceBranch: record.sourceBranch,
+    sourcePath: record.sourcePath,
+  });
+  if (dependencyContext.stack.length === 0) {
+    dependencyContext.stack.push(currentIdentity);
+  }
+  const dependencies = await installManifestDependencies({
+    parent: currentIdentity,
+    manifestDependencies: manifest.value.dependencies,
+    checkoutInput: input,
+    userRoot,
+    context: dependencyContext,
+    checkoutDependency: checkoutWorkflowPackageInternal,
+  });
+  if (!dependencies.ok) {
+    return dependencies;
   }
   const skills = await validateWorkflowPackageSkills({
     packageRoot,
@@ -470,14 +522,13 @@ export async function checkoutWorkflowPackage(
     ...(manifest.value.integrity === undefined
       ? {}
       : { integrity: manifest.value.integrity }),
-    registry: registry.value,
+    registry,
     ...(input.options === undefined ? {} : { options: input.options }),
   });
   if (!integrity.ok) {
     return integrity;
   }
   const sourceWorkflowName = path.basename(sourceDirectory);
-  const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
   const validationDestination = resolveWorkflowCheckoutDestination(
     sourceWorkflowName,
     {
@@ -721,6 +772,7 @@ export async function checkoutWorkflowPackage(
       version: record.version,
       registryUrl: record.registryUrl,
       registryRef: record.sourceBranch,
+      sourcePath: record.sourcePath,
       sourceDirectory,
       metadataPath: path.posix.join(record.sourcePath, "rielflow-package.json"),
       checksum: record.checksum,
@@ -791,7 +843,11 @@ export async function checkoutWorkflowPackage(
         checkedOutAt: checkedOutAt.toISOString(),
       },
     );
-    await discardMutationBackups(mutationBackups);
+    if (dependencyContext.stack.length > 1) {
+      dependencyContext.dependencyMutationBackups.push(mutationBackups);
+    } else {
+      await discardMutationBackups(mutationBackups);
+    }
     return ok({
       packageId: record.packageName,
       packageName: record.packageName,

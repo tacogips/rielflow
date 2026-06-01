@@ -139,18 +139,25 @@ Verification should include
 
 Workflow package install validation issue-resolution runs should keep scoped
 cross-workflow callee behavior visible in user-facing docs. `package install`
-validates the staged package workflow before mutation with package-local sibling
-workflows, destination scoped workflows, and runtime-visible fallback roots;
-staged workflows shadow installed workflows with the same id. Project-scope
-installs may resolve already installed project and user callees such as
+normalizes `rielflow-package.json` dependencies from package id strings or
+objects with `packageId`, optional `registry`, and optional `branch`, then
+installs missing dependencies recursively before validating the caller workflow.
+Dependency branch overrides are local to each dependency entry; they do not
+inherit the caller package branch. Equivalent already-installed dependencies are
+reused when checkout records and workflow directories still match. Dependency
+cycles fail with the normalized package chain, and caller install failure rolls
+back or restores dependency mutations created by that install attempt. Caller
+validation then uses package-local sibling workflows, destination scoped
+workflows, and runtime-visible fallback roots; staged workflows shadow installed
+workflows with the same id. Project-scope installs may resolve already
+installed project and user callees such as
 `codex-design-and-implement-review-loop`, while `--user-scope` installs must not
 silently depend on project-only callees. Keep this provider-neutral:
 `codex-agent` remains only an `executionBackend` value. Verification should
-include `bun test packages/rielflow/src/workflow/packages/packages.test.ts`,
-`bun test packages/rielflow/src/workflow/load.test.ts
-packages/rielflow/src/workflow/validate.test.ts`, `bun run typecheck`, and the
-reproduction command
-`bun run packages/rielflow/src/bin.ts package install codex-impl-plan-completion-loop --pre-install-check --output json`
+include `bun test packages/rielflow/src/workflow/packages/packages.test.ts
+packages/rielflow/src/workflow/packages/checkout.test.ts`, `bun run typecheck`,
+`git diff --check`, and reproduction commands such as
+`bun run packages/rielflow/src/bin.ts package install codex-impl-plan-completion-loop --registry default --output json`
 when local package checksums allow it.
 
 ## Reporting

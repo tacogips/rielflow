@@ -6,6 +6,7 @@ import {
   WORKFLOW_PACKAGE_MANIFEST_FILE,
   type NormalizedWorkflowPackageManifest,
   type WorkflowPackageFailure,
+  type WorkflowPackageManifestDependencyEntry,
   type WorkflowPackageManifestSkillEntry,
   type WorkflowPackageSkillVendor,
   type WorkflowPackageWorkflowMetadata,
@@ -118,6 +119,90 @@ function normalizeWorkflowPackageManifestSkills(
     entries.push({ vendor, name, sourcePath });
   }
   return ok(entries);
+}
+
+const WORKFLOW_PACKAGE_DEPENDENCY_KEYS: ReadonlySet<string> = new Set([
+  "packageId",
+  "registry",
+  "branch",
+]);
+
+function normalizeWorkflowPackageManifestDependencies(
+  value: unknown,
+  packageName: string,
+): Result<
+  readonly WorkflowPackageManifestDependencyEntry[],
+  WorkflowPackageFailure
+> {
+  if (value === undefined) {
+    return ok([]);
+  }
+  if (!Array.isArray(value)) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "package manifest dependencies must be an array",
+      ),
+    );
+  }
+  const dependencies: WorkflowPackageManifestDependencyEntry[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (typeof entry === "string") {
+      if (!isSafeWorkflowPackageName(entry) || entry === packageName) {
+        return err(
+          packageFailure(
+            "INVALID_MANIFEST",
+            `package manifest dependencies[${index}] packageId is invalid`,
+          ),
+        );
+      }
+      dependencies.push({ packageId: entry });
+      continue;
+    }
+    if (!isRecord(entry)) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `package manifest dependencies[${index}] must be a string or object`,
+        ),
+      );
+    }
+    for (const key of Object.keys(entry)) {
+      if (!WORKFLOW_PACKAGE_DEPENDENCY_KEYS.has(key)) {
+        return err(
+          packageFailure(
+            "INVALID_MANIFEST",
+            `package manifest dependencies[${index}] has unsupported key '${key}'`,
+          ),
+        );
+      }
+    }
+    const packageId = entry["packageId"];
+    const registry = entry["registry"];
+    const branch = entry["branch"];
+    if (
+      typeof packageId !== "string" ||
+      !isSafeWorkflowPackageName(packageId) ||
+      packageId === packageName ||
+      (registry !== undefined &&
+        (typeof registry !== "string" || registry.trim().length === 0)) ||
+      (branch !== undefined &&
+        (typeof branch !== "string" || branch.trim().length === 0))
+    ) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `package manifest dependencies[${index}] is invalid`,
+        ),
+      );
+    }
+    dependencies.push({
+      packageId,
+      ...(registry === undefined ? {} : { registry }),
+      ...(branch === undefined ? {} : { branch }),
+    });
+  }
+  return ok(dependencies);
 }
 
 export function normalizeWorkflowPackageWorkflowMetadata(
@@ -241,6 +326,13 @@ export function normalizeWorkflowPackageManifest(
       packageFailure("INVALID_PACKAGE_NAME", `invalid package name '${name}'`),
     );
   }
+  const dependencies = normalizeWorkflowPackageManifestDependencies(
+    value["dependencies"],
+    name,
+  );
+  if (!dependencies.ok) {
+    return dependencies;
+  }
   const workflow: Result<
     WorkflowPackageWorkflowMetadata,
     WorkflowPackageFailure
@@ -333,6 +425,7 @@ export function normalizeWorkflowPackageManifest(
       ? { minimumRielflowVersion: value["minimumRielflowVersion"] }
       : {}),
     backends: authoredBackends ?? workflow.value.backends ?? [],
+    dependencies: dependencies.value,
     // Checked by loadWorkflowPackageManifest after async filesystem stat.
     ...(workflowJsonPath.length > 0 ? {} : {}),
   });
