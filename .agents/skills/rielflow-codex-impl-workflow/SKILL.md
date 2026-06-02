@@ -101,9 +101,15 @@ Documentation refresh should cover `README.md`, `examples/README.md`,
 `examples/event-sources/README.md`, and this skill when those surfaces change,
 and should keep verification commands explicit:
 `workflow validate discord-agent-trio-chat`, `workflow validate
-telegram-agent-trio-chat`, `workflow validate matrix-chat-reply`, `events
-validate`, focused adapter/add-on tests, `bun run typecheck`, `bun run
-lint:biome`, `bun run build`, and any deterministic redaction audit script.
+telegram-agent-trio-chat`, `workflow validate telegram-sdk-trio-chat`,
+`workflow validate matrix-chat-reply`, `events validate`, focused adapter/add-on
+tests, `bun run typecheck`, `bun run lint:biome`, `bun run build`, and any
+deterministic redaction audit script. SDK-backed trio updates should keep
+`rielflow/codex-sdk-worker`, `rielflow/claude-sdk-worker`, and
+`rielflow/cursor-sdk-worker` distinct from the non-SDK `codex-agent`,
+`claude-code-agent`, and `cursor-cli-agent` examples, and should document live
+credential requirements for `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
+`CURSOR_API_KEY`.
 
 Because the workflow ends with commit/push, do not use it when the user has
 explicitly asked to avoid workflow-driven commits or wants manual local edits
@@ -118,6 +124,13 @@ prompt into resumed user prompt text when the backend runner already appends
 `systemPrompt`; stall-watch resume nudges keep the watcher-supplied nudge prompt
 while still forwarding the stable system prompt option. Verification should
 include the focused Codex and Cursor adapter tests and `bun run typecheck`.
+Cursor SDK issue-resolution runs should also keep the Bun child-process boundary
+visible: the adapter spawns the SDK child from the adapter runtime module
+directory, passes workflow `cwd`, store root, model, prompt, and
+`CURSOR_API_KEY` through the child input boundary, and defaults SDK local `cwd`
+to the workflow `workingDirectory` unless adapter config overrides it.
+Verification should include `packages/rielflow/src/workflow/adapters/cursor-sdk.test.ts`
+and any SDK worker add-on tests affected by the change.
 
 Event-source or example-workflow issue-resolution runs should keep the shipped
 behavior discoverable from user-facing docs. Refresh the root `README.md`, the

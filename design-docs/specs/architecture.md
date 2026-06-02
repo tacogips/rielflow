@@ -1340,6 +1340,60 @@ Verification commands:
 - `bun test packages/rielflow/src/workflow/adapters/claude.test.ts`
 - `git diff -- packages/rielflow-adapters/src/codex.ts packages/rielflow-adapters/src/cursor.ts packages/rielflow/src/workflow/adapters/codex.test.ts packages/rielflow/src/workflow/adapters/cursor.test.ts design-docs/specs/architecture.md`
 
+#### SDK-backed Agent Adapter Boundary
+
+Issue-resolution intake for branch `feature/sdk-node-addons` expands the agent
+backend set with SDK-owned adapters:
+
+- `official/openai-sdk`
+- `official/anthropic-sdk`
+- `official/cursor-sdk`
+
+These backends are adapter choices, not new workflow roles. Authored workflows
+continue to use normal worker steps, normal prompt templates, normal output
+contracts, and normal timeout/cancellation boundaries. Built-in SDK worker
+add-ons may resolve to these backends, but after add-on resolution they are
+ordinary `agent` node payloads and dispatch through the shared adapter registry
+in `packages/rielflow-adapters/src/dispatch.ts`.
+
+Credential handling remains adapter-owned:
+
+- `official/openai-sdk` reads `OPENAI_API_KEY`
+- `official/anthropic-sdk` reads `ANTHROPIC_API_KEY`
+- `official/cursor-sdk` reads `CURSOR_API_KEY`
+
+The runtime should expose missing credentials as readiness or policy-blocked
+adapter failures. Workflow bundles and add-on refs must not embed SDK secrets or
+provider-specific process configuration.
+
+Cursor SDK behavior is isolated in
+`packages/rielflow-adapters/src/cursor-sdk.ts`. The adapter may invoke
+`@cursor/sdk` from a Bun child process to keep Bun compatibility concerns out of
+the workflow engine and add-on catalog. The child process receives only the
+model id, working directory, JSONL store root, prompt message, and
+`CURSOR_API_KEY`, and it returns a minimal JSON result envelope for the parent
+adapter to normalize through the same output-contract path as the other
+adapters.
+
+Codex-agent reference mapping: local `../../codex-agent` was unavailable during
+this design pass, so the branch uses existing rielflow Codex adapter behavior
+and tests as the local reference trail:
+
+- `packages/rielflow-adapters/src/codex.ts`
+- `packages/rielflow/src/workflow/adapters/codex.test.ts`
+- `examples/telegram-agent-trio-chat/nodes/node-yui-codex.json`
+
+Intentional divergence from Codex-agent and Cursor CLI behavior: the SDK
+adapters are direct provider SDK integrations. They should converge at the
+rielflow adapter contract and output envelope, but they do not need to emulate
+CLI session transcript, spawn flags, or local-agent resume prompts.
+
+Verification commands:
+
+- `bun test packages/rielflow/src/workflow/adapters/cursor-sdk.test.ts packages/rielflow/src/workflow/adapters/dispatch.test.ts packages/rielflow/src/workflow/node-addons/sdk-agent-workers.test.ts`
+- `bun test packages/rielflow/src/workflow/runtime-readiness-backends.test.ts packages/rielflow/src/package-boundaries.test.ts`
+- `bun run typecheck`
+
 For nodes with `output` configured, output-contract normalization also accepts a
 valid adapter envelope from inline adapter payloads or reserved candidate files:
 `when` is the transition predicate map, `payload` is the business object to

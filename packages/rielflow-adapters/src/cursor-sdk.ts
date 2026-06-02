@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   AdapterExecutionError,
   normalizeOutputContractEnvelope,
@@ -60,6 +61,16 @@ type CursorAgentOptions = {
   readonly local: { readonly cwd: string };
 };
 
+type CursorBunChildSpawn = (
+  command: string,
+  args: readonly string[],
+  options: {
+    readonly cwd: string;
+    readonly env: NodeJS.ProcessEnv;
+    readonly stdio: ["pipe", "pipe", "pipe"];
+  },
+) => ChildProcessWithoutNullStreams;
+
 type CursorRunResult = {
   readonly status: string;
   readonly result?: string;
@@ -82,17 +93,23 @@ class BunChildCursorRun implements CursorRunLike {
   constructor(input: {
     readonly options: CursorAgentOptions;
     readonly message: string;
+    readonly childRuntimeCwd: string;
+    readonly childSpawn: CursorBunChildSpawn;
   }) {
-    this.#child = spawn(resolveBunExecutable(), ["--eval", BUN_CURSOR_SDK_SCRIPT], {
-      cwd: input.options.local.cwd,
-      env: {
-        CURSOR_API_KEY: input.options.apiKey,
-        PATH: process.env["PATH"] ?? "",
-        HOME: process.env["HOME"] ?? "",
-        LANG: process.env["LANG"] ?? "C.UTF-8",
+    this.#child = input.childSpawn(
+      resolveBunExecutable(),
+      ["--eval", BUN_CURSOR_SDK_SCRIPT],
+      {
+        cwd: input.childRuntimeCwd,
+        env: {
+          CURSOR_API_KEY: input.options.apiKey,
+          PATH: process.env["PATH"] ?? "",
+          HOME: process.env["HOME"] ?? "",
+          LANG: process.env["LANG"] ?? "C.UTF-8",
+        },
+        stdio: ["pipe", "pipe", "pipe"],
       },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    );
     this.#resultPromise = this.#waitForChild();
     this.#child.stdin.end(
       JSON.stringify({
@@ -170,13 +187,26 @@ class BunChildCursorRun implements CursorRunLike {
 
 class BunChildCursorAgent implements CursorAgentLike {
   readonly #options: CursorAgentOptions;
+  readonly #childRuntimeCwd: string;
+  readonly #childSpawn: CursorBunChildSpawn;
 
-  constructor(options: CursorAgentOptions) {
-    this.#options = options;
+  constructor(input: {
+    readonly options: CursorAgentOptions;
+    readonly childRuntimeCwd: string;
+    readonly childSpawn: CursorBunChildSpawn;
+  }) {
+    this.#childRuntimeCwd = input.childRuntimeCwd;
+    this.#childSpawn = input.childSpawn;
+    this.#options = input.options;
   }
 
   async send(message: string): Promise<CursorRunLike> {
-    return new BunChildCursorRun({ options: this.#options, message });
+    return new BunChildCursorRun({
+      options: this.#options,
+      message,
+      childRuntimeCwd: this.#childRuntimeCwd,
+      childSpawn: this.#childSpawn,
+    });
   }
 
   close(): void {
@@ -190,6 +220,8 @@ export interface CursorSdkAdapterConfig {
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
   readonly agentFactory?: (options: CursorAgentOptions) => Promise<CursorAgentLike>;
+  readonly bunChildRuntimeCwd?: string;
+  readonly bunChildSpawn?: CursorBunChildSpawn;
 }
 
 function formatCursorPrompt(input: AdapterExecutionInput): string {
@@ -200,8 +232,14 @@ function formatCursorPrompt(input: AdapterExecutionInput): string {
 
 async function defaultAgentFactory(
   options: CursorAgentOptions,
+  config: Pick<CursorSdkAdapterConfig, "bunChildRuntimeCwd" | "bunChildSpawn">,
 ): Promise<CursorAgentLike> {
-  return new BunChildCursorAgent(options);
+  return new BunChildCursorAgent({
+    options,
+    childRuntimeCwd:
+      config.bunChildRuntimeCwd ?? resolveCursorSdkBunChildRuntimeCwd(),
+    childSpawn: config.bunChildSpawn ?? spawn,
+  });
 }
 
 function resolveBunExecutable(): string {
@@ -209,6 +247,10 @@ function resolveBunExecutable(): string {
     return process.execPath;
   }
   return process.env["BUN_BINARY"] ?? "bun";
+}
+
+function resolveCursorSdkBunChildRuntimeCwd(): string {
+  return dirname(fileURLToPath(import.meta.url));
 }
 
 function parseCursorRunResult(value: unknown): CursorRunResult {
@@ -237,6 +279,24 @@ function normalizeCursorResult(result: CursorRunResult): string {
   return result.result ?? "";
 }
 
+function redactSecret(text: string, secret: string): string {
+  return secret.length === 0 ? text : text.split(secret).join("[REDACTED]");
+}
+
+function redactCursorAdapterError(
+  error: AdapterExecutionError,
+  apiKey: string,
+): AdapterExecutionError {
+  const message = redactSecret(error.message, apiKey);
+  const processLogs = error.processLogs?.map((log) => ({
+    ...log,
+    text: redactSecret(log.text, apiKey),
+  }));
+  return new AdapterExecutionError(error.code, message, {
+    ...(processLogs === undefined ? {} : { processLogs }),
+  });
+}
+
 export class CursorSdkAdapter implements NodeAdapter {
   readonly #config: CursorSdkAdapterConfig;
 
@@ -257,7 +317,9 @@ export class CursorSdkAdapter implements NodeAdapter {
     }
 
     const { maxAttempts, retryDelayMs } = resolveRetryPolicy(this.#config);
-    const agentFactory = this.#config.agentFactory ?? defaultAgentFactory;
+    const agentFactory =
+      this.#config.agentFactory ??
+      ((options) => defaultAgentFactory(options, this.#config));
 
     return executeWithRetry({
       maxAttempts,
@@ -274,7 +336,7 @@ export class CursorSdkAdapter implements NodeAdapter {
         const agent = await agentFactory({
           apiKey,
           model: { id: input.node.model },
-          local: { cwd: this.#config.cwd ?? process.cwd() },
+          local: { cwd: this.#config.cwd ?? input.workingDirectory },
         });
 
         let run: CursorRunLike | undefined;
@@ -285,6 +347,13 @@ export class CursorSdkAdapter implements NodeAdapter {
 
         try {
           run = await agent.send(formatCursorPrompt(input));
+          if (context.signal.aborted) {
+            await run.cancel().catch(() => undefined);
+            throw new AdapterExecutionError(
+              "timeout",
+              "official Cursor SDK request aborted",
+            );
+          }
           const text = normalizeCursorResult(await run.wait());
           const normalizedPayload =
             input.output === undefined
@@ -317,7 +386,10 @@ export class CursorSdkAdapter implements NodeAdapter {
             "official Cursor SDK request aborted",
           );
         }
-        return normalizeAdapterFailure(error, "unknown Cursor SDK failure");
+        return redactCursorAdapterError(
+          normalizeAdapterFailure(error, "unknown Cursor SDK failure"),
+          apiKey,
+        );
       },
     });
   }

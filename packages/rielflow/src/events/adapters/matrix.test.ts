@@ -650,6 +650,7 @@ describe("matrix event source adapter", () => {
 
   test("dispatches Matrix persona replies with reply bot access tokens", async () => {
     const adapter = createMatrixEventSourceAdapter();
+    const mikaAccessToken = "persona-reply-token";
     const calls: Array<{ readonly url: string; readonly init: RequestInit }> =
       [];
 
@@ -663,7 +664,7 @@ describe("matrix event source adapter", () => {
       env: {
         RIEL_MATRIX_HOMESERVER_URL: "https://matrix.example",
         RIEL_MATRIX_ACCESS_TOKEN: "default-token",
-        RIEL_MATRIX_MIKA_TOKEN: "mika-token",
+        RIEL_MATRIX_MIKA_TOKEN: mikaAccessToken,
       },
       fetchImpl: async (url, init) => {
         calls.push({ url: String(url), init: init ?? {} });
@@ -676,7 +677,7 @@ describe("matrix event source adapter", () => {
 
     expect(result?.providerMessageId).toBe("$mika-reply");
     expect(calls[0]?.init.headers).toMatchObject({
-      authorization: "Bearer mika-token",
+      authorization: `Bearer ${mikaAccessToken}`,
       "content-type": "application/json",
     });
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({

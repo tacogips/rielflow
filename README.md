@@ -358,6 +358,9 @@ Useful starting points in `examples/`:
 - `supervised-mock-retry`: deterministic supervised retry example.
 - `discord-agent-trio-chat`, `telegram-agent-trio-chat`,
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
+- `telegram-sdk-trio-chat`: Telegram persona trio using SDK-backed worker
+  add-ons for `official/openai-sdk`, `official/anthropic-sdk`, and
+  `official/cursor-sdk`.
 - `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
   the Telegram trio chat.
 - `x-follower-ai-business-digest`: hourly X follower-post digest that fetches
