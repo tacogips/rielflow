@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { join } from "node:path";
 import {
   AdapterExecutionError,
   normalizeOutputContractEnvelope,
@@ -17,9 +18,8 @@ import {
 } from "./shared";
 
 const DEFAULT_CURSOR_API_KEY_ENV = "CURSOR_API_KEY";
-const NODE_CURSOR_SDK_SCRIPT = `
-import { Agent } from "@cursor/sdk";
-
+const DEFAULT_CURSOR_JSONL_STORE_DIR = ".rielflow-data/cursor-sdk-jsonl";
+const BUN_CURSOR_SDK_SCRIPT = `
 const chunks = [];
 for await (const chunk of process.stdin) {
   chunks.push(chunk);
@@ -28,30 +28,30 @@ const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 if (
   typeof input.modelId !== "string" ||
   typeof input.cwd !== "string" ||
+  typeof input.storeRoot !== "string" ||
   typeof input.message !== "string"
 ) {
-  throw new Error("invalid Cursor SDK child input");
+  throw new Error("invalid Cursor SDK Bun child input");
 }
 const apiKey = process.env.CURSOR_API_KEY;
 if (typeof apiKey !== "string" || apiKey.length === 0) {
-  throw new Error("missing Cursor SDK child API key");
+  throw new Error("missing Cursor SDK Bun child API key");
 }
 
+const { Agent, JsonlLocalAgentStore } = await import("@cursor/sdk");
+const store = new JsonlLocalAgentStore(input.storeRoot);
 const agent = await Agent.create({
   apiKey,
   model: { id: input.modelId },
-  local: { cwd: input.cwd },
+  local: { cwd: input.cwd, store },
 });
-try {
-  const run = await agent.send(input.message);
-  const result = await run.wait();
-  process.stdout.write(JSON.stringify({
-    status: result.status,
-    result: result.result ?? "",
-  }));
-} finally {
-  agent.close();
-}
+const run = await agent.send(input.message);
+const result = await run.wait();
+process.stdout.write(JSON.stringify({
+  status: result.status,
+  result: result.result ?? "",
+}));
+process.exit(0);
 `;
 
 type CursorAgentOptions = {
@@ -75,7 +75,7 @@ interface CursorAgentLike {
   close(): void;
 }
 
-class NodeChildCursorRun implements CursorRunLike {
+class BunChildCursorRun implements CursorRunLike {
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #resultPromise: Promise<CursorRunResult>;
 
@@ -83,25 +83,25 @@ class NodeChildCursorRun implements CursorRunLike {
     readonly options: CursorAgentOptions;
     readonly message: string;
   }) {
-    this.#child = spawn(
-      process.execPath.includes("bun") ? "node" : process.execPath,
-      ["--input-type=module", "-e", NODE_CURSOR_SDK_SCRIPT],
-      {
-        cwd: input.options.local.cwd,
-        env: {
-          CURSOR_API_KEY: input.options.apiKey,
-          PATH: process.env["PATH"] ?? "",
-          HOME: process.env["HOME"] ?? "",
-          LANG: process.env["LANG"] ?? "C.UTF-8",
-        },
-        stdio: ["pipe", "pipe", "pipe"],
+    this.#child = spawn(resolveBunExecutable(), ["--eval", BUN_CURSOR_SDK_SCRIPT], {
+      cwd: input.options.local.cwd,
+      env: {
+        CURSOR_API_KEY: input.options.apiKey,
+        PATH: process.env["PATH"] ?? "",
+        HOME: process.env["HOME"] ?? "",
+        LANG: process.env["LANG"] ?? "C.UTF-8",
       },
-    );
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     this.#resultPromise = this.#waitForChild();
     this.#child.stdin.end(
       JSON.stringify({
         modelId: input.options.model.id,
         cwd: input.options.local.cwd,
+        storeRoot: join(
+          input.options.local.cwd,
+          DEFAULT_CURSOR_JSONL_STORE_DIR,
+        ),
         message: input.message,
       }),
     );
@@ -136,32 +136,39 @@ class NodeChildCursorRun implements CursorRunLike {
       this.#child.once("exit", (code, signal) => resolve({ code, signal }));
     });
 
-    const stderrText = stderrChunks.join("").trim();
+    const stdoutText = stdoutChunks.join("").trim();
+    if (stdoutText.length > 0) {
+      try {
+        return parseCursorRunResult(JSON.parse(stdoutText));
+      } catch (error: unknown) {
+        throw new AdapterExecutionError(
+          "provider_error",
+          `invalid Cursor SDK Bun child response: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
     if (exit.code !== 0) {
+      const stderrText = stderrChunks.join("").trim();
       const detail =
         stderrText.length > 0
           ? stderrText
-          : `Cursor SDK child exited with code ${exit.code ?? "null"} signal ${
+          : `Cursor SDK Bun child exited with code ${exit.code ?? "null"} signal ${
               exit.signal ?? "null"
             }`;
       throw new AdapterExecutionError("provider_error", detail);
     }
 
-    const stdoutText = stdoutChunks.join("").trim();
-    try {
-      return parseCursorRunResult(JSON.parse(stdoutText));
-    } catch (error: unknown) {
-      throw new AdapterExecutionError(
-        "provider_error",
-        `invalid Cursor SDK child response: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+    throw new AdapterExecutionError(
+      "provider_error",
+      "Cursor SDK Bun child produced no response",
+    );
   }
 }
 
-class NodeChildCursorAgent implements CursorAgentLike {
+class BunChildCursorAgent implements CursorAgentLike {
   readonly #options: CursorAgentOptions;
 
   constructor(options: CursorAgentOptions) {
@@ -169,7 +176,7 @@ class NodeChildCursorAgent implements CursorAgentLike {
   }
 
   async send(message: string): Promise<CursorRunLike> {
-    return new NodeChildCursorRun({ options: this.#options, message });
+    return new BunChildCursorRun({ options: this.#options, message });
   }
 
   close(): void {
@@ -194,7 +201,14 @@ function formatCursorPrompt(input: AdapterExecutionInput): string {
 async function defaultAgentFactory(
   options: CursorAgentOptions,
 ): Promise<CursorAgentLike> {
-  return new NodeChildCursorAgent(options);
+  return new BunChildCursorAgent(options);
+}
+
+function resolveBunExecutable(): string {
+  if ("bun" in process.versions) {
+    return process.execPath;
+  }
+  return process.env["BUN_BINARY"] ?? "bun";
 }
 
 function parseCursorRunResult(value: unknown): CursorRunResult {
