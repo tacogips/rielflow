@@ -113,6 +113,9 @@ export async function runCliWorkflowPackageScope(
       ...(parsed.options.backend === undefined
         ? {}
         : { backend: parsed.options.backend }),
+      ...(parsed.options.packageKind === undefined
+        ? {}
+        : { kind: parsed.options.packageKind }),
       ...(parsed.options.limit === undefined
         ? {}
         : { limit: parsed.options.limit }),
@@ -132,7 +135,7 @@ export async function runCliWorkflowPackageScope(
     } else {
       for (const record of searched.value.records) {
         io.stdout(
-          `${record.packageName}\t${record.version}\t${record.workflowId}\t${record.registryUrl}\t${record.checksum}\t${record.description}`,
+          `${record.kind}\t${record.packageName}\t${record.version}\t${record.workflowId}\t${record.registryUrl}\t${record.checksum}\t${record.description}`,
         );
       }
     }
@@ -165,6 +168,7 @@ export async function runCliWorkflowPackageScope(
         io.stdout(
           [
             installedPackage.installId,
+            installedPackage.packageKind,
             installedPackage.packageId,
             installedPackage.packageVersion ?? installedPackage.version ?? "",
             installedPackage.packageHash ??
@@ -173,7 +177,11 @@ export async function runCliWorkflowPackageScope(
               "",
             installedPackage.workflowName,
             installedPackage.scope,
-            String(installedPackage.skills.length),
+            String(
+              installedPackage.packageKind === "node-addon"
+                ? installedPackage.addons.length
+                : installedPackage.skills.length,
+            ),
             installedPackage.destinationDirectory,
           ].join("\t"),
         );
@@ -223,18 +231,35 @@ export async function runCliWorkflowPackageScope(
       emitJson(io, checkedOut.value);
     } else {
       io.stdout(`installed package: ${checkedOut.value.packageName}`);
-      io.stdout(`workflow: ${checkedOut.value.workflowName}`);
+      io.stdout(`kind: ${checkedOut.value.packageKind}`);
+      if (checkedOut.value.packageKind === "workflow") {
+        io.stdout(`workflow: ${checkedOut.value.workflowName}`);
+      }
       io.stdout(`scope: ${checkedOut.value.scope}`);
-      io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
+      if (checkedOut.value.packageKind === "workflow") {
+        io.stdout(`destination: ${checkedOut.value.destinationDirectory}`);
+      } else {
+        for (const addon of checkedOut.value.addons) {
+          io.stdout(
+            `addon: ${addon.addonName}@${addon.addonVersion}\t${addon.destinationDirectory}`,
+          );
+        }
+      }
       io.stdout(`registry: ${checkedOut.value.registryUrl}`);
       io.stdout(`checksum: ${checkedOut.value.checksum}`);
       io.stdout(`content digest: ${checkedOut.value.contentDigest}`);
       io.stdout(`updated: ${String(checkedOut.value.updated)}`);
       io.stdout(`installId: ${checkedOut.value.installId}`);
-      if (checkedOut.value.skills.length > 0) {
+      if (
+        checkedOut.value.packageKind === "workflow" &&
+        checkedOut.value.skills.length > 0
+      ) {
         io.stdout(`skills: ${checkedOut.value.skills.length}`);
       }
-      if (checkedOut.value.preInstallCheck !== undefined) {
+      if (
+        checkedOut.value.packageKind === "workflow" &&
+        checkedOut.value.preInstallCheck !== undefined
+      ) {
         const blockingFindings =
           checkedOut.value.preInstallCheck.findings.filter(
             (finding) =>

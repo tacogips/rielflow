@@ -59,6 +59,23 @@ compatibility or historical references rather than missed primary examples.
   - Duplicate checkout is rejected by default when either the destination workflow directory exists or the matching checkout registry record exists. `--overwrite` keeps the existing destination untouched until the staged remote bundle validates, then removes only the resolved destination directory under the selected workflow root and installs the staged bundle.
   - On success, write checkout registry metadata under `<user-root>/workflow-registry/checkouts/<scope>-<workflow-name>.json`. The JSON record includes at least `workflowName`, `sourceUrl`, `scope` (`project` or `user`), `checkedOutAt`, and `destinationDirectory`.
   - Text output should identify the installed workflow name, destination scope, destination directory, and registry record path. `--output json` should emit the same fields plus validation status.
+- `package install <package-id>`
+  - Install a registry package into project scope by default or user scope with
+    `--user-scope`.
+  - Workflow packages install workflow bundles, and node packages with
+    `kind: "node-addon"` install validated add-on manifests under the selected
+    scope's `addons/` root.
+  - The command reuses registry resolution, staged validation, checksum,
+    integrity/signature policy, duplicate handling, `--overwrite`, `--yes`, and
+    package checkout provenance for both package kinds.
+  - Node package install must not download or execute add-on code during
+    workflow load; installed add-ons are resolved later through the normal local
+    add-on root lookup.
+  - `--workflow-definition-dir` remains a workflow package destination override
+    and does not redirect node package add-on projection.
+  - JSON output includes `packageKind`, `installId`, registry fields, checksum
+    and integrity fields, and either installed workflow fields or installed
+    `addons[]` artifact fields.
 - `workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.

@@ -4,9 +4,13 @@ import { err, ok, type Result } from "../result";
 import { normalizeWorkflowPackageIntegrity } from "./integrity";
 import {
   WORKFLOW_PACKAGE_MANIFEST_FILE,
+  type AnyWorkflowPackageManifest,
   type NormalizedWorkflowPackageManifest,
+  type NormalizedWorkflowNodeAddonPackageManifest,
   type WorkflowPackageFailure,
+  type WorkflowPackageKind,
   type WorkflowPackageManifestDependencyEntry,
+  type WorkflowPackageManifestAddonEntry,
   type WorkflowPackageManifestSkillEntry,
   type WorkflowPackageSkillVendor,
   type WorkflowPackageWorkflowMetadata,
@@ -53,6 +57,23 @@ function readStringArray(value: unknown): readonly string[] | undefined {
     (entry): entry is string => typeof entry === "string" && entry.length > 0,
   );
   return values.length === value.length ? values : undefined;
+}
+
+function normalizeWorkflowPackageKind(
+  value: unknown,
+): Result<WorkflowPackageKind, WorkflowPackageFailure> {
+  if (value === undefined || value === "workflow") {
+    return ok("workflow");
+  }
+  if (value === "node-addon") {
+    return ok("node-addon");
+  }
+  return err(
+    packageFailure(
+      "INVALID_MANIFEST",
+      "package manifest kind must be workflow or node-addon",
+    ),
+  );
 }
 
 const WORKFLOW_PACKAGE_SKILL_VENDOR_SET: ReadonlySet<string> = new Set([
@@ -297,6 +318,18 @@ export function normalizeWorkflowPackageManifest(
       packageFailure("INVALID_MANIFEST", "package manifest is invalid"),
     );
   }
+  const kind = normalizeWorkflowPackageKind(value["kind"]);
+  if (!kind.ok) {
+    return kind;
+  }
+  if (kind.value !== "workflow") {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "workflow package manifest loader requires kind workflow",
+      ),
+    );
+  }
   const name = value["name"];
   const version = value["version"];
   const description = value["description"];
@@ -397,6 +430,7 @@ export function normalizeWorkflowPackageManifest(
     );
   }
   return ok({
+    kind: "workflow",
     name,
     version,
     description,
@@ -431,17 +465,220 @@ export function normalizeWorkflowPackageManifest(
   });
 }
 
+function normalizeWorkflowPackageManifestAddons(
+  value: unknown,
+): Result<
+  readonly WorkflowPackageManifestAddonEntry[],
+  WorkflowPackageFailure
+> {
+  if (!Array.isArray(value) || value.length === 0) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "node-addon package manifest addons must be a non-empty array",
+      ),
+    );
+  }
+  const addons: WorkflowPackageManifestAddonEntry[] = [];
+  const seen = new Set<string>();
+  for (const [index, entry] of value.entries()) {
+    if (!isRecord(entry)) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package manifest addons[${index}] must be an object`,
+        ),
+      );
+    }
+    const name = entry["name"];
+    const version = entry["version"];
+    const sourcePath = entry["sourcePath"];
+    const normalizedSourcePath =
+      typeof sourcePath === "string"
+        ? normalizePackageRelativePath(sourcePath)
+        : undefined;
+    if (
+      typeof name !== "string" ||
+      name.length === 0 ||
+      typeof version !== "string" ||
+      version.length === 0 ||
+      normalizedSourcePath === undefined
+    ) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package manifest addons[${index}] is invalid`,
+        ),
+      );
+    }
+    const duplicateKey = `${name}\0${version}`;
+    if (seen.has(duplicateKey)) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package manifest addons[${index}] duplicates ${name}@${version}`,
+        ),
+      );
+    }
+    seen.add(duplicateKey);
+    addons.push({ name, version, sourcePath: normalizedSourcePath });
+  }
+  return ok(addons);
+}
+
+export function normalizeWorkflowNodeAddonPackageManifest(
+  value: unknown,
+): Result<NormalizedWorkflowNodeAddonPackageManifest, WorkflowPackageFailure> {
+  if (!isRecord(value)) {
+    return err(
+      packageFailure("INVALID_MANIFEST", "package manifest is invalid"),
+    );
+  }
+  const kind = normalizeWorkflowPackageKind(value["kind"]);
+  if (!kind.ok) {
+    return kind;
+  }
+  if (kind.value !== "node-addon") {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "node-addon package manifest loader requires kind node-addon",
+      ),
+    );
+  }
+  const name = value["name"];
+  const version = value["version"];
+  const description = value["description"];
+  const tags = readStringArray(value["tags"]);
+  const registry = value["registry"];
+  const checksum = value["checksum"];
+  const checksumAlgorithm = value["checksumAlgorithm"];
+  const integrity = normalizeWorkflowPackageIntegrity(value["integrity"]);
+  if (!integrity.ok) {
+    return integrity;
+  }
+  if (
+    typeof name !== "string" ||
+    typeof version !== "string" ||
+    typeof description !== "string" ||
+    tags === undefined ||
+    typeof registry !== "string" ||
+    typeof checksum !== "string" ||
+    checksumAlgorithm !== "md5"
+  ) {
+    return err(
+      packageFailure("INVALID_MANIFEST", "package manifest is missing fields"),
+    );
+  }
+  if (!isSafeWorkflowPackageName(name)) {
+    return err(
+      packageFailure("INVALID_PACKAGE_NAME", `invalid package name '${name}'`),
+    );
+  }
+  if (
+    value["workflow"] !== undefined ||
+    value["workflowDirectory"] !== undefined
+  ) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        "node-addon package manifest must not include workflow metadata",
+      ),
+    );
+  }
+  const dependencies = normalizeWorkflowPackageManifestDependencies(
+    value["dependencies"],
+    name,
+  );
+  if (!dependencies.ok) {
+    return dependencies;
+  }
+  const addons = normalizeWorkflowPackageManifestAddons(value["addons"]);
+  if (!addons.ok) {
+    return addons;
+  }
+  const authors = readStringArray(value["authors"]);
+  const examples = readStringArray(value["examples"]);
+  return ok({
+    kind: "node-addon",
+    name,
+    version,
+    description,
+    tags,
+    registry,
+    checksum,
+    checksumAlgorithm,
+    addons: addons.value,
+    ...(integrity.value === undefined ? {} : { integrity: integrity.value }),
+    ...(typeof value["title"] === "string" ? { title: value["title"] } : {}),
+    ...(authors === undefined ? {} : { authors }),
+    ...(typeof value["license"] === "string"
+      ? { license: value["license"] }
+      : {}),
+    ...(typeof value["homepage"] === "string"
+      ? { homepage: value["homepage"] }
+      : {}),
+    ...(typeof value["repository"] === "string"
+      ? { repository: value["repository"] }
+      : {}),
+    ...(examples === undefined ? {} : { examples }),
+    ...(typeof value["minimumRielflowVersion"] === "string"
+      ? { minimumRielflowVersion: value["minimumRielflowVersion"] }
+      : {}),
+    dependencies: dependencies.value,
+  });
+}
+
+export function normalizeAnyWorkflowPackageManifest(
+  value: unknown,
+  packageRoot: string,
+): Result<AnyWorkflowPackageManifest, WorkflowPackageFailure> {
+  if (!isRecord(value)) {
+    return err(
+      packageFailure("INVALID_MANIFEST", "package manifest is invalid"),
+    );
+  }
+  const kind = normalizeWorkflowPackageKind(value["kind"]);
+  if (!kind.ok) {
+    return kind;
+  }
+  return kind.value === "node-addon"
+    ? normalizeWorkflowNodeAddonPackageManifest(value)
+    : normalizeWorkflowPackageManifest(value, packageRoot);
+}
+
 export async function loadWorkflowPackageManifest(
   packageRoot: string,
 ): Promise<Result<NormalizedWorkflowPackageManifest, WorkflowPackageFailure>> {
+  const loaded = await loadAnyWorkflowPackageManifest(packageRoot);
+  if (!loaded.ok) {
+    return loaded;
+  }
+  if (loaded.value.kind !== "workflow") {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `package '${loaded.value.name}' is a node-addon package, not a workflow package`,
+      ),
+    );
+  }
+  return ok(loaded.value);
+}
+
+export async function loadAnyWorkflowPackageManifest(
+  packageRoot: string,
+): Promise<Result<AnyWorkflowPackageManifest, WorkflowPackageFailure>> {
   const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
   try {
     const raw = await readFile(manifestPath, "utf8");
-    const normalized = normalizeWorkflowPackageManifest(
+    const normalized = normalizeAnyWorkflowPackageManifest(
       JSON.parse(raw) as unknown,
       packageRoot,
     );
     if (!normalized.ok) {
+      return normalized;
+    }
+    if (normalized.value.kind === "node-addon") {
       return normalized;
     }
     const workflowJsonPath = path.join(

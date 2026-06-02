@@ -135,6 +135,12 @@ Use object form with explicit version:
 
 Current built-ins include `rielflow/chat-reply-worker`, `rielflow/codex-worker`, `rielflow/claude-code-worker`, `rielflow/x-gateway-read`, `rielflow/x-gateway`, `rielflow/mail-gateway-read`, `rielflow/mail-gateway`, `rielflow/git-commit`, and `rielflow/git-push`, all version `1`.
 
+Non-built-in add-ons can also come from package-installed node add-on packages.
+Search and install them with `rielflow package search --kind node-addon` and
+`rielflow package install <package-id>`. After install, reference them through
+the same `addon` object; workflow validation and execution resolve them from
+local project/user add-on roots and do not download missing packages.
+
 ## External Portability
 
 When creating workflows for users outside the rielflow repository:

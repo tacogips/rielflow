@@ -10,6 +10,7 @@ export const WORKFLOW_PACKAGE_MANIFEST_FILE = "rielflow-package.json";
 
 export type WorkflowPackageChecksumAlgorithm = "md5";
 export type WorkflowPackageCacheBackendKind = "json" | "sqlite";
+export type WorkflowPackageKind = "workflow" | "node-addon";
 export type WorkflowPackageIntegrityAlgorithm = "sha256";
 export type WorkflowPackageSignatureAlgorithm = "ed25519";
 export type WorkflowPackagePreInstallCheckMode = "warn" | "reject";
@@ -81,6 +82,7 @@ export interface WorkflowPackageRegistryConfigOptions {
 }
 
 export interface WorkflowPackageManifest {
+  readonly kind?: "workflow";
   readonly name: string;
   readonly version: string;
   readonly description: string;
@@ -113,6 +115,12 @@ export interface WorkflowPackageManifestDependencyEntry {
   readonly branch?: string;
 }
 
+export interface WorkflowPackageManifestAddonEntry {
+  readonly name: string;
+  readonly version: string;
+  readonly sourcePath: string;
+}
+
 export interface WorkflowPackageDependencyIdentity {
   readonly packageId: string;
   readonly registryUrl: string;
@@ -122,10 +130,45 @@ export interface WorkflowPackageDependencyIdentity {
 
 export interface NormalizedWorkflowPackageManifest
   extends WorkflowPackageManifest {
+  readonly kind: "workflow";
   readonly workflowDirectory: string;
   readonly backends: readonly string[];
   readonly dependencies: readonly WorkflowPackageManifestDependencyEntry[];
 }
+
+export interface WorkflowNodeAddonPackageManifest {
+  readonly kind: "node-addon";
+  readonly name: string;
+  readonly version: string;
+  readonly description: string;
+  readonly tags: readonly string[];
+  readonly registry: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly addons: readonly WorkflowPackageManifestAddonEntry[];
+  readonly integrity?: WorkflowPackageIntegrity;
+  readonly title?: string;
+  readonly authors?: readonly string[];
+  readonly license?: string;
+  readonly homepage?: string;
+  readonly repository?: string;
+  readonly examples?: readonly string[];
+  readonly minimumRielflowVersion?: string;
+  readonly dependencies?: readonly (
+    | string
+    | WorkflowPackageManifestDependencyEntry
+  )[];
+}
+
+export interface NormalizedWorkflowNodeAddonPackageManifest
+  extends WorkflowNodeAddonPackageManifest {
+  readonly addons: readonly WorkflowPackageManifestAddonEntry[];
+  readonly dependencies: readonly WorkflowPackageManifestDependencyEntry[];
+}
+
+export type AnyWorkflowPackageManifest =
+  | NormalizedWorkflowPackageManifest
+  | NormalizedWorkflowNodeAddonPackageManifest;
 
 export interface WorkflowPackageWorkflowMetadata {
   readonly title?: string;
@@ -141,6 +184,7 @@ export interface WorkflowPackageManifestSkillEntry {
 }
 
 export interface WorkflowPackageIndexRecord {
+  readonly kind: WorkflowPackageKind;
   readonly registryId: string;
   readonly registryUrl: string;
   readonly packageName: string;
@@ -157,10 +201,12 @@ export interface WorkflowPackageIndexRecord {
   readonly checksum: string;
   readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
   readonly integrity?: WorkflowPackageIntegrity;
+  readonly addons?: readonly WorkflowPackageManifestAddonEntry[];
   readonly updatedAt: string;
 }
 
 export interface WorkflowPackageSearchRecord {
+  readonly kind: WorkflowPackageKind;
   readonly packageId: string;
   readonly packageName: string;
   readonly workflowName: string;
@@ -177,7 +223,54 @@ export interface WorkflowPackageSearchRecord {
   readonly checksum: string;
   readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
   readonly integrity?: WorkflowPackageIntegrity;
+  readonly addons?: readonly WorkflowPackageManifestAddonEntry[];
   readonly updatedAt: string;
+}
+
+export interface WorkflowPackageAddonArtifact {
+  readonly addonName: string;
+  readonly addonVersion: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly manifestPath: string;
+  readonly allowedFiles: readonly string[];
+  readonly contentDigest: string;
+  readonly contentDigestAlgorithm: "sha256";
+}
+
+export interface WorkflowPackageAddonInstallTarget
+  extends WorkflowPackageAddonArtifact {
+  readonly scope: import("../checkout").WorkflowCheckoutScope;
+  readonly destinationDirectory: string;
+}
+
+export interface WorkflowNodeAddonPackageCheckoutResult {
+  readonly packageKind: "node-addon";
+  readonly packageId: string;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly scope: import("../checkout").WorkflowCheckoutScope;
+  readonly registryPath: string;
+  readonly registryUrl: string;
+  readonly registryRef: string;
+  readonly sourcePath: string;
+  readonly sourceDirectory: string;
+  readonly metadataPath: string;
+  readonly checkoutRecordPath: string;
+  readonly checksum: string;
+  readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly includedFiles: readonly string[];
+  readonly integrityDigest?: string;
+  readonly addons: readonly WorkflowPackageAddonInstallTarget[];
+  readonly installId: string;
+  readonly overwritten: boolean;
+  readonly updated: boolean;
+  readonly confirmationSkipped?: boolean;
+  readonly changedArtifacts?: readonly string[];
+  readonly dependencies?: readonly WorkflowPackageDependencyInstallResult[];
+  readonly dependencyGraph?: readonly WorkflowPackageDependencyEdge[];
 }
 
 export interface WorkflowPackageDependencyEdge {

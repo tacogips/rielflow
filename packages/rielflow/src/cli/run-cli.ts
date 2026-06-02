@@ -160,6 +160,7 @@ export async function runCli(
       (scope === "workflow" && (command === "list" || command === "usage")) ||
       (scope === "package" &&
         (command === "list" ||
+          command === "search" ||
           command === "status" ||
           command === "update" ||
           command === "remove"))

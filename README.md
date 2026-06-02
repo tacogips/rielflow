@@ -229,8 +229,12 @@ project or user catalog for workflows you want to keep.
 
 ## Package Management
 
-Rielflow has a workflow package manager. Packages are Git-backed workflow
-bundles that can also include agent skills. The built-in default registry is:
+Rielflow has a package manager for Git-backed workflow bundles and
+declarative node add-on packages. Workflow packages can also include agent
+skills. Node add-on packages use `kind: "node-addon"` in
+`rielflow-package.json` and install validated `addon.json` based add-ons under
+project or user add-on roots; they do not execute package lifecycle code or
+download missing add-ons during workflow load. The built-in default registry is:
 
 ```text
 https://github.com/tacogips/rielflow-packages
@@ -245,12 +249,31 @@ Search packages:
 
 ```bash
 rielflow package search review --refresh
+rielflow package search release --kind node-addon --output json
 ```
 
-Install a package into the current project:
+Install a package into the current project. Workflow packages install workflow
+bundles; node add-on packages install package-owned add-ons into
+`.rielflow/addons/...`:
 
 ```bash
 rielflow package install worker-only-single-step
+rielflow package install release-note-node --output json
+```
+
+After a node add-on package install, authored workflows reference the installed
+add-on through the existing `workflow.json.nodes[].addon` object. No package is
+downloaded while loading, validating, or running the workflow:
+
+```json
+{
+  "id": "release-note",
+  "addon": {
+    "name": "team/release-note",
+    "version": "1",
+    "config": {}
+  }
+}
 ```
 
 Install a package into the user catalog:
@@ -268,6 +291,8 @@ equivalent dependencies are reused when their checkout record and workflow
 directory still match. Dependency cycles fail with the package chain, and if the
 caller install later fails, dependency mutations created by that install attempt
 are rolled back or restored before the error is reported.
+This first node add-on package iteration rejects `kind: "node-addon"` manifests
+with dependencies during checkout rather than silently ignoring them.
 
 Package validation then uses the same scoped workflow visibility the installed
 workflow will have: package-local sibling workflows remain visible, the staged
@@ -277,6 +302,15 @@ must resolve callees from user-visible roots. Missing `toWorkflowId` callees
 still fail before caller install and report the searched workflow roots.
 Machine-readable install output includes dependency activity such as the
 `dependencyGraph` and any rolled-back dependency records.
+
+Machine-readable package lifecycle output includes package kind. Workflow
+package installs report `packageKind: "workflow"` and installed workflow
+fields. Node add-on package installs report `packageKind: "node-addon"` and an
+`addons[]` array with add-on names, versions, destination directories,
+manifest paths, and SHA-256 content digests. `package list`, `package status`,
+`package remove`, and `package update` keep `packageKind` explicit so
+automation can distinguish workflow package checkouts from package-owned local
+add-ons.
 
 List installed packages:
 

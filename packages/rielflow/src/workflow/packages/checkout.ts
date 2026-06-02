@@ -16,6 +16,7 @@ import { resolveConfiguredRootPath } from "../paths";
 import { err, ok, type Result } from "../result";
 import { packageChangedArtifacts } from "./change-detection";
 import { computeWorkflowPackageChecksum } from "./checksum";
+import { checkoutWorkflowNodeAddonPackage } from "./checkout-node-addon";
 import {
   dependencyIdentity,
   installManifestDependencies,
@@ -27,7 +28,7 @@ import {
   describePackageValidationFailure,
 } from "./install-validation";
 import { verifyWorkflowPackageIntegrity } from "./integrity";
-import { loadWorkflowPackageManifest } from "./manifest";
+import { loadAnyWorkflowPackageManifest } from "./manifest";
 import { runWorkflowPackageContainerCheck } from "./pre-install-container";
 import { createWorkflowPackageStaticScanner } from "./pre-install-scanner";
 import {
@@ -49,6 +50,8 @@ import type {
   WorkflowPackageContainerRuntimeRequest,
   WorkflowPackageDependencyEdge,
   WorkflowPackageDependencyInstallResult,
+  WorkflowPackageAddonInstallTarget,
+  WorkflowPackageKind,
   WorkflowPackageSkillInstallTarget,
   WorkflowPackageSkillSelection,
 } from "./types";
@@ -75,6 +78,7 @@ export interface WorkflowPackageCheckoutInput {
 }
 
 export interface WorkflowPackageCheckoutResult {
+  readonly packageKind: WorkflowPackageKind;
   readonly packageId: string;
   readonly packageName: string;
   readonly workflowName: string;
@@ -88,12 +92,14 @@ export interface WorkflowPackageCheckoutResult {
   readonly metadataPath: string;
   readonly checkoutRecordPath: string;
   readonly checksum: string;
+  readonly checksumAlgorithm: "md5";
   readonly contentDigestAlgorithm: "sha256";
   readonly contentDigest: string;
   readonly includedFiles: readonly string[];
   readonly packageVersion: string;
   readonly packageHash: string;
   readonly skills: readonly WorkflowPackageSkillInstallTarget[];
+  readonly addons: readonly WorkflowPackageAddonInstallTarget[];
   readonly managedSkillRoot?: string;
   readonly preInstallCheck?: WorkflowPackagePreInstallCheckResult;
   readonly installId: string;
@@ -463,11 +469,28 @@ async function checkoutWorkflowPackageInternal(
   const registry = resolvedPackage.value.registry;
   const record = resolvedPackage.value.record;
   const packageRoot = path.join(registry.localPath, record.sourcePath);
-  const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
-  const manifest = await loadWorkflowPackageManifest(packageRoot);
+  const manifest = await loadAnyWorkflowPackageManifest(packageRoot);
   if (!manifest.ok) {
     return manifest;
   }
+  if (manifest.value.kind === "node-addon") {
+    if (manifest.value.dependencies.length > 0) {
+      return err(
+        packageFailure(
+          "VALIDATION",
+          "node-addon package dependencies are not supported during checkout in this release",
+        ),
+      );
+    }
+    return checkoutWorkflowNodeAddonPackage({
+      checkoutInput: input,
+      registry,
+      record,
+      packageRoot,
+      manifest: manifest.value,
+    });
+  }
+  const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
   const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
   const currentIdentity = dependencyIdentity({
     packageId: record.packageName,
@@ -758,6 +781,7 @@ async function checkoutWorkflowPackageInternal(
     const checkedOutAt = input.options?.now ?? new Date();
     const packageRecord = {
       checkoutKind: "package",
+      packageKind: "workflow",
       installId,
       workflowName: loaded.value.workflowName,
       sourceUrl: `${record.registryUrl}#${record.sourceBranch}:${record.sourcePath}`,
@@ -849,6 +873,7 @@ async function checkoutWorkflowPackageInternal(
       await discardMutationBackups(mutationBackups);
     }
     return ok({
+      packageKind: "workflow",
       packageId: record.packageName,
       packageName: record.packageName,
       workflowName: loaded.value.workflowName,
@@ -866,12 +891,14 @@ async function checkoutWorkflowPackageInternal(
         ".rielflow-package-provenance.json",
       ),
       checksum: record.checksum,
+      checksumAlgorithm: record.checksumAlgorithm,
       contentDigestAlgorithm: contentDigest.value.contentDigestAlgorithm,
       contentDigest: contentDigest.value.contentDigest,
       includedFiles: contentDigest.value.includedFiles,
       packageVersion: record.version,
       packageHash: checksum.value.checksum,
       skills: installedSkills.value.targets,
+      addons: [],
       installId,
       overwritten: destinationExists || checkoutRecordExists,
       updated: destinationExists || checkoutRecordExists,
