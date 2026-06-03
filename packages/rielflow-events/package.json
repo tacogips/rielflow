@@ -1,6 +1,6 @@
 {
   "name": "rielflow-events",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "External event contracts and runtime ports for Rielflow",
   "type": "module",
   "main": "dist/index.js",
