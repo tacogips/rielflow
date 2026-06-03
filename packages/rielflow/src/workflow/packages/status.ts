@@ -4,6 +4,7 @@ import { ok, type Result } from "../result";
 import { searchWorkflowPackages } from "./search";
 import type { WorkflowPackageCheckoutResult } from "./checkout";
 import type {
+  WorkflowPackageAddonInstallTarget,
   WorkflowPackageFailure,
   WorkflowPackageRegistryConfigOptions,
   WorkflowPackageSkillInstallTarget,
@@ -37,22 +38,40 @@ function installedArtifacts(
   record: Readonly<Record<string, unknown>>,
   checkoutRecordPath: string,
 ): readonly Readonly<Record<string, unknown>>[] {
-  const artifacts: Readonly<Record<string, unknown>>[] = [
-    {
-      kind: "workflow",
-      destination: recordString(record, "destinationDirectory"),
-      sourcePath: recordString(record, "workflowDirectory"),
-      checksum: recordString(record, "checksum"),
-    },
-    {
-      kind: "provenance",
-      destination: path.join(
-        recordString(record, "destinationDirectory") ?? "",
-        ".rielflow-package-provenance.json",
-      ),
-      sourcePath: checkoutRecordPath,
-    },
-  ];
+  const packageKind = recordString(record, "packageKind") ?? "workflow";
+  const artifacts: Readonly<Record<string, unknown>>[] =
+    packageKind === "node-addon"
+      ? []
+      : [
+          {
+            kind: "workflow",
+            destination: recordString(record, "destinationDirectory"),
+            sourcePath: recordString(record, "workflowDirectory"),
+            checksum: recordString(record, "checksum"),
+          },
+          {
+            kind: "provenance",
+            destination: path.join(
+              recordString(record, "destinationDirectory") ?? "",
+              ".rielflow-package-provenance.json",
+            ),
+            sourcePath: checkoutRecordPath,
+          },
+        ];
+  for (const addon of recordArray(record, "addons")) {
+    if (typeof addon !== "object" || addon === null || Array.isArray(addon)) {
+      continue;
+    }
+    const addonRecord = addon as Readonly<Record<string, unknown>>;
+    artifacts.push({
+      kind: "node-addon",
+      name: recordString(addonRecord, "addonName"),
+      version: recordString(addonRecord, "addonVersion"),
+      destination: recordString(addonRecord, "destinationDirectory"),
+      sourcePath: recordString(addonRecord, "sourcePath"),
+      checksum: recordString(addonRecord, "contentDigest"),
+    });
+  }
   for (const skill of recordArray(record, "skills")) {
     if (typeof skill !== "object" || skill === null || Array.isArray(skill)) {
       continue;
@@ -106,6 +125,10 @@ export async function resolveWorkflowPackageCheckoutStatus(input: {
       : await searchWorkflowPackages({
           query: packageId,
           registry: registryUrl,
+          kind:
+            recordString(input.record, "packageKind") === "node-addon"
+              ? "node-addon"
+              : "workflow",
           refresh: true,
           ...(registryRef === undefined ? {} : { branch: registryRef }),
           ...(input.options === undefined ? {} : { options: input.options }),
@@ -165,6 +188,10 @@ export function createNoopWorkflowPackageUpdateResult(
   status: Readonly<Record<string, unknown>>,
 ): WorkflowPackageCheckoutResult {
   return {
+    packageKind:
+      String(status["packageKind"] ?? "workflow") === "node-addon"
+        ? "node-addon"
+        : "workflow",
     packageId: String(status["packageId"] ?? ""),
     packageName: String(status["packageName"] ?? status["packageId"] ?? ""),
     workflowName: String(status["workflowName"] ?? ""),
@@ -178,6 +205,7 @@ export function createNoopWorkflowPackageUpdateResult(
     metadataPath: String(status["metadataPath"] ?? ""),
     checkoutRecordPath: String(status["checkoutRecordPath"] ?? ""),
     checksum: String(status["installedChecksum"] ?? status["checksum"] ?? ""),
+    checksumAlgorithm: "md5",
     contentDigestAlgorithm: "sha256",
     contentDigest: String(status["contentDigest"] ?? ""),
     includedFiles: (Array.isArray(status["includedFiles"])
@@ -188,6 +216,9 @@ export function createNoopWorkflowPackageUpdateResult(
     skills: (Array.isArray(status["skills"])
       ? status["skills"]
       : []) as readonly WorkflowPackageSkillInstallTarget[],
+    addons: (Array.isArray(status["addons"])
+      ? status["addons"]
+      : []) as readonly WorkflowPackageAddonInstallTarget[],
     installId: String(status["installId"] ?? ""),
     overwritten: false,
     updated: false,

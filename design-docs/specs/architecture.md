@@ -1217,6 +1217,14 @@ workflow validation pipeline, so CLI, GraphQL, library validation, and runtime
 readiness surfaces all consume the same add-on result instead of duplicating
 transport-specific checks.
 
+Node packages extend the add-on catalog without changing workflow load-time
+resolution. A node package is a Git-backed registry package with
+`kind: "node-addon"` that installs validated local add-on manifests into the
+project or user add-on root. Package install owns network fetch, package
+integrity, duplicate handling, and provenance; workflow load continues to read
+only local add-on roots and never downloads missing add-ons on demand. See
+`design-docs/specs/design-workflow-node-package-install.md`.
+
 ### Prompt and Input Assembly
 
 Source:

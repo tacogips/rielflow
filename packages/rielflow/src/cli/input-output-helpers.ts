@@ -116,7 +116,7 @@ export function printHelp(io: CliIo): void {
     "  package update <workflow-name>|--install-id <id> [--yes to remove registry-deleted package]",
   );
   io.stdout(
-    "  package search [query] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
+    "  package search [query] [--kind workflow|node-addon] [--registry <id-or-url>] [--refresh|--no-cache] [--tag <tag>]",
   );
   io.stdout(
     "  package registry add <id> --registry-url <url> [--local-path <path>] [--branch <name>]",

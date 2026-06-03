@@ -15,6 +15,11 @@ export interface WorkflowPackageChecksumInput {
   readonly algorithm?: WorkflowPackageChecksumAlgorithm;
 }
 
+export interface WorkflowNodeAddonPackageChecksumInput {
+  readonly packageRoot: string;
+  readonly algorithm?: WorkflowPackageChecksumAlgorithm;
+}
+
 export interface WorkflowPackageChecksumResult {
   readonly checksum: string;
   readonly checksumAlgorithm: WorkflowPackageChecksumAlgorithm;
@@ -24,6 +29,11 @@ export interface WorkflowPackageChecksumResult {
 export interface WorkflowPackageIntegrityDigestInput {
   readonly packageRoot: string;
   readonly workflowDirectory: string;
+  readonly algorithm?: WorkflowPackageIntegrityAlgorithm;
+}
+
+export interface WorkflowNodeAddonPackageIntegrityDigestInput {
+  readonly packageRoot: string;
   readonly algorithm?: WorkflowPackageIntegrityAlgorithm;
 }
 
@@ -119,8 +129,9 @@ function normalizeDigestInput(relativePath: string, content: string): string {
 
 async function computePackageDigest(input: {
   readonly packageRoot: string;
-  readonly workflowDirectory: string;
+  readonly workflowDirectory?: string;
   readonly hashAlgorithm: "md5" | "sha256";
+  readonly requireWorkflowBundle: boolean;
 }): Promise<
   Result<
     { readonly digest: string; readonly includedFiles: readonly string[] },
@@ -130,15 +141,24 @@ async function computePackageDigest(input: {
   try {
     const files = await collectFiles(input.packageRoot);
     const hasManifest = files.includes(WORKFLOW_PACKAGE_MANIFEST_FILE);
-    const workflowJson = path
-      .join(input.workflowDirectory, "workflow.json")
-      .split(path.sep)
-      .join("/");
-    if (!hasManifest || !files.includes(workflowJson)) {
+    const workflowJson =
+      input.workflowDirectory === undefined
+        ? undefined
+        : path
+            .join(input.workflowDirectory, "workflow.json")
+            .split(path.sep)
+            .join("/");
+    if (
+      !hasManifest ||
+      (input.requireWorkflowBundle &&
+        (workflowJson === undefined || !files.includes(workflowJson)))
+    ) {
       return err(
         packageFailure(
           "MISSING_WORKFLOW_BUNDLE",
-          "package checksum requires rielflow-package.json and workflow.json",
+          input.requireWorkflowBundle
+            ? "package checksum requires rielflow-package.json and workflow.json"
+            : "package checksum requires rielflow-package.json",
         ),
       );
     }
@@ -173,6 +193,31 @@ export async function computeWorkflowPackageChecksum(
     packageRoot: input.packageRoot,
     workflowDirectory: input.workflowDirectory,
     hashAlgorithm: "md5",
+    requireWorkflowBundle: true,
+  });
+  if (!computed.ok) {
+    return computed;
+  }
+  return ok({
+    checksum: computed.value.digest,
+    checksumAlgorithm: algorithm,
+    includedFiles: computed.value.includedFiles,
+  });
+}
+
+export async function computeWorkflowNodeAddonPackageChecksum(
+  input: WorkflowNodeAddonPackageChecksumInput,
+): Promise<Result<WorkflowPackageChecksumResult, WorkflowPackageFailure>> {
+  const algorithm = input.algorithm ?? "md5";
+  if (algorithm !== "md5") {
+    return err(
+      packageFailure("USAGE", "only md5 package checksums are supported"),
+    );
+  }
+  const computed = await computePackageDigest({
+    packageRoot: input.packageRoot,
+    hashAlgorithm: "md5",
+    requireWorkflowBundle: false,
   });
   if (!computed.ok) {
     return computed;
@@ -199,6 +244,33 @@ export async function computeWorkflowPackageIntegrityDigest(
     packageRoot: input.packageRoot,
     workflowDirectory: input.workflowDirectory,
     hashAlgorithm: "sha256",
+    requireWorkflowBundle: true,
+  });
+  if (!computed.ok) {
+    return computed;
+  }
+  return ok({
+    digest: computed.value.digest,
+    digestAlgorithm: algorithm,
+    includedFiles: computed.value.includedFiles,
+  });
+}
+
+export async function computeWorkflowNodeAddonPackageIntegrityDigest(
+  input: WorkflowNodeAddonPackageIntegrityDigestInput,
+): Promise<
+  Result<WorkflowPackageIntegrityDigestResult, WorkflowPackageFailure>
+> {
+  const algorithm = input.algorithm ?? "sha256";
+  if (algorithm !== "sha256") {
+    return err(
+      packageFailure("USAGE", "only sha256 package integrity is supported"),
+    );
+  }
+  const computed = await computePackageDigest({
+    packageRoot: input.packageRoot,
+    hashAlgorithm: "sha256",
+    requireWorkflowBundle: false,
   });
   if (!computed.ok) {
     return computed;

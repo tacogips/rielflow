@@ -160,6 +160,25 @@ packages/rielflow/src/workflow/packages/checkout.test.ts`, `bun run typecheck`,
 `bun run packages/rielflow/src/bin.ts package install codex-impl-plan-completion-loop --registry default --output json`
 when local package checksums allow it.
 
+Workflow node package install issue-resolution runs should keep the
+plugin-style but declarative boundary visible in user-facing docs. Node add-on
+packages use `rielflow-package.json` with `kind: "node-addon"` and install
+validated `addon.json` based add-ons into project or user add-on roots through
+the existing `rielflow package install <package-id>` command. They do not
+execute package lifecycle code, install executable plugins, or download missing
+add-ons during workflow load, validation, or execution. `package search --kind
+node-addon`, install, list, status, remove, and update JSON output must expose
+`kind` or `packageKind` so automation can distinguish workflow packages from
+package-owned add-ons. First-iteration node add-on package manifests with
+dependencies are rejected during checkout. Documentation refresh should cover
+`README.md`, this workflow skill, and directly affected add-on/workflow
+authoring skills. Verification should include
+`bun test packages/rielflow/src/workflow/packages/packages.test.ts`,
+`bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`,
+`bun test packages/rielflow/src/workflow/authored-workflow.test.ts`,
+`bun test packages/rielflow/src/cli.test.ts`, `bun run typecheck`, `bun run
+lint:biome`, and `git diff --check`.
+
 ## Reporting
 
 After the workflow finishes, report:

@@ -15,13 +15,16 @@ import {
   resolveWorkflowPackageCheckoutStatus,
 } from "./status";
 import type {
+  WorkflowPackageAddonInstallTarget,
   WorkflowPackageFailure,
+  WorkflowPackageKind,
   WorkflowPackageRegistryConfigOptions,
   WorkflowPackageSkillInstallTarget,
 } from "./types";
 
 export interface WorkflowPackageInstalledRecord {
   readonly installId: string;
+  readonly packageKind: WorkflowPackageKind;
   readonly packageId: string;
   readonly packageName: string;
   readonly workflowName: string;
@@ -40,6 +43,7 @@ export interface WorkflowPackageInstalledRecord {
   readonly registryRef?: string;
   readonly sourceUrl?: string;
   readonly skills: readonly WorkflowPackageSkillInstallTarget[];
+  readonly addons: readonly WorkflowPackageAddonInstallTarget[];
 }
 
 export interface WorkflowPackageListResult {
@@ -48,6 +52,7 @@ export interface WorkflowPackageListResult {
 
 export interface WorkflowPackageRemoveResult {
   readonly installId: string;
+  readonly packageKind: WorkflowPackageKind;
   readonly packageId: string;
   readonly workflowName: string;
   readonly scope: WorkflowCheckoutScope;
@@ -207,6 +212,26 @@ function recordSkills(
   );
 }
 
+function recordAddons(
+  record: Readonly<Record<string, unknown>>,
+): readonly WorkflowPackageAddonInstallTarget[] {
+  return recordArray(record, "addons").filter(
+    (entry): entry is WorkflowPackageAddonInstallTarget => {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        return false;
+      }
+      const addonRecord = entry as Readonly<Record<string, unknown>>;
+      return (
+        recordString(addonRecord, "addonName") !== undefined &&
+        recordString(addonRecord, "addonVersion") !== undefined &&
+        recordString(addonRecord, "destinationDirectory") !== undefined &&
+        recordString(addonRecord, "manifestPath") !== undefined &&
+        recordString(addonRecord, "contentDigest") !== undefined
+      );
+    },
+  );
+}
+
 function integrityRecordDigest(
   record: Readonly<Record<string, unknown>>,
 ): string | undefined {
@@ -226,6 +251,9 @@ function toInstalledPackageRecord(input: {
   readonly record: Readonly<Record<string, unknown>>;
 }): WorkflowPackageInstalledRecord | undefined {
   const installId = recordString(input.record, "installId");
+  const packageKindRaw = recordString(input.record, "packageKind");
+  const packageKind =
+    packageKindRaw === "node-addon" ? "node-addon" : "workflow";
   const packageId = recordString(input.record, "packageId");
   const packageName = recordString(input.record, "packageName") ?? packageId;
   const workflowName = recordString(input.record, "workflowName");
@@ -256,6 +284,7 @@ function toInstalledPackageRecord(input: {
   const sourceUrl = recordString(input.record, "sourceUrl");
   return {
     installId,
+    packageKind,
     packageId,
     packageName,
     workflowName,
@@ -273,6 +302,7 @@ function toInstalledPackageRecord(input: {
     ...(registryRef === undefined ? {} : { registryRef }),
     ...(sourceUrl === undefined ? {} : { sourceUrl }),
     skills: recordSkills(input.record),
+    addons: recordAddons(input.record),
   };
 }
 
@@ -487,37 +517,47 @@ export async function removeWorkflowPackageCheckout(input: {
   const removedPaths: string[] = [];
   const skippedPaths: string[] = [];
   try {
-    for (const skill of installed.skills) {
+    if (installed.packageKind === "node-addon") {
+      for (const addon of installed.addons) {
+        await removeRecordedPackagePath({
+          path: addon.destinationDirectory,
+          removedPaths,
+        });
+      }
+    } else {
+      for (const skill of installed.skills) {
+        await removeRecordedPackagePath({
+          path: skill.projectionPath,
+          removedPaths,
+        });
+        await removeRecordedPackagePath({
+          path: skill.managedPath,
+          removedPaths,
+        });
+      }
       await removeRecordedPackagePath({
-        path: skill.projectionPath,
+        path: recordString(matchedRecord.record, "managedSkillRoot"),
         removedPaths,
       });
       await removeRecordedPackagePath({
-        path: skill.managedPath,
+        path: path.join(
+          installed.destinationDirectory,
+          ".rielflow-package-provenance.json",
+        ),
+        removedPaths,
+      });
+      await removeRecordedPackagePath({
+        path: installed.destinationDirectory,
         removedPaths,
       });
     }
-    await removeRecordedPackagePath({
-      path: recordString(matchedRecord.record, "managedSkillRoot"),
-      removedPaths,
-    });
-    await removeRecordedPackagePath({
-      path: path.join(
-        installed.destinationDirectory,
-        ".rielflow-package-provenance.json",
-      ),
-      removedPaths,
-    });
-    await removeRecordedPackagePath({
-      path: installed.destinationDirectory,
-      removedPaths,
-    });
     await removeRecordedPackagePath({
       path: matchedRecord.path,
       removedPaths,
     });
     return ok({
       installId: installed.installId,
+      packageKind: installed.packageKind,
       packageId: installed.packageId,
       workflowName: installed.workflowName,
       scope: installed.scope,

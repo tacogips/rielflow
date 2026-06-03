@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: CLI option parsing is consolidated; extracting it is a separate parser refactor.
 import type {
   WorkflowSelfImproveMode,
   WorkflowSelfImproveSourceMode,
@@ -16,25 +17,23 @@ import {
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
-  let workflowRoot: string | undefined;
-  let workflowManifestPath: string | undefined;
+  let workflowRoot: string | undefined,
+    workflowManifestPath: string | undefined;
   let workflowScope: WorkflowScopeSelector | undefined;
-  let userRoot: string | undefined;
-  let projectRoot: string | undefined;
+  let userRoot: string | undefined, projectRoot: string | undefined;
   let addonRoot: string | undefined;
   let artifactRoot: string | undefined;
   let sessionStoreRoot: string | undefined;
   let workingDirectory: string | undefined;
-  let workerOnly = false;
   let output: "text" | "json" | "table" = "text";
-  let structure = false;
-  let executablePreflight = false;
+  let workerOnly = false,
+    structure = false,
+    executablePreflight = false;
   let format: "text" | "json" | "jsonl" | undefined;
-  let variablesPath: string | undefined;
-  let nodePatchPath: string | undefined;
-  let dryRun = false;
-  let verbose = false;
-  let debug = false;
+  let variablesPath: string | undefined, nodePatchPath: string | undefined;
+  let dryRun = false,
+    verbose = false,
+    debug = false;
   let mockScenarioPath: string | undefined;
   let maxSteps: number | undefined;
   let maxConcurrency: number | undefined;
@@ -47,8 +46,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let authToken: string | undefined;
   let authTokenEnv: string | undefined;
   let filePath: string | undefined;
-  let readOnly = false;
-  let noExec = false;
+  let readOnly = false,
+    noExec = false;
   let messageJson: string | undefined;
   let messageFile: string | undefined;
   let promptVariant: string | undefined;
@@ -66,24 +65,24 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let live = false;
   let reason: string | undefined;
   let parseError: string | undefined;
-  let autoImprove = false;
-  let disableAutoImprove = false;
+  let autoImprove = false,
+    disableAutoImprove = false;
   let superviserWorkflowId: string | undefined;
   let monitorIntervalMs: number | undefined;
   let stallTimeoutMs: number | undefined;
   let maxSupervisedAttempts: number | undefined;
   let maxWorkflowPatches: number | undefined;
   let workflowMutationMode: "execution-copy" | "in-place" | undefined;
-  let noAllowTargetedRerun = false;
+  let noAllowTargetedRerun = false,
+    nestedSuperviser = false;
   let firstAutoImprovePolicyFlag: string | undefined;
   let firstAutoImproveOnlyPolicyFlag: string | undefined;
-  let nestedSuperviser = false;
   let continuationStartStepId: string | undefined;
   let continuationAfterStepRunId: string | undefined;
   let stepRunsFilterStepId: string | undefined;
-  let userScope = false;
-  let overwrite = false;
-  let yes = false;
+  let userScope = false,
+    overwrite = false,
+    yes = false;
   let selfImproveSourceMode: WorkflowSelfImproveSourceMode | undefined;
   let selfImproveSessions: string[] = [];
   let selfImproveMode: WorkflowSelfImproveMode | undefined;
@@ -95,12 +94,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let packageId: string | undefined;
   let branch: string | undefined;
   let backend: string | undefined;
+  let packageKind: "workflow" | "node-addon" | undefined;
   let localPath: string | undefined;
-  let refresh = false;
-  let noCache = false;
-  let createPr = false;
-  let preInstallCheck = false;
-  let noPreInstallCheck = false;
+  let refresh = false,
+    noCache = false,
+    createPr = false;
+  let preInstallCheck = false,
+    noPreInstallCheck = false;
   let preInstallCheckMode: "warn" | "reject" | undefined;
   let preInstallCheckContainer: "docker" | "podman" | "auto" | undefined;
   let tags: string[] = [];
@@ -800,6 +800,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         backend = parsedString.value;
         break;
       }
+      case "--kind": {
+        const parsedKind = parseEnumOption(
+          token,
+          readNext(),
+          ["workflow", "node-addon"],
+          "workflow or node-addon",
+        );
+        if (parsedKind.error !== undefined) {
+          parseError = parsedKind.error;
+          break;
+        }
+        packageKind = parsedKind.value;
+        break;
+      }
       case "--local-path":
       case "--registry-local-path": {
         const parsedString = parseRequiredStringOption(token, readNext());
@@ -980,6 +994,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       ...(packageId === undefined ? {} : { packageId }),
       ...(branch === undefined ? {} : { branch }),
       ...(backend === undefined ? {} : { backend }),
+      ...(packageKind === undefined ? {} : { packageKind }),
       ...(localPath === undefined ? {} : { localPath }),
       refresh,
       noCache,

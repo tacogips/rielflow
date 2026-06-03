@@ -1,7 +1,10 @@
 import { sign, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { err, ok, type Result } from "../result";
-import { computeWorkflowPackageIntegrityDigest } from "./checksum";
+import {
+  computeWorkflowNodeAddonPackageIntegrityDigest,
+  computeWorkflowPackageIntegrityDigest,
+} from "./checksum";
 import type {
   WorkflowPackageFailure,
   WorkflowPackageIntegrity,
@@ -257,6 +260,101 @@ export async function verifyWorkflowPackageIntegrity(input: {
   const computed = await computeWorkflowPackageIntegrityDigest({
     packageRoot: input.packageRoot,
     workflowDirectory: input.workflowDirectory,
+  });
+  if (!computed.ok) {
+    return computed;
+  }
+  const signatureRequired = shouldRequireWorkflowPackageSignature({
+    registry: input.registry,
+    ...(input.options === undefined ? {} : { options: input.options }),
+  });
+  if (input.integrity === undefined) {
+    return signatureRequired
+      ? err(
+          packageFailure(
+            "VALIDATION",
+            `package integrity signature is required for registry '${input.registry.id}'`,
+          ),
+        )
+      : ok({
+          digest: computed.value.digest,
+          digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
+          signatureVerified: false,
+          signatureRequired,
+        });
+  }
+  if (
+    input.integrity.digestAlgorithm !== computed.value.digestAlgorithm ||
+    input.integrity.digest !== computed.value.digest
+  ) {
+    return err(
+      packageFailure("VALIDATION", "package sha256 integrity digest mismatch"),
+    );
+  }
+  const trustedSigners = input.registry.trustedSigners ?? [];
+  if (trustedSigners.length === 0) {
+    return signatureRequired
+      ? err(
+          packageFailure(
+            "VALIDATION",
+            `registry '${input.registry.id}' requires trusted package signers`,
+          ),
+        )
+      : ok({
+          digest: computed.value.digest,
+          digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
+          signatureVerified: false,
+          signatureRequired,
+        });
+  }
+  for (const signature of input.integrity.signatures ?? []) {
+    const signer = trustedSigners.find(
+      (candidate) => candidate.id === signature.keyId,
+    );
+    if (signer === undefined) {
+      continue;
+    }
+    try {
+      if (
+        verify(
+          null,
+          digestPayload(input.integrity.digest),
+          signer.publicKey,
+          new Uint8Array(Buffer.from(signature.signature, "base64")),
+        )
+      ) {
+        return ok({
+          digest: computed.value.digest,
+          digestAlgorithm: computed.value.digestAlgorithm,
+          includedFiles: computed.value.includedFiles,
+          signatureVerified: true,
+          signatureRequired,
+        });
+      }
+    } catch {
+      continue;
+    }
+  }
+  return err(
+    packageFailure(
+      "VALIDATION",
+      `package signature is not trusted for registry '${input.registry.id}'`,
+    ),
+  );
+}
+
+export async function verifyWorkflowNodeAddonPackageIntegrity(input: {
+  readonly packageRoot: string;
+  readonly integrity?: WorkflowPackageIntegrity;
+  readonly registry: WorkflowPackageRegistryEntry;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+}): Promise<
+  Result<WorkflowPackageIntegrityVerificationResult, WorkflowPackageFailure>
+> {
+  const computed = await computeWorkflowNodeAddonPackageIntegrityDigest({
+    packageRoot: input.packageRoot,
   });
   if (!computed.ok) {
     return computed;

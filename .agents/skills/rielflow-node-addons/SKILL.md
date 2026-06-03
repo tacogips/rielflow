@@ -27,6 +27,20 @@ Current built-ins, version `1`:
 
 Read `references/addons-reference.md` for field contracts and resolver guidance.
 
+## Package-Installed Add-Ons
+
+Reusable non-built-in add-ons may be installed from Git-backed rielflow package
+registries with `rielflow package install <package-id>`. These packages use
+`kind: "node-addon"` in `rielflow-package.json` and install validated
+`addon.json` based add-ons into project or user add-on roots. They are
+declarative: package install does not run lifecycle scripts, native executor
+registration, npm/Bun code, or shell hooks, and workflow load never downloads a
+missing add-on package.
+
+Use `rielflow package search --kind node-addon --output json` to discover
+registry node add-on packages. Use `--user-scope` for user-wide installs and
+`--overwrite` only for package-owned add-on directories.
+
 ## Authoring Pattern
 
 ```json

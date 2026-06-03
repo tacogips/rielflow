@@ -377,6 +377,7 @@ export interface ParsedOptions {
   readonly packageId?: string;
   readonly branch?: string;
   readonly backend?: string;
+  readonly packageKind?: "workflow" | "node-addon";
   readonly localPath?: string;
   readonly refresh: boolean;
   readonly noCache: boolean;

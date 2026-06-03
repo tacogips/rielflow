@@ -2,9 +2,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { loadWorkflowFromDisk } from "../load";
 import { err, ok, type Result } from "../result";
-import { computeWorkflowPackageChecksum } from "./checksum";
+import {
+  computeWorkflowNodeAddonPackageChecksum,
+  computeWorkflowPackageChecksum,
+} from "./checksum";
 import { createWorkflowPackageCacheBackend } from "./cache";
-import { loadWorkflowPackageManifest } from "./manifest";
+import { loadAnyWorkflowPackageManifest } from "./manifest";
 import {
   loadWorkflowPackageRegistryConfig,
   resolveWorkflowPackageRegistryEntry,
@@ -14,6 +17,7 @@ import {
   type WorkflowPackageCacheBackendKind,
   type WorkflowPackageFailure,
   type WorkflowPackageIndexRecord,
+  type WorkflowPackageKind,
   type WorkflowPackageRegistryConfigOptions,
   type WorkflowPackageRegistryEntry,
   type WorkflowPackageSearchCliResult,
@@ -25,6 +29,7 @@ export interface WorkflowPackageSearchInput {
   readonly registry?: string;
   readonly tags?: readonly string[];
   readonly backend?: string;
+  readonly kind?: WorkflowPackageKind;
   readonly branch?: string;
   readonly limit?: number;
   readonly refresh?: boolean;
@@ -182,8 +187,46 @@ async function buildRegistryIndex(input: {
     const roots = await findPackageRoots(input.registry.localPath);
     const records: WorkflowPackageIndexRecord[] = [];
     for (const packageRoot of roots) {
-      const manifest = await loadWorkflowPackageManifest(packageRoot);
+      const manifest = await loadAnyWorkflowPackageManifest(packageRoot);
       if (!manifest.ok) {
+        continue;
+      }
+      if (manifest.value.kind === "node-addon") {
+        const checksum = await computeWorkflowNodeAddonPackageChecksum({
+          packageRoot,
+        });
+        if (!checksum.ok) {
+          return checksum;
+        }
+        records.push({
+          kind: "node-addon",
+          registryId: input.registry.id,
+          registryUrl: input.registry.url,
+          packageName: manifest.value.name,
+          version: manifest.value.version,
+          ...(manifest.value.title === undefined
+            ? {}
+            : { title: manifest.value.title }),
+          description: manifest.value.description,
+          tags: manifest.value.tags,
+          backends: [],
+          workflowId: manifest.value.name,
+          workflowDescription: manifest.value.description,
+          workflowDirectory: ".",
+          sourceBranch: input.branch,
+          sourcePath: path
+            .relative(input.registry.localPath, packageRoot)
+            .split(path.sep)
+            .join("/"),
+          checksum: checksum.value.checksum,
+          checksumAlgorithm: checksum.value.checksumAlgorithm,
+          ...(manifest.value.integrity === undefined
+            ? {}
+            : { integrity: manifest.value.integrity }),
+          addons: manifest.value.addons,
+          updatedAt:
+            input.options?.now?.toISOString() ?? new Date().toISOString(),
+        });
         continue;
       }
       const checksum = await computeWorkflowPackageChecksum({
@@ -218,6 +261,7 @@ async function buildRegistryIndex(input: {
         ...new Set([...manifest.value.backends, ...derivedBackends]),
       ].sort((left, right) => left.localeCompare(right));
       records.push({
+        kind: "workflow",
         registryId: input.registry.id,
         registryUrl: input.registry.url,
         packageName: manifest.value.name,
@@ -256,6 +300,10 @@ function matchesSearch(
   record: WorkflowPackageIndexRecord,
   input: WorkflowPackageSearchInput,
 ): boolean {
+  const recordKind = record.kind ?? "workflow";
+  if (input.kind !== undefined && recordKind !== input.kind) {
+    return false;
+  }
   const requiredTags = input.tags ?? [];
   if (
     requiredTags.some(
@@ -282,6 +330,11 @@ function matchesSearch(
     record.workflowDescription,
     ...record.tags,
     ...record.backends,
+    ...(record.addons ?? []).flatMap((addon) => [
+      addon.name,
+      addon.version,
+      addon.sourcePath,
+    ]),
   ]
     .join("\n")
     .toLowerCase();
@@ -292,6 +345,7 @@ function toSearchRecord(
   record: WorkflowPackageIndexRecord,
 ): WorkflowPackageSearchRecord {
   return {
+    kind: record.kind ?? "workflow",
     packageId: record.packageName,
     packageName: record.packageName,
     workflowName: record.workflowId,
@@ -311,6 +365,7 @@ function toSearchRecord(
     checksum: record.checksum,
     checksumAlgorithm: record.checksumAlgorithm,
     ...(record.integrity === undefined ? {} : { integrity: record.integrity }),
+    ...(record.addons === undefined ? {} : { addons: record.addons }),
     updatedAt: record.updatedAt,
   };
 }

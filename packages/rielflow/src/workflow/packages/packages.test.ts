@@ -13,9 +13,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createWorkflowTemplate } from "../create";
+import { loadWorkflowFromDisk } from "../load";
 import {
   checkoutWorkflowPackage,
   getWorkflowPackageCheckoutStatus,
+  listWorkflowPackageCheckouts,
+  removeWorkflowPackageCheckout,
   updateWorkflowPackageCheckout,
 } from "./checkout";
 import { checkoutWorkflowPackageForTemporaryRun } from "./temp-run";
@@ -24,11 +27,16 @@ import {
   encodeWorkflowPackageCacheSegment,
 } from "./cache";
 import {
+  computeWorkflowNodeAddonPackageChecksum,
+  computeWorkflowNodeAddonPackageIntegrityDigest,
   computeWorkflowPackageChecksum,
   computeWorkflowPackageIntegrityDigest,
 } from "./checksum";
 import { createWorkflowPackageSignature } from "./integrity";
-import { loadWorkflowPackageManifest } from "./manifest";
+import {
+  loadWorkflowPackageManifest,
+  normalizeWorkflowNodeAddonPackageManifest,
+} from "./manifest";
 import { buildWorkflowPackageContainerCheckCommand } from "./pre-install-container";
 import { createWorkflowPackageStaticScanner } from "./pre-install-scanner";
 import { publishWorkflowPackage } from "./publish";
@@ -168,6 +176,146 @@ async function createPackagedWorkflow(input: {
     "utf8",
   );
   return packageRoot;
+}
+
+async function createNodeAddonPackage(input: {
+  readonly registryRoot: string;
+  readonly packageName: string;
+  readonly addonName?: string;
+  readonly addonVersion?: string;
+  readonly sourcePath?: string;
+  readonly executableFile?: boolean;
+  readonly dependencies?: readonly (
+    | string
+    | { readonly packageId: string; readonly registry?: string }
+  )[];
+  readonly extraFiles?: readonly {
+    readonly relativePath: string;
+    readonly content: string;
+  }[];
+}): Promise<string> {
+  const addonName = input.addonName ?? "team/release-note";
+  const addonVersion = input.addonVersion ?? "1";
+  const sourcePath =
+    input.sourcePath ??
+    path.posix.join("addons", ...addonName.split("/"), addonVersion);
+  const packageRoot = path.join(
+    input.registryRoot,
+    "packages",
+    input.packageName,
+  );
+  const addonDirectory = path.join(packageRoot, ...sourcePath.split("/"));
+  await mkdir(addonDirectory, { recursive: true });
+  await writeFile(
+    path.join(addonDirectory, "prompt.md"),
+    "Write a release note for {{addon.inputs.topic}}.\n",
+    "utf8",
+  );
+  await writeFile(
+    path.join(addonDirectory, "addon.json"),
+    `${JSON.stringify(
+      {
+        name: addonName,
+        version: addonVersion,
+        description: "Reusable release-note worker node.",
+        allowedRoles: ["worker"],
+        resolution: {
+          kind: "node-payload-template",
+          nodeType: "agent",
+          executionBackend: "codex-agent",
+          model: "gpt-5.4",
+          promptTemplateFile: "prompt.md",
+        },
+        inputSchema: {
+          type: "object",
+          properties: {
+            topic: { type: "string" },
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  if (input.executableFile === true) {
+    await writeFile(path.join(addonDirectory, "activate.js"), "export {};\n");
+  }
+  for (const extraFile of input.extraFiles ?? []) {
+    const extraPath = path.join(
+      addonDirectory,
+      ...extraFile.relativePath.split("/"),
+    );
+    await mkdir(path.dirname(extraPath), { recursive: true });
+    await writeFile(extraPath, extraFile.content, "utf8");
+  }
+  await writeFile(
+    path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+    `${JSON.stringify(
+      {
+        kind: "node-addon",
+        name: input.packageName,
+        version: "1.0.0",
+        title: "Release Note Add-on",
+        description: "Reusable release-note worker node package.",
+        tags: ["addon", "node", "release"],
+        registry: "local",
+        checksum: "pending",
+        checksumAlgorithm: "md5",
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: "",
+        },
+        addons: [
+          {
+            name: addonName,
+            version: addonVersion,
+            sourcePath,
+          },
+        ],
+        ...(input.dependencies === undefined
+          ? {}
+          : { dependencies: input.dependencies }),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await refreshNodeAddonPackageManifestDigests(packageRoot);
+  return packageRoot;
+}
+
+async function refreshNodeAddonPackageManifestDigests(
+  packageRoot: string,
+): Promise<void> {
+  const checksum = await computeWorkflowNodeAddonPackageChecksum({
+    packageRoot,
+  });
+  if (!checksum.ok) {
+    throw new Error(checksum.error.message);
+  }
+  const integrity = await computeWorkflowNodeAddonPackageIntegrityDigest({
+    packageRoot,
+  });
+  if (!integrity.ok) {
+    throw new Error(integrity.error.message);
+  }
+  const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+    string,
+    unknown
+  >;
+  manifest["checksum"] = checksum.value.checksum;
+  manifest["integrity"] = {
+    digestAlgorithm: integrity.value.digestAlgorithm,
+    digest: integrity.value.digest,
+  };
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 async function addCrossWorkflowTransition(input: {
@@ -572,6 +720,44 @@ describe("workflow package registry", () => {
     }
   });
 
+  test("search indexes node-addon packages and filters by kind", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    await createPackagedWorkflow({
+      registryRoot,
+      packageName: "workflow-result",
+      workflowName: "workflow-result",
+    });
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "release-note-node",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const searched = await searchWorkflowPackages({
+      registry: "local",
+      kind: "node-addon",
+      refresh: true,
+      options: { userRoot },
+    });
+
+    expect(searched.ok).toBe(true);
+    if (searched.ok) {
+      expect(searched.value.records).toHaveLength(1);
+      expect(searched.value.records[0]?.kind).toBe("node-addon");
+      expect(searched.value.records[0]?.addons?.[0]?.name).toBe(
+        "team/release-note",
+      );
+      expect(searched.value.packages[0]?.kind).toBe("node-addon");
+    }
+  });
+
   test("rejects malformed authored backend metadata", async () => {
     const registryRoot = await makeTempDir();
     const packageRoot = await createPackagedWorkflow({
@@ -627,6 +813,32 @@ describe("workflow package registry", () => {
           branch: "feature/dependency",
         },
       ]);
+    }
+  });
+
+  test("rejects invalid node-addon package manifest entries", async () => {
+    const registryRoot = await makeTempDir();
+    const packageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "invalid-release-node",
+    });
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["addons"] = [
+      {
+        name: "team/release-note",
+        version: "1",
+        sourcePath: "../escape",
+      },
+    ];
+    const normalized = normalizeWorkflowNodeAddonPackageManifest(manifest);
+
+    expect(normalized.ok).toBe(false);
+    if (!normalized.ok) {
+      expect(normalized.error.code).toBe("INVALID_MANIFEST");
     }
   });
 
@@ -818,6 +1030,403 @@ describe("workflow package registry", () => {
       expect(workflowContentCheckout.value.contentDigest).not.toBe(
         initialContentDigest,
       );
+    }
+  });
+
+  test("checkout installs node-addon packages into project add-on scope", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "release-note-node",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "release-note-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.packageKind).toBe("node-addon");
+      expect(checkedOut.value.workflowName).toBe("release-note-node");
+      expect(checkedOut.value.addons).toHaveLength(1);
+      expect(checkedOut.value.addons[0]?.destinationDirectory).toBe(
+        path.join(
+          projectRoot,
+          ".rielflow",
+          "addons",
+          "team",
+          "release-note",
+          "1",
+        ),
+      );
+      await expect(
+        readFile(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "release-note",
+            "1",
+            "addon.json",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("team/release-note");
+      const workflowRoot = path.join(projectRoot, ".rielflow");
+      const workflowDirectory = path.join(workflowRoot, "uses-release-node");
+      await mkdir(workflowDirectory, { recursive: true });
+      await writeFile(
+        path.join(workflowDirectory, "workflow.json"),
+        `${JSON.stringify(
+          {
+            workflowId: "uses-release-node",
+            description: "Uses installed node add-on package",
+            defaults: {
+              nodeTimeoutMs: 120000,
+              maxLoopIterations: 3,
+            },
+            entryStepId: "release-note-step",
+            nodes: [
+              {
+                id: "release-note-node",
+                addon: {
+                  name: "team/release-note",
+                  version: "1",
+                  inputs: { topic: "package install" },
+                },
+              },
+            ],
+            steps: [
+              {
+                id: "release-note-step",
+                nodeId: "release-note-node",
+                role: "worker",
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      const loaded = await loadWorkflowFromDisk("uses-release-node", {
+        cwd: projectRoot,
+        userRoot,
+      });
+      if (!loaded.ok) {
+        throw new Error(loaded.error.message);
+      }
+      expect(loaded.value.bundle.workflow.nodeRegistry[0]?.id).toBe(
+        "release-note-node",
+      );
+      expect(
+        loaded.value.nodeValidationResults.some(
+          (entry) =>
+            entry.source === "addon" && entry.addonName === "team/release-note",
+        ),
+      ).toBe(true);
+      const listed = await listWorkflowPackageCheckouts({
+        options: { userRoot, cwd: projectRoot },
+      });
+      expect(listed.ok).toBe(true);
+      if (listed.ok) {
+        expect(listed.value.packages[0]?.packageKind).toBe("node-addon");
+        expect(listed.value.packages[0]?.addons).toHaveLength(1);
+      }
+      const removed = await removeWorkflowPackageCheckout({
+        installId: checkedOut.value.installId,
+        options: { userRoot, cwd: projectRoot },
+      });
+      expect(removed.ok).toBe(true);
+      if (removed.ok) {
+        expect(removed.value.packageKind).toBe("node-addon");
+        expect(removed.value.removedPaths).toContain(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "release-note",
+            "1",
+          ),
+        );
+        expect(removed.value.removedPaths).not.toContain(
+          path.join(projectRoot, ".rielflow", "addons"),
+        );
+      }
+      expect(
+        await pathExists(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "release-note",
+            "1",
+          ),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  test("checkout rejects node-addon overwrite of unrelated local add-on destinations", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "collision-release-node",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "collision-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+    expect(checkedOut.ok).toBe(true);
+
+    const collidingSourcePath = "addons/team/colliding/1";
+    const collidingSourceDirectory = path.join(
+      packageRoot,
+      ...collidingSourcePath.split("/"),
+    );
+    await mkdir(collidingSourceDirectory, { recursive: true });
+    await writeFile(
+      path.join(collidingSourceDirectory, "prompt.md"),
+      "Write a colliding release note.\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(collidingSourceDirectory, "addon.json"),
+      `${JSON.stringify(
+        {
+          name: "team/colliding",
+          version: "1",
+          description: "Colliding package add-on.",
+          allowedRoles: ["worker"],
+          resolution: {
+            kind: "node-payload-template",
+            nodeType: "agent",
+            executionBackend: "codex-agent",
+            model: "gpt-5.4",
+            promptTemplateFile: "prompt.md",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const packageManifestPath = path.join(
+      packageRoot,
+      WORKFLOW_PACKAGE_MANIFEST_FILE,
+    );
+    const packageManifest = JSON.parse(
+      await readFile(packageManifestPath, "utf8"),
+    ) as Record<string, unknown>;
+    packageManifest["addons"] = [
+      ...((Array.isArray(packageManifest["addons"])
+        ? packageManifest["addons"]
+        : []) as readonly unknown[]),
+      {
+        name: "team/colliding",
+        version: "1",
+        sourcePath: collidingSourcePath,
+      },
+    ];
+    await writeFile(
+      packageManifestPath,
+      `${JSON.stringify(packageManifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshNodeAddonPackageManifestDigests(packageRoot);
+    await searchWorkflowPackages({
+      registry: "local",
+      refresh: true,
+      options: { userRoot },
+    });
+
+    const unrelatedDestination = path.join(
+      projectRoot,
+      ".rielflow",
+      "addons",
+      "team",
+      "colliding",
+      "1",
+    );
+    await mkdir(unrelatedDestination, { recursive: true });
+    await writeFile(
+      path.join(unrelatedDestination, "sentinel.txt"),
+      "unrelated local add-on content\n",
+      "utf8",
+    );
+
+    const updated = await checkoutWorkflowPackage({
+      packageName: "collision-release-node",
+      registry: "local",
+      overwrite: true,
+      yes: true,
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(updated.ok).toBe(false);
+    if (!updated.ok) {
+      expect(updated.error.code).toBe("DUPLICATE_PACKAGE");
+      expect(updated.error.message).toContain("not package-owned");
+    }
+    await expect(
+      readFile(path.join(unrelatedDestination, "sentinel.txt"), "utf8"),
+    ).resolves.toContain("unrelated local add-on content");
+  });
+
+  test("checkout rejects node-addon packages with unreferenced files", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "unreferenced-release-node",
+      extraFiles: [
+        {
+          relativePath: "notes.txt",
+          content: "This file is not referenced by addon.json.\n",
+        },
+      ],
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "unreferenced-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("not referenced");
+    }
+  });
+
+  test("checkout rejects node-addon packages with credential-like files", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "credential-release-node",
+      extraFiles: [
+        {
+          relativePath: ".env",
+          content: "TOKEN=do-not-copy\n",
+        },
+      ],
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "credential-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("not supported");
+    }
+  });
+
+  test("checkout rejects node-addon packages with declared dependencies", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "dependent-release-node",
+      dependencies: ["dependency-flow"],
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "dependent-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain(
+        "node-addon package dependencies are not supported",
+      );
+    }
+  });
+
+  test("checkout rejects node-addon packages with executable files", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "executable-release-node",
+      executableFile: true,
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "executable-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("VALIDATION");
+      expect(checkedOut.error.message).toContain("not supported");
     }
   });
 

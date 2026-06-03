@@ -110,7 +110,10 @@ Search behavior:
 ## Package Lifecycle Commands
 
 `package install` is the canonical command for persistent package installation.
-It renders package-oriented help, summaries, and JSON field names.
+It renders package-oriented help, summaries, and JSON field names. It installs
+workflow packages and node packages; node packages are registry packages with
+`kind: "node-addon"` whose primary artifacts are local add-on manifests. See
+`design-docs/specs/design-workflow-node-package-install.md`.
 
 Install behavior:
 
@@ -120,9 +123,13 @@ Install behavior:
 - Project scope is the default installation destination.
 - `--user-scope` installs package workflows under `~/.rielflow/workflows` and
   package-managed skill data under `~/.rielflow-managed`.
+- Node package installs write package-owned add-on artifacts under
+  `<project>/.rielflow/addons` or `~/.rielflow/addons` and include
+  `packageKind: "node-addon"` plus installed `addons[]` entries in JSON output.
 - `--workflow-definition-dir` is allowed as a project-scope workflow
   destination override; skill projection and package ownership checks still use
-  the current project root.
+  the current project root. It does not redirect node package add-on
+  projection.
 - `--overwrite` permits replacing an existing package-owned install after
   confirmation.
 - `--yes` bypasses overwrite/update confirmation for automation.
@@ -283,6 +290,8 @@ Help output and README examples must make these distinctions explicit:
 
 - `package install <package-id>` installs a registry package and is the
   canonical package lifecycle command
+- node packages are installed through `package install` and are exposed to
+  workflows as ordinary installed add-ons
 - `package list` lists locally installed package records without network access
 - `package remove` removes package-owned workflows and skills by install id or
   unambiguous package/workflow selector
