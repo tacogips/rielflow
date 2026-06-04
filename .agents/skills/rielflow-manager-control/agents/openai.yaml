@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rielflow Manager Control"
-  short_description: "Issue typed manager control actions"
-  default_prompt: "Use $rielflow-manager-control to issue a safe rielflow manager control action."

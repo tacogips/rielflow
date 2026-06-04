@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rielflow TUI Operator"
-  short_description: "Navigate rielflow operator UI"
-  default_prompt: "Use $rielflow-tui-operator to explain how to inspect this workflow in the rielflow UI."

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rielflow Node Add-Ons"
-  short_description: "Use built-in and local node add-ons"
-  default_prompt: "Use $rielflow-node-addons to add or review this rielflow node add-on."

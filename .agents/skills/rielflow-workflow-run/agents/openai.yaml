@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rielflow Workflow Run"
-  short_description: "Run and monitor rielflow workflows"
-  default_prompt: "Use $rielflow-workflow-run to run this rielflow workflow and inspect the resulting session."
