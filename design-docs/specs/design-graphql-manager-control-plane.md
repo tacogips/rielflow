@@ -109,6 +109,83 @@ Examples:
 - communication identifiers belong in GraphQL query input
 - CLI flags such as `--endpoint` or `--auth-token-env` remain transport concerns
 
+## Run-Scoped Workflow Definition Body
+
+Run-log and session-inspection callers need to retrieve the authored
+`workflow.json` body that was used for a workflow execution. This is a
+run-scoped inspection concern, not a current-catalog workflow-definition lookup.
+
+### GraphQL Field
+
+Add a nullable field to the detail views that already represent run-log
+inspection:
+
+```text
+WorkflowExecutionView.workflowDefinitionJsonBody: String
+WorkflowExecutionOverviewView.workflowDefinitionJsonBody: String
+```
+
+The field returns the raw UTF-8 JSON text for the execution's authored
+`workflow.json` body. It intentionally returns `String` instead of the existing
+`JSON` scalar so callers can inspect the exact body text, preserve formatting for
+logs and diff tools, and avoid ambiguity between authored JSON and normalized
+runtime objects. Callers that need parsed JSON can parse the string explicitly.
+
+The field is nullable so historical sessions that cannot prove their
+execution-time source can still return the rest of the run-log view. A missing
+body must resolve to `null`; it must not make `workflowExecution` or
+`workflowExecutionOverview` fail when sibling fields are available.
+
+### Source Resolution Rules
+
+The resolver must not load the current catalog workflow by `workflowName` as the
+primary source, because a stored workflow may have been edited after the run.
+The source order is:
+
+1. Return the persisted execution-scoped `workflowDefinitionJsonBody` snapshot
+   when present.
+2. For retained temporary registry or GitHub-directory runs, read
+   `<temporaryWorkflowDirectory>/workflow.json` only when retained-run
+   provenance still points at an existing managed temporary checkout for the
+   target `workflowExecutionId`.
+3. Return `null` when no persisted snapshot exists and the run source cannot be
+   proven.
+
+New local, project-scope, user-scope, manifest-backed, direct
+`--workflow-definition-dir`, and temporary registry/GitHub runs must persist the
+authored `workflow.json` body into execution metadata before node execution can
+begin. Temporary runs must persist this snapshot before terminal cleanup is
+allowed to remove the temporary checkout. This keeps stored and temporary
+workflow inspection behavior identical from the GraphQL caller's point of view.
+
+### Boundary and Rollout Constraints
+
+The field belongs on `workflowExecution(workflowExecutionId: String!)` and
+`workflowExecutionOverview(workflowExecutionId: String!, ...)` because those are
+run-log detail queries. It is not added to `workflowExecutions(...)` list rows or
+`WorkflowExecutionStepRun` timeline rows in this iteration to avoid large
+payloads on list/timeline queries.
+
+Implementation must keep these files synchronized:
+
+- `packages/rielflow-graphql/src/schema-contract.ts`
+- `packages/rielflow-graphql/src/control-plane-service.ts`
+- `packages/rielflow/src/graphql/types.ts`
+- `packages/rielflow/src/graphql/schema/execution-resolvers.ts`
+- `packages/rielflow/src/server/graphql-executable-schema.ts`
+- session/source metadata under `packages/rielflow/src/workflow/session.ts`,
+  `packages/rielflow/src/workflow/session-store.ts`,
+  `packages/rielflow/src/workflow/runtime-db/session-query-records.ts`, and
+  the workflow run setup path that first has both the resolved workflow source
+  and raw workflow JSON body available
+- temporary-run provenance paths in
+  `packages/rielflow/src/workflow/packages/temp-run.ts` and
+  `packages/rielflow/src/cli/registry-run-provenance.ts`
+
+Verification must cover GraphQL schema/type exposure, stored workflow runs whose
+catalog file is edited after the run, temporary registry/GitHub runs after
+terminal cleanup, and legacy sessions that legitimately return `null`.
+
 ## File and Image Reference Contract
 
 GraphQL requests that need to reference images or other local files must not send host absolute paths.

@@ -583,6 +583,102 @@ describe("createGraphqlSchema", () => {
     );
   });
 
+  test("workflowExecution and overview expose the run-scoped workflow definition body", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const workflowBody = await readFile(
+      path.join(root, "demo", "workflow.json"),
+      "utf8",
+    );
+    const schema = createGraphqlSchema();
+
+    const execution = await schema.query.workflowExecution(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(execution?.workflowDefinitionJsonBody).toBe(workflowBody);
+
+    const overview = await schema.query.workflowExecutionOverview(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(overview?.workflowDefinitionJsonBody).toBe(workflowBody);
+
+    await writeFile(
+      path.join(root, "demo", "workflow.json"),
+      `${JSON.stringify({ workflowId: "demo", nodes: [] }, null, 2)}\n`,
+      "utf8",
+    );
+    const afterCatalogEdit = await schema.query.workflowExecution(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(afterCatalogEdit?.workflowDefinitionJsonBody).toBe(workflowBody);
+
+    await rm(path.join(root, "demo"), { recursive: true, force: true });
+    const afterWorkflowDirectoryCleanup = await schema.query.workflowExecution(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(afterWorkflowDirectoryCleanup?.workflowDefinitionJsonBody).toBe(
+      workflowBody,
+    );
+
+    const executableResult = await graphql({
+      schema: createExecutableGraphqlSchema(),
+      source: `
+        query WorkflowDefinitionBody($workflowExecutionId: String!) {
+          workflowExecution(workflowExecutionId: $workflowExecutionId) {
+            workflowDefinitionJsonBody
+          }
+          workflowExecutionOverview(workflowExecutionId: $workflowExecutionId) {
+            workflowDefinitionJsonBody
+          }
+        }
+      `,
+      variableValues: { workflowExecutionId: session.sessionId },
+      contextValue: options,
+    });
+    expect(executableResult.errors).toBeUndefined();
+    expect(executableResult.data).toMatchObject({
+      workflowExecution: { workflowDefinitionJsonBody: workflowBody },
+      workflowExecutionOverview: { workflowDefinitionJsonBody: workflowBody },
+    });
+  });
+
+  test("workflowExecution workflow definition body is null for legacy sessions", async () => {
+    const root = await makeTempDir();
+    const sessionRoot = path.join(root, "sessions");
+    const session = createSessionState({
+      sessionId: "sess-legacy-workflow-body",
+      workflowName: "demo",
+      workflowId: "demo",
+      initialNodeId: "manager",
+      runtimeVariables: {},
+    });
+    const saved = await saveSession(session, { sessionStoreRoot: sessionRoot });
+    expect(saved.ok).toBe(true);
+
+    const schema = createGraphqlSchema();
+    const context: GraphqlRequestContext = {
+      cwd: root,
+      sessionStoreRoot: sessionRoot,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      rootDataDir: path.join(root, "data"),
+    };
+    const execution = await schema.query.workflowExecution(
+      { workflowExecutionId: session.sessionId },
+      context,
+    );
+    const overview = await schema.query.workflowExecutionOverview(
+      { workflowExecutionId: session.sessionId },
+      context,
+    );
+    expect(execution?.workflowDefinitionJsonBody).toBeNull();
+    expect(overview?.workflowDefinitionJsonBody).toBeNull();
+  });
+
   test("exposes workflow, workflowExecution, communication, communications, and nodeExecution views", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);

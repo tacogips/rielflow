@@ -172,6 +172,7 @@ export interface WorkflowSessionView extends WorkflowControlPlaneSession {
 
 export interface WorkflowExecutionView {
   readonly workflowExecutionId: string;
+  readonly workflowDefinitionJsonBody: string | null;
   readonly session: WorkflowSessionView;
   readonly nodeExecutions: readonly GraphqlRuntimeNodeExecutionSummary[];
   readonly nodeLogs: readonly GraphqlRuntimeNodeLogEntry[];
@@ -182,6 +183,7 @@ export interface WorkflowExecutionView {
 
 export interface WorkflowExecutionOverviewView {
   readonly workflowExecutionId: string;
+  readonly workflowDefinitionJsonBody: string | null;
   readonly workflowId: string;
   readonly workflowName: string;
   readonly status: WorkflowControlPlaneSessionStatus;

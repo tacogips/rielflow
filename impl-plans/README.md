@@ -31,6 +31,7 @@ impl-plans/
 | `active/matrix-attachment-text` | Completed | `design-matrix-attachment-text`, `design-event-listener-workflow-trigger`, `architecture` |
 | `active/opentelemetry-instrumentation` | Ready | `architecture#opentelemetry-runtime-instrumentation`, `command#telemetry-and-jaeger-verification` |
 | `active/package-checkout-content-digest-metadata` | In Progress | `architecture#workflow-checkout-boundary` |
+| `active/run-log-workflow-definition-body` | Ready | `design-graphql-manager-control-plane#run-scoped-workflow-definition-body` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
 | `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |

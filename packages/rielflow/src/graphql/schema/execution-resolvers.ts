@@ -341,6 +341,7 @@ export async function buildWorkflowExecutionView(
     ]);
   return {
     workflowExecutionId: input.workflowExecutionId,
+    workflowDefinitionJsonBody: session.workflowDefinitionJsonBody ?? null,
     session: await toWorkflowSessionView(session, context),
     nodeExecutions,
     nodeLogs,
@@ -410,6 +411,7 @@ export async function buildWorkflowExecutionOverviewView(
 
   return {
     workflowExecutionId: input.workflowExecutionId,
+    workflowDefinitionJsonBody: session.workflowDefinitionJsonBody ?? null,
     workflowId: session.workflowId,
     workflowName: session.workflowName,
     status: session.status,

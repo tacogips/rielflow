@@ -88,6 +88,7 @@ export interface WorkflowControlPlaneSession {
   readonly sessionId: string;
   readonly workflowName: string;
   readonly workflowId: string;
+  readonly workflowDefinitionJsonBody?: string | null;
   readonly status: WorkflowControlPlaneSessionStatus;
   readonly startedAt: string;
   readonly endedAt?: string;

@@ -214,6 +214,10 @@ describe("loadWorkflowFromDisk", () => {
   test("loads a step-addressed workflow and derives runtime ids from steps", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({ workflowRoot, workflowName: "demo" });
+    const workflowBody = readFileSync(
+      path.join(workflowRoot, "demo", "workflow.json"),
+      "utf8",
+    );
 
     const result = await loadWorkflowFromDisk("demo", { workflowRoot });
     expect(result.ok).toBe(true);
@@ -230,6 +234,7 @@ describe("loadWorkflowFromDisk", () => {
     expect(getStructuralEdges(result.value.bundle.workflow)).toEqual([
       { from: "manager", to: "worker", when: "always" },
     ]);
+    expect(result.value.workflowDefinitionJsonBody).toBe(workflowBody);
   });
 
   test("applies node patches without writing workflow bundle files", async () => {
