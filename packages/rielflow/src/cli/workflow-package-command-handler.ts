@@ -13,6 +13,36 @@ import type { WorkflowCheckoutScope } from "../workflow/checkout";
 import { emitJson } from "./input-output-helpers";
 import type { RunCliScopeContext } from "./storage-and-options";
 
+function renderRawWorkflowCheckoutStatus(
+  io: RunCliScopeContext["io"],
+  status: Readonly<Record<string, unknown>>,
+): void {
+  io.stdout("install type: workflow-checkout");
+  io.stdout(`workflow: ${String(status["workflowName"])}`);
+  io.stdout(`scope: ${String(status["scope"])}`);
+  io.stdout(`managed by: ${String(status["managedBy"])}`);
+  io.stdout(`package managed: ${String(status["packageManaged"])}`);
+  if ("destinationDirectory" in status) {
+    io.stdout(`destination: ${String(status["destinationDirectory"])}`);
+  }
+  if ("sourceUrl" in status) {
+    io.stdout(`source: ${String(status["sourceUrl"])}`);
+  }
+  if ("contentDigest" in status) {
+    io.stdout(`digest algorithm: ${String(status["contentDigestAlgorithm"])}`);
+    io.stdout(`digest: ${String(status["contentDigest"])}`);
+  }
+  if ("checkoutRecordPath" in status) {
+    io.stdout(`checkout record: ${String(status["checkoutRecordPath"])}`);
+  }
+  const suggestedCommands = Array.isArray(status["suggestedCommands"])
+    ? status["suggestedCommands"]
+    : [];
+  for (const command of suggestedCommands) {
+    io.stdout(`suggested: ${String(command)}`);
+  }
+}
+
 export async function runCliWorkflowPackageScope(
   context: RunCliScopeContext,
 ): Promise<number> {
@@ -186,6 +216,23 @@ export async function runCliWorkflowPackageScope(
           ].join("\t"),
         );
       }
+      if (listed.value.workflowCheckouts.length > 0) {
+        io.stdout("raw workflow checkouts:");
+      }
+      for (const workflowCheckout of listed.value.workflowCheckouts) {
+        io.stdout(
+          [
+            "workflow-checkout",
+            workflowCheckout.workflowName,
+            workflowCheckout.scope,
+            workflowCheckout.sourceUrl ?? "",
+            workflowCheckout.contentDigest ?? "",
+            workflowCheckout.destinationDirectory,
+            workflowCheckout.checkoutRecordPath,
+            workflowCheckout.suggestedCommands[0] ?? "",
+          ].join("\t"),
+        );
+      }
     }
     return 0;
   }
@@ -347,24 +394,31 @@ export async function runCliWorkflowPackageScope(
     if (parsed.options.output === "json") {
       emitJson(io, result.value);
     } else {
-      io.stdout(`package: ${String(result.value.packageId)}`);
-      io.stdout(`workflow: ${String(result.value.workflowName)}`);
-      io.stdout(`scope: ${String(result.value.scope)}`);
-      if ("destinationDirectory" in result.value) {
-        io.stdout(`destination: ${String(result.value.destinationDirectory)}`);
-      }
-      if ("registryUrl" in result.value) {
-        io.stdout(`registry: ${String(result.value.registryUrl)}`);
-      }
-      if ("checksum" in result.value) {
-        io.stdout(`checksum: ${String(result.value.checksum)}`);
-      }
-      io.stdout(`installId: ${String(result.value.installId)}`);
-      io.stdout(
-        `updated: ${String("updated" in result.value ? result.value.updated : false)}`,
-      );
-      if ("removed" in result.value) {
-        io.stdout(`removed: ${String(result.value.removed)}`);
+      const resultRecord = result.value as Readonly<Record<string, unknown>>;
+      if (resultRecord["installType"] === "workflow-checkout") {
+        renderRawWorkflowCheckoutStatus(io, resultRecord);
+      } else {
+        io.stdout(`package: ${String(result.value.packageId)}`);
+        io.stdout(`workflow: ${String(result.value.workflowName)}`);
+        io.stdout(`scope: ${String(result.value.scope)}`);
+        if ("destinationDirectory" in result.value) {
+          io.stdout(
+            `destination: ${String(result.value.destinationDirectory)}`,
+          );
+        }
+        if ("registryUrl" in result.value) {
+          io.stdout(`registry: ${String(result.value.registryUrl)}`);
+        }
+        if ("checksum" in result.value) {
+          io.stdout(`checksum: ${String(result.value.checksum)}`);
+        }
+        io.stdout(`installId: ${String(result.value.installId)}`);
+        io.stdout(
+          `updated: ${String("updated" in result.value ? result.value.updated : false)}`,
+        );
+        if ("removed" in result.value) {
+          io.stdout(`removed: ${String(result.value.removed)}`);
+        }
       }
     }
     return 0;

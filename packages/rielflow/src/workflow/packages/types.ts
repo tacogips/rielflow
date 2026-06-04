@@ -372,6 +372,7 @@ export interface WorkflowPackageFailure {
     | "MISSING_PACKAGE"
     | "MISSING_REGISTRY"
     | "MISSING_WORKFLOW_BUNDLE"
+    | "NOT_PACKAGE_CHECKOUT"
     | "PRE_INSTALL_CHECK_FAILED"
     | "UNSAFE_PATH"
     | "USAGE"

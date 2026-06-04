@@ -63,6 +63,7 @@ rielflow package search [query] [--registry <registry-url-or-alias>] [--tag <tag
 rielflow package registry add <id> --registry-url <url> [--local-path <path>] [--branch <branch>] [--output json|text]
 rielflow package registry list [--output json|text]
 rielflow package list [--scope project|user|auto] [--workflow-definition-dir <path>] [--output json|text]
+rielflow package status <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
 rielflow package remove <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
 rielflow package publish <workflow-name-or-path> [--registry <registry-url>] [--registry-local-path <path>] [--branch <branch>] [--package-id <id>] [--source-workflow-dir <path>] [--message <text>] [--create-pr] [--pr-base <branch>] [--dry-run] [--output json|text]
 rielflow workflow checkout <github-directory-url> [--user-scope] [--overwrite] [--output json|text]
@@ -137,7 +138,13 @@ Install behavior:
 `package list` reads the local checkout catalog only; it must not refresh
 registries or require network access. It lists package checkout records with
 enough metadata to make update, audit, and removal decisions without loading
-remote package contents.
+remote package contents. Raw workflow checkout records created by
+`workflow checkout` are not package-owned artifacts, but the package boundary
+must not hide them when the same catalog lookup explains why package lifecycle
+commands cannot manage them. JSON output keeps `packages` package-only and adds
+`workflowCheckouts` entries with `installType: "workflow-checkout"`; text output
+uses a separate raw workflow checkout section when such records match the
+requested scope.
 
 Required list JSON fields:
 
@@ -158,9 +165,51 @@ Required list JSON fields:
 - `skills`
 - `checkedOutAt`
 
+Required raw workflow checkout JSON fields:
+
+- `installType`: `workflow-checkout`
+- `workflowName`
+- `scope`
+- `destinationDirectory`
+- `sourceUrl`
+- `contentDigestAlgorithm`
+- `contentDigest`
+- `checkoutRecordPath`
+- `checkedOutAt`
+- `suggestedCommands`
+
 Text output should use compact columns for `INSTALL ID`, `PACKAGE`, `WORKFLOW`,
 `SCOPE`, `VERSION`, `HASH`, and `DESTINATION`. It may truncate long ids and
 hashes only in text output; JSON output must keep full values.
+
+`package status` first resolves package checkout records using the package
+selector rules. When no package record matches, it must inspect raw workflow
+checkout records in the same local checkout catalog before returning a missing
+package error. If exactly one raw workflow checkout matches, status returns a
+read-only explanatory result instead of the generic `package checkout record not
+found` failure.
+
+Raw workflow checkout status JSON fields:
+
+- `installType`: `workflow-checkout`
+- `managedBy`: `workflow checkout`
+- `packageManaged`: `false`
+- `workflowName`
+- `scope`
+- `destinationDirectory`
+- `sourceUrl`
+- `contentDigestAlgorithm`
+- `contentDigest`
+- `checkoutRecordPath`
+- `checkedOutAt`
+- `suggestedCommands`
+
+The suggested commands should include
+`rielflow workflow usage <workflow-name> --scope <scope>` and a package install
+hint such as `rielflow package install <package-id> --user-scope` only when the
+operator wants registry-managed package lifecycle support. The status command
+is read-only and does not attempt registry search to infer a package id for raw
+checkouts.
 
 `package remove` removes only package-owned artifacts recorded in checkout
 catalog metadata. It accepts `--install-id` as the exact selector. Without an
@@ -178,7 +227,9 @@ Removal behavior:
   skill artifacts are deleted or confirmed absent.
 - Direct URL checkout records are not removed by `package remove` unless the
   command explicitly identifies a package checkout record. The command should
-  report `not-package-checkout` for legacy direct records.
+  report `not-package-checkout` for legacy direct records and include the
+  matching raw workflow checkout summary plus workflow-command guidance when
+  available.
 
 Required remove JSON fields:
 
@@ -293,6 +344,11 @@ Help output and README examples must make these distinctions explicit:
 - node packages are installed through `package install` and are exposed to
   workflows as ordinary installed add-ons
 - `package list` lists locally installed package records without network access
+- `package list --output json` includes a separate `workflowCheckouts` array for
+  raw `workflow checkout` records without mixing them into package-owned
+  `packages`
+- `package status <workflow>` returns typed workflow-checkout status when a raw
+  checkout exists and no matching package checkout record exists
 - `package remove` removes package-owned workflows and skills by install id or
   unambiguous package/workflow selector
 - `workflow checkout <github-url>` installs a direct GitHub workflow directory
@@ -309,6 +365,10 @@ Help output and README examples must make these distinctions explicit:
 - Workflow-scoped package aliases are intentionally unsupported.
 - `package list` reads installed checkout records locally and never refreshes
   remote registries.
+- `package status` resolves package records first, then raw workflow checkout
+  records, and only then reports that no package or raw checkout record matched.
+- Raw workflow checkout status is explanatory only; package update and remove
+  continue rejecting raw workflow checkout records as not package-managed.
 - `package remove` requires exact install-id targeting when a
   package/workflow selector is ambiguous.
 - `package remove` deletes only package-owned artifacts recorded in the checkout

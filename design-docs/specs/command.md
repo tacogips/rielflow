@@ -85,6 +85,22 @@ compatibility or historical references rather than missed primary examples.
     and integrity fields, dependency locks, and either installed workflow fields
     or installed `addons[]` artifact fields with execution metadata and verified
     content digests.
+- `package list`
+  - List local registry-managed package checkout records without registry
+    refresh or network access.
+  - Raw workflow checkout records from `workflow checkout` are reported in a
+    separate `workflowCheckouts` JSON array with
+    `installType: "workflow-checkout"` and are not mixed into package-owned
+    `packages`.
+- `package status <package-id-or-workflow-name>`
+  - Report registry-managed package status when a package checkout record
+    matches.
+  - If no package record matches but a raw workflow checkout record exists,
+    return typed workflow-checkout status with scope, destination, source URL,
+    digest, checkout record path, and suggested `workflow usage` guidance
+    instead of the generic `package checkout record not found` failure.
+  - Status is read-only; raw workflow checkout records remain non-package
+    records for package update and remove.
 - `workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.

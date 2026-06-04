@@ -46,8 +46,29 @@ export interface WorkflowPackageInstalledRecord {
   readonly addons: readonly WorkflowPackageAddonInstallTarget[];
 }
 
+export interface RawWorkflowCheckoutInstalledRecord {
+  readonly installType: "workflow-checkout";
+  readonly workflowName: string;
+  readonly scope: WorkflowCheckoutScope;
+  readonly destinationDirectory: string;
+  readonly checkoutRecordPath: string;
+  readonly suggestedCommands: readonly string[];
+  readonly sourceUrl: string;
+  readonly contentDigestAlgorithm: "sha256";
+  readonly contentDigest: string;
+  readonly checkedOutAt?: string;
+}
+
+export interface RawWorkflowCheckoutStatus
+  extends RawWorkflowCheckoutInstalledRecord {
+  readonly status: "workflow-checkout";
+  readonly managedBy: "workflow checkout";
+  readonly packageManaged: false;
+}
+
 export interface WorkflowPackageListResult {
   readonly packages: readonly WorkflowPackageInstalledRecord[];
+  readonly workflowCheckouts: readonly RawWorkflowCheckoutInstalledRecord[];
 }
 
 export interface WorkflowPackageRemoveResult {
@@ -131,6 +152,45 @@ async function listPackageCheckoutRecords(input: {
           const recordPath = path.join(checkoutRoot, entry.name);
           const record = await readJsonRecord(recordPath);
           return record?.["checkoutKind"] === "package"
+            ? { path: recordPath, record }
+            : undefined;
+        }),
+    );
+    return records.filter(
+      (
+        record,
+      ): record is {
+        readonly path: string;
+        readonly record: Readonly<Record<string, unknown>>;
+      } => record !== undefined,
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function listRawWorkflowCheckoutRecords(input: {
+  readonly userRoot: string;
+}): Promise<
+  readonly {
+    readonly path: string;
+    readonly record: Readonly<Record<string, unknown>>;
+  }[]
+> {
+  const checkoutRoot = path.join(
+    input.userRoot,
+    "workflow-registry",
+    "checkouts",
+  );
+  try {
+    const entries = await readdir(checkoutRoot, { withFileTypes: true });
+    const records = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          const recordPath = path.join(checkoutRoot, entry.name);
+          const record = await readJsonRecord(recordPath);
+          return record !== undefined && record["checkoutKind"] !== "package"
             ? { path: recordPath, record }
             : undefined;
         }),
@@ -306,6 +366,66 @@ function toInstalledPackageRecord(input: {
   };
 }
 
+function workflowCheckoutSuggestedCommands(input: {
+  readonly workflowName: string;
+  readonly scope: WorkflowCheckoutScope;
+}): readonly string[] {
+  return [
+    `rielflow workflow usage ${input.workflowName} --scope ${input.scope}`,
+    input.scope === "user"
+      ? "rielflow package install <package-id> --user-scope"
+      : "rielflow package install <package-id>",
+  ];
+}
+
+function toRawWorkflowCheckoutRecord(input: {
+  readonly path: string;
+  readonly record: Readonly<Record<string, unknown>>;
+}): RawWorkflowCheckoutInstalledRecord | undefined {
+  const workflowName = recordString(input.record, "workflowName");
+  const scope = recordScope(input.record);
+  const destinationDirectory = recordString(
+    input.record,
+    "destinationDirectory",
+  );
+  if (
+    workflowName === undefined ||
+    scope === undefined ||
+    destinationDirectory === undefined
+  ) {
+    return undefined;
+  }
+  const sourceUrl = recordString(input.record, "sourceUrl");
+  const contentDigestAlgorithm = recordString(
+    input.record,
+    "contentDigestAlgorithm",
+  );
+  const contentDigest = recordString(input.record, "contentDigest");
+  if (
+    sourceUrl === undefined ||
+    contentDigestAlgorithm !== "sha256" ||
+    contentDigest === undefined
+  ) {
+    return undefined;
+  }
+  const checkedOutAt = recordString(input.record, "checkedOutAt");
+  return {
+    installType: "workflow-checkout",
+    workflowName,
+    scope,
+    destinationDirectory,
+    checkoutRecordPath: input.path,
+    sourceUrl,
+    contentDigestAlgorithm: "sha256",
+    contentDigest,
+    ...(checkedOutAt === undefined ? {} : { checkedOutAt }),
+    suggestedCommands: workflowCheckoutSuggestedCommands({
+      workflowName,
+      scope,
+    }),
+  };
+}
+
 function matchesPackageCheckoutRecord(input: {
   readonly record: Readonly<Record<string, unknown>>;
   readonly workflowName?: string;
@@ -388,6 +508,101 @@ function matchPackageCheckoutRecords(input: {
   );
 }
 
+function matchesRawWorkflowCheckoutRecord(input: {
+  readonly record: Readonly<Record<string, unknown>>;
+  readonly workflowName?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly currentProjectRootIdentity: string;
+  readonly currentWorkflowDefinitionDir?: string;
+}): boolean {
+  if (
+    input.workflowName !== undefined &&
+    recordString(input.record, "workflowName") !== input.workflowName
+  ) {
+    return false;
+  }
+  const scope = recordString(input.record, "scope");
+  if (input.scope !== undefined && scope !== input.scope) {
+    return false;
+  }
+  if (scope !== "project") {
+    return true;
+  }
+  const recordProjectRootIdentity = recordString(
+    input.record,
+    "projectRootIdentity",
+  );
+  if (
+    recordProjectRootIdentity !== undefined &&
+    recordProjectRootIdentity !== input.currentProjectRootIdentity
+  ) {
+    return false;
+  }
+  const recordWorkflowDefinitionDir = recordString(
+    input.record,
+    "workflowDefinitionDirOverride",
+  );
+  return (
+    input.currentWorkflowDefinitionDir === undefined ||
+    recordWorkflowDefinitionDir === undefined ||
+    recordWorkflowDefinitionDir === input.currentWorkflowDefinitionDir
+  );
+}
+
+function matchRawWorkflowCheckoutRecords(input: {
+  readonly workflowName?: string;
+  readonly scope?: WorkflowCheckoutScope;
+  readonly options?: WorkflowPackageRegistryConfigOptions;
+  readonly records: readonly {
+    readonly path: string;
+    readonly record: Readonly<Record<string, unknown>>;
+  }[];
+}): readonly {
+  readonly path: string;
+  readonly record: Readonly<Record<string, unknown>>;
+}[] {
+  const currentProjectRootIdentity = resolveStatusProjectRootIdentity(
+    input.options,
+  );
+  const currentWorkflowDefinitionDir = workflowDefinitionDirOverride(
+    input.options,
+  );
+  return input.records.filter(({ record }) =>
+    matchesRawWorkflowCheckoutRecord({
+      record,
+      ...(input.workflowName === undefined
+        ? {}
+        : { workflowName: input.workflowName }),
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+      currentProjectRootIdentity,
+      ...(currentWorkflowDefinitionDir === undefined
+        ? {}
+        : { currentWorkflowDefinitionDir }),
+    }),
+  );
+}
+
+function rawCheckoutAmbiguityMessage(
+  records: readonly {
+    readonly path: string;
+    readonly record: Readonly<Record<string, unknown>>;
+  }[],
+): string {
+  const paths = records.map((record) => record.path).join(", ");
+  return `multiple raw workflow checkout records match; retry with a narrower --scope or --workflow-definition-dir (${paths})`;
+}
+
+function toRawWorkflowCheckoutStatus(
+  record: RawWorkflowCheckoutInstalledRecord,
+): RawWorkflowCheckoutStatus {
+  return {
+    ...record,
+    status: "workflow-checkout",
+    managedBy: "workflow checkout",
+    packageManaged: false,
+  };
+}
+
 export async function getWorkflowPackageCheckoutStatus(input: {
   readonly workflowName?: string;
   readonly installId?: string;
@@ -405,8 +620,40 @@ export async function getWorkflowPackageCheckoutStatus(input: {
     records: await listPackageCheckoutRecords({ userRoot }),
   });
   if (matched.length === 0) {
+    const rawMatched =
+      input.installId === undefined
+        ? matchRawWorkflowCheckoutRecords({
+            ...(input.workflowName === undefined
+              ? {}
+              : { workflowName: input.workflowName }),
+            ...(input.scope === undefined ? {} : { scope: input.scope }),
+            ...(input.options === undefined ? {} : { options: input.options }),
+            records: await listRawWorkflowCheckoutRecords({ userRoot }),
+          })
+        : [];
+    if (rawMatched.length === 1) {
+      const rawRecord =
+        rawMatched[0] === undefined
+          ? undefined
+          : toRawWorkflowCheckoutRecord(rawMatched[0]);
+      if (rawRecord !== undefined) {
+        return ok(
+          toRawWorkflowCheckoutStatus(rawRecord) as unknown as Readonly<
+            Record<string, unknown>
+          >,
+        );
+      }
+    }
+    if (rawMatched.length > 1) {
+      return err(
+        packageFailure("USAGE", rawCheckoutAmbiguityMessage(rawMatched)),
+      );
+    }
     return err(
-      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+      packageFailure(
+        "MISSING_PACKAGE",
+        "no package checkout record or raw workflow checkout record found",
+      ),
     );
   }
   if (matched.length > 1) {
@@ -420,7 +667,10 @@ export async function getWorkflowPackageCheckoutStatus(input: {
   const record = matched[0];
   if (record === undefined) {
     return err(
-      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+      packageFailure(
+        "MISSING_PACKAGE",
+        "no package checkout record or raw workflow checkout record found",
+      ),
     );
   }
   return resolveWorkflowPackageCheckoutStatus({
@@ -435,12 +685,17 @@ export async function listWorkflowPackageCheckouts(input: {
   readonly options?: WorkflowPackageRegistryConfigOptions;
 }): Promise<Result<WorkflowPackageListResult, WorkflowPackageFailure>> {
   const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
-  const records = matchPackageCheckoutRecords({
+  const packageRecords = matchPackageCheckoutRecords({
     ...(input.scope === undefined ? {} : { scope: input.scope }),
     ...(input.options === undefined ? {} : { options: input.options }),
     records: await listPackageCheckoutRecords({ userRoot }),
   });
-  const packages = records
+  const rawRecords = matchRawWorkflowCheckoutRecords({
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    ...(input.options === undefined ? {} : { options: input.options }),
+    records: await listRawWorkflowCheckoutRecords({ userRoot }),
+  });
+  const packages = packageRecords
     .map(toInstalledPackageRecord)
     .filter(
       (record): record is WorkflowPackageInstalledRecord =>
@@ -451,7 +706,18 @@ export async function listWorkflowPackageCheckouts(input: {
         `${right.scope}:${right.packageId}:${right.workflowName}:${right.installId}`,
       ),
     );
-  return ok({ packages });
+  const workflowCheckouts = rawRecords
+    .map(toRawWorkflowCheckoutRecord)
+    .filter(
+      (record): record is RawWorkflowCheckoutInstalledRecord =>
+        record !== undefined,
+    )
+    .sort((left, right) =>
+      `${left.scope}:${left.workflowName}:${left.destinationDirectory}`.localeCompare(
+        `${right.scope}:${right.workflowName}:${right.destinationDirectory}`,
+      ),
+    );
+  return ok({ packages, workflowCheckouts });
 }
 
 async function removeRecordedPackagePath(input: {
@@ -490,8 +756,32 @@ export async function removeWorkflowPackageCheckout(input: {
     records: await listPackageCheckoutRecords({ userRoot }),
   });
   if (matched.length === 0) {
+    if (input.installId === undefined) {
+      const rawMatched = matchRawWorkflowCheckoutRecords({
+        ...(input.workflowName === undefined
+          ? {}
+          : { workflowName: input.workflowName }),
+        ...(input.scope === undefined ? {} : { scope: input.scope }),
+        ...(input.options === undefined ? {} : { options: input.options }),
+        records: await listRawWorkflowCheckoutRecords({ userRoot }),
+      });
+      if (rawMatched.length > 0) {
+        const workflowName = input.workflowName ?? "<workflow-name>";
+        const scopeHint =
+          input.scope === undefined ? "" : ` --scope ${input.scope}`;
+        return err(
+          packageFailure(
+            "NOT_PACKAGE_CHECKOUT",
+            `not-package-checkout: '${workflowName}' is a raw workflow checkout, not a registry package install; use rielflow workflow usage ${workflowName}${scopeHint} or install through rielflow package install for package lifecycle commands`,
+          ),
+        );
+      }
+    }
     return err(
-      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+      packageFailure(
+        "MISSING_PACKAGE",
+        "no package checkout record or raw workflow checkout record found",
+      ),
     );
   }
   if (matched.length > 1) {
@@ -505,7 +795,10 @@ export async function removeWorkflowPackageCheckout(input: {
   const matchedRecord = matched[0];
   if (matchedRecord === undefined) {
     return err(
-      packageFailure("MISSING_PACKAGE", "package checkout record not found"),
+      packageFailure(
+        "MISSING_PACKAGE",
+        "no package checkout record or raw workflow checkout record found",
+      ),
     );
   }
   const installed = toInstalledPackageRecord(matchedRecord);
@@ -581,6 +874,14 @@ export async function updateWorkflowPackageCheckout(input: {
   const status = await getWorkflowPackageCheckoutStatus(input);
   if (!status.ok) {
     return status;
+  }
+  if (status.value["installType"] === "workflow-checkout") {
+    return err(
+      packageFailure(
+        "NOT_PACKAGE_CHECKOUT",
+        "not-package-checkout: raw workflow checkouts are not package-managed; use workflow commands or install through rielflow package install",
+      ),
+    );
   }
   if (status.value["status"] === "missing-source-package") {
     if (input.yes !== true) {

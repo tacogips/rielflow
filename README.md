@@ -425,12 +425,24 @@ rielflow package list
 rielflow package list --scope user --output json
 ```
 
+`package list` keeps registry-managed package installs in `packages`. Raw
+workflow checkouts created by `workflow checkout` are reported separately in
+`workflowCheckouts` with `installType: "workflow-checkout"` so they are visible
+without becoming package-managed.
+
 Check status and update:
 
 ```bash
 rielflow package status worker-only-single-step
 rielflow package update worker-only-single-step
 ```
+
+If `package status <workflow>` finds no package checkout record but does find a
+matching raw workflow checkout, it returns read-only workflow-checkout status
+with scope, destination, source URL, content digest, checkout record path, and
+suggested `rielflow workflow usage <workflow> --scope <scope>` guidance.
+`package update` and `package remove` still reject raw workflow checkouts as
+not package-managed.
 
 Package updates apply changed package contents, including package-installed
 skills, without an extra confirmation prompt. If the selected package has been
@@ -465,6 +477,10 @@ Install directly from a public GitHub workflow directory:
 rielflow workflow checkout \
   https://github.com/<owner>/<repo>/tree/<ref>/.rielflow/workflows/<workflow-name>
 ```
+
+Use `workflow checkout` for direct GitHub workflow installs. Use
+`package install <package-id>` when you want package lifecycle commands such as
+package status, update, and remove to manage the install.
 
 Register another package registry:
 

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-31T23:20:00+09:00",
+  "lastUpdated": "2026-06-05T09:00:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -555,6 +555,9 @@
     },
     "188": {
       "status": "COMPLETED"
+    },
+    "189": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -706,6 +709,50 @@
             "TASK-004",
             "TASK-005",
             "TASK-006"
+          ]
+        }
+      }
+    },
+    "active/workflow-package-raw-checkout-status": {
+      "phase": 189,
+      "status": "Completed",
+      "path": "impl-plans/active/workflow-package-raw-checkout-status.md",
+      "designReference": "design-docs/specs/design-workflow-package-commands.md#package-lifecycle-commands; design-docs/specs/design-workflow-package-checkout.md; design-docs/specs/command.md#subcommands",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
           ]
         }
       }

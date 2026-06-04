@@ -230,6 +230,7 @@ Local package lifecycle commands:
 
 ```bash
 rielflow package list [--scope project|user|auto] [--workflow-definition-dir <path>] [--output json|text]
+rielflow package status <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
 rielflow package remove <package-id-or-workflow-name> [--scope project|user|auto] [--install-id <id>] [--workflow-definition-dir <path>] [--output json|text]
 ```
 
@@ -678,7 +679,7 @@ JSON output should include:
 - `managedSkillRoot`
 - `packageHash`
 
-## Installed Package Listing
+## Installed Package Listing And Raw Checkout Boundary
 
 Installed package listing reads checkout catalog records from
 `~/.rielflow/workflow-registry/checkouts/` and does not contact registries.
@@ -691,6 +692,28 @@ List must include package version and hash data from the installed record, not
 from current registry metadata. If a legacy package record lacks a field, JSON
 output should report `null` or omit the field consistently rather than
 refreshing the registry to backfill it.
+
+The checkout catalog also contains raw workflow checkout records written by
+`rielflow workflow checkout`. Those records are intentionally not package-owned
+and may lack `checkoutKind`; they carry workflow provenance fields such as
+`workflowName`, `sourceUrl`, `scope`, `destinationDirectory`,
+`contentDigestAlgorithm`, `contentDigest`, and `includedFiles`.
+
+Package listing must keep package records and raw workflow checkout records
+separate:
+
+- `packages` remains the package-owned list derived from records with
+  `checkoutKind: "package"`.
+- `workflowCheckouts` lists matching raw workflow checkout records with
+  `installType: "workflow-checkout"`.
+- scope, project-root, and workflow-definition-dir filters apply before both
+  record sets are rendered.
+- registry refresh, registry search, and package-id inference are never
+  performed while listing local records.
+
+This preserves package lifecycle semantics while preventing a user-scope raw
+checkout from looking absent when `package list --scope user --output json` is
+used for diagnosis.
 
 Required list result fields:
 
@@ -714,6 +737,58 @@ Required list result fields:
 Text output should show at least install id, package id/name, workflow name,
 scope, version, hash/checksum, and destination. Long hashes may be shortened in
 text output only.
+
+Raw workflow checkout list entries should include at least workflow name, scope,
+destination, source URL, digest algorithm, digest, checkout record path, and
+suggested workflow commands. Text output should label this section as raw
+workflow checkouts or direct workflow checkouts so it is not mistaken for
+registry-managed package state.
+
+## Package Status For Raw Workflow Checkouts
+
+`rielflow package status <name>` is a package-boundary diagnostic as well as an
+update-status command. It must avoid the generic `package checkout record not
+found` failure when the local checkout catalog contains a matching raw workflow
+checkout.
+
+Resolution order:
+
+1. Select matching package checkout records by `--install-id`, selector,
+   `--scope`, current project root identity, and workflow-definition-dir.
+2. If one package checkout record matches, return normal package status.
+3. If multiple package checkout records match, keep the existing ambiguous
+   package failure and require `--install-id`.
+4. If no package record matches, select matching raw workflow checkout records
+   with the same scope and destination filters.
+5. If one raw workflow checkout matches, return explanatory workflow-checkout
+   status.
+6. If multiple raw workflow checkouts match, return an ambiguity diagnostic that
+   includes matching checkout record paths and requires a narrower scope or
+   workflow-definition-dir.
+7. If nothing matches, return a missing-package diagnostic that states no
+   package checkout or raw workflow checkout record was found.
+
+Raw workflow checkout status is successful, read-only, and non-updatable. JSON
+output uses:
+
+- `installType`: `workflow-checkout`
+- `managedBy`: `workflow checkout`
+- `packageManaged`: `false`
+- `workflowName`
+- `scope`
+- `destinationDirectory`
+- `sourceUrl`
+- `contentDigestAlgorithm`
+- `contentDigest`
+- `checkoutRecordPath`
+- `checkedOutAt`
+- `suggestedCommands`
+
+The suggested commands should point to workflow commands, especially
+`rielflow workflow usage <workflow-name> --scope <scope>`. If the user wants
+package lifecycle commands such as list/status/update/remove, status should
+explain that the workflow must be installed through `rielflow package install`
+from a registry package instead of raw `workflow checkout`.
 
 ## Package Removal
 
@@ -808,6 +883,12 @@ has not changed.
 - Make `rielflow package install` the canonical package lifecycle command.
 - Make `rielflow package list` a local catalog read that reports installed
   version and hash metadata without registry refresh.
+- Keep package-owned entries and raw workflow checkout entries separate in
+  package list output; raw entries use `installType: "workflow-checkout"` and
+  do not become package-managed.
+- Make `rielflow package status <workflow>` return explanatory
+  workflow-checkout status when no package record matches but a raw workflow
+  checkout record exists.
 - Make `rielflow package remove` a checkout-record-driven deletion operation
   that requires `--install-id` when selectors are ambiguous.
 - Require checksum verification when package metadata provides a checksum.

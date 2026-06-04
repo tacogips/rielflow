@@ -1433,6 +1433,145 @@ describe("runCli", () => {
     ).toContain('"workflowId": "demo"');
   });
 
+  test("package list and status explain user-scope raw workflow checkouts", async () => {
+    const root = await makeTempDir();
+    const sourceRoot = path.join(root, "source");
+    const userRoot = path.join(root, "user", ".rielflow");
+    const created = await createWorkflowTemplate("raw-demo", {
+      workflowRoot: sourceRoot,
+      templateMode: "worker-only",
+    });
+    expect(created.ok).toBe(true);
+    const fetchImpl = await createWorkflowCheckoutFetch({
+      sourceRoot,
+      workflowName: "raw-demo",
+    });
+
+    const checkoutCapture = createIoCapture();
+    const checkoutCode = await runCli(
+      [
+        "workflow",
+        "checkout",
+        "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-demo",
+        "--user-scope",
+        "--user-root",
+        userRoot,
+      ],
+      checkoutCapture.io,
+      createCliDeps({ fetchImpl }),
+    );
+    expect(checkoutCode).toBe(0);
+
+    const listCapture = createIoCapture();
+    const listCode = await runCli(
+      [
+        "package",
+        "list",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      listCapture.io,
+      createCliDeps(),
+    );
+    expect(listCode).toBe(0);
+    const listed = JSON.parse(listCapture.stdout.join("\n")) as {
+      packages: readonly unknown[];
+      workflowCheckouts: readonly {
+        installType: string;
+        workflowName: string;
+        scope: string;
+        destinationDirectory: string;
+        sourceUrl: string;
+        contentDigestAlgorithm: string;
+        contentDigest: string;
+        suggestedCommands: readonly string[];
+      }[];
+    };
+    expect(listed.packages).toEqual([]);
+    expect(listed.workflowCheckouts).toHaveLength(1);
+    const listedRawCheckout = listed.workflowCheckouts[0];
+    if (listedRawCheckout === undefined) {
+      throw new Error("raw workflow checkout was not listed");
+    }
+    expect(listedRawCheckout).toMatchObject({
+      installType: "workflow-checkout",
+      workflowName: "raw-demo",
+      scope: "user",
+      destinationDirectory: path.join(userRoot, "workflows", "raw-demo"),
+      sourceUrl:
+        "https://github.com/org/repo/tree/main/.rielflow/workflows/raw-demo",
+      contentDigestAlgorithm: "sha256",
+    });
+    expect(listedRawCheckout.contentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(listedRawCheckout.suggestedCommands).toContain(
+      "rielflow workflow usage raw-demo --scope user",
+    );
+
+    const statusCapture = createIoCapture();
+    const statusCode = await runCli(
+      [
+        "package",
+        "status",
+        "raw-demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+        "--output",
+        "json",
+      ],
+      statusCapture.io,
+      createCliDeps(),
+    );
+    expect(statusCode).toBe(0);
+    const status = JSON.parse(statusCapture.stdout.join("\n")) as {
+      installType: string;
+      managedBy: string;
+      packageManaged: boolean;
+      workflowName: string;
+      scope: string;
+      suggestedCommands: readonly string[];
+    };
+    expect(status).toMatchObject({
+      installType: "workflow-checkout",
+      managedBy: "workflow checkout",
+      packageManaged: false,
+      workflowName: "raw-demo",
+      scope: "user",
+    });
+    expect(status.suggestedCommands).toContain(
+      "rielflow workflow usage raw-demo --scope user",
+    );
+
+    const textStatusCapture = createIoCapture();
+    const textStatusCode = await runCli(
+      [
+        "package",
+        "status",
+        "raw-demo",
+        "--scope",
+        "user",
+        "--user-root",
+        userRoot,
+      ],
+      textStatusCapture.io,
+      createCliDeps(),
+    );
+    expect(textStatusCode).toBe(0);
+    const textStatus = textStatusCapture.stdout.join("\n");
+    expect(textStatus).toContain("install type: workflow-checkout");
+    expect(textStatus).toContain("managed by: workflow checkout");
+    expect(textStatus).toContain("package managed: false");
+    expect(textStatus).toContain(
+      "suggested: rielflow workflow usage raw-demo --scope user",
+    );
+    expect(textStatus).not.toContain("installId:");
+  });
+
   test("package commands search and install package ids", async () => {
     const root = await makeTempDir();
     const registryRoot = path.join(root, "registry");
@@ -1765,6 +1904,7 @@ describe("runCli", () => {
     expect(listAfterRemoveCode).toBe(0);
     expect(JSON.parse(listAfterRemoveCapture.stdout.join("\n"))).toEqual({
       packages: [],
+      workflowCheckouts: [],
     });
   });
 

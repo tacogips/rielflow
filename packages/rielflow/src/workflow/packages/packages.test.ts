@@ -60,6 +60,52 @@ async function makeTempDir(): Promise<string> {
   return directory;
 }
 
+async function writeRawWorkflowCheckoutRecord(input: {
+  readonly userRoot: string;
+  readonly workflowName: string;
+  readonly scope?: "project" | "user";
+  readonly recordName?: string;
+  readonly destinationDirectory?: string;
+}): Promise<{
+  readonly checkoutRecordPath: string;
+  readonly destinationDirectory: string;
+}> {
+  const scope = input.scope ?? "user";
+  const destinationDirectory =
+    input.destinationDirectory ??
+    path.join(input.userRoot, "workflows", input.workflowName);
+  await mkdir(destinationDirectory, { recursive: true });
+  const checkoutRoot = path.join(
+    input.userRoot,
+    "workflow-registry",
+    "checkouts",
+  );
+  await mkdir(checkoutRoot, { recursive: true });
+  const checkoutRecordPath = path.join(
+    checkoutRoot,
+    input.recordName ?? `${scope}-${input.workflowName}.json`,
+  );
+  await writeFile(
+    checkoutRecordPath,
+    `${JSON.stringify(
+      {
+        workflowName: input.workflowName,
+        sourceUrl: `https://github.com/example/repo/tree/main/.rielflow/workflows/${input.workflowName}`,
+        scope,
+        checkedOutAt: "2026-06-05T00:00:00.000Z",
+        destinationDirectory,
+        contentDigestAlgorithm: "sha256",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+        includedFiles: ["workflow.json"],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return { checkoutRecordPath, destinationDirectory };
+}
+
 async function computeTestAddonContentDigest(input: {
   readonly addonDirectory: string;
   readonly allowedFiles: readonly string[];
@@ -5676,5 +5722,139 @@ describe("workflow package registry", () => {
       );
       expect(published.value.dryRun).toBe(true);
     }
+  });
+
+  test("package list reports raw workflow checkouts outside package records", async () => {
+    const userRoot = await makeTempDir();
+    const raw = await writeRawWorkflowCheckoutRecord({
+      userRoot,
+      workflowName: "raw-user-flow",
+      scope: "user",
+    });
+
+    const listed = await listWorkflowPackageCheckouts({
+      scope: "user",
+      options: { userRoot },
+    });
+
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.value.packages).toHaveLength(0);
+      expect(listed.value.workflowCheckouts).toHaveLength(1);
+      const rawCheckout = listed.value.workflowCheckouts[0];
+      if (rawCheckout === undefined) {
+        throw new Error("raw workflow checkout was not listed");
+      }
+      expect(rawCheckout).toMatchObject({
+        installType: "workflow-checkout",
+        workflowName: "raw-user-flow",
+        scope: "user",
+        destinationDirectory: raw.destinationDirectory,
+        checkoutRecordPath: raw.checkoutRecordPath,
+        contentDigestAlgorithm: "sha256",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      });
+      expect(rawCheckout.suggestedCommands).toContain(
+        "rielflow workflow usage raw-user-flow --scope user",
+      );
+    }
+  });
+
+  test("package status falls back to read-only raw workflow checkout status", async () => {
+    const userRoot = await makeTempDir();
+    const raw = await writeRawWorkflowCheckoutRecord({
+      userRoot,
+      workflowName: "raw-status-flow",
+      scope: "user",
+    });
+
+    const status = await getWorkflowPackageCheckoutStatus({
+      workflowName: "raw-status-flow",
+      scope: "user",
+      options: { userRoot },
+    });
+
+    expect(status.ok).toBe(true);
+    if (status.ok) {
+      expect(status.value).toMatchObject({
+        installType: "workflow-checkout",
+        managedBy: "workflow checkout",
+        packageManaged: false,
+        workflowName: "raw-status-flow",
+        scope: "user",
+        destinationDirectory: raw.destinationDirectory,
+        checkoutRecordPath: raw.checkoutRecordPath,
+      });
+      expect(status.value["suggestedCommands"]).toContain(
+        "rielflow workflow usage raw-status-flow --scope user",
+      );
+    }
+  });
+
+  test("package status reports ambiguity for multiple matching raw workflow checkouts", async () => {
+    const userRoot = await makeTempDir();
+    await writeRawWorkflowCheckoutRecord({
+      userRoot,
+      workflowName: "raw-ambiguous-flow",
+      scope: "user",
+      recordName: "user-raw-ambiguous-flow-one.json",
+      destinationDirectory: path.join(userRoot, "workflows", "one"),
+    });
+    await writeRawWorkflowCheckoutRecord({
+      userRoot,
+      workflowName: "raw-ambiguous-flow",
+      scope: "user",
+      recordName: "user-raw-ambiguous-flow-two.json",
+      destinationDirectory: path.join(userRoot, "workflows", "two"),
+    });
+
+    const status = await getWorkflowPackageCheckoutStatus({
+      workflowName: "raw-ambiguous-flow",
+      scope: "user",
+      options: { userRoot },
+    });
+
+    expect(status.ok).toBe(false);
+    if (!status.ok) {
+      expect(status.error.code).toBe("USAGE");
+      expect(status.error.message).toContain(
+        "multiple raw workflow checkout records match",
+      );
+    }
+  });
+
+  test("package update and remove do not manage raw workflow checkouts", async () => {
+    const userRoot = await makeTempDir();
+    const raw = await writeRawWorkflowCheckoutRecord({
+      userRoot,
+      workflowName: "raw-mutation-flow",
+      scope: "user",
+    });
+
+    const updated = await updateWorkflowPackageCheckout({
+      workflowName: "raw-mutation-flow",
+      scope: "user",
+      options: { userRoot },
+    });
+    const removed = await removeWorkflowPackageCheckout({
+      workflowName: "raw-mutation-flow",
+      scope: "user",
+      options: { userRoot },
+    });
+
+    expect(updated.ok).toBe(false);
+    if (!updated.ok) {
+      expect(updated.error.code).toBe("NOT_PACKAGE_CHECKOUT");
+      expect(updated.error.message).toContain("not-package-checkout");
+    }
+    expect(removed.ok).toBe(false);
+    if (!removed.ok) {
+      expect(removed.error.code).toBe("NOT_PACKAGE_CHECKOUT");
+      expect(removed.error.message).toContain("not-package-checkout");
+    }
+    await expect(readFile(raw.checkoutRecordPath, "utf8")).resolves.toContain(
+      "raw-mutation-flow",
+    );
+    expect(await pathExists(raw.destinationDirectory)).toBe(true);
   });
 });

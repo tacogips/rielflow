@@ -37,6 +37,7 @@ impl-plans/
 | `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |
 | `active/workflow-package-install-scoped-callee-validation` | Ready | `design-workflow-package-checkout#scoped-cross-workflow-validation-during-install`, `architecture#workflow-checkout-boundary` |
 | `active/workflow-node-package-install` | Completed | `design-workflow-node-package-install`, `design-workflow-package-registry`, `design-workflow-package-commands` |
+| `active/workflow-package-raw-checkout-status` | Completed | `design-workflow-package-commands#package-lifecycle-commands`, `design-workflow-package-checkout`, `command` |
 | `active/workflow-package-registry` | Ready | `design-workflow-package-registry` |
 
 ## Recently Completed
