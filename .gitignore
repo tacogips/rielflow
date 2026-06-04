@@ -55,10 +55,7 @@ impl-plans/.progress.lock
 .private*/
 
 # rielflow runtime artifacts and session store (default paths)
-.rielflow/artifacts/
-.rielflow/artifacts/**
-.rielflow/logs/
-.rielflow/logs/**
+.rielflow/
 .rielflow-data/
 .rielflow-data/**
 .rielflow-opt/
