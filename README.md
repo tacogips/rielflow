@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./img/rielflow_icon.png" alt="Rielflow icon" width="320">
+</p>
+
 # Rielflow
 
 Rielflow is a local workflow runner for cooperative multi-agent work. It lets
