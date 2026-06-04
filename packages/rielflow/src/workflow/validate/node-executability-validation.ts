@@ -170,6 +170,7 @@ function enrichAddonResults(input: {
       path: result.path ?? candidate.path,
       ...(result.backend === undefined ? {} : { backend: result.backend }),
       ...(addonName === undefined ? {} : { addonName }),
+      ...(result.details === undefined ? {} : { details: result.details }),
     });
   });
 }

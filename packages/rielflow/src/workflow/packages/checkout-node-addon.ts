@@ -20,6 +20,8 @@ import {
 import type {
   NormalizedWorkflowNodeAddonPackageManifest,
   WorkflowPackageAddonInstallTarget,
+  WorkflowPackageDependencyEdge,
+  WorkflowPackageDependencyInstallResult,
   WorkflowPackageFailure,
   WorkflowPackageIndexRecord,
   WorkflowPackageRegistryEntry,
@@ -271,6 +273,8 @@ export async function checkoutWorkflowNodeAddonPackage(input: {
   readonly record: WorkflowPackageIndexRecord;
   readonly packageRoot: string;
   readonly manifest: NormalizedWorkflowNodeAddonPackageManifest;
+  readonly dependencies?: readonly WorkflowPackageDependencyInstallResult[];
+  readonly dependencyGraph?: readonly WorkflowPackageDependencyEdge[];
 }): Promise<Result<WorkflowPackageCheckoutResult, WorkflowPackageFailure>> {
   if (input.checkoutInput.options?.workflowRoot !== undefined) {
     return err(
@@ -297,6 +301,20 @@ export async function checkoutWorkflowNodeAddonPackage(input: {
       packageFailure(
         "VALIDATION",
         `package checksum mismatch for '${input.record.packageName}'`,
+      ),
+    );
+  }
+  if (
+    input.manifest.integrity === undefined &&
+    input.manifest.addons.some(
+      (addon) =>
+        addon.execution !== undefined && addon.execution.kind !== "declarative",
+    )
+  ) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `executable node-addon package '${input.record.packageName}' requires sha256 integrity metadata`,
       ),
     );
   }
@@ -470,6 +488,13 @@ export async function checkoutWorkflowNodeAddonPackage(input: {
         signatureVerified: integrity.value.signatureVerified,
         signatureRequired: integrity.value.signatureRequired,
       },
+      ...(input.dependencies === undefined || input.dependencies.length === 0
+        ? {}
+        : { dependencies: input.dependencies }),
+      ...(input.dependencyGraph === undefined ||
+      input.dependencyGraph.length === 0
+        ? {}
+        : { dependencyGraph: input.dependencyGraph }),
       ...(destination.projectRootIdentity === undefined
         ? {}
         : { projectRootIdentity: destination.projectRootIdentity }),
@@ -516,6 +541,13 @@ export async function checkoutWorkflowNodeAddonPackage(input: {
       confirmationSkipped: input.checkoutInput.yes === true,
       changedArtifacts,
       integrityDigest: integrity.value.digest,
+      ...(input.dependencies === undefined || input.dependencies.length === 0
+        ? {}
+        : { dependencies: input.dependencies }),
+      ...(input.dependencyGraph === undefined ||
+      input.dependencyGraph.length === 0
+        ? {}
+        : { dependencyGraph: input.dependencyGraph }),
     });
   } catch (error: unknown) {
     await restoreMutationBackups(mutationBackups);

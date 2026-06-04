@@ -1,6 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { err, ok, type Result } from "../result";
+import {
+  normalizeWorkflowAddonCapabilities,
+  normalizeWorkflowPackageAddonDependencyLocks,
+  normalizeWorkflowPackageAddonExecution,
+} from "./addon-metadata";
 import { normalizeWorkflowPackageIntegrity } from "./integrity";
 import {
   WORKFLOW_PACKAGE_MANIFEST_FILE,
@@ -146,6 +151,8 @@ const WORKFLOW_PACKAGE_DEPENDENCY_KEYS: ReadonlySet<string> = new Set([
   "packageId",
   "registry",
   "branch",
+  "kind",
+  "addons",
 ]);
 
 function normalizeWorkflowPackageManifestDependencies(
@@ -201,6 +208,14 @@ function normalizeWorkflowPackageManifestDependencies(
     const packageId = entry["packageId"];
     const registry = entry["registry"];
     const branch = entry["branch"];
+    const dependencyKind = entry["kind"];
+    const addonLocks = normalizeWorkflowPackageAddonDependencyLocks(
+      entry["addons"],
+      `package manifest dependencies[${index}].addons`,
+    );
+    if (!addonLocks.ok) {
+      return addonLocks;
+    }
     if (
       typeof packageId !== "string" ||
       !isSafeWorkflowPackageName(packageId) ||
@@ -208,7 +223,11 @@ function normalizeWorkflowPackageManifestDependencies(
       (registry !== undefined &&
         (typeof registry !== "string" || registry.trim().length === 0)) ||
       (branch !== undefined &&
-        (typeof branch !== "string" || branch.trim().length === 0))
+        (typeof branch !== "string" || branch.trim().length === 0)) ||
+      (dependencyKind !== undefined &&
+        dependencyKind !== "workflow" &&
+        dependencyKind !== "node-addon") ||
+      (dependencyKind === "node-addon" && addonLocks.value === undefined)
     ) {
       return err(
         packageFailure(
@@ -221,6 +240,10 @@ function normalizeWorkflowPackageManifestDependencies(
       packageId,
       ...(registry === undefined ? {} : { registry }),
       ...(branch === undefined ? {} : { branch }),
+      ...(dependencyKind === undefined
+        ? {}
+        : { kind: dependencyKind as WorkflowPackageKind }),
+      ...(addonLocks.value === undefined ? {} : { addons: addonLocks.value }),
     });
   }
   return ok(dependencies);
@@ -493,6 +516,21 @@ function normalizeWorkflowPackageManifestAddons(
     const name = entry["name"];
     const version = entry["version"];
     const sourcePath = entry["sourcePath"];
+    const execution = normalizeWorkflowPackageAddonExecution(
+      entry["execution"],
+      `node-addon package manifest addons[${index}].execution`,
+    );
+    if (!execution.ok) {
+      return execution;
+    }
+    const capabilities = normalizeWorkflowAddonCapabilities(
+      entry["capabilities"],
+      `node-addon package manifest addons[${index}].capabilities`,
+    );
+    if (!capabilities.ok) {
+      return capabilities;
+    }
+    const contentDigest = entry["contentDigest"];
     const normalizedSourcePath =
       typeof sourcePath === "string"
         ? normalizePackageRelativePath(sourcePath)
@@ -502,12 +540,39 @@ function normalizeWorkflowPackageManifestAddons(
       name.length === 0 ||
       typeof version !== "string" ||
       version.length === 0 ||
-      normalizedSourcePath === undefined
+      normalizedSourcePath === undefined ||
+      (contentDigest !== undefined &&
+        (typeof contentDigest !== "string" ||
+          !/^sha256:[a-f0-9]{64}$/.test(contentDigest)))
     ) {
       return err(
         packageFailure(
           "INVALID_MANIFEST",
           `node-addon package manifest addons[${index}] is invalid`,
+        ),
+      );
+    }
+    if (
+      execution.value !== undefined &&
+      execution.value.kind !== "declarative" &&
+      (capabilities.value === undefined || capabilities.value.length === 0)
+    ) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package manifest addons[${index}].capabilities is required for executable add-ons`,
+        ),
+      );
+    }
+    if (
+      execution.value !== undefined &&
+      execution.value.kind !== "declarative" &&
+      contentDigest === undefined
+    ) {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package manifest addons[${index}].contentDigest is required for executable add-ons`,
         ),
       );
     }
@@ -521,7 +586,16 @@ function normalizeWorkflowPackageManifestAddons(
       );
     }
     seen.add(duplicateKey);
-    addons.push({ name, version, sourcePath: normalizedSourcePath });
+    addons.push({
+      name,
+      version,
+      sourcePath: normalizedSourcePath,
+      ...(execution.value === undefined ? {} : { execution: execution.value }),
+      ...(capabilities.value === undefined
+        ? {}
+        : { capabilities: capabilities.value }),
+      ...(contentDigest === undefined ? {} : { contentDigest }),
+    });
   }
   return ok(addons);
 }

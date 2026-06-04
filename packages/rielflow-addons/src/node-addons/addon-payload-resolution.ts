@@ -488,6 +488,7 @@ export async function resolveNodeAddonPayloadAsync(input: {
         addon: input.addon,
         path: input.path,
         source: localSource.value,
+        ...(input.options === undefined ? {} : { options: input.options }),
       }),
     });
   }

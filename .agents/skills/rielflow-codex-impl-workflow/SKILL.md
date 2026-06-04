@@ -211,18 +211,25 @@ packages use `rielflow-package.json` with `kind: "node-addon"` and install
 validated `addon.json` based add-ons into project or user add-on roots through
 the existing `rielflow package install <package-id>` command. They do not
 execute package lifecycle code, install executable plugins, or download missing
-add-ons during workflow load, validation, or execution. `package search --kind
+add-ons during workflow load, validation, or execution. Package manifests may
+declare add-on `execution`, `capabilities`, and `contentDigest`, plus package
+`dependencies`; executable add-on files such as `.bash` are accepted only when
+execution metadata, exact add-on content digest, package sha256 integrity, and
+capability authorization all match. Workflow package dependencies may require
+exact node-addon locks, and temporary local smoke runs must use
+`workflow run --direct-executable-addon-grant <inline-json|@file|file>` rather
+than treating direct grants as production dependency locks. Endpoint-backed
+runs reject direct executable add-on grants. `package search --kind
 node-addon`, install, list, status, remove, and update JSON output must expose
 `kind` or `packageKind` so automation can distinguish workflow packages from
-package-owned add-ons. First-iteration node add-on package manifests with
-dependencies are rejected during checkout. Documentation refresh should cover
-`README.md`, this workflow skill, and directly affected add-on/workflow
-authoring skills. Verification should include
+package-owned add-ons, and package lifecycle output should preserve dependency
+lock, execution, capability, integrity, and content digest metadata.
+Documentation refresh should cover `README.md`, this workflow skill, and
+directly affected add-on/workflow authoring skills. Verification should include
 `bun test packages/rielflow/src/workflow/packages/packages.test.ts`,
-`bun test packages/rielflow/src/workflow/addon-package-boundary.test.ts`,
-`bun test packages/rielflow/src/workflow/authored-workflow.test.ts`,
-`bun test packages/rielflow/src/cli.test.ts`, `bun run typecheck`, `bun run
-lint:biome`, and `git diff --check`.
+`bun test packages/rielflow/src/cli.test.ts --test-name-pattern "direct executable add-on grants|registry packages over endpoint|direct executable add-on grants over endpoint"`,
+the isolated greeting-node-addon smoke using `/Users/taco/gits/tacogips/rielflow-packages`,
+`bun run typecheck`, `bun run lint`, and `git diff --check`.
 
 ## Reporting
 

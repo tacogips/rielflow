@@ -59,6 +59,9 @@ export interface WorkflowValidationOptions
     | "asyncNodeAddonResolvers"
     | "nodeAddonResolvers"
     | "nodePatch"
+    | "directExecutableAddonGrants"
+    | "addonDependencyLocks"
+    | "allowUnpackagedExecutableAddons"
   > {
   readonly allowResolvedStepFileFields?: boolean;
   readonly executablePreflight?: boolean;
@@ -191,6 +194,7 @@ export function normalizeContainerBuild(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
+  options?: { readonly allowRuntimeAddonBuildPaths?: boolean },
 ): ContainerBuild | undefined {
   if (value === undefined) {
     return undefined;
@@ -200,7 +204,14 @@ export function normalizeContainerBuild(
     return undefined;
   }
 
-  const allowedKeys = new Set(["contextPath", "containerfilePath", "target"]);
+  const allowedKeys = new Set([
+    "contextPath",
+    "containerfilePath",
+    "target",
+    ...(options?.allowRuntimeAddonBuildPaths === true
+      ? ["runtimeContextPath", "runtimeContainerfilePath"]
+      : []),
+  ]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       issues.push(
@@ -283,6 +294,44 @@ export function normalizeContainerBuild(
       );
     }
   }
+  let runtimeContextPath: string | undefined;
+  const runtimeContextPathRaw = value["runtimeContextPath"];
+  if (runtimeContextPathRaw !== undefined) {
+    if (
+      options?.allowRuntimeAddonBuildPaths === true &&
+      typeof runtimeContextPathRaw === "string" &&
+      runtimeContextPathRaw.length > 0
+    ) {
+      runtimeContextPath = runtimeContextPathRaw;
+    } else if (options?.allowRuntimeAddonBuildPaths === true) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runtimeContextPath`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
+  let runtimeContainerfilePath: string | undefined;
+  const runtimeContainerfilePathRaw = value["runtimeContainerfilePath"];
+  if (runtimeContainerfilePathRaw !== undefined) {
+    if (
+      options?.allowRuntimeAddonBuildPaths === true &&
+      typeof runtimeContainerfilePathRaw === "string" &&
+      runtimeContainerfilePathRaw.length > 0
+    ) {
+      runtimeContainerfilePath = runtimeContainerfilePathRaw;
+    } else if (options?.allowRuntimeAddonBuildPaths === true) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runtimeContainerfilePath`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
 
   if (contextPath === null || !isSafeWorkflowRelativePath(contextPath)) {
     return undefined;
@@ -291,6 +340,10 @@ export function normalizeContainerBuild(
   return {
     contextPath,
     ...(containerfilePath === undefined ? {} : { containerfilePath }),
+    ...(runtimeContextPath === undefined ? {} : { runtimeContextPath }),
+    ...(runtimeContainerfilePath === undefined
+      ? {}
+      : { runtimeContainerfilePath }),
     ...(target === undefined ? {} : { target }),
   };
 }
@@ -471,6 +524,7 @@ export function normalizeCommandExecution(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
+  options?: { readonly allowRuntimeAddonCommandPaths?: boolean },
 ): CommandExecution | undefined {
   if (value === undefined) {
     return undefined;
@@ -482,6 +536,9 @@ export function normalizeCommandExecution(
 
   const allowedKeys = new Set([
     "scriptPath",
+    ...(options?.allowRuntimeAddonCommandPaths === true
+      ? ["runtimeScriptPath"]
+      : []),
     "argvTemplate",
     "envTemplate",
     "workingDirectory",
@@ -508,6 +565,25 @@ export function normalizeCommandExecution(
       ),
     );
   }
+  let runtimeScriptPath: string | undefined;
+  const runtimeScriptPathRaw = value["runtimeScriptPath"];
+  if (runtimeScriptPathRaw !== undefined) {
+    if (
+      options?.allowRuntimeAddonCommandPaths === true &&
+      typeof runtimeScriptPathRaw === "string" &&
+      runtimeScriptPathRaw.length > 0
+    ) {
+      runtimeScriptPath = runtimeScriptPathRaw;
+    } else if (options?.allowRuntimeAddonCommandPaths === true) {
+      issues.push(
+        makeIssue(
+          "error",
+          `${path}.runtimeScriptPath`,
+          "must be a non-empty string when provided",
+        ),
+      );
+    }
+  }
 
   const argvTemplate = normalizeStringArrayField(
     value["argvTemplate"],
@@ -533,6 +609,7 @@ export function normalizeCommandExecution(
 
   return {
     scriptPath,
+    ...(runtimeScriptPath === undefined ? {} : { runtimeScriptPath }),
     ...(argvTemplate === undefined ? {} : { argvTemplate }),
     ...(envTemplate === undefined ? {} : { envTemplate }),
     ...(workingDirectory === undefined ? {} : { workingDirectory }),

@@ -24,6 +24,7 @@ export function normalizeContainerExecution(
   value: unknown,
   path: string,
   issues: ValidationIssue[],
+  options?: { readonly allowRuntimeAddonBuildPaths?: boolean },
 ): ContainerExecution | undefined {
   if (value === undefined) {
     return undefined;
@@ -110,6 +111,7 @@ export function normalizeContainerExecution(
     value["build"],
     `${path}.build`,
     issues,
+    options,
   );
   if ((image === undefined) === (build === undefined)) {
     issues.push(

@@ -136,6 +136,8 @@ export function normalizeNodePayload(input: {
   readonly issues: ValidationIssue[];
   readonly path?: string;
   readonly allowManagerCodePathDefaults?: boolean;
+  readonly allowRuntimeAddonCommandPaths?: boolean;
+  readonly allowRuntimeAddonBuildPaths?: boolean;
 }): NodePayload | null {
   const path = input.path ?? `nodePayloads.${input.nodeFile}`;
   const payload = input.payload;
@@ -179,11 +181,18 @@ export function normalizeNodePayload(input: {
     payload["command"],
     `${path}.command`,
     issues,
+    {
+      allowRuntimeAddonCommandPaths:
+        input.allowRuntimeAddonCommandPaths === true,
+    },
   );
   const container = normalizeContainerExecution(
     payload["container"],
     `${path}.container`,
     issues,
+    {
+      allowRuntimeAddonBuildPaths: input.allowRuntimeAddonBuildPaths === true,
+    },
   );
   if (payload["runtimeIsolation"] !== undefined) {
     issues.push(

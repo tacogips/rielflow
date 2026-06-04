@@ -44,6 +44,20 @@ Use `rielflow package search --kind node-addon --output json` to discover
 registry node add-on packages. Use `--user-scope` for user-wide installs and
 `--overwrite` only for package-owned add-on directories.
 
+Package manifests may declare per-add-on `execution`, `capabilities`, and
+`contentDigest`, plus package `dependencies`. Executable artifacts such as
+`.bash` files require `execution.kind`, a safe relative entrypoint, exact
+SHA-256 add-on content digest verification, package sha256 integrity, and a
+matching capability authorization. Capability entries default to required unless
+`required: false` is set.
+
+Packaged workflows authorize executable add-ons through dependency locks in
+`rielflow-package.json`. Temporary local smoke workflows can authorize the same
+installed executable add-on with `workflow run --direct-executable-addon-grant
+<inline-json|@file|file>`. Direct grants are local-only and rejected with
+`--endpoint`; they are for development and test runs, not a replacement for
+workflow package dependency locks.
+
 ## Authoring Pattern
 
 ```json

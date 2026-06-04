@@ -226,6 +226,9 @@ export function buildLibraryWorkflowRunOptions(
       ? {}
       : { nodeAddonResolvers: input.nodeAddonResolvers }),
     ...(input.nodePatch === undefined ? {} : { nodePatch: input.nodePatch }),
+    ...(input.directExecutableAddonGrants === undefined
+      ? {}
+      : { directExecutableAddonGrants: input.directExecutableAddonGrants }),
     ...(workflowWorkingDirectory === undefined
       ? {}
       : { workflowWorkingDirectory }),

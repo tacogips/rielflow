@@ -142,6 +142,12 @@ Search and install them with `rielflow package search --kind node-addon` and
 the same `addon` object; workflow validation and execution resolve them from
 local project/user add-on roots and do not download missing packages.
 
+Executable package-installed add-ons require extra authorization. Workflow
+packages should declare exact node-addon dependency locks with add-on
+`contentDigest` and capability grants. Temporary local workflow runs may use
+`--direct-executable-addon-grant <inline-json|@file|file>` for development or
+smoke testing; endpoint-backed runs reject this local-only grant surface.
+
 ## External Portability
 
 When creating workflows for users outside the rielflow repository:

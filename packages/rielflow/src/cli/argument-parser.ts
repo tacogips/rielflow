@@ -31,6 +31,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     executablePreflight = false;
   let format: "text" | "json" | "jsonl" | undefined;
   let variablesPath: string | undefined;
+  let directExecutableAddonGrantValues: string[] = [];
   let nodePatchPath: string | undefined;
   let workflowJson: string | undefined;
   let workflowJsonFile: string | undefined;
@@ -253,6 +254,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
           break;
         }
         variablesPath = parsedString.value;
+        break;
+      }
+      case "--direct-executable-addon-grant": {
+        const parsedString = parseRequiredStringOption(token, readNext());
+        if (parsedString.error !== undefined) {
+          parseError = parsedString.error;
+          break;
+        }
+        if (parsedString.value !== undefined) {
+          directExecutableAddonGrantValues = [
+            ...directExecutableAddonGrantValues,
+            parsedString.value,
+          ];
+        }
         break;
       }
       case "--node-patch": {
@@ -956,6 +971,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       executablePreflight,
       ...(format === undefined ? {} : { format }),
       ...(variablesPath === undefined ? {} : { variablesPath }),
+      ...(directExecutableAddonGrantValues.length === 0
+        ? {}
+        : { directExecutableAddonGrantValues }),
       ...(nodePatchPath === undefined ? {} : { nodePatchPath }),
       ...(workflowJson === undefined ? {} : { workflowJson }),
       ...(workflowJsonFile === undefined ? {} : { workflowJsonFile }),

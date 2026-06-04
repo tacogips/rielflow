@@ -29,6 +29,10 @@ import {
 } from "./install-validation";
 import { verifyWorkflowPackageIntegrity } from "./integrity";
 import { loadAnyWorkflowPackageManifest } from "./manifest";
+import {
+  addonDependencyLocksFromDependencies,
+  workflowPackageValidationSource,
+} from "./package-addon-locks";
 import { runWorkflowPackageContainerCheck } from "./pre-install-container";
 import { createWorkflowPackageStaticScanner } from "./pre-install-scanner";
 import {
@@ -473,24 +477,6 @@ async function checkoutWorkflowPackageInternal(
   if (!manifest.ok) {
     return manifest;
   }
-  if (manifest.value.kind === "node-addon") {
-    if (manifest.value.dependencies.length > 0) {
-      return err(
-        packageFailure(
-          "VALIDATION",
-          "node-addon package dependencies are not supported during checkout in this release",
-        ),
-      );
-    }
-    return checkoutWorkflowNodeAddonPackage({
-      checkoutInput: input,
-      registry,
-      record,
-      packageRoot,
-      manifest: manifest.value,
-    });
-  }
-  const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
   const userRoot = resolveUserScopeRootForCheckout(input.options ?? {});
   const currentIdentity = dependencyIdentity({
     packageId: record.packageName,
@@ -501,6 +487,29 @@ async function checkoutWorkflowPackageInternal(
   if (dependencyContext.stack.length === 0) {
     dependencyContext.stack.push(currentIdentity);
   }
+  if (manifest.value.kind === "node-addon") {
+    const dependencies = await installManifestDependencies({
+      parent: currentIdentity,
+      manifestDependencies: manifest.value.dependencies,
+      checkoutInput: input,
+      userRoot,
+      context: dependencyContext,
+      checkoutDependency: checkoutWorkflowPackageInternal,
+    });
+    if (!dependencies.ok) {
+      return dependencies;
+    }
+    return checkoutWorkflowNodeAddonPackage({
+      checkoutInput: input,
+      registry,
+      record,
+      packageRoot,
+      manifest: manifest.value,
+      dependencies: dependencyContext.dependencies,
+      dependencyGraph: dependencyContext.dependencyGraph,
+    });
+  }
+  const sourceDirectory = path.join(packageRoot, record.workflowDirectory);
   const dependencies = await installManifestDependencies({
     parent: currentIdentity,
     manifestDependencies: manifest.value.dependencies,
@@ -581,13 +590,29 @@ async function checkoutWorkflowPackageInternal(
       workflowDefinitionDirOverride(input.options) === undefined &&
       validationDestination.value.scope === "project",
   });
+  const addonDependencyLocks = addonDependencyLocksFromDependencies(
+    dependencyContext.dependencies,
+  );
   const loaded = await loadWorkflowFromDisk(sourceWorkflowName, {
     workflowRoot: validationWorkflowRoot.workflowRoot,
+    resolvedWorkflowSource: workflowPackageValidationSource({
+      scope: validationDestination.value.scope,
+      workflowRoot: validationWorkflowRoot.workflowRoot,
+      workflowName: sourceWorkflowName,
+      scopeRoot:
+        validationDestination.value.scope === "user"
+          ? userRoot
+          : path.dirname(validationDestination.value.workflowRoot),
+    }),
     ...(input.options?.cwd === undefined ? {} : { cwd: input.options.cwd }),
     ...(input.options?.env === undefined ? {} : { env: input.options.env }),
     ...(input.options?.userRoot === undefined
       ? {}
       : { userRoot: input.options.userRoot }),
+    ...(input.options?.projectRoot === undefined
+      ? {}
+      : { projectRoot: input.options.projectRoot }),
+    ...(addonDependencyLocks.length === 0 ? {} : { addonDependencyLocks }),
   }).finally(async () => {
     await removePathIfPresent(validationWorkflowRoot.workflowRoot);
   });
@@ -812,6 +837,12 @@ async function checkoutWorkflowPackageInternal(
         signatureVerified: integrity.value.signatureVerified,
         signatureRequired: integrity.value.signatureRequired,
       },
+      ...(dependencyContext.dependencies.length === 0
+        ? {}
+        : { dependencies: dependencyContext.dependencies }),
+      ...(dependencyContext.dependencyGraph.length === 0
+        ? {}
+        : { dependencyGraph: dependencyContext.dependencyGraph }),
       ...(projectRootIdentity === undefined ? {} : { projectRootIdentity }),
       ...(directWorkflowDefinitionDir === undefined
         ? {}
@@ -864,6 +895,12 @@ async function checkoutWorkflowPackageInternal(
           signatureVerified: integrity.value.signatureVerified,
           signatureRequired: integrity.value.signatureRequired,
         },
+        ...(dependencyContext.dependencies.length === 0
+          ? {}
+          : { dependencies: dependencyContext.dependencies }),
+        ...(dependencyContext.dependencyGraph.length === 0
+          ? {}
+          : { dependencyGraph: dependencyContext.dependencyGraph }),
         checkedOutAt: checkedOutAt.toISOString(),
       },
     );

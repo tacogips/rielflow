@@ -101,8 +101,16 @@ function formatPackageIdentityChain(
 
 export function dependencyInstallResultFromCheckout(
   result: WorkflowPackageCheckoutResult,
+  addons?: readonly {
+    readonly name: string;
+    readonly version: string;
+    readonly contentDigest?: string;
+    readonly capabilityGrant?: Readonly<Record<string, unknown>>;
+    readonly optional?: boolean;
+  }[],
 ): WorkflowPackageDependencyInstallResult {
   return {
+    packageKind: result.packageKind,
     packageId: result.packageId,
     registryUrl: result.registryUrl,
     registryRef: result.registryRef,
@@ -110,6 +118,7 @@ export function dependencyInstallResultFromCheckout(
     installId: result.installId,
     workflowName: result.workflowName,
     checkoutRecordPath: result.checkoutRecordPath,
+    ...(addons === undefined ? {} : { addons }),
   };
 }
 
@@ -218,11 +227,50 @@ async function listPackageCheckoutRecordFiles(input: {
 
 async function findSatisfiedDependency(input: {
   readonly identity: WorkflowPackageDependencyIdentity;
+  readonly packageKind: "workflow" | "node-addon";
   readonly workflowName: string;
   readonly userRoot: string;
   readonly options?: WorkflowPackageRegistryConfigOptions;
   readonly userScope?: boolean;
+  readonly addons?: readonly {
+    readonly name: string;
+    readonly version: string;
+    readonly contentDigest?: string;
+    readonly capabilityGrant?: Readonly<Record<string, unknown>>;
+    readonly optional?: boolean;
+  }[];
 }): Promise<WorkflowPackageDependencyInstallResult | undefined> {
+  if (input.packageKind === "node-addon") {
+    const expectedScope = input.userScope === true ? "user" : "project";
+    const records = await listPackageCheckoutRecordFiles({
+      userRoot: input.userRoot,
+    });
+    const matched = records.find(({ record }) => {
+      return (
+        recordString(record, "packageKind") === "node-addon" &&
+        recordString(record, "packageId") === input.identity.packageId &&
+        recordString(record, "registryUrl") === input.identity.registryUrl &&
+        recordString(record, "registryRef") === input.identity.sourceBranch &&
+        recordString(record, "sourcePath") === input.identity.sourcePath &&
+        recordString(record, "scope") === expectedScope
+      );
+    });
+    if (matched === undefined) {
+      return undefined;
+    }
+    const installId = recordString(matched.record, "installId");
+    return {
+      packageKind: "node-addon",
+      packageId: input.identity.packageId,
+      registryUrl: input.identity.registryUrl,
+      registryRef: input.identity.sourceBranch,
+      status: "already-installed",
+      ...(installId === undefined ? {} : { installId }),
+      workflowName: input.workflowName,
+      checkoutRecordPath: matched.path,
+      ...(input.addons === undefined ? {} : { addons: input.addons }),
+    };
+  }
   const destination = resolveWorkflowCheckoutDestination(input.workflowName, {
     ...(input.options?.cwd === undefined ? {} : { cwd: input.options.cwd }),
     ...(input.options?.env === undefined ? {} : { env: input.options.env }),
@@ -271,6 +319,7 @@ async function findSatisfiedDependency(input: {
   }
   const installId = recordString(matched.record, "installId");
   return {
+    packageKind: "workflow",
     packageId: input.identity.packageId,
     registryUrl: input.identity.registryUrl,
     registryRef: input.identity.sourceBranch,
@@ -278,6 +327,7 @@ async function findSatisfiedDependency(input: {
     ...(installId === undefined ? {} : { installId }),
     workflowName: input.workflowName,
     checkoutRecordPath: matched.path,
+    ...(input.addons === undefined ? {} : { addons: input.addons }),
   };
 }
 
@@ -287,6 +337,14 @@ export async function installManifestDependencies(input: {
     readonly packageId: string;
     readonly registry?: string;
     readonly branch?: string;
+    readonly kind?: "workflow" | "node-addon";
+    readonly addons?: readonly {
+      readonly name: string;
+      readonly version: string;
+      readonly contentDigest?: string;
+      readonly capabilityGrant?: Readonly<Record<string, unknown>>;
+      readonly optional?: boolean;
+    }[];
   }[];
   readonly checkoutInput: WorkflowPackageCheckoutInput;
   readonly userRoot: string;
@@ -312,13 +370,29 @@ export async function installManifestDependencies(input: {
     if (!resolved.ok) {
       return resolved;
     }
+    if (
+      dependency.kind !== undefined &&
+      resolved.value.record.kind !== dependency.kind
+    ) {
+      return err(
+        packageFailure(
+          "VALIDATION",
+          `package dependency '${dependency.packageId}' resolved to ${resolved.value.record.kind}, expected ${dependency.kind}`,
+        ),
+      );
+    }
+    const packageKind = resolved.value.record.kind;
     const identity = dependencyIdentity({
       packageId: resolved.value.record.packageName,
       registryUrl: resolved.value.record.registryUrl,
       sourceBranch: resolved.value.record.sourceBranch,
       sourcePath: resolved.value.record.sourcePath,
     });
-    input.context.dependencyGraph.push({ from: input.parent, to: identity });
+    input.context.dependencyGraph.push({
+      from: input.parent,
+      to: identity,
+      packageKind,
+    });
     const existingIndex = input.context.stack.findIndex(
       (candidate) =>
         packageIdentityKey(candidate) === packageIdentityKey(identity),
@@ -334,6 +408,7 @@ export async function installManifestDependencies(input: {
     }
     const satisfied = await findSatisfiedDependency({
       identity,
+      packageKind,
       workflowName: resolved.value.record.workflowId,
       userRoot: input.userRoot,
       ...(input.checkoutInput.options === undefined
@@ -342,6 +417,7 @@ export async function installManifestDependencies(input: {
       ...(input.checkoutInput.userScope === undefined
         ? {}
         : { userScope: input.checkoutInput.userScope }),
+      ...(dependency.addons === undefined ? {} : { addons: dependency.addons }),
     });
     if (satisfied !== undefined) {
       input.context.dependencies.push(satisfied);
@@ -388,7 +464,7 @@ export async function installManifestDependencies(input: {
     }
     input.context.installedDependencies.push(checkedOut.value);
     input.context.dependencies.push(
-      dependencyInstallResultFromCheckout(checkedOut.value),
+      dependencyInstallResultFromCheckout(checkedOut.value, dependency.addons),
     );
   }
   return ok(undefined);

@@ -1287,6 +1287,18 @@ integrity, duplicate handling, and provenance; workflow load continues to read
 only local add-on roots and never downloads missing add-ons on demand. See
 `design-docs/specs/design-workflow-node-package-install.md`.
 
+Executable node-addon packages extend that same package boundary rather than
+creating a workflow-package subtype. A node-addon manifest may declare
+`execution`, `capabilities`, `contentDigest`, and dependencies; executable files
+such as `.bash` are installable only when declared by execution metadata and
+verified by add-on content digest plus package integrity. Installed executable
+add-ons resolve to package-owned command or container payloads under the
+project/user/local add-on roots, and workflow packages may require exact
+node-addon dependency locks before validation accepts a reference. The greeting
+fixture in `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon`
+is the current acceptance path for `examples/greeting-shell@1`. See
+`design-docs/specs/design-executable-node-addon-manifest-dependencies.md`.
+
 ### Prompt and Input Assembly
 
 Source:

@@ -334,6 +334,11 @@ function matchesSearch(
       addon.name,
       addon.version,
       addon.sourcePath,
+      addon.execution?.kind ?? "",
+      addon.execution?.entrypoint ?? "",
+      addon.execution?.containerfilePath ?? "",
+      ...(addon.execution?.runtimeHints ?? []),
+      ...(addon.capabilities ?? []).map((capability) => capability.name),
     ]),
   ]
     .join("\n")

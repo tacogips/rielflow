@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -13,7 +13,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { createWorkflowTemplate } from "../create";
-import { loadWorkflowFromDisk } from "../load";
+import { buildInspectionSummary } from "../inspect";
+import { loadWorkflowFromCatalog, loadWorkflowFromDisk } from "../load";
 import {
   checkoutWorkflowPackage,
   getWorkflowPackageCheckoutStatus,
@@ -37,6 +38,7 @@ import {
   loadWorkflowPackageManifest,
   normalizeWorkflowNodeAddonPackageManifest,
 } from "./manifest";
+import { validateWorkflowPackageAddons } from "./node-addon-install";
 import { buildWorkflowPackageContainerCheckCommand } from "./pre-install-container";
 import { createWorkflowPackageStaticScanner } from "./pre-install-scanner";
 import { publishWorkflowPackage } from "./publish";
@@ -58,6 +60,27 @@ async function makeTempDir(): Promise<string> {
   return directory;
 }
 
+async function computeTestAddonContentDigest(input: {
+  readonly addonDirectory: string;
+  readonly allowedFiles: readonly string[];
+}): Promise<string> {
+  const hash = createHash("sha256");
+  for (const relativePath of [...input.allowedFiles].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    const content = await readFile(
+      path.join(input.addonDirectory, relativePath),
+    );
+    hash.update(relativePath, "utf8");
+    hash.update("\0", "utf8");
+    hash.update(String(content.byteLength), "utf8");
+    hash.update("\0", "utf8");
+    hash.update(content.toString("base64"), "utf8");
+    hash.update("\0", "utf8");
+  }
+  return `sha256:${hash.digest("hex")}`;
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs
@@ -77,6 +100,13 @@ async function createPackagedWorkflow(input: {
         readonly packageId: string;
         readonly registry?: string;
         readonly branch?: string;
+        readonly kind?: "workflow" | "node-addon";
+        readonly addons?: readonly {
+          readonly name: string;
+          readonly version: string;
+          readonly contentDigest?: string;
+          readonly capabilityGrant?: Readonly<Record<string, unknown>>;
+        }[];
       }
   )[];
 }): Promise<string> {
@@ -185,9 +215,28 @@ async function createNodeAddonPackage(input: {
   readonly addonVersion?: string;
   readonly sourcePath?: string;
   readonly executableFile?: boolean;
+  readonly executableAddon?: boolean;
+  readonly omitExecutableCapabilityRequired?: boolean;
+  readonly extraExecutableCapabilities?: readonly {
+    readonly name: string;
+    readonly required?: boolean;
+    readonly scope?: string;
+    readonly reason?: string;
+    readonly defaultPolicy?: "deny" | "prompt" | "allow";
+  }[];
   readonly dependencies?: readonly (
     | string
-    | { readonly packageId: string; readonly registry?: string }
+    | {
+        readonly packageId: string;
+        readonly registry?: string;
+        readonly kind?: "workflow" | "node-addon";
+        readonly addons?: readonly {
+          readonly name: string;
+          readonly version: string;
+          readonly contentDigest?: string;
+          readonly capabilityGrant?: Readonly<Record<string, unknown>>;
+        }[];
+      }
   )[];
   readonly extraFiles?: readonly {
     readonly relativePath: string;
@@ -207,10 +256,53 @@ async function createNodeAddonPackage(input: {
   const addonDirectory = path.join(packageRoot, ...sourcePath.split("/"));
   await mkdir(addonDirectory, { recursive: true });
   await writeFile(
-    path.join(addonDirectory, "prompt.md"),
-    "Write a release note for {{addon.inputs.topic}}.\n",
+    path.join(
+      addonDirectory,
+      input.executableAddon === true ? "greeting.bash" : "prompt.md",
+    ),
+    input.executableAddon === true
+      ? '#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p "$RIEL_MAILBOX_DIR/outbox"\nprintf \'{"greeting":"Hello %s"}\\n\' "$' +
+          '{1:-world}" > "$RIEL_MAILBOX_DIR/outbox/output.json"\n'
+      : "Write a release note for {{addon.inputs.topic}}.\n",
     "utf8",
   );
+  const addonResolution =
+    input.executableAddon === true
+      ? {
+          kind: "node-payload-template",
+          nodeType: "command",
+          command: {
+            scriptPath: "greeting.bash",
+            argvTemplate: ["{{addon.inputs.name}}"],
+          },
+        }
+      : {
+          kind: "node-payload-template",
+          nodeType: "agent",
+          executionBackend: "codex-agent",
+          model: "gpt-5.4",
+          promptTemplateFile: "prompt.md",
+        };
+  const executableMetadata =
+    input.executableAddon === true
+      ? {
+          execution: {
+            kind: "local-command",
+            entrypoint: "greeting.bash",
+            runtimeHints: ["bash"],
+          },
+          capabilities: [
+            {
+              name: "process.spawn",
+              ...(input.omitExecutableCapabilityRequired === true
+                ? {}
+                : { required: true }),
+              reason: "runs the packaged greeting Bash script",
+            },
+            ...(input.extraExecutableCapabilities ?? []),
+          ],
+        }
+      : {};
   await writeFile(
     path.join(addonDirectory, "addon.json"),
     `${JSON.stringify(
@@ -219,17 +311,14 @@ async function createNodeAddonPackage(input: {
         version: addonVersion,
         description: "Reusable release-note worker node.",
         allowedRoles: ["worker"],
-        resolution: {
-          kind: "node-payload-template",
-          nodeType: "agent",
-          executionBackend: "codex-agent",
-          model: "gpt-5.4",
-          promptTemplateFile: "prompt.md",
-        },
+        resolution: addonResolution,
+        ...executableMetadata,
         inputSchema: {
           type: "object",
           properties: {
-            topic: { type: "string" },
+            ...(input.executableAddon === true
+              ? { name: { type: "string" } }
+              : { topic: { type: "string" } }),
           },
         },
       },
@@ -249,6 +338,13 @@ async function createNodeAddonPackage(input: {
     await mkdir(path.dirname(extraPath), { recursive: true });
     await writeFile(extraPath, extraFile.content, "utf8");
   }
+  const executableContentDigest =
+    input.executableAddon === true
+      ? await computeTestAddonContentDigest({
+          addonDirectory,
+          allowedFiles: ["addon.json", "greeting.bash"],
+        })
+      : undefined;
   await writeFile(
     path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
     `${JSON.stringify(
@@ -271,6 +367,10 @@ async function createNodeAddonPackage(input: {
             name: addonName,
             version: addonVersion,
             sourcePath,
+            ...executableMetadata,
+            ...(executableContentDigest === undefined
+              ? {}
+              : { contentDigest: executableContentDigest }),
           },
         ],
         ...(input.dependencies === undefined
@@ -316,6 +416,120 @@ async function refreshNodeAddonPackageManifestDigests(
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf8",
   );
+}
+
+async function refreshNodeAddonEntryContentDigest(input: {
+  readonly packageRoot: string;
+  readonly sourcePath: string;
+  readonly allowedFiles: readonly string[];
+}): Promise<string> {
+  const addonDirectory = path.join(
+    input.packageRoot,
+    ...input.sourcePath.split("/"),
+  );
+  const contentDigest = await computeTestAddonContentDigest({
+    addonDirectory,
+    allowedFiles: input.allowedFiles,
+  });
+  const manifestPath = path.join(
+    input.packageRoot,
+    WORKFLOW_PACKAGE_MANIFEST_FILE,
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    addons?: Array<Record<string, unknown>>;
+  };
+  const addon = manifest.addons?.find(
+    (entry) => entry["sourcePath"] === input.sourcePath,
+  );
+  if (addon === undefined) {
+    throw new Error(`missing add-on manifest entry for ${input.sourcePath}`);
+  }
+  addon["contentDigest"] = contentDigest;
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  await refreshNodeAddonPackageManifestDigests(input.packageRoot);
+  return contentDigest;
+}
+
+async function readFirstAddonContentDigest(
+  packageRoot: string,
+): Promise<string> {
+  const manifest = JSON.parse(
+    await readFile(
+      path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+      "utf8",
+    ),
+  ) as {
+    readonly addons?: readonly { readonly contentDigest?: unknown }[];
+  };
+  const contentDigest = manifest.addons?.[0]?.contentDigest;
+  if (typeof contentDigest !== "string") {
+    throw new Error("missing add-on contentDigest");
+  }
+  return contentDigest;
+}
+
+async function addEnvReadCapabilityToExecutableAddonPackage(input: {
+  readonly packageRoot: string;
+  readonly sourcePath: string;
+}): Promise<string> {
+  const addonManifestPath = path.join(
+    input.packageRoot,
+    ...input.sourcePath.split("/"),
+    "addon.json",
+  );
+  const addonManifest = JSON.parse(
+    await readFile(addonManifestPath, "utf8"),
+  ) as Record<string, unknown>;
+  const capabilities = Array.isArray(addonManifest["capabilities"])
+    ? [...addonManifest["capabilities"]]
+    : [];
+  capabilities.push({
+    name: "env.read",
+    required: false,
+    reason: "reads greeting environment bindings",
+  });
+  addonManifest["capabilities"] = capabilities;
+  addonManifest["envSchema"] = {
+    type: "object",
+    properties: {
+      GREETING_SECRET: { type: "object" },
+    },
+    required: ["GREETING_SECRET"],
+    additionalProperties: false,
+  };
+  await writeFile(
+    addonManifestPath,
+    `${JSON.stringify(addonManifest, null, 2)}\n`,
+    "utf8",
+  );
+  const manifestPath = path.join(
+    input.packageRoot,
+    WORKFLOW_PACKAGE_MANIFEST_FILE,
+  );
+  const packageManifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    addons?: Array<Record<string, unknown>>;
+  };
+  const packageAddon = packageManifest.addons?.find(
+    (entry) => entry["sourcePath"] === input.sourcePath,
+  );
+  if (packageAddon === undefined) {
+    throw new Error(`missing add-on manifest entry for ${input.sourcePath}`);
+  }
+  packageAddon["capabilities"] = capabilities;
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(packageManifest, null, 2)}\n`,
+    "utf8",
+  );
+  return await refreshNodeAddonEntryContentDigest({
+    packageRoot: input.packageRoot,
+    sourcePath: input.sourcePath,
+    allowedFiles: ["addon.json", "greeting.bash"],
+  });
 }
 
 async function addCrossWorkflowTransition(input: {
@@ -1368,14 +1582,1305 @@ describe("workflow package registry", () => {
     }
   });
 
-  test("checkout rejects node-addon packages with declared dependencies", async () => {
+  test("checkout installs node-addon package dependencies before add-on install", async () => {
     const userRoot = await makeTempDir();
     const registryRoot = await makeTempDir();
     const projectRoot = await makeTempDir();
     await createNodeAddonPackage({
       registryRoot,
+      packageName: "dependency-release-node",
+      addonName: "team/dependency-release-note",
+    });
+    await createNodeAddonPackage({
+      registryRoot,
       packageName: "dependent-release-node",
-      dependencies: ["dependency-flow"],
+      dependencies: [
+        {
+          packageId: "dependency-release-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/dependency-release-note",
+              version: "1",
+              capabilityGrant: {
+                "process.spawn": {
+                  allowed: true,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "dependent-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.packageKind).toBe("node-addon");
+      expect(checkedOut.value.dependencies).toHaveLength(1);
+      expect(checkedOut.value.dependencies?.[0]).toMatchObject({
+        packageKind: "node-addon",
+        packageId: "dependency-release-node",
+        status: "installed",
+        addons: [
+          {
+            name: "team/dependency-release-note",
+            version: "1",
+            capabilityGrant: {
+              "process.spawn": {
+                allowed: true,
+              },
+            },
+          },
+        ],
+      });
+      const checkoutRecord = JSON.parse(
+        await readFile(checkedOut.value.checkoutRecordPath, "utf8"),
+      ) as {
+        readonly dependencies?: unknown;
+        readonly dependencyGraph?: unknown;
+      };
+      expect(checkoutRecord.dependencies).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            packageKind: "node-addon",
+            packageId: "dependency-release-node",
+            addons: [
+              {
+                name: "team/dependency-release-note",
+                version: "1",
+                capabilityGrant: {
+                  "process.spawn": {
+                    allowed: true,
+                  },
+                },
+              },
+            ],
+          }),
+        ]),
+      );
+      expect(checkoutRecord.dependencyGraph).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            packageKind: "node-addon",
+          }),
+        ]),
+      );
+      await expect(
+        readFile(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "dependency-release-note",
+            "1",
+            "addon.json",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("team/dependency-release-note");
+      await expect(
+        readFile(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "release-note",
+            "1",
+            "addon.json",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("team/release-note");
+    }
+  });
+
+  test("checkout installs executable node-addon packages with declared entrypoint", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "greeting-release-node",
+      addonName: "team/greeting",
+      executableAddon: true,
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "greeting-release-node",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.addons[0]?.execution).toMatchObject({
+        kind: "local-command",
+        entrypoint: "greeting.bash",
+      });
+      expect(checkedOut.value.addons[0]?.capabilities).toContainEqual({
+        name: "process.spawn",
+        required: true,
+        reason: "runs the packaged greeting Bash script",
+      });
+      expect(checkedOut.value.addons[0]?.contentDigest).toMatch(/^sha256:/);
+      await expect(
+        readFile(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "greeting",
+            "1",
+            "greeting.bash",
+          ),
+          "utf8",
+        ),
+      ).resolves.toContain("Hello %s");
+      await expect(
+        readFile(
+          path.join(
+            projectRoot,
+            ".rielflow",
+            "addons",
+            "team",
+            "greeting",
+            "1",
+            "activate.js",
+          ),
+          "utf8",
+        ),
+      ).rejects.toThrow();
+      const workflowRoot = path.join(projectRoot, "direct-workflows");
+      const workflowDirectory = path.join(workflowRoot, "direct-greeting");
+      await mkdir(workflowDirectory, { recursive: true });
+      await writeFile(
+        path.join(workflowDirectory, "workflow.json"),
+        `${JSON.stringify(
+          {
+            workflowId: "direct-greeting",
+            description: "Direct add-on root must not bypass executable gates.",
+            defaults: {
+              nodeTimeoutMs: 120000,
+              maxLoopIterations: 3,
+            },
+            entryStepId: "greeting-step",
+            nodes: [
+              {
+                id: "greeting-node",
+                addon: {
+                  name: "team/greeting",
+                  version: "1",
+                  inputs: { name: "Ada" },
+                },
+              },
+            ],
+            steps: [
+              {
+                id: "greeting-step",
+                nodeId: "greeting-node",
+                role: "worker",
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      const loadedFromDirectAddonRoot = await loadWorkflowFromDisk(
+        "direct-greeting",
+        {
+          workflowRoot,
+          addonRoot: path.join(projectRoot, ".rielflow", "addons"),
+          userRoot,
+          cwd: projectRoot,
+        },
+      );
+      expect(loadedFromDirectAddonRoot.ok).toBe(false);
+      if (!loadedFromDirectAddonRoot.ok) {
+        expect(loadedFromDirectAddonRoot.error.message).toBe(
+          "workflow validation failed",
+        );
+        expect(loadedFromDirectAddonRoot.error.issues?.[0]?.message).toContain(
+          "cannot be loaded from a direct add-on root",
+        );
+      }
+      const unsafeDirectAddonRoot = path.join(projectRoot, "unsafe-addons");
+      const unsafeAddonDirectory = path.join(
+        unsafeDirectAddonRoot,
+        "team",
+        "unsafe-command",
+        "1",
+      );
+      await mkdir(unsafeAddonDirectory, { recursive: true });
+      await writeFile(
+        path.join(unsafeAddonDirectory, "run.bash"),
+        "#!/usr/bin/env bash\necho '{}'\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(unsafeAddonDirectory, "addon.json"),
+        `${JSON.stringify(
+          {
+            name: "team/unsafe-command",
+            version: "1",
+            description: "Unsafe direct command without execution metadata.",
+            allowedRoles: ["worker"],
+            resolution: {
+              kind: "node-payload-template",
+              nodeType: "command",
+              command: {
+                scriptPath: "run.bash",
+              },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      const unsafeWorkflowDirectory = path.join(workflowRoot, "unsafe-direct");
+      await mkdir(unsafeWorkflowDirectory, { recursive: true });
+      await writeFile(
+        path.join(unsafeWorkflowDirectory, "workflow.json"),
+        `${JSON.stringify(
+          {
+            workflowId: "unsafe-direct",
+            description: "Unsafe direct command add-on.",
+            defaults: {
+              nodeTimeoutMs: 120000,
+              maxLoopIterations: 3,
+            },
+            entryStepId: "unsafe-step",
+            nodes: [
+              {
+                id: "unsafe-node",
+                addon: {
+                  name: "team/unsafe-command",
+                  version: "1",
+                },
+              },
+            ],
+            steps: [
+              {
+                id: "unsafe-step",
+                nodeId: "unsafe-node",
+                role: "worker",
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      const loadedUnsafeDirect = await loadWorkflowFromDisk("unsafe-direct", {
+        workflowRoot,
+        addonRoot: unsafeDirectAddonRoot,
+        allowUnpackagedExecutableAddons: true,
+        userRoot,
+        cwd: projectRoot,
+      });
+      expect(loadedUnsafeDirect.ok).toBe(false);
+      if (!loadedUnsafeDirect.ok) {
+        expect(loadedUnsafeDirect.error.issues?.[0]?.message).toContain(
+          "must declare matching execution metadata",
+        );
+      }
+    }
+  });
+
+  test("manifest rejects executable node-addon entries without contentDigest", async () => {
+    const registryRoot = await makeTempDir();
+    const packageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "missing-digest-greeting-node",
+      addonName: "team/missing-digest-greeting",
+      executableAddon: true,
+    });
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      addons?: Array<Record<string, unknown>>;
+    };
+    if (manifest.addons?.[0] === undefined) {
+      throw new Error("missing add-on manifest entry");
+    }
+    delete manifest.addons[0]["contentDigest"];
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshNodeAddonPackageManifestDigests(packageRoot);
+
+    const loadedManifest = normalizeWorkflowNodeAddonPackageManifest(manifest);
+
+    expect(loadedManifest.ok).toBe(false);
+    if (!loadedManifest.ok) {
+      expect(loadedManifest.error.message).toContain(
+        "contentDigest is required for executable add-ons",
+      );
+    }
+  });
+
+  test("checkout authorizes executable node-addon dependency locks for packaged workflows", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const addonPackageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "workflow-greeting-node",
+      addonName: "team/greeting",
+      executableAddon: true,
+    });
+    const addonPackageManifestRaw = JSON.parse(
+      await readFile(
+        path.join(addonPackageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+        "utf8",
+      ),
+    ) as unknown;
+    const addonPackageManifest = normalizeWorkflowNodeAddonPackageManifest(
+      addonPackageManifestRaw,
+    );
+    if (!addonPackageManifest.ok) {
+      throw new Error(addonPackageManifest.error.message);
+    }
+    const addonArtifacts = await validateWorkflowPackageAddons({
+      packageRoot: addonPackageRoot,
+      addons: addonPackageManifest.value.addons,
+    });
+    if (!addonArtifacts.ok) {
+      throw new Error(addonArtifacts.error.message);
+    }
+    const contentDigest = addonArtifacts.value[0]?.contentDigest;
+    if (contentDigest === undefined) {
+      throw new Error("missing add-on contentDigest");
+    }
+    const workflowPackageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "uses-greeting-workflow-package",
+      workflowName: "uses-greeting-workflow",
+      dependencies: [
+        {
+          packageId: "workflow-greeting-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/greeting",
+              version: "1",
+              contentDigest,
+              capabilityGrant: {
+                "process.spawn": {
+                  allowed: true,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const workflowDirectory = path.join(
+      workflowPackageRoot,
+      "uses-greeting-workflow",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "uses-greeting-workflow",
+          description: "Uses executable greeting add-on dependency.",
+          defaults: {
+            nodeTimeoutMs: 120000,
+            maxLoopIterations: 3,
+          },
+          entryStepId: "greeting-step",
+          nodes: [
+            {
+              id: "greeting-node",
+              addon: {
+                name: "team/greeting",
+                version: "1",
+                inputs: { name: "Ada" },
+              },
+            },
+          ],
+          steps: [
+            {
+              id: "greeting-step",
+              nodeId: "greeting-node",
+              role: "worker",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot: workflowPackageRoot,
+      workflowDirectory: "uses-greeting-workflow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "uses-greeting-workflow-package",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(true);
+    if (checkedOut.ok) {
+      expect(checkedOut.value.dependencies?.[0]).toMatchObject({
+        packageKind: "node-addon",
+        packageId: "workflow-greeting-node",
+        addons: [
+          {
+            name: "team/greeting",
+            version: "1",
+            contentDigest,
+            capabilityGrant: {
+              "process.spawn": {
+                allowed: true,
+              },
+            },
+          },
+        ],
+      });
+      const loaded = await loadWorkflowFromCatalog("uses-greeting-workflow", {
+        userRoot,
+        cwd: projectRoot,
+      });
+      expect(loaded.ok).toBe(true);
+      if (loaded.ok) {
+        expect(loaded.value.bundle.workflow.nodeRegistry[0]?.id).toBe(
+          "greeting-node",
+        );
+        const serializedValidation = JSON.parse(
+          JSON.stringify(loaded.value.nodeValidationResults),
+        ) as unknown;
+        expect(serializedValidation).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              source: "addon",
+              addonName: "team/greeting",
+              details: {
+                executableAddonAuthorization: expect.objectContaining({
+                  sourceKind: "packageDependencyLock",
+                  sourceScope: "project",
+                  packageId: "workflow-greeting-node",
+                  contentDigest,
+                  declaredCapabilities: expect.arrayContaining([
+                    expect.objectContaining({
+                      name: "process.spawn",
+                      required: true,
+                    }),
+                  ]),
+                  grantedCapabilities: {
+                    "process.spawn": { allowed: true },
+                  },
+                }),
+              },
+            }),
+          ]),
+        );
+        const inspectionSummary = JSON.parse(
+          JSON.stringify(
+            await buildInspectionSummary(loaded.value, {
+              userRoot,
+              cwd: projectRoot,
+            }),
+          ),
+        ) as {
+          readonly nodeValidationResults?: readonly unknown[];
+        };
+        expect(inspectionSummary.nodeValidationResults).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              details: {
+                executableAddonAuthorization: expect.objectContaining({
+                  sourceKind: "packageDependencyLock",
+                  sourceScope: "project",
+                  packageId: "workflow-greeting-node",
+                  contentDigest,
+                }),
+              },
+            }),
+          ]),
+        );
+      }
+      await writeFile(
+        path.join(
+          projectRoot,
+          ".rielflow",
+          "addons",
+          "team",
+          "greeting",
+          "1",
+          "greeting.bash",
+        ),
+        "#!/usr/bin/env bash\necho tampered\n",
+        "utf8",
+      );
+      const tampered = await loadWorkflowFromCatalog("uses-greeting-workflow", {
+        userRoot,
+        cwd: projectRoot,
+      });
+      expect(tampered.ok).toBe(false);
+      if (!tampered.ok) {
+        expect(tampered.error.issues?.[0]?.message).toContain(
+          "contentDigest mismatch",
+        );
+      }
+    }
+  });
+
+  test("executable command add-ons overwrite package workingDirectory with installed directory", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const addonPackageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "redirect-greeting-node",
+      addonName: "team/redirect-greeting",
+      executableAddon: true,
+    });
+    const sourcePath = "addons/team/redirect-greeting/1";
+    const addonManifestPath = path.join(
+      addonPackageRoot,
+      ...sourcePath.split("/"),
+      "addon.json",
+    );
+    const addonManifest = JSON.parse(
+      await readFile(addonManifestPath, "utf8"),
+    ) as { resolution?: { command?: Record<string, unknown> } };
+    if (addonManifest.resolution?.command === undefined) {
+      throw new Error("missing command resolution");
+    }
+    addonManifest.resolution.command["workingDirectory"] =
+      "/tmp/rielflow-redirect";
+    await writeFile(
+      addonManifestPath,
+      `${JSON.stringify(addonManifest, null, 2)}\n`,
+      "utf8",
+    );
+    const contentDigest = await refreshNodeAddonEntryContentDigest({
+      packageRoot: addonPackageRoot,
+      sourcePath,
+      allowedFiles: ["addon.json", "greeting.bash"],
+    });
+    const workflowPackageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "uses-redirect-greeting-workflow-package",
+      workflowName: "uses-redirect-greeting-workflow",
+      dependencies: [
+        {
+          packageId: "redirect-greeting-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/redirect-greeting",
+              version: "1",
+              contentDigest,
+              capabilityGrant: { "process.spawn": { allowed: true } },
+            },
+          ],
+        },
+      ],
+    });
+    const workflowDirectory = path.join(
+      workflowPackageRoot,
+      "uses-redirect-greeting-workflow",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "uses-redirect-greeting-workflow",
+          description: "Uses executable greeting add-on dependency.",
+          defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 3 },
+          entryStepId: "greeting-step",
+          nodes: [
+            {
+              id: "greeting-node",
+              addon: {
+                name: "team/redirect-greeting",
+                version: "1",
+                inputs: { name: "Ada" },
+              },
+            },
+          ],
+          steps: [
+            { id: "greeting-step", nodeId: "greeting-node", role: "worker" },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot: workflowPackageRoot,
+      workflowDirectory: "uses-redirect-greeting-workflow",
+    });
+    expect(
+      await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkoutWorkflowPackage({
+        packageName: "uses-redirect-greeting-workflow-package",
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      }),
+    ).toMatchObject({ ok: true });
+
+    const loaded = await loadWorkflowFromCatalog(
+      "uses-redirect-greeting-workflow",
+      { userRoot, cwd: projectRoot },
+    );
+
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      const command =
+        loaded.value.bundle.nodePayloads["greeting-node"]?.command;
+      const installedAddonDirectory = path.join(
+        projectRoot,
+        ".rielflow",
+        "addons",
+        "team",
+        "redirect-greeting",
+        "1",
+      );
+      expect(command?.scriptPath).toBe("greeting.bash");
+      expect(command?.workingDirectory).toBe(installedAddonDirectory);
+      expect(command?.runtimeScriptPath).toBe(
+        path.join(installedAddonDirectory, "greeting.bash"),
+      );
+    }
+  });
+
+  test("executable add-ons treat omitted capability required as required", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const addonPackageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "default-required-greeting-node",
+      addonName: "team/default-required-greeting",
+      executableAddon: true,
+      omitExecutableCapabilityRequired: true,
+      extraExecutableCapabilities: [
+        {
+          name: "filesystem.read",
+          reason: "reads packaged greeting assets",
+        },
+      ],
+    });
+    const contentDigest = await readFirstAddonContentDigest(addonPackageRoot);
+    expect(
+      await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkoutWorkflowPackage({
+        packageName: "default-required-greeting-node",
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    const workflowRoot = path.join(projectRoot, ".rielflow", "workflows");
+    const workflowDirectory = path.join(
+      workflowRoot,
+      "default-required-greeting",
+    );
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "default-required-greeting",
+          description: "Uses omitted-required executable greeting add-on.",
+          defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 3 },
+          entryStepId: "greeting-step",
+          nodes: [
+            {
+              id: "greeting-node",
+              addon: {
+                name: "team/default-required-greeting",
+                version: "1",
+                inputs: { name: "Ada" },
+              },
+            },
+          ],
+          steps: [
+            { id: "greeting-step", nodeId: "greeting-node", role: "worker" },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const missingProcessGrant = await loadWorkflowFromCatalog(
+      "default-required-greeting",
+      {
+        userRoot,
+        projectRoot,
+        cwd: projectRoot,
+        directExecutableAddonGrants: [
+          {
+            packageId: "default-required-greeting-node",
+            kind: "node-addon",
+            addons: [
+              {
+                name: "team/default-required-greeting",
+                version: "1",
+                contentDigest,
+                capabilityGrant: {
+                  "filesystem.read": { allowed: true },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(missingProcessGrant.ok).toBe(false);
+    if (!missingProcessGrant.ok) {
+      expect(missingProcessGrant.error.issues?.[0]?.message).toContain(
+        "process.spawn",
+      );
+    }
+
+    const missingFilesystemGrant = await loadWorkflowFromCatalog(
+      "default-required-greeting",
+      {
+        userRoot,
+        projectRoot,
+        cwd: projectRoot,
+        directExecutableAddonGrants: [
+          {
+            packageId: "default-required-greeting-node",
+            kind: "node-addon",
+            addons: [
+              {
+                name: "team/default-required-greeting",
+                version: "1",
+                contentDigest,
+                capabilityGrant: {
+                  "process.spawn": { allowed: true },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(missingFilesystemGrant.ok).toBe(false);
+    if (!missingFilesystemGrant.ok) {
+      expect(missingFilesystemGrant.error.issues?.[0]?.message).toContain(
+        "filesystem.read",
+      );
+    }
+  });
+
+  test("executable add-ons reject addon env without matching env.read grant", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const addonPackageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "env-greeting-node",
+      addonName: "team/env-greeting",
+      executableAddon: true,
+    });
+    const sourcePath = "addons/team/env-greeting/1";
+    const contentDigest = await addEnvReadCapabilityToExecutableAddonPackage({
+      packageRoot: addonPackageRoot,
+      sourcePath,
+    });
+    expect(
+      await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkoutWorkflowPackage({
+        packageName: "env-greeting-node",
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    const workflowRoot = path.join(projectRoot, ".rielflow", "workflows");
+    const workflowDirectory = path.join(workflowRoot, "env-greeting");
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "env-greeting",
+          description: "Uses executable env greeting add-on.",
+          defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 3 },
+          entryStepId: "greeting-step",
+          nodes: [
+            {
+              id: "greeting-node",
+              addon: {
+                name: "team/env-greeting",
+                version: "1",
+                inputs: { name: "Ada" },
+                env: {
+                  GREETING_SECRET: { fromEnv: "GREETING_SECRET" },
+                },
+              },
+            },
+          ],
+          steps: [
+            { id: "greeting-step", nodeId: "greeting-node", role: "worker" },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowFromCatalog("env-greeting", {
+      userRoot,
+      projectRoot,
+      cwd: projectRoot,
+      directExecutableAddonGrants: [
+        {
+          packageId: "env-greeting-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/env-greeting",
+              version: "1",
+              contentDigest,
+              capabilityGrant: {
+                "process.spawn": { allowed: true },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(loaded.ok).toBe(false);
+    if (!loaded.ok) {
+      expect(loaded.error.issues?.[0]?.message).toContain("env.read");
+    }
+    const wrongScope = await loadWorkflowFromCatalog("env-greeting", {
+      userRoot,
+      projectRoot,
+      cwd: projectRoot,
+      directExecutableAddonGrants: [
+        {
+          packageId: "env-greeting-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/env-greeting",
+              version: "1",
+              contentDigest,
+              capabilityGrant: {
+                "process.spawn": { allowed: true },
+                "env.read": { allowed: true, scope: "workflow.env" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(wrongScope.ok).toBe(false);
+    if (!wrongScope.ok) {
+      expect(wrongScope.error.issues?.[0]?.message).toContain("addon.env");
+    }
+  });
+
+  test("executable add-ons accept addon env with env.read grant and summarize direct grant authorization", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const addonPackageRoot = await createNodeAddonPackage({
+      registryRoot,
+      packageName: "env-allowed-greeting-node",
+      addonName: "team/env-allowed-greeting",
+      executableAddon: true,
+    });
+    const sourcePath = "addons/team/env-allowed-greeting/1";
+    const contentDigest = await addEnvReadCapabilityToExecutableAddonPackage({
+      packageRoot: addonPackageRoot,
+      sourcePath,
+    });
+    expect(
+      await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkoutWorkflowPackage({
+        packageName: "env-allowed-greeting-node",
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    const workflowRoot = path.join(projectRoot, ".rielflow", "workflows");
+    const workflowDirectory = path.join(workflowRoot, "env-allowed-greeting");
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "env-allowed-greeting",
+          description: "Uses executable env greeting add-on.",
+          defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 3 },
+          entryStepId: "greeting-step",
+          nodes: [
+            {
+              id: "greeting-node",
+              addon: {
+                name: "team/env-allowed-greeting",
+                version: "1",
+                inputs: { name: "Ada" },
+                env: {
+                  GREETING_SECRET: { fromEnv: "GREETING_SECRET" },
+                },
+              },
+            },
+          ],
+          steps: [
+            { id: "greeting-step", nodeId: "greeting-node", role: "worker" },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const loaded = await loadWorkflowFromCatalog("env-allowed-greeting", {
+      userRoot,
+      projectRoot,
+      cwd: projectRoot,
+      directExecutableAddonGrants: [
+        {
+          packageId: "env-allowed-greeting-node",
+          kind: "node-addon",
+          addons: [
+            {
+              name: "team/env-allowed-greeting",
+              version: "1",
+              contentDigest,
+              capabilityGrant: {
+                "process.spawn": { allowed: true },
+                "env.read": { allowed: true, scope: "addon.env" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(
+        JSON.parse(JSON.stringify(loaded.value.nodeValidationResults)),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: "addon",
+            addonName: "team/env-allowed-greeting",
+            details: {
+              executableAddonAuthorization: expect.objectContaining({
+                sourceKind: "directExecutableAddonGrant",
+                sourceScope: "project",
+                packageId: "env-allowed-greeting-node",
+                contentDigest,
+                declaredCapabilities: expect.arrayContaining([
+                  expect.objectContaining({
+                    name: "env.read",
+                    required: false,
+                  }),
+                  expect.objectContaining({
+                    name: "process.spawn",
+                    required: true,
+                  }),
+                ]),
+                grantedCapabilities: expect.objectContaining({
+                  "env.read": { allowed: true, scope: "addon.env" },
+                  "process.spawn": { allowed: true },
+                }),
+              }),
+            },
+          }),
+        ]),
+      );
+    }
+  });
+
+  test("executable container add-ons keep runtime build paths outside authored workflow paths", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageName = "container-greeting-node";
+    const addonName = "team/container-greeting";
+    const sourcePath = "addons/team/container-greeting/1";
+    const addonPackageRoot = path.join(registryRoot, "packages", packageName);
+    const addonDirectory = path.join(
+      addonPackageRoot,
+      ...sourcePath.split("/"),
+    );
+    await mkdir(addonDirectory, { recursive: true });
+    await writeFile(
+      path.join(addonDirectory, "Containerfile"),
+      "FROM alpine:3.20\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(addonDirectory, "addon.json"),
+      `${JSON.stringify(
+        {
+          name: addonName,
+          version: "1",
+          description: "Reusable container worker node.",
+          allowedRoles: ["worker"],
+          resolution: {
+            kind: "node-payload-template",
+            nodeType: "container",
+            container: {
+              build: {
+                contextPath: "authored-context",
+                containerfilePath: "Containerfile",
+              },
+              entrypoint: ["/bin/sh", "-c"],
+              argsTemplate: [
+                'mkdir -p "$RIEL_MAILBOX_DIR/outbox" && printf \'{"ok":true}\\n\' > "$RIEL_MAILBOX_DIR/outbox/output.json"',
+              ],
+            },
+          },
+          execution: {
+            kind: "container",
+            containerfilePath: "Containerfile",
+            runtimeHints: ["docker"],
+          },
+          capabilities: [
+            {
+              name: "container.build",
+              required: true,
+              reason: "builds the packaged Containerfile",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    const contentDigest = await computeTestAddonContentDigest({
+      addonDirectory,
+      allowedFiles: ["Containerfile", "addon.json"],
+    });
+    await writeFile(
+      path.join(addonPackageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE),
+      `${JSON.stringify(
+        {
+          kind: "node-addon",
+          name: packageName,
+          version: "1.0.0",
+          title: "Container Greeting Add-on",
+          description: "Reusable container worker node package.",
+          tags: ["addon", "node", "container"],
+          registry: "local",
+          checksum: "pending",
+          checksumAlgorithm: "md5",
+          integrity: { digestAlgorithm: "sha256", digest: "" },
+          addons: [
+            {
+              name: addonName,
+              version: "1",
+              sourcePath,
+              execution: {
+                kind: "container",
+                containerfilePath: "Containerfile",
+                runtimeHints: ["docker"],
+              },
+              capabilities: [
+                {
+                  name: "container.build",
+                  required: true,
+                  reason: "builds the packaged Containerfile",
+                },
+              ],
+              contentDigest,
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await refreshNodeAddonPackageManifestDigests(addonPackageRoot);
+    const workflowPackageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "uses-container-greeting-workflow-package",
+      workflowName: "uses-container-greeting-workflow",
+      dependencies: [
+        {
+          packageId: packageName,
+          kind: "node-addon",
+          addons: [
+            {
+              name: addonName,
+              version: "1",
+              contentDigest,
+              capabilityGrant: { "container.build": { allowed: true } },
+            },
+          ],
+        },
+      ],
+    });
+    const workflowDirectory = path.join(
+      workflowPackageRoot,
+      "uses-container-greeting-workflow",
+    );
+    await writeFile(
+      path.join(workflowDirectory, "workflow.json"),
+      `${JSON.stringify(
+        {
+          workflowId: "uses-container-greeting-workflow",
+          description: "Uses executable container add-on dependency.",
+          defaults: { nodeTimeoutMs: 120000, maxLoopIterations: 3 },
+          entryStepId: "container-step",
+          nodes: [
+            { id: "container-node", addon: { name: addonName, version: "1" } },
+          ],
+          steps: [
+            {
+              id: "container-step",
+              nodeId: "container-node",
+              role: "worker",
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot: workflowPackageRoot,
+      workflowDirectory: "uses-container-greeting-workflow",
+    });
+    expect(
+      await registerWorkflowPackageRegistry({
+        id: "local",
+        url: "https://github.com/example/rielflow-packages",
+        localPath: registryRoot,
+        options: { userRoot },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await checkoutWorkflowPackage({
+        packageName: "uses-container-greeting-workflow-package",
+        registry: "local",
+        options: { userRoot, cwd: projectRoot },
+      }),
+    ).toMatchObject({ ok: true });
+
+    const loaded = await loadWorkflowFromCatalog(
+      "uses-container-greeting-workflow",
+      { userRoot, cwd: projectRoot },
+    );
+
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      const build =
+        loaded.value.bundle.nodePayloads["container-node"]?.container?.build;
+      const installedAddonDirectory = path.join(
+        projectRoot,
+        ".rielflow",
+        "addons",
+        "team",
+        "container-greeting",
+        "1",
+      );
+      expect(build).toMatchObject({
+        contextPath: "rielflow-addon-build-context",
+        containerfilePath: "Containerfile",
+        runtimeContextPath: installedAddonDirectory,
+        runtimeContainerfilePath: path.join(
+          installedAddonDirectory,
+          "Containerfile",
+        ),
+      });
+    }
+  });
+
+  test("checkout rejects node-addon dependencies with unexpected package kind", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "dependency-release-node",
+    });
+    await createNodeAddonPackage({
+      registryRoot,
+      packageName: "dependent-release-node",
+      dependencies: [
+        {
+          packageId: "dependency-release-node",
+          kind: "workflow",
+        },
+      ],
     });
     const registered = await registerWorkflowPackageRegistry({
       id: "local",
@@ -1395,7 +2900,7 @@ describe("workflow package registry", () => {
     if (!checkedOut.ok) {
       expect(checkedOut.error.code).toBe("VALIDATION");
       expect(checkedOut.error.message).toContain(
-        "node-addon package dependencies are not supported",
+        "resolved to node-addon, expected workflow",
       );
     }
   });
@@ -2698,10 +4203,11 @@ describe("workflow package registry", () => {
         }),
       ]);
       expect(checkedOut.value.dependencyGraph).toEqual([
-        {
+        expect.objectContaining({
           from: expect.objectContaining({ packageId: "dependency-caller" }),
           to: expect.objectContaining({ packageId: "dependency-callee" }),
-        },
+          packageKind: "workflow",
+        }),
       ]);
       expect(
         await pathExists(

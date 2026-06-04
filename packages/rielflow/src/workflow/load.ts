@@ -14,6 +14,7 @@ import { resolveWorkflowRelativePath } from "./prompt-template-file";
 import { err, ok, type Result } from "./result";
 import {
   isSafeWorkflowName,
+  resolveConfiguredRootPath,
   resolveEffectiveRoots,
   resolveWorkflowScopedPath,
 } from "./paths";
@@ -26,6 +27,7 @@ import {
   withResolvedWorkflowSourceOptions,
 } from "./catalog";
 import type {
+  DirectExecutableAddonGrant,
   LoadOptions,
   NormalizedWorkflowBundle,
   ResolvedWorkflowSource,
@@ -84,6 +86,157 @@ export interface LoadFailure {
     | "VALIDATION";
   readonly message: string;
   readonly issues?: readonly ValidationIssue[];
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordString(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function resolveUserRootForPackageRecords(options: LoadOptions): string {
+  const env = options.env ?? process.env;
+  return resolveConfiguredRootPath(
+    options.userRoot ?? env["RIEL_USER_ROOT"] ?? "~/.rielflow",
+    options,
+  );
+}
+
+function normalizeAddonDependencyLock(
+  value: unknown,
+): DirectExecutableAddonGrant["addons"][number] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const name = recordString(value, "name");
+  const version = recordString(value, "version");
+  if (name === undefined || version === undefined) {
+    return undefined;
+  }
+  const contentDigest = recordString(value, "contentDigest");
+  const capabilityGrantRaw = value["capabilityGrant"];
+  const capabilityGrant: Record<
+    string,
+    { readonly allowed: boolean; readonly scope?: string }
+  > = {};
+  if (isRecord(capabilityGrantRaw)) {
+    for (const [capabilityName, grantRaw] of Object.entries(
+      capabilityGrantRaw,
+    )) {
+      if (!isRecord(grantRaw) || typeof grantRaw["allowed"] !== "boolean") {
+        continue;
+      }
+      const scope = recordString(grantRaw, "scope");
+      capabilityGrant[capabilityName] = {
+        allowed: grantRaw["allowed"],
+        ...(scope === undefined ? {} : { scope }),
+      };
+    }
+  }
+  const optional = value["optional"];
+  return {
+    name,
+    version,
+    ...(contentDigest === undefined ? {} : { contentDigest }),
+    ...(Object.keys(capabilityGrant).length === 0 ? {} : { capabilityGrant }),
+    ...(typeof optional === "boolean" ? { optional } : {}),
+  };
+}
+
+function normalizeAddonDependencyGrant(
+  value: unknown,
+): DirectExecutableAddonGrant | undefined {
+  if (!isRecord(value) || recordString(value, "packageKind") !== "node-addon") {
+    return undefined;
+  }
+  const packageId = recordString(value, "packageId");
+  const registry = recordString(value, "registryUrl");
+  const branch = recordString(value, "registryRef");
+  const addonsRaw = value["addons"];
+  if (
+    packageId === undefined ||
+    registry === undefined ||
+    branch === undefined ||
+    !Array.isArray(addonsRaw)
+  ) {
+    return undefined;
+  }
+  const addons = addonsRaw
+    .map((entry) => normalizeAddonDependencyLock(entry))
+    .filter(
+      (entry): entry is DirectExecutableAddonGrant["addons"][number] =>
+        entry !== undefined,
+    );
+  if (addons.length === 0) {
+    return undefined;
+  }
+  return { packageId, registry, branch, kind: "node-addon", addons };
+}
+
+function addonDependencyLocksFromCheckoutRecord(
+  record: Readonly<Record<string, unknown>>,
+): readonly DirectExecutableAddonGrant[] {
+  const dependencies = record["dependencies"];
+  if (!Array.isArray(dependencies)) {
+    return [];
+  }
+  return dependencies
+    .map((dependency) => normalizeAddonDependencyGrant(dependency))
+    .filter(
+      (grant): grant is DirectExecutableAddonGrant => grant !== undefined,
+    );
+}
+
+async function findInstalledWorkflowAddonDependencyLocks(input: {
+  readonly source: ResolvedWorkflowSource;
+  readonly options: LoadOptions;
+}): Promise<readonly DirectExecutableAddonGrant[]> {
+  if (input.source.scope !== "project" && input.source.scope !== "user") {
+    return [];
+  }
+  const checkoutRoot = path.join(
+    resolveUserRootForPackageRecords(input.options),
+    "workflow-registry",
+    "checkouts",
+  );
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(checkoutRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(
+        await readFile(path.join(checkoutRoot, entry.name), "utf8"),
+      ) as unknown;
+    } catch {
+      continue;
+    }
+    if (
+      !isRecord(parsed) ||
+      parsed["checkoutKind"] !== "package" ||
+      parsed["packageKind"] !== "workflow" ||
+      recordString(parsed, "workflowName") !== input.source.workflowName ||
+      recordString(parsed, "scope") !== input.source.scope ||
+      recordString(parsed, "destinationDirectory") !==
+        input.source.workflowDirectory
+    ) {
+      continue;
+    }
+    return addonDependencyLocksFromCheckoutRecord(parsed);
+  }
+  return [];
 }
 
 async function readJsonTextFile(
@@ -506,13 +659,28 @@ export async function loadWorkflowFromCatalog(
     source.value,
     options,
   );
-  const loaded = await loadWorkflowFromDisk(workflowName, resolvedOptions);
+  const installedAddonDependencyLocks =
+    await findInstalledWorkflowAddonDependencyLocks({
+      source: source.value,
+      options: resolvedOptions,
+    });
+  const workflowLoadOptions =
+    installedAddonDependencyLocks.length === 0
+      ? resolvedOptions
+      : {
+          ...resolvedOptions,
+          addonDependencyLocks: [
+            ...(resolvedOptions.addonDependencyLocks ?? []),
+            ...installedAddonDependencyLocks,
+          ],
+        };
+  const loaded = await loadWorkflowFromDisk(workflowName, workflowLoadOptions);
   if (!loaded.ok) {
     return loaded;
   }
 
   if (source.value.scope === "manifest") {
-    const roots = resolveEffectiveRoots(resolvedOptions);
+    const roots = resolveEffectiveRoots(workflowLoadOptions);
     const artifactWorkflowRoot = resolveWorkflowScopedPath(
       roots.artifactRoot,
       source.value.workflowName,

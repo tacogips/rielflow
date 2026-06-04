@@ -849,10 +849,15 @@ describe("runCli", () => {
       "run",
       "--workflow-json",
       JSON.stringify(makeTemporaryWorkflowBundle()),
+      "--direct-executable-addon-grant",
+      '{"packageId":"greeting-node-addon","addons":[]}',
     ]);
 
     expect(parsed.error).toBeUndefined();
     expect(parsed.options.workflowJson).toContain("temp-demo");
+    expect(parsed.options.directExecutableAddonGrantValues).toEqual([
+      '{"packageId":"greeting-node-addon","addons":[]}',
+    ]);
   });
 
   test("workflow run executes inline temporary workflow JSON", async () => {
@@ -2655,6 +2660,29 @@ describe("runCli", () => {
 
     expect(code).toBe(2);
     expect(capture.stderr.join("\n")).toContain("--from-registry");
+    expect(capture.stderr.join("\n")).toContain("--endpoint");
+  });
+
+  test("workflow run rejects direct executable add-on grants over endpoint transport", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "temp-cli-flow",
+        "--endpoint",
+        "http://127.0.0.1:4317/graphql",
+        "--direct-executable-addon-grant",
+        '{"packageId":"greeting-node-addon","addons":[]}',
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain(
+      "--direct-executable-addon-grant",
+    );
     expect(capture.stderr.join("\n")).toContain("--endpoint");
   });
 
@@ -5352,6 +5380,66 @@ describe("runCli", () => {
     }
   });
 
+  test("workflow run accepts inline direct executable add-on grants locally", async () => {
+    const root = await makeTempDir();
+    await createManagerlessWorkflowFixture(root, "worker-only");
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: createSessionState({
+            sessionId: "sess-direct-grant",
+            workflowName: "worker-only",
+            workflowId: "worker-only",
+            initialNodeId: "step-1",
+            runtimeVariables: {},
+          }),
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+    const grant = {
+      packageId: "greeting-node-addon",
+      kind: "node-addon",
+      addons: [
+        {
+          name: "examples/greeting-shell",
+          version: "1",
+          contentDigest: `sha256:${"a".repeat(64)}`,
+          capabilityGrant: {
+            "process.spawn": {
+              allowed: true,
+              scope: "addon.entrypoint",
+            },
+          },
+        },
+      ],
+    };
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "worker-only",
+        "--workflow-definition-dir",
+        root,
+        "--direct-executable-addon-grant",
+        JSON.stringify(grant),
+        "--output",
+        "json",
+      ],
+      capture.io,
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "worker-only",
+      expect.objectContaining({
+        directExecutableAddonGrants: [grant],
+      }),
+    );
+  });
+
   test.each([
     {
       name: "malformed inline object",
@@ -5392,6 +5480,30 @@ describe("runCli", () => {
     expect(code).toBe(1);
     expect(capture.stderr.join("\n")).toContain("failed to parse --variables");
     expect(capture.stderr.join("\n")).toContain(expected);
+    expect(runWorkflowSpy).not.toHaveBeenCalled();
+  });
+
+  test("workflow run rejects invalid direct executable add-on grants", async () => {
+    const runWorkflowSpy = vi.spyOn(workflowEngine, "runWorkflow");
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "demo",
+        "--direct-executable-addon-grant",
+        '{"packageId":"greeting-node-addon","addons":[]}',
+      ],
+      capture.io,
+    );
+
+    expect(code).toBe(1);
+    expect(capture.stderr.join("\n")).toContain(
+      "failed to parse --direct-executable-addon-grant",
+    );
+    expect(capture.stderr.join("\n")).toContain(
+      "addons must be a non-empty array",
+    );
     expect(runWorkflowSpy).not.toHaveBeenCalled();
   });
 

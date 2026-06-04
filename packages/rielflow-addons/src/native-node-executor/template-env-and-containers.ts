@@ -466,15 +466,19 @@ export async function buildContainerImage(input: {
     );
   }
 
-  const contextPath = path.join(
-    input.workflowDirectory,
-    input.build.contextPath,
-  );
+  const contextPath =
+    input.build.runtimeContextPath ??
+    path.join(input.workflowDirectory, input.build.contextPath);
   const buildArgs = ["build", "-t", input.imageTag];
-  if (input.build.containerfilePath !== undefined) {
+  const containerfilePath =
+    input.build.runtimeContainerfilePath ??
+    (input.build.containerfilePath === undefined
+      ? undefined
+      : path.join(input.workflowDirectory, input.build.containerfilePath));
+  if (containerfilePath !== undefined) {
     buildArgs.push(
       "-f",
-      path.join(input.workflowDirectory, input.build.containerfilePath),
+      containerfilePath,
     );
   }
   if (input.build.target !== undefined) {
@@ -529,14 +533,13 @@ export async function executeCommandNode(
     nodeExecId: input.nodeExecId,
     ...(input.env === undefined ? {} : { ambientEnv: input.env }),
   });
-  const scriptPath = path.join(
-    input.workflowDirectory,
-    commandConfig.scriptPath,
-  );
   const cwd = resolveNodeExecutionWorkingDirectory(
     input.workflowWorkingDirectory,
     input.node.workingDirectory ?? commandConfig.workingDirectory,
   );
+  const scriptPath =
+    commandConfig.runtimeScriptPath ??
+    path.join(input.workflowDirectory, commandConfig.scriptPath);
   const extension = path.extname(scriptPath);
   const shellCommand =
     extension === ".bash" ? "bash" : extension === ".sh" ? "sh" : undefined;

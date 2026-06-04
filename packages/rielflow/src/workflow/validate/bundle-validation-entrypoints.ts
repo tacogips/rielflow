@@ -160,6 +160,8 @@ export function buildStepAddressedNodePayloadsSync(input: {
               path: `workflow.nodes[${index}].addon.payload`,
               allowManagerCodePathDefaults:
                 usage?.manager === true && usage.worker !== true,
+              allowRuntimeAddonCommandPaths: true,
+              allowRuntimeAddonBuildPaths: true,
             });
         if (normalizedPayload !== null) {
           basePayloadsByRegistryId.set(node.id, normalizedPayload);
@@ -245,6 +247,8 @@ export async function buildStepAddressedNodePayloadsAsync(input: {
               path: `workflow.nodes[${index}].addon.payload`,
               allowManagerCodePathDefaults:
                 usage?.manager === true && usage.worker !== true,
+              allowRuntimeAddonCommandPaths: true,
+              allowRuntimeAddonBuildPaths: true,
             });
         if (normalizedPayload !== null) {
           basePayloadsByRegistryId.set(node.id, normalizedPayload);
@@ -361,6 +365,8 @@ export function validateWorkflowBundleDetailed(
             payload: resolved.payload,
             issues,
             path: `workflow.nodes[${index}].addon.payload`,
+            allowRuntimeAddonCommandPaths: true,
+            allowRuntimeAddonBuildPaths: true,
           });
           if (normalizedPayload !== null) {
             nodePayloads[node.id] = normalizedPayload;
@@ -501,6 +507,8 @@ export async function validateWorkflowBundleDetailedAsync(
             payload: resolved.payload,
             issues,
             path: `workflow.nodes[${index}].addon.payload`,
+            allowRuntimeAddonCommandPaths: true,
+            allowRuntimeAddonBuildPaths: true,
           });
           if (normalizedPayload !== null) {
             nodePayloads[node.id] = normalizedPayload;

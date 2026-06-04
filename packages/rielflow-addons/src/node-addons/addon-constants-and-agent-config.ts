@@ -221,6 +221,7 @@ export function makeNodeValidationResult(
     ...(input.path === undefined ? {} : { path: input.path }),
     ...(input.backend === undefined ? {} : { backend: input.backend }),
     ...(input.addonName === undefined ? {} : { addonName: input.addonName }),
+    ...(input.details === undefined ? {} : { details: input.details }),
   };
 }
 export function errorMessageFromUnknown(error: unknown): string {

@@ -36,6 +36,51 @@ export type WorkflowPackageSkillVendor =
   | "cursor"
   | "gemini";
 export type WorkflowPackageSkillInstallMode = "managed-only" | "projected";
+export type WorkflowPackageAddonExecutionKind =
+  | "declarative"
+  | "container"
+  | "local-command";
+export type WorkflowAddonCapabilityName =
+  | "network.egress"
+  | "filesystem.read"
+  | "filesystem.write"
+  | "process.spawn"
+  | "container.build"
+  | "container.run"
+  | "device.gpu"
+  | "env.read";
+
+export interface WorkflowAddonCapability {
+  readonly name: WorkflowAddonCapabilityName;
+  readonly required?: boolean;
+  readonly scope?: string;
+  readonly reason?: string;
+  readonly defaultPolicy?: "deny" | "prompt" | "allow";
+}
+
+export interface WorkflowPackageAddonExecutionDescriptor {
+  readonly kind: WorkflowPackageAddonExecutionKind;
+  readonly entrypoint?: string;
+  readonly containerfilePath?: string;
+  readonly runtimeHints?: readonly string[];
+}
+
+export interface WorkflowPackageAddonCapabilityGrant {
+  readonly allowed: boolean;
+  readonly scope?: string;
+}
+
+export interface WorkflowPackageManifestAddonDependencyLock {
+  readonly name: string;
+  readonly version: string;
+  readonly contentDigest?: string;
+  readonly capabilityGrant?: Readonly<
+    Partial<
+      Record<WorkflowAddonCapabilityName, WorkflowPackageAddonCapabilityGrant>
+    >
+  >;
+  readonly optional?: boolean;
+}
 
 export interface WorkflowPackageTrustedSigner {
   readonly id: string;
@@ -113,12 +158,17 @@ export interface WorkflowPackageManifestDependencyEntry {
   readonly packageId: string;
   readonly registry?: string;
   readonly branch?: string;
+  readonly kind?: WorkflowPackageKind;
+  readonly addons?: readonly WorkflowPackageManifestAddonDependencyLock[];
 }
 
 export interface WorkflowPackageManifestAddonEntry {
   readonly name: string;
   readonly version: string;
   readonly sourcePath: string;
+  readonly execution?: WorkflowPackageAddonExecutionDescriptor;
+  readonly capabilities?: readonly WorkflowAddonCapability[];
+  readonly contentDigest?: string;
 }
 
 export interface WorkflowPackageDependencyIdentity {
@@ -236,6 +286,8 @@ export interface WorkflowPackageAddonArtifact {
   readonly allowedFiles: readonly string[];
   readonly contentDigest: string;
   readonly contentDigestAlgorithm: "sha256";
+  readonly execution?: WorkflowPackageAddonExecutionDescriptor;
+  readonly capabilities: readonly WorkflowAddonCapability[];
 }
 
 export interface WorkflowPackageAddonInstallTarget
@@ -276,9 +328,11 @@ export interface WorkflowNodeAddonPackageCheckoutResult {
 export interface WorkflowPackageDependencyEdge {
   readonly from: WorkflowPackageDependencyIdentity;
   readonly to: WorkflowPackageDependencyIdentity;
+  readonly packageKind?: WorkflowPackageKind;
 }
 
 export interface WorkflowPackageDependencyInstallResult {
+  readonly packageKind?: WorkflowPackageKind;
   readonly packageId: string;
   readonly registryUrl: string;
   readonly registryRef: string;
@@ -286,6 +340,7 @@ export interface WorkflowPackageDependencyInstallResult {
   readonly installId?: string;
   readonly workflowName?: string;
   readonly checkoutRecordPath?: string;
+  readonly addons?: readonly WorkflowPackageManifestAddonDependencyLock[];
 }
 
 export interface WorkflowPackageSearchCliResult {

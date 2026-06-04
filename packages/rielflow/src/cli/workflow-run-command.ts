@@ -26,6 +26,7 @@ import {
   readMockScenarioOption,
   readRemoteWorkflowExecutionPayload,
   readRuntimeVariables,
+  readRuntimeVariablesSource,
   readWorkflowNodePatchOption,
   rejectUnsupportedRemoteMockScenario,
 } from "./input-output-helpers";
@@ -40,6 +41,7 @@ import {
   optionsForLoadedWorkflow,
   workflowSourceJson,
 } from "./workflow-graphql-formatters";
+import type { DirectExecutableAddonGrant } from "../workflow/types";
 
 function retainedRegistryStatus(
   status: string,
@@ -122,6 +124,170 @@ async function loadTemporaryWorkflowForCli(
   }
 }
 
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeDirectExecutableAddonGrant(
+  value: unknown,
+  pathLabel: string,
+): DirectExecutableAddonGrant {
+  if (!isRecord(value)) {
+    throw new Error(`${pathLabel} must be an object`);
+  }
+  const packageId = value["packageId"];
+  if (typeof packageId !== "string" || packageId.length === 0) {
+    throw new Error(`${pathLabel}.packageId must be a non-empty string`);
+  }
+  const kind = value["kind"];
+  if (kind !== undefined && kind !== "node-addon") {
+    throw new Error(`${pathLabel}.kind must be node-addon when provided`);
+  }
+  const registry = value["registry"];
+  if (
+    registry !== undefined &&
+    (typeof registry !== "string" || registry.length === 0)
+  ) {
+    throw new Error(`${pathLabel}.registry must be a non-empty string`);
+  }
+  const branch = value["branch"];
+  if (
+    branch !== undefined &&
+    (typeof branch !== "string" || branch.length === 0)
+  ) {
+    throw new Error(`${pathLabel}.branch must be a non-empty string`);
+  }
+  const addonsRaw = value["addons"];
+  if (!Array.isArray(addonsRaw) || addonsRaw.length === 0) {
+    throw new Error(`${pathLabel}.addons must be a non-empty array`);
+  }
+  const addons = addonsRaw.map((entry, index) => {
+    if (!isRecord(entry)) {
+      throw new Error(
+        `${pathLabel}.addons[${String(index)}] must be an object`,
+      );
+    }
+    const name = entry["name"];
+    const version = entry["version"];
+    const contentDigest = entry["contentDigest"];
+    if (typeof name !== "string" || name.length === 0) {
+      throw new Error(
+        `${pathLabel}.addons[${String(index)}].name must be a non-empty string`,
+      );
+    }
+    if (typeof version !== "string" || version.length === 0) {
+      throw new Error(
+        `${pathLabel}.addons[${String(index)}].version must be a non-empty string`,
+      );
+    }
+    if (
+      typeof contentDigest !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(contentDigest)
+    ) {
+      throw new Error(
+        `${pathLabel}.addons[${String(index)}].contentDigest must be a sha256 digest`,
+      );
+    }
+    const optional = entry["optional"];
+    if (optional !== undefined && typeof optional !== "boolean") {
+      throw new Error(
+        `${pathLabel}.addons[${String(index)}].optional must be a boolean`,
+      );
+    }
+    const capabilityGrantRaw = entry["capabilityGrant"];
+    let capabilityGrant:
+      | Readonly<
+          Record<
+            string,
+            NonNullable<
+              DirectExecutableAddonGrant["addons"][number]["capabilityGrant"]
+            >[string]
+          >
+        >
+      | undefined;
+    if (capabilityGrantRaw !== undefined) {
+      if (!isRecord(capabilityGrantRaw)) {
+        throw new Error(
+          `${pathLabel}.addons[${String(index)}].capabilityGrant must be an object`,
+        );
+      }
+      const grants: Record<
+        string,
+        NonNullable<
+          DirectExecutableAddonGrant["addons"][number]["capabilityGrant"]
+        >[string]
+      > = {};
+      for (const [capabilityName, grantRaw] of Object.entries(
+        capabilityGrantRaw,
+      )) {
+        if (!isRecord(grantRaw) || typeof grantRaw["allowed"] !== "boolean") {
+          throw new Error(
+            `${pathLabel}.addons[${String(index)}].capabilityGrant.${capabilityName}.allowed must be a boolean`,
+          );
+        }
+        const scope = grantRaw["scope"];
+        if (
+          scope !== undefined &&
+          (typeof scope !== "string" || scope.length === 0)
+        ) {
+          throw new Error(
+            `${pathLabel}.addons[${String(index)}].capabilityGrant.${capabilityName}.scope must be a non-empty string`,
+          );
+        }
+        grants[capabilityName] = {
+          allowed: grantRaw["allowed"],
+          ...(scope === undefined ? {} : { scope }),
+        };
+      }
+      capabilityGrant = grants;
+    }
+    return {
+      name,
+      version,
+      contentDigest,
+      ...(capabilityGrant === undefined ? {} : { capabilityGrant }),
+      ...(optional === undefined ? {} : { optional }),
+    };
+  });
+  return {
+    packageId,
+    ...(registry === undefined ? {} : { registry }),
+    ...(branch === undefined ? {} : { branch }),
+    ...(kind === undefined ? {} : { kind }),
+    addons,
+  };
+}
+
+async function readDirectExecutableAddonGrants(
+  values: readonly string[] | undefined,
+): Promise<readonly DirectExecutableAddonGrant[]> {
+  const grants: DirectExecutableAddonGrant[] = [];
+  for (const value of values ?? []) {
+    const source = await readRuntimeVariablesSource(value);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.content) as unknown;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      throw new Error(
+        `${source.displayValue} must contain valid JSON: ${message}`,
+      );
+    }
+    const entries = Array.isArray(parsed) ? parsed : [parsed];
+    for (const [index, entry] of entries.entries()) {
+      grants.push(
+        normalizeDirectExecutableAddonGrant(
+          entry,
+          Array.isArray(parsed)
+            ? `--direct-executable-addon-grant[${String(index)}]`
+            : "--direct-executable-addon-grant",
+        ),
+      );
+    }
+  }
+  return grants;
+}
+
 export async function runCliWorkflowRunCommand(
   context: RunCliScopeContext,
   workflowTarget: string | undefined,
@@ -172,6 +338,15 @@ export async function runCliWorkflowRunCommand(
     );
     return 2;
   }
+  if (
+    graphqlCliTransport !== null &&
+    parsed.options.directExecutableAddonGrantValues !== undefined
+  ) {
+    io.stderr(
+      "--direct-executable-addon-grant is local-only and cannot be combined with --endpoint",
+    );
+    return 2;
+  }
   let runtimeVariables: Readonly<Record<string, unknown>> = {};
   if (parsed.options.variablesPath !== undefined) {
     try {
@@ -183,6 +358,21 @@ export async function runCliWorkflowRunCommand(
       io.stderr(`failed to parse --variables: ${message}`);
       return 1;
     }
+  }
+  let directExecutableAddonGrants:
+    | readonly DirectExecutableAddonGrant[]
+    | undefined;
+  try {
+    const parsedGrants = await readDirectExecutableAddonGrants(
+      parsed.options.directExecutableAddonGrantValues,
+    );
+    if (parsedGrants.length > 0) {
+      directExecutableAddonGrants = parsedGrants;
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    io.stderr(`failed to parse --direct-executable-addon-grant: ${message}`);
+    return 1;
   }
   let nodePatch:
     | Awaited<ReturnType<typeof readWorkflowNodePatchOption>>
@@ -300,6 +490,9 @@ export async function runCliWorkflowRunCommand(
   const temporaryWorkflow = hasTemporaryWorkflowInput
     ? await loadTemporaryWorkflowForCli(context, {
         ...sharedOptions,
+        ...(directExecutableAddonGrants === undefined
+          ? {}
+          : { directExecutableAddonGrants }),
         ...(nodePatch === undefined ? {} : { nodePatch }),
       })
     : undefined;
@@ -329,11 +522,15 @@ export async function runCliWorkflowRunCommand(
           ...sharedOptions,
           workflowRoot: registryRun.workflowDefinitionDir,
         };
+  const effectiveLoadOptions =
+    directExecutableAddonGrants === undefined
+      ? effectiveSharedOptions
+      : { ...effectiveSharedOptions, directExecutableAddonGrants };
 
   const loadedWorkflow =
     temporaryWorkflow?.value.loadedWorkflow === undefined
       ? await loadWorkflowFromCatalog(effectiveWorkflowTarget, {
-          ...effectiveSharedOptions,
+          ...effectiveLoadOptions,
           ...(nodePatch === undefined ? {} : { nodePatch }),
         })
       : {
@@ -371,7 +568,7 @@ export async function runCliWorkflowRunCommand(
   }
   const workflowRunOptions = optionsForLoadedWorkflow(
     loadedWorkflow.value,
-    effectiveSharedOptions,
+    effectiveLoadOptions,
   );
 
   const result = await runWorkflow(effectiveWorkflowTarget, {

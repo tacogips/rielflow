@@ -359,17 +359,40 @@ Install a package into the user catalog:
 rielflow package install worker-only-single-step --user-scope
 ```
 
+Node add-on package manifests can declare `execution`, `capabilities`, and
+`contentDigest` metadata for each add-on. Executable artifacts such as `.bash`
+files are allowed only when the manifest declares matching execution metadata
+and the installed package verifies both the add-on `contentDigest` and package
+`integrity`. Required capabilities default to required unless
+`required: false` is set, and executable add-ons must be authorized by a
+workflow package dependency lock or by an explicit local direct-run grant.
+
 Package install resolves declared `rielflow-package.json` dependencies first.
 Dependency entries can be package ids or objects with `packageId`, `registry`,
-and `branch`; missing dependencies are installed into the same effective scope
-before the caller workflow is validated. Dependency branches are local to each
-dependency entry and do not inherit the caller package branch. Already installed
-equivalent dependencies are reused when their checkout record and workflow
-directory still match. Dependency cycles fail with the package chain, and if the
-caller install later fails, dependency mutations created by that install attempt
-are rolled back or restored before the error is reported.
-This first node add-on package iteration rejects `kind: "node-addon"` manifests
-with dependencies during checkout rather than silently ignoring them.
+and `branch`; dependency objects can also declare `kind` and exact `addons[]`
+locks for executable node add-ons. Missing dependencies are installed into the
+same effective scope before the caller workflow is validated. Dependency
+branches are local to each dependency entry and do not inherit the caller
+package branch. Already installed equivalent dependencies are reused when their
+checkout record, package kind, dependency locks, and workflow or add-on
+directory still match. Dependency cycles fail with the package chain, and if
+the caller install later fails, dependency mutations created by that install
+attempt are rolled back or restored before the error is reported.
+
+For temporary local smoke runs that intentionally execute a package-installed
+executable add-on outside a workflow package, pass one or more direct grants:
+
+```bash
+rielflow workflow run --workflow-json-file ./workflow.json \
+  --direct-executable-addon-grant @./direct-executable-addon-grant.json \
+  --output json
+```
+
+`--direct-executable-addon-grant` accepts inline JSON, `@file`, or a bare file
+path and is local-only; it is rejected with `--endpoint`. A grant names the
+node-addon package and add-on locks, including `name`, `version`, exact
+`contentDigest`, and capability grants such as `process.spawn`,
+`filesystem.read`, or `env.read`.
 
 Package validation then uses the same scoped workflow visibility the installed
 workflow will have: package-local sibling workflows remain visible, the staged
@@ -384,10 +407,10 @@ Machine-readable package lifecycle output includes package kind. Workflow
 package installs report `packageKind: "workflow"` and installed workflow
 fields. Node add-on package installs report `packageKind: "node-addon"` and an
 `addons[]` array with add-on names, versions, destination directories,
-manifest paths, and SHA-256 content digests. `package list`, `package status`,
-`package remove`, and `package update` keep `packageKind` explicit so
-automation can distinguish workflow package checkouts from package-owned local
-add-ons.
+manifest paths, execution metadata, capabilities, package integrity, dependency
+locks, and SHA-256 content digests. `package list`, `package status`,
+`package remove`, and `package update` keep `packageKind` explicit so automation
+can distinguish workflow package checkouts from package-owned local add-ons.
 
 List installed packages:
 

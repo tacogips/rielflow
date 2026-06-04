@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveConfiguredRootPath } from "../../rielflow-core/src/paths";
 import {
   listNodeTemplateFieldContainers,
   NODE_TEMPLATE_FIELD_SPECS,
@@ -10,9 +11,22 @@ import {
   validateJsonSchemaDefinition,
   validateJsonValueAgainstSchema,
 } from "../../rielflow-core/src/index";
+import {
+  computeInstalledAddonContentDigest,
+  isExecutableLocalAddon,
+  validateExecutableResolutionMetadata,
+} from "./local-node-addon-executable-validation";
+import {
+  buildExecutableAddonAuthorizationSummary,
+  findMatchingAddonLock,
+  validateCapabilityGrant,
+  type ExecutableAddonGrantValidationResult,
+} from "./local-node-addon-authorization";
 import type {
   JsonObject,
+  LoadOptions,
   NodeAddonResolveResult,
+  NodeValidationResultInput,
   NodePayload,
   ResolvedAddonSource,
   ValidationIssue,
@@ -25,9 +39,31 @@ export interface LocalNodeAddonManifest {
   readonly description: string;
   readonly allowedRoles: readonly ["worker"];
   readonly resolution: LocalNodeAddonResolutionTemplate;
+  readonly execution?: LocalNodeAddonExecutionDescriptor;
+  readonly capabilities?: readonly LocalNodeAddonCapability[];
   readonly configSchema?: JsonObject;
   readonly envSchema?: JsonObject;
   readonly inputSchema?: JsonObject;
+}
+
+export type LocalNodeAddonExecutionKind =
+  | "declarative"
+  | "container"
+  | "local-command";
+
+export interface LocalNodeAddonExecutionDescriptor {
+  readonly kind: LocalNodeAddonExecutionKind;
+  readonly entrypoint?: string;
+  readonly containerfilePath?: string;
+  readonly runtimeHints?: readonly string[];
+}
+
+export interface LocalNodeAddonCapability {
+  readonly name: string;
+  readonly required?: boolean;
+  readonly scope?: string;
+  readonly reason?: string;
+  readonly defaultPolicy?: "deny" | "prompt" | "allow";
 }
 
 export interface LocalNodeAddonResolutionTemplate
@@ -80,6 +116,179 @@ function readOptionalJsonSchema(
     );
   }
   return value;
+}
+
+function readStringArray(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const strings = value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  return strings.length === value.length ? strings : undefined;
+}
+
+function isSafeAddonRelativePath(value: string): boolean {
+  if (
+    value.length === 0 ||
+    path.posix.isAbsolute(value) ||
+    path.win32.isAbsolute(value)
+  ) {
+    return false;
+  }
+  const segments = value
+    .split(/[\\/]+/)
+    .filter((segment) => segment.length > 0);
+  return (
+    segments.length > 0 &&
+    !segments.some((segment) => segment === "." || segment === "..")
+  );
+}
+
+function normalizeExecutionDescriptor(
+  value: unknown,
+  issues: ValidationIssue[],
+): LocalNodeAddonExecutionDescriptor | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    issues.push(makeIssue("addon.execution", "must be an object"));
+    return undefined;
+  }
+  const kind = value["kind"];
+  if (
+    kind !== "declarative" &&
+    kind !== "container" &&
+    kind !== "local-command"
+  ) {
+    issues.push(
+      makeIssue(
+        "addon.execution.kind",
+        "must be declarative, container, or local-command",
+      ),
+    );
+    return undefined;
+  }
+  const entrypoint = value["entrypoint"];
+  if (
+    entrypoint !== undefined &&
+    (typeof entrypoint !== "string" || !isSafeAddonRelativePath(entrypoint))
+  ) {
+    issues.push(
+      makeIssue(
+        "addon.execution.entrypoint",
+        "must be a safe relative path",
+      ),
+    );
+  }
+  const containerfilePath = value["containerfilePath"];
+  if (
+    containerfilePath !== undefined &&
+    (typeof containerfilePath !== "string" ||
+      !isSafeAddonRelativePath(containerfilePath))
+  ) {
+    issues.push(
+      makeIssue(
+        "addon.execution.containerfilePath",
+        "must be a safe relative path",
+      ),
+    );
+  }
+  const runtimeHints = readStringArray(value["runtimeHints"]);
+  if (value["runtimeHints"] !== undefined && runtimeHints === undefined) {
+    issues.push(
+      makeIssue(
+        "addon.execution.runtimeHints",
+        "must be an array of non-empty strings",
+      ),
+    );
+  }
+  return {
+    kind,
+    ...(typeof entrypoint === "string" ? { entrypoint } : {}),
+    ...(typeof containerfilePath === "string" ? { containerfilePath } : {}),
+    ...(runtimeHints === undefined ? {} : { runtimeHints }),
+  };
+}
+
+function normalizeCapabilities(
+  value: unknown,
+  issues: ValidationIssue[],
+): readonly LocalNodeAddonCapability[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    issues.push(makeIssue("addon.capabilities", "must be an array"));
+    return undefined;
+  }
+  const capabilities: LocalNodeAddonCapability[] = [];
+  for (const [index, entry] of value.entries()) {
+    if (!isRecord(entry)) {
+      issues.push(
+        makeIssue(`addon.capabilities[${index}]`, "must be an object"),
+      );
+      continue;
+    }
+    const name = entry["name"];
+    const required = entry["required"];
+    const scope = entry["scope"];
+    const reason = entry["reason"];
+    const defaultPolicy = entry["defaultPolicy"];
+    if (typeof name !== "string" || name.length === 0) {
+      issues.push(
+        makeIssue(`addon.capabilities[${index}].name`, "must be a string"),
+      );
+      continue;
+    }
+    if (required !== undefined && typeof required !== "boolean") {
+      issues.push(
+        makeIssue(
+          `addon.capabilities[${index}].required`,
+          "must be a boolean",
+        ),
+      );
+    }
+    if (scope !== undefined && (typeof scope !== "string" || scope.length === 0)) {
+      issues.push(
+        makeIssue(`addon.capabilities[${index}].scope`, "must be a string"),
+      );
+    }
+    if (
+      reason !== undefined &&
+      (typeof reason !== "string" || reason.length === 0)
+    ) {
+      issues.push(
+        makeIssue(`addon.capabilities[${index}].reason`, "must be a string"),
+      );
+    }
+    if (
+      defaultPolicy !== undefined &&
+      defaultPolicy !== "deny" &&
+      defaultPolicy !== "prompt" &&
+      defaultPolicy !== "allow"
+    ) {
+      issues.push(
+        makeIssue(
+          `addon.capabilities[${index}].defaultPolicy`,
+          "must be deny, prompt, or allow",
+        ),
+      );
+    }
+    capabilities.push({
+      name,
+      ...(typeof required === "boolean" ? { required } : {}),
+      ...(typeof scope === "string" ? { scope } : {}),
+      ...(typeof reason === "string" ? { reason } : {}),
+      ...(defaultPolicy === "deny" ||
+      defaultPolicy === "prompt" ||
+      defaultPolicy === "allow"
+        ? { defaultPolicy }
+        : {}),
+    });
+  }
+  return capabilities;
 }
 
 function normalizeManifest(
@@ -154,6 +363,8 @@ function normalizeManifest(
   const configSchema = readOptionalJsonSchema(value, "configSchema", issues);
   const envSchema = readOptionalJsonSchema(value, "envSchema", issues);
   const inputSchema = readOptionalJsonSchema(value, "inputSchema", issues);
+  const execution = normalizeExecutionDescriptor(value["execution"], issues);
+  const capabilities = normalizeCapabilities(value["capabilities"], issues);
 
   if (issues.length > 0 || normalizedResolution === undefined) {
     return err({
@@ -169,6 +380,8 @@ function normalizeManifest(
     description: value["description"] as string,
     allowedRoles: ["worker"],
     resolution: normalizedResolution,
+    ...(execution === undefined ? {} : { execution }),
+    ...(capabilities === undefined ? {} : { capabilities }),
     ...(configSchema === undefined ? {} : { configSchema }),
     ...(envSchema === undefined ? {} : { envSchema }),
     ...(inputSchema === undefined ? {} : { inputSchema }),
@@ -361,11 +574,303 @@ async function resolveTemplateFiles(input: {
   }
 }
 
+function applyExecutableAddonDirectoryDefaults(input: {
+  readonly manifest: LocalNodeAddonManifest;
+  readonly source: ResolvedAddonSource;
+  readonly payload: Record<string, unknown>;
+}): void {
+  if (
+    input.payload["nodeType"] === "command" &&
+    isRecord(input.payload["command"])
+  ) {
+    const command = { ...input.payload["command"] };
+    if (input.manifest.execution?.kind === "local-command") {
+      command["workingDirectory"] = input.source.addonDirectory;
+      if (input.manifest.execution.entrypoint !== undefined) {
+        command["runtimeScriptPath"] = path.join(
+          input.source.addonDirectory,
+          input.manifest.execution.entrypoint,
+        );
+      }
+    }
+    input.payload["command"] = command;
+  }
+  if (
+    input.payload["nodeType"] === "container" &&
+    isRecord(input.payload["container"])
+  ) {
+    const container = { ...input.payload["container"] };
+    if (
+      input.manifest.execution?.kind === "container" &&
+      container["build"] !== undefined &&
+      isRecord(container["build"])
+    ) {
+      const build = { ...container["build"] };
+      build["contextPath"] = "rielflow-addon-build-context";
+      build["runtimeContextPath"] = input.source.addonDirectory;
+      if (input.manifest.execution.containerfilePath !== undefined) {
+        build["containerfilePath"] = input.manifest.execution.containerfilePath;
+        build["runtimeContainerfilePath"] = path.join(
+          input.source.addonDirectory,
+          input.manifest.execution.containerfilePath,
+        );
+      }
+      container["build"] = build;
+    }
+    input.payload["container"] = container;
+  }
+}
+
+function resolveUserRoot(options: LoadOptions | undefined): string {
+  const env = options?.env ?? process.env;
+  return resolveConfiguredRootPath(
+    options?.userRoot ?? env["RIEL_USER_ROOT"] ?? "~/.rielflow",
+    {
+      ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
+      env,
+    },
+  );
+}
+
+function recordString(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function recordArray(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): readonly unknown[] {
+  const value = record[key];
+  return Array.isArray(value) ? value : [];
+}
+
+async function readJsonRecord(
+  filePath: string,
+): Promise<Readonly<Record<string, unknown>> | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(filePath, "utf8")) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function findInstalledAddonPackageRecord(input: {
+  readonly source: ResolvedAddonSource;
+  readonly options?: LoadOptions;
+}): Promise<
+  | {
+      readonly record: Readonly<Record<string, unknown>>;
+      readonly addonRecord: Readonly<Record<string, unknown>>;
+    }
+  | undefined
+> {
+  const checkoutsRoot = path.join(
+    resolveUserRoot(input.options),
+    "workflow-registry",
+    "checkouts",
+  );
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(checkoutsRoot, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  const expectedDirectory = path.resolve(input.source.addonDirectory);
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+    const record = await readJsonRecord(path.join(checkoutsRoot, entry.name));
+    if (record?.["packageKind"] !== "node-addon") {
+      continue;
+    }
+    for (const addonRaw of recordArray(record, "addons")) {
+      if (!isRecord(addonRaw)) {
+        continue;
+      }
+      const destinationDirectory = recordString(
+        addonRaw,
+        "destinationDirectory",
+      );
+      if (
+        destinationDirectory !== undefined &&
+        path.resolve(destinationDirectory) === expectedDirectory
+      ) {
+        return { record, addonRecord: addonRaw };
+      }
+    }
+  }
+  return undefined;
+}
+
+async function validateExecutableAddonGrant(input: {
+  readonly addon: WorkflowNodeAddonRef;
+  readonly source: ResolvedAddonSource;
+  readonly manifest: LocalNodeAddonManifest;
+  readonly options?: LoadOptions;
+  readonly path: string;
+}): Promise<ExecutableAddonGrantValidationResult> {
+  if (!isExecutableLocalAddon(input.manifest)) {
+    return { issues: [] };
+  }
+  const metadataIssues = validateExecutableResolutionMetadata({
+    manifest: input.manifest,
+    path: input.path,
+  });
+  if (metadataIssues.length > 0) {
+    return { issues: metadataIssues };
+  }
+  if (input.source.scope === "direct") {
+    return input.options?.allowUnpackagedExecutableAddons === true
+      ? { issues: [] }
+      : {
+          issues: [
+            makeIssue(
+              input.path,
+              `executable local node add-on '${input.source.addonName}' cannot be loaded from a direct add-on root without allowUnpackagedExecutableAddons`,
+            ),
+          ],
+        };
+  }
+  const installed = await findInstalledAddonPackageRecord({
+    source: input.source,
+    ...(input.options === undefined ? {} : { options: input.options }),
+  });
+  if (installed === undefined) {
+    return {
+      issues: [
+        makeIssue(
+          input.path,
+          `executable local node add-on '${input.source.addonName}' must resolve from package-owned installed provenance or an explicit direct add-on root`,
+        ),
+      ],
+    };
+  }
+  const integrity = installed.record["integrity"];
+  if (
+    !isRecord(integrity) ||
+    typeof integrity["digest"] !== "string" ||
+    integrity["digest"].length === 0 ||
+    integrity["digestAlgorithm"] !== "sha256"
+  ) {
+    return {
+      issues: [
+        makeIssue(
+          input.path,
+          `executable local node add-on '${input.source.addonName}' requires verified sha256 package integrity`,
+        ),
+      ],
+    };
+  }
+  const storedContentDigest = recordString(installed.addonRecord, "contentDigest");
+  if (storedContentDigest === undefined) {
+    return {
+      issues: [
+        makeIssue(
+          input.path,
+          `executable local node add-on '${input.source.addonName}' requires installed add-on contentDigest`,
+        ),
+      ],
+    };
+  }
+  const recomputedContentDigest = await computeInstalledAddonContentDigest({
+    source: input.source,
+    manifest: input.manifest,
+    path: input.path,
+  });
+  if (!recomputedContentDigest.ok) {
+    return { issues: recomputedContentDigest.error };
+  }
+  if (recomputedContentDigest.value !== storedContentDigest) {
+    return {
+      issues: [
+        makeIssue(
+          input.path,
+          `executable local node add-on '${input.source.addonName}' contentDigest mismatch`,
+        ),
+      ],
+    };
+  }
+  const matchingDependencyLock = findMatchingAddonLock({
+    source: input.source,
+    packageRecord: installed.record,
+    contentDigest: recomputedContentDigest.value,
+    grants: input.options?.addonDependencyLocks ?? [],
+  });
+  const requiresEnvRead = input.addon.env !== undefined;
+  if (matchingDependencyLock !== undefined) {
+    const issues = validateCapabilityGrant({
+      source: input.source,
+      manifest: input.manifest,
+      lock: matchingDependencyLock,
+      sourceKind: "package dependency lock",
+      requiresEnvRead,
+      path: input.path,
+    });
+    if (issues.length > 0) {
+      return { issues };
+    }
+    const authorization = buildExecutableAddonAuthorizationSummary({
+      source: input.source,
+      manifest: input.manifest,
+      packageRecord: installed.record,
+      contentDigest: recomputedContentDigest.value,
+      lock: matchingDependencyLock,
+      sourceKind: "packageDependencyLock",
+    });
+    return authorization === undefined
+      ? { issues }
+      : { issues, authorization };
+  }
+  const matchingDirectGrant = findMatchingAddonLock({
+    source: input.source,
+    packageRecord: installed.record,
+    contentDigest: recomputedContentDigest.value,
+    grants: input.options?.directExecutableAddonGrants ?? [],
+  });
+  if (matchingDirectGrant === undefined) {
+    return {
+      issues: [
+        makeIssue(
+          input.path,
+          `executable local node add-on '${input.source.addonName}' requires a matching package dependency lock or directExecutableAddonGrant`,
+        ),
+      ],
+    };
+  }
+  const issues = validateCapabilityGrant({
+    source: input.source,
+    manifest: input.manifest,
+    lock: matchingDirectGrant,
+    sourceKind: "directExecutableAddonGrant",
+    requiresEnvRead,
+    path: input.path,
+  });
+  if (issues.length > 0) {
+    return { issues };
+  }
+  const authorization = buildExecutableAddonAuthorizationSummary({
+    source: input.source,
+    manifest: input.manifest,
+    packageRecord: installed.record,
+    contentDigest: recomputedContentDigest.value,
+    lock: matchingDirectGrant,
+    sourceKind: "directExecutableAddonGrant",
+  });
+  return authorization === undefined ? { issues } : { issues, authorization };
+}
+
 export async function resolveLocalNodeAddonPayload(input: {
   readonly nodeId: string;
   readonly addon: WorkflowNodeAddonRef;
   readonly path: string;
   readonly source: ResolvedAddonSource;
+  readonly options?: LoadOptions;
 }): Promise<NodeAddonResolveResult> {
   const manifestResult = await loadLocalNodeAddonManifest(input.source);
   if (!manifestResult.ok) {
@@ -377,6 +882,14 @@ export async function resolveLocalNodeAddonPayload(input: {
   }
   const manifest = manifestResult.value;
   const issues = [...validateAddonInput(input.addon, manifest, input.path)];
+  const executableGrant = await validateExecutableAddonGrant({
+    addon: input.addon,
+    source: input.source,
+    manifest,
+    ...(input.options === undefined ? {} : { options: input.options }),
+    path: input.path,
+  });
+  issues.push(...executableGrant.issues);
 
   const context = {
     nodeId: input.nodeId,
@@ -410,8 +923,34 @@ export async function resolveLocalNodeAddonPayload(input: {
     payload,
     issues,
   });
+  applyExecutableAddonDirectoryDefaults({
+    manifest,
+    source: input.source,
+    payload,
+  });
 
-  return issues.length > 0
-    ? { issues }
-    : { payload: payload as unknown as NodePayload, issues: [] };
+  if (issues.length > 0) {
+    return { issues };
+  }
+  const nodeValidationResults: NodeValidationResultInput[] =
+    executableGrant.authorization === undefined
+      ? []
+      : [
+          {
+            status: "valid",
+            message: `executable local node add-on '${input.source.addonName}' authorized by ${executableGrant.authorization.sourceKind}`,
+            nodeId: input.nodeId,
+            source: "addon",
+            path: input.path,
+            addonName: input.source.addonName,
+            details: {
+              executableAddonAuthorization: executableGrant.authorization,
+            },
+          },
+        ];
+  return {
+    payload: payload as unknown as NodePayload,
+    issues: [],
+    ...(nodeValidationResults.length === 0 ? {} : { nodeValidationResults }),
+  };
 }

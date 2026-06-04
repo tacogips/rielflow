@@ -10,7 +10,10 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { isSafeAddonName, isSafeAddonVersion } from "../catalog";
-import { loadLocalNodeAddonManifest } from "../local-node-addons";
+import {
+  loadLocalNodeAddonManifest,
+  type LocalNodeAddonManifest,
+} from "../local-node-addons";
 import {
   listNodeTemplateFieldContainers,
   NODE_TEMPLATE_FIELD_SPECS,
@@ -21,6 +24,7 @@ import { normalizePackageRelativePath } from "./manifest";
 import type {
   WorkflowPackageAddonArtifact,
   WorkflowPackageAddonInstallTarget,
+  WorkflowPackageAddonExecutionDescriptor,
   WorkflowPackageFailure,
   WorkflowPackageManifestAddonEntry,
 } from "./types";
@@ -97,7 +101,14 @@ function addonSourceFromEntry(input: {
   });
 }
 
-function shouldRejectFile(relativePath: string): boolean {
+function shouldRejectFile(input: {
+  readonly relativePath: string;
+  readonly allowedExecutableFiles: ReadonlySet<string>;
+}): boolean {
+  if (input.allowedExecutableFiles.has(input.relativePath)) {
+    return false;
+  }
+  const relativePath = input.relativePath;
   const baseName = path.posix.basename(relativePath);
   const lowerBaseName = baseName.toLowerCase();
   const segments = relativePath.split("/");
@@ -130,12 +141,14 @@ function shouldRejectFile(relativePath: string): boolean {
     baseName.endsWith(".mjs") ||
     baseName.endsWith(".cjs") ||
     baseName.endsWith(".ts") ||
-    baseName.endsWith(".sh")
+    baseName.endsWith(".sh") ||
+    baseName.endsWith(".bash")
   );
 }
 
 async function collectAddonFiles(
   sourceDirectory: string,
+  allowedExecutableFiles: ReadonlySet<string>,
 ): Promise<Result<readonly string[], WorkflowPackageFailure>> {
   const files: string[] = [];
   async function visit(
@@ -157,7 +170,7 @@ async function collectAddonFiles(
           ),
         );
       }
-      if (shouldRejectFile(relativePath)) {
+      if (shouldRejectFile({ relativePath, allowedExecutableFiles })) {
         return err(
           packageFailure(
             "VALIDATION",
@@ -224,8 +237,15 @@ function normalizeAddonFileReference(relativePath: string): string | undefined {
 function referencedAddonFiles(input: {
   readonly addonName: string;
   readonly resolution: Readonly<Record<string, unknown>>;
+  readonly execution?: WorkflowPackageAddonExecutionDescriptor;
 }): Result<readonly string[], WorkflowPackageFailure> {
   const files = new Set<string>(["addon.json"]);
+  if (input.execution?.entrypoint !== undefined) {
+    files.add(input.execution.entrypoint);
+  }
+  if (input.execution?.containerfilePath !== undefined) {
+    files.add(input.execution.containerfilePath);
+  }
   const resolution = { ...input.resolution };
   for (const { record } of listNodeTemplateFieldContainers(resolution)) {
     for (const spec of NODE_TEMPLATE_FIELD_SPECS) {
@@ -254,6 +274,121 @@ function referencedAddonFiles(input: {
     }
   }
   return ok([...files].sort((left, right) => left.localeCompare(right)));
+}
+
+function executionKindForNodeType(
+  nodeType: unknown,
+): WorkflowPackageAddonExecutionDescriptor["kind"] {
+  if (nodeType === "command") {
+    return "local-command";
+  }
+  if (nodeType === "container") {
+    return "container";
+  }
+  return "declarative";
+}
+
+function normalizeCapabilitiesForCompare(
+  capabilities: readonly {
+    readonly name: string;
+    readonly required?: boolean;
+    readonly scope?: string;
+    readonly reason?: string;
+    readonly defaultPolicy?: "deny" | "prompt" | "allow";
+  }[],
+): string {
+  return JSON.stringify(
+    capabilities
+      .map((capability) =>
+        Object.fromEntries(
+          Object.entries(capability).sort(([left], [right]) =>
+            left.localeCompare(right),
+          ),
+        ),
+      )
+      .sort((left, right) => {
+        const leftName = typeof left["name"] === "string" ? left["name"] : "";
+        const rightName =
+          typeof right["name"] === "string" ? right["name"] : "";
+        return leftName.localeCompare(rightName);
+      }),
+  );
+}
+
+function validateExecutableAddonManifestAgreement(input: {
+  readonly packageEntry: WorkflowPackageManifestAddonEntry;
+  readonly localManifest: LocalNodeAddonManifest;
+}): Result<
+  WorkflowPackageAddonExecutionDescriptor | undefined,
+  WorkflowPackageFailure
+> {
+  const resolutionKind = executionKindForNodeType(
+    input.localManifest.resolution.nodeType,
+  );
+  const packageExecution = input.packageEntry.execution;
+  const localExecution = input.localManifest.execution;
+  if (packageExecution === undefined) {
+    if (localExecution !== undefined && localExecution.kind !== "declarative") {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package add-on '${input.packageEntry.name}' has executable addon.json metadata but no package manifest execution descriptor`,
+        ),
+      );
+    }
+    if (resolutionKind !== "declarative") {
+      return err(
+        packageFailure(
+          "INVALID_MANIFEST",
+          `node-addon package add-on '${input.packageEntry.name}' resolves to executable nodeType without package manifest execution metadata`,
+        ),
+      );
+    }
+    return ok(undefined);
+  }
+  if (packageExecution.kind !== resolutionKind) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `node-addon package add-on '${input.packageEntry.name}' execution kind does not match resolution nodeType`,
+      ),
+    );
+  }
+  if (localExecution === undefined) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `node-addon package add-on '${input.packageEntry.name}' addon.json is missing execution metadata`,
+      ),
+    );
+  }
+  if (
+    localExecution.kind !== packageExecution.kind ||
+    localExecution.entrypoint !== packageExecution.entrypoint ||
+    localExecution.containerfilePath !== packageExecution.containerfilePath
+  ) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `node-addon package add-on '${input.packageEntry.name}' execution metadata does not match addon.json`,
+      ),
+    );
+  }
+  const packageCapabilities = input.packageEntry.capabilities ?? [];
+  const localCapabilities = input.localManifest.capabilities ?? [];
+  if (
+    packageCapabilities.length === 0 ||
+    normalizeCapabilitiesForCompare(packageCapabilities) !==
+      normalizeCapabilitiesForCompare(localCapabilities)
+  ) {
+    return err(
+      packageFailure(
+        "INVALID_MANIFEST",
+        `node-addon package add-on '${input.packageEntry.name}' capabilities do not match addon.json`,
+      ),
+    );
+  }
+  return ok(packageExecution);
 }
 
 function restrictToReferencedFiles(input: {
@@ -375,13 +510,31 @@ export async function validateWorkflowPackageAddons(
         ),
       );
     }
-    const collectedFiles = await collectAddonFiles(source.value.addonDirectory);
+    const agreement = validateExecutableAddonManifestAgreement({
+      packageEntry: entry,
+      localManifest: manifest.value,
+    });
+    if (!agreement.ok) {
+      return agreement;
+    }
+    const allowedExecutableFiles = new Set<string>();
+    if (agreement.value?.entrypoint !== undefined) {
+      allowedExecutableFiles.add(agreement.value.entrypoint);
+    }
+    if (agreement.value?.containerfilePath !== undefined) {
+      allowedExecutableFiles.add(agreement.value.containerfilePath);
+    }
+    const collectedFiles = await collectAddonFiles(
+      source.value.addonDirectory,
+      allowedExecutableFiles,
+    );
     if (!collectedFiles.ok) {
       return collectedFiles;
     }
     const referencedFiles = referencedAddonFiles({
       addonName: entry.name,
       resolution: manifest.value.resolution,
+      ...(agreement.value === undefined ? {} : { execution: agreement.value }),
     });
     if (!referencedFiles.ok) {
       return referencedFiles;
@@ -401,6 +554,17 @@ export async function validateWorkflowPackageAddons(
     if (!digest.ok) {
       return digest;
     }
+    if (
+      entry.contentDigest !== undefined &&
+      entry.contentDigest !== digest.value
+    ) {
+      return err(
+        packageFailure(
+          "VALIDATION",
+          `node-addon package add-on '${entry.name}' contentDigest mismatch`,
+        ),
+      );
+    }
     artifacts.push({
       addonName: entry.name,
       addonVersion: entry.version,
@@ -410,6 +574,8 @@ export async function validateWorkflowPackageAddons(
       allowedFiles: allowedFiles.value,
       contentDigest: digest.value,
       contentDigestAlgorithm: "sha256",
+      ...(agreement.value === undefined ? {} : { execution: agreement.value }),
+      capabilities: entry.capabilities ?? [],
     });
   }
   return ok(artifacts);

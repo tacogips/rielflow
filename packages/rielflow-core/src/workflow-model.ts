@@ -446,6 +446,7 @@ export interface ContainerRuntimeDefaults {
 
 export interface CommandExecution {
   readonly scriptPath: string;
+  readonly runtimeScriptPath?: string;
   readonly argvTemplate?: readonly string[];
   readonly envTemplate?: Readonly<Record<string, string>>;
   readonly workingDirectory?: string;
@@ -459,6 +460,8 @@ export interface SleepNodeConfig {
 export interface ContainerBuild {
   readonly contextPath: string;
   readonly containerfilePath?: string;
+  readonly runtimeContextPath?: string;
+  readonly runtimeContainerfilePath?: string;
   readonly target?: string;
 }
 
@@ -627,6 +630,9 @@ export interface LoadOptions {
   readonly sessionStoreRoot?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
+  readonly directExecutableAddonGrants?: readonly DirectExecutableAddonGrant[];
+  readonly addonDependencyLocks?: readonly DirectExecutableAddonGrant[];
+  readonly allowUnpackagedExecutableAddons?: boolean;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";
@@ -669,6 +675,29 @@ export interface ResolvedWorkflowSource {
   readonly temporaryWorkflow?: TemporaryWorkflowSourceMetadata;
   readonly defaultVariables?: Readonly<Record<string, unknown>>;
   readonly manifestAutoImprove?: WorkflowManifestAutoImprove;
+}
+
+export interface DirectExecutableAddonCapabilityGrant {
+  readonly allowed: boolean;
+  readonly scope?: string;
+}
+
+export interface DirectExecutableAddonDependencyLock {
+  readonly name: string;
+  readonly version: string;
+  readonly contentDigest?: string;
+  readonly capabilityGrant?: Readonly<
+    Record<string, DirectExecutableAddonCapabilityGrant>
+  >;
+  readonly optional?: boolean;
+}
+
+export interface DirectExecutableAddonGrant {
+  readonly packageId: string;
+  readonly registry?: string;
+  readonly branch?: string;
+  readonly kind?: "node-addon";
+  readonly addons: readonly DirectExecutableAddonDependencyLock[];
 }
 
 export interface ResolvedAddonSource {

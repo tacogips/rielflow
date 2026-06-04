@@ -1,4 +1,5 @@
 import type { LoadedWorkflow } from "./load";
+import type { NodeValidationResult } from "./validate";
 import {
   collectWorkflowAddonSourceSummaries,
   type WorkflowAddonSourceSummary,
@@ -99,6 +100,7 @@ export interface WorkflowInspectionSummary {
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
   readonly addonSources: readonly WorkflowAddonSourceSummary[];
+  readonly nodeValidationResults: readonly NodeValidationResult[];
   readonly callable: WorkflowCallableContractSummary;
   readonly steps: readonly WorkflowStepSummary[];
   readonly runtime: WorkflowRuntimeReadiness;
@@ -283,6 +285,7 @@ export async function buildInspectionSummary(
       options,
       ...(loaded.source === undefined ? {} : { workflowSource: loaded.source }),
     }),
+    nodeValidationResults: loaded.nodeValidationResults,
     callable: deriveWorkflowCallableContractSummary(loaded.bundle),
     steps: deriveWorkflowStepSummaries(workflow),
     runtime: await inspectWorkflowRuntimeReadiness(loaded.bundle, options),

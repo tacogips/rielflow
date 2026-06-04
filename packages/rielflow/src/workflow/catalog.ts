@@ -137,7 +137,20 @@ function discoverProjectScopeRoot(options: LoadOptions): string | undefined {
   const env = options.env ?? process.env;
   const explicitProjectRoot = options.projectRoot ?? env["RIEL_PROJECT_ROOT"];
   if (explicitProjectRoot !== undefined && explicitProjectRoot.length > 0) {
-    return resolveConfiguredRootPath(explicitProjectRoot, options);
+    const resolvedProjectRoot = resolveConfiguredRootPath(
+      explicitProjectRoot,
+      options,
+    );
+    const nestedScopeRoot = path.join(resolvedProjectRoot, ".rielflow");
+    try {
+      if (statSync(nestedScopeRoot).isDirectory()) {
+        return nestedScopeRoot;
+      }
+    } catch {
+      // Treat the configured root itself as the scope root when no nested
+      // project scope exists yet.
+    }
+    return resolvedProjectRoot;
   }
 
   let current = path.resolve(resolveCwd(options));

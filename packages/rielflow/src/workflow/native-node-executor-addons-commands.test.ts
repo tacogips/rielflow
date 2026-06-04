@@ -913,6 +913,109 @@ describe("executeNativeNode", () => {
     await expectPayloadCwd(output.payload, workflowWorkingDirectory);
   });
 
+  test("keeps command scriptPath workflow-relative with absolute command workingDirectory", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "node-1");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "node-1",
+          nodeExecId: "exec-1",
+          node: {
+            id: "node-1",
+            nodeType: "command",
+            variables: {},
+            command: {
+              scriptPath: "sh",
+              workingDirectory: "/bin",
+              argvTemplate: [
+                "-c",
+                'mkdir -p "$RIEL_MAILBOX_DIR/outbox" && printf \'{"bypassed":true}\\n\' > "$RIEL_MAILBOX_DIR/outbox/output.json"',
+              ],
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "provider_error",
+    } satisfies Partial<AdapterExecutionError>);
+    await expect(
+      readFile(path.join(artifactDir, "mailbox", "outbox", "output.json")),
+    ).rejects.toThrow();
+  });
+
+  test("runs runtime-owned command script paths for executable add-ons", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    const addonDirectory = await makeTempDir();
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptPath = await writeReportCwdScript(
+      addonDirectory,
+      ".",
+      "greeting.bash",
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath,
+            runtimeScriptPath: path.join(addonDirectory, scriptPath),
+            workingDirectory: addonDirectory,
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    await expectPayloadCwd(output.payload, addonDirectory);
+  });
+
   test("returns command stdout and stderr as process log attachments", async () => {
     const workflowDirectory = await makeTempDir();
     const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");

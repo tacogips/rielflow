@@ -325,6 +325,7 @@ export interface ParsedOptions {
   readonly executablePreflight: boolean;
   readonly format?: "text" | "json" | "jsonl";
   readonly variablesPath?: string;
+  readonly directExecutableAddonGrantValues?: readonly string[];
   readonly nodePatchPath?: string;
   readonly workflowJson?: string;
   readonly workflowJsonFile?: string;

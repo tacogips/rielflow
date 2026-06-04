@@ -65,6 +65,14 @@ compatibility or historical references rather than missed primary examples.
   - Workflow packages install workflow bundles, and node packages with
     `kind: "node-addon"` install validated add-on manifests under the selected
     scope's `addons/` root.
+  - Node-addon package manifests may declare `execution`, `capabilities`,
+    `contentDigest`, and package `dependencies`. Executable artifacts such as
+    `.bash` files are accepted only when they are declared by `execution`
+    metadata and verified by both add-on `contentDigest` and package
+    `integrity`.
+  - Package dependency installation preserves normalized dependency lock
+    metadata, including workflow dependencies that require exact node-addon
+    locks and node-addon packages that depend on other node-addon packages.
   - The command reuses registry resolution, staged validation, checksum,
     integrity/signature policy, duplicate handling, `--overwrite`, `--yes`, and
     package checkout provenance for both package kinds.
@@ -74,8 +82,9 @@ compatibility or historical references rather than missed primary examples.
   - `--workflow-definition-dir` remains a workflow package destination override
     and does not redirect node package add-on projection.
   - JSON output includes `packageKind`, `installId`, registry fields, checksum
-    and integrity fields, and either installed workflow fields or installed
-    `addons[]` artifact fields.
+    and integrity fields, dependency locks, and either installed workflow fields
+    or installed `addons[]` artifact fields with execution metadata and verified
+    content digests.
 - `workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.

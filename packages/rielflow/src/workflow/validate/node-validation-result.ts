@@ -13,6 +13,7 @@ export interface NodeValidationResultInput {
   readonly path?: string;
   readonly backend?: NodeExecutionBackend;
   readonly addonName?: string;
+  readonly details?: Readonly<Record<string, unknown>>;
 }
 
 export class NodeValidationResult {
@@ -24,6 +25,7 @@ export class NodeValidationResult {
   readonly path?: string;
   readonly backend?: NodeExecutionBackend;
   readonly addonName?: string;
+  readonly details?: Readonly<Record<string, unknown>>;
 
   constructor(input: NodeValidationResultInput) {
     this.status = input.status;
@@ -45,6 +47,9 @@ export class NodeValidationResult {
     }
     if (input.addonName !== undefined) {
       this.addonName = input.addonName;
+    }
+    if (input.details !== undefined) {
+      this.details = input.details;
     }
   }
 }
