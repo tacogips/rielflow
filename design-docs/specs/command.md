@@ -181,6 +181,12 @@ compatibility or historical references rather than missed primary examples.
   - Cleanup must happen after the runner no longer needs workflow-local files such as prompts, scripts, add-on payloads, or container context. If cleanup fails, command output should report the temporary path and failure reason without changing the workflow execution result.
   - If a registry-backed run pauses or otherwise returns a resumable non-terminal local session, the command must retain the temporary checkout and persist registry-run provenance in runtime session metadata rather than normal checkout catalog metadata. That provenance must include the session id, package id, workflow name, registry id or URL, branch/ref, source path, checksum data, and `temporaryWorkflowDirectory`.
   - Local run output includes the resolved workflow `source` scope and workflow directory before execution/session details.
+  - Native command nodes resolve `command.scriptPath` relative to the workflow
+    directory. `.bash` scripts run through `bash`, `.sh` scripts run through
+    `sh`, and other script paths execute directly with ordinary host
+    executable-bit and shebang requirements. Rendered `command.argvTemplate`
+    values remain argv entries for the selected process, so interpreter
+    dispatch does not introduce shell-string interpolation.
   - `--variables <value>` supplies workflow runtime variables. The value may be an inline JSON object such as `{"hours":48}`, an existing file path such as `./vars.json`, or an explicit file reference such as `@./vars.json`.
   - Inline JSON for `workflow run --variables` is parsed only when the supplied value is syntactically a JSON object. Existing file path usage remains valid, including paths that do not start with `@`.
   - Runtime variables must parse to a JSON object; arrays, scalars, malformed inline JSON, unreadable files, and files containing non-object JSON fail before workflow execution or remote GraphQL dispatch.

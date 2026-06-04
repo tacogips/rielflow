@@ -166,16 +166,19 @@ Verification should include
 
 Native command script dispatch issue-resolution runs should keep interpreter
 selection and package-script portability visible in user-facing docs.
-Workflow-local `nodeType: "command"` scripts dispatch by extension: `.bash`
-runs through `bash`, `.sh` runs through `sh`, and other script paths run
-directly with normal host executable-bit and shebang behavior. Arguments remain
-argv entries from `command.argvTemplate`, and working-directory precedence stays
+Workflow-local `nodeType: "command"` scripts resolve `command.scriptPath`
+relative to the workflow directory and dispatch by extension: `.bash` runs
+through `bash`, `.sh` runs through `sh`, and other script paths run directly
+with normal host executable-bit and shebang behavior. Arguments remain argv
+entries from `command.argvTemplate`, and working-directory precedence stays
 `node.workingDirectory`, then `command.workingDirectory`, then the workflow
 working directory. Regression work must prove a non-executable `.bash` package
 script still runs through bash-only syntax, not a POSIX-compatible fixture that
-would pass under `/bin/sh`. Package skill projection safety remains separate:
-checkout rejects symlink or non-directory skill projection ancestors before
-copying agent skills and must preserve existing files such as `.codex`.
+would pass under `/bin/sh`. Package scanner executable-file warnings remain
+separate from runtime interpreter dispatch. Package skill projection safety
+also remains separate: checkout rejects symlink or non-directory skill
+projection ancestors before copying agent skills and must preserve existing
+files such as `.codex`.
 Documentation refresh should cover `README.md`, this workflow skill, and any
 directly affected workflow/package authoring skills. Verification should
 include `bun test packages/rielflow/src/workflow/native-node-executor-gateway.test.ts

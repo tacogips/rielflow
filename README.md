@@ -296,8 +296,9 @@ listed, or exposed through a server manifest.
 ## Command Nodes
 
 Native `nodeType: "command"` nodes can run workflow-local scripts through
-`command.scriptPath`. Rielflow selects interpreters by script extension so
-packaged scripts do not have to depend on preserved executable mode bits:
+`command.scriptPath`. Rielflow resolves `scriptPath` relative to the workflow
+directory and selects interpreters by script extension so packaged scripts do
+not have to depend on preserved executable mode bits:
 
 - `.bash` scripts run as `bash <scriptPath> ...args`
 - `.sh` scripts run as `sh <scriptPath> ...args`
@@ -306,7 +307,8 @@ packaged scripts do not have to depend on preserved executable mode bits:
 Rendered `command.argvTemplate` values are passed as argv entries rather than
 interpolated through a shell string. The effective working directory is
 `node.workingDirectory`, then `command.workingDirectory`, then the workflow
-working directory.
+working directory. Package pre-install executable-file warnings remain separate
+from this runtime dispatch behavior.
 
 ## Package Management
 
