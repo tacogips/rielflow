@@ -1047,6 +1047,7 @@ describe("package boundaries", () => {
       "normalizeNodeExecutionBackend",
       "normalizeOutputContractEnvelope",
       "normalizeSessionState",
+      "normalizeTemporaryWorkflowPayload",
       "normalizeTextBusinessPayload",
       "normalizeWorkflowNodePatchMap",
       "normalizeWorkflowWorkingDirectoryOverride",

@@ -1,6 +1,6 @@
 {
   "name": "rielflow-core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Core workflow runtime and library APIs for Rielflow",
   "type": "module",
   "main": "dist/index.js",
