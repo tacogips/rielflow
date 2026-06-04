@@ -210,6 +210,7 @@ export async function loadedTemporaryWorkflowFromNormalizedPayload(input: {
     workflowName,
     workflowDirectory: displayPath ?? "<temporary-workflow>",
     artifactWorkflowRoot,
+    workflowDefinitionJsonBody: `${JSON.stringify(input.normalizedPayload.workflow, null, 2)}\n`,
     bundle: input.normalizedPayload,
     validationIssues: [],
     nodeValidationResults: [],

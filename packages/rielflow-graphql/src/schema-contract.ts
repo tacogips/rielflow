@@ -612,6 +612,19 @@ export const GRAPHQL_SCHEMA_TEXT = `
     status: String!
   }
 
+  type DeleteWorkflowHistoryPayload {
+    deletedSessionCount: Int!
+    workflowId: String!
+    workflowName: String!
+  }
+
+  type DeleteWorkflowSessionHistoryPayload {
+    deleted: Boolean!
+    workflowExecutionId: String!
+    workflowId: String!
+    workflowName: String!
+  }
+
   type SupervisedWorkflowGraphqlPayload {
     supervisedRun: JSON!
     runnerPoolRunId: String
@@ -771,6 +784,17 @@ export const GRAPHQL_SCHEMA_TEXT = `
 
   input CancelWorkflowExecutionInput {
     workflowExecutionId: String!
+  }
+
+  input DeleteWorkflowHistoryInput {
+    workflowId: String!
+    workflowName: String!
+  }
+
+  input DeleteWorkflowSessionHistoryInput {
+    sessionId: String!
+    workflowId: String!
+    workflowName: String!
   }
 
   input EventSupervisorCommandInput {
@@ -953,6 +977,8 @@ export const GRAPHQL_SCHEMA_TEXT = `
     retryCommunicationDelivery(input: RetryCommunicationDeliveryInput!): RetryCommunicationDeliveryPayload!
     replayCommunication(input: ReplayCommunicationInput!): ReplayCommunicationPayload!
     cancelWorkflowExecution(input: CancelWorkflowExecutionInput!): CancelWorkflowExecutionPayload!
+    deleteWorkflowHistory(input: DeleteWorkflowHistoryInput!): DeleteWorkflowHistoryPayload!
+    deleteWorkflowSessionHistory(input: DeleteWorkflowSessionHistoryInput!): DeleteWorkflowSessionHistoryPayload!
     dispatchSupervisedWorkflowCommand(
       input: DispatchSupervisedWorkflowCommandInput!
     ): SupervisedWorkflowGraphqlPayload!

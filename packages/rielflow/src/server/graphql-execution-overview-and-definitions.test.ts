@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -6,9 +6,11 @@ import type { MockNodeScenario } from "../workflow/scenario-adapter";
 import { createWorkflowTemplate } from "../workflow/create";
 import { runWorkflow } from "../workflow/engine";
 import {
+  listRuntimeSessions,
   saveEventReplyDispatchToRuntimeDb,
   saveHookEventToRuntimeDb,
 } from "../workflow/runtime-db";
+import { loadSession } from "../workflow/session-store";
 import { handleGraphqlRequest } from "./graphql";
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -464,6 +466,120 @@ describe("GraphQL HTTP transport", () => {
         },
       },
     });
+  });
+
+  test("exposes workflow and session history deletion over /graphql", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+
+    const executionArtifactRoot = path.join(
+      options.artifactRoot,
+      "demo",
+      "executions",
+      session.sessionId,
+    );
+    await expect(access(executionArtifactRoot)).resolves.toBeNull();
+
+    const deleteSessionResponse = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            mutation DeleteWorkflowSessionHistory($input: DeleteWorkflowSessionHistoryInput!) {
+              deleteWorkflowSessionHistory(input: $input) {
+                deleted
+                workflowExecutionId
+                workflowId
+                workflowName
+              }
+            }
+          `,
+          variables: {
+            input: {
+              sessionId: session.sessionId,
+              workflowId: "demo",
+              workflowName: "demo",
+            },
+          },
+        }),
+      }),
+      options,
+    );
+    expect(deleteSessionResponse.status).toBe(200);
+    await expect(deleteSessionResponse.json()).resolves.toMatchObject({
+      data: {
+        deleteWorkflowSessionHistory: {
+          deleted: true,
+          workflowExecutionId: session.sessionId,
+          workflowId: "demo",
+          workflowName: "demo",
+        },
+      },
+    });
+
+    expect(await listRuntimeSessions(options)).toEqual([]);
+    expect((await loadSession(session.sessionId, options)).ok).toBe(false);
+    await expect(access(executionArtifactRoot)).rejects.toThrow();
+
+    const rerun = await runWorkflow("demo", {
+      ...options,
+      runtimeVariables: {
+        humanInput: {
+          request: "run after GraphQL session deletion",
+        },
+      },
+      mockScenario: makeDefaultTemplateScenario(),
+    });
+    expect(rerun.ok).toBe(true);
+    if (!rerun.ok) {
+      throw new Error(rerun.error.message);
+    }
+
+    const workflowArtifactRoot = path.join(options.artifactRoot, "demo");
+    await expect(access(workflowArtifactRoot)).resolves.toBeNull();
+
+    const deleteWorkflowResponse = await handleGraphqlRequest(
+      new Request("http://localhost/graphql", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `
+            mutation DeleteWorkflowHistory($input: DeleteWorkflowHistoryInput!) {
+              deleteWorkflowHistory(input: $input) {
+                deletedSessionCount
+                workflowId
+                workflowName
+              }
+            }
+          `,
+          variables: {
+            input: {
+              workflowId: "demo",
+              workflowName: "demo",
+            },
+          },
+        }),
+      }),
+      options,
+    );
+    expect(deleteWorkflowResponse.status).toBe(200);
+    await expect(deleteWorkflowResponse.json()).resolves.toMatchObject({
+      data: {
+        deleteWorkflowHistory: {
+          deletedSessionCount: 1,
+          workflowId: "demo",
+          workflowName: "demo",
+        },
+      },
+    });
+
+    expect(await listRuntimeSessions(options)).toEqual([]);
+    await expect(access(workflowArtifactRoot)).rejects.toThrow();
   });
 
   test("creates worker-only workflow definitions over /graphql", async () => {

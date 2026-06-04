@@ -8,6 +8,8 @@ import type {
   CommunicationsQueryInput,
   ContinueWorkflowExecutionInput,
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowHistoryInput,
+  DeleteWorkflowSessionHistoryInput,
   DispatchSupervisedWorkflowCommandInput,
   DispatchSupervisorChatGraphqlInput,
   DispatchSupervisorConversationGraphqlInput,
@@ -408,6 +410,23 @@ export function createExecutableGraphqlSchema(
           context: GraphqlRequestContext,
         ) {
           return schema.mutation.cancelWorkflowExecution(args.input, context);
+        },
+        deleteWorkflowHistory(
+          _parent: unknown,
+          args: { readonly input: DeleteWorkflowHistoryInput },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.deleteWorkflowHistory(args.input, context);
+        },
+        deleteWorkflowSessionHistory(
+          _parent: unknown,
+          args: { readonly input: DeleteWorkflowSessionHistoryInput },
+          context: GraphqlRequestContext,
+        ) {
+          return schema.mutation.deleteWorkflowSessionHistory(
+            args.input,
+            context,
+          );
         },
         dispatchSupervisedWorkflowCommand(
           _parent: unknown,

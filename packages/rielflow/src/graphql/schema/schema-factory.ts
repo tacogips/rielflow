@@ -17,6 +17,9 @@ import type {
   ContinueWorkflowExecutionInput,
   ContinueWorkflowExecutionPayload,
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowHistoryInput,
+  DeleteWorkflowSessionHistoryInput,
+  DeleteWorkflowSessionHistoryPayload,
   DispatchSupervisedWorkflowCommandInput,
   DispatchSupervisorChatGraphqlInput,
   DispatchSupervisorChatPayload,
@@ -65,6 +68,8 @@ import type {
   WorkflowStatusOverviewGraphqlInput,
   WorkflowView,
 } from "../types";
+import { deleteWorkflowHistory } from "../../workflow/history";
+import { deleteWorkflowSessionHistory } from "../../workflow/session-history";
 import {
   assertManagerIdentity,
   assertWorkflowExecutionScope,
@@ -426,6 +431,43 @@ export function createGraphqlSchema(
         context: GraphqlRequestContext = {},
       ): Promise<CancelWorkflowExecutionPayload> {
         return cancelWorkflowExecutionMutation(input, context, deps);
+      },
+
+      async deleteWorkflowHistory(
+        input: DeleteWorkflowHistoryInput,
+        context: GraphqlRequestContext = {},
+      ) {
+        if (context.readOnly === true) {
+          throw new Error("read-only mode enabled");
+        }
+        return deleteWorkflowHistory({
+          workflowId: input.workflowId,
+          workflowName: input.workflowName,
+          ...context,
+        });
+      },
+
+      async deleteWorkflowSessionHistory(
+        input: DeleteWorkflowSessionHistoryInput,
+        context: GraphqlRequestContext = {},
+      ): Promise<DeleteWorkflowSessionHistoryPayload> {
+        if (context.readOnly === true) {
+          throw new Error("read-only mode enabled");
+        }
+        await deleteWorkflowSessionHistory(
+          {
+            sessionId: input.sessionId,
+            workflowId: input.workflowId,
+            workflowName: input.workflowName,
+          },
+          context,
+        );
+        return {
+          deleted: true,
+          workflowExecutionId: input.sessionId,
+          workflowId: input.workflowId,
+          workflowName: input.workflowName,
+        };
       },
 
       async dispatchSupervisedWorkflowCommand(

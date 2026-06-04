@@ -19,6 +19,7 @@ import type {
   FanoutGroupSummary,
   WorkflowInspectionSummary,
 } from "../workflow/inspect";
+import type { DeleteWorkflowHistoryResult } from "../workflow/history";
 import type { ManagerControlAction } from "../workflow/manager-control";
 import type {
   DataDirFileRef,
@@ -431,6 +432,24 @@ export interface CancelWorkflowExecutionPayload {
   readonly status: WorkflowControlPlaneSessionStatus;
 }
 
+export interface DeleteWorkflowHistoryInput {
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
+export interface DeleteWorkflowSessionHistoryInput {
+  readonly sessionId: string;
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
+export interface DeleteWorkflowSessionHistoryPayload {
+  readonly deleted: boolean;
+  readonly workflowExecutionId: string;
+  readonly workflowId: string;
+  readonly workflowName: string;
+}
+
 export interface EventSupervisorCommandInput {
   readonly commandId: string;
   readonly sourceId: string;
@@ -704,6 +723,14 @@ export interface GraphqlMutationRoot {
     input: CancelWorkflowExecutionInput,
     context?: GraphqlRequestContext,
   ): Promise<CancelWorkflowExecutionPayload>;
+  deleteWorkflowHistory(
+    input: DeleteWorkflowHistoryInput,
+    context?: GraphqlRequestContext,
+  ): Promise<DeleteWorkflowHistoryResult>;
+  deleteWorkflowSessionHistory(
+    input: DeleteWorkflowSessionHistoryInput,
+    context?: GraphqlRequestContext,
+  ): Promise<DeleteWorkflowSessionHistoryPayload>;
   dispatchSupervisedWorkflowCommand(
     input: DispatchSupervisedWorkflowCommandInput,
     context?: GraphqlRequestContext,
