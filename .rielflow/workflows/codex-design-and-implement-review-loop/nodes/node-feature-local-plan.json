@@ -1,0 +1,15 @@
+{
+  "id": "feature-local-plan",
+  "description": "Produce one accepted feature-local design and implementation-plan branch result for the bounded fanout path.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "effort": "high",
+  "sessionPolicy": {
+    "mode": "reuse"
+  },
+  "promptTemplateFile": "prompts/feature-local-plan.md",
+  "variables": {},
+  "output": {
+    "description": "Return JSON with workflowMode, issueReference, featureId, featureTitle, designDocPaths, implPlanPaths, reviewDecisions, verification, addressedFeedback, and risks."
+  }
+}

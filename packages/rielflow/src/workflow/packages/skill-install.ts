@@ -62,6 +62,14 @@ async function assertNoSymlinkAncestors(input: {
           ),
         );
       }
+      if (!stats.isDirectory()) {
+        return err(
+          packageFailure(
+            "UNSAFE_PATH",
+            `skill projection ancestor is not a directory: ${cursor}`,
+          ),
+        );
+      }
       const cursorRealpath = await realpath(cursor);
       const realRelative = path.relative(rootRealpath, cursorRealpath);
       if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {

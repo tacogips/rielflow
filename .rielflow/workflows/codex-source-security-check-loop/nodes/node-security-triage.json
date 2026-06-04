@@ -1,0 +1,85 @@
+{
+  "id": "security-triage",
+  "description": "Review deterministic security evidence and source code.",
+  "executionBackend": "codex-agent",
+  "model": "gpt-5.5",
+  "promptTemplateFile": "prompts/security-triage.md",
+  "variables": {},
+  "output": {
+    "description": "Return only JSON matching this schema. Schema validation failure must be treated as an invalid output and retried.",
+    "maxValidationAttempts": 3,
+    "jsonSchema": {
+      "type": "object",
+      "required": [
+        "scanSummary",
+        "methodSummaries",
+        "methodResults",
+        "toolCoverage",
+        "findings",
+        "blockingFindings",
+        "needs_fix",
+        "fixWorkflowInput",
+        "reviewedFiles",
+        "coverageGaps",
+        "notes"
+      ],
+      "properties": {
+        "scanSummary": { "type": "string" },
+        "methodSummaries": { "type": "array", "items": { "type": "object" } },
+        "methodResults": {
+          "type": "object",
+          "required": ["secrets", "gitleaks", "static", "dependencies", "supply-chain-config"],
+          "properties": {
+            "secrets": { "type": "object" },
+            "gitleaks": { "type": "object" },
+            "static": { "type": "object" },
+            "dependencies": { "type": "object" },
+            "supply-chain-config": { "type": "object" }
+          }
+        },
+        "toolCoverage": { "type": "array", "items": { "type": "object" } },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "severity", "source", "file", "line", "evidence", "impact", "recommendation", "verification"],
+            "properties": {
+              "id": { "type": "string" },
+              "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+              "source": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": ["number", "null"] },
+              "evidence": { "type": "string" },
+              "impact": { "type": "string" },
+              "recommendation": { "type": "string" },
+              "verification": { "type": "string" }
+            }
+          }
+        },
+        "blockingFindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "severity", "source", "file", "line", "evidence", "impact", "recommendation", "verification"],
+            "properties": {
+              "id": { "type": "string" },
+              "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+              "source": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": ["number", "null"] },
+              "evidence": { "type": "string" },
+              "impact": { "type": "string" },
+              "recommendation": { "type": "string" },
+              "verification": { "type": "string" }
+            }
+          }
+        },
+        "needs_fix": { "type": "boolean" },
+        "fixWorkflowInput": { "type": ["object", "null"] },
+        "reviewedFiles": { "type": "array", "items": { "type": "string" } },
+        "coverageGaps": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

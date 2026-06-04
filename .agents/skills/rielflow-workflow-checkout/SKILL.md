@@ -23,6 +23,9 @@ hashes/checksums, install ids, workflow destinations, and installed skill
 metadata. Use `package remove --install-id <install-id>` when multiple package
 records may match the same package or workflow name; removal deletes the
 recorded workflow install plus managed/projected package skills.
+Package-installed agent skills are copied only under safe project or user skill
+roots; install rejects symlink ancestors and file ancestors before projection,
+preserving existing files such as `.codex`.
 
 Package install resolves declared `rielflow-package.json` dependencies before
 caller validation. Dependency entries may be package id strings or objects with

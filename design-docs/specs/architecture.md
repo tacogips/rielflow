@@ -81,6 +81,43 @@ Current direction:
   and server-backed start paths. See
   `design-docs/specs/design-server-workflow-manifest.md`.
 
+### Native Command Script Dispatch
+
+Native `nodeType: "command"` execution treats workflow-local scripts as data
+selected by explicit extension rules, not by host file executability alone.
+The executor resolves `command.scriptPath` under the workflow directory and
+runs known shell script types through their interpreter so packaged workflow
+scripts can remain portable across checkout systems that do not preserve
+executable mode bits.
+
+Dispatch rules:
+
+- `.bash` scripts are launched as `bash <scriptPath> ...args`
+- `.sh` scripts are launched as `sh <scriptPath> ...args`
+- other script paths are launched directly and therefore remain responsible for
+  ordinary host executability and shebang behavior
+- command arguments come from the rendered `command.argvTemplate` and are
+  passed as argv entries, not interpolated through a shell string
+- the effective working directory is
+  `node.workingDirectory ?? command.workingDirectory ?? workflowWorkingDirectory`
+- command environment remains explicit: rendered `command.envTemplate` plus
+  runtime-owned mailbox/workflow identifiers, without implicit workflow package
+  metadata injection
+
+Regression coverage must prove both extension-based interpreter selection and
+non-executable package script compatibility. A `.bash` fixture must remain
+non-executable, for example mode `0644`, and must use bash-only semantics such
+as arrays or `[[ ... ]]` so the test fails if the executor accidentally routes
+the file through `/bin/sh`. This keeps the package-script portability behavior
+observable while preventing a POSIX-compatible fixture from masking incorrect
+bash dispatch.
+
+This command-node behavior is independent from package skill projection.
+Package checkout may preserve workflow script files as non-executable, but
+vendor skill projections remain inert guidance assets governed by the package
+skill layout and projection safety design in
+`design-docs/specs/design-workflow-package-skills.md`.
+
 ### Product Rename to Rielflow
 
 The product rename changes the repository, package, command, documentation,

@@ -111,6 +111,7 @@ Agent node payload:
 - Valid `executionBackend` values are `codex-agent`, `claude-code-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
 - Do not encode backend identifiers in `model`; `model` should be a provider/backend model name.
 - Valid authored `nodeType` values are `agent`, `command`, `container`, and `user-action`. Do not author `nodeType: "addon"`.
+- For `nodeType: "command"` with workflow-local `command.scriptPath`, `.bash` scripts run through `bash`, `.sh` scripts run through `sh`, and other script paths run directly. Keep script arguments in `command.argvTemplate`; they are passed as argv entries, not shell-interpolated text.
 - A cross-workflow transition uses `toWorkflowId`, `toStepId`, and `resumeStepId`; `resumeStepId` must name a step in the current workflow.
 - A step may have at most one cross-workflow transition.
 

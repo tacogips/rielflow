@@ -48,6 +48,36 @@ The installed binary is `rielflow`.
 Built-in add-ons are bundled into the installed command; they do not require a
 separate add-on package install.
 
+### Run With Bun
+
+For development, or when you want to run directly from a source checkout, use
+Bun:
+
+```bash
+git clone https://github.com/tacogips/rielflow.git
+cd rielflow
+bun install
+bun run packages/rielflow/src/bin.ts --help
+```
+
+You can pass normal CLI commands after the entry file:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow list
+bun run packages/rielflow/src/bin.ts serve --workflow-definition-dir ./examples
+```
+
+To run the built package entry point from the checkout:
+
+```bash
+bun run build
+bun run packages/rielflow/dist/main.js --help
+```
+
+`bunx rielflow` only works when the `rielflow` npm package is available from
+the npm registry. If Bun reports that the package cannot be found, use
+Homebrew, Nix, or the source-checkout commands above.
+
 ### Optional LLM Agent Setup
 
 After installing `rielflow`, you can install standard registry skill packages
@@ -227,6 +257,21 @@ Rielflow finds workflows from these places:
 Use `--workflow-definition-dir ./examples` for examples and tests. Use the
 project or user catalog for workflows you want to keep.
 
+## Command Nodes
+
+Native `nodeType: "command"` nodes can run workflow-local scripts through
+`command.scriptPath`. Rielflow selects interpreters by script extension so
+packaged scripts do not have to depend on preserved executable mode bits:
+
+- `.bash` scripts run as `bash <scriptPath> ...args`
+- `.sh` scripts run as `sh <scriptPath> ...args`
+- other script paths run directly and use the host executable bit and shebang
+
+Rendered `command.argvTemplate` values are passed as argv entries rather than
+interpolated through a shell string. The effective working directory is
+`node.workingDirectory`, then `command.workingDirectory`, then the workflow
+working directory.
+
 ## Package Management
 
 Rielflow has a package manager for Git-backed workflow bundles and
@@ -331,6 +376,11 @@ skills, without an extra confirmation prompt. If the selected package has been
 removed from the registry, `package update` asks before removing the local
 checkout; answer `N` to keep it installed, or pass `--yes` for noninteractive
 removal.
+
+Package-installed agent skills are projected only through safe project or user
+skill roots. Checkout rejects symlink ancestors and file ancestors before
+copying skill files, so an existing file such as `.codex` is preserved instead
+of being replaced by a skill directory.
 
 Remove a package:
 

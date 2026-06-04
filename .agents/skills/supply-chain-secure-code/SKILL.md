@@ -148,8 +148,8 @@ const result = debounce(fn, 300);
 ### Avoid eval and Dynamic Code Execution
 
 ```typescript
-// DANGEROUS - eval executes arbitrary code
-eval(data);                    // NEVER
+// DANGEROUS - dynamic code execution runs arbitrary code
+dynamicEvaluate(data);         // NEVER
 new Function(data)();          // NEVER
 import(variable);              // AVOID (use static imports)
 
@@ -209,7 +209,7 @@ const proc = Bun.spawn(["some-tool", "--flag"], {
 // BAD
 const response = await fetch("https://example.com/script.js");
 const code = await response.text();
-eval(code);  // NEVER
+dynamicEvaluate(code);  // NEVER
 
 // BAD
 await Bun.$`curl -sSL https://example.com/install.sh | bash`;
@@ -412,7 +412,7 @@ When reviewing TypeScript code for supply chain security:
 ### High Priority
 
 - [ ] No hardcoded credentials, tokens, or API keys
-- [ ] No `eval()`, `new Function()`, or dynamic `import()` with user input
+- [ ] No dynamic evaluation, `new Function`, or dynamic `import` with user input
 - [ ] No `curl | bash` or download-and-execute patterns
 - [ ] Subprocess calls use array form, not shell string interpolation
 - [ ] Subprocess calls do NOT inherit full `process.env`

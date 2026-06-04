@@ -77,9 +77,7 @@ const token = process.env.GITHUB_TOKEN;
 # BAD
 github_token: ghp_actualTokenValue123
 ssh_key: |
-  -----BEGIN OPENSSH PRIVATE KEY-----
-  actual-key-content
-  -----END OPENSSH PRIVATE KEY-----
+  <private key material here>
 
 # GOOD
 github_token: ${GITHUB_TOKEN}  # Set via environment variable

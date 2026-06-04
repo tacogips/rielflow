@@ -537,8 +537,12 @@ export async function executeCommandNode(
     input.workflowWorkingDirectory,
     input.node.workingDirectory ?? commandConfig.workingDirectory,
   );
-  const command = path.extname(scriptPath) === ".sh" ? "sh" : scriptPath;
-  const args = command === "sh" ? [scriptPath, ...argv] : [...argv];
+  const extension = path.extname(scriptPath);
+  const shellCommand =
+    extension === ".bash" ? "bash" : extension === ".sh" ? "sh" : undefined;
+  const command = shellCommand ?? scriptPath;
+  const args =
+    shellCommand === undefined ? [...argv] : [scriptPath, ...argv];
 
   const result = await runLoggedSpawnedProcess({
     command,

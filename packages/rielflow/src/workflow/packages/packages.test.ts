@@ -2060,6 +2060,68 @@ describe("workflow package registry", () => {
     }
   });
 
+  test("checkout rejects file project skill projection ancestors", async () => {
+    const userRoot = await makeTempDir();
+    const registryRoot = await makeTempDir();
+    const projectRoot = await makeTempDir();
+    const packageRoot = await createPackagedWorkflow({
+      registryRoot,
+      packageName: "codex-file-ancestor-flow",
+      workflowName: "codex-file-ancestor-flow",
+    });
+    await mkdir(path.join(packageRoot, "skills", "codex", "audit"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(packageRoot, "skills", "codex", "audit", "SKILL.md"),
+      "---\nname: audit\ndescription: Audit workflows\n---\n",
+      "utf8",
+    );
+    const manifestPath = path.join(packageRoot, WORKFLOW_PACKAGE_MANIFEST_FILE);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    manifest["skillDirectory"] = "skills";
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      "utf8",
+    );
+    await refreshPackageManifestDigests({
+      packageRoot,
+      workflowDirectory: "codex-file-ancestor-flow",
+    });
+    const registered = await registerWorkflowPackageRegistry({
+      id: "local",
+      url: "https://github.com/example/rielflow-packages",
+      localPath: registryRoot,
+      options: { userRoot },
+    });
+    expect(registered.ok).toBe(true);
+    await writeFile(path.join(projectRoot, ".codex"), "codex config\n", "utf8");
+
+    const checkedOut = await checkoutWorkflowPackage({
+      packageName: "codex-file-ancestor-flow",
+      registry: "local",
+      options: { userRoot, cwd: projectRoot },
+    });
+
+    expect(checkedOut.ok).toBe(false);
+    if (!checkedOut.ok) {
+      expect(checkedOut.error.code).toBe("UNSAFE_PATH");
+      expect(checkedOut.error.message).toContain(
+        "skill projection ancestor is not a directory",
+      );
+    }
+    await expect(
+      readFile(path.join(projectRoot, ".codex"), "utf8"),
+    ).resolves.toBe("codex config\n");
+    await expect(
+      stat(path.join(projectRoot, ".codex", "skills", "audit", "SKILL.md")),
+    ).rejects.toThrow();
+  });
+
   test("checkout projects user-scope Claude and Codex skills safely", async () => {
     const homeRoot = await makeTempDir();
     const userRoot = path.join(homeRoot, ".rielflow");

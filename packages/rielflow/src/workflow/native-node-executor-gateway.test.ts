@@ -4,6 +4,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -34,6 +35,7 @@ async function writeReportCwdScript(
   workflowDirectory: string,
   relativeDirectory = "scripts",
   fileName = "report-cwd.sh",
+  mode = 0o755,
 ): Promise<string> {
   const scriptDirectory = path.join(workflowDirectory, relativeDirectory);
   await mkdir(scriptDirectory, { recursive: true });
@@ -46,7 +48,36 @@ async function writeReportCwdScript(
       `printf '{"cwd":"%s"}\n' "$PWD" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
       "",
     ].join("\n"),
-    { encoding: "utf8", mode: 0o755 },
+    { encoding: "utf8", mode },
+  );
+  return path.join(relativeDirectory, fileName);
+}
+
+async function writeBashOnlyReportCwdScript(
+  workflowDirectory: string,
+  relativeDirectory = "scripts",
+  fileName = "report-cwd.bash",
+  mode = 0o644,
+): Promise<string> {
+  const scriptDirectory = path.join(workflowDirectory, relativeDirectory);
+  await mkdir(scriptDirectory, { recursive: true });
+  const scriptPath = path.join(scriptDirectory, fileName);
+  const bashExpansionPrefix = "$";
+  await writeFile(
+    scriptPath,
+    [
+      'cwd_parts=("$PWD")',
+      `if [[ ${bashExpansionPrefix}{BASH##*/} != bash ]]; then`,
+      "  exit 43",
+      "fi",
+      `if [[ ${bashExpansionPrefix}{#cwd_parts[@]} -ne 1 ]]; then`,
+      "  exit 42",
+      "fi",
+      'mkdir -p "$RIEL_MAILBOX_DIR/outbox"',
+      `printf '{"cwd":"%s"}\n' "${bashExpansionPrefix}{cwd_parts[0]}" > "$RIEL_MAILBOX_DIR/outbox/output.json"`,
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode },
   );
   return path.join(relativeDirectory, fileName);
 }
@@ -678,6 +709,51 @@ describe("executeNativeNode", () => {
     );
 
     await expectPayloadCwd(output.payload, nodeWorkingDirectory);
+  });
+
+  test("runs non-executable bash workflow scripts through bash", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workflowWorkingDirectory = path.join(workflowDirectory, "workspace");
+    await mkdir(workflowWorkingDirectory, { recursive: true });
+    const scriptPath = await writeBashOnlyReportCwdScript(workflowDirectory);
+    const scriptStats = await stat(path.join(workflowDirectory, scriptPath));
+    expect(scriptStats.mode & 0o111).toBe(0);
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "node-1",
+        nodeExecId: "exec-1",
+        node: {
+          id: "node-1",
+          nodeType: "command",
+          variables: {},
+          command: {
+            scriptPath,
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir: path.join(workflowDirectory, "artifacts", "node-1"),
+        executionMailbox: makeExecutionMailbox(),
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    await expectPayloadCwd(output.payload, workflowWorkingDirectory);
   });
 
   test("honors command.workingDirectory when set on the native command", async () => {
