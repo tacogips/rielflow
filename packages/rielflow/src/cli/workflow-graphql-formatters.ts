@@ -97,7 +97,8 @@ export function optionsForLoadedWorkflow<T extends CliStorageOptions>(
   loadedWorkflow: LoadedWorkflow,
   options: T,
 ): T {
-  return loadedWorkflow.source === undefined
+  return loadedWorkflow.source === undefined ||
+    loadedWorkflow.source.scope === "temporary"
     ? options
     : withResolvedWorkflowSourceOptions(loadedWorkflow.source, options);
 }
@@ -107,7 +108,9 @@ export function formatWorkflowSource(
   if (source === undefined) {
     return undefined;
   }
-  return `${source.scope} ${source.workflowDirectory}`;
+  return source.scope === "temporary"
+    ? `temporary ${source.temporaryWorkflow?.input ?? "inline-json"}`
+    : `${source.scope} ${source.workflowDirectory}`;
 }
 export function workflowSourceJson(
   source: ResolvedWorkflowSource | undefined,
@@ -119,6 +122,14 @@ export function workflowSourceJson(
     scope: source.scope,
     workflowRoot: source.workflowRoot,
     workflowDirectory: source.workflowDirectory,
+    ...(source.temporaryWorkflow === undefined
+      ? {}
+      : {
+          input: source.temporaryWorkflow.input,
+          ...(source.temporaryWorkflow.displayPath === undefined
+            ? {}
+            : { displayPath: source.temporaryWorkflow.displayPath }),
+        }),
     ...(source.scopeRoot === undefined ? {} : { scopeRoot: source.scopeRoot }),
   };
 }
@@ -134,7 +145,12 @@ export function formatAddonSource(source: {
 export function assertWorkflowOverviewSourceScope(
   value: string,
 ): WorkflowSourceScope {
-  if (value === "direct" || value === "project" || value === "user") {
+  if (
+    value === "direct" ||
+    value === "project" ||
+    value === "user" ||
+    value === "temporary"
+  ) {
     return value;
   }
   throw new Error(`invalid workflow overview sourceScope '${value}'`);
@@ -386,6 +402,8 @@ export function workflowOverviewSourceScopeLabel(
       return "direct root";
     case "manifest":
       return "manifest";
+    case "temporary":
+      return "temporary";
   }
 }
 export function workflowOverviewDuplicateWarningLines(

@@ -25,6 +25,31 @@ tests may still construct legacy fixtures under explicit non-strict validation.
 
 ## Available Examples
 
+### `temporary-workflow`
+
+Temporary workflow payload runnable directly from inline JSON or a JSON file
+without project or user scope installation:
+
+- stores the complete temporary payload in `temp-workflow.json`
+- embeds the node prompt directly in JSON instead of using `prompts/*.md`
+- can be run with `--workflow-json-file` or `--workflow-json`
+- dry-run commands verify validation, source metadata, and
+  `temporary-workflow-payload/` artifact logging without calling an agent backend
+
+Run it from the JSON file:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run \
+  --workflow-json-file ./examples/temporary-workflow/temp-workflow.json \
+  --dry-run \
+  --output json \
+  --artifact-root ./tmp/temporary-workflow-example/file-artifacts \
+  --session-store ./tmp/temporary-workflow-example/file-sessions
+```
+
+See `examples/temporary-workflow/README.md` for the inline JSON command and
+payload-log inspection command.
+
 ### `worker-only-single-step`
 
 Minimal runnable reference for a manager-less workflow:

@@ -20,6 +20,7 @@ import { listRuntimeNodeExecutions, listRuntimeNodeLogs } from "./runtime-db";
 import { resolveCurrentStepId } from "./session";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 import { isSupervisionStallLastError } from "./superviser";
+import { normalizeTemporaryWorkflowPayload } from "./temporary-workflow";
 import type {
   ChatReplyDispatchRequest,
   WorkflowJson,
@@ -31,6 +32,29 @@ const deterministicAdapter = new DeterministicNodeAdapter();
 
 /** Shared workflow-load options for engine test fixtures. */
 const workflowLoadOpts = {} as const;
+
+function makeTemporaryWorkflowBundle(): unknown {
+  return {
+    workflow: {
+      workflowId: "temp-engine-demo",
+      description: "temporary engine demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "main",
+      entryStepId: "main",
+      nodes: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+      steps: [{ id: "main", nodeId: "main", role: "manager" }],
+    },
+    nodePayloads: {
+      "nodes/node-main.json": {
+        id: "main",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "do the work",
+        variables: {},
+      },
+    },
+  };
+}
 
 class OptionalDecisionAdapter implements NodeAdapter {
   managerCalls = 0;
@@ -2793,6 +2817,78 @@ async function createRootOutputThenTaskFixture(
 }
 
 describe("runWorkflow", () => {
+  test("persists temporary workflow payloads under the run artifact tree", async () => {
+    const root = await makeTempDir();
+    const artifactRoot = path.join(root, "artifacts");
+    const temporaryWorkflow = await normalizeTemporaryWorkflowPayload(
+      { kind: "inline-json", value: makeTemporaryWorkflowBundle() },
+      { artifactRoot },
+    );
+    expect(temporaryWorkflow.ok).toBe(true);
+    if (!temporaryWorkflow.ok) {
+      throw new Error("temporary workflow failed to normalize");
+    }
+
+    const result = await runWorkflow("temp-engine-demo", {
+      artifactRoot,
+      sessionStoreRoot: path.join(root, "sessions"),
+      temporaryWorkflow: temporaryWorkflow.value,
+      mockScenario: {
+        main: {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { ok: true },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    const payloadDir = path.join(
+      artifactRoot,
+      "temp-engine-demo",
+      result.value.session.sessionId,
+      "temporary-workflow-payload",
+    );
+    await expect(
+      readFile(path.join(payloadDir, "input.json"), "utf8"),
+    ).resolves.toContain("temp-engine-demo");
+    await expect(
+      readFile(path.join(payloadDir, "normalized.json"), "utf8"),
+    ).resolves.toContain("temp-engine-demo");
+    await expect(
+      readFile(path.join(payloadDir, "metadata.json"), "utf8"),
+    ).resolves.toContain("inline-json");
+    expect(result.value.session.temporaryWorkflowSource).toMatchObject({
+      scope: "temporary",
+      input: "inline-json",
+    });
+
+    const rerun = await runWorkflow("temp-engine-demo", {
+      artifactRoot,
+      sessionStoreRoot: path.join(root, "sessions"),
+      rerunFromSessionId: result.value.session.sessionId,
+      rerunFromStepId: "main",
+      mockScenario: {
+        main: {
+          provider: "scenario-mock",
+          when: { always: true },
+          payload: { rerun: true },
+        },
+      },
+    });
+    expect(rerun.ok).toBe(true);
+    if (!rerun.ok) {
+      throw new Error(rerun.error.message);
+    }
+    expect(rerun.value.session.temporaryWorkflowSource).toMatchObject({
+      scope: "temporary",
+      input: "persisted-normalized",
+    });
+  });
+
   test("executes manager-less workflows from entryStepId", async () => {
     const root = await makeTempDir();
     await createManagerlessWorkflowFixture(root, "managerless");

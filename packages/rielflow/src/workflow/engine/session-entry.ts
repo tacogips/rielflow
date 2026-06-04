@@ -26,6 +26,7 @@ const {
   cloneSupervisionForContinuedRun,
   isTerminalStatus,
   persistExternalMailboxInputCommunication,
+  persistTemporaryWorkflowPayloadLog,
 } = workflowSessionEntryPort;
 
 export type EnterWorkflowSessionResult =
@@ -47,6 +48,7 @@ export async function enterWorkflowSession(
     loaded,
     preloadedForBundlePath,
     precomputedSupervision,
+    temporaryWorkflowForRun,
     runtimeVariables,
     workflow,
     workflowNodes,
@@ -346,6 +348,31 @@ export async function enterWorkflowSession(
     };
   }
   if (options.resumeSessionId === undefined) {
+    if (temporaryWorkflowForRun !== undefined) {
+      const payloadLog = await persistTemporaryWorkflowPayloadLog({
+        artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
+        workflowExecutionId: session.sessionId,
+        inputPayload: temporaryWorkflowForRun.inputPayload,
+        normalizedPayload: temporaryWorkflowForRun.normalizedPayload,
+        metadata: temporaryWorkflowForRun.metadata,
+      });
+      if (!payloadLog.ok) {
+        return {
+          kind: "result",
+          result: err(workflowRunFailure(1, payloadLog.error.message, session)),
+        };
+      }
+      session = {
+        ...session,
+        temporaryWorkflowSource: {
+          scope: "temporary",
+          input: temporaryWorkflowForRun.metadata.input,
+          payloadDirectory: payloadLog.value.payloadDirectory,
+          normalizedPayloadPath: payloadLog.value.normalizedPath,
+          metadataPath: payloadLog.value.metadataPath,
+        },
+      };
+    }
     const humanInput = session.runtimeVariables["humanInput"];
     if (humanInput !== undefined) {
       const bootstrapCommunication =

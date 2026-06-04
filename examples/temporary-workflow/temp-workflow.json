@@ -1,0 +1,37 @@
+{
+  "workflow": {
+    "workflowId": "temporary-embedded-status",
+    "description": "Temporary workflow payload example with embedded node prompt content.",
+    "defaults": {
+      "maxLoopIterations": 3,
+      "nodeTimeoutMs": 120000
+    },
+    "entryStepId": "main-worker",
+    "nodes": [
+      {
+        "id": "main-worker",
+        "nodeFile": "nodes/node-main-worker.json"
+      }
+    ],
+    "steps": [
+      {
+        "id": "main-worker",
+        "nodeId": "main-worker",
+        "role": "worker"
+      }
+    ]
+  },
+  "nodePayloads": {
+    "nodes/node-main-worker.json": {
+      "id": "main-worker",
+      "description": "Return a compact status response for the temporary workflow example.",
+      "executionBackend": "codex-agent",
+      "model": "gpt-5-nano",
+      "promptTemplate": "Return one JSON object with status set to ok, workflow set to temporary-embedded-status, and summary set to a short sentence explaining that this workflow was loaded from a temporary embedded JSON payload.",
+      "variables": {},
+      "output": {
+        "description": "A compact JSON status object."
+      }
+    }
+  }
+}

@@ -17,6 +17,9 @@ Identify what the user wants:
 - Choose a workflow for AI/tool use: use `workflow usage --output json` first.
 - Check a workflow before running: use `workflow validate` and optionally `workflow inspect`.
 - Run locally: use `workflow run`; for important or long-running work, prefer supervised execution with `--auto-improve`.
+- Run a one-off local workflow payload: use `workflow run --workflow-json` or
+  `workflow run --workflow-json-file` when the workflow should not be installed
+  into project or user scope.
 - Run deterministically without real agents: add `--mock-scenario`.
 - Monitor an existing run: use `session progress`, `session status`, or GraphQL detail queries.
 - Continue a run: use `session resume`.
@@ -43,6 +46,42 @@ rielflow <command>
 ```
 
 Use `--workflow-definition-dir <path>` when the workflow definition bundles are not coming from scoped project/user lookup. This option points at a directory containing `<workflow-name>/workflow.json` bundles; it does not control logs, sessions, or artifacts. In this repository, examples use `--workflow-definition-dir ./examples`.
+
+Run a temporary workflow from embedded JSON when the caller has the complete
+workflow payload and does not want to install it into a project or user catalog:
+
+```bash
+bun run src/main.ts workflow run \
+  --workflow-json '{"workflow":{"workflowId":"temp-demo","description":"Temporary demo","entryStepId":"main","nodes":[{"id":"main","nodeFile":"nodes/node-main.json"}],"steps":[{"id":"main","nodeId":"main","role":"worker"}]},"nodePayloads":{"nodes/node-main.json":{"id":"main","executionBackend":"codex-agent","model":"gpt-5-nano","promptTemplate":"Return concise JSON.","variables":{}}}}' \
+  --output json
+```
+
+For larger payloads, put the same embedded bundle shape in one JSON file:
+
+```bash
+bun run src/main.ts workflow run \
+  --workflow-json-file ./temp-workflow.json \
+  --output json
+```
+
+Temporary workflow payloads must use `{ "workflow": ..., "nodePayloads": ... }`
+and embed prompt and related prompt content directly in JSON. Do not use
+`promptTemplateFile`, `systemPromptTemplateFile`,
+`sessionStartPromptTemplateFile`, `steps[].stepFile`, or node file references
+unless the referenced node payload is present in `nodePayloads`. Temporary
+workflow flags are local-only source selectors; do not combine them with a
+positional workflow target, `--workflow-definition-dir`, `--from-registry`, or
+`--endpoint`. Explicit temporary flags take precedence over
+`RIEL_WORKFLOW_DEFINITION_DIR`.
+
+JSON output reports `source.scope: "temporary"` and `source.input` as
+`"inline-json"` or `"json-file"`. During execution Rielflow writes
+`temporary-workflow-payload/input.json`, `normalized.json`, and `metadata.json`
+under the run artifact tree. Normal project, user, direct-directory, manifest,
+and registry runs must not create this directory. Local `session resume`,
+`session rerun`, and history-linked `session continue` reload temporary
+sessions from the persisted normalized payload, so they do not depend on the
+original inline string or JSON file still existing.
 
 Run a registry workflow without installing it into a scoped catalog by adding
 `--from-registry` to `workflow run`. The target can be a package id, including
@@ -207,6 +246,8 @@ bun run src/main.ts session continue <session-id> \
 - Prefer supervised execution with `--auto-improve --nested-supervisor` for real work where failure recovery matters.
 - Prefer `--output json` when the result will be parsed, saved, or compared.
 - Prefer `--mock-scenario` for demos, tests, and docs because it avoids real backend calls.
+- For temporary workflow payloads, prefer `--workflow-json-file` when the JSON
+  is large enough that shell quoting would hide validation errors.
 - Keep OpenTelemetry message payload export disabled for normal runs. Telemetry
   can be enabled with an OTLP endpoint or `RIELFLOW_OTEL_ENABLED=true`, but
   set `RIELFLOW_OTEL_EXPORT_MESSAGES=true` only for trusted fixtures.

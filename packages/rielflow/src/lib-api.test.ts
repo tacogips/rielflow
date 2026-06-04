@@ -40,6 +40,29 @@ async function writeJson(filePath: string, payload: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+function makeTemporaryWorkflowBundle(): unknown {
+  return {
+    workflow: {
+      workflowId: "temp-lib-demo",
+      description: "temporary library demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "main",
+      entryStepId: "main",
+      nodes: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+      steps: [{ id: "main", nodeId: "main", role: "manager" }],
+    },
+    nodePayloads: {
+      "nodes/node-main.json": {
+        id: "main",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "do the work",
+        variables: {},
+      },
+    },
+  };
+}
+
 async function createCallStepFixture(
   workflowRoot: string,
   workflowName: string,
@@ -543,6 +566,50 @@ describe("library api", () => {
     expect(result.workflowExecutionId).toBe(result.sessionId);
     expect(result.status).toBe("completed");
     expect(result.exitCode).toBe(0);
+  });
+
+  test("executeWorkflow runs parsed temporary workflow payload", async () => {
+    const root = await makeTempDir();
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          session: {
+            ...createSessionState({
+              sessionId: "sess-temp-lib-demo",
+              workflowName: "temp-lib-demo",
+              workflowId: "temp-lib-demo",
+              initialNodeId: "main",
+              runtimeVariables: {},
+            }),
+            status: "completed" as const,
+          },
+          exitCode: 0,
+        },
+      });
+
+    const result = await executeWorkflow({
+      workflowJsonPayload: makeTemporaryWorkflowBundle(),
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    });
+
+    expect(result).toMatchObject({
+      sessionId: "sess-temp-lib-demo",
+      status: "completed",
+      exitCode: 0,
+    });
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "temp-lib-demo",
+      expect.objectContaining({
+        temporaryWorkflow: expect.objectContaining({
+          metadata: expect.objectContaining({ input: "inline-json" }),
+        }),
+      }),
+    );
+    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty("autoImprove");
+    runWorkflowSpy.mockRestore();
   });
 
   test("rejects invalid async nodePatch before library client dispatch", async () => {

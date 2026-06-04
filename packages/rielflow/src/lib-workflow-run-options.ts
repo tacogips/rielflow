@@ -22,6 +22,12 @@ export interface LibraryWorkflowRunOptionsInput
   readonly telemetry?: WorkflowTelemetryOptions;
 }
 
+export interface TemporaryWorkflowRunInput {
+  readonly workflowJson?: string;
+  readonly workflowJsonPayload?: unknown;
+  readonly workflowJsonFile?: string;
+}
+
 export interface BuildLibraryWorkflowRunOptionsConfig {
   readonly includeWorkflowSourceOptions?: boolean;
   readonly includeRuntimeVariables?: boolean;

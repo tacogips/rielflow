@@ -627,8 +627,26 @@ export interface LoadOptions {
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";
-export type WorkflowSourceScope = "direct" | "project" | "user" | "manifest";
+export type WorkflowSourceScope =
+  | "direct"
+  | "project"
+  | "user"
+  | "manifest"
+  | "temporary";
 export type AddonSourceScope = "direct" | "project" | "user";
+
+export type TemporaryWorkflowSourceInputKind =
+  | "inline-json"
+  | "json-file"
+  | "persisted-normalized";
+
+export interface TemporaryWorkflowSourceMetadata {
+  readonly input: TemporaryWorkflowSourceInputKind;
+  readonly displayPath?: string;
+  readonly payloadDirectory?: string;
+  readonly normalizedPayloadPath?: string;
+  readonly contentDigest?: string;
+}
 
 export interface WorkflowManifestAutoImprove {
   readonly mode: "active" | "disabled";
@@ -645,6 +663,7 @@ export interface ResolvedWorkflowSource {
   readonly manifestEntryId?: string;
   readonly authoredWorkflowId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly temporaryWorkflow?: TemporaryWorkflowSourceMetadata;
   readonly defaultVariables?: Readonly<Record<string, unknown>>;
   readonly manifestAutoImprove?: WorkflowManifestAutoImprove;
 }

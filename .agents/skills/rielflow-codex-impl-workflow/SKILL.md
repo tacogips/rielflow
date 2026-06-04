@@ -125,6 +125,20 @@ directly affected example README such as `examples/README.md` or
 `examples/event-sources/README.md`, and workflow-local `EXPECTED_RESULTS.md`
 when deterministic fixtures, event payloads, or validation commands change.
 
+Temporary workflow issue-resolution runs should keep local one-off execution
+behavior explicit in user-facing docs. Refresh `README.md`,
+`.agents/skills/rielflow-workflow-run/SKILL.md`, and this skill when changes
+affect `workflow run --workflow-json`, `workflow run --workflow-json-file`,
+embedded prompt/content validation, `temporary-workflow-payload/` artifact
+logging, or resume/rerun/continue reload from persisted temporary payloads.
+Temporary workflow behavior is provider-neutral: `codex-agent` may appear in a
+node payload, but command parsing, validation, payload persistence, and session
+reload must not special-case the Codex backend. Verification should keep these
+commands explicit: `bun run packages/rielflow/src/bin.ts workflow run --help`,
+focused temporary workflow CLI/API/session tests, inline JSON and JSON-file
+smoke runs, a normal scoped/direct run proving no `temporary-workflow-payload/`
+directory is created, `bun run typecheck`, and `bun run biome check .`.
+
 Built-in add-on package boundary issue-resolution runs should keep
 source-tree-versus-dist behavior explicit in design, implementation plans,
 tests, and user-facing docs. When `rielflow` executes from

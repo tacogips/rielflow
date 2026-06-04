@@ -9,6 +9,11 @@ import {
   loadSession,
   saveSession,
 } from "./session-store";
+import {
+  loadPersistedTemporaryWorkflowPayload,
+  persistTemporaryWorkflowPayloadLog,
+} from "./temporary-workflow-payload-log";
+import type { NormalizedWorkflowBundle } from "./types";
 
 const tempDirs: string[] = [];
 
@@ -29,6 +34,62 @@ afterEach(async () => {
 });
 
 describe("session-store", () => {
+  test("persists and reloads temporary workflow payload logs", async () => {
+    const root = await makeTempDir();
+    const bundle: NormalizedWorkflowBundle = {
+      workflow: {
+        workflowId: "temp-demo",
+        description: "temporary demo",
+        defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+        managerStepId: "main",
+        entryStepId: "main",
+        nodeRegistry: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+        nodes: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+        steps: [{ id: "main", nodeId: "main", role: "manager" }],
+      },
+      nodePayloads: {
+        main: {
+          id: "main",
+          executionBackend: "codex-agent",
+          model: "gpt-5-nano",
+          promptTemplate: "do the work",
+          variables: {},
+        },
+      },
+    };
+
+    const persisted = await persistTemporaryWorkflowPayloadLog({
+      artifactWorkflowRoot: root,
+      workflowExecutionId: "riel-temp-demo-123456-test",
+      inputPayload: {
+        workflow: bundle.workflow,
+        nodePayloads: bundle.nodePayloads,
+      },
+      normalizedPayload: bundle,
+      metadata: { input: "inline-json", contentDigest: "digest" },
+    });
+
+    expect(persisted.ok).toBe(true);
+    if (!persisted.ok) {
+      throw new Error("temporary payload log failed to persist");
+    }
+    await expect(
+      readFile(persisted.value.inputPath, "utf8"),
+    ).resolves.toContain("temp-demo");
+
+    const loaded = await loadPersistedTemporaryWorkflowPayload({
+      artifactWorkflowRoot: root,
+      workflowExecutionId: "riel-temp-demo-123456-test",
+      options: { artifactRoot: root },
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) {
+      throw new Error("temporary payload log failed to load");
+    }
+    expect(loaded.value.metadata.input).toBe("persisted-normalized");
+    expect(loaded.value.loadedWorkflow.source?.scope).toBe("temporary");
+  });
+
   test("uses ~/.rielflow/artifacts/sessions when unset", async () => {
     const root = await makeTempDir();
     const resolved = getSessionStoreRoot({ cwd: root, env: {} });

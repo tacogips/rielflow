@@ -33,6 +33,7 @@ export {
   type CandidatePayloadResolutionError,
 } from "../runtime-execution-contracts";
 import type { MockNodeScenario } from "../scenario-adapter";
+import type { LoadedTemporaryWorkflow } from "../temporary-workflow";
 import { evaluateBranch } from "../semantics";
 import type {
   CommunicationRecord,
@@ -130,6 +131,7 @@ export interface WorkflowRunOptions
   readonly onProgress?: (event: WorkflowRunProgressEvent) => void;
   /** Process startup telemetry controls; message export defaults to false. */
   readonly telemetry?: WorkflowTelemetryOptions;
+  readonly temporaryWorkflow?: LoadedTemporaryWorkflow;
 }
 export type NormalizedWorkflowRunOptions = Omit<
   WorkflowRunOptions,

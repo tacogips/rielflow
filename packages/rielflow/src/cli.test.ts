@@ -169,6 +169,29 @@ function makeDefaultTemplateScenario(): Readonly<Record<string, unknown>> {
   };
 }
 
+function makeTemporaryWorkflowBundle(): unknown {
+  return {
+    workflow: {
+      workflowId: "temp-demo",
+      description: "temporary demo",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "main",
+      entryStepId: "main",
+      nodes: [{ id: "main", nodeFile: "nodes/node-main.json" }],
+      steps: [{ id: "main", nodeId: "main", role: "manager" }],
+    },
+    nodePayloads: {
+      "nodes/node-main.json": {
+        id: "main",
+        executionBackend: "codex-agent",
+        model: "gpt-5-nano",
+        promptTemplate: "do the work",
+        variables: {},
+      },
+    },
+  };
+}
+
 function createIoCapture(): {
   stdout: string[];
   stderr: string[];
@@ -818,6 +841,96 @@ describe("runCli", () => {
     expect(parsed.options.fromRegistry).toBe(true);
     expect(parsed.options.registry).toBe("local");
     expect(parsed.options.branch).toBe("feature/test");
+  });
+
+  test("parses temporary workflow run flags", () => {
+    const parsed = parseArgs([
+      "workflow",
+      "run",
+      "--workflow-json",
+      JSON.stringify(makeTemporaryWorkflowBundle()),
+    ]);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.options.workflowJson).toContain("temp-demo");
+  });
+
+  test("workflow run executes inline temporary workflow JSON", async () => {
+    const root = await makeTempDir();
+    const runWorkflowSpy = vi
+      .spyOn(workflowEngine, "runWorkflow")
+      .mockResolvedValue(
+        ok({
+          session: createSessionState({
+            sessionId: "riel-temp-demo-123456-abcd",
+            workflowName: "temp-demo",
+            workflowId: "temp-demo",
+            initialNodeId: "main",
+            runtimeVariables: {},
+          }),
+          exitCode: 0,
+        } satisfies workflowEngine.WorkflowRunResult),
+      );
+    const capture = createIoCapture();
+
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "--workflow-json",
+        JSON.stringify(makeTemporaryWorkflowBundle()),
+        "--artifact-root",
+        path.join(root, "artifacts"),
+        "--output",
+        "json",
+      ],
+      capture.io,
+      createCliDeps({
+        env: {
+          RIEL_WORKFLOW_DEFINITION_DIR: path.join(root, "ignored-workflows"),
+        },
+      }),
+    );
+
+    expect(code).toBe(0);
+    expect(runWorkflowSpy).toHaveBeenCalledWith(
+      "temp-demo",
+      expect.objectContaining({
+        temporaryWorkflow: expect.objectContaining({
+          metadata: expect.objectContaining({ input: "inline-json" }),
+        }),
+      }),
+    );
+    expect(runWorkflowSpy.mock.calls[0]?.[1]).not.toHaveProperty(
+      "workflowRoot",
+    );
+    const payload = JSON.parse(capture.stdout.join("\n")) as {
+      source: { scope: string; input: string };
+    };
+    expect(payload.source).toMatchObject({
+      scope: "temporary",
+      input: "inline-json",
+    });
+    runWorkflowSpy.mockRestore();
+  });
+
+  test("workflow run rejects temporary workflow mixed with explicit source selector", async () => {
+    const capture = createIoCapture();
+    const code = await runCli(
+      [
+        "workflow",
+        "run",
+        "--workflow-json",
+        JSON.stringify(makeTemporaryWorkflowBundle()),
+        "--workflow-definition-dir",
+        "workflows",
+      ],
+      capture.io,
+      createCliDeps(),
+    );
+
+    expect(code).toBe(2);
+    expect(capture.stderr.join("\n")).toContain("--workflow-definition-dir");
   });
 
   test("rejects conflicting pre-install check CLI flags", () => {

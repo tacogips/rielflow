@@ -12,10 +12,11 @@ import {
   type LoadedWorkflow,
 } from "../load";
 import { recordWorkflowPatchRevision } from "../mutable-workspace";
-import { resolveEffectiveRoots } from "../paths";
+import { resolveEffectiveRoots, resolveWorkflowScopedPath } from "../paths";
 import { err, ok, type Result } from "../result";
 import { createSessionId, type WorkflowSessionState } from "../session";
 import { loadSession, saveSession } from "../session-store";
+import { loadPersistedTemporaryWorkflowPayload } from "../temporary-workflow-payload-log";
 import {
   getEngineSupervisionPatcherId,
   isSupervisionStallLastError,
@@ -166,10 +167,22 @@ export async function runAutoImproveLoop(
       options,
       failedSession,
     );
-    const wfForTarget = await loadWorkflowFromDisk(
-      workflowName,
-      loadOptsForTarget,
+    const rootsForTarget = resolveEffectiveRoots(loadOptsForTarget);
+    const tempArtifactWorkflowRoot = resolveWorkflowScopedPath(
+      rootsForTarget.artifactRoot,
+      failedSession.workflowId,
     );
+    const wfForTarget =
+      failedSession.temporaryWorkflowSource !== undefined &&
+      tempArtifactWorkflowRoot !== undefined
+        ? await loadPersistedTemporaryWorkflowPayload({
+            artifactWorkflowRoot: tempArtifactWorkflowRoot,
+            workflowExecutionId: failedSession.sessionId,
+            options: loadOptsForTarget,
+          }).then((loaded) =>
+            loaded.ok ? ok(loaded.value.loadedWorkflow) : err(loaded.error),
+          )
+        : await loadWorkflowFromDisk(workflowName, loadOptsForTarget);
     if (!wfForTarget.ok) {
       return err(
         workflowRunFailure(
@@ -344,10 +357,10 @@ export async function runWorkflow(
     normalizedOptions.autoImprove !== undefined &&
     freshRunForWorkflowDefaults
   ) {
-    const loadedForDefaults = await loadWorkflowFromDisk(
-      workflowName,
-      normalizedOptions,
-    );
+    const loadedForDefaults =
+      normalizedOptions.temporaryWorkflow === undefined
+        ? await loadWorkflowFromDisk(workflowName, normalizedOptions)
+        : ok(normalizedOptions.temporaryWorkflow.loadedWorkflow);
     if (!loadedForDefaults.ok) {
       return err(
         workflowRunFailure(
