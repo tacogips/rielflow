@@ -6,7 +6,8 @@ export type CliAgentBackend =
 export type NodeExecutionBackend =
   | CliAgentBackend
   | "official/openai-sdk"
-  | "official/anthropic-sdk";
+  | "official/anthropic-sdk"
+  | "official/cursor-sdk";
 
 export const NODE_REASONING_EFFORTS = [
   "low",
@@ -22,6 +23,7 @@ export const NODE_EXECUTION_BACKEND = {
   CURSOR_CLI_AGENT: "cursor-cli-agent",
   OFFICIAL_OPENAI_SDK: "official/openai-sdk",
   OFFICIAL_ANTHROPIC_SDK: "official/anthropic-sdk",
+  OFFICIAL_CURSOR_SDK: "official/cursor-sdk",
 } as const;
 
 export const CLI_AGENT_BACKENDS = [
@@ -34,6 +36,7 @@ export const NODE_EXECUTION_BACKENDS = [
   ...CLI_AGENT_BACKENDS,
   NODE_EXECUTION_BACKEND.OFFICIAL_OPENAI_SDK,
   NODE_EXECUTION_BACKEND.OFFICIAL_ANTHROPIC_SDK,
+  NODE_EXECUTION_BACKEND.OFFICIAL_CURSOR_SDK,
 ] as const satisfies readonly NodeExecutionBackend[];
 
 export const NODE_EXECUTION_BACKEND_LIST_TEXT = formatDisjunction(

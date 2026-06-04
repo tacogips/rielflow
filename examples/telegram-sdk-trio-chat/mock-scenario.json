@@ -1,0 +1,25 @@
+{
+  "route-message": {
+    "provider": "scenario-mock",
+    "model": "router",
+    "when": {
+      "target_yui": false,
+      "target_mika": false,
+      "target_rina": true
+    },
+    "payload": {
+      "target": "rina",
+      "reason": "The user explicitly called Rina.",
+      "target_yui": false,
+      "target_mika": false,
+      "target_rina": true
+    }
+  },
+  "rina-cursor-sdk": {
+    "provider": "scenario-mock",
+    "model": "composer-2",
+    "payload": {
+      "text": "Rinaです。SDK版のトリオ構成なら、Telegram入力をルーターで分けて、各SDK workerが本文だけ返し、最後にchat-reply-workerで送る形が一番シンプルです。"
+    }
+  }
+}

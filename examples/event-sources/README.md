@@ -302,6 +302,13 @@ image bytes, OCR images, transcribe media, process commands, or handle inline
 keyboard callbacks in this slice. Persisted history stores only bounded
 normalized chat items and never stores bot tokens.
 
+The SDK-backed variant `telegram-sdk-trio-chat` is also wired through the
+disabled binding `telegram-gateway-sdk-trio-to-workflow.json`. To serve the SDK
+variant, enable that binding and disable
+`telegram-gateway-personas-to-workflow.json` so one Telegram message does not
+produce duplicate replies. Live SDK replies require `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, and `CURSOR_API_KEY`.
+
 The `telegram-time-signal-cron` source demonstrates scheduled Telegram output
 for the trio chat. It uses the six-field cron schedule `*/30 * * * * *`, so the
 event runner wakes every 30 seconds. The companion workflow

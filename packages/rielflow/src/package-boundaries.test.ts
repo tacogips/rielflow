@@ -667,6 +667,7 @@ describe("package boundaries", () => {
           "anthropic-sdk.d.ts",
           "claude.d.ts",
           "codex.d.ts",
+          "cursor-sdk.d.ts",
           "cursor.d.ts",
           "dispatch.d.ts",
           "index.d.ts",
@@ -880,6 +881,7 @@ describe("package boundaries", () => {
         "packages/rielflow-adapters/dist/claude.d.ts",
         "packages/rielflow-adapters/dist/codex.d.ts",
         "packages/rielflow-adapters/dist/cursor.d.ts",
+        "packages/rielflow-adapters/dist/cursor-sdk.d.ts",
         "packages/rielflow-adapters/dist/dispatch.d.ts",
         "packages/rielflow-adapters/dist/index.d.ts",
         "packages/rielflow-adapters/dist/llm-session-stall-watch.d.ts",
@@ -1101,7 +1103,8 @@ describe("package boundaries", () => {
     expect(coreEntrypoint).not.toContain("executeNativeNode");
     expect(coreEntrypoint).not.toContain("createNodeAddonRegistry");
     expect(coreEntrypoint).not.toContain("native-node");
-    expect(coreEntrypoint).not.toContain("node-addons");
+    expect(coreEntrypoint).not.toContain("rielflow-addons/src/node-addons");
+    expect(coreEntrypoint).not.toContain("rielflow/src/workflow/node-addons");
     expect(coreEntrypoint).not.toContain("rielflow/git-commit");
     expect(coreEntrypoint).not.toContain("rielflow/git-push");
     expect(coreEntrypoint).not.toContain("rielflow/x-gateway");

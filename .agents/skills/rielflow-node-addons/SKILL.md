@@ -17,6 +17,9 @@ Current built-ins, version `1`:
 - `rielflow/chat-persona-router`
 - `rielflow/codex-worker`
 - `rielflow/claude-code-worker`
+- `rielflow/codex-sdk-worker`
+- `rielflow/claude-sdk-worker`
+- `rielflow/cursor-sdk-worker`
 - `rielflow/workflow-package-sandbox-review`
 - `rielflow/x-gateway-read`
 - `rielflow/x-gateway`
@@ -69,6 +72,10 @@ registry node add-on packages. Use `--user-scope` for user-wide installs and
 - `addon.inputs` becomes resolved node `variables`.
 - `addon.config` is validated by the add-on descriptor.
 - `addon.env` is explicit; ambient environment variables are not forwarded implicitly.
+- SDK worker add-ons use the standard backend environment variables:
+  `OPENAI_API_KEY` for `rielflow/codex-sdk-worker`, `ANTHROPIC_API_KEY` for
+  `rielflow/claude-sdk-worker`, and `CURSOR_API_KEY` for
+  `rielflow/cursor-sdk-worker`.
 - Use `rielflow/chat-persona-router` for provider-neutral chat persona
   selection instead of Discord-, Telegram-, or Matrix-specific routing prompts.
 - Use `rielflow/chat-reply-worker` for chat replies so provider destinations own

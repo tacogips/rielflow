@@ -275,6 +275,34 @@ bun run packages/rielflow/src/bin.ts workflow run telegram-agent-trio-chat \
   --input '{"request":"Yui, give your opinion and ask Mika too"}'
 ```
 
+### `telegram-sdk-trio-chat`
+
+Minimal Telegram trio chat workflow using the SDK-backed worker add-ons:
+
+- routes normalized Telegram messages through `rielflow/chat-persona-router`
+- `Yui Codex SDK` uses `rielflow/codex-sdk-worker`
+- `Mika Claude SDK` uses `rielflow/claude-sdk-worker`
+- `Rina Cursor SDK` uses `rielflow/cursor-sdk-worker`
+- replies use `rielflow/chat-reply-worker` and dry-run when a local run has no
+  Telegram chat target
+- the deterministic mock scenario exercises the routing and reply path without
+  requiring live SDK API keys
+
+Validate it:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow validate telegram-sdk-trio-chat --workflow-definition-dir ./examples
+```
+
+Run the bundled deterministic Rina scenario:
+
+```bash
+bun run packages/rielflow/src/bin.ts workflow run telegram-sdk-trio-chat \
+  --workflow-definition-dir ./examples \
+  --mock-scenario ./examples/telegram-sdk-trio-chat/mock-scenario.json \
+  --input '{"request":"Rina, explain the SDK trio setup"}'
+```
+
 ### `telegram-agent-trio-time-signal`
 
 Scheduled Telegram reply companion for the Telegram trio chat:

@@ -45,6 +45,7 @@ test-results/
 tmp/
 temp/
 .cache/
+telegram-sdk/
 
 # Implementation progress lock file
 impl-plans/.progress.lock

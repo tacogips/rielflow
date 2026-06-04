@@ -182,7 +182,10 @@ async function probeCrossWorkflowDispatchRuntime(
 }
 
 function probeEnvConfiguredBackend(input: {
-  readonly backend: "official/openai-sdk" | "official/anthropic-sdk";
+  readonly backend:
+    | "official/openai-sdk"
+    | "official/anthropic-sdk"
+    | "official/cursor-sdk";
   readonly envName: string;
   readonly sourceStepIds: readonly string[];
   readonly models: ReadonlySet<string>;
@@ -551,6 +554,17 @@ export async function inspectWorkflowRuntimeReadiness(
           probeEnvConfiguredBackend({
             backend: candidate.backend,
             envName: "ANTHROPIC_API_KEY",
+            sourceStepIds: candidate.sourceStepIds,
+            models: candidate.models,
+            env: options.env,
+          }),
+        );
+        break;
+      case "official/cursor-sdk":
+        requirements.push(
+          probeEnvConfiguredBackend({
+            backend: candidate.backend,
+            envName: "CURSOR_API_KEY",
             sourceStepIds: candidate.sourceStepIds,
             models: candidate.models,
             env: options.env,

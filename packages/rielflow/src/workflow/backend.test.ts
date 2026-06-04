@@ -12,7 +12,7 @@ import {
 describe("workflow backend constants and normalizers", () => {
   test("normalizes every canonical node execution backend", () => {
     expect(NODE_EXECUTION_BACKEND_LIST_TEXT).toBe(
-      "codex-agent, claude-code-agent, cursor-cli-agent, official/openai-sdk, or official/anthropic-sdk",
+      "codex-agent, claude-code-agent, cursor-cli-agent, official/openai-sdk, official/anthropic-sdk, or official/cursor-sdk",
     );
 
     for (const backend of NODE_EXECUTION_BACKENDS) {
@@ -34,6 +34,7 @@ describe("workflow backend constants and normalizers", () => {
     expect(nonCliBackends).toEqual([
       NODE_EXECUTION_BACKEND.OFFICIAL_OPENAI_SDK,
       NODE_EXECUTION_BACKEND.OFFICIAL_ANTHROPIC_SDK,
+      NODE_EXECUTION_BACKEND.OFFICIAL_CURSOR_SDK,
     ]);
     for (const backend of nonCliBackends) {
       expect(normalizeCliAgentBackend(backend)).toBeNull();

@@ -12,6 +12,7 @@ import type { AnthropicSdkAdapterConfig } from "./anthropic-sdk";
 import type { ClaudeAdapterConfig } from "./claude";
 import type { CodexAdapterConfig } from "./codex";
 import type { CursorAdapterConfig } from "./cursor";
+import type { CursorSdkAdapterConfig } from "./cursor-sdk";
 import type { OpenAiSdkAdapterConfig } from "./openai-sdk";
 
 export interface DispatchingNodeAdapterConfig {
@@ -20,6 +21,7 @@ export interface DispatchingNodeAdapterConfig {
   readonly cursorCliAgent?: CursorAdapterConfig;
   readonly openAiSdk?: OpenAiSdkAdapterConfig;
   readonly anthropicSdk?: AnthropicSdkAdapterConfig;
+  readonly cursorSdk?: CursorSdkAdapterConfig;
   readonly registry?: NodeAdapterRegistry;
 }
 
@@ -102,6 +104,10 @@ function createDefaultNodeAdapterRegistry(
     [NODE_EXECUTION_BACKEND.OFFICIAL_ANTHROPIC_SDK]: async () => {
       const { AnthropicSdkAdapter } = await import("./anthropic-sdk");
       return new AnthropicSdkAdapter(config.anthropicSdk);
+    },
+    [NODE_EXECUTION_BACKEND.OFFICIAL_CURSOR_SDK]: async () => {
+      const { CursorSdkAdapter } = await import("./cursor-sdk");
+      return new CursorSdkAdapter(config.cursorSdk);
     },
   };
 }

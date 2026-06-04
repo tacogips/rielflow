@@ -115,6 +115,22 @@ parallel:
 - `rielflow/chat-reply-worker` sends the reply through the event destination
   publisher and the source-specific adapter
 
+The SDK-backed Telegram trio example is a sibling, not a replacement, for the
+non-SDK Telegram trio:
+
+- `examples/telegram-agent-trio-chat` keeps Yui Codex, Mika Claude Code, and
+  Rina Cursor on CLI-agent backends.
+- `examples/telegram-sdk-trio-chat` keeps the same router and reply-worker graph
+  shape while using `rielflow/codex-sdk-worker`,
+  `rielflow/claude-sdk-worker`, and `rielflow/cursor-sdk-worker`.
+- `examples/event-sources/.rielflow-events/bindings/telegram-gateway-sdk-trio-to-workflow.json`
+  binds the SDK trio to the same normalized `telegram-gateway` event source and
+  the same Telegram reply destination family.
+
+The SDK trio exists to validate add-on-backed provider SDK execution in a live
+chat workflow without changing the behavior or documentation contract of
+existing non-SDK Discord, Telegram, and Matrix examples.
+
 The Matrix trio example must copy the provider-neutral authoring pattern from
 the Discord and Telegram trio examples without copying provider parsing or
 Matrix Client-Server API details into workflow prompts. The existing
@@ -250,6 +266,12 @@ adapter. The event layer must not special-case Cursor, and Cursor-agent
 behavior must not alter Telegram/Discord/Matrix event normalization, reply
 target mapping, destination publishing, or chat add-on validation.
 
+For the SDK trio, Rina Cursor uses `rielflow/cursor-sdk-worker`, which resolves
+to `official/cursor-sdk`. Cursor SDK behavior is isolated behind
+`packages/rielflow-adapters/src/cursor-sdk.ts` and must not leak Bun child
+process details, JSONL store paths, or SDK credential handling into the
+Telegram event binding or workflow JSON.
+
 ## Intentional Divergences
 
 - Diverges from Chat SDK Telegram by using a native `telegram-gateway` event
@@ -266,6 +288,9 @@ target mapping, destination publishing, or chat add-on validation.
 - Diverges from the earlier Matrix sample-only design by requiring a dedicated
   Matrix trio workflow and event binding while retaining `matrix-chat-reply` as
   a focused reply-worker fixture.
+- Diverges from the non-SDK Telegram trio only at the persona worker backend
+  boundary; event normalization, router aliases, reply-worker behavior, and
+  destination publishing remain shared.
 
 ## Usage Examples
 
@@ -273,6 +298,7 @@ Validate the example workflow and event configuration:
 
 ```bash
 bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-chat --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate telegram-sdk-trio-chat --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts workflow validate matrix-agent-trio-chat --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
 ```
@@ -294,9 +320,11 @@ run these commands:
 bun test packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts packages/rielflow/src/events/adapters/discord-gateway.test.ts packages/rielflow/src/events/adapters/telegram-gateway.test.ts packages/rielflow/src/events/adapters/matrix.test.ts packages/rielflow/src/workflow/adapters/codex.test.ts
 bun run packages/rielflow/src/bin.ts workflow validate discord-agent-trio-chat --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts workflow validate telegram-agent-trio-chat --workflow-definition-dir ./examples
+bun run packages/rielflow/src/bin.ts workflow validate telegram-sdk-trio-chat --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts workflow validate matrix-agent-trio-chat --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts workflow validate matrix-chat-reply --workflow-definition-dir ./examples
 bun run packages/rielflow/src/bin.ts events validate --workflow-definition-dir ./examples --event-root ./examples/event-sources/.rielflow-events
+bun test packages/rielflow/src/workflow/adapters/cursor-sdk.test.ts packages/rielflow/src/workflow/node-addons/sdk-agent-workers.test.ts packages/rielflow/src/workflow/adapters/official-sdk-live-smoke.test.ts
 bun test packages/rielflow/src/events/matrix-chat-reply-example.test.ts packages/rielflow/src/events/adapters/matrix.test.ts packages/rielflow/src/events/reply-dispatcher.test.ts
 bun run typecheck
 bun run lint:biome

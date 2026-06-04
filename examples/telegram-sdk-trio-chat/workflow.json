@@ -1,0 +1,200 @@
+{
+  "workflowId": "telegram-sdk-trio-chat",
+  "description": "Route normalized Telegram messages to a simple trio of SDK-backed personas: Yui Codex via the OpenAI SDK, Mika Claude via the Anthropic SDK, and Rina Cursor via the Cursor SDK. Replies are sent through the Telegram Gateway chat reply destination.",
+  "defaults": {
+    "maxLoopIterations": 3,
+    "nodeTimeoutMs": 180000
+  },
+  "prompts": {
+    "workerSystemPromptTemplate": "Return only the visible Telegram reply text. Do not include JSON, routing details, backend names, or workflow internals.",
+    "chatFailureMessageTemplate": "ごめん、{{node.id}}はいま少し調子が悪いみたい。少し待ってからもう一度呼んでね。"
+  },
+  "entryStepId": "route-message",
+  "nodes": [
+    {
+      "id": "route-message",
+      "addon": {
+        "name": "rielflow/chat-persona-router",
+        "version": "1",
+        "config": {
+          "defaultPersonaId": "yui",
+          "personas": [
+            {
+              "id": "yui",
+              "name": "Yui Codex SDK",
+              "aliases": [
+                "yui",
+                "codex",
+                "openai",
+                "default bot"
+              ]
+            },
+            {
+              "id": "mika",
+              "name": "Mika Claude SDK",
+              "aliases": [
+                "mika",
+                "claude",
+                "anthropic",
+                "trend"
+              ]
+            },
+            {
+              "id": "rina",
+              "name": "Rina Cursor SDK",
+              "aliases": [
+                "rina",
+                "cursor",
+                "technical"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "yui-codex-sdk",
+      "addon": {
+        "name": "rielflow/codex-sdk-worker",
+        "version": "1",
+        "config": {
+          "model": "gpt-5-nano",
+          "systemPromptTemplate": "You are Yui Codex SDK, a calm Japanese secretary persona replying in Telegram. Be concise and practical.",
+          "promptTemplate": "Reply to this Telegram message as Yui. Use natural Japanese unless the user asks for another language.\n\nUser display name: {{event.actor.displayName}}\nConversation id: {{event.conversation.id}}\nThread id: {{event.conversation.threadId}}\nMessage: {{event.input.text}}\nAttachments: {{event.input.attachments}}\nWorkflow input: {{input}}\n\nReturn only the message text to send."
+        }
+      }
+    },
+    {
+      "id": "mika-claude-sdk",
+      "addon": {
+        "name": "rielflow/claude-sdk-worker",
+        "version": "1",
+        "config": {
+          "model": "claude-haiku-4-5",
+          "systemPromptTemplate": "You are Mika Claude SDK, a bright Japanese trend-aware persona replying in Telegram. Keep the tone casual but useful.",
+          "promptTemplate": "Reply to this Telegram message as Mika. Use natural Japanese unless the user asks for another language.\n\nUser display name: {{event.actor.displayName}}\nConversation id: {{event.conversation.id}}\nThread id: {{event.conversation.threadId}}\nMessage: {{event.input.text}}\nAttachments: {{event.input.attachments}}\nWorkflow input: {{input}}\n\nReturn only the message text to send."
+        }
+      }
+    },
+    {
+      "id": "rina-cursor-sdk",
+      "addon": {
+        "name": "rielflow/cursor-sdk-worker",
+        "version": "1",
+        "config": {
+          "model": "composer-2",
+          "systemPromptTemplate": "You are Rina Cursor SDK, a precise Japanese technical analyst persona replying in Telegram. Be direct and specific.",
+          "promptTemplate": "Reply to this Telegram message as Rina. Use natural Japanese unless the user asks for another language.\n\nUser display name: {{event.actor.displayName}}\nConversation id: {{event.conversation.id}}\nThread id: {{event.conversation.threadId}}\nMessage: {{event.input.text}}\nAttachments: {{event.input.attachments}}\nWorkflow input: {{input}}\n\nReturn only the message text to send."
+        }
+      }
+    },
+    {
+      "id": "send-yui-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.text}}",
+          "replyAsTemplate": "yui",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-mika-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.text}}",
+          "replyAsTemplate": "mika",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    },
+    {
+      "id": "send-rina-reply",
+      "addon": {
+        "name": "rielflow/chat-reply-worker",
+        "version": "1",
+        "config": {
+          "textTemplate": "{{inbox.latest.output.payload.text}}",
+          "replyAsTemplate": "rina",
+          "visibility": "public",
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "route-message",
+      "nodeId": "route-message",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "yui-codex-sdk",
+          "label": "target_yui"
+        },
+        {
+          "toStepId": "mika-claude-sdk",
+          "label": "target_mika"
+        },
+        {
+          "toStepId": "rina-cursor-sdk",
+          "label": "target_rina"
+        }
+      ]
+    },
+    {
+      "id": "yui-codex-sdk",
+      "nodeId": "yui-codex-sdk",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-yui-reply"
+        }
+      ]
+    },
+    {
+      "id": "send-yui-reply",
+      "nodeId": "send-yui-reply",
+      "role": "worker"
+    },
+    {
+      "id": "mika-claude-sdk",
+      "nodeId": "mika-claude-sdk",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-mika-reply"
+        }
+      ]
+    },
+    {
+      "id": "send-mika-reply",
+      "nodeId": "send-mika-reply",
+      "role": "worker"
+    },
+    {
+      "id": "rina-cursor-sdk",
+      "nodeId": "rina-cursor-sdk",
+      "role": "worker",
+      "transitions": [
+        {
+          "toStepId": "send-rina-reply"
+        }
+      ]
+    },
+    {
+      "id": "send-rina-reply",
+      "nodeId": "send-rina-reply",
+      "role": "worker"
+    }
+  ]
+}

@@ -16,7 +16,8 @@ can all be described as a reusable workflow.
 - Run one-off temporary workflow payloads from inline JSON or one JSON file
   without installing them into a catalog.
 - Use agent backends such as `codex-agent`, `claude-code-agent`,
-  `cursor-cli-agent`, `official/openai-sdk`, and `official/anthropic-sdk`.
+  `cursor-cli-agent`, `official/openai-sdk`, `official/anthropic-sdk`, and
+  `official/cursor-sdk`.
 - Combine agent steps with command, container, sleep, user-action,
   workflow-call, and add-on-backed steps.
 - Discover workflow purpose and callable inputs before running anything.
@@ -135,9 +136,10 @@ rielflow package install claude-code-design-and-implement-review-loop \
 ```
 
 Agent backends need their own credentials and local tools. For example,
-OpenAI-backed nodes use `OPENAI_API_KEY`, Anthropic-backed nodes use
-`ANTHROPIC_API_KEY`, and local CLI-backed nodes depend on the corresponding
-Codex, Claude Code, or Cursor CLI setup.
+OpenAI/Codex SDK-backed nodes use `OPENAI_API_KEY`, Anthropic/Claude SDK-backed
+nodes use `ANTHROPIC_API_KEY`, Cursor SDK-backed nodes use `CURSOR_API_KEY`,
+and local CLI-backed nodes depend on the corresponding Codex, Claude Code, or
+Cursor CLI setup.
 
 Optional Nix install:
 
@@ -470,6 +472,9 @@ Useful starting points in `examples/`:
 - `supervised-mock-retry`: deterministic supervised retry example.
 - `discord-agent-trio-chat`, `telegram-agent-trio-chat`,
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
+- `telegram-sdk-trio-chat`: Telegram persona trio using SDK-backed worker
+  add-ons for `official/openai-sdk`, `official/anthropic-sdk`, and
+  `official/cursor-sdk`.
 - `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
   the Telegram trio chat.
 - `x-follower-ai-business-digest`: hourly X follower-post digest that fetches

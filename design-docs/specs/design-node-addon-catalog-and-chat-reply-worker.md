@@ -531,19 +531,31 @@ Validation rules:
 
 ## Built-in Agent Worker Add-ons
 
-Two generic agent-backed worker add-ons are available for workflows that want a
+Generic agent-backed worker add-ons are available for workflows that want a
 compact authored reference instead of a workflow-local `node-*.json` payload:
 
 - `rielflow/codex-worker`
 - `rielflow/claude-code-worker`
+- `rielflow/codex-sdk-worker`
+- `rielflow/claude-sdk-worker`
+- `rielflow/cursor-sdk-worker`
 
-Both are worker-only add-ons. They resolve to ordinary `agent` node payloads:
+All five are worker-only add-ons. They resolve to ordinary `agent` node
+payloads:
 
 - `rielflow/codex-worker` sets `executionBackend: "codex-agent"`
 - `rielflow/claude-code-worker` sets `executionBackend: "claude-code-agent"`
+- `rielflow/codex-sdk-worker` sets `executionBackend: "official/openai-sdk"`
+- `rielflow/claude-sdk-worker` sets
+  `executionBackend: "official/anthropic-sdk"`
+- `rielflow/cursor-sdk-worker` sets
+  `executionBackend: "official/cursor-sdk"`
 
 The add-on name selects the backend. `executionBackend` remains the low-level
-runtime adapter field and is not replaced by the add-on system.
+runtime adapter field and is not replaced by the add-on system. SDK-backed
+worker add-ons intentionally use the same authored config shape as the
+CLI-agent worker add-ons so examples can switch the backend through the add-on
+name without introducing provider-specific workflow fields.
 
 Authored example:
 
@@ -587,7 +599,56 @@ workflow runtime variables and inbox context.
 
 `addon.env` is not supported by these agent worker add-ons in version `1`.
 Credential and runtime environment handling remains owned by the configured
-agent backend adapters.
+agent backend adapters. Required SDK credentials are adapter preflight inputs:
+`OPENAI_API_KEY` for `official/openai-sdk`, `ANTHROPIC_API_KEY` for
+`official/anthropic-sdk`, and `CURSOR_API_KEY` for `official/cursor-sdk`.
+Validation should surface missing backend support or credentials as runtime
+readiness/executability information rather than silently falling back to a
+different worker add-on.
+
+SDK worker regression coverage should include:
+
+- add-on resolution for all three SDK add-ons in
+  `packages/rielflow/src/workflow/node-addons/sdk-agent-workers.test.ts`
+- dispatch registration for `official/openai-sdk`,
+  `official/anthropic-sdk`, and `official/cursor-sdk`
+- package-boundary exports for workflow add-on types in
+  `packages/rielflow/src/package-boundaries.test.ts`
+
+Verification commands:
+
+```bash
+bun test packages/rielflow/src/workflow/node-addons/sdk-agent-workers.test.ts packages/rielflow/src/workflow/adapters/dispatch.test.ts packages/rielflow/src/package-boundaries.test.ts
+bun run typecheck
+```
+
+### Cursor SDK Worker Boundary
+
+`rielflow/cursor-sdk-worker` resolves to the `official/cursor-sdk` adapter, not
+to `cursor-cli-agent`. Cursor SDK behavior must remain isolated behind
+`packages/rielflow-adapters/src/cursor-sdk.ts` and its runtime wrapper in
+`packages/rielflow/src/workflow/adapters/cursor-sdk.ts`.
+
+The Cursor SDK adapter may use a Bun child process to load `@cursor/sdk`,
+construct a JSONL local agent store, execute one prompt, and return a small JSON
+result envelope. That child-process boundary is intentional because Bun runtime
+compatibility is an adapter concern, not a workflow or add-on concern. The
+parent adapter should pass only the model id, working directory, store root,
+message, and resolved `CURSOR_API_KEY`; the workflow model should not expose
+Cursor SDK process details.
+
+The Cursor SDK prompt boundary currently combines `systemPromptText` and the
+per-turn prompt before sending the SDK message because the Cursor SDK message
+API does not expose the same separate system-prompt option as the local
+CLI-agent runners. That is an intentional divergence from the local
+`codex-agent` and `cursor-cli-agent` prompt-splitting behavior documented in
+`design-docs/specs/architecture.md`.
+
+Cursor SDK verification should stay deterministic by testing injected
+`agentFactory` behavior and output parsing in
+`packages/rielflow/src/workflow/adapters/cursor-sdk.test.ts`. Live Cursor SDK
+coverage must remain credential-gated behind `CURSOR_API_KEY` in
+`packages/rielflow/src/workflow/adapters/official-sdk-live-smoke.test.ts`.
 
 ## Built-in `rielflow/workflow-package-sandbox-review`
 

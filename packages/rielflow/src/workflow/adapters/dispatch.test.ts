@@ -14,8 +14,21 @@ const baseContext: AdapterExecutionContext = {
   signal: new AbortController().signal,
 };
 
+const originalOpenAiApiKey = process.env["OPENAI_API_KEY"];
+const originalCursorApiKey = process.env["CURSOR_API_KEY"];
+
 afterEach(() => {
   vi.restoreAllMocks();
+  if (originalOpenAiApiKey === undefined) {
+    delete process.env["OPENAI_API_KEY"];
+  } else {
+    process.env["OPENAI_API_KEY"] = originalOpenAiApiKey;
+  }
+  if (originalCursorApiKey === undefined) {
+    delete process.env["CURSOR_API_KEY"];
+  } else {
+    process.env["CURSOR_API_KEY"] = originalCursorApiKey;
+  }
 });
 
 function makeCodexRunner() {
@@ -197,6 +210,54 @@ describe("DispatchingNodeAdapter", () => {
     const output = await adapter.execute(input, baseContext);
     expect(output.provider).toBe("official-openai-sdk");
     expect(output.payload["text"]).toBe("hello from openai");
+  });
+
+  test("routes to official cursor sdk backend when explicitly selected", async () => {
+    const adapter = new DispatchingNodeAdapter({
+      cursorSdk: {
+        agentFactory: async () => ({
+          async send() {
+            return {
+              async wait() {
+                return { status: "finished", result: "hello from cursor" };
+              },
+              async cancel() {
+                return;
+              },
+            };
+          },
+          close() {
+            return;
+          },
+        }),
+      },
+    });
+    process.env["CURSOR_API_KEY"] = "test-key";
+
+    const input: AdapterExecutionInput = {
+      workflowId: "wf",
+      workflowExecutionId: "sess-1",
+      nodeId: "node-1",
+      nodeExecId: "exec-1",
+      node: {
+        id: "node-1",
+        model: "composer-2",
+        executionBackend: "official/cursor-sdk",
+        promptTemplate: "test",
+        variables: {},
+      },
+      workingDirectory: "/tmp/project",
+      mergedVariables: {},
+      promptText: "hello",
+      arguments: null,
+      executionIndex: 1,
+      artifactDir: "/tmp/node-1/exec-1",
+      upstreamCommunicationIds: [],
+    };
+
+    const output = await adapter.execute(input, baseContext);
+    expect(output.provider).toBe("official-cursor-sdk");
+    expect(output.payload["text"]).toBe("hello from cursor");
   });
 
   test("routes to codex-agent backend when explicitly selected", async () => {
