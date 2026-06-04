@@ -68,6 +68,7 @@ export interface LoadedWorkflow {
   readonly workflowName: string;
   readonly workflowDirectory: string;
   readonly artifactWorkflowRoot: string;
+  readonly workflowDefinitionJsonBody: string;
   readonly bundle: NormalizedWorkflowBundle;
   readonly validationIssues: readonly ValidationIssue[];
   readonly nodeValidationResults: readonly NodeValidationResult[];
@@ -85,12 +86,14 @@ export interface LoadFailure {
   readonly issues?: readonly ValidationIssue[];
 }
 
-async function readJsonFile(
+async function readJsonTextFile(
   filePath: string,
-): Promise<Result<unknown, LoadFailure>> {
+): Promise<
+  Result<{ readonly value: unknown; readonly rawText: string }, LoadFailure>
+> {
   try {
-    const raw = await readFile(filePath, "utf8");
-    return ok(JSON.parse(raw) as unknown);
+    const rawText = await readFile(filePath, "utf8");
+    return ok({ value: JSON.parse(rawText) as unknown, rawText });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "unknown error";
     if (message.includes("ENOENT")) {
@@ -104,6 +107,13 @@ async function readJsonFile(
       message: `failed reading JSON file '${filePath}': ${message}`,
     });
   }
+}
+
+async function readJsonFile(
+  filePath: string,
+): Promise<Result<unknown, LoadFailure>> {
+  const result = await readJsonTextFile(filePath);
+  return result.ok ? ok(result.value.value) : err(result.error);
 }
 
 async function readTextFile(
@@ -342,15 +352,15 @@ export async function loadWorkflowFromDisk(
 
   const workflowPath = path.join(workflowDirectory, "workflow.json");
 
-  const workflowRaw = await readJsonFile(workflowPath);
+  const workflowRaw = await readJsonTextFile(workflowPath);
   if (!workflowRaw.ok) {
     return err(workflowRaw.error);
   }
 
   if (
-    typeof workflowRaw.value !== "object" ||
-    workflowRaw.value === null ||
-    !Array.isArray((workflowRaw.value as { nodes?: unknown }).nodes)
+    typeof workflowRaw.value.value !== "object" ||
+    workflowRaw.value.value === null ||
+    !Array.isArray((workflowRaw.value.value as { nodes?: unknown }).nodes)
   ) {
     return err({
       code: "VALIDATION",
@@ -367,7 +377,7 @@ export async function loadWorkflowFromDisk(
 
   const resolvedWorkflow = await resolveWorkflowStepFiles({
     workflowDirectory,
-    workflow: workflowRaw.value,
+    workflow: workflowRaw.value.value,
   });
   if (!resolvedWorkflow.ok) {
     return err(resolvedWorkflow.error);
@@ -466,6 +476,7 @@ export async function loadWorkflowFromDisk(
     workflowName,
     workflowDirectory,
     artifactWorkflowRoot,
+    workflowDefinitionJsonBody: workflowRaw.value.rawText,
     bundle: validation.value.bundle,
     validationIssues: validation.value.issues,
     nodeValidationResults: validation.value.nodeValidationResults,

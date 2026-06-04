@@ -271,6 +271,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
 
   type WorkflowExecutionView {
     workflowExecutionId: String!
+    workflowDefinitionJsonBody: String
     session: WorkflowSessionState!
     nodeExecutions: [RuntimeNodeExecutionSummary!]!
     nodeLogs: [RuntimeNodeLogEntry!]!
@@ -414,6 +415,7 @@ export const GRAPHQL_SCHEMA_TEXT = `
 
   type WorkflowExecutionOverviewView {
     workflowExecutionId: String!
+    workflowDefinitionJsonBody: String
     workflowId: String!
     workflowName: String!
     status: String!

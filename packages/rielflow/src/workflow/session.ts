@@ -322,6 +322,7 @@ export interface WorkflowSessionState {
   readonly sessionId: string;
   readonly workflowName: string;
   readonly workflowId: string;
+  readonly workflowDefinitionJsonBody?: string;
   readonly status: SessionStatus;
   readonly startedAt: string;
   readonly endedAt?: string;
@@ -400,6 +401,7 @@ export interface CreateSessionInput {
   readonly sessionId: string;
   readonly workflowName: string;
   readonly workflowId: string;
+  readonly workflowDefinitionJsonBody?: string;
   /** Entry step id seeded as the first `queue` entry. */
   readonly initialNodeId: string;
   readonly runtimeVariables: Readonly<Record<string, unknown>>;
@@ -412,6 +414,9 @@ export function createSessionState(
     sessionId: input.sessionId,
     workflowName: input.workflowName,
     workflowId: input.workflowId,
+    ...(input.workflowDefinitionJsonBody === undefined
+      ? {}
+      : { workflowDefinitionJsonBody: input.workflowDefinitionJsonBody }),
     status: "running",
     startedAt: new Date().toISOString(),
     queue: [input.initialNodeId],
@@ -568,6 +573,9 @@ export function normalizeSessionState(
 
   let next: WorkflowSessionState = {
     ...session,
+    ...(typeof session.workflowDefinitionJsonBody === "string"
+      ? { workflowDefinitionJsonBody: session.workflowDefinitionJsonBody }
+      : {}),
     loopIterationCounts: { ...(session.loopIterationCounts ?? {}) },
     restartCounts: { ...(session.restartCounts ?? {}) },
     restartEvents: [...(session.restartEvents ?? [])],

@@ -114,6 +114,7 @@ export async function enterWorkflowSession(
         createSessionId({ workflowId: workflow.workflowId }),
       workflowName,
       workflowId: workflow.workflowId,
+      workflowDefinitionJsonBody: loaded.value.workflowDefinitionJsonBody,
       initialNodeId: rerunTargetId,
       runtimeVariables: { ...source.runtimeVariables, ...runtimeVariables },
     });
@@ -203,6 +204,7 @@ export async function enterWorkflowSession(
         createSessionId({ workflowId: workflow.workflowId }),
       workflowName,
       workflowId: workflow.workflowId,
+      workflowDefinitionJsonBody: loaded.value.workflowDefinitionJsonBody,
       initialNodeId: trimmedStart,
       runtimeVariables: {
         ...sourceSession.runtimeVariables,
@@ -289,6 +291,7 @@ export async function enterWorkflowSession(
         createSessionId({ workflowId: workflow.workflowId }),
       workflowName,
       workflowId: workflow.workflowId,
+      workflowDefinitionJsonBody: loaded.value.workflowDefinitionJsonBody,
       initialNodeId:
         options.fanoutBranchStartStepId ??
         resolveWorkflowManagerStepId(workflow),
