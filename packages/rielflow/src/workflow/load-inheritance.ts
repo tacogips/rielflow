@@ -2,10 +2,7 @@ import {
   applyWorkflowNodePatch,
   normalizeWorkflowNodePatchMap,
 } from "./node-patches";
-import {
-  resolveEffectiveRoots,
-  resolveWorkflowScopedPath,
-} from "./paths";
+import { resolveEffectiveRoots, resolveWorkflowScopedPath } from "./paths";
 import { err, ok, type Result } from "./result";
 import {
   validateWorkflowBundleDetailedAsync,
@@ -116,9 +113,7 @@ export function parseWorkflowExtendsSpec(
     nodePatch = normalized.value;
   }
 
-  let stringReplacements:
-    | readonly (readonly [string, string])[]
-    | undefined;
+  let stringReplacements: readonly (readonly [string, string])[] | undefined;
   if (extendsRaw["stringReplacements"] !== undefined) {
     const replacementsRaw = extendsRaw["stringReplacements"];
     if (!isRecord(replacementsRaw)) {
@@ -285,8 +280,7 @@ function agentNodePatchMapForBundle(
       continue;
     }
     const payload =
-      bundle.nodePayloads[node.id] ??
-      bundle.nodePayloads[node.nodeFile];
+      bundle.nodePayloads[node.id] ?? bundle.nodePayloads[node.nodeFile];
     if (isAgentNodePayload(payload)) {
       mapped[node.id] = patch;
     }
