@@ -126,6 +126,16 @@ JSON reference, and this workflow skill when shipped behavior changes
 `codex-agent` references explicit as execution-backend references, and document
 the accepted verification commands.
 
+Google Speech-to-Text add-on issue-resolution runs should refresh `README.md`,
+`.codex/skills/rielflow-workflow/SKILL.md`,
+`.codex/skills/rielflow-workflow/references/workflow-format.md`, and this
+workflow skill when shipped behavior changes `rielflow/google-speech-to-text`.
+Keep service-account credential guidance explicit for
+`GOOGLE_APPLICATION_CREDENTIALS` and kinko/direnv-friendly
+`GOOGLE_APPLICATION_CREDENTIALS_JSON`, document Japanese-only, English-only,
+and mixed Japanese/English language modes, and keep live GCP smoke results
+separate from deterministic Bun verification when credentials are unavailable.
+
 ## Reporting
 
 After the workflow finishes, report:

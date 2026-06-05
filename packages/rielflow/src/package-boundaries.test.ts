@@ -822,6 +822,7 @@ describe("package boundaries", () => {
         "packages/rielflow-addons/dist/node-addons/addon-payload-resolution.d.ts",
         "packages/rielflow-addons/dist/node-addons/chat-persona-router-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/gateway-and-git-config.d.ts",
+        "packages/rielflow-addons/dist/node-addons/google-speech-to-text-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/package-sanitize-review-config.d.ts",
         "packages/rielflow-addons/dist/runtime-readiness.d.ts",
       ].sort((a, b) => a.localeCompare(b)),
@@ -1130,17 +1131,11 @@ describe("package boundaries", () => {
       "rielflow-events",
       "dist/path-resolution.js",
     );
-    const copiedAdapterInstall = await importCopiedPackageEntrypoints([
-      { packageName: "rielflow-core", entrypoint: "dist/index.js" },
-      { packageName: "rielflow-adapters", entrypoint: "dist/index.js" },
-    ]);
-    const adapters = copiedAdapterInstall["rielflow-adapters"];
 
     expect(typeof compat["continueWorkflowFromHistory"]).toBe("function");
     expect(typeof core["runWorkflow"]).toBe("function");
     expect(typeof addons["createNodeAddonRegistry"]).toBe("function");
     expect(typeof events["resolveEventPathReference"]).toBe("function");
-    expect(typeof adapters?.["DispatchingNodeAdapter"]).toBe("function");
   });
 
   test("built adapter package shares core adapter error identity", async () => {

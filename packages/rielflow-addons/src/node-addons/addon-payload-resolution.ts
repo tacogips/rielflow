@@ -48,6 +48,7 @@ import {
   resolveXGatewayPayload,
   resolveXGatewayReadPayload,
 } from "./gateway-and-git-config";
+import { resolveGoogleSpeechToTextPayload } from "./google-speech-to-text-config";
 import { resolveWorkflowPackageSandboxReviewPayload } from "./package-sanitize-review-config";
 
 export function resolveSuperviserControlPayload(input: {
@@ -221,6 +222,13 @@ export function resolveBuiltinNodeAddonPayload(
     gitPushPayload.issues.length > 0
   ) {
     return gitPushPayload;
+  }
+  const googleSpeechToTextPayload = resolveGoogleSpeechToTextPayload(input);
+  if (
+    googleSpeechToTextPayload.payload !== undefined ||
+    googleSpeechToTextPayload.issues.length > 0
+  ) {
+    return googleSpeechToTextPayload;
   }
 
   if (input.addon.name === CHAT_PERSONA_ROUTER_ADDON_NAME) {

@@ -313,10 +313,13 @@ Built-in add-ons:
 - `rielflow/mail-gateway`
 - `rielflow/git-commit`
 - `rielflow/git-push`
+- `rielflow/google-speech-to-text`
 
 Use explicit object form with `version: "1"` unless a newer implementation documents a different version.
 
 `addon.inputs` becomes resolved node `variables`. `addon.config` is validated by the add-on descriptor. `addon.env` maps add-on environment variable names to rielflow runtime environment variable names only for descriptors that support explicit environment bindings.
+
+`rielflow/google-speech-to-text` accepts exactly one of `audioPathTemplate` or `gcsUriTemplate`, requires `languageCodeTemplate`, supports `alternativeLanguageCodes`, and writes JSON/SRT/VTT artifacts by default. Configure service-account auth with explicit `addon.env` bindings for `GOOGLE_APPLICATION_CREDENTIALS` or direnv/kinko-friendly `GOOGLE_APPLICATION_CREDENTIALS_JSON`; do not put credential JSON in tracked workflow files.
 
 Prefer DRY composition when using add-ons: chain reusable primitive steps in `steps[].transitions` instead of authoring combined nodes that duplicate behavior. For example, express commit-and-push as `rielflow/git-commit` followed by `rielflow/git-push`.
 

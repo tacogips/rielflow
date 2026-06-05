@@ -165,7 +165,9 @@ Use object form with explicit version:
 }
 ```
 
-Current built-ins include `rielflow/chat-reply-worker`, `rielflow/codex-worker`, `rielflow/claude-code-worker`, `rielflow/x-gateway-read`, `rielflow/x-gateway`, `rielflow/mail-gateway-read`, `rielflow/mail-gateway`, `rielflow/git-commit`, and `rielflow/git-push`, all version `1`.
+Current built-ins include `rielflow/chat-reply-worker`, `rielflow/codex-worker`, `rielflow/claude-code-worker`, `rielflow/x-gateway-read`, `rielflow/x-gateway`, `rielflow/mail-gateway-read`, `rielflow/mail-gateway`, `rielflow/git-commit`, `rielflow/git-push`, and `rielflow/google-speech-to-text`, all version `1`.
+
+For `rielflow/google-speech-to-text`, configure exactly one of `audioPathTemplate` or `gcsUriTemplate`, set `languageCodeTemplate` to `ja-JP` for Japanese-only or `en-US` for English-only, and use `languageCodeTemplate: "ja-JP"` with `alternativeLanguageCodes: ["en-US"]` for mixed Japanese/English. Omitted `outputFormats` writes JSON, SRT, and VTT artifacts. Map `GOOGLE_APPLICATION_CREDENTIALS` or direnv/kinko-friendly `GOOGLE_APPLICATION_CREDENTIALS_JSON` through `addon.env` when explicit forwarding is wanted, for example `{ "GOOGLE_APPLICATION_CREDENTIALS_JSON": { "fromEnv": "GOOGLE_APPLICATION_CREDENTIALS_JSON" } }`; when `addon.env` is omitted, the native runtime reads those same names from its environment. Never place service-account JSON in tracked workflow files.
 
 ## External Portability
 

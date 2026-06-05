@@ -54,6 +54,36 @@ rielflow --help
 The installed binary is `rielflow`.
 Built-in add-ons are bundled into the installed command; they do not require a
 separate add-on package install.
+The built-in `rielflow/google-speech-to-text` add-on uses Google Cloud
+Speech-to-Text from TypeScript/Bun, accepts local audio files or `gs://` URIs,
+and writes JSON, SRT, and VTT artifacts. Set
+`GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+through explicit `addon.env` bindings or the runtime environment when using
+service-account credentials. Use `languageCodeTemplate: "ja-JP"` for
+Japanese-only, `languageCodeTemplate: "en-US"` for English-only, or
+`languageCodeTemplate: "ja-JP"` with `alternativeLanguageCodes: ["en-US"]`
+for mixed Japanese/English:
+
+```json
+{
+  "id": "transcribe",
+  "addon": {
+    "name": "rielflow/google-speech-to-text",
+    "version": "1",
+    "config": {
+      "audioPathTemplate": "audio/{{arguments.audioFile}}",
+      "languageCodeTemplate": "ja-JP",
+      "alternativeLanguageCodes": ["en-US"],
+      "outputFormats": ["json", "srt", "vtt"]
+    },
+    "env": {
+      "GOOGLE_APPLICATION_CREDENTIALS_JSON": {
+        "fromEnv": "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+      }
+    }
+  }
+}
+```
 
 ### Run With Bun
 

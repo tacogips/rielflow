@@ -58,6 +58,29 @@ export interface GitPushAddonConfig {
   readonly branchTemplate?: string;
 }
 
+export type GoogleSpeechToTextRecognitionMode = "sync" | "long-running";
+export type GoogleSpeechToTextOutputFormat = "json" | "srt" | "vtt";
+
+export interface GoogleSpeechToTextAddonConfig {
+  readonly audioPathTemplate?: string;
+  readonly gcsUriTemplate?: string;
+  readonly languageCodeTemplate: string;
+  readonly alternativeLanguageCodes?: readonly string[];
+  readonly encoding?: string;
+  readonly sampleRateHertz?: number;
+  readonly audioChannelCount?: number;
+  readonly model?: string;
+  readonly useEnhanced?: boolean;
+  readonly enableAutomaticPunctuation?: boolean;
+  readonly enableWordTimeOffsets?: boolean;
+  readonly enableWordConfidence?: boolean;
+  readonly profanityFilter?: boolean;
+  readonly maxAlternatives?: number;
+  readonly recognitionMode?: GoogleSpeechToTextRecognitionMode;
+  readonly outputFormats?: readonly GoogleSpeechToTextOutputFormat[];
+  readonly outputBaseNameTemplate?: string;
+}
+
 export interface AgentWorkerAddonConfig {
   readonly model: string;
   readonly promptTemplate: string;
@@ -194,6 +217,14 @@ export interface ResolvedGitPushAddon {
   readonly inputs?: Readonly<Record<string, unknown>>;
 }
 
+export interface ResolvedGoogleSpeechToTextAddon {
+  readonly name: "rielflow/google-speech-to-text";
+  readonly version: "1";
+  readonly config: GoogleSpeechToTextAddonConfig;
+  readonly env?: Readonly<Record<string, WorkflowNodeAddonEnvBinding>>;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
 export interface ResolvedCodexWorkerAddon {
   readonly name: "rielflow/codex-worker";
   readonly version: "1";
@@ -257,6 +288,7 @@ export type ResolvedNodeAddon =
   | ResolvedMailGatewayAddon
   | ResolvedGitCommitAddon
   | ResolvedGitPushAddon
+  | ResolvedGoogleSpeechToTextAddon
   | ResolvedAgentWorkerAddon
   | ResolvedWorkflowPackageSandboxReviewAddon
   | ResolvedSuperviserControlAddon;

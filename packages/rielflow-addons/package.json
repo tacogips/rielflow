@@ -18,6 +18,7 @@
     "typecheck": "bun run --cwd ../.. typecheck"
   },
   "dependencies": {
+    "@google-cloud/speech": "7.3.1",
     "rielflow-core": "workspace:*"
   },
   "license": "MIT"

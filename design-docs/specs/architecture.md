@@ -1253,6 +1253,9 @@ Initial scope:
 - `rielflow/mail-gateway-read` and `rielflow/mail-gateway` for read-only mail
   inspection and intentional mail send mutations through the same explicit
   container runner and environment binding model
+- `rielflow/google-speech-to-text` for Google Cloud Speech-to-Text
+  transcription of local audio files or `gs://` URIs with JSON, SRT, and VTT
+  artifact output through explicit credential environment bindings
 - add-on nodes remain ordinary worker nodes after resolution
 - `rielflow/` is reserved for runtime-provided add-ons; third-party add-ons use
   non-`rielflow/` names such as `vendor/name`

@@ -42,6 +42,7 @@ import {
   normalizeCommittedFilePath,
   parseCommittedFiles,
 } from "./chat-and-gateway-addons";
+import { executeGoogleSpeechToTextAddonNode } from "./google-speech-to-text-addon";
 
 export async function rejectDirectoryCommittedFiles(input: {
   readonly cwd: string;
@@ -503,6 +504,8 @@ export async function executeAddonNode(
       return await executeGitCommitAddonNode(input, addon, context);
     case GIT_PUSH_ADDON_NAME:
       return await executeGitPushAddonNode(input, addon, context);
+    case "rielflow/google-speech-to-text":
+      return await executeGoogleSpeechToTextAddonNode(input, addon, context);
     default:
       throw new AdapterExecutionError(
         "policy_blocked",

@@ -2,15 +2,17 @@
 
 This document defines an authored workflow add-on mechanism and the current
 built-in worker add-ons: chat reply, agent worker, workflow package sandbox
-review, x-gateway worker nodes, and mail-gateway worker nodes.
+review, x-gateway worker nodes, mail-gateway worker nodes, and Google
+Speech-to-Text transcription.
 
 ## Overview
 
 Workflow authors often need common nodes whose behavior is operational rather
 than business-specific. Examples include replying to a triggering chat event,
 running a standard agent-backed implementation worker, querying/posting through
-x-gateway, or reading/sending mail through mail-gateway without copying
-container and credential plumbing into every workflow bundle.
+x-gateway, reading/sending mail through mail-gateway, or transcribing audio
+through Google Cloud Speech-to-Text without copying provider SDK and credential
+plumbing into every workflow bundle.
 
 Authors should be able to reference these nodes as built-in add-ons from
 `workflow.json` without writing a `nodes/node-*.json` payload or maintaining
@@ -31,6 +33,8 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
   add-on roots under `<scope-root>/addons`
 - keep provider SDKs and credentials outside workflow bundles
 - make chat replies runtime-owned and idempotent
+- make transcription artifact generation reusable for local audio files and
+  `gs://` audio inputs
 - preserve authored workflow round-trips; save/edit surfaces should keep the
   add-on reference rather than expanding it into generated node JSON
 - allow future external add-on distribution without designing network fetching
@@ -1282,6 +1286,170 @@ Failure rules:
 - duplicate dispatch for the same idempotency key must return the original
   dispatch result when the adapter can determine it
 
+## Built-in `rielflow/google-speech-to-text`
+
+### Purpose
+
+`rielflow/google-speech-to-text` transcribes audio through Google Cloud
+Speech-to-Text and publishes ordinary rielflow node output plus JSON, SRT, and
+VTT artifacts.
+
+It is intended for workflows that need repeatable transcription steps without
+embedding Google SDK setup, service-account handling, subtitle formatting, or
+artifact writes into workflow-local nodes.
+
+### Current Branch Reference Paths
+
+The feature branch maps this design to these repository modules:
+
+- `packages/rielflow-addons/src/node-addons/google-speech-to-text-config.ts`
+  owns built-in add-on name/version constants, config normalization, validation,
+  resolved add-on payload construction, and the output contract
+- `packages/rielflow-addons/src/node-addons/addon-payload-resolution.ts`
+  routes `rielflow/google-speech-to-text` into the built-in add-on resolver
+- `packages/rielflow-addons/src/native-node-executor/google-speech-to-text-addon.ts`
+  owns Google Speech client construction, request data flow, response
+  normalization, and artifact writes
+- `packages/rielflow-addons/src/native-node-executor/git-and-addon-execution.ts`
+  dispatches the native add-on executor by add-on name
+- `packages/rielflow/src/workflow/addon-types.ts` and
+  `packages/rielflow-core/src/index.ts` expose the public config and resolved
+  add-on types
+- `packages/rielflow/src/workflow/google-speech-to-text-addon.test.ts` covers
+  resolver behavior, language modes, request shape, and artifact output
+
+### Authored Example
+
+```json
+{
+  "id": "transcribe",
+  "role": "worker",
+  "addon": {
+    "name": "rielflow/google-speech-to-text",
+    "version": "1",
+    "config": {
+      "audioPathTemplate": "audio/{{arguments.audioFile}}",
+      "languageCodeTemplate": "ja-JP",
+      "alternativeLanguageCodes": ["en-US"],
+      "outputFormats": ["json", "srt", "vtt"],
+      "outputBaseNameTemplate": "{{arguments.audioFile}}"
+    },
+    "env": {
+      "GOOGLE_APPLICATION_CREDENTIALS_JSON": {
+        "fromEnv": "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+      }
+    },
+    "inputs": {}
+  }
+}
+```
+
+### Configuration
+
+Required config:
+
+```typescript
+interface GoogleSpeechToTextAddonConfig {
+  readonly audioPathTemplate?: string;
+  readonly gcsUriTemplate?: string;
+  readonly languageCodeTemplate: string;
+  readonly alternativeLanguageCodes?: readonly string[];
+  readonly encoding?: string;
+  readonly sampleRateHertz?: number;
+  readonly audioChannelCount?: number;
+  readonly model?: string;
+  readonly useEnhanced?: boolean;
+  readonly enableAutomaticPunctuation?: boolean;
+  readonly enableWordTimeOffsets?: boolean;
+  readonly enableWordConfidence?: boolean;
+  readonly profanityFilter?: boolean;
+  readonly maxAlternatives?: number;
+  readonly recognitionMode?: "sync" | "long-running";
+  readonly outputFormats?: readonly ("json" | "srt" | "vtt")[];
+  readonly outputBaseNameTemplate?: string;
+}
+```
+
+Rules:
+
+- exactly one of `audioPathTemplate` or `gcsUriTemplate` is required
+- `languageCodeTemplate` is required and renders against the normal node
+  template context
+- Japanese-only uses `ja-JP`
+- English-only uses `en-US`
+- mixed Japanese/English uses `ja-JP` with `alternativeLanguageCodes: ["en-US"]`
+  unless a later Google provider mode is explicitly documented
+- omitted `outputFormats` defaults to `["json", "srt", "vtt"]`
+- local file inputs are read relative to the resolved node working directory
+  when the rendered path is not absolute
+- `gs://` inputs use Google Speech `uri` audio and default to long-running
+  recognition unless `recognitionMode` is explicitly supplied
+- subtitle outputs require word timestamps; when the provider omits word timing,
+  generated SRT/VTT files must still be valid with deterministic fallback timing
+
+### Execution Data Flow
+
+Execution follows a provider-specific but workflow-neutral data flow:
+
+1. Resolve `addon.inputs` into node variables and render
+   `languageCodeTemplate`, the selected audio source template, and
+   `outputBaseNameTemplate`.
+2. Resolve explicit `addon.env` bindings and construct the Google Speech client
+   from `GOOGLE_APPLICATION_CREDENTIALS` or in-memory
+   `GOOGLE_APPLICATION_CREDENTIALS_JSON`.
+3. Build the recognition config from the rendered language code, optional
+   `alternativeLanguageCodes`, audio hints, punctuation, word timestamp, and
+   output format settings.
+4. For local files, resolve the rendered path against the node working
+   directory when needed, read the bytes, and send base64 text through Google
+   Speech `audio.content`.
+5. For `gs://` URIs, send the rendered URI through Google Speech `audio.uri`.
+6. Select `recognize` or `longRunningRecognize` from `recognitionMode`, defaulting
+   local files to sync and `gs://` inputs to long-running.
+7. Normalize provider results into transcript segments, preserving confidence,
+   language codes, word timestamps, and deterministic fallback timing.
+8. Write requested JSON, SRT, and VTT artifacts under the node artifact
+   directory and return their paths in ordinary rielflow output payload fields.
+
+### Credential Boundary
+
+Credentials are environment-owned, not workflow-owned. The add-on accepts
+explicit `addon.env` bindings for `GOOGLE_APPLICATION_CREDENTIALS` and
+`GOOGLE_APPLICATION_CREDENTIALS_JSON`.
+
+Rules:
+
+- `GOOGLE_APPLICATION_CREDENTIALS` points at an untracked service-account JSON
+  file when file-based credentials are used
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` contains the service-account JSON string
+  for kinko/direnv-friendly setups that avoid persistent plaintext files
+- the executor parses `GOOGLE_APPLICATION_CREDENTIALS_JSON` in memory and must
+  not write it to a tracked or generated repository file
+- validation and execution errors must not echo raw credential JSON, private
+  keys, client emails, or local secret paths beyond the environment variable
+  name needed for diagnosis
+- live smoke credentials for project `ai-tools-proj` are local test material
+  only; they belong in kinko or ignored temporary files and must be removed from
+  plaintext local storage after setup
+
+### Output Contract
+
+The node payload contains a `googleSpeechToText` object and compatibility
+aliases for consumers that only need the transcript, output files, or captions.
+
+Required payload fields:
+
+- `googleSpeechToText.transcript`
+- `googleSpeechToText.languageCode`
+- `googleSpeechToText.recognitionMode`
+- `googleSpeechToText.segments`
+- `googleSpeechToText.outputFiles`
+
+When requested, `outputFiles` contains absolute paths to generated `json`,
+`srt`, and `vtt` artifacts under the node artifact directory. Captions may also
+be included inline for downstream nodes, but artifact paths remain the stable
+contract for large or persisted outputs.
+
 ## Event Layer Responsibilities
 
 The event layer owns provider reply dispatch.
@@ -1319,6 +1487,8 @@ Current rules:
 - unknown or unhandled add-on names fail validation
 - add-on descriptors are part of the installed runtime and are covered by the
   same release integrity model as the rest of `rielflow`
+- built-in add-ons that call provider SDKs must receive credentials only through
+  explicit `addon.env` mappings or caller-owned runtime environment
 - external add-on registries, package downloads, and lockfiles are future work
 
 Future distributed add-on support must require:
@@ -1356,7 +1526,14 @@ The implementation should cover:
 - validation rejects workflow-local node payload files that author runtime-only
   `nodeType: "addon"` instead of using `workflow.json.nodes[].addon`
 - validation accepts the built-in agent worker add-ons, both x-gateway add-ons,
-  and both mail-gateway add-ons
+  both mail-gateway add-ons, and the Google Speech-to-Text add-on
+- validation rejects Google Speech-to-Text config that omits both audio sources
+  or provides both `audioPathTemplate` and `gcsUriTemplate`
+- Google Speech-to-Text unit tests cover Japanese-only, English-only, and mixed
+  Japanese/English requests plus JSON/SRT/VTT artifact output
+- live Google Speech-to-Text smoke tests use ignored generated audio and
+  kinko/direnv-sourced credentials for Japanese-only, English-only, and mixed
+  Japanese/English fixtures when the environment is available
 - loader materializes an effective payload with the authored node id
 - workflow save/edit preserves the authored `addon` reference
 - chat reply worker renders text from upstream output
