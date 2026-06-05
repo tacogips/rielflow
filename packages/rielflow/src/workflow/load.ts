@@ -26,6 +26,10 @@ import {
   resolveWorkflowSource,
   withResolvedWorkflowSourceOptions,
 } from "./catalog";
+import {
+  loadInheritedWorkflowFromDisk,
+  parseWorkflowExtendsSpec,
+} from "./load-inheritance";
 import type {
   DirectExecutableAddonGrant,
   LoadOptions,
@@ -485,9 +489,10 @@ async function resolveWorkflowStepFiles(input: {
   });
 }
 
-export async function loadWorkflowFromDisk(
+async function loadWorkflowFromDiskInternal(
   workflowName: string,
   options: LoadOptions = {},
+  inheritanceStack: readonly string[] = [],
 ): Promise<Result<LoadedWorkflow, LoadFailure>> {
   if (!isSafeWorkflowName(workflowName)) {
     return err({
@@ -508,6 +513,36 @@ export async function loadWorkflowFromDisk(
   const workflowRaw = await readJsonTextFile(workflowPath);
   if (!workflowRaw.ok) {
     return err(workflowRaw.error);
+  }
+
+  const inheritanceSpec = parseWorkflowExtendsSpec(workflowRaw.value.value);
+  if (!inheritanceSpec.ok) {
+    return err(inheritanceSpec.error);
+  }
+  if (inheritanceSpec.value !== undefined) {
+    if (!isRecord(workflowRaw.value.value)) {
+      return err({
+        code: "VALIDATION",
+        message: "workflow validation failed",
+        issues: [
+          {
+            severity: "error",
+            path: "workflow",
+            message: "must be an object",
+          },
+        ],
+      });
+    }
+    return await loadInheritedWorkflowFromDisk({
+      workflowName,
+      workflowDirectory,
+      rawText: workflowRaw.value.rawText,
+      workflow: workflowRaw.value.value,
+      spec: inheritanceSpec.value,
+      options,
+      inheritanceStack,
+      loadBaseWorkflowById: loadWorkflowByIdFromDiskInternal,
+    });
   }
 
   if (
@@ -636,6 +671,13 @@ export async function loadWorkflowFromDisk(
   });
 }
 
+export async function loadWorkflowFromDisk(
+  workflowName: string,
+  options: LoadOptions = {},
+): Promise<Result<LoadedWorkflow, LoadFailure>> {
+  return await loadWorkflowFromDiskInternal(workflowName, options, []);
+}
+
 export async function loadWorkflowFromCatalog(
   workflowName: string,
   options: LoadOptions = {},
@@ -713,15 +755,20 @@ export async function loadWorkflowFromCatalog(
   });
 }
 
-export async function loadWorkflowByIdFromDisk(
+async function loadWorkflowByIdFromDiskInternal(
   workflowId: string,
   options: LoadOptions = {},
+  inheritanceStack: readonly string[] = [],
 ): Promise<Result<LoadedWorkflow, LoadFailure>> {
   // Callee resolution always walks the workflow root; never inherit a root run's
   // execution-copy bundle directory.
   const { workflowBundleDirectoryOverride: _bdo, ...discoveryOptions } =
     options;
-  const direct = await loadWorkflowFromDisk(workflowId, discoveryOptions);
+  const direct = await loadWorkflowFromDiskInternal(
+    workflowId,
+    discoveryOptions,
+    inheritanceStack,
+  );
   if (direct.ok && direct.value.bundle.workflow.workflowId === workflowId) {
     return direct;
   }
@@ -759,7 +806,11 @@ export async function loadWorkflowByIdFromDisk(
       continue;
     }
 
-    return await loadWorkflowFromDisk(entry.name, discoveryOptions);
+    return await loadWorkflowFromDiskInternal(
+      entry.name,
+      discoveryOptions,
+      inheritanceStack,
+    );
   }
 
   if (direct.ok) {
@@ -775,4 +826,11 @@ export async function loadWorkflowByIdFromDisk(
         message: `workflow id '${workflowId}' was not found under workflow root '${roots.workflowRoot}'`,
       })
     : direct;
+}
+
+export async function loadWorkflowByIdFromDisk(
+  workflowId: string,
+  options: LoadOptions = {},
+): Promise<Result<LoadedWorkflow, LoadFailure>> {
+  return await loadWorkflowByIdFromDiskInternal(workflowId, options, []);
 }

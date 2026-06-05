@@ -141,7 +141,7 @@ Minimal worker-only authored shape:
 
 ### Top-Level Fields
 
-Required:
+Required for ordinary workflows without `extends`:
 
 - `workflowId: string`
 - `defaults.nodeTimeoutMs: number`
@@ -149,9 +149,19 @@ Required:
 - `nodes: WorkflowNodeRef[]`
 - `steps: WorkflowStepRef[]`
 
+Required for derived workflows with `extends`:
+
+- `workflowId: string`
+- `extends.workflowId: string`
+
+For derived workflows, `defaults`, `entryStepId`, `nodes`, and `steps` are
+inherited from the loaded base workflow and validated on the resolved derived
+bundle after inheritance transformations are applied.
+
 Optional:
 
 - `description: string`
+- `extends`
 - `managerStepId: string`
 - `prompts.rielflowPromptTemplate: string`
 - `prompts.workerSystemPromptTemplate: string`
@@ -167,8 +177,13 @@ Validation rules:
 
 - `workflowId` is a filesystem namespace key for runtime artifacts and attachments, so it must start with an alphanumeric character and then contain only letters, digits, hyphens, or underscores
 - when provided, `description` must be a non-empty string
-- `entryStepId` must resolve to an authored step
-- `managerStepId`, when present, must resolve to an authored step
+- ordinary workflows must author `defaults.nodeTimeoutMs`, `entryStepId`,
+  `nodes`, and `steps`; derived workflows with `extends` inherit those fields
+  from the base workflow before final validation
+- `entryStepId` must resolve to a step in the ordinary authored workflow or the
+  resolved derived bundle
+- `managerStepId`, when present, must resolve to a step in the ordinary authored
+  workflow or the resolved derived bundle
 - at most one step may declare `role: "manager"`
 - if `managerStepId` is omitted and exactly one step declares `role: "manager"`, the validator infers that step as the manager step
 - every step must reference a node registry entry through `nodeId`
@@ -198,6 +213,78 @@ Not part of the schema:
 - `workflow-ref` sub-workflow definitions
 
 Older documents mentioned those concepts, but they are not current authored fields.
+
+### `extends`
+
+`extends` lets a derived workflow inherit another workflow bundle by
+`workflowId` and then apply bounded in-memory transformations. It is intended
+for same-family workflow variants, such as Cursor CLI or Claude Code packages
+that track a Codex workflow while changing agent backends/models and rewriting
+same-family workflow references.
+
+Minimal derived shape:
+
+```json
+{
+  "workflowId": "cursor-cli-example",
+  "description": "Cursor CLI variant of the Codex workflow.",
+  "extends": {
+    "workflowId": "codex-example",
+    "stringReplacements": {
+      "codex-example": "cursor-cli-example",
+      "codex-agent": "cursor-cli-agent"
+    },
+    "agentNodePatch": {
+      "executionBackend": "cursor-cli-agent",
+      "model": "claude-sonnet-4-5"
+    }
+  }
+}
+```
+
+Fields:
+
+- `workflowId: string` is required and names the base workflow to load through
+  the normal workflow-id discovery path
+- optional `agentNodePatch` applies one node patch to inherited file-backed
+  agent node payloads only
+- optional `nodePatch` applies explicit node-id patches using the same field
+  allowlist and validation rules as `--node-patch`
+- optional `stringReplacements` maps non-empty source strings to replacement
+  strings
+
+Load-time behavior:
+
+- workflows without `extends` keep the ordinary authored workflow load path
+- the base workflow is loaded and validated first, including its file-backed
+  steps, node payloads, prompt files, and add-on resolution
+- inheritance transformations are in-memory only; the derived workflow directory
+  and the base workflow directory are not rewritten
+- the derived `workflowId` and optional `description` override the inherited
+  values after the base bundle is materialized
+- `stringReplacements` are for same-family workflow identifiers, backend labels,
+  and related authored strings that need to point from the base family to the
+  derived family
+- `agentNodePatch` is convenience syntax for backend/model family variants; it
+  must not patch add-on-backed nodes or non-agent execution nodes
+- explicit `nodePatch` may override or complement `agentNodePatch` for named
+  inherited node registry entries
+- any run-time `LoadOptions.nodePatch` remains a caller-supplied non-persistent
+  patch and must still apply after the inherited bundle is resolved
+- final validation must describe the resolved derived bundle, not just the base
+  bundle
+- inheritance cycles fail validation
+
+Boundaries:
+
+- `extends` does not introduce template inheritance, partial authored overlays,
+  or arbitrary deep merge semantics for `workflow.json`
+- derived workflows should not redefine `nodes[]`, `steps[]`, `defaults`, or
+  prompt files in the first implementation; such edits belong in the base
+  workflow or a future explicit overlay design
+- backend-specific behavior remains in existing agent adapters such as
+  `codex-agent`, `cursor-cli-agent`, and `claude-code-agent`; the loader only
+  rewrites data and applies validated node patches
 
 ### `defaults.selfImprove`
 
