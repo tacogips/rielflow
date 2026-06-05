@@ -293,6 +293,52 @@ project or user catalog for workflows you want to keep. Temporary workflow
 payloads are local `workflow run` inputs only; they are not installed,
 listed, or exposed through a server manifest.
 
+## Derived Workflow Inheritance
+
+Workflow bundles can define sparse derived variants with `workflow.json`
+`extends`. Use this when one workflow family shares the same graph, prompts,
+and node files, but a variant needs a different workflow id, agent backend or
+model, and same-family workflow references.
+
+```json
+{
+  "workflowId": "cursor-demo",
+  "description": "Cursor variant of the demo workflow.",
+  "extends": {
+    "workflowId": "codex-demo",
+    "stringReplacements": {
+      "codex-demo": "cursor-demo",
+      "codex-helper": "cursor-helper"
+    },
+    "agentNodePatch": {
+      "executionBackend": "cursor-cli-agent",
+      "model": "claude-sonnet-4-5"
+    },
+    "nodePatch": {
+      "worker": {
+        "model": "claude-sonnet-4-5"
+      }
+    }
+  }
+}
+```
+
+Derived workflows require only `workflowId` and `extends.workflowId`; ordinary
+workflows without `extends` still author their full `defaults`, `entryStepId`,
+`nodes`, and `steps`. At load time Rielflow validates the base workflow, applies
+configured `stringReplacements` to the inherited in-memory bundle, overrides the
+derived `workflowId` and optional `description`, applies `agentNodePatch` to
+inherited file-backed agent nodes, applies explicit `extends.nodePatch`, then
+validates the resolved derived bundle. Runtime node patches still apply after
+inheritance and remain non-persistent.
+
+`stringReplacements` are intended for same-family workflow ids, transition
+targets, and backend labels. Keep replacement keys specific because replacements
+run recursively over strings in the inherited in-memory bundle. Inheritance
+does not rewrite files on disk, patch inline agent nodes, patch add-on nodes,
+or provide arbitrary partial workflow overlays. Inheritance cycles fail
+validation.
+
 ## Command Nodes
 
 Native `nodeType: "command"` nodes can run workflow-local scripts through

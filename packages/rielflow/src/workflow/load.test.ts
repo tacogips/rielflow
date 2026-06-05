@@ -8,6 +8,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import { INLINE_NODE_FIELD } from "./authored-node";
 import {
   REJECTED_AUTHORED_STEP_ADDRESSED_DISALLOWED_TOP_LEVEL_KEYS,
   makeStepAddressedAuthoredWorkflowFieldIssue,
@@ -270,6 +271,249 @@ describe("loadWorkflowFromDisk", () => {
     });
     expect(readFileSync(workflowPath, "utf8")).toBe(workflowBefore);
     expect(readFileSync(workerPath, "utf8")).toBe(workerBefore);
+  });
+
+  test("loads a workflow that extends a base workflow and patches agent nodes", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "codex-helper",
+      workflowId: "codex-helper",
+    });
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "cursor-helper",
+      workflowId: "cursor-helper",
+    });
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "codex-demo",
+      workflowId: "codex-demo",
+      extraWorkflowFields: {
+        steps: [
+          {
+            id: "manager",
+            nodeId: "manager",
+            role: "manager",
+            transitions: [
+              {
+                toWorkflowId: "codex-helper",
+                toStepId: "manager",
+                resumeStepId: "worker",
+                label: "codex-demo",
+              },
+            ],
+          },
+          { id: "worker", nodeId: "worker", role: "worker" },
+        ],
+      },
+    });
+    const baseWorkflowPath = path.join(
+      workflowRoot,
+      "codex-demo",
+      "workflow.json",
+    );
+    const baseWorkerPath = path.join(
+      workflowRoot,
+      "codex-demo",
+      "nodes",
+      "node-worker.json",
+    );
+    const derivedWorkflowPath = path.join(
+      workflowRoot,
+      "cursor-demo",
+      "workflow.json",
+    );
+    writeJson(derivedWorkflowPath, {
+      workflowId: "cursor-demo",
+      description: "cursor variant",
+      extends: {
+        workflowId: "codex-demo",
+        stringReplacements: {
+          "codex-demo": "cursor-demo",
+          "codex-helper": "cursor-helper",
+        },
+        agentNodePatch: {
+          executionBackend: "cursor-cli-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+    const baseWorkflowBefore = readFileSync(baseWorkflowPath, "utf8");
+    const baseWorkerBefore = readFileSync(baseWorkerPath, "utf8");
+    const derivedWorkflowBefore = readFileSync(derivedWorkflowPath, "utf8");
+
+    const result = await loadWorkflowFromDisk("cursor-demo", { workflowRoot });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.value.workflowName).toBe("cursor-demo");
+    expect(result.value.bundle.workflow.workflowId).toBe("cursor-demo");
+    expect(result.value.bundle.workflow.description).toBe("cursor variant");
+    expect(result.value.bundle.workflow.entryStepId).toBe("manager");
+    expect(result.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "cursor-cli-agent",
+      model: "claude-sonnet-4-5",
+    });
+    expect(
+      result.value.bundle.workflow.steps[0]?.transitions?.[0],
+    ).toMatchObject({
+      toWorkflowId: "cursor-helper",
+      label: "cursor-demo",
+    });
+    expect(result.value.bundle.nodePayloads["manager"]).toMatchObject({
+      promptTemplate: "manager",
+    });
+    expect(result.value.bundle.nodePayloads["manager"]).not.toHaveProperty(
+      "executionBackend",
+    );
+    expect(readFileSync(baseWorkflowPath, "utf8")).toBe(baseWorkflowBefore);
+    expect(readFileSync(baseWorkerPath, "utf8")).toBe(baseWorkerBefore);
+    expect(readFileSync(derivedWorkflowPath, "utf8")).toBe(
+      derivedWorkflowBefore,
+    );
+  });
+
+  test("applies inherited node patches before runtime node patches", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "codex-demo",
+      workflowId: "codex-demo",
+    });
+    writeJson(path.join(workflowRoot, "cursor-demo", "workflow.json"), {
+      workflowId: "cursor-demo",
+      extends: {
+        workflowId: "codex-demo",
+        agentNodePatch: {
+          executionBackend: "cursor-cli-agent",
+          model: "agent-model",
+        },
+        nodePatch: {
+          worker: { model: "extends-model" },
+        },
+      },
+    });
+
+    const inherited = await loadWorkflowFromDisk("cursor-demo", {
+      workflowRoot,
+    });
+    expect(inherited.ok).toBe(true);
+    if (!inherited.ok) {
+      return;
+    }
+    expect(inherited.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "cursor-cli-agent",
+      model: "extends-model",
+    });
+
+    const runtimePatched = await loadWorkflowFromDisk("cursor-demo", {
+      workflowRoot,
+      nodePatch: {
+        worker: { model: "runtime-model" },
+      },
+    });
+    expect(runtimePatched.ok).toBe(true);
+    if (!runtimePatched.ok) {
+      return;
+    }
+    expect(runtimePatched.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "cursor-cli-agent",
+      model: "runtime-model",
+    });
+  });
+
+  test("does not apply inherited agent patches to inline agent nodes", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "codex-demo",
+      workflowId: "codex-demo",
+      extraWorkflowFields: {
+        nodes: [
+          { id: "manager", nodeFile: "nodes/node-manager.json" },
+          {
+            id: "worker",
+            [INLINE_NODE_FIELD]: {
+              id: "worker",
+              executionBackend: "codex-agent",
+              model: "gpt-5-nano",
+              promptTemplate: "worker",
+              variables: {},
+            },
+          },
+        ],
+      },
+    });
+    writeJson(path.join(workflowRoot, "cursor-demo", "workflow.json"), {
+      workflowId: "cursor-demo",
+      extends: {
+        workflowId: "codex-demo",
+        agentNodePatch: {
+          executionBackend: "cursor-cli-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+
+    const result = await loadWorkflowFromDisk("cursor-demo", { workflowRoot });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.value.bundle.nodePayloads["worker"]).toMatchObject({
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+    });
+  });
+
+  test("rejects invalid workflow extends shapes", async () => {
+    const workflowRoot = makeTempDir();
+    writeJson(path.join(workflowRoot, "broken", "workflow.json"), {
+      workflowId: "broken",
+      extends: {
+        workflowId: "",
+      },
+    });
+
+    const result = await loadWorkflowFromDisk("broken", { workflowRoot });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "workflow.extends.workflowId",
+          message: expect.stringContaining("non-empty string"),
+        }),
+      ]),
+    );
+  });
+
+  test("rejects workflow inheritance cycles", async () => {
+    const workflowRoot = makeTempDir();
+    writeJson(path.join(workflowRoot, "cycle-a", "workflow.json"), {
+      workflowId: "cycle-a",
+      extends: { workflowId: "cycle-b" },
+    });
+    writeJson(path.join(workflowRoot, "cycle-b", "workflow.json"), {
+      workflowId: "cycle-b",
+      extends: { workflowId: "cycle-a" },
+    });
+
+    const result = await loadWorkflowFromDisk("cycle-a", { workflowRoot });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("VALIDATION");
+    expect(result.error.message).toContain(
+      "workflow inheritance cycle detected: cycle-a -> cycle-b -> cycle-a",
+    );
   });
 
   test("applies codex effort in node patches", async () => {

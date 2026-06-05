@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-05T09:00:00+09:00",
+  "lastUpdated": "2026-06-05T18:52:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -557,6 +557,9 @@
       "status": "COMPLETED"
     },
     "189": {
+      "status": "COMPLETED"
+    },
+    "190": {
       "status": "COMPLETED"
     }
   },
@@ -7219,6 +7222,47 @@
             "TASK-003",
             "TASK-004",
             "TASK-005"
+          ]
+        }
+      }
+    },
+    "active/workflow-definition-inheritance-loader": {
+      "phase": 190,
+      "status": "Completed",
+      "path": "impl-plans/active/workflow-definition-inheritance-loader.md",
+      "designReference": "design-docs/specs/design-workflow-json.md#extends",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
           ]
         }
       }

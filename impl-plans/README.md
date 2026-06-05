@@ -39,6 +39,7 @@ impl-plans/
 | `active/workflow-node-package-install` | Completed | `design-workflow-node-package-install`, `design-workflow-package-registry`, `design-workflow-package-commands` |
 | `active/workflow-package-raw-checkout-status` | Completed | `design-workflow-package-commands#package-lifecycle-commands`, `design-workflow-package-checkout`, `command` |
 | `active/workflow-package-registry` | Ready | `design-workflow-package-registry` |
+| `active/workflow-definition-inheritance-loader` | Completed | `design-workflow-json#extends` |
 
 ## Recently Completed
 
