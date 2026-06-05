@@ -56,6 +56,56 @@ async function writeReportCwdScript(
   return path.join(relativeDirectory, fileName);
 }
 
+function shellSingleQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function writeFakeYtDlpScript(input: {
+  readonly workflowDirectory: string;
+  readonly fileName?: string;
+  readonly exitCode?: number;
+}): Promise<{
+  readonly binaryPath: string;
+  readonly argvLogPath: string;
+  readonly cwdLogPath: string;
+  readonly envLogPath: string;
+}> {
+  const scriptDirectory = path.join(input.workflowDirectory, "fake-bin");
+  await mkdir(scriptDirectory, { recursive: true });
+  const fileName = input.fileName ?? "yt-dlp";
+  const binaryPath = path.join(scriptDirectory, fileName);
+  const argvLogPath = path.join(scriptDirectory, `${fileName}.argv.log`);
+  const cwdLogPath = path.join(scriptDirectory, `${fileName}.cwd.log`);
+  const envLogPath = path.join(scriptDirectory, `${fileName}.env.log`);
+  const exitCode = input.exitCode ?? 0;
+  await writeFile(
+    binaryPath,
+    [
+      "#!/bin/sh",
+      "set -eu",
+      `printf '%s\\n' "$PWD" > ${shellSingleQuote(cwdLogPath)}`,
+      `: > ${shellSingleQuote(argvLogPath)}`,
+      `for arg in "$@"; do printf '%s\\n' "$arg" >> ${shellSingleQuote(argvLogPath)}; done`,
+      `env | sed 's/=.*//' | sort > ${shellSingleQuote(envLogPath)}`,
+      'output_dir=""',
+      'previous=""',
+      'for arg in "$@"; do',
+      '  if [ "$previous" = "--paths" ]; then output_dir="$arg"; fi',
+      '  previous="$arg"',
+      "done",
+      'if [ "$output_dir" = "" ]; then echo "missing --paths" >&2; exit 2; fi',
+      `if [ ${String(exitCode)} -ne 0 ]; then echo "fake failure" >&2; exit ${String(exitCode)}; fi`,
+      'mkdir -p "$output_dir"',
+      'printf "fake mp4\\n" > "$output_dir/fake-video.mp4"',
+      'printf "fake stdout\\n"',
+      'printf "fake stderr\\n" >&2',
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+  return { binaryPath, argvLogPath, cwdLogPath, envLogPath };
+}
+
 function readPayloadCwd(payload: Readonly<Record<string, unknown>>): string {
   const cwd = payload["cwd"];
   if (typeof cwd !== "string") {
@@ -366,6 +416,280 @@ describe("executeNativeNode", () => {
         await runGit(remote, ["rev-parse", "refs/heads/release/test-branch"])
       ).trim().length,
     ).toBeGreaterThan(0);
+  });
+
+  test("runs built-in YouTube MP4 download add-on with argv execution and minimized env", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "youtube");
+    const downloadParentDirectory = path.join(workingDirectory, "downloads");
+    await mkdir(workingDirectory, { recursive: true });
+    await mkdir(artifactDir, { recursive: true });
+    await mkdir(downloadParentDirectory, { recursive: true });
+    await writeFile(
+      path.join(downloadParentDirectory, "stale-video.mp4"),
+      "stale mp4\n",
+      "utf8",
+    );
+    const fakeYtDlp = await writeFakeYtDlpScript({ workflowDirectory });
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: workingDirectory,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "download",
+        nodeExecId: "exec-1",
+        node: {
+          id: "download",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "rielflow/youtube-mp4-download",
+            version: "1",
+            config: {
+              ytDlpPath: fakeYtDlp.binaryPath,
+              outputDirectory: "downloads",
+              fileNameTemplate: "%(id)s.%(ext)s",
+              formatSelector: "best[ext=mp4]",
+            },
+            inputs: {
+              url: "{{workflowInput.youtubeUrl}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {
+          workflowInput: {
+            youtubeUrl: "https://www.youtube.com/watch?v=abc123",
+          },
+        },
+        mergedVariables: {},
+        arguments: {},
+        artifactDir,
+        executionMailbox: makeExecutionMailbox(),
+        env: {
+          PATH: process.env["PATH"],
+          GITHUB_TOKEN: "secret",
+          NPM_TOKEN: "secret",
+          OPENAI_API_KEY: "secret",
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.provider).toBe("native-addon:youtube-mp4-download");
+    expect(output.model).toBe("rielflow/youtube-mp4-download@1");
+    expect(output.payload).toMatchObject({
+      youtubeMp4Download: {
+        status: "downloaded",
+        url: "https://www.youtube.com/watch?v=abc123",
+        fileName: "fake-video.mp4",
+        fileSize: 9,
+      },
+      downloadStatus: "downloaded",
+      residualRisks: [],
+    });
+    expect(output.processLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stream: "stdout",
+          label: "yt-dlp",
+          text: expect.stringContaining("fake stdout"),
+        }),
+        expect.objectContaining({
+          stream: "stderr",
+          label: "yt-dlp",
+          text: expect.stringContaining("fake stderr"),
+        }),
+      ]),
+    );
+    const outputPath = output.payload["outputPath"];
+    expect(typeof outputPath).toBe("string");
+    if (typeof outputPath !== "string") {
+      throw new Error("expected string outputPath");
+    }
+    expect(outputPath).toContain(`${path.join("downloads", "exec-1-")}`);
+    expect(outputPath.endsWith("fake-video.mp4")).toBe(true);
+    expect(outputPath).not.toContain("stale-video.mp4");
+
+    const argv = (await readFile(fakeYtDlp.argvLogPath, "utf8"))
+      .trim()
+      .split("\n");
+    for (const expectedArg of [
+      "--ignore-config",
+      "--no-playlist",
+      "--merge-output-format",
+      "mp4",
+      "--remux-video",
+      "--paths",
+      "--output",
+      "%(id)s.%(ext)s",
+      "--format",
+      "best[ext=mp4]",
+      "https://www.youtube.com/watch?v=abc123",
+    ]) {
+      expect(argv).toContain(expectedArg);
+    }
+    const pathsFlagIndex = argv.indexOf("--paths");
+    expect(pathsFlagIndex).toBeGreaterThanOrEqual(0);
+    const ytDlpOutputDirectory = argv[pathsFlagIndex + 1];
+    const downloadParentRealpath = await realpath(downloadParentDirectory);
+    expect(
+      ytDlpOutputDirectory?.startsWith(`${downloadParentRealpath}${path.sep}`),
+    ).toBe(true);
+    expect(ytDlpOutputDirectory).not.toBe(downloadParentRealpath);
+    expect(argv).not.toContain("-c");
+    await expectPayloadCwd(
+      { cwd: (await readFile(fakeYtDlp.cwdLogPath, "utf8")).trim() },
+      workingDirectory,
+    );
+    const envKeys = (await readFile(fakeYtDlp.envLogPath, "utf8")).split("\n");
+    expect(envKeys).toContain("PATH");
+    expect(envKeys).toContain("HOME");
+    expect(envKeys).not.toContain("GITHUB_TOKEN");
+    expect(envKeys).not.toContain("NPM_TOKEN");
+    expect(envKeys).not.toContain("OPENAI_API_KEY");
+  });
+
+  test("rejects rendered YouTube playlist URLs before spawning yt-dlp", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "youtube");
+    await mkdir(workingDirectory, { recursive: true });
+    await mkdir(artifactDir, { recursive: true });
+    const fakeYtDlp = await writeFakeYtDlpScript({ workflowDirectory });
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory: workingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "download",
+          nodeExecId: "exec-1",
+          node: {
+            id: "download",
+            nodeType: "addon",
+            variables: {},
+            addon: {
+              name: "rielflow/youtube-mp4-download",
+              version: "1",
+              config: {
+                ytDlpPath: fakeYtDlp.binaryPath,
+                outputDirectory: "downloads",
+                fileNameTemplate: "%(id)s.%(ext)s",
+                formatSelector: "best[ext=mp4]",
+              },
+              inputs: {
+                url: "{{workflowInput.youtubeUrl}}",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {
+            workflowInput: {
+              youtubeUrl: "https://www.youtube.com/watch?v=abc123&list=PL123",
+            },
+          },
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "policy_blocked",
+      message: expect.stringContaining("playlist"),
+    } satisfies Partial<AdapterExecutionError>);
+    await expect(readFile(fakeYtDlp.argvLogPath, "utf8")).rejects.toThrow();
+  });
+
+  test("preserves yt-dlp process logs on non-zero exit", async () => {
+    const workflowDirectory = await makeTempDir();
+    const workingDirectory = path.join(workflowDirectory, "workspace");
+    const artifactDir = path.join(workflowDirectory, "artifacts", "youtube");
+    await mkdir(workingDirectory, { recursive: true });
+    await mkdir(artifactDir, { recursive: true });
+    const fakeYtDlp = await writeFakeYtDlpScript({
+      workflowDirectory,
+      fileName: "yt-dlp-fail",
+      exitCode: 7,
+    });
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory: workingDirectory,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "download",
+          nodeExecId: "exec-1",
+          node: {
+            id: "download",
+            nodeType: "addon",
+            variables: {},
+            addon: {
+              name: "rielflow/youtube-mp4-download",
+              version: "1",
+              config: {
+                ytDlpPath: fakeYtDlp.binaryPath,
+                outputDirectory: "downloads",
+                fileNameTemplate: "%(id)s.%(ext)s",
+                formatSelector: "best[ext=mp4]",
+              },
+              inputs: {
+                url: "https://youtu.be/abc123",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: makeExecutionMailbox(),
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "provider_error",
+      processLogs: expect.arrayContaining([
+        expect.objectContaining({
+          stream: "stderr",
+          label: "yt-dlp",
+          text: expect.stringContaining("fake failure"),
+        }),
+      ]),
+    } satisfies Partial<AdapterExecutionError>);
   });
 
   test("routes chat personas with provider-neutral built-in router", async () => {

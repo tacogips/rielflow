@@ -2,7 +2,8 @@
 
 This document defines an authored workflow add-on mechanism and the current
 built-in worker add-ons: chat reply, agent worker, workflow package sandbox
-review, x-gateway worker nodes, and mail-gateway worker nodes.
+review, x-gateway worker nodes, mail-gateway worker nodes, and YouTube MP4
+download worker nodes.
 
 ## Overview
 
@@ -1191,6 +1192,213 @@ Validation rules:
 - command or binary overrides are rejected; version `1` always runs
   `mail-gateway`
 
+## Built-in `rielflow/youtube-mp4-download`
+
+### Purpose
+
+`rielflow/youtube-mp4-download` downloads one YouTube video URL to an MP4 file
+with `yt-dlp`. It is intended for workflows that need a deterministic
+runtime-owned media acquisition step without embedding command payloads,
+shell quoting, or ad hoc path handling in workflow bundles.
+
+The add-on is worker-only and resolves to a native add-on payload with
+`nodeType: "addon"`. Version `1` supports a single video URL, always rejects
+playlists, and rejects non-YouTube hosts instead of delegating arbitrary network
+downloads to `yt-dlp`.
+
+### Authored Example
+
+```json
+{
+  "id": "download-video",
+  "role": "worker",
+  "addon": {
+    "name": "rielflow/youtube-mp4-download",
+    "version": "1",
+    "config": {
+      "outputDirectory": "downloads",
+      "fileNameTemplate": "%(title).200B-%(id)s.%(ext)s"
+    },
+    "inputs": {
+      "url": "{{event.input.youtubeUrl}}"
+    }
+  }
+}
+```
+
+### Configuration
+
+Initial config:
+
+```typescript
+interface YoutubeMp4DownloadAddonConfig {
+  readonly ytDlpPath?: string;
+  readonly outputDirectory?: string;
+  readonly fileNameTemplate?: string;
+  readonly formatSelector?: string;
+  readonly timeoutMs?: number;
+}
+```
+
+Defaults:
+
+- `ytDlpPath`: `"yt-dlp"`
+- `outputDirectory`: `"downloads"`
+- `fileNameTemplate`: `"%(title).200B-%(id)s.%(ext)s"`
+- `formatSelector`:
+  `"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]"`
+- `timeoutMs`: inherited from the node execution context unless configured
+
+Authored `addon.inputs.url` is required. The executor renders it against the
+normal node template context before validation, so workflows can pass URLs from
+runtime variables, arguments, or upstream outputs while keeping the URL in the
+invocation-specific input surface.
+
+`addon.env` is not supported in version `1`. The add-on must not forward
+ambient credentials, cookies, package manager tokens, SSH configuration, or
+provider API keys to `yt-dlp`. Tests and specialized deployments should use
+`config.ytDlpPath` to point at a fake or managed binary rather than environment
+overrides.
+
+### Validation Rules
+
+Validation is split between authoring-time schema checks and execution-time
+rendered value checks:
+
+- `version` must be `"1"`
+- `role` must be `worker`
+- `config`, when present, must be an object with only the supported keys
+- `inputs` must be an object containing a non-empty string `url`
+- `addon.env` is rejected
+- `ytDlpPath`, `outputDirectory`, `fileNameTemplate`, and `formatSelector` must
+  be non-empty strings without NUL, carriage return, newline, or tab characters
+- `outputDirectory` must be relative to the node execution working directory
+  and must not normalize outside that directory
+- `fileNameTemplate` must be a basename template only; path separators,
+  absolute paths, and `..` segments are rejected
+- `timeoutMs` must be a positive integer when supplied
+- the rendered `url` must be `http:` or `https:`, must target `youtube.com`,
+  `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, or `youtu.be`, and
+  must be a single-video route: `youtu.be/<id>`, `/watch?v=<id>`,
+  `/shorts/<id>`, `/embed/<id>`, or `/live/<id>`
+
+Execution must repeat the path and URL checks after template rendering because
+schema validation cannot see runtime-rendered values.
+
+### Native Executor Data Flow
+
+The executor:
+
+1. resolves the node execution working directory through the normal workflow
+   working-directory helper
+2. renders `inputs.url`
+3. normalizes and creates `outputDirectory` inside the working directory
+4. creates a fresh per-execution child directory under `outputDirectory`, then
+   rejects symlinks or real paths that escape the working directory
+5. builds an argv array for `yt-dlp`; it never invokes a shell string
+6. passes `--ignore-config`, `--no-playlist`, `--merge-output-format mp4`,
+   `--remux-video mp4`, `--paths`, `--output`, the configured format selector,
+   and the rendered URL
+7. runs `yt-dlp` with a minimized environment containing only path lookup and
+   platform essentials; cache/temp locations should point inside the node
+   artifact directory when feasible
+8. captures stdout and stderr as process log attachments
+9. resolves the final output file by inspecting only the fresh per-execution
+   output directory, so stale MP4 files in `outputDirectory` cannot be returned
+10. writes an ordinary runtime-owned node output envelope
+
+The executor must not use user shell expansion, `exec`, `execSync`, command
+concatenation, or a `shell: true` subprocess option. Any configurable executable
+path is passed as the command argument to argv-style spawning.
+
+### Output Contract
+
+The add-on returns provider/model metadata through the normal native output
+envelope:
+
+- `provider`: `"native-addon:youtube-mp4-download"`
+- `model`: `"rielflow/youtube-mp4-download@1"`
+- `processLogs`: stdout/stderr attachments for the `yt-dlp` subprocess
+
+The payload includes structured download data:
+
+```json
+{
+  "youtubeMp4Download": {
+    "status": "downloaded",
+    "url": "https://www.youtube.com/watch?v=example",
+    "outputPath": "downloads/video-example.mp4",
+    "fileName": "video-example.mp4",
+    "fileSize": 1234567
+  },
+  "downloadStatus": "downloaded",
+  "url": "https://www.youtube.com/watch?v=example",
+  "outputPath": "downloads/video-example.mp4",
+  "fileName": "video-example.mp4",
+  "fileSize": 1234567,
+  "residualRisks": []
+}
+```
+
+`outputPath` is workflow-working-directory relative. Absolute host paths should
+remain in runtime artifacts or process-log metadata only when needed for
+debugging. `fileSize` is omitted when the file cannot be statted after a
+successful `yt-dlp` run.
+
+Failure rules:
+
+- unsupported or unsafe URLs fail validation before subprocess execution
+- non-zero `yt-dlp` exit fails the node with captured process logs
+- multiple downloaded files fail the node because version `1` supports only a
+  single video
+- a missing final MP4 file after successful `yt-dlp` exit fails the node as an
+  invalid provider output
+
+### Test Expectations
+
+Focused coverage should use a fake `yt-dlp` binary and no network access:
+
+- resolver validation accepts a valid `rielflow/youtube-mp4-download` version
+  `1` reference
+- resolver validation rejects unsupported versions, missing `inputs.url`,
+  non-object config or inputs, unsupported config keys, unsupported `addon.env`,
+  unsafe output directories, unsafe file-name templates, invalid URL shapes, and
+  non-YouTube hosts
+- native execution passes argv-style arguments to the fake binary without shell
+  execution
+- native execution confines output paths to the workflow working directory
+- native execution uses a minimized environment rather than inheriting the full
+  runtime environment
+- native execution returns status, URL, relative output path, file name, file
+  size when available, provider/model metadata, and process logs
+
+### Rollout and Documentation Boundaries
+
+Implementation should stay inside the built-in add-on catalog, resolver
+validation, and native executor packages. Workflow authors must only see the
+`workflow.json.nodes[].addon` surface; direct `nodeType: "addon"` authoring
+remains runtime-owned and rejected in workflow-local node payload files.
+
+User-facing add-on documentation and projected workflow skills should include
+the add-on name, version, required `inputs.url`, supported config keys, path
+confinement behavior, and the requirement that `yt-dlp` is installed or supplied
+through `config.ytDlpPath`. If workflow package, prompt, script, or skill files
+are edited while documenting this add-on, package digest metadata must be
+refreshed as required by the package rules.
+
+### Open Implementation Notes
+
+No unresolved user decision is required for version `1`; these items should be
+settled during implementation:
+
+- `timeoutMs` should prefer the node execution context timeout when present and
+  otherwise use a conservative fixed fallback documented in the descriptor tests
+- the user-facing documentation update should target the existing workflow
+  add-on docs and projected rielflow workflow skill surfaces that enumerate
+  built-in add-ons
+- `yt-dlp` installation remains an external runtime prerequisite unless
+  `config.ytDlpPath` points to a managed binary supplied by the deployment
+
 ### Reply Target Metadata
 
 The event trigger layer should expose reply target data in
@@ -1356,7 +1564,11 @@ The implementation should cover:
 - validation rejects workflow-local node payload files that author runtime-only
   `nodeType: "addon"` instead of using `workflow.json.nodes[].addon`
 - validation accepts the built-in agent worker add-ons, both x-gateway add-ons,
-  and both mail-gateway add-ons
+  both mail-gateway add-ons, and `rielflow/youtube-mp4-download`
+- validation rejects unsafe YouTube MP4 download config, inputs, and
+  unsupported `addon.env`
+- the YouTube MP4 download native executor uses a fake `yt-dlp` binary in tests
+  and performs no network download
 - loader materializes an effective payload with the authored node id
 - workflow save/edit preserves the authored `addon` reference
 - chat reply worker renders text from upstream output

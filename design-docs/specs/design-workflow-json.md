@@ -459,6 +459,9 @@ Initial built-in add-ons:
 - `rielflow/mail-gateway`: worker node that runs the full
   `mail-gateway graphql --query` surface for intentional query or send-mutation
   documents in a Docker-compatible container
+- `rielflow/youtube-mp4-download`: worker node that invokes `yt-dlp` through
+  argv-style native execution to download one validated YouTube URL as an MP4
+  file under the workflow working directory
 
 Detailed design:
 `design-docs/specs/design-node-addon-catalog-and-chat-reply-worker.md`.

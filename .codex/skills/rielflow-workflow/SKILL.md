@@ -165,7 +165,9 @@ Use object form with explicit version:
 }
 ```
 
-Current built-ins include `rielflow/chat-reply-worker`, `rielflow/codex-worker`, `rielflow/claude-code-worker`, `rielflow/x-gateway-read`, `rielflow/x-gateway`, `rielflow/mail-gateway-read`, `rielflow/mail-gateway`, `rielflow/git-commit`, and `rielflow/git-push`, all version `1`.
+Current built-ins include `rielflow/chat-reply-worker`, `rielflow/codex-worker`, `rielflow/claude-code-worker`, `rielflow/x-gateway-read`, `rielflow/x-gateway`, `rielflow/mail-gateway-read`, `rielflow/mail-gateway`, `rielflow/git-commit`, `rielflow/git-push`, and `rielflow/youtube-mp4-download`, all version `1`.
+
+`rielflow/youtube-mp4-download` requires `addon.inputs.url`, invokes external `yt-dlp`, writes under the workflow working directory, accepts only single-video YouTube routes, rejects playlists and non-YouTube hosts, creates a fresh per-execution child directory below `outputDirectory`, and accepts optional config keys `ytDlpPath`, `outputDirectory`, `fileNameTemplate`, `formatSelector`, and `timeoutMs`. Defaults are `ytDlpPath: "yt-dlp"`, `outputDirectory: "downloads"`, `fileNameTemplate: "%(title).200B-%(id)s.%(ext)s"`, and `formatSelector: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]"`; `timeoutMs` defaults to the node execution timeout or the native executor fallback. Successful runs return provider `native-addon:youtube-mp4-download`, model `rielflow/youtube-mp4-download@1`, stdout/stderr process logs, and structured output fields for status, URL, workflow-relative output path, file name, and file size when available.
 
 ## External Portability
 

@@ -39,6 +39,9 @@ export const GIT_COMMIT_ADDON_NAME = "rielflow/git-commit";
 export const GIT_COMMIT_ADDON_VERSION = "1";
 export const GIT_PUSH_ADDON_NAME = "rielflow/git-push";
 export const GIT_PUSH_ADDON_VERSION = "1";
+export const YOUTUBE_MP4_DOWNLOAD_ADDON_NAME =
+  "rielflow/youtube-mp4-download";
+export const YOUTUBE_MP4_DOWNLOAD_ADDON_VERSION = "1";
 export const SUPERVISER_CONTROL_ADDON_VERSION = "1";
 export const CHAT_REPLY_WORKER_OUTPUT: NodeOutputContract = {
   description:
@@ -186,6 +189,29 @@ export const GIT_PUSH_OUTPUT: NodeOutputContract = {
           commitHash: { type: "string", minLength: 1 },
           pushedRemote: { type: "string", minLength: 1 },
           pushedBranch: { type: "string", minLength: 1 },
+        },
+      },
+    },
+  },
+};
+export const YOUTUBE_MP4_DOWNLOAD_OUTPUT: NodeOutputContract = {
+  description:
+    "YouTube MP4 download result produced by the built-in yt-dlp add-on.",
+  jsonSchema: {
+    type: "object",
+    required: ["youtubeMp4Download"],
+    additionalProperties: true,
+    properties: {
+      youtubeMp4Download: {
+        type: "object",
+        required: ["status", "url", "outputPath", "fileName"],
+        additionalProperties: true,
+        properties: {
+          status: { enum: ["downloaded"] },
+          url: { type: "string", minLength: 1 },
+          outputPath: { type: "string", minLength: 1 },
+          fileName: { type: "string", minLength: 1 },
+          fileSize: { type: "number" },
         },
       },
     },

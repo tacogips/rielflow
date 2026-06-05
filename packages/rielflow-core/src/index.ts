@@ -164,6 +164,7 @@ export type {
   NodeExecutionBackend,
   NodeOutputContract,
   NodePayload,
+  NormalizedYoutubeMp4DownloadConfig,
   ResolvedAddonSource,
   ResolvedAgentWorkerAddon,
   ResolvedChatReplyWorkerAddon,
@@ -183,6 +184,7 @@ export type {
   ResolvedWorkflowSource,
   ResolvedXGatewayAddon,
   ResolvedXGatewayReadAddon,
+  ResolvedYoutubeMp4DownloadAddon,
   SupervisionIncident,
   SupervisionRemediationAction,
   SupervisionRemediationRecord,
@@ -205,6 +207,7 @@ export type {
   WorkflowSourceScope,
   XGatewayAddonConfig,
   XGatewayReadAddonConfig,
+  YoutubeMp4DownloadAddonConfig,
 } from "../../rielflow/src/workflow/types";
 export {
   describeSuperviserControlAddon,

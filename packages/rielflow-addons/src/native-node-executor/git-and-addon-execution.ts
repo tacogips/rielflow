@@ -12,6 +12,7 @@ import type {
   ResolvedGitCommitAddon,
   ResolvedGitPushAddon,
   ResolvedSuperviserControlAddon,
+  ResolvedYoutubeMp4DownloadAddon,
 } from "../../../rielflow-core/src/index";
 import {
   getSuperviserControlAddonProviderOperationId,
@@ -42,6 +43,7 @@ import {
   normalizeCommittedFilePath,
   parseCommittedFiles,
 } from "./chat-and-gateway-addons";
+import { executeYoutubeMp4DownloadAddonNode } from "./youtube-mp4-download";
 
 export async function rejectDirectoryCommittedFiles(input: {
   readonly cwd: string;
@@ -503,6 +505,12 @@ export async function executeAddonNode(
       return await executeGitCommitAddonNode(input, addon, context);
     case GIT_PUSH_ADDON_NAME:
       return await executeGitPushAddonNode(input, addon, context);
+    case "rielflow/youtube-mp4-download":
+      return await executeYoutubeMp4DownloadAddonNode(
+        input,
+        addon as ResolvedYoutubeMp4DownloadAddon,
+        context,
+      );
     default:
       throw new AdapterExecutionError(
         "policy_blocked",

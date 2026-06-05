@@ -36,7 +36,8 @@ can all be described as a reusable workflow.
 - Connect event sources such as webhooks, cron, file changes, S3-style object
   events, sequential lists, Discord Gateway, Telegram Gateway, Matrix, and
   generic Chat SDK adapters.
-- Use built-in chat add-ons for persona routing and chat replies.
+- Use built-in add-ons for chat replies, persona routing, git commit/push, and
+  YouTube MP4 downloads.
 - Install workflow packages and optional agent skills from Git-backed package
   registries.
 - Install hook snippets for Claude Code, Codex, and Gemini.
@@ -54,6 +55,22 @@ rielflow --help
 The installed binary is `rielflow`.
 Built-in add-ons are bundled into the installed command; they do not require a
 separate add-on package install.
+
+The built-in `rielflow/youtube-mp4-download` worker add-on invokes an external
+`yt-dlp` binary to download one validated YouTube video URL as an MP4 under the
+workflow working directory. Use `addon.inputs.url` for the URL; optional
+`addon.config` keys are `ytDlpPath`, `outputDirectory`, `fileNameTemplate`,
+`formatSelector`, and `timeoutMs`. Defaults are `ytDlpPath: "yt-dlp"`,
+`outputDirectory: "downloads"`,
+`fileNameTemplate: "%(title).200B-%(id)s.%(ext)s"`, and
+`formatSelector: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]"`.
+Version `1` accepts only single-video routes such as `/watch?v=`, `/shorts/`,
+`/embed/`, `/live/`, or `youtu.be/`, creates a fresh per-execution child
+directory below `outputDirectory`, and rejects playlists, non-YouTube hosts,
+unsafe output paths, and `addon.env`. Successful runs return provider
+`native-addon:youtube-mp4-download`, model `rielflow/youtube-mp4-download@1`,
+stdout/stderr process logs, and structured output fields for status, URL,
+workflow-relative output path, file name, and file size when available.
 
 ### Run With Bun
 

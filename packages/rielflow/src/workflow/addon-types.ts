@@ -58,6 +58,22 @@ export interface GitPushAddonConfig {
   readonly branchTemplate?: string;
 }
 
+export interface YoutubeMp4DownloadAddonConfig {
+  readonly ytDlpPath?: string;
+  readonly outputDirectory?: string;
+  readonly fileNameTemplate?: string;
+  readonly formatSelector?: string;
+  readonly timeoutMs?: number;
+}
+
+export interface NormalizedYoutubeMp4DownloadConfig {
+  readonly ytDlpPath: string;
+  readonly outputDirectory: string;
+  readonly fileNameTemplate: string;
+  readonly formatSelector: string;
+  readonly timeoutMs?: number;
+}
+
 export interface AgentWorkerAddonConfig {
   readonly model: string;
   readonly promptTemplate: string;
@@ -194,6 +210,13 @@ export interface ResolvedGitPushAddon {
   readonly inputs?: Readonly<Record<string, unknown>>;
 }
 
+export interface ResolvedYoutubeMp4DownloadAddon {
+  readonly name: "rielflow/youtube-mp4-download";
+  readonly version: "1";
+  readonly config: NormalizedYoutubeMp4DownloadConfig;
+  readonly inputs: Readonly<{ url: string }>;
+}
+
 export interface ResolvedCodexWorkerAddon {
   readonly name: "rielflow/codex-worker";
   readonly version: "1";
@@ -257,6 +280,7 @@ export type ResolvedNodeAddon =
   | ResolvedMailGatewayAddon
   | ResolvedGitCommitAddon
   | ResolvedGitPushAddon
+  | ResolvedYoutubeMp4DownloadAddon
   | ResolvedAgentWorkerAddon
   | ResolvedWorkflowPackageSandboxReviewAddon
   | ResolvedSuperviserControlAddon;

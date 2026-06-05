@@ -45,6 +45,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `youtube-mp4-download-addon` | 2026-06-06 | `design-node-addon-catalog-and-chat-reply-worker#built-in-rielflowyoutube-mp4-download` |
 | `inherited-cross-workflow-callee-validation` | 2026-06-05 | `architecture`, `command#workflow-validate-name`, `design-workflow-json#extends` |
 | `temporary-workflow-execution` | 2026-05-31 | `design-temporary-workflow-execution`, `command`, `architecture` |
 | `chat-source-restart-history` | 2026-05-29 | `design-matrix-chat-history`, `design-chat-sdk-chat-history`, `design-matrix-attachment-text` |

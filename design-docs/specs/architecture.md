@@ -1253,6 +1253,9 @@ Initial scope:
 - `rielflow/mail-gateway-read` and `rielflow/mail-gateway` for read-only mail
   inspection and intentional mail send mutations through the same explicit
   container runner and environment binding model
+- `rielflow/youtube-mp4-download` for worker-only MP4 acquisition from one
+  validated YouTube URL through argv-style `yt-dlp` execution confined to the
+  workflow working directory
 - add-on nodes remain ordinary worker nodes after resolution
 - `rielflow/` is reserved for runtime-provided add-ons; third-party add-ons use
   non-`rielflow/` names such as `vendor/name`
@@ -1300,8 +1303,9 @@ verified by add-on content digest plus package integrity. Installed executable
 add-ons resolve to package-owned command or container payloads under the
 project/user/local add-on roots, and workflow packages may require exact
 node-addon dependency locks before validation accepts a reference. The greeting
-fixture in `/Users/taco/gits/tacogips/rielflow-packages/packages/greeting-node-addon`
-is the current acceptance path for `examples/greeting-shell@1`. See
+fixture in the `rielflow-packages` repository at
+`packages/greeting-node-addon` is the current acceptance path for
+`examples/greeting-shell@1`. See
 `design-docs/specs/design-executable-node-addon-manifest-dependencies.md`.
 
 ### Prompt and Input Assembly

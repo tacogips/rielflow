@@ -313,10 +313,13 @@ Built-in add-ons:
 - `rielflow/mail-gateway`
 - `rielflow/git-commit`
 - `rielflow/git-push`
+- `rielflow/youtube-mp4-download`
 
 Use explicit object form with `version: "1"` unless a newer implementation documents a different version.
 
 `addon.inputs` becomes resolved node `variables`. `addon.config` is validated by the add-on descriptor. `addon.env` maps add-on environment variable names to rielflow runtime environment variable names only for descriptors that support explicit environment bindings.
+
+`rielflow/youtube-mp4-download` requires `addon.inputs.url` and an installed or configured `yt-dlp` binary. Version `1` downloads one single-video YouTube route as an MP4 under a fresh per-execution child directory below `outputDirectory`, rejects playlists, rejects non-YouTube hosts, rejects `addon.env`, and supports `ytDlpPath`, `outputDirectory`, `fileNameTemplate`, `formatSelector`, and `timeoutMs` config keys. Defaults are `ytDlpPath: "yt-dlp"`, `outputDirectory: "downloads"`, `fileNameTemplate: "%(title).200B-%(id)s.%(ext)s"`, and `formatSelector: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best[ext=mp4]"`; `timeoutMs` defaults to the node execution timeout or the native executor fallback. Successful runs return provider `native-addon:youtube-mp4-download`, model `rielflow/youtube-mp4-download@1`, stdout/stderr process logs, and structured output fields for status, URL, workflow-relative output path, file name, and file size when available.
 
 Prefer DRY composition when using add-ons: chain reusable primitive steps in `steps[].transitions` instead of authoring combined nodes that duplicate behavior. For example, express commit-and-push as `rielflow/git-commit` followed by `rielflow/git-push`.
 

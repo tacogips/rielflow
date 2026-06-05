@@ -12,4 +12,5 @@ export {
   executeAddonNode,
   executeNativeNode,
 } from "./native-node-executor/git-and-addon-execution";
+export * from "./native-node-executor/youtube-mp4-download";
 export { isContainerRunnerWithDockerCli } from "./native-node-executor/template-env-and-containers";

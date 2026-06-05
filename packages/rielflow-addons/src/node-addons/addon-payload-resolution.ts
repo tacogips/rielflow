@@ -49,6 +49,7 @@ import {
   resolveXGatewayReadPayload,
 } from "./gateway-and-git-config";
 import { resolveWorkflowPackageSandboxReviewPayload } from "./package-sanitize-review-config";
+import { resolveYoutubeMp4DownloadPayload } from "./youtube-mp4-download-config";
 
 export function resolveSuperviserControlPayload(input: {
   readonly nodeId: string;
@@ -221,6 +222,13 @@ export function resolveBuiltinNodeAddonPayload(
     gitPushPayload.issues.length > 0
   ) {
     return gitPushPayload;
+  }
+  const youtubeMp4DownloadPayload = resolveYoutubeMp4DownloadPayload(input);
+  if (
+    youtubeMp4DownloadPayload.payload !== undefined ||
+    youtubeMp4DownloadPayload.issues.length > 0
+  ) {
+    return youtubeMp4DownloadPayload;
   }
 
   if (input.addon.name === CHAT_PERSONA_ROUTER_ADDON_NAME) {
