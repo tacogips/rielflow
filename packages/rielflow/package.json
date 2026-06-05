@@ -1,6 +1,6 @@
 {
   "name": "rielflow",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Compatibility facade for the Rielflow CLI and public library API",
   "type": "module",
   "main": "dist/lib.js",
