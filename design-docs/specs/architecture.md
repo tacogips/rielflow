@@ -917,6 +917,11 @@ run on `codex-agent` to call already installed workflows such as
 `codex-design-and-implement-review-loop` without duplicating those callee
 workflow directories in the package. Missing callees remain validation errors
 before any checkout mutation, and diagnostics should report the searched roots.
+The callee resolver must load the effective workflow bundle, including
+`extends` inheritance and node patches, before checking the callable entry step.
+This keeps direct `workflow validate` / `workflow inspect` and step-authored
+cross-workflow validation consistent for derived packages such as
+`claude-code-design-and-implement-review-loop`.
 
 ### Runtime State Boundary
 
@@ -1525,6 +1530,9 @@ Responsibilities:
 Current behavior:
 
 - cross-workflow invocation targets the callee workflow's callable entry step (`managerStepId` when present, otherwise `entryStepId`); there is no supported authored top-level `workflow.workflowCalls` array
+- validation uses the same effective callee loading boundary as runtime
+  dispatch. A raw extends-only callee `workflow.json` is not enough evidence for
+  a missing entry error; the resolved inherited bundle is authoritative.
 - matching dispatches run after their caller step's node execution succeeds, in deterministic step order
 - manager output payloads may include `managerControl.actions`; the runtime validates control scope before honoring those actions
 

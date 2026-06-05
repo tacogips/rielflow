@@ -36,6 +36,9 @@ export function validateCrossWorkflowCalleeEntryAlignmentSync(
   options: WorkflowValidationOptions,
   issues: ValidationIssue[],
 ): void {
+  if (options.skipCrossWorkflowCalleeEntryValidation === true) {
+    return;
+  }
   const workflowRoot = options.workflowRoot;
   if (workflowRoot === undefined || workflowRoot === "") {
     return;
@@ -66,10 +69,14 @@ export function validateCrossWorkflowCalleeEntryAlignmentSync(
     }
 
     try {
-      const resolved = resolveCalleeWorkflowEntryByIdSync({
-        workflowRoot: resolvedRoot,
-        workflowId: calleeId,
-      });
+      const preloaded = options.preloadedWorkflowCalleeEntries?.get(calleeId);
+      const resolved =
+        preloaded === undefined
+          ? resolveCalleeWorkflowEntryByIdSync({
+              workflowRoot: resolvedRoot,
+              workflowId: calleeId,
+            })
+          : { ok: true as const, entry: preloaded.entryStepId };
       if (!resolved.ok) {
         calleeEntryById.set(calleeId, {
           status: "error",
@@ -132,6 +139,9 @@ export async function validateCrossWorkflowCalleeEntryAlignment(
   options: WorkflowValidationOptions,
   issues: ValidationIssue[],
 ): Promise<void> {
+  if (options.skipCrossWorkflowCalleeEntryValidation === true) {
+    return;
+  }
   const workflowRoot = options.workflowRoot;
   if (workflowRoot === undefined || workflowRoot === "") {
     return;
@@ -162,10 +172,22 @@ export async function validateCrossWorkflowCalleeEntryAlignment(
     }
 
     try {
-      const resolved = await resolveCalleeWorkflowEntryByIdAsync({
-        workflowRoot: resolvedRoot,
-        workflowId: calleeId,
-      });
+      const resolvedFromOption =
+        options.workflowCalleeEntryResolver === undefined
+          ? undefined
+          : await options.workflowCalleeEntryResolver({
+              workflowRoot: resolvedRoot,
+              workflowId: calleeId,
+            });
+      const resolved =
+        resolvedFromOption === undefined
+          ? await resolveCalleeWorkflowEntryByIdAsync({
+              workflowRoot: resolvedRoot,
+              workflowId: calleeId,
+            })
+          : resolvedFromOption.ok
+            ? { ok: true as const, entry: resolvedFromOption.value.entryStepId }
+            : { ok: false as const, message: resolvedFromOption.message };
       if (!resolved.ok) {
         calleeEntryById.set(calleeId, {
           status: "error",

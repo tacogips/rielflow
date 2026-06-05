@@ -65,7 +65,30 @@ export interface WorkflowValidationOptions
   > {
   readonly allowResolvedStepFileFields?: boolean;
   readonly executablePreflight?: boolean;
+  readonly skipCrossWorkflowCalleeEntryValidation?: boolean;
+  readonly workflowCalleeEntryResolver?:
+    | WorkflowCalleeEntryResolver
+    | undefined;
+  readonly preloadedWorkflowCalleeEntries?:
+    | ReadonlyMap<string, WorkflowCalleeEntryResolution>
+    | undefined;
 }
+export interface WorkflowCalleeEntryRequest {
+  readonly workflowRoot: string;
+  readonly workflowId: string;
+}
+export interface WorkflowCalleeEntryResolution {
+  readonly workflowId: string;
+  readonly entryStepId: string;
+  readonly workflowDirectory: string;
+  readonly source: "effective-loader" | "preloaded-sync";
+}
+export type WorkflowCalleeEntryResolver = (
+  input: WorkflowCalleeEntryRequest,
+) => Promise<
+  | { readonly ok: true; readonly value: WorkflowCalleeEntryResolution }
+  | { readonly ok: false; readonly message: string }
+>;
 export function isStrictWorkflowAuthorshipValidation(
   _options: WorkflowValidationOptions,
 ): boolean {

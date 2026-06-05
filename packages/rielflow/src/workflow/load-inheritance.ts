@@ -6,6 +6,7 @@ import { resolveEffectiveRoots, resolveWorkflowScopedPath } from "./paths";
 import { err, ok, type Result } from "./result";
 import {
   validateWorkflowBundleDetailedAsync,
+  type WorkflowCalleeEntryResolver,
   type NodeValidationResult,
 } from "./validate";
 import type { LoadedWorkflow, LoadFailure } from "./load";
@@ -196,6 +197,7 @@ function authoredWorkflowForValidation(
 async function validateResolvedInheritedBundle(
   bundle: NormalizedWorkflowBundle,
   options: LoadOptions,
+  workflowCalleeEntryResolver: WorkflowCalleeEntryResolver | undefined,
 ): Promise<
   Result<
     {
@@ -213,6 +215,9 @@ async function validateResolvedInheritedBundle(
     },
     {
       ...options,
+      ...(workflowCalleeEntryResolver === undefined
+        ? {}
+        : { workflowCalleeEntryResolver }),
       allowResolvedStepFileFields: true,
     },
   );
@@ -238,8 +243,12 @@ function isAgentNodePayload(value: unknown): boolean {
 function applyStringReplacements(
   value: unknown,
   replacements: readonly (readonly [string, string])[] | undefined,
+  path: readonly string[] = [],
 ): unknown {
   if (replacements === undefined || replacements.length === 0) {
+    return value;
+  }
+  if (path[path.length - 1] === "nodeFile") {
     return value;
   }
   if (typeof value === "string") {
@@ -249,7 +258,9 @@ function applyStringReplacements(
     );
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => applyStringReplacements(entry, replacements));
+    return value.map((entry, index) =>
+      applyStringReplacements(entry, replacements, [...path, String(index)]),
+    );
   }
   if (!isRecord(value)) {
     return value;
@@ -257,7 +268,10 @@ function applyStringReplacements(
 
   const replaced: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
-    replaced[key] = applyStringReplacements(entry, replacements);
+    replaced[key] = applyStringReplacements(entry, replacements, [
+      ...path,
+      key,
+    ]);
   }
   return replaced;
 }
@@ -328,6 +342,7 @@ export async function loadInheritedWorkflowFromDisk(input: {
   readonly workflow: Readonly<Record<string, unknown>>;
   readonly spec: WorkflowExtendsSpec;
   readonly options: LoadOptions;
+  readonly workflowCalleeEntryResolver?: WorkflowCalleeEntryResolver;
   readonly inheritanceStack: readonly string[];
   readonly loadBaseWorkflowById: (
     workflowId: string,
@@ -420,6 +435,7 @@ export async function loadInheritedWorkflowFromDisk(input: {
   const validation = await validateResolvedInheritedBundle(
     patchedBundle.value,
     input.options,
+    input.workflowCalleeEntryResolver,
   );
   if (!validation.ok) {
     return validation;

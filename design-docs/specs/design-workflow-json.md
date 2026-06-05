@@ -265,6 +265,12 @@ Load-time behavior:
 - `stringReplacements` are for same-family workflow identifiers, backend labels,
   and related authored strings that need to point from the base family to the
   derived family
+- workflow-local file references such as `nodeFile`, `stepFile`, and prompt
+  template file paths are load provenance as well as authored strings. If a
+  string replacement changes one of those paths, validation must either resolve
+  an actual replacement file supplied by the derived bundle or keep the inherited
+  base file path for lookup; it must not fail by looking only for a synthesized
+  missing path such as `nodes/node-adhoc-claude-code.json`.
 - `agentNodePatch` is convenience syntax for backend/model family variants; it
   must not patch add-on-backed nodes or non-agent execution nodes
 - explicit `nodePatch` may override or complement `agentNodePatch` for named
@@ -273,6 +279,10 @@ Load-time behavior:
   patch and must still apply after the inherited bundle is resolved
 - final validation must describe the resolved derived bundle, not just the base
   bundle
+- direct validation/inspection and cross-workflow callee validation share the
+  same resolved derived bundle semantics. A transition targeting a derived
+  callee must validate against the callee's effective `managerStepId` or
+  `entryStepId` after `extends` has loaded.
 - inheritance cycles fail validation
 
 Boundaries:

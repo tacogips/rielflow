@@ -20,6 +20,7 @@ import {
 } from "./paths";
 import {
   validateWorkflowBundleDetailedAsync,
+  type WorkflowCalleeEntryResolver,
   type NodeValidationResult,
 } from "./validate";
 import {
@@ -502,6 +503,10 @@ async function loadWorkflowFromDiskInternal(
   }
 
   const roots = resolveEffectiveRoots(options);
+  const workflowCalleeEntryResolver =
+    options.skipCrossWorkflowCalleeEntryValidation === true
+      ? undefined
+      : createEffectiveWorkflowCalleeEntryResolver(options, inheritanceStack);
   const workflowDirectory = resolveWorkflowBundleDirectory(
     options,
     roots.workflowRoot,
@@ -540,6 +545,9 @@ async function loadWorkflowFromDiskInternal(
       workflow: workflowRaw.value.value,
       spec: inheritanceSpec.value,
       options,
+      ...(workflowCalleeEntryResolver === undefined
+        ? {}
+        : { workflowCalleeEntryResolver }),
       inheritanceStack,
       loadBaseWorkflowById: loadWorkflowByIdFromDiskInternal,
     });
@@ -629,6 +637,9 @@ async function loadWorkflowFromDiskInternal(
     },
     {
       ...options,
+      ...(options.workflowRoot === undefined
+        ? {}
+        : { workflowCalleeEntryResolver }),
       allowResolvedStepFileFields: true,
     },
   );
@@ -676,6 +687,66 @@ export async function loadWorkflowFromDisk(
   options: LoadOptions = {},
 ): Promise<Result<LoadedWorkflow, LoadFailure>> {
   return await loadWorkflowFromDiskInternal(workflowName, options, []);
+}
+
+function createEffectiveWorkflowCalleeEntryResolver(
+  options: LoadOptions,
+  inheritanceStack: readonly string[],
+): WorkflowCalleeEntryResolver {
+  const resolvedByWorkflowId = new Map<
+    string,
+    Awaited<ReturnType<WorkflowCalleeEntryResolver>>
+  >();
+  return async (input) => {
+    const cached = resolvedByWorkflowId.get(input.workflowId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const {
+      skipCrossWorkflowCalleeEntryValidation: _skipCalleeEntryValidation,
+      ...baseOptions
+    } = options;
+    const loaded = await loadWorkflowByIdFromDiskInternal(
+      input.workflowId,
+      {
+        ...baseOptions,
+        workflowRoot: input.workflowRoot,
+        skipCrossWorkflowCalleeEntryValidation: true,
+      },
+      inheritanceStack,
+    );
+    if (!loaded.ok) {
+      const result = { ok: false as const, message: loaded.error.message };
+      resolvedByWorkflowId.set(input.workflowId, result);
+      return result;
+    }
+
+    const entryStepId =
+      loaded.value.bundle.workflow.managerStepId ??
+      loaded.value.bundle.workflow.entryStepId;
+    if (entryStepId === undefined) {
+      const result = {
+        ok: false as const,
+        message:
+          "callee workflow must declare managerStepId or entryStepId (or exactly one manager-role step)",
+      };
+      resolvedByWorkflowId.set(input.workflowId, result);
+      return result;
+    }
+
+    const result = {
+      ok: true as const,
+      value: {
+        workflowId: loaded.value.bundle.workflow.workflowId,
+        entryStepId,
+        workflowDirectory: loaded.value.workflowDirectory,
+        source: "effective-loader" as const,
+      },
+    };
+    resolvedByWorkflowId.set(input.workflowId, result);
+    return result;
+  };
 }
 
 export async function loadWorkflowFromCatalog(

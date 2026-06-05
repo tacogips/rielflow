@@ -376,6 +376,123 @@ describe("loadWorkflowFromDisk", () => {
     );
   });
 
+  test("validates cross-workflow transition to inherited callee entry", async () => {
+    const workflowRoot = makeTempDir();
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "codex-callee",
+      workflowId: "codex-callee",
+    });
+    writeJson(path.join(workflowRoot, "claude-callee", "workflow.json"), {
+      workflowId: "claude-callee",
+      description: "derived callee",
+      extends: {
+        workflowId: "codex-callee",
+        stringReplacements: {
+          "codex-callee": "claude-callee",
+        },
+      },
+    });
+    writeWorkflowBundle({
+      workflowRoot,
+      workflowName: "caller",
+      extraWorkflowFields: {
+        steps: [
+          {
+            id: "manager",
+            nodeId: "manager",
+            role: "manager",
+            transitions: [
+              {
+                toStepId: "manager",
+                toWorkflowId: "claude-callee",
+                resumeStepId: "worker",
+              },
+            ],
+          },
+          { id: "worker", nodeId: "worker", role: "worker" },
+        ],
+      },
+    });
+
+    const result = await loadWorkflowFromDisk("caller", { workflowRoot });
+    if (!result.ok) {
+      throw new Error(
+        `${result.error.message}: ${JSON.stringify(result.error.issues)}`,
+      );
+    }
+    expect(result.ok).toBe(true);
+  });
+
+  test("preserves inherited nodeFile lookup when string replacements rename node ids", async () => {
+    const workflowRoot = makeTempDir();
+    const baseWorkflowDirectory = path.join(workflowRoot, "codex-task");
+    writeJson(path.join(baseWorkflowDirectory, "workflow.json"), {
+      workflowId: "codex-task",
+      description: "codex task",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      managerStepId: "manager",
+      entryStepId: "manager",
+      nodes: [
+        { id: "manager", nodeFile: "nodes/node-manager.json" },
+        { id: "adhoc-codex", nodeFile: "nodes/node-adhoc-codex.json" },
+      ],
+      steps: [
+        {
+          id: "manager",
+          nodeId: "manager",
+          role: "manager",
+          transitions: [{ toStepId: "adhoc-codex" }],
+        },
+        { id: "adhoc-codex", nodeId: "adhoc-codex", role: "worker" },
+      ],
+    });
+    writeJson(path.join(baseWorkflowDirectory, "nodes/node-manager.json"), {
+      id: "manager",
+      promptTemplate: "manager",
+      variables: {},
+    });
+    writeJson(path.join(baseWorkflowDirectory, "nodes/node-adhoc-codex.json"), {
+      id: "adhoc-codex",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "run codex task",
+      variables: {},
+    });
+    writeJson(path.join(workflowRoot, "claude-task", "workflow.json"), {
+      workflowId: "claude-task",
+      description: "claude task",
+      extends: {
+        workflowId: "codex-task",
+        stringReplacements: {
+          "adhoc-codex": "adhoc-claude",
+          codex: "claude",
+        },
+        agentNodePatch: {
+          executionBackend: "claude-code-agent",
+          model: "claude-sonnet-4-5",
+        },
+      },
+    });
+
+    const result = await loadWorkflowFromDisk("claude-task", { workflowRoot });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.value.bundle.workflow.nodeRegistry).toContainEqual(
+      expect.objectContaining({
+        id: "adhoc-claude",
+        nodeFile: "nodes/node-adhoc-codex.json",
+      }),
+    );
+    expect(result.value.bundle.nodePayloads["adhoc-claude"]).toMatchObject({
+      id: "adhoc-claude",
+      executionBackend: "claude-code-agent",
+      model: "claude-sonnet-4-5",
+    });
+  });
+
   test("applies inherited node patches before runtime node patches", async () => {
     const workflowRoot = makeTempDir();
     writeWorkflowBundle({

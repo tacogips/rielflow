@@ -104,6 +104,12 @@ compatibility or historical references rather than missed primary examples.
 - `workflow validate <name>`
   - Validate `<workflow-definition-dir>/<name>/` structure and semantic constraints when a direct definition directory is supplied.
   - Scoped catalog output includes the resolved workflow `source` scope and workflow directory so project/user shadowing is visible.
+  - Cross-workflow transition validation resolves every `toWorkflowId` target
+    through the same effective workflow loading path used by direct
+    `workflow validate` and `workflow inspect`. Derived callees with `extends`
+    must be validated after inheritance is applied, so entry checks read the
+    resolved `managerStepId` or `entryStepId`, not only the raw callee
+    `workflow.json`.
   - `--node-patch <value>` applies a non-persistent node settings patch before validation. The value follows the same input convention as `workflow run --variables`: inline JSON object, explicit `@path/to/patch.json`, or an existing file path.
   - Node patches are keyed by reusable workflow node id, not step id. Patch object values may contain only `executionBackend`, `model`, and `effort`; unknown node ids, malformed JSON, arrays/scalars, and any other fields are validation errors.
   - Validation must run against the patched in-memory workflow state, including `--executable` node preflight, without writing changes back to `workflow.json` or `nodes/node-*.json`.

@@ -715,6 +715,7 @@ export interface LoadOptions {
   readonly directExecutableAddonGrants?: readonly DirectExecutableAddonGrant[];
   readonly addonDependencyLocks?: readonly DirectExecutableAddonGrant[];
   readonly allowUnpackagedExecutableAddons?: boolean;
+  readonly skipCrossWorkflowCalleeEntryValidation?: boolean;
 }
 
 export type WorkflowScopeSelector = "auto" | "project" | "user";
