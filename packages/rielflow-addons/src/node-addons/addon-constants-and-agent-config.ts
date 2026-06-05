@@ -35,6 +35,9 @@ export const MAIL_GATEWAY_READ_ADDON_NAME = "rielflow/mail-gateway-read";
 export const MAIL_GATEWAY_READ_ADDON_VERSION = "1";
 export const DEFAULT_MAIL_GATEWAY_IMAGE =
   "ghcr.io/tacogips/mail-gateway:latest";
+export const MP4_AUDIO_EXTRACT_ADDON_NAME =
+  "rielflow/mp4-audio-extract";
+export const MP4_AUDIO_EXTRACT_ADDON_VERSION = "1";
 export const GIT_COMMIT_ADDON_NAME = "rielflow/git-commit";
 export const GIT_COMMIT_ADDON_VERSION = "1";
 export const GIT_PUSH_ADDON_NAME = "rielflow/git-push";
@@ -143,6 +146,41 @@ export const MAIL_GATEWAY_OUTPUT: NodeOutputContract = {
       mailGateway: {
         type: "object",
         additionalProperties: true,
+      },
+    },
+  },
+};
+export const MP4_AUDIO_EXTRACT_OUTPUT: NodeOutputContract = {
+  description:
+    "Audio artifact metadata produced from an MP4 input by the built-in MP4 audio extraction add-on.",
+  jsonSchema: {
+    type: "object",
+    required: ["audioExtract"],
+    additionalProperties: true,
+    properties: {
+      audioExtract: {
+        type: "object",
+        required: ["audioPath", "metadata"],
+        additionalProperties: false,
+        properties: {
+          audioPath: { type: "string", minLength: 1 },
+          metadata: {
+            type: "object",
+            required: [
+              "provider",
+              "sourceFileName",
+              "audioArtifactPath",
+            ],
+            additionalProperties: false,
+            properties: {
+              provider: { enum: ["ffmpeg"] },
+              sourceFileName: { type: "string", minLength: 1 },
+              audioArtifactPath: { enum: ["audio/extracted.flac"] },
+              sampleRateHertz: { type: "number", minimum: 1 },
+              audioChannelCount: { type: "number", minimum: 1 },
+            },
+          },
+        },
       },
     },
   },

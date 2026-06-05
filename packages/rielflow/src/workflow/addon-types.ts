@@ -46,6 +46,13 @@ export interface MailGatewayAddonConfig {
   readonly networkPolicy?: "disabled" | "egress-allowed";
 }
 
+export interface Mp4AudioExtractAddonConfig {
+  readonly mp4PathTemplate: string;
+  readonly ffmpegPath?: string;
+  readonly sampleRateHertz?: number;
+  readonly audioChannelCount?: number;
+}
+
 export interface GitCommitAddonConfig {
   readonly commitMessageTemplate: string;
   readonly committedFilesTemplate: string;
@@ -180,6 +187,13 @@ export interface ResolvedMailGatewayAddon {
   readonly inputs?: Readonly<Record<string, unknown>>;
 }
 
+export interface ResolvedMp4AudioExtractAddon {
+  readonly name: "rielflow/mp4-audio-extract";
+  readonly version: "1";
+  readonly config: Mp4AudioExtractAddonConfig;
+  readonly inputs?: Readonly<Record<string, unknown>>;
+}
+
 export interface ResolvedGitCommitAddon {
   readonly name: "rielflow/git-commit";
   readonly version: "1";
@@ -255,6 +269,7 @@ export type ResolvedNodeAddon =
   | ResolvedXGatewayAddon
   | ResolvedMailGatewayReadAddon
   | ResolvedMailGatewayAddon
+  | ResolvedMp4AudioExtractAddon
   | ResolvedGitCommitAddon
   | ResolvedGitPushAddon
   | ResolvedAgentWorkerAddon

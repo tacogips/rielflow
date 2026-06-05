@@ -42,6 +42,7 @@ import {
   normalizeCommittedFilePath,
   parseCommittedFiles,
 } from "./chat-and-gateway-addons";
+import { executeMp4AudioExtractAddonNode } from "./mp4-audio-extract-addon";
 
 export async function rejectDirectoryCommittedFiles(input: {
   readonly cwd: string;
@@ -499,6 +500,8 @@ export async function executeAddonNode(
       return await executeMailGatewayReadAddonNode(input, addon, context);
     case "rielflow/mail-gateway":
       return await executeMailGatewayAddonNode(input, addon, context);
+    case "rielflow/mp4-audio-extract":
+      return await executeMp4AudioExtractAddonNode(input, addon, context);
     case GIT_COMMIT_ADDON_NAME:
       return await executeGitCommitAddonNode(input, addon, context);
     case GIT_PUSH_ADDON_NAME:

@@ -822,6 +822,7 @@ describe("package boundaries", () => {
         "packages/rielflow-addons/dist/node-addons/addon-payload-resolution.d.ts",
         "packages/rielflow-addons/dist/node-addons/chat-persona-router-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/gateway-and-git-config.d.ts",
+        "packages/rielflow-addons/dist/node-addons/mp4-audio-extract-config.d.ts",
         "packages/rielflow-addons/dist/node-addons/package-sanitize-review-config.d.ts",
         "packages/rielflow-addons/dist/runtime-readiness.d.ts",
       ].sort((a, b) => a.localeCompare(b)),

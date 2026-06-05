@@ -2,15 +2,16 @@
 
 This document defines an authored workflow add-on mechanism and the current
 built-in worker add-ons: chat reply, agent worker, workflow package sandbox
-review, x-gateway worker nodes, and mail-gateway worker nodes.
+review, x-gateway worker nodes, mail-gateway worker nodes, and MP4 audio
+extraction.
 
 ## Overview
 
 Workflow authors often need common nodes whose behavior is operational rather
 than business-specific. Examples include replying to a triggering chat event,
 running a standard agent-backed implementation worker, querying/posting through
-x-gateway, or reading/sending mail through mail-gateway without copying
-container and credential plumbing into every workflow bundle.
+x-gateway, reading/sending mail through mail-gateway, or extracting audio from
+MP4 media without copying subprocess plumbing into every workflow bundle.
 
 Authors should be able to reference these nodes as built-in add-ons from
 `workflow.json` without writing a `nodes/node-*.json` payload or maintaining
@@ -31,6 +32,7 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
   add-on roots under `<scope-root>/addons`
 - keep provider SDKs and credentials outside workflow bundles
 - make chat replies runtime-owned and idempotent
+- provide a built-in native worker that extracts MP4 audio with `ffmpeg`
 - preserve authored workflow round-trips; save/edit surfaces should keep the
   add-on reference rather than expanding it into generated node JSON
 - allow future external add-on distribution without designing network fetching
@@ -43,6 +45,7 @@ node roles, `nodeType`, output contracts, or the runtime-owned mailbox model.
 - allowing arbitrary add-on code execution from a workflow definition
 - loading arbitrary executable add-on packages directly from a workflow bundle
 - adding Slack, Discord, Telegram, or web-chat fields to `workflow.json`
+- providing a general media transcoding framework
 - replacing `user-action` nodes, which remain the mechanism for mid-run human
   replies and approvals
 - replacing ordinary `nodeFile` payloads for custom business workers
@@ -1191,6 +1194,103 @@ Validation rules:
 - command or binary overrides are rejected; version `1` always runs
   `mail-gateway`
 
+## Built-in `rielflow/mp4-audio-extract`
+
+### Purpose
+
+`rielflow/mp4-audio-extract` extracts FLAC audio from one MP4 file. The built-in
+native executor renders an authored MP4 path, invokes `ffmpeg` with argv/no
+shell, writes the deterministic node artifact `audio/extracted.flac`, and
+publishes a concrete `audioPath` plus artifact-relative metadata.
+
+This is a trusted runtime built-in under the reserved `rielflow/` namespace. It
+is not a local manifest add-on and does not allow workflow-authored executable
+code.
+
+### Authored Example
+
+```json
+{
+  "id": "extract-audio",
+  "role": "worker",
+  "addon": {
+    "name": "rielflow/mp4-audio-extract",
+    "version": "1",
+    "config": {
+      "mp4PathTemplate": "{{args.videoPath}}",
+      "sampleRateHertz": 16000,
+      "audioChannelCount": 1
+    }
+  }
+}
+```
+
+### Configuration
+
+Version `1` supports:
+
+- `mp4PathTemplate`: required template that renders to the MP4 input path
+- `ffmpegPath`: optional executable path, defaulting to `ffmpeg`
+- `sampleRateHertz`: optional positive integer passed to `ffmpeg` as `-ar`
+- `audioChannelCount`: optional positive integer passed to `ffmpeg` as `-ac`
+
+Validation rules:
+
+- `config` and `inputs` must be objects when present
+- version must be `1`
+- `mp4PathTemplate` must be a non-empty string
+- `ffmpegPath` must be a non-empty string when present
+- numeric audio fields must be positive integers when present
+
+### Native Data Flow
+
+The executor renders `mp4PathTemplate` with the normal node template context,
+resolves the rendered path through the existing node working-directory policy,
+and rejects empty paths or control characters. The MP4 input path may be
+absolute or relative to the node execution working directory, matching existing
+command and git add-on path behavior.
+
+Audio extraction:
+
+1. create an `audio/` child directory under the node artifact directory
+2. invoke `ffmpeg` with `spawn`/argv and no shell
+3. read from the rendered MP4 path and write `audio/extracted.flac`
+4. fail the node with process-log attachments when `ffmpeg` exits non-zero
+
+The default extracted audio format is FLAC with one channel unless
+`audioChannelCount` sets a different channel count. `sampleRateHertz` is passed
+only when authored.
+
+### Output Contract
+
+The add-on publishes an ordinary output payload under `audioExtract`:
+
+```json
+{
+  "audioExtract": {
+    "audioPath": "<artifact-dir>/audio/extracted.flac",
+    "metadata": {
+      "provider": "ffmpeg",
+      "sourceFileName": "meeting.mp4",
+      "audioArtifactPath": "audio/extracted.flac",
+      "sampleRateHertz": 16000,
+      "audioChannelCount": 1
+    }
+  }
+}
+```
+
+`audioPath` is suitable for a downstream local-audio consumer such as
+`rielflow/google-speech-to-text` `audioPathTemplate`. Safe metadata may include
+file names, artifact-relative paths, and selected config values. It must not
+include the full host environment or full source path unless an existing
+artifact policy already exposes that path for native node execution.
+
+Failure rules:
+
+- missing or invalid MP4 path fails before invoking `ffmpeg`
+- `ffmpeg` failure fails the node and attaches only process stdout/stderr logs
+
 ### Reply Target Metadata
 
 The event trigger layer should expose reply target data in
@@ -1319,6 +1419,9 @@ Current rules:
 - unknown or unhandled add-on names fail validation
 - add-on descriptors are part of the installed runtime and are covered by the
   same release integrity model as the rest of `rielflow`
+- native add-ons that execute subprocesses use `spawn` with argv and no shell
+- native add-ons that need credentials consume only explicit `addon.env`
+  bindings and redact credential-bearing paths or values from logs and errors
 - external add-on registries, package downloads, and lockfiles are future work
 
 Future distributed add-on support must require:
@@ -1356,7 +1459,9 @@ The implementation should cover:
 - validation rejects workflow-local node payload files that author runtime-only
   `nodeType: "addon"` instead of using `workflow.json.nodes[].addon`
 - validation accepts the built-in agent worker add-ons, both x-gateway add-ons,
-  and both mail-gateway add-ons
+  both mail-gateway add-ons, and `rielflow/mp4-audio-extract`
+- validation rejects invalid MP4 audio extract add-on config and unsupported
+  versions
 - loader materializes an effective payload with the authored node id
 - workflow save/edit preserves the authored `addon` reference
 - chat reply worker renders text from upstream output
@@ -1364,6 +1469,9 @@ The implementation should cover:
   `fail`
 - chat reply worker emits `intent-only` or `dry-run` output when configured
 - reply dispatch is idempotent across node retry/resume
+- MP4 audio extract executor invokes `ffmpeg` with argv/no shell, writes
+  extracted audio under the node artifact directory, and does not forward
+  unrelated ambient environment values to `ffmpeg`
 - provider-specific adapter code stays outside `src/workflow/`
 
 ## References

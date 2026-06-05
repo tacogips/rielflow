@@ -48,6 +48,7 @@ import {
   resolveXGatewayPayload,
   resolveXGatewayReadPayload,
 } from "./gateway-and-git-config";
+import { resolveMp4AudioExtractPayload } from "./mp4-audio-extract-config";
 import { resolveWorkflowPackageSandboxReviewPayload } from "./package-sanitize-review-config";
 
 export function resolveSuperviserControlPayload(input: {
@@ -207,6 +208,13 @@ export function resolveBuiltinNodeAddonPayload(
     mailGatewayPayload.issues.length > 0
   ) {
     return mailGatewayPayload;
+  }
+  const mp4AudioExtractPayload = resolveMp4AudioExtractPayload(input);
+  if (
+    mp4AudioExtractPayload.payload !== undefined ||
+    mp4AudioExtractPayload.issues.length > 0
+  ) {
+    return mp4AudioExtractPayload;
   }
   const gitCommitPayload = resolveGitCommitPayload(input);
   if (

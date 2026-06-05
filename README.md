@@ -36,7 +36,8 @@ can all be described as a reusable workflow.
 - Connect event sources such as webhooks, cron, file changes, S3-style object
   events, sequential lists, Discord Gateway, Telegram Gateway, Matrix, and
   generic Chat SDK adapters.
-- Use built-in chat add-ons for persona routing and chat replies.
+- Use built-in add-ons for persona routing, chat replies, gateway access, git
+  handoff, and MP4 audio extraction through ffmpeg.
 - Install workflow packages and optional agent skills from Git-backed package
   registries.
 - Install hook snippets for Claude Code, Codex, and Gemini.
@@ -355,6 +356,20 @@ interpolated through a shell string. The effective working directory is
 `node.workingDirectory`, then `command.workingDirectory`, then the workflow
 working directory. Package pre-install executable-file warnings remain separate
 from this runtime dispatch behavior.
+
+## Built-In Add-Ons
+
+Built-in `rielflow/*` add-ons are resolved by the installed runtime. The
+`rielflow/mp4-audio-extract` version `1` add-on converts one MP4 file
+to an extracted audio artifact: it renders `config.mp4PathTemplate` and writes
+FLAC audio to the node artifact `audio/extracted.flac` with `ffmpeg` argv
+execution.
+
+Configure it with optional `ffmpegPath`, `sampleRateHertz`, and
+`audioChannelCount`. Hosts must have `ffmpeg` on `PATH` unless `ffmpegPath` is
+configured. The output payload is under `audioExtract` with artifact-relative
+metadata and `audioPath`, which can be passed to
+`rielflow/google-speech-to-text` as `audioPathTemplate`.
 
 ## Package Management
 
