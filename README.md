@@ -372,7 +372,11 @@ https://github.com/tacogips/rielflow-packages
 Use `rielflow package ...` for persistent package lifecycle operations. Direct
 workflow checkout remains limited to public GitHub workflow directory URLs via
 `rielflow workflow checkout <url>`; package ids are installed with
-`rielflow package install <package>`.
+`rielflow package install <package>`. Package ids may be unscoped, such as
+`worker-only-single-step`, or npm-style scoped names, such as
+`@vendor/youtube-mp4-download-addon`; registry directory names can remain
+filesystem-safe while `rielflow-package.json.name` carries the scoped package
+id.
 
 Search packages:
 
@@ -392,7 +396,10 @@ rielflow package install release-note-node --output json
 
 After a node add-on package install, authored workflows reference the installed
 add-on through the existing `workflow.json.nodes[].addon` object. No package is
-downloaded while loading, validating, or running the workflow:
+downloaded while loading, validating, or running the workflow. Add-on names use
+their own namespace form, such as `team/release-note` or
+`tacogips/youtube-mp4-download`; the `rielflow/` namespace is reserved for
+built-ins and cannot be provided by node-addon packages:
 
 ```json
 {
