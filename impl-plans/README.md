@@ -45,6 +45,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sqlite-runtime-json-checks` | 2026-06-07 | `design-sqlite-message-store#runtime-json-validation-policy`, `architecture#runtime-storage-layout` |
 | `sqlite-message-store` | 2026-06-07 | `design-sqlite-message-store`, `command`, `design-node-mailbox` |
 | `inherited-cross-workflow-callee-validation` | 2026-06-05 | `architecture`, `command#workflow-validate-name`, `design-workflow-json#extends` |
 | `temporary-workflow-execution` | 2026-05-31 | `design-temporary-workflow-execution`, `command`, `architecture` |

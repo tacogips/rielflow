@@ -5,6 +5,21 @@ import type { AdapterLlmSessionMessage } from "../adapter";
 import { resolveRootDataDir } from "../paths";
 import type { NodeExecutionRecord, SessionStatus } from "../session";
 import type { LoadOptions } from "../types";
+import {
+  ensureBaseRuntimeJsonConstraints,
+  ensureEventRuntimeJsonConstraints,
+  nullableJsonTextColumn,
+  requiredJsonTextColumn,
+} from "./json-schema-constraints";
+import type { RuntimeEventReplyDispatchStatus } from "./message-types";
+export type {
+  RuntimeEventReplyDispatchStatus,
+  RuntimeWorkflowMessageRecord,
+  WorkflowMessageArtifactRef,
+  WorkflowMessageArtifactPathBase,
+  WorkflowMessageDeliveryKind,
+  WorkflowMessageStatus,
+} from "./message-types";
 
 export type RuntimeNodeLogLevel = "info" | "warning" | "error";
 export const PROCESS_LOG_MESSAGE_TEXT_LIMIT = 500;
@@ -100,55 +115,6 @@ export interface RuntimeLlmSessionMessageRecord {
   readonly rawMessageJson: string | null;
   readonly at: string;
 }
-export type WorkflowMessageDeliveryKind =
-  | "edge-transition"
-  | "loop-back"
-  | "manual-rerun"
-  | "conversation-turn"
-  | "external-input"
-  | "external-output";
-export type WorkflowMessageStatus =
-  | "created"
-  | "delivered"
-  | "consumed"
-  | "delivery_failed"
-  | "superseded";
-export type WorkflowMessageArtifactPathBase = "attachment-root";
-export interface WorkflowMessageArtifactRef {
-  readonly pathBase: WorkflowMessageArtifactPathBase;
-  readonly path: string;
-  readonly mediaType?: string;
-  readonly byteLength?: number;
-  readonly sourcePath?: string;
-}
-export interface RuntimeWorkflowMessageRecord {
-  readonly workflowId: string;
-  readonly workflowExecutionId: string;
-  readonly communicationId: string;
-  readonly fromNodeId: string;
-  readonly toNodeId: string;
-  readonly routingScope: string;
-  readonly deliveryKind: WorkflowMessageDeliveryKind;
-  readonly transitionWhen: string;
-  readonly sourceNodeExecId: string;
-  readonly status: WorkflowMessageStatus;
-  readonly activeDeliveryAttemptId: string | null;
-  readonly deliveryAttemptIdsJson: string;
-  readonly payloadRefJson: string;
-  readonly payloadJson: string | null;
-  readonly artifactRefsJson: string | null;
-  readonly artifactDir: string;
-  readonly createdAt: string;
-  readonly deliveredAt: string | null;
-  readonly consumedByNodeExecId: string | null;
-  readonly consumedAt: string | null;
-  readonly failureReason: string | null;
-  readonly supersededByCommunicationId: string | null;
-  readonly supersededAt: string | null;
-  readonly replayedFromCommunicationId: string | null;
-  readonly managerMessageId: string | null;
-  readonly updatedAt: string;
-}
 export interface RuntimeEventReceiptIndexRecord {
   readonly receiptId: string;
   readonly sourceId: string;
@@ -183,12 +149,6 @@ export interface RuntimeEventReceiptSaveInput {
   readonly receivedAt: string;
   readonly updatedAt: string;
 }
-export type RuntimeEventReplyDispatchStatus =
-  | "dispatching"
-  | "sent"
-  | "queued"
-  | "failed"
-  | "no_delivery_target";
 export interface RuntimeEventReplyDispatchRecord {
   readonly idempotencyKey: string;
   readonly sourceId: string;
@@ -372,8 +332,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       status TEXT NOT NULL,
       dispatch_id TEXT,
       provider_message_id TEXT,
-      request_json TEXT NOT NULL,
-      response_json TEXT,
+      ${requiredJsonTextColumn("request_json")},
+      ${nullableJsonTextColumn("response_json")},
       error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -394,8 +354,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       model TEXT,
       turn_id TEXT,
       payload_hash TEXT NOT NULL,
-      payload_ref_json TEXT,
-      response_json TEXT,
+      ${nullableJsonTextColumn("payload_ref_json")},
+      ${nullableJsonTextColumn("response_json")},
       status TEXT NOT NULL,
       error TEXT,
       created_at TEXT NOT NULL,
@@ -433,9 +393,9 @@ export function ensureEventRuntimeSchema(db: Database): void {
       binding_id TEXT NOT NULL,
       correlation_key TEXT NOT NULL,
       action TEXT NOT NULL,
-      args_json TEXT,
+      ${nullableJsonTextColumn("args_json")},
       receipt_id TEXT NOT NULL,
-      result_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("result_json")},
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_correlation
@@ -450,14 +410,14 @@ export function ensureEventRuntimeSchema(db: Database): void {
       binding_id TEXT NOT NULL,
       source_receipt_id TEXT NOT NULL,
       workflow_name TEXT NOT NULL,
-      workflow_source_json TEXT,
+      ${nullableJsonTextColumn("workflow_source_json")},
       kind TEXT NOT NULL,
       timezone TEXT NOT NULL,
       due_at TEXT,
       cron TEXT,
       next_due_at TEXT NOT NULL,
       status TEXT NOT NULL,
-      workflow_input_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("workflow_input_json")},
       conversation_id TEXT,
       thread_id TEXT,
       actor_id TEXT,
@@ -484,7 +444,7 @@ export function ensureEventRuntimeSchema(db: Database): void {
       correlation_key TEXT NOT NULL,
       conversation_revision INTEGER NOT NULL,
       selected_managed_run_id TEXT,
-      selected_managed_run_ids_by_workflow_key_json TEXT,
+      ${nullableJsonTextColumn("selected_managed_run_ids_by_workflow_key_json")},
       status TEXT NOT NULL,
       artifact_dir TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -509,8 +469,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       profile_revision TEXT NOT NULL,
       conversation_revision INTEGER NOT NULL,
       status TEXT NOT NULL,
-      proposal_json TEXT NOT NULL,
-      result_summary_json TEXT,
+      ${requiredJsonTextColumn("proposal_json")},
+      ${nullableJsonTextColumn("result_summary_json")},
       receipt_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -574,8 +534,11 @@ export function ensureEventRuntimeSchema(db: Database): void {
     supervisorCommandColumns.map((row) => row.name),
   );
   if (!supervisorCommandColumnSet.has("args_json")) {
-    db.exec("ALTER TABLE event_supervisor_commands ADD COLUMN args_json TEXT");
+    db.exec(
+      `ALTER TABLE event_supervisor_commands ADD COLUMN ${nullableJsonTextColumn("args_json")}`,
+    );
   }
+  ensureEventRuntimeJsonConstraints(db);
 }
 
 export const eventRuntimeSchemaExtensions = [ensureEventRuntimeSchema] as const;
@@ -674,7 +637,7 @@ export function ensureSchema(db: Database): void {
       current_node_id TEXT,
       current_step_id TEXT,
       node_execution_counter INTEGER NOT NULL,
-      queue_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("queue_json")},
       last_error TEXT,
       updated_at TEXT NOT NULL
     );
@@ -691,7 +654,7 @@ export function ensureSchema(db: Database): void {
       ended_at TEXT NOT NULL,
       attempt INTEGER,
       output_attempt_count INTEGER,
-      output_validation_errors_json TEXT,
+      ${nullableJsonTextColumn("output_validation_errors_json")},
       prompt_variant TEXT,
       timeout_ms INTEGER,
       backend_session_mode TEXT,
@@ -700,8 +663,8 @@ export function ensureSchema(db: Database): void {
       execution_ordinal INTEGER,
       input_hash TEXT NOT NULL,
       output_hash TEXT NOT NULL,
-      input_json TEXT NOT NULL,
-      output_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("input_json")},
+      ${requiredJsonTextColumn("output_json")},
       created_at TEXT NOT NULL,
       PRIMARY KEY (session_id, node_exec_id)
     );
@@ -712,7 +675,7 @@ export function ensureSchema(db: Database): void {
       node_id TEXT,
       level TEXT NOT NULL,
       message TEXT NOT NULL,
-      payload_json TEXT,
+      ${nullableJsonTextColumn("payload_json")},
       at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS llm_session_messages (
@@ -727,7 +690,7 @@ export function ensureSchema(db: Database): void {
       role TEXT,
       event_type TEXT NOT NULL,
       content_text TEXT,
-      raw_message_json TEXT,
+      ${nullableJsonTextColumn("raw_message_json")},
       at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS workflow_messages (
@@ -742,10 +705,10 @@ export function ensureSchema(db: Database): void {
       source_node_exec_id TEXT NOT NULL,
       status TEXT NOT NULL,
       active_delivery_attempt_id TEXT,
-      delivery_attempt_ids_json TEXT NOT NULL,
-      payload_ref_json TEXT NOT NULL,
-      payload_json TEXT,
-      artifact_refs_json TEXT,
+      ${requiredJsonTextColumn("delivery_attempt_ids_json")},
+      ${requiredJsonTextColumn("payload_ref_json")},
+      ${nullableJsonTextColumn("payload_json")},
+      ${nullableJsonTextColumn("artifact_refs_json")},
       artifact_dir TEXT NOT NULL,
       created_at TEXT NOT NULL,
       delivered_at TEXT,
@@ -802,7 +765,7 @@ export function ensureSchema(db: Database): void {
   }
   if (!existingNodeExecutionColumns.has("output_validation_errors_json")) {
     db.exec(
-      "ALTER TABLE node_executions ADD COLUMN output_validation_errors_json TEXT",
+      `ALTER TABLE node_executions ADD COLUMN ${nullableJsonTextColumn("output_validation_errors_json")}`,
     );
   }
   if (!existingNodeExecutionColumns.has("backend_session_mode")) {
@@ -823,59 +786,69 @@ export function ensureSchema(db: Database): void {
     )
       ? "CASE WHEN artifact_dir <> '' THEN artifact_dir ELSE compat_artifact_dir END"
       : "compat_artifact_dir";
-    db.exec(`
-      CREATE TABLE workflow_messages_new (
-        workflow_id TEXT NOT NULL,
-        workflow_execution_id TEXT NOT NULL,
-        communication_id TEXT NOT NULL,
-        from_node_id TEXT NOT NULL,
-        to_node_id TEXT NOT NULL,
-        routing_scope TEXT NOT NULL,
-        delivery_kind TEXT NOT NULL,
-        transition_when TEXT NOT NULL,
-        source_node_exec_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        active_delivery_attempt_id TEXT,
-        delivery_attempt_ids_json TEXT NOT NULL,
-        payload_ref_json TEXT NOT NULL,
-        payload_json TEXT,
-        artifact_refs_json TEXT,
-        artifact_dir TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        delivered_at TEXT,
-        consumed_by_node_exec_id TEXT,
-        consumed_at TEXT,
-        failure_reason TEXT,
-        superseded_by_communication_id TEXT,
-        superseded_at TEXT,
-        replayed_from_communication_id TEXT,
-        manager_message_id TEXT,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (workflow_execution_id, communication_id)
-      );
-      INSERT INTO workflow_messages_new (
-        workflow_id, workflow_execution_id, communication_id, from_node_id,
-        to_node_id, routing_scope, delivery_kind, transition_when,
-        source_node_exec_id, status, active_delivery_attempt_id,
-        delivery_attempt_ids_json, payload_ref_json, payload_json,
-        artifact_refs_json, artifact_dir, created_at, delivered_at,
-        consumed_by_node_exec_id, consumed_at, failure_reason,
-        superseded_by_communication_id, superseded_at,
-        replayed_from_communication_id, manager_message_id, updated_at
-      )
-      SELECT
-        workflow_id, workflow_execution_id, communication_id, from_node_id,
-        to_node_id, routing_scope, delivery_kind, transition_when,
-        source_node_exec_id, status, active_delivery_attempt_id,
-        delivery_attempt_ids_json, payload_ref_json, payload_json,
-        artifact_refs_json, ${artifactDirExpression}, created_at, delivered_at,
-        consumed_by_node_exec_id, consumed_at, failure_reason,
-        superseded_by_communication_id, superseded_at,
-        replayed_from_communication_id, manager_message_id, updated_at
-      FROM workflow_messages;
-      DROP TABLE workflow_messages;
-      ALTER TABLE workflow_messages_new RENAME TO workflow_messages;
-    `);
+    const rebuildWorkflowMessages = db.transaction(() => {
+      db.exec(`
+        DROP TABLE IF EXISTS workflow_messages_new;
+        CREATE TABLE workflow_messages_new (
+          workflow_id TEXT NOT NULL,
+          workflow_execution_id TEXT NOT NULL,
+          communication_id TEXT NOT NULL,
+          from_node_id TEXT NOT NULL,
+          to_node_id TEXT NOT NULL,
+          routing_scope TEXT NOT NULL,
+          delivery_kind TEXT NOT NULL,
+          transition_when TEXT NOT NULL,
+          source_node_exec_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          active_delivery_attempt_id TEXT,
+          ${requiredJsonTextColumn("delivery_attempt_ids_json")},
+          ${requiredJsonTextColumn("payload_ref_json")},
+          ${nullableJsonTextColumn("payload_json")},
+          ${nullableJsonTextColumn("artifact_refs_json")},
+          artifact_dir TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          delivered_at TEXT,
+          consumed_by_node_exec_id TEXT,
+          consumed_at TEXT,
+          failure_reason TEXT,
+          superseded_by_communication_id TEXT,
+          superseded_at TEXT,
+          replayed_from_communication_id TEXT,
+          manager_message_id TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workflow_execution_id, communication_id)
+        );
+      `);
+      db.prepare(
+        `
+          INSERT INTO workflow_messages_new (
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, artifact_dir, created_at, delivered_at,
+            consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          )
+          SELECT
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, ${artifactDirExpression}, created_at, delivered_at,
+            consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          FROM workflow_messages
+        `,
+      ).run();
+      db.exec(`
+        DROP TABLE workflow_messages;
+        ALTER TABLE workflow_messages_new RENAME TO workflow_messages;
+      `);
+    });
+    rebuildWorkflowMessages();
   } else if (!existingWorkflowMessageColumns.has("artifact_dir")) {
     db.exec(
       "ALTER TABLE workflow_messages ADD COLUMN artifact_dir TEXT NOT NULL DEFAULT ''",
@@ -922,7 +895,9 @@ export function ensureSchema(db: Database): void {
     .all() as Array<{ name: string }>;
   const sessionColumnSet = new Set(sessionColumnsFinal.map((row) => row.name));
   if (!sessionColumnSet.has("supervision_json")) {
-    db.exec("ALTER TABLE sessions ADD COLUMN supervision_json TEXT");
+    db.exec(
+      `ALTER TABLE sessions ADD COLUMN ${nullableJsonTextColumn("supervision_json")}`,
+    );
   }
   const sessionContinuationColumns = db
     .query("PRAGMA table_info(sessions)")
@@ -952,8 +927,11 @@ export function ensureSchema(db: Database): void {
     db.exec("ALTER TABLE sessions ADD COLUMN continued_start_step_id TEXT");
   }
   if (!sessionContinuationColumnSet.has("history_imports_json")) {
-    db.exec("ALTER TABLE sessions ADD COLUMN history_imports_json TEXT");
+    db.exec(
+      `ALTER TABLE sessions ADD COLUMN ${nullableJsonTextColumn("history_imports_json")}`,
+    );
   }
+  ensureBaseRuntimeJsonConstraints(db);
   backfillMissingNodeExecutionOrdinals(db);
 }
 export function toRuntimeEventReceiptIndexRecord(row: {

@@ -32,6 +32,8 @@ import {
   saveSessionSnapshotToRuntimeDb,
   saveWorkflowMessageToRuntimeDb,
   updateWorkflowMessageStatusInRuntimeDb,
+  withDatabase,
+  withEventRuntimeDatabase,
 } from "./runtime-db";
 import {
   setWorkflowMessageAttachmentSourceOpenHookForTests,
@@ -72,6 +74,66 @@ function makeRuntimeDbOptions(
     cwd: root,
     ...(sessionId === undefined ? {} : { sessionId }),
   };
+}
+
+function expectSqliteJsonCheckRejection(action: () => unknown): void {
+  expect(action).toThrow(/CHECK constraint failed|constraint/i);
+}
+
+function insertWorkflowMessageJsonConstraintRow(
+  db: Database,
+  input: {
+    readonly communicationId: string;
+    readonly deliveryAttemptIdsJson?: string;
+    readonly payloadRefJson?: string;
+    readonly payloadJson?: string | null;
+    readonly artifactRefsJson?: string | null;
+  },
+): void {
+  db.prepare(
+    `
+      INSERT INTO workflow_messages (
+        workflow_id, workflow_execution_id, communication_id, from_node_id,
+        to_node_id, routing_scope, delivery_kind, transition_when,
+        source_node_exec_id, status, active_delivery_attempt_id,
+        delivery_attempt_ids_json, payload_ref_json, payload_json,
+        artifact_refs_json, artifact_dir, created_at, delivered_at,
+        consumed_by_node_exec_id, consumed_at, failure_reason,
+        superseded_by_communication_id, superseded_at,
+        replayed_from_communication_id, manager_message_id, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+  ).run(
+    "demo",
+    "sess-json-checks",
+    input.communicationId,
+    "manager",
+    "worker",
+    "intra-workflow",
+    "edge-transition",
+    "always",
+    "exec-000001",
+    "delivered",
+    "attempt-000001",
+    input.deliveryAttemptIdsJson ?? '["attempt-000001"]',
+    input.payloadRefJson ??
+      '{"kind":"node-output","workflowExecutionId":"sess-json-checks"}',
+    input.payloadJson === undefined
+      ? '{"payload":{"ok":true}}'
+      : input.payloadJson,
+    input.artifactRefsJson ?? null,
+    "/tmp/artifacts",
+    "2026-06-07T00:00:00.000Z",
+    "2026-06-07T00:00:00.000Z",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "2026-06-07T00:00:00.000Z",
+  );
 }
 
 async function createWorkflowFixture(
@@ -512,6 +574,440 @@ describe("runtime-db", () => {
           )
           .run("{invalid-json"),
       ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects malformed JSON in workflow_messages sqlite JSON columns", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root);
+
+    await withDatabase(options, () => undefined);
+
+    const db = new Database(resolveRuntimeDbPath(options));
+    try {
+      insertWorkflowMessageJsonConstraintRow(db, {
+        communicationId: "comm-valid-json",
+        artifactRefsJson: "[]",
+      });
+      insertWorkflowMessageJsonConstraintRow(db, {
+        communicationId: "comm-nullable-json-null",
+        payloadJson: null,
+        artifactRefsJson: null,
+      });
+      const nullableRow = db
+        .query(
+          `
+            SELECT payload_json, artifact_refs_json
+            FROM workflow_messages
+            WHERE communication_id = ?
+          `,
+        )
+        .get("comm-nullable-json-null") as {
+        readonly payload_json: string | null;
+        readonly artifact_refs_json: string | null;
+      } | null;
+      expect(nullableRow).toEqual({
+        payload_json: null,
+        artifact_refs_json: null,
+      });
+
+      expectSqliteJsonCheckRejection(() =>
+        insertWorkflowMessageJsonConstraintRow(db, {
+          communicationId: "comm-bad-delivery-attempts",
+          deliveryAttemptIdsJson: "{bad-json",
+        }),
+      );
+      expectSqliteJsonCheckRejection(() =>
+        insertWorkflowMessageJsonConstraintRow(db, {
+          communicationId: "comm-bad-payload-ref",
+          payloadRefJson: "{bad-json",
+        }),
+      );
+      expectSqliteJsonCheckRejection(() =>
+        insertWorkflowMessageJsonConstraintRow(db, {
+          communicationId: "comm-bad-payload",
+          payloadJson: "{bad-json",
+        }),
+      );
+      expectSqliteJsonCheckRejection(() =>
+        insertWorkflowMessageJsonConstraintRow(db, {
+          communicationId: "comm-bad-artifacts",
+          artifactRefsJson: "{bad-json",
+        }),
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rebuilds legacy workflow_messages tables with JSON checks", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root);
+    const dbPath = resolveRuntimeDbPath(options);
+    await mkdir(path.dirname(dbPath), { recursive: true });
+    const legacyDb = new Database(dbPath);
+    legacyDb.exec(`
+      CREATE TABLE workflow_messages (
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        communication_id TEXT NOT NULL,
+        from_node_id TEXT NOT NULL,
+        to_node_id TEXT NOT NULL,
+        routing_scope TEXT NOT NULL,
+        delivery_kind TEXT NOT NULL,
+        transition_when TEXT NOT NULL,
+        source_node_exec_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        active_delivery_attempt_id TEXT,
+        delivery_attempt_ids_json TEXT NOT NULL,
+        payload_ref_json TEXT NOT NULL,
+        payload_json TEXT,
+        artifact_refs_json TEXT,
+        artifact_dir TEXT NOT NULL,
+        compat_artifact_dir TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        delivered_at TEXT,
+        consumed_by_node_exec_id TEXT,
+        consumed_at TEXT,
+        failure_reason TEXT,
+        superseded_by_communication_id TEXT,
+        superseded_at TEXT,
+        replayed_from_communication_id TEXT,
+        manager_message_id TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workflow_execution_id, communication_id)
+      );
+    `);
+    legacyDb
+      .prepare(
+        `
+          INSERT INTO workflow_messages (
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, artifact_dir, compat_artifact_dir, created_at,
+            delivered_at, consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "demo",
+        "sess-json-checks",
+        "comm-legacy-json",
+        "manager",
+        "worker",
+        "intra-workflow",
+        "edge-transition",
+        "always",
+        "exec-000001",
+        "delivered",
+        "attempt-000001",
+        '["attempt-000001"]',
+        '{"kind":"node-output","workflowExecutionId":"sess-json-checks"}',
+        '{"payload":{"ok":true}}',
+        "[]",
+        "/tmp/artifacts",
+        "/tmp/compat-artifacts",
+        "2026-06-07T00:00:00.000Z",
+        "2026-06-07T00:00:00.000Z",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "2026-06-07T00:00:00.000Z",
+      );
+    legacyDb.close();
+
+    await withDatabase(options, () => undefined);
+
+    const db = new Database(dbPath);
+    try {
+      const table = db
+        .query(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'workflow_messages'",
+        )
+        .get() as { readonly sql: string } | null;
+      expect(table?.sql).toContain(
+        "CHECK (json_valid(delivery_attempt_ids_json))",
+      );
+      expect(table?.sql).toContain("CHECK (json_valid(payload_ref_json))");
+      expect(table?.sql).toContain(
+        "CHECK (payload_json IS NULL OR json_valid(payload_json))",
+      );
+      expect(table?.sql).toContain(
+        "CHECK (artifact_refs_json IS NULL OR json_valid(artifact_refs_json))",
+      );
+      const migratedRows = db
+        .query(
+          `
+            SELECT communication_id, payload_json, artifact_refs_json, artifact_dir
+            FROM workflow_messages
+            ORDER BY communication_id ASC
+          `,
+        )
+        .all() as readonly {
+        readonly communication_id: string;
+        readonly payload_json: string | null;
+        readonly artifact_refs_json: string | null;
+        readonly artifact_dir: string;
+      }[];
+      expect(migratedRows).toEqual([
+        {
+          communication_id: "comm-legacy-json",
+          payload_json: '{"payload":{"ok":true}}',
+          artifact_refs_json: "[]",
+          artifact_dir: "/tmp/artifacts",
+        },
+      ]);
+      expectSqliteJsonCheckRejection(() =>
+        insertWorkflowMessageJsonConstraintRow(db, {
+          communicationId: "comm-legacy-bad-json",
+          payloadJson: "{bad-json",
+        }),
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("fails malformed legacy workflow_messages compat rebuild without dropping source rows", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root);
+    const dbPath = resolveRuntimeDbPath(options);
+    await mkdir(path.dirname(dbPath), { recursive: true });
+    const legacyDb = new Database(dbPath);
+    legacyDb.exec(`
+      CREATE TABLE workflow_messages (
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        communication_id TEXT NOT NULL,
+        from_node_id TEXT NOT NULL,
+        to_node_id TEXT NOT NULL,
+        routing_scope TEXT NOT NULL,
+        delivery_kind TEXT NOT NULL,
+        transition_when TEXT NOT NULL,
+        source_node_exec_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        active_delivery_attempt_id TEXT,
+        delivery_attempt_ids_json TEXT NOT NULL,
+        payload_ref_json TEXT NOT NULL,
+        payload_json TEXT,
+        artifact_refs_json TEXT,
+        artifact_dir TEXT NOT NULL,
+        compat_artifact_dir TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        delivered_at TEXT,
+        consumed_by_node_exec_id TEXT,
+        consumed_at TEXT,
+        failure_reason TEXT,
+        superseded_by_communication_id TEXT,
+        superseded_at TEXT,
+        replayed_from_communication_id TEXT,
+        manager_message_id TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workflow_execution_id, communication_id)
+      );
+    `);
+    legacyDb
+      .prepare(
+        `
+          INSERT INTO workflow_messages (
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, artifact_dir, compat_artifact_dir, created_at,
+            delivered_at, consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "demo",
+        "sess-json-checks",
+        "comm-legacy-malformed-json",
+        "manager",
+        "worker",
+        "intra-workflow",
+        "edge-transition",
+        "always",
+        "exec-000001",
+        "delivered",
+        "attempt-000001",
+        '["attempt-000001"]',
+        '{"kind":"node-output","workflowExecutionId":"sess-json-checks"}',
+        "{bad-json",
+        "[]",
+        "/tmp/artifacts",
+        "/tmp/compat-artifacts",
+        "2026-06-07T00:00:00.000Z",
+        "2026-06-07T00:00:00.000Z",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "2026-06-07T00:00:00.000Z",
+      );
+    legacyDb.close();
+
+    await expect(withDatabase(options, () => undefined)).rejects.toThrow(
+      /CHECK constraint failed|constraint/i,
+    );
+
+    const db = new Database(dbPath);
+    try {
+      const rows = db
+        .query(
+          `
+            SELECT communication_id, payload_json
+            FROM workflow_messages
+            ORDER BY communication_id ASC
+          `,
+        )
+        .all() as readonly {
+        readonly communication_id: string;
+        readonly payload_json: string | null;
+      }[];
+      expect(rows).toEqual([
+        {
+          communication_id: "comm-legacy-malformed-json",
+          payload_json: "{bad-json",
+        },
+      ]);
+      const columns = db
+        .query("PRAGMA table_info(workflow_messages)")
+        .all() as readonly { readonly name: string }[];
+      expect(columns.map((column) => column.name)).toContain(
+        "compat_artifact_dir",
+      );
+      const tempTable = db
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workflow_messages_new'",
+        )
+        .get();
+      expect(tempTable).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects malformed JSON in representative runtime and event tables", async () => {
+    const root = await makeTempDir();
+    const options = makeRuntimeDbOptions(root);
+
+    await withDatabase(options, () => undefined);
+    let db = new Database(resolveRuntimeDbPath(options));
+    try {
+      expectSqliteJsonCheckRejection(() =>
+        db
+          .prepare(
+            `
+              INSERT INTO sessions (
+                session_id, workflow_name, workflow_id, status, started_at,
+                node_execution_counter, queue_json, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            "sess-bad-json",
+            "demo",
+            "demo",
+            "running",
+            "2026-06-07T00:00:00.000Z",
+            0,
+            "{bad-json",
+            "2026-06-07T00:00:00.000Z",
+          ),
+      );
+      db.prepare(
+        `
+          INSERT INTO sessions (
+            session_id, workflow_name, workflow_id, status, started_at,
+            node_execution_counter, queue_json, supervision_json,
+            history_imports_json, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      ).run(
+        "sess-valid-json",
+        "demo",
+        "demo",
+        "running",
+        "2026-06-07T00:00:00.000Z",
+        0,
+        "[]",
+        null,
+        null,
+        "2026-06-07T00:00:00.000Z",
+      );
+    } finally {
+      db.close();
+    }
+
+    await withEventRuntimeDatabase(options, () => undefined);
+    db = new Database(resolveRuntimeDbPath(options));
+    try {
+      expectSqliteJsonCheckRejection(() =>
+        db
+          .prepare(
+            `
+              INSERT INTO event_reply_dispatches (
+                idempotency_key, source_id, provider, workflow_id,
+                workflow_execution_id, node_id, node_exec_id, event_id,
+                conversation_id, status, request_json, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            "idem-bad-request",
+            "discord",
+            "discord",
+            "demo",
+            "sess-event-json",
+            "node",
+            "exec-000001",
+            "event-1",
+            "conversation-1",
+            "dispatching",
+            "{bad-json",
+            "2026-06-07T00:00:00.000Z",
+            "2026-06-07T00:00:00.000Z",
+          ),
+      );
+      expectSqliteJsonCheckRejection(() =>
+        db
+          .prepare(
+            `
+              INSERT INTO supervisor_dispatch_decisions (
+                decision_id, supervisor_conversation_id, source_message_id,
+                profile_revision, conversation_revision, status,
+                proposal_json, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            "decision-bad-json",
+            "conversation-1",
+            "message-1",
+            "profile-1",
+            1,
+            "pending",
+            "{bad-json",
+            "2026-06-07T00:00:00.000Z",
+            "2026-06-07T00:00:00.000Z",
+          ),
+      );
     } finally {
       db.close();
     }

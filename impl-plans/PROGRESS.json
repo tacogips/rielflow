@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-07T14:50:27+09:00",
+  "lastUpdated": "2026-06-07T17:48:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -563,6 +563,9 @@
       "status": "COMPLETED"
     },
     "191": {
+      "status": "COMPLETED"
+    },
+    "192": {
       "status": "COMPLETED"
     }
   },
@@ -7321,6 +7324,104 @@
           ]
         }
       }
+    },
+    "completed/sqlite-runtime-json-checks": {
+      "phase": 192,
+      "status": "Completed",
+      "path": "impl-plans/completed/sqlite-runtime-json-checks.md",
+      "designReference": "design-docs/specs/design-sqlite-message-store.md#runtime-json-validation-policy; design-docs/specs/architecture.md#runtime-storage-layout",
+      "workflowMode": "issue-resolution",
+      "issueReference": "github-pr:54",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastImplementationNode": "step6-implement",
+      "codexAgentReference": "codex-agent / gpt-5.5 execution provider only; SQLite JSON validation is rielflow-owned runtime DB behavior.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004"
+          ]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-005"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "bun run typecheck",
+        "bun run lint:biome",
+        "bun test packages/rielflow/src/workflow/runtime-db.test.ts",
+        "bun test packages/rielflow/src/workflow/manager-session-store.test.ts",
+        "bun test packages/rielflow/src/workflow/communication-service.test.ts",
+        "bun test packages/rielflow/src/workflow/runtime-db.test.ts -t \"JSON|json\"",
+        "bun test packages/rielflow/src/workflow/runtime-db.test.ts -t \"legacy workflow_messages|JSON|json\"",
+        "bun test packages/rielflow/src/workflow/manager-session-store.test.ts -t \"JSON|json\""
+      ],
+      "selfReviewCorrections": [
+        {
+          "nodeId": "step6-implement-self-review",
+          "file": "packages/rielflow/src/workflow/runtime-db.test.ts",
+          "finding": "workflow_messages nullable payload_json NULL case was not actually asserted because the test helper used nullish coalescing.",
+          "resolution": "Changed helper to preserve explicit null and added an assertion that payload_json and artifact_refs_json persist as NULL.",
+          "verificationCommands": [
+            "bun test packages/rielflow/src/workflow/runtime-db.test.ts -t \"JSON|json\"",
+            "bun test packages/rielflow/src/workflow/runtime-db.test.ts",
+            "bun run lint:biome",
+            "bun run typecheck"
+          ]
+        }
+      ],
+      "adversarialReviewCorrections": [
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "high",
+          "file": "packages/rielflow/src/workflow/runtime-db/schema-and-record-types.ts",
+          "finding": "Legacy workflow_messages compat_artifact_dir rebuild used a multi-statement db.exec copy that could drop communication history after malformed JSON rejected the constrained insert.",
+          "resolution": "Replaced the compat rebuild with an explicit transaction and prepared INSERT ... SELECT before DROP/RENAME, then added malformed legacy compat regression coverage.",
+          "verificationCommands": [
+            "bun test packages/rielflow/src/workflow/runtime-db.test.ts -t \"legacy workflow_messages|JSON|json\"",
+            "bun test packages/rielflow/src/workflow/runtime-db.test.ts",
+            "bun run typecheck",
+            "bun run lint:biome"
+          ]
+        }
+      ],
+      "residualRisks": [
+        "Malformed historical runtime SQLite JSON rows fail rebuild migration explicitly by design.",
+        "Step 7 adversarial review accepted the migration fix before plan archival."
+      ]
     }
   }
 }

@@ -948,6 +948,15 @@ publication step. Message metadata, delivery state, replay/retry state, and
 structured non-binary payload snapshots are read from SQLite. See
 `design-docs/specs/design-sqlite-message-store.md`.
 
+Runtime SQLite JSON text columns are validated at the schema boundary. Required
+JSON text columns use `CHECK(json_valid(column))`; nullable JSON text columns
+use `CHECK(column IS NULL OR json_valid(column))`. This applies to
+`workflow_messages` payload and artifact reference columns and to other
+rielflow-owned runtime DB JSON text columns where malformed JSON would make
+runtime inspection, replay, retry, or session recovery ambiguous. Migrations
+that rebuild tables must recreate the checks before copying rows so malformed
+historical rows fail explicitly instead of being silently accepted.
+
 Temporary workflow runs add one source-specific artifact area under the
 individual run artifact tree:
 
@@ -1718,6 +1727,11 @@ JSON-compatible. File or binary handoff content is not stored in SQLite; SQLite
 stores only a normalized path reference under the runtime attachment root,
 shaped as
 `{workflow_id_path_friendly}/{workflow_run_id}/messages/{communicationId}/{some_path}`.
+Message JSON columns are schema-validated with SQLite JSON1: non-null
+`delivery_attempt_ids_json` and `payload_ref_json` require valid JSON, while
+nullable `payload_json` and `artifact_refs_json` accept either null or valid
+JSON. Invalid JSON is a failed runtime write, not a value to be repaired by the
+mailbox reader.
 
 Planned continuation extension:
 

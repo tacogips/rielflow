@@ -1,6 +1,10 @@
 import { timingSafeEqual, createHash, randomBytes } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { withRuntimeDatabase } from "./runtime-db";
+import {
+  ensureManagerSessionJsonConstraints,
+  requiredJsonTextColumn,
+} from "./runtime-db/json-schema-constraints";
 import type { LoadOptions } from "./types";
 
 export interface ManagerIntentSummary {
@@ -338,7 +342,7 @@ function ensureManagerSessionSchema(db: Database): void {
       manager_step_id TEXT NOT NULL,
       manager_node_exec_id TEXT NOT NULL,
       message TEXT,
-      parsed_intent_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("parsed_intent_json")},
       accepted INTEGER NOT NULL,
       rejection_reason TEXT,
       created_at TEXT NOT NULL
@@ -348,7 +352,7 @@ function ensureManagerSessionSchema(db: Database): void {
       manager_session_id TEXT NOT NULL,
       idempotency_key TEXT NOT NULL,
       normalized_request_hash TEXT NOT NULL,
-      response_json TEXT NOT NULL,
+        ${requiredJsonTextColumn("response_json")},
       completed_at TEXT NOT NULL,
       PRIMARY KEY (mutation_name, manager_session_id, idempotency_key)
     );
@@ -388,6 +392,7 @@ function ensureManagerSessionSchema(db: Database): void {
       );
     }
   }
+  ensureManagerSessionJsonConstraints(db);
 }
 
 async function withManagerDatabase<T>(

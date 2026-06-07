@@ -149,9 +149,16 @@ session communication arrays are not fallback sources. Also document that
 `RIEL_RUNTIME_DB`, `RIEL_ARTIFACT_DIR`, and `RIEL_ATTACHMENT_ROOT` control the
 runtime database and file/binary handoff roots, that SQLite stores only
 attachment-root-relative references for file/binary handoffs, and that failed
-SQLite writes block message publication. Keep PR references such as `PR #54`,
-branch names such as `feature/sqlite-message-store`, and `codex-agent`
-execution references explicit in workflow outputs.
+SQLite writes block message publication. When the run hardens runtime JSON TEXT
+columns, also document that required JSON text uses
+`CHECK(json_valid(column))`, nullable JSON text uses
+`CHECK(column IS NULL OR json_valid(column))`, malformed historical rows may
+fail rebuild migrations explicitly, and manager/session/event/supervisor
+runtime JSON columns follow the same policy as `workflow_messages`
+`delivery_attempt_ids_json`, `payload_ref_json`, `payload_json`, and
+`artifact_refs_json`. Keep PR references such as `PR #54`, branch names such as
+`feature/sqlite-message-store`, and `codex-agent` execution references explicit
+in workflow outputs.
 
 ## Reporting
 

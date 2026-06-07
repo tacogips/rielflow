@@ -736,6 +736,16 @@ GraphQL inspection, and manager mutation scope checks use SQLite as the message
 source. Legacy per-message files and session communication arrays are not
 fallback sources for new communication reads.
 
+Runtime JSON text columns are validated by SQLite. Required JSON values use
+`CHECK(json_valid(column))`, while nullable JSON values use
+`CHECK(column IS NULL OR json_valid(column))`. For message handoffs this covers
+`workflow_messages.delivery_attempt_ids_json`, `payload_ref_json`,
+`payload_json`, and `artifact_refs_json`; malformed JSON rejects the runtime
+write instead of being accepted for later repair. The same policy applies to
+rielflow-owned runtime JSON columns used for session state, node execution
+records, event runtime metadata, supervisor dispatch records, schedules, and
+manager control-plane messages.
+
 File and binary handoffs are materialized under the workflow/run/message scope
 before the SQLite row is stored. Attachment references recorded in SQLite are
 attachment-root-relative paths, and absolute or escaping paths are rejected.

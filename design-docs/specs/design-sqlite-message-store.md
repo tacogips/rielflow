@@ -125,13 +125,66 @@ Core columns:
 
 JSON columns use SQLite `TEXT` storage with canonical JSON strings. SQLite does
 not provide a native JSON storage class; JSON1 operates on text JSON, so the
-runtime stores `*_json` fields as text and should add `CHECK(json_valid(...))`
-constraints only when a non-null column needs structural validation. The design
-does not promote arbitrary JSON fields into table fields. Only values that are
-needed for filtering, ordering, joining, or stable inspection should be
-duplicated as ordinary typed columns while also remaining inside the canonical
-JSON text. File and binary bodies remain outside SQLite regardless of JSON
-column shape.
+runtime stores JSON fields as text and validates them at the SQLite schema
+boundary. Required JSON text columns must use `CHECK(json_valid(column))`.
+Nullable JSON text columns must use
+`CHECK(column IS NULL OR json_valid(column))`. The design does not promote
+arbitrary JSON fields into table fields. Only values that are needed for
+filtering, ordering, joining, or stable inspection should be duplicated as
+ordinary typed columns while also remaining inside the canonical JSON text.
+File and binary bodies remain outside SQLite regardless of JSON column shape.
+
+## Runtime JSON Validation Policy
+
+Every new runtime SQLite row that writes canonical JSON text must be rejected by
+SQLite when the JSON text is malformed. This applies to the base runtime schema,
+runtime schema migrations, and event runtime schema extensions that share the
+same runtime database.
+
+Policy:
+
+- non-null JSON text: `TEXT NOT NULL CHECK (json_valid(column))`
+- nullable JSON text: `TEXT CHECK (column IS NULL OR json_valid(column))`
+- table rebuild migrations must recreate the same constraints as the create
+  path before copying old rows into the replacement table
+- malformed historical rows may fail migration rather than being silently
+  rewritten or accepted
+- newly added nullable JSON columns may use `ALTER TABLE ... ADD COLUMN` with a
+  nullable JSON check when SQLite accepts the constraint for existing rows
+- validation belongs in the SQLite schema in addition to TypeScript
+  serialization, so direct DB writes and regression tests exercise the same
+  boundary
+
+`workflow_messages` must explicitly constrain:
+
+- `delivery_attempt_ids_json` as non-null JSON
+- `payload_ref_json` as non-null JSON
+- `payload_json` as nullable JSON
+- `artifact_refs_json` as nullable JSON
+
+The same policy applies to other runtime JSON text columns where the column is
+owned by rielflow runtime persistence, including session queue/supervision
+state, node execution input/output and output-validation errors, node log
+payloads, LLM raw message snapshots, runtime schema metadata, event reply and
+hook request/response references, event supervisor command arguments/results,
+workflow schedule source/input, supervisor conversation selection maps, and
+supervisor dispatch decision proposal/result summaries. Manager control-plane
+SQLite tables are in scope too: manager message parsed intent snapshots and
+idempotent mutation response envelopes are runtime JSON text and should follow
+the same required/nullable constraint rule. Columns that merely store hashes,
+opaque provider identifiers, or filesystem paths are not JSON columns and must
+not receive JSON checks.
+
+Focused tests must prove:
+
+- malformed JSON is rejected for required `workflow_messages` JSON columns
+- malformed JSON is rejected for nullable `workflow_messages` JSON columns when
+  non-null
+- null remains accepted for nullable `workflow_messages` JSON columns
+- valid JSON remains accepted for all constrained message JSON columns
+- the `workflow_messages` rebuild migration preserves these checks
+- representative non-message runtime JSON columns reject malformed direct
+  inserts
 
 Indexes:
 
