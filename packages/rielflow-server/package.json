@@ -1,6 +1,6 @@
 {
   "name": "rielflow-server",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "HTTP server transport contracts for Rielflow",
   "type": "module",
   "main": "dist/index.js",
