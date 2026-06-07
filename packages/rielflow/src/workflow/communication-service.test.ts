@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Database } from "bun:sqlite";
@@ -532,6 +532,135 @@ describe("communication-service", () => {
           sourceCommunication.communicationId,
       ),
     ).toBe(false);
+  });
+
+  test("replays sqlite messages with mixed file and non-file attachments", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const sourceCommunication = session.communications.at(0);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const attachmentRoot = path.join(root, "message-files");
+    const sourceAttachmentPath = path.join(
+      attachmentRoot,
+      "demo",
+      session.sessionId,
+      "messages",
+      sourceCommunication.communicationId,
+      "attachments",
+      "brief.txt",
+    );
+    await mkdir(path.dirname(sourceAttachmentPath), { recursive: true });
+    await writeFile(sourceAttachmentPath, "replay mixed attachment\n", "utf8");
+    const metadataAttachment = {
+      label: "triage link",
+      href: "https://example.test/triage",
+    };
+    const linkAttachment = {
+      kind: "link",
+      path: "https://example.test/replay",
+      mediaType: "text/uri-list",
+    };
+    const sourceFileRef = {
+      pathBase: "attachment-root",
+      path: [
+        "demo",
+        session.sessionId,
+        "messages",
+        sourceCommunication.communicationId,
+        "attachments",
+        "brief.txt",
+      ].join("/"),
+      mediaType: "text/plain",
+    };
+    const db = new Database(path.join(options.rootDataDir, "rielflow.db"));
+    try {
+      db.query(
+        [
+          "UPDATE workflow_messages",
+          "SET status = 'delivered', consumed_by_node_exec_id = NULL, consumed_at = NULL, payload_json = ?",
+          "WHERE workflow_execution_id = ? AND communication_id = ?",
+        ].join(" "),
+      ).run(
+        JSON.stringify({
+          payload: {
+            attachments: [metadataAttachment, sourceFileRef, linkAttachment],
+          },
+        }),
+        session.sessionId,
+        sourceCommunication.communicationId,
+      );
+    } finally {
+      db.close();
+    }
+
+    const runtimeOptions = {
+      ...options,
+      env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+    };
+    const service = createCommunicationService({
+      now: () => "2026-04-20T00:10:00.000Z",
+    });
+    const replayed = await service.replayCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: sourceCommunication.communicationId,
+        reason: "preserve mixed attachments",
+      },
+      runtimeOptions,
+    );
+
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      runtimeOptions,
+    );
+    expect(replayedRecord?.payloadJson).not.toBeNull();
+    const payload = JSON.parse(replayedRecord?.payloadJson ?? "{}") as {
+      readonly payload?: { readonly attachments?: readonly unknown[] };
+    };
+    const replayedFileRef = {
+      pathBase: "attachment-root",
+      path: [
+        "demo",
+        session.sessionId,
+        "messages",
+        replayed.replayedCommunicationId,
+        "attachments",
+        "brief.txt",
+      ].join("/"),
+      mediaType: "text/plain",
+      byteLength: 24,
+      sourcePath: sourceFileRef.path,
+    };
+
+    expect(payload.payload?.attachments).toEqual([
+      metadataAttachment,
+      replayedFileRef,
+      linkAttachment,
+    ]);
+    expect(JSON.parse(replayedRecord?.artifactRefsJson ?? "[]")).toEqual([
+      replayedFileRef,
+    ]);
+    await expect(
+      readFile(
+        path.join(
+          attachmentRoot,
+          "demo",
+          session.sessionId,
+          "messages",
+          replayed.replayedCommunicationId,
+          "attachments",
+          "brief.txt",
+        ),
+        "utf8",
+      ),
+    ).resolves.toBe("replay mixed attachment\n");
   });
 
   test("retries a sqlite-backed communication when session communications are missing", async () => {

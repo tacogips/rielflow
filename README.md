@@ -752,6 +752,14 @@ attachment-root-relative paths, and absolute or escaping paths are rejected.
 Message publication succeeds only after the SQLite write succeeds, so failed
 database writes block delivery instead of leaving file-only communication state.
 
+`payload.attachments[]` is persisted as a mixed descriptor array. Non-file
+descriptors such as links, text metadata, unsupported provider descriptors,
+entries without a usable local path, and JSON scalar entries remain in
+`workflow_messages.payload_json` for message views, replay, retry, GraphQL
+inspection, and downstream workflow inspection. Only safely materialized
+file-backed descriptors are rewritten to normalized `attachment-root` refs, and
+only those file refs are recorded in `workflow_messages.artifact_refs_json`.
+
 ### Install Or Run A Workflow Package
 
 ```text

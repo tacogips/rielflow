@@ -203,6 +203,38 @@ payloads include files, binary content, or large generated artifacts,
 `payload_json` stores metadata and path references, while `artifact_refs_json`
 stores attachment-root-relative paths and media metadata.
 
+### Payload Attachment Snapshot Rules
+
+`payload.attachments[]` is a mixed descriptor array, not a file-only list. The
+SQLite snapshotter must preserve JSON-compatible attachment descriptors that do
+not resolve to a file ref, including links, text-only metadata, unsupported
+attachment descriptors, descriptors without `path`, and descriptors with
+non-file provider metadata. These descriptors remain in `payload_json` with
+their original JSON-compatible shape because they are business payload data for
+message views, communication replay, and downstream workflow inspection.
+
+File-backed entries are the only entries that the snapshotter rewrites. When an
+attachment can be safely materialized from a root-data path or verified
+attachment-root path, the entry in `payload.attachments[]` is replaced with the
+normalized `attachment-root` file ref and the same ref is recorded in
+`artifact_refs_json`. The persisted `payload_json` must not include raw file
+content, embedded binary data, host absolute paths, or source paths that would
+bypass the existing root-data and attachment-root scope checks.
+
+Snapshot validation rules:
+
+- preserve non-object attachment array entries as JSON payload data rather than
+  silently dropping them
+- preserve object descriptors that do not have a materializable file path
+- replace only successfully materialized file descriptors with normalized
+  `attachment-root` refs
+- continue rejecting absolute paths, path traversal, cross-workflow/cross-run
+  refs, symlink escapes, hardlink escapes, and unsafe preexisting targets
+- let a genuinely file-backed descriptor fail publication when its source
+  claims to be materializable but violates attachment safety rules
+- keep `artifact_refs_json` limited to materialized file refs; it must not
+  mirror non-file descriptors
+
 ## Schema Versioning And Migrations
 
 The runtime database must include a metadata table that records the active
@@ -334,6 +366,12 @@ Validation must cover:
 - replay row creation and retry delivery-attempt updates
 - GraphQL list/detail and manager-control behavior when session communication
   arrays are missing
+- non-file `payload.attachments[]` descriptors preserved in
+  `workflow_messages.payload_json`
+- mixed file and non-file attachments persisted with only materialized file
+  entries rewritten to `attachment-root` refs
+- sqlite-backed communication replay preserves non-file attachment descriptors
+  while keeping materialized file refs safe
 - regression coverage for explicit `artifactRoot` and `sessionStoreRoot`
   database co-location inference when `rootDataDir` is absent
 - readiness probe stdout/stderr capture across nonzero exit, spawn error, and

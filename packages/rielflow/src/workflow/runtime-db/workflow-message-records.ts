@@ -25,35 +25,10 @@ import {
   runBeforeAttachmentTargetFileWriteForTests,
   runBeforeAttachmentTargetWriteForTests,
 } from "./workflow-message-test-hooks";
-
-interface RuntimeWorkflowMessageRow {
-  readonly workflow_id: string;
-  readonly workflow_execution_id: string;
-  readonly communication_id: string;
-  readonly from_node_id: string;
-  readonly to_node_id: string;
-  readonly routing_scope: string;
-  readonly delivery_kind: CommunicationRecord["deliveryKind"];
-  readonly transition_when: string;
-  readonly source_node_exec_id: string;
-  readonly status: CommunicationRecord["status"];
-  readonly active_delivery_attempt_id: string | null;
-  readonly delivery_attempt_ids_json: string;
-  readonly payload_ref_json: string;
-  readonly payload_json: string | null;
-  readonly artifact_refs_json: string | null;
-  readonly artifact_dir: string;
-  readonly created_at: string;
-  readonly delivered_at: string | null;
-  readonly consumed_by_node_exec_id: string | null;
-  readonly consumed_at: string | null;
-  readonly failure_reason: string | null;
-  readonly superseded_by_communication_id: string | null;
-  readonly superseded_at: string | null;
-  readonly replayed_from_communication_id: string | null;
-  readonly manager_message_id: string | null;
-  readonly updated_at: string;
-}
+import {
+  toRuntimeWorkflowMessageRecordFromRow,
+  type RuntimeWorkflowMessageRow,
+} from "./workflow-message-record-conversion";
 
 export interface SaveWorkflowMessageInput {
   readonly communication: CommunicationRecord;
@@ -79,6 +54,16 @@ interface WorkflowMessagePayloadSnapshot {
   readonly payloadJson: string | null;
   readonly artifactRefs: readonly WorkflowMessageArtifactRef[];
 }
+
+type WorkflowMessageAttachmentSnapshotResult =
+  | {
+      readonly kind: "preserve";
+      readonly attachment: unknown;
+    }
+  | {
+      readonly kind: "materialized";
+      readonly ref: WorkflowMessageArtifactRef;
+    };
 
 interface AttachmentSourceSnapshot {
   readonly byteLength: number;
@@ -583,6 +568,47 @@ async function materializeAttachmentRef(input: {
   };
 }
 
+function isUrlLikeAttachmentPath(sourcePath: string): boolean {
+  const trimmed = sourcePath.trim();
+  const schemeMatch = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(trimmed);
+  if (schemeMatch === null) {
+    return false;
+  }
+  const scheme = schemeMatch[1]?.toLowerCase();
+  return scheme !== undefined && scheme !== "file" && scheme.length > 1;
+}
+
+async function snapshotAttachmentDescriptor(input: {
+  readonly attachment: unknown;
+  readonly communication: CommunicationRecord;
+  readonly options: LoadOptions;
+  readonly createdAttachmentPaths: string[];
+}): Promise<WorkflowMessageAttachmentSnapshotResult> {
+  if (!isJsonObject(input.attachment)) {
+    return { kind: "preserve", attachment: input.attachment };
+  }
+
+  const sourcePath = input.attachment["path"];
+  if (
+    typeof sourcePath !== "string" ||
+    sourcePath.trim().length === 0 ||
+    (input.attachment["pathBase"] !== "attachment-root" &&
+      isUrlLikeAttachmentPath(sourcePath))
+  ) {
+    return { kind: "preserve", attachment: input.attachment };
+  }
+
+  const ref = await materializeAttachmentRef({
+    attachment: input.attachment,
+    communication: input.communication,
+    options: input.options,
+    createdAttachmentPaths: input.createdAttachmentPaths,
+  });
+  return ref === null
+    ? { kind: "preserve", attachment: input.attachment }
+    : { kind: "materialized", ref };
+}
+
 async function buildWorkflowMessagePayloadSnapshot(
   communication: CommunicationRecord,
   outputRaw: string | undefined,
@@ -606,23 +632,24 @@ async function buildWorkflowMessagePayloadSnapshot(
     return { payloadJson: JSON.stringify(parsed), artifactRefs: [] };
   }
   const artifactRefs: WorkflowMessageArtifactRef[] = [];
+  const sanitizedAttachments: unknown[] = [];
   for (const attachment of attachments) {
-    if (!isJsonObject(attachment)) {
-      continue;
-    }
-    const ref = await materializeAttachmentRef({
+    const snapshot = await snapshotAttachmentDescriptor({
       attachment,
       communication,
       options,
       createdAttachmentPaths,
     });
-    if (ref !== null) {
-      artifactRefs.push(ref);
+    if (snapshot.kind === "preserve") {
+      sanitizedAttachments.push(snapshot.attachment);
+      continue;
     }
+    artifactRefs.push(snapshot.ref);
+    sanitizedAttachments.push(snapshot.ref);
   }
   const sanitizedPayload = {
     ...parsed["payload"],
-    attachments: artifactRefs,
+    attachments: sanitizedAttachments,
   };
   return {
     payloadJson: JSON.stringify({
@@ -670,92 +697,6 @@ function toRuntimeWorkflowMessageRecord(
       communication.replayedFromCommunicationId ?? null,
     managerMessageId: communication.managerMessageId ?? null,
     updatedAt,
-  };
-}
-
-export function workflowMessageRecordToCommunication(
-  record: RuntimeWorkflowMessageRecord,
-): CommunicationRecord {
-  const payloadRef = JSON.parse(
-    record.payloadRefJson,
-  ) as CommunicationRecord["payloadRef"];
-  const deliveryAttemptIds = JSON.parse(
-    record.deliveryAttemptIdsJson,
-  ) as readonly string[];
-  return {
-    workflowId: record.workflowId,
-    workflowExecutionId: record.workflowExecutionId,
-    communicationId: record.communicationId,
-    fromNodeId: record.fromNodeId,
-    toNodeId: record.toNodeId,
-    routingScope:
-      record.routingScope === "external-mailbox"
-        ? "external-mailbox"
-        : "intra-workflow",
-    sourceNodeExecId: record.sourceNodeExecId,
-    payloadRef,
-    deliveryKind: record.deliveryKind,
-    transitionWhen: record.transitionWhen,
-    status: record.status,
-    deliveryAttemptIds,
-    ...(record.activeDeliveryAttemptId === null
-      ? {}
-      : { activeDeliveryAttemptId: record.activeDeliveryAttemptId }),
-    createdAt: record.createdAt,
-    ...(record.deliveredAt === null ? {} : { deliveredAt: record.deliveredAt }),
-    ...(record.consumedByNodeExecId === null
-      ? {}
-      : { consumedByNodeExecId: record.consumedByNodeExecId }),
-    ...(record.consumedAt === null ? {} : { consumedAt: record.consumedAt }),
-    ...(record.failureReason === null
-      ? {}
-      : { failureReason: record.failureReason }),
-    ...(record.supersededByCommunicationId === null
-      ? {}
-      : { supersededByCommunicationId: record.supersededByCommunicationId }),
-    ...(record.supersededAt === null
-      ? {}
-      : { supersededAt: record.supersededAt }),
-    ...(record.replayedFromCommunicationId === null
-      ? {}
-      : { replayedFromCommunicationId: record.replayedFromCommunicationId }),
-    ...(record.managerMessageId === null
-      ? {}
-      : { managerMessageId: record.managerMessageId }),
-    artifactDir: record.artifactDir,
-  };
-}
-
-function toRuntimeWorkflowMessageRecordFromRow(
-  row: RuntimeWorkflowMessageRow,
-): RuntimeWorkflowMessageRecord {
-  return {
-    workflowId: row.workflow_id,
-    workflowExecutionId: row.workflow_execution_id,
-    communicationId: row.communication_id,
-    fromNodeId: row.from_node_id,
-    toNodeId: row.to_node_id,
-    routingScope: row.routing_scope,
-    deliveryKind: row.delivery_kind,
-    transitionWhen: row.transition_when,
-    sourceNodeExecId: row.source_node_exec_id,
-    status: row.status,
-    activeDeliveryAttemptId: row.active_delivery_attempt_id,
-    deliveryAttemptIdsJson: row.delivery_attempt_ids_json,
-    payloadRefJson: row.payload_ref_json,
-    payloadJson: row.payload_json,
-    artifactRefsJson: row.artifact_refs_json,
-    artifactDir: row.artifact_dir,
-    createdAt: row.created_at,
-    deliveredAt: row.delivered_at,
-    consumedByNodeExecId: row.consumed_by_node_exec_id,
-    consumedAt: row.consumed_at,
-    failureReason: row.failure_reason,
-    supersededByCommunicationId: row.superseded_by_communication_id,
-    supersededAt: row.superseded_at,
-    replayedFromCommunicationId: row.replayed_from_communication_id,
-    managerMessageId: row.manager_message_id,
-    updatedAt: row.updated_at,
   };
 }
 

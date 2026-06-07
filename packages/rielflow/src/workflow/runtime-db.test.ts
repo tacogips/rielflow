@@ -1208,6 +1208,325 @@ describe("runtime-db", () => {
     expect(record.payloadJson).not.toContain("must not be stored in sqlite");
   });
 
+  test("preserves non-file payload attachments in sqlite payload snapshots", async () => {
+    const root = await makeTempDir();
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-non-file-attachments",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-non-file-attachments",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+    const attachments = [
+      { label: "release notes", text: "plain descriptor" },
+      {
+        kind: "link",
+        path: "https://example.test/report",
+        mediaType: "text/uri-list",
+      },
+      {
+        kind: "link",
+        path: "data:text/plain;base64,SGVsbG8=",
+        mediaType: "text/plain",
+      },
+      {
+        kind: "link",
+        path: "about:blank",
+      },
+      "inline-note",
+      null,
+      { path: "", label: "missing local path" },
+    ];
+
+    const record = await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: JSON.stringify({
+          payload: { attachments },
+        }),
+      },
+      { cwd: root },
+    );
+    const payload = JSON.parse(record.payloadJson ?? "{}") as {
+      readonly payload?: { readonly attachments?: readonly unknown[] };
+    };
+
+    expect(payload.payload?.attachments).toEqual(attachments);
+    expect(record.artifactRefsJson).toBeNull();
+  });
+
+  test("preserves mixed non-file attachments while materializing file refs", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "runtime-data");
+    const attachmentRoot = path.join(root, "message-files");
+    const sourceRelativePath =
+      "files/demo/sess-mixed-attachments/attachments/brief.txt";
+    const sourcePath = path.join(rootDataDir, ...sourceRelativePath.split("/"));
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, "mixed attachment\n", "utf8");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-mixed-attachments",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-mixed-attachments",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+    const linkAttachment = {
+      kind: "link",
+      path: "https://example.test/mixed",
+    };
+    const metadataAttachment = { label: "metadata-only", value: 42 };
+
+    const record = await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: JSON.stringify({
+          payload: {
+            attachments: [
+              metadataAttachment,
+              {
+                path: sourceRelativePath,
+                mediaType: "text/plain",
+                content: "must not be stored in sqlite",
+              },
+              linkAttachment,
+            ],
+          },
+        }),
+      },
+      {
+        cwd: root,
+        rootDataDir,
+        env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+      },
+    );
+    const payload = JSON.parse(record.payloadJson ?? "{}") as {
+      readonly payload?: { readonly attachments?: readonly unknown[] };
+    };
+    const materializedRef = {
+      pathBase: "attachment-root",
+      path: "demo/sess-mixed-attachments/messages/comm-000001/files/attachments/brief.txt",
+      mediaType: "text/plain",
+      byteLength: 17,
+      sourcePath: sourceRelativePath,
+    };
+
+    expect(payload.payload?.attachments).toEqual([
+      metadataAttachment,
+      materializedRef,
+      linkAttachment,
+    ]);
+    expect(JSON.parse(record.artifactRefsJson ?? "[]")).toEqual([
+      materializedRef,
+    ]);
+    expect(record.payloadJson).not.toContain("must not be stored in sqlite");
+  });
+
+  test("rejects absolute attachment paths even when descriptor has non-file markers", async () => {
+    const root = await makeTempDir();
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-absolute-marker-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-absolute-marker-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+
+    await expect(
+      saveWorkflowMessageToRuntimeDb(
+        {
+          communication,
+          outputRaw: JSON.stringify({
+            payload: {
+              attachments: [
+                {
+                  provider: "external",
+                  kind: "link",
+                  path: path.join(root, "secret.txt"),
+                },
+              ],
+            },
+          }),
+        },
+        { cwd: root },
+      ),
+    ).rejects.toThrow("absolute paths");
+  });
+
+  test("rejects file URL attachment paths instead of preserving host paths", async () => {
+    const root = await makeTempDir();
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-file-url-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-file-url-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+
+    await expect(
+      saveWorkflowMessageToRuntimeDb(
+        {
+          communication,
+          outputRaw: JSON.stringify({
+            payload: {
+              attachments: [
+                {
+                  kind: "link",
+                  path: `file://${path.join(root, "private.txt")}`,
+                },
+              ],
+            },
+          }),
+        },
+        { cwd: root },
+      ),
+    ).rejects.toThrow("message attachment path must not contain traversal");
+  });
+
+  test("materializes root-data attachments with type metadata instead of preserving content", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "runtime-data");
+    const attachmentRoot = path.join(root, "message-files");
+    const sourceRelativePath =
+      "files/demo/sess-type-metadata-attachment/attachments/brief.txt";
+    const sourcePath = path.join(rootDataDir, ...sourceRelativePath.split("/"));
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, "typed attachment\n", "utf8");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-type-metadata-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-type-metadata-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+
+    const record = await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: JSON.stringify({
+          payload: {
+            attachments: [
+              {
+                path: sourceRelativePath,
+                type: "text/plain",
+                content: "must not be stored in sqlite",
+              },
+            ],
+          },
+        }),
+      },
+      {
+        cwd: root,
+        rootDataDir,
+        env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+      },
+    );
+    const materializedRef = {
+      pathBase: "attachment-root",
+      path: "demo/sess-type-metadata-attachment/messages/comm-000001/files/attachments/brief.txt",
+      byteLength: 17,
+      sourcePath: sourceRelativePath,
+    };
+
+    expect(JSON.parse(record.payloadJson ?? "{}")).toEqual({
+      payload: { attachments: [materializedRef] },
+    });
+    expect(JSON.parse(record.artifactRefsJson ?? "[]")).toEqual([
+      materializedRef,
+    ]);
+    expect(record.payloadJson).not.toContain("must not be stored in sqlite");
+  });
+
   test("streams large root-data attachments into attachment-root refs", async () => {
     const root = await makeTempDir();
     const rootDataDir = path.join(root, "runtime-data");

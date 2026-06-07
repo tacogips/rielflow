@@ -149,8 +149,14 @@ session communication arrays are not fallback sources. Also document that
 `RIEL_RUNTIME_DB`, `RIEL_ARTIFACT_DIR`, and `RIEL_ATTACHMENT_ROOT` control the
 runtime database and file/binary handoff roots, that SQLite stores only
 attachment-root-relative references for file/binary handoffs, and that failed
-SQLite writes block message publication. When the run hardens runtime JSON TEXT
-columns, also document that required JSON text uses
+SQLite writes block message publication. For payload attachment snapshot
+changes, user-facing docs must state that `payload.attachments[]` is a mixed
+descriptor array: non-file descriptors remain in
+`workflow_messages.payload_json`, only safely materialized file-backed
+descriptors are rewritten to normalized `attachment-root` refs, and
+`workflow_messages.artifact_refs_json` stays limited to materialized file refs.
+When the run hardens runtime JSON TEXT columns, also document that required
+JSON text uses
 `CHECK(json_valid(column))`, nullable JSON text uses
 `CHECK(column IS NULL OR json_valid(column))`, malformed historical rows may
 fail rebuild migrations explicitly, and manager/session/event/supervisor
