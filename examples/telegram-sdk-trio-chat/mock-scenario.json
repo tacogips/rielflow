@@ -17,7 +17,7 @@
   },
   "rina-cursor-sdk": {
     "provider": "scenario-mock",
-    "model": "composer-2",
+    "model": "gpt-5.5",
     "payload": {
       "text": "Rinaです。SDK版のトリオ構成なら、Telegram入力をルーターで分けて、各SDK workerが本文だけ返し、最後にchat-reply-workerで送る形が一番シンプルです。"
     }
