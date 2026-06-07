@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { afterEach, describe, expect, test } from "vitest";
 import { commitWorkflowSelfImproveChanges } from "./git";
 
-const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
@@ -26,8 +25,56 @@ afterEach(async () => {
 });
 
 async function git(cwd: string, args: readonly string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", cwd, ...args]);
-  return stdout.trim();
+  const captureDir = await mkdtemp(
+    path.join(os.tmpdir(), "rielflow-self-improve-git-test-"),
+  );
+  const captureId = randomUUID();
+  const stdoutPath = path.join(captureDir, `${captureId}-stdout.log`);
+  const stderrPath = path.join(captureDir, `${captureId}-stderr.log`);
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(
+      "sh",
+      [
+        "-c",
+        'exec "$@" >"$RIEL_GIT_STDOUT" 2>"$RIEL_GIT_STDERR"',
+        "rielflow-git-test",
+        "git",
+        "-C",
+        cwd,
+        ...args,
+      ],
+      {
+        stdio: ["ignore", "ignore", "ignore"],
+        env: {
+          ...process.env,
+          RIEL_GIT_STDOUT: stdoutPath,
+          RIEL_GIT_STDERR: stderrPath,
+        },
+      },
+    );
+    child.on("error", (error) => {
+      void rm(captureDir, { recursive: true, force: true });
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      void (async () => {
+        const [stdout, stderr] = await Promise.all([
+          readFile(stdoutPath, "utf8").catch(() => ""),
+          readFile(stderrPath, "utf8").catch(() => ""),
+        ]);
+        await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+        if (exitCode === 0) {
+          resolve(stdout.trim());
+          return;
+        }
+        reject(
+          new Error(
+            `git ${args.join(" ")} failed with ${String(exitCode)}: ${stderr.trim()}`,
+          ),
+        );
+      })();
+    });
+  });
 }
 
 describe("commitWorkflowSelfImproveChanges", () => {

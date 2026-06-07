@@ -339,6 +339,19 @@ describe("runtime-db", () => {
     expect(
       resolveRuntimeDbPath({
         cwd: root,
+        artifactRoot: "artifacts",
+      }),
+    ).toBe(path.join(root, "rielflow.db"));
+    expect(
+      resolveRuntimeDbPath({
+        cwd: root,
+        artifactRoot: "artifacts",
+        sessionStoreRoot: "sessions",
+      }),
+    ).toBe(path.join(root, "rielflow.db"));
+    expect(
+      resolveRuntimeDbPath({
+        cwd: root,
         env: {
           RIEL_ARTIFACT_DIR: "runtime-data",
           RIEL_RUNTIME_DB: "custom/runtime.sqlite",

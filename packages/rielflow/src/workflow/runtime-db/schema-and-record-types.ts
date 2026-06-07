@@ -262,6 +262,25 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
   if (typeof dbPath === "string" && dbPath.length > 0) {
     return path.isAbsolute(dbPath) ? dbPath : path.resolve(cwd, dbPath);
   }
+  if (options.rootDataDir === undefined) {
+    const explicitStorageRoot =
+      options.sessionStoreRoot !== undefined
+        ? path.dirname(
+            path.isAbsolute(options.sessionStoreRoot)
+              ? options.sessionStoreRoot
+              : path.resolve(cwd, options.sessionStoreRoot),
+          )
+        : options.artifactRoot === undefined
+          ? undefined
+          : path.dirname(
+              path.isAbsolute(options.artifactRoot)
+                ? options.artifactRoot
+                : path.resolve(cwd, options.artifactRoot),
+            );
+    if (explicitStorageRoot !== undefined) {
+      return path.join(explicitStorageRoot, "rielflow.db");
+    }
+  }
   return path.join(resolveRootDataDir(options), "rielflow.db");
 }
 

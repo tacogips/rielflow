@@ -1,4 +1,8 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { NodeExecutionBackend, LoadOptions } from "./types";
 import type { WorkflowRuntimeRequirement } from "./runtime-readiness";
 import { buildCodexModelAvailabilityFailureMessage } from "./codex-model-check-message";
@@ -116,17 +120,48 @@ async function runCommandImpl(
   options: Pick<LoadOptions, "cwd" | "env">,
   timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS,
 ): Promise<CommandExecutionResult> {
+  const captureDir = await mkdtemp(
+    path.join(os.tmpdir(), "rielflow-runtime-readiness-"),
+  );
+  const captureId = randomUUID();
+  const stdoutPath = path.join(captureDir, `${captureId}-stdout.log`);
+  const stderrPath = path.join(captureDir, `${captureId}-stderr.log`);
+  const readCapturedLogs = async (): Promise<{
+    readonly stdout: string;
+    readonly stderr: string;
+  }> => {
+    const [stdout, stderr] = await Promise.all([
+      readFile(stdoutPath, "utf8").catch(() => ""),
+      readFile(stderrPath, "utf8").catch(() => ""),
+    ]);
+    await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+    return { stdout, stderr };
+  };
   return await new Promise<CommandExecutionResult>((resolve) => {
-    const child = spawn(command, args, {
-      cwd: resolveProbeCwd(options.cwd),
-      env: buildProcessEnv(options.env),
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn(
+      "sh",
+      [
+        "-c",
+        'exec "$@" >"$RIEL_READINESS_STDOUT" 2>"$RIEL_READINESS_STDERR"',
+        "rielflow-runtime-readiness",
+        command,
+        ...args,
+      ],
+      {
+        cwd: resolveProbeCwd(options.cwd),
+        env: {
+          ...buildProcessEnv(options.env),
+          RIEL_READINESS_STDOUT: stdoutPath,
+          RIEL_READINESS_STDERR: stderrPath,
+        },
+        shell: false,
+        stdio: ["ignore", "ignore", "ignore"],
+      },
+    );
 
-    let stdout = "";
-    let stderr = "";
     let settled = false;
+    let timedOut = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
 
     const settle = (result: CommandExecutionResult): void => {
       if (settled) {
@@ -134,61 +169,61 @@ async function runCommandImpl(
       }
       settled = true;
       clearTimeout(timer);
+      if (killTimer !== undefined) {
+        clearTimeout(killTimer);
+      }
       resolve(result);
     };
 
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-
     child.on("error", (error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : "unknown spawn error";
-      settle({
-        ok: false,
-        stdout,
-        stderr,
-        message,
-      });
+      void (async () => {
+        const logs = await readCapturedLogs();
+        const message =
+          error instanceof Error ? error.message : "unknown spawn error";
+        settle({
+          ok: false,
+          stdout: logs.stdout,
+          stderr: logs.stderr,
+          message,
+        });
+      })();
     });
 
     child.on("close", (code, signal) => {
-      if (code === 0) {
+      void (async () => {
+        const logs = await readCapturedLogs();
+        if (code === 0 && !timedOut) {
+          settle({
+            ok: true,
+            stdout: logs.stdout,
+            stderr: logs.stderr,
+          });
+          return;
+        }
+        const reason = timedOut
+          ? `timed out after ${timeoutMs}ms`
+          : signal !== null
+            ? `signal ${signal}`
+            : `exit code ${String(code ?? "unknown")}`;
+        const stderrText = logs.stderr.trim();
         settle({
-          ok: true,
-          stdout,
-          stderr,
+          ok: false,
+          stdout: logs.stdout,
+          stderr: logs.stderr,
+          message:
+            stderrText.length > 0
+              ? stderrText
+              : `${command} failed (${reason})`,
         });
-        return;
-      }
-      const reason =
-        signal !== null
-          ? `signal ${signal}`
-          : `exit code ${String(code ?? "unknown")}`;
-      const stderrText = stderr.trim();
-      settle({
-        ok: false,
-        stdout,
-        stderr,
-        message:
-          stderrText.length > 0 ? stderrText : `${command} failed (${reason})`,
-      });
+      })();
     });
 
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGTERM");
-      settle({
-        ok: false,
-        stdout,
-        stderr,
-        message: `${command} timed out after ${timeoutMs}ms`,
-      });
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, 1_000);
     }, timeoutMs);
   });
 }
