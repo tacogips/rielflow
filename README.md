@@ -718,6 +718,23 @@ the run artifact tree so local resume, rerun, and continue operations do not
 depend on the original inline string or JSON file.
 ```
 
+### Runtime Message Storage
+
+Workflow message handoffs are persisted in SQLite by default. The runtime writes
+one canonical `workflow_messages` row per communication id:
+
+```text
+~/.rielflow/artifacts/rielflow.db
+~/.rielflow/artifacts/files/{workflowId}/{workflowExecutionId}/messages/{communicationId}/...
+```
+
+`RIEL_RUNTIME_DB` overrides the SQLite file. `RIEL_ARTIFACT_DIR` overrides the
+shared runtime data root. `RIEL_ATTACHMENT_ROOT` overrides file and binary
+message handoff storage only. SQLite stores path references for file and binary
+handoffs; it does not store file contents. Communication reads, replay, retry,
+GraphQL inspection, and manager mutation scope checks use SQLite as the message
+source.
+
 ### Install Or Run A Workflow Package
 
 ```text

@@ -1,7 +1,11 @@
-import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { atomicWriteJsonFile } from "../shared/fs";
-import { persistDeliveredCommunicationArtifacts } from "./communication-artifact-persistence";
+import {
+  loadWorkflowMessageFromRuntimeDb,
+  saveWorkflowMessageToRuntimeDb,
+  updateWorkflowMessageStatusInRuntimeDb,
+  type RuntimeWorkflowMessageRecord,
+  workflowMessageRecordToCommunication,
+} from "./runtime-db";
 import type { IdempotencyStore } from "./manager-message-service/idempotency";
 import { runIdempotentMutation } from "./manager-message-service/idempotency";
 import {
@@ -16,6 +20,7 @@ import type {
 } from "./session";
 import {
   initialDeliveryAttemptId,
+  nextCommunicationId,
   nextDeliveryAttemptId,
 } from "./runtime-execution-contracts";
 import { getWorkflowTelemetry } from "../telemetry";
@@ -96,31 +101,21 @@ export interface CommunicationService {
   ): Promise<RetryCommunicationDeliveryResult>;
 }
 
-async function readOptionalText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("ENOENT")) {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function findCommunication(
-  session: WorkflowSessionState,
+async function loadRuntimeMessageForLookup(
   input: CommunicationLookupInput,
-): CommunicationRecord | null {
-  if (session.workflowId !== input.workflowId) {
+  options: CommunicationServiceOptions,
+): Promise<RuntimeWorkflowMessageRecord | null> {
+  const record = await loadWorkflowMessageFromRuntimeDb(
+    {
+      workflowExecutionId: input.workflowExecutionId,
+      communicationId: input.communicationId,
+    },
+    options,
+  );
+  if (record === null || record.workflowId !== input.workflowId) {
     return null;
   }
-  return (
-    session.communications.find(
-      (communication) =>
-        communication.communicationId === input.communicationId,
-    ) ?? null
-  );
+  return record;
 }
 
 function findNodeExecution(
@@ -137,112 +132,100 @@ function findNodeExecution(
   );
 }
 
-async function loadCommunicationSnapshot(
-  communication: CommunicationRecord,
-): Promise<CommunicationArtifactSnapshot> {
+function parseJsonOrNull(value: string | null): unknown {
+  return value === null ? null : JSON.parse(value);
+}
+
+function buildCommunicationSnapshotFromRuntimeRecord(
+  record: RuntimeWorkflowMessageRecord,
+): CommunicationArtifactSnapshot {
+  const communication = workflowMessageRecordToCommunication(record);
+  const messageJson = `${JSON.stringify(
+    {
+      workflowId: record.workflowId,
+      workflowExecutionId: record.workflowExecutionId,
+      communicationId: record.communicationId,
+      fromNodeId: record.fromNodeId,
+      toNodeId: record.toNodeId,
+      routingScope: record.routingScope,
+      sourceNodeExecId: record.sourceNodeExecId,
+      deliveryKind: record.deliveryKind,
+      payloadRef: JSON.parse(record.payloadRefJson) as unknown,
+      payload: parseJsonOrNull(record.payloadJson),
+      artifactRefs: parseJsonOrNull(record.artifactRefsJson) ?? [],
+      createdAt: record.createdAt,
+    },
+    null,
+    2,
+  )}\n`;
+  const metaJson = `${JSON.stringify(
+    {
+      status: record.status,
+      workflowId: record.workflowId,
+      workflowExecutionId: record.workflowExecutionId,
+      communicationId: record.communicationId,
+      fromNodeId: record.fromNodeId,
+      toNodeId: record.toNodeId,
+      sourceNodeExecId: record.sourceNodeExecId,
+      routingScope: record.routingScope,
+      deliveryKind: record.deliveryKind,
+      activeDeliveryAttemptId: record.activeDeliveryAttemptId,
+      deliveryAttemptIds: JSON.parse(record.deliveryAttemptIdsJson) as unknown,
+      createdAt: record.createdAt,
+      deliveredAt: record.deliveredAt,
+      consumedByNodeExecId: record.consumedByNodeExecId,
+      consumedAt: record.consumedAt,
+      failureReason: record.failureReason,
+      supersededByCommunicationId: record.supersededByCommunicationId,
+      supersededAt: record.supersededAt,
+      replayedFromCommunicationId: record.replayedFromCommunicationId,
+      managerMessageId: record.managerMessageId,
+      updatedAt: record.updatedAt,
+    },
+    null,
+    2,
+  )}\n`;
   return {
-    messageJson: await readOptionalText(
-      path.join(communication.artifactDir, "message.json"),
-    ),
-    metaJson: await readOptionalText(
-      path.join(communication.artifactDir, "meta.json"),
-    ),
-    outboxMessageJson: await readOptionalText(
-      path.join(
-        communication.artifactDir,
-        "outbox",
-        communication.fromNodeId,
-        "message.json",
-      ),
-    ),
-    outboxOutputRaw: await readOptionalText(
-      path.join(
-        communication.artifactDir,
-        "outbox",
-        communication.fromNodeId,
-        "output.json",
-      ),
-    ),
-    inboxMessageJson: await readOptionalText(
-      path.join(
-        communication.artifactDir,
-        "inbox",
-        communication.toNodeId,
-        "message.json",
-      ),
-    ),
-    attemptFiles: await Promise.all(
-      communication.deliveryAttemptIds.map(async (deliveryAttemptId) => ({
-        deliveryAttemptId,
-        attemptJson: await readOptionalText(
-          path.join(
-            communication.artifactDir,
-            "attempts",
-            deliveryAttemptId,
-            "attempt.json",
-          ),
-        ),
-        receiptJson: await readOptionalText(
-          path.join(
-            communication.artifactDir,
-            "attempts",
-            deliveryAttemptId,
-            "receipt.json",
-          ),
-        ),
-      })),
-    ),
+    messageJson,
+    metaJson,
+    outboxMessageJson: messageJson,
+    outboxOutputRaw: record.payloadJson,
+    inboxMessageJson: messageJson,
+    attemptFiles: communication.deliveryAttemptIds.map((deliveryAttemptId) => ({
+      deliveryAttemptId,
+      attemptJson: `${JSON.stringify(
+        {
+          workflowId: record.workflowId,
+          workflowExecutionId: record.workflowExecutionId,
+          communicationId: record.communicationId,
+          deliveryAttemptId,
+          toNodeId: record.toNodeId,
+          status: "succeeded",
+        },
+        null,
+        2,
+      )}\n`,
+      receiptJson: `${JSON.stringify(
+        {
+          communicationId: record.communicationId,
+          deliveryAttemptId,
+          deliveredByNodeId: record.fromNodeId,
+          deliveredAt: record.deliveredAt,
+        },
+        null,
+        2,
+      )}\n`,
+    })),
   };
 }
 
-async function loadSourceOutputRaw(
-  communication: CommunicationRecord,
-): Promise<string> {
-  const outboxOutputRaw = await readOptionalText(
-    path.join(
-      communication.artifactDir,
-      "outbox",
-      communication.fromNodeId,
-      "output.json",
-    ),
-  );
-  if (outboxOutputRaw !== null) {
-    return outboxOutputRaw;
-  }
-  const sourceOutputRaw = await readOptionalText(
-    path.join(communication.payloadRef.artifactDir, "output.json"),
-  );
-  if (sourceOutputRaw !== null) {
-    return sourceOutputRaw;
+function loadSourceOutputRaw(record: RuntimeWorkflowMessageRecord): string {
+  if (record.payloadJson !== null) {
+    return `${JSON.stringify(JSON.parse(record.payloadJson), null, 2)}\n`;
   }
   throw new Error(
-    `communication '${communication.communicationId}' does not have a readable source output artifact`,
+    `communication '${record.communicationId}' does not have a persisted sqlite payload`,
   );
-}
-
-async function loadDeliveredByNodeId(
-  communication: CommunicationRecord,
-): Promise<string> {
-  const activeDeliveryAttemptId =
-    communication.activeDeliveryAttemptId ??
-    communication.deliveryAttemptIds.at(-1) ??
-    initialDeliveryAttemptId();
-  const receiptRaw = await readOptionalText(
-    path.join(
-      communication.artifactDir,
-      "attempts",
-      activeDeliveryAttemptId,
-      "receipt.json",
-    ),
-  );
-  if (receiptRaw === null) {
-    return communication.toNodeId;
-  }
-  const parsed = JSON.parse(receiptRaw) as Record<string, unknown>;
-  const deliveredByNodeId = parsed["deliveredByNodeId"];
-  return typeof deliveredByNodeId === "string" && deliveredByNodeId.length > 0
-    ? deliveredByNodeId
-    : communication.toNodeId;
 }
 
 function resolveArtifactWorkflowRoot(artifactDir: string): string {
@@ -276,10 +259,11 @@ export function createCommunicationService(
           if (!loaded.ok) {
             return null;
           }
-          const communication = findCommunication(loaded.value, input);
-          if (communication === null) {
+          const record = await loadRuntimeMessageForLookup(input, options);
+          if (record === null) {
             return null;
           }
+          const communication = workflowMessageRecordToCommunication(record);
           return {
             record: communication,
             sourceNodeExecution: findNodeExecution(
@@ -290,7 +274,8 @@ export function createCommunicationService(
               loaded.value,
               communication.consumedByNodeExecId,
             ),
-            artifactSnapshot: await loadCommunicationSnapshot(communication),
+            artifactSnapshot:
+              buildCommunicationSnapshotFromRuntimeRecord(record),
           };
         },
       );
@@ -325,55 +310,35 @@ export function createCommunicationService(
               if (!loaded.ok) {
                 throw new Error(loaded.error.message);
               }
-              const sourceCommunication = findCommunication(
-                loaded.value,
+              const sourceRecord = await loadRuntimeMessageForLookup(
                 input,
+                options,
               );
-              if (sourceCommunication === null) {
+              if (sourceRecord === null) {
                 throw new Error(
                   `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
                 );
               }
+              const sourceCommunication =
+                workflowMessageRecordToCommunication(sourceRecord);
 
-              const outputRaw = await loadSourceOutputRaw(sourceCommunication);
-              const deliveredByNodeId =
-                await loadDeliveredByNodeId(sourceCommunication);
-              const persistedArtifacts =
-                await persistDeliveredCommunicationArtifacts({
-                  artifactWorkflowRoot: resolveArtifactWorkflowRoot(
-                    sourceCommunication.artifactDir,
-                  ),
-                  workflowId: sourceCommunication.workflowId,
-                  workflowExecutionId: sourceCommunication.workflowExecutionId,
-                  communicationCounter: loaded.value.communicationCounter,
-                  fromNodeId: sourceCommunication.fromNodeId,
-                  toNodeId: sourceCommunication.toNodeId,
-                  routingScope: sourceCommunication.routingScope,
-                  sourceNodeExecId: sourceCommunication.sourceNodeExecId,
-                  deliveryKind: "manual-rerun",
-                  payloadRef: sourceCommunication.payloadRef,
-                  outputRaw,
-                  deliveredByNodeId,
-                  createdAt: now,
-                  extraEnvelopeFields: {
-                    replayedFromCommunicationId:
-                      sourceCommunication.communicationId,
-                  },
-                  extraMetaFields: {
-                    replayedFromCommunicationId:
-                      sourceCommunication.communicationId,
-                    ...(input.reason === undefined
-                      ? {}
-                      : { replayReason: input.reason }),
-                  },
-                  extraAttemptFields:
-                    input.reason === undefined ? {} : { reason: input.reason },
-                });
+              const outputRaw = loadSourceOutputRaw(sourceRecord);
+              const replayedCommunicationId = nextCommunicationId(
+                loaded.value.communicationCounter + 1,
+              );
+              const replayedDeliveryAttemptId = initialDeliveryAttemptId();
+              const replayedArtifactDir = path.join(
+                resolveArtifactWorkflowRoot(sourceCommunication.artifactDir),
+                "executions",
+                sourceCommunication.workflowExecutionId,
+                "communications",
+                replayedCommunicationId,
+              );
 
               const replayedRecord: CommunicationRecord = {
                 workflowId: sourceCommunication.workflowId,
                 workflowExecutionId: sourceCommunication.workflowExecutionId,
-                communicationId: persistedArtifacts.communicationId,
+                communicationId: replayedCommunicationId,
                 fromNodeId: sourceCommunication.fromNodeId,
                 toNodeId: sourceCommunication.toNodeId,
                 routingScope: sourceCommunication.routingScope,
@@ -382,37 +347,41 @@ export function createCommunicationService(
                 deliveryKind: "manual-rerun",
                 transitionWhen: `manual-rerun:${sourceCommunication.communicationId}`,
                 status: "delivered",
-                deliveryAttemptIds: [persistedArtifacts.deliveryAttemptId],
-                activeDeliveryAttemptId: persistedArtifacts.deliveryAttemptId,
+                deliveryAttemptIds: [replayedDeliveryAttemptId],
+                activeDeliveryAttemptId: replayedDeliveryAttemptId,
                 createdAt: now,
                 deliveredAt: now,
                 replayedFromCommunicationId:
                   sourceCommunication.communicationId,
-                artifactDir: persistedArtifacts.artifactDir,
+                artifactDir: replayedArtifactDir,
               };
-              const updatedCommunications = loaded.value.communications.map(
-                (communication) =>
-                  communication.communicationId ===
-                  sourceCommunication.communicationId
-                    ? {
-                        ...communication,
-                        status: "superseded" as const,
-                        supersededByCommunicationId:
-                          persistedArtifacts.communicationId,
-                        supersededAt: now,
-                      }
-                    : communication,
-              );
+              const updatedSourceCommunication = {
+                ...sourceCommunication,
+                status: "superseded" as const,
+                supersededByCommunicationId: replayedCommunicationId,
+                supersededAt: now,
+              };
               const updatedSession: WorkflowSessionState = {
                 ...loaded.value,
                 communicationCounter: loaded.value.communicationCounter + 1,
-                communications: [...updatedCommunications, replayedRecord],
               };
+              await updateWorkflowMessageStatusInRuntimeDb(
+                updatedSourceCommunication,
+                options,
+              );
+              await saveWorkflowMessageToRuntimeDb(
+                {
+                  communication: replayedRecord,
+                  outputRaw,
+                  updatedAt: now,
+                },
+                options,
+              );
               await persistUpdatedSession(updatedSession, options);
               return {
                 sourceCommunicationId: sourceCommunication.communicationId,
                 workflowExecutionId: input.workflowExecutionId,
-                replayedCommunicationId: persistedArtifacts.communicationId,
+                replayedCommunicationId,
                 status: replayedRecord.status,
               } satisfies ReplayCommunicationResult;
             },
@@ -450,12 +419,14 @@ export function createCommunicationService(
               if (!loaded.ok) {
                 throw new Error(loaded.error.message);
               }
-              const communication = findCommunication(loaded.value, input);
-              if (communication === null) {
+              const record = await loadRuntimeMessageForLookup(input, options);
+              if (record === null) {
                 throw new Error(
                   `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
                 );
               }
+              const communication =
+                workflowMessageRecordToCommunication(record);
               if (
                 communication.status === "superseded" ||
                 communication.status === "consumed"
@@ -468,74 +439,6 @@ export function createCommunicationService(
               const activeDeliveryAttemptId = nextDeliveryAttemptId(
                 communication.deliveryAttemptIds,
               );
-              const deliveredByNodeId =
-                await loadDeliveredByNodeId(communication);
-              await mkdir(
-                path.join(
-                  communication.artifactDir,
-                  "attempts",
-                  activeDeliveryAttemptId,
-                ),
-                { recursive: true },
-              );
-              const attempt = {
-                workflowId: communication.workflowId,
-                workflowExecutionId: communication.workflowExecutionId,
-                communicationId: communication.communicationId,
-                deliveryAttemptId: activeDeliveryAttemptId,
-                toNodeId: communication.toNodeId,
-                status: "succeeded",
-                startedAt: now,
-                endedAt: now,
-                ...(input.reason === undefined ? {} : { reason: input.reason }),
-              };
-              const receipt = {
-                communicationId: communication.communicationId,
-                deliveryAttemptId: activeDeliveryAttemptId,
-                deliveredByNodeId,
-                deliveredAt: now,
-              };
-              const metaPath = path.join(
-                communication.artifactDir,
-                "meta.json",
-              );
-              const existingMetaRaw = await readOptionalText(metaPath);
-              const existingMeta =
-                existingMetaRaw === null
-                  ? {}
-                  : (JSON.parse(existingMetaRaw) as Record<string, unknown>);
-              const updatedMeta: Record<string, unknown> = {
-                ...existingMeta,
-                status: "delivered",
-                activeDeliveryAttemptId,
-                deliveryAttemptIds: [
-                  ...communication.deliveryAttemptIds,
-                  activeDeliveryAttemptId,
-                ],
-                deliveredAt: now,
-              };
-              delete updatedMeta["failureReason"];
-
-              await atomicWriteJsonFile(
-                path.join(
-                  communication.artifactDir,
-                  "attempts",
-                  activeDeliveryAttemptId,
-                  "attempt.json",
-                ),
-                attempt,
-              );
-              await atomicWriteJsonFile(
-                path.join(
-                  communication.artifactDir,
-                  "attempts",
-                  activeDeliveryAttemptId,
-                  "receipt.json",
-                ),
-                receipt,
-              );
-              await atomicWriteJsonFile(metaPath, updatedMeta);
-
               const updatedRecord: CommunicationRecord = {
                 ...communication,
                 status: "delivered",
@@ -546,15 +449,10 @@ export function createCommunicationService(
                 activeDeliveryAttemptId,
                 deliveredAt: now,
               };
-              const updatedSession: WorkflowSessionState = {
-                ...loaded.value,
-                communications: loaded.value.communications.map((entry) =>
-                  entry.communicationId === communication.communicationId
-                    ? updatedRecord
-                    : entry,
-                ),
-              };
-              await persistUpdatedSession(updatedSession, options);
+              await updateWorkflowMessageStatusInRuntimeDb(
+                updatedRecord,
+                options,
+              );
               return {
                 communicationId: communication.communicationId,
                 activeDeliveryAttemptId,

@@ -19,6 +19,10 @@ import {
   prepareManagerMessageArtifacts,
   persistManagerMessageCommunication,
 } from "./manager-message-service/artifacts";
+import {
+  loadWorkflowMessageFromRuntimeDb,
+  workflowMessageRecordToCommunication,
+} from "./runtime-db";
 import { loadSession, saveSession } from "./session-store";
 import type { WorkflowSessionState } from "./session";
 
@@ -153,6 +157,161 @@ describe("communication-service", () => {
     );
   });
 
+  test("prefers sqlite message rows when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communication = session.communications.at(-1);
+    expect(communication).toBeDefined();
+    if (communication === undefined) {
+      return;
+    }
+    const stripped: WorkflowSessionState = {
+      ...session,
+      communications: session.communications.filter(
+        (entry) => entry.communicationId !== communication.communicationId,
+      ),
+    };
+    const saved = await saveSession(stripped, options);
+    expect(saved.ok).toBe(true);
+
+    const service = createCommunicationService();
+    const view = await service.getCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+      },
+      options,
+    );
+
+    expect(view?.record.communicationId).toBe(communication.communicationId);
+    expect(view?.artifactSnapshot.messageJson).toContain(
+      communication.communicationId,
+    );
+  });
+
+  test("replays a sqlite-backed communication when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communication = session.communications.at(-1);
+    expect(communication).toBeDefined();
+    if (communication === undefined) {
+      return;
+    }
+    const stripped: WorkflowSessionState = {
+      ...session,
+      communications: session.communications.filter(
+        (entry) => entry.communicationId !== communication.communicationId,
+      ),
+    };
+    const saved = await saveSession(stripped, options);
+    expect(saved.ok).toBe(true);
+
+    const service = createCommunicationService();
+    const replayed = await service.replayCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+        reason: "sqlite-backed replay",
+      },
+      options,
+    );
+
+    expect(replayed.sourceCommunicationId).toBe(communication.communicationId);
+    const sqliteSource = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+      },
+      options,
+    );
+    expect(sqliteSource?.status).toBe("superseded");
+    expect(sqliteSource?.supersededByCommunicationId).toBe(
+      replayed.replayedCommunicationId,
+    );
+    const sqliteReplay = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
+    );
+    expect(sqliteReplay?.replayedFromCommunicationId).toBe(
+      communication.communicationId,
+    );
+  });
+
+  test("retries a sqlite-backed communication when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const sourceCommunication = session.communications.at(-1);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const service = createCommunicationService();
+    const replayed = await service.replayCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: sourceCommunication.communicationId,
+        reason: "create sqlite-backed retry target",
+      },
+      options,
+    );
+    const replayedSqliteRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
+    );
+    expect(replayedSqliteRecord).not.toBeNull();
+    if (replayedSqliteRecord === null) {
+      return;
+    }
+    const replayedCommunication =
+      workflowMessageRecordToCommunication(replayedSqliteRecord);
+    const stripped: WorkflowSessionState = {
+      ...session,
+      communications: session.communications.filter(
+        (entry) =>
+          entry.communicationId !== replayedCommunication.communicationId,
+      ),
+    };
+    const saved = await saveSession(stripped, options);
+    expect(saved.ok).toBe(true);
+
+    const retried = await service.retryCommunicationDelivery(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: replayedCommunication.communicationId,
+        reason: "sqlite-backed retry",
+      },
+      options,
+    );
+
+    expect(retried.communicationId).toBe(replayedCommunication.communicationId);
+    expect(retried.activeDeliveryAttemptId).not.toBe(
+      replayedCommunication.activeDeliveryAttemptId,
+    );
+    const sqliteMessage = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayedCommunication.communicationId,
+      },
+      options,
+    );
+    expect(sqliteMessage?.activeDeliveryAttemptId).toBe(
+      retried.activeDeliveryAttemptId,
+    );
+    expect(sqliteMessage?.activeDeliveryAttemptId).toBe(
+      retried.activeDeliveryAttemptId,
+    );
+  });
+
   test("replays a communication with idempotent reuse and conflict detection", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
@@ -186,22 +345,25 @@ describe("communication-service", () => {
       sourceCommunication.communicationId,
     );
 
-    const loadedAfterReplay = await loadSession(session.sessionId, options);
-    expect(loadedAfterReplay.ok).toBe(true);
-    if (!loadedAfterReplay.ok) {
-      return;
-    }
-    const updatedSource = loadedAfterReplay.value.communications.find(
-      (entry) => entry.communicationId === sourceCommunication.communicationId,
+    const sqliteSource = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: sourceCommunication.communicationId,
+      },
+      options,
     );
-    const replayedRecord = loadedAfterReplay.value.communications.find(
-      (entry) => entry.communicationId === replayed.replayedCommunicationId,
+    const sqliteReplay = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
     );
-    expect(updatedSource?.status).toBe("superseded");
-    expect(updatedSource?.supersededByCommunicationId).toBe(
+    expect(sqliteSource?.status).toBe("superseded");
+    expect(sqliteSource?.supersededByCommunicationId).toBe(
       replayed.replayedCommunicationId,
     );
-    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+    expect(sqliteReplay?.replayedFromCommunicationId).toBe(
       sourceCommunication.communicationId,
     );
 
@@ -224,7 +386,7 @@ describe("communication-service", () => {
       return;
     }
     expect(loadedAfterSecondCall.value.communicationCounter).toBe(
-      loadedAfterReplay.value.communicationCounter,
+      session.communicationCounter + 1,
     );
 
     await expect(
@@ -284,18 +446,17 @@ describe("communication-service", () => {
     );
     expect(retried.activeDeliveryAttemptId).toBe("attempt-000002");
 
-    const loadedAfterRetry = await loadSession(session.sessionId, options);
-    expect(loadedAfterRetry.ok).toBe(true);
-    if (!loadedAfterRetry.ok) {
-      return;
-    }
-    const updatedCommunication = loadedAfterRetry.value.communications.find(
-      (entry) => entry.communicationId === replayed.replayedCommunicationId,
+    const sqliteMessage = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
     );
-    expect(updatedCommunication?.deliveryAttemptIds).toEqual([
-      "attempt-000001",
-      "attempt-000002",
-    ]);
+    expect(sqliteMessage?.activeDeliveryAttemptId).toBe("attempt-000002");
+    expect(sqliteMessage?.deliveryAttemptIdsJson).toBe(
+      JSON.stringify(["attempt-000001", "attempt-000002"]),
+    );
 
     const retriedAgain = await service.retryCommunicationDelivery(
       {
@@ -370,6 +531,7 @@ describe("communication-service", () => {
       payloadRef: artifacts.payloadRef,
       outputRaw: artifacts.outputRaw,
       createdAt: "2026-03-15T04:00:00.000Z",
+      runtimeLogOptions: options,
     });
     const seeded: WorkflowSessionState = {
       ...session,
@@ -393,16 +555,20 @@ describe("communication-service", () => {
       options,
     );
 
-    const loadedAfterReplay = await loadSession(session.sessionId, options);
-    expect(loadedAfterReplay.ok).toBe(true);
-    if (!loadedAfterReplay.ok) {
-      return;
-    }
-    const replayedRecord = loadedAfterReplay.value.communications.find(
-      (entry) => entry.communicationId === replayed.replayedCommunicationId,
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
     );
-    expect(replayedRecord?.payloadRef.kind).toBe("manager-message");
-    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+    expect(replayedRecord).not.toBeNull();
+    const replayedCommunication =
+      replayedRecord === null
+        ? null
+        : workflowMessageRecordToCommunication(replayedRecord);
+    expect(replayedCommunication?.payloadRef.kind).toBe("manager-message");
+    expect(replayedCommunication?.replayedFromCommunicationId).toBe(
       sourceCommunicationId,
     );
   });

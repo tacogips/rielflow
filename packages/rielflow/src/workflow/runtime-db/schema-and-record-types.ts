@@ -100,6 +100,55 @@ export interface RuntimeLlmSessionMessageRecord {
   readonly rawMessageJson: string | null;
   readonly at: string;
 }
+export type WorkflowMessageDeliveryKind =
+  | "edge-transition"
+  | "loop-back"
+  | "manual-rerun"
+  | "conversation-turn"
+  | "external-input"
+  | "external-output";
+export type WorkflowMessageStatus =
+  | "created"
+  | "delivered"
+  | "consumed"
+  | "delivery_failed"
+  | "superseded";
+export type WorkflowMessageArtifactPathBase = "attachment-root";
+export interface WorkflowMessageArtifactRef {
+  readonly pathBase: WorkflowMessageArtifactPathBase;
+  readonly path: string;
+  readonly mediaType?: string;
+  readonly byteLength?: number;
+  readonly sourcePath?: string;
+}
+export interface RuntimeWorkflowMessageRecord {
+  readonly workflowId: string;
+  readonly workflowExecutionId: string;
+  readonly communicationId: string;
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+  readonly routingScope: string;
+  readonly deliveryKind: WorkflowMessageDeliveryKind;
+  readonly transitionWhen: string;
+  readonly sourceNodeExecId: string;
+  readonly status: WorkflowMessageStatus;
+  readonly activeDeliveryAttemptId: string | null;
+  readonly deliveryAttemptIdsJson: string;
+  readonly payloadRefJson: string;
+  readonly payloadJson: string | null;
+  readonly artifactRefsJson: string | null;
+  readonly artifactDir: string;
+  readonly createdAt: string;
+  readonly deliveredAt: string | null;
+  readonly consumedByNodeExecId: string | null;
+  readonly consumedAt: string | null;
+  readonly failureReason: string | null;
+  readonly supersededByCommunicationId: string | null;
+  readonly supersededAt: string | null;
+  readonly replayedFromCommunicationId: string | null;
+  readonly managerMessageId: string | null;
+  readonly updatedAt: string;
+}
 export interface RuntimeEventReceiptIndexRecord {
   readonly receiptId: string;
   readonly sourceId: string;
@@ -664,10 +713,43 @@ export function ensureSchema(db: Database): void {
       raw_message_json TEXT,
       at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS workflow_messages (
+      workflow_id TEXT NOT NULL,
+      workflow_execution_id TEXT NOT NULL,
+      communication_id TEXT NOT NULL,
+      from_node_id TEXT NOT NULL,
+      to_node_id TEXT NOT NULL,
+      routing_scope TEXT NOT NULL,
+      delivery_kind TEXT NOT NULL,
+      transition_when TEXT NOT NULL,
+      source_node_exec_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      active_delivery_attempt_id TEXT,
+      delivery_attempt_ids_json TEXT NOT NULL,
+      payload_ref_json TEXT NOT NULL,
+      payload_json TEXT,
+      artifact_refs_json TEXT,
+      artifact_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      delivered_at TEXT,
+      consumed_by_node_exec_id TEXT,
+      consumed_at TEXT,
+      failure_reason TEXT,
+      superseded_by_communication_id TEXT,
+      superseded_at TEXT,
+      replayed_from_communication_id TEXT,
+      manager_message_id TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (workflow_execution_id, communication_id)
+    );
     CREATE INDEX IF NOT EXISTS idx_sessions_workflow_name ON sessions (workflow_name);
     CREATE INDEX IF NOT EXISTS idx_node_exec_session ON node_executions (session_id, node_id);
     CREATE INDEX IF NOT EXISTS idx_node_logs_session ON node_logs (session_id, at);
     CREATE INDEX IF NOT EXISTS idx_llm_session_messages_session ON llm_session_messages (session_id, node_exec_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
   `);
 
   const nodeExecutionColumns = db
@@ -692,6 +774,82 @@ export function ensureSchema(db: Database): void {
   if (!existingNodeExecutionColumns.has("backend_session_id")) {
     db.exec("ALTER TABLE node_executions ADD COLUMN backend_session_id TEXT");
   }
+  const workflowMessageColumns = db
+    .query("PRAGMA table_info(workflow_messages)")
+    .all() as Array<{ name: string }>;
+  const existingWorkflowMessageColumns = new Set(
+    workflowMessageColumns.map((row) => row.name),
+  );
+  if (existingWorkflowMessageColumns.has("compat_artifact_dir")) {
+    const artifactDirExpression = existingWorkflowMessageColumns.has(
+      "artifact_dir",
+    )
+      ? "CASE WHEN artifact_dir <> '' THEN artifact_dir ELSE compat_artifact_dir END"
+      : "compat_artifact_dir";
+    db.exec(`
+      CREATE TABLE workflow_messages_new (
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        communication_id TEXT NOT NULL,
+        from_node_id TEXT NOT NULL,
+        to_node_id TEXT NOT NULL,
+        routing_scope TEXT NOT NULL,
+        delivery_kind TEXT NOT NULL,
+        transition_when TEXT NOT NULL,
+        source_node_exec_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        active_delivery_attempt_id TEXT,
+        delivery_attempt_ids_json TEXT NOT NULL,
+        payload_ref_json TEXT NOT NULL,
+        payload_json TEXT,
+        artifact_refs_json TEXT,
+        artifact_dir TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        delivered_at TEXT,
+        consumed_by_node_exec_id TEXT,
+        consumed_at TEXT,
+        failure_reason TEXT,
+        superseded_by_communication_id TEXT,
+        superseded_at TEXT,
+        replayed_from_communication_id TEXT,
+        manager_message_id TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workflow_execution_id, communication_id)
+      );
+      INSERT INTO workflow_messages_new (
+        workflow_id, workflow_execution_id, communication_id, from_node_id,
+        to_node_id, routing_scope, delivery_kind, transition_when,
+        source_node_exec_id, status, active_delivery_attempt_id,
+        delivery_attempt_ids_json, payload_ref_json, payload_json,
+        artifact_refs_json, artifact_dir, created_at, delivered_at,
+        consumed_by_node_exec_id, consumed_at, failure_reason,
+        superseded_by_communication_id, superseded_at,
+        replayed_from_communication_id, manager_message_id, updated_at
+      )
+      SELECT
+        workflow_id, workflow_execution_id, communication_id, from_node_id,
+        to_node_id, routing_scope, delivery_kind, transition_when,
+        source_node_exec_id, status, active_delivery_attempt_id,
+        delivery_attempt_ids_json, payload_ref_json, payload_json,
+        artifact_refs_json, ${artifactDirExpression}, created_at, delivered_at,
+        consumed_by_node_exec_id, consumed_at, failure_reason,
+        superseded_by_communication_id, superseded_at,
+        replayed_from_communication_id, manager_message_id, updated_at
+      FROM workflow_messages;
+      DROP TABLE workflow_messages;
+      ALTER TABLE workflow_messages_new RENAME TO workflow_messages;
+    `);
+  } else if (!existingWorkflowMessageColumns.has("artifact_dir")) {
+    db.exec(
+      "ALTER TABLE workflow_messages ADD COLUMN artifact_dir TEXT NOT NULL DEFAULT ''",
+    );
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
+  `);
   const sessionColumns = db
     .query("PRAGMA table_info(sessions)")
     .all() as Array<{

@@ -17,6 +17,8 @@ import {
   saveHookEventToRuntimeDb,
   saveNodeExecutionToRuntimeDb,
   saveSessionSnapshotToRuntimeDb,
+  loadWorkflowMessageFromRuntimeDb,
+  workflowMessageRecordToCommunication,
   type RuntimeLlmSessionMessageRecord,
 } from "../workflow/runtime-db";
 import { createSessionState } from "../workflow/session";
@@ -772,6 +774,107 @@ describe("createGraphqlSchema", () => {
     expect(nodeExecution?.nodeExecId).toBe(nodeExecutionRecord.nodeExecId);
     expect(nodeExecution?.output).toContain(nodeExecutionRecord.nodeId);
     expect(nodeExecution?.recentLogs.length).toBeGreaterThan(0);
+  });
+
+  test("lists sqlite-backed communications when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communicationRecord = session.communications.at(-1);
+    expect(communicationRecord).toBeDefined();
+    if (communicationRecord === undefined) {
+      return;
+    }
+    const saved = await saveSession(
+      {
+        ...session,
+        communications: [],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+    const schema = createGraphqlSchema();
+
+    const connection = await schema.query.communications(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        first: 50,
+      },
+      options,
+    );
+    expect(connection.totalCount).toBe(session.communications.length);
+    expect(
+      connection.items.some(
+        (item) =>
+          item.record.communicationId === communicationRecord.communicationId,
+      ),
+    ).toBe(true);
+
+    const overview = await schema.query.workflowExecutionOverview(
+      {
+        workflowExecutionId: session.sessionId,
+        firstCommunications: 50,
+      },
+      options,
+    );
+    expect(overview?.communications.totalCount).toBe(
+      session.communications.length,
+    );
+    expect(
+      overview?.communications.items.some(
+        (item) =>
+          item.record.communicationId === communicationRecord.communicationId,
+      ),
+    ).toBe(true);
+  });
+
+  test("ignores session-only communications for GraphQL list views", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communicationRecord = session.communications.at(-1);
+    expect(communicationRecord).toBeDefined();
+    if (communicationRecord === undefined) {
+      return;
+    }
+    const sessionOnlyCommunication = {
+      ...communicationRecord,
+      communicationId: "comm-session-only-legacy",
+      createdAt: "2026-03-14T00:00:00.000Z",
+      deliveredAt: "2026-03-14T00:00:00.000Z",
+    };
+    const saved = await saveSession(
+      {
+        ...session,
+        communications: [...session.communications, sessionOnlyCommunication],
+      },
+      options,
+    );
+    expect(saved.ok).toBe(true);
+    const schema = createGraphqlSchema();
+
+    const connection = await schema.query.communications(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        first: 100,
+      },
+      options,
+    );
+
+    expect(connection.totalCount).toBe(session.communications.length);
+    expect(
+      connection.items.some(
+        (item) =>
+          item.record.communicationId === communicationRecord.communicationId,
+      ),
+    ).toBe(true);
+    expect(
+      connection.items.some(
+        (item) =>
+          item.record.communicationId ===
+          sessionOnlyCommunication.communicationId,
+      ),
+    ).toBe(false);
   });
 
   test("lists workflow execution summaries for browser session views", async () => {
@@ -3495,6 +3598,96 @@ describe("createGraphqlSchema", () => {
     expect(sent.accepted).toBe(true);
     expect(sent.managerSessionId).toBe("mgrsess-000001");
     expect(sent.queuedNodeIds).toContain("main-worker");
+  });
+
+  test("manager communication mutations resolve sqlite-backed communications when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communication =
+      session.communications.find(
+        (entry) =>
+          entry.fromNodeId === "rielflow-manager" ||
+          entry.toNodeId === "rielflow-manager",
+      ) ?? session.communications[0];
+    expect(communication).toBeDefined();
+    if (communication === undefined) {
+      return;
+    }
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const schema = createGraphqlSchema({
+      now: () => "2026-03-15T01:00:00.000Z",
+      managerSessionStore: managerStore,
+    });
+    const context = {
+      ...options,
+      managerSessionId: "mgrsess-000001",
+      authToken: "secret",
+    };
+    const stripped = await saveSession(
+      {
+        ...session,
+        communications: session.communications.filter(
+          (entry) => entry.communicationId !== communication.communicationId,
+        ),
+      },
+      options,
+    );
+    expect(stripped.ok).toBe(true);
+
+    const replayed = await schema.mutation.replayCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+        idempotencyKey: "gql-sqlite-backed-replay",
+        reason: "sqlite-backed manager replay",
+      },
+      context,
+    );
+    expect(replayed.sourceCommunicationId).toBe(communication.communicationId);
+    expect(replayed.replayedCommunicationId).not.toBe(
+      communication.communicationId,
+    );
+
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
+    );
+    expect(replayedRecord).not.toBeNull();
+    if (replayedRecord === null) {
+      return;
+    }
+    const replayedCommunication =
+      workflowMessageRecordToCommunication(replayedRecord);
+    const strippedAgain = await saveSession(
+      {
+        ...session,
+        communications: session.communications.filter(
+          (entry) =>
+            entry.communicationId !== replayedCommunication.communicationId,
+        ),
+      },
+      options,
+    );
+    expect(strippedAgain.ok).toBe(true);
+
+    const retried = await schema.mutation.retryCommunicationDelivery(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: replayedCommunication.communicationId,
+        idempotencyKey: "gql-sqlite-backed-retry",
+        reason: "sqlite-backed manager retry",
+      },
+      context,
+    );
+    expect(retried.communicationId).toBe(replayedCommunication.communicationId);
+    expect(retried.activeDeliveryAttemptId).not.toBe(
+      replayedCommunication.activeDeliveryAttemptId,
+    );
   });
 
   test("rejects manager-scoped mutations when auth token validation fails", async () => {

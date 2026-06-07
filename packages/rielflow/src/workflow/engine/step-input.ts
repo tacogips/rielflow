@@ -397,6 +397,7 @@ export async function handlePreparedStepInput(
       upstreamCommunicationIds,
       nodeExecId,
       endedAt,
+      options,
     );
     if (!consumedCommunicationsResult.ok) {
       const failed: WorkflowSessionState = {
@@ -698,6 +699,7 @@ export async function handlePreparedStepInput(
       upstreamCommunicationIds,
       nodeExecId,
       endedAt,
+      options,
     );
     if (!consumedCommunicationsResult.ok) {
       const failed: WorkflowSessionState = {

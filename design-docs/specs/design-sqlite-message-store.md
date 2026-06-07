@@ -1,0 +1,186 @@
+# SQLite Workflow Message Store
+
+This document defines the SQLite-only persistence boundary for inbound and
+outbound workflow messages that were previously exchanged through mailbox
+files.
+
+## Overview
+
+Workflow communication remains manager-owned, but SQLite is now the canonical
+message transport store. New runtime code must create, read, replay, retry,
+consume, list, and inspect workflow messages through `workflow_messages`.
+Session communication arrays may still exist as engine state while the broader
+session model is simplified, but they are not a fallback message source.
+
+Design goals:
+
+- persist every new communication message in SQLite by default
+- store file and binary payloads on disk, never as SQLite blobs
+- store only path references for file handoffs in SQLite
+- keep default storage under `~/.rielflow` through existing runtime root rules
+- let operators override the runtime database and file roots with environment
+  variables
+- fail message publication when the SQLite write fails
+
+## Storage Roots
+
+Default roots use the existing runtime storage model:
+
+- runtime database: `{rootDataDir}/rielflow.db`
+- message file and binary root: `{rootDataDir}/files`
+
+With the default user root, `{rootDataDir}` is `~/.rielflow/artifacts`, so new
+message records default to `~/.rielflow/artifacts/rielflow.db` and message files
+default under `~/.rielflow/artifacts/files`.
+
+Override order:
+
+- `RIEL_RUNTIME_DB` overrides the SQLite database path directly.
+- `RIEL_ARTIFACT_DIR` overrides `{rootDataDir}` and therefore the default
+  database and files roots.
+- `RIEL_ATTACHMENT_ROOT` overrides only the file and binary message root.
+- `--artifact-root` and `--session-store` keep existing runtime data
+  co-location inference for the default database path when `RIEL_RUNTIME_DB` is
+  not set.
+
+`RIEL_ARTIFACT_ROOT` still controls non-message workflow artifacts, but it is
+not the canonical message transport root.
+
+## Message File Path Shape
+
+SQLite path fields store normalized attachment-root-relative paths for message
+files and binary handoff artifacts:
+
+```text
+{workflow_id_path_friendly}/{workflow_run_id}/messages/{communicationId}/{some_path}
+```
+
+Examples:
+
+```text
+demo-workflow/wfexec-000123/messages/comm-000004/payload.json
+demo-workflow/wfexec-000123/messages/comm-000004/files/report.pdf
+```
+
+Rules:
+
+- `workflow_id_path_friendly` is the safe workflow id segment accepted by
+  `resolveWorkflowScopedPath`.
+- `workflow_run_id` is the workflow execution id.
+- message paths must stay under
+  `{attachmentRoot}/{workflow_id_path_friendly}/{workflow_run_id}/`.
+- persisted paths are relative to `resolveAttachmentRoot()`.
+- path normalization rejects empty segments, `.`, `..`, path separators inside
+  identifier segments, and targets that escape the scoped root.
+- absolute attachment paths are rejected for new message rows.
+
+Existing manager attachment inputs that arrive as root-data-relative paths are
+materialized into the attachment root before the SQLite row is stored. The DB
+row still records `pathBase: "attachment-root"`.
+
+## SQLite Record Model
+
+`workflow_messages` is the canonical table for message transport state.
+`node_logs` may continue to receive compact communication events for CLI
+observability, but message behavior does not read from logs.
+
+Row cardinality:
+
+- one canonical row is written per `communicationId` in a workflow execution
+- the row represents both sender outbox and recipient inbox views through
+  `from_node_id`, `to_node_id`, `routing_scope`, and `delivery_kind`
+- outbound message reads filter by `from_node_id`
+- inbound message reads filter by `to_node_id`
+- replay creates a new communication row
+- retry updates delivery-attempt state on the existing row
+
+Core columns:
+
+- `workflow_id`
+- `workflow_execution_id`
+- `communication_id`
+- `from_node_id`
+- `to_node_id`
+- `routing_scope`
+- `delivery_kind`
+- `transition_when`
+- `source_node_exec_id`
+- `status`
+- `active_delivery_attempt_id`
+- `delivery_attempt_ids_json`
+- `payload_ref_json`
+- `payload_json`
+- `artifact_refs_json`
+- `artifact_dir`
+- `created_at`
+- `delivered_at`
+- `consumed_by_node_exec_id`
+- `consumed_at`
+- `failure_reason`
+- `superseded_by_communication_id`
+- `superseded_at`
+- `replayed_from_communication_id`
+- `manager_message_id`
+- `updated_at`
+
+Indexes:
+
+- primary key on `(workflow_execution_id, communication_id)`
+- `(workflow_execution_id, created_at)`
+- `(workflow_execution_id, to_node_id, status)`
+- `(workflow_execution_id, from_node_id, created_at)`
+- `(source_node_exec_id, created_at)`
+
+`payload_json` is for structured, JSON-compatible payload snapshots only. When
+payloads include files, binary content, or large generated artifacts,
+`payload_json` stores metadata and path references, while `artifact_refs_json`
+stores attachment-root-relative paths and media metadata.
+
+## Write Flow
+
+1. Resolve the runtime database path and attachment root from the effective
+   execution options.
+2. Allocate `communicationId` through the existing manager-owned allocator.
+3. Normalize file or binary handoffs into attachment-root-relative paths.
+4. Copy file/binary content under the attachment root.
+5. Insert or update the `workflow_messages` row in SQLite.
+6. Treat delivery as successful only after the SQLite write succeeds.
+
+## Read Rules
+
+Communication lists, communication detail, GraphQL manager mutations,
+replay/retry selection, and consumed-state updates read from
+`workflow_messages`. If a row is absent, the communication is absent.
+
+GraphQL inspection surfaces synthesize message snapshots from the SQLite row.
+They do not require per-communication mailbox files.
+
+## Validation
+
+Validation must cover:
+
+- default database placement under `~/.rielflow/artifacts/rielflow.db`
+- `RIEL_RUNTIME_DB` override for the SQLite path
+- `RIEL_ARTIFACT_DIR` co-location of files and the default database
+- `RIEL_ATTACHMENT_ROOT` file/binary message root override
+- path traversal rejection for workflow ids, workflow run ids, communication
+  ids, and file paths
+- failed SQLite writes blocking new message publication
+- one-row-per-communication SQLite cardinality
+- inbound reads by `to_node_id` and outbound reads by `from_node_id`
+- replay row creation and retry delivery-attempt updates
+- GraphQL list/detail and manager-control behavior when session communication
+  arrays are missing
+
+History deletion and cleanup delete message file roots using workflow-scoped
+attachment-root rules. No new retention policy is introduced by this design.
+
+## References
+
+Relevant local files:
+
+- `packages/rielflow/src/workflow/communication-service.ts`
+- `packages/rielflow/src/workflow/runtime-db/schema-and-record-types.ts`
+- `packages/rielflow/src/workflow/runtime-db/workflow-message-records.ts`
+- `packages/rielflow/src/workflow/runtime-db/session-query-records.ts`
+- `packages/rielflow-core/src/paths.ts`

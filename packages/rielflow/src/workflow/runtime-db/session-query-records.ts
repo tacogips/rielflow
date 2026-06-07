@@ -310,6 +310,9 @@ export async function deleteRuntimeSession(
 ): Promise<void> {
   await withDatabase(options, (db) => {
     const runDelete = db.transaction((targetSessionId: string) => {
+      db.prepare(
+        "DELETE FROM workflow_messages WHERE workflow_execution_id = ?",
+      ).run(targetSessionId);
       db.prepare("DELETE FROM llm_session_messages WHERE session_id = ?").run(
         targetSessionId,
       );

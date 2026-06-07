@@ -16,7 +16,11 @@ import {
   type WorkflowRunEvent,
 } from "./engine";
 import { createManagerSessionStore } from "./manager-session-store";
-import { listRuntimeNodeExecutions, listRuntimeNodeLogs } from "./runtime-db";
+import {
+  listRuntimeNodeExecutions,
+  listRuntimeNodeLogs,
+  loadWorkflowMessageFromRuntimeDb,
+} from "./runtime-db";
 import { resolveCurrentStepId } from "./session";
 import { getSessionStoreRoot, loadSession, saveSession } from "./session-store";
 import { isSupervisionStallLastError } from "./superviser";
@@ -1203,6 +1207,22 @@ async function makeTempDir(): Promise<string> {
   );
   tempDirs.push(directory);
   return directory;
+}
+
+async function loadSqliteMessageRecord(
+  workflowExecutionId: string,
+  communicationId: string,
+  options: Parameters<typeof loadWorkflowMessageFromRuntimeDb>[1],
+) {
+  const record = await loadWorkflowMessageFromRuntimeDb(
+    { workflowExecutionId, communicationId },
+    options,
+  );
+  expect(record).not.toBeNull();
+  if (record === null) {
+    throw new Error(`missing sqlite message ${communicationId}`);
+  }
+  return record;
 }
 
 async function writeJson(filePath: string, payload: unknown): Promise<void> {
@@ -5882,49 +5902,23 @@ describe("runWorkflow", () => {
     expect(mailboxMeta.paths.outputPath).toBe("outbox/output.json");
     expect(mailboxInput.upstream[0]?.communicationId).toBe("comm-000001");
 
-    const communicationMessageRaw = await readFile(
-      path.join(
-        root,
-        "artifacts",
-        "linear",
-        "executions",
-        result.value.session.sessionId,
-        "communications",
-        "comm-000001",
-        "message.json",
-      ),
-      "utf8",
+    const communicationMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      "comm-000001",
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
     );
-    const communicationMessageJson = JSON.parse(communicationMessageRaw) as {
-      workflowExecutionId: string;
-      communicationId: string;
-      fromNodeId: string;
-      toNodeId: string;
-    };
-    expect(communicationMessageJson.workflowExecutionId).toBe(
+    expect(communicationMessage.workflowExecutionId).toBe(
       result.value.session.sessionId,
     );
-    expect(communicationMessageJson.communicationId).toBe("comm-000001");
-    expect(communicationMessageJson.fromNodeId).toBe("rielflow-manager");
-    expect(communicationMessageJson.toNodeId).toBe("step-1");
-
-    const receiptRaw = await readFile(
-      path.join(
-        root,
-        "artifacts",
-        "linear",
-        "executions",
-        result.value.session.sessionId,
-        "communications",
-        "comm-000001",
-        "attempts",
-        "attempt-000001",
-        "receipt.json",
-      ),
-      "utf8",
-    );
-    const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("rielflow-manager");
+    expect(communicationMessage.communicationId).toBe("comm-000001");
+    expect(communicationMessage.fromNodeId).toBe("rielflow-manager");
+    expect(communicationMessage.toNodeId).toBe("step-1");
+    expect(communicationMessage.activeDeliveryAttemptId).toBe("attempt-000001");
 
     const managerOutputRaw = await readFile(
       path.join(
@@ -5940,22 +5934,9 @@ describe("runWorkflow", () => {
       ),
       "utf8",
     );
-    const mailboxOutputRaw = await readFile(
-      path.join(
-        root,
-        "artifacts",
-        "linear",
-        "executions",
-        result.value.session.sessionId,
-        "communications",
-        "comm-000001",
-        "outbox",
-        "rielflow-manager",
-        "output.json",
-      ),
-      "utf8",
+    expect(JSON.parse(communicationMessage.payloadJson ?? "null")).toEqual(
+      JSON.parse(managerOutputRaw) as unknown,
     );
-    expect(mailboxOutputRaw).toBe(managerOutputRaw);
 
     const handoffRaw = await readFile(
       path.join(step1Exec.artifactDir, "handoff.json"),
@@ -6926,22 +6907,23 @@ describe("runWorkflow", () => {
   test("delivers root human input through an external mailbox communication", async () => {
     const root = await makeTempDir();
     await createWorkflowFixture(root, "root-mailbox-input", false);
+    const options = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      runtimeVariables: {
+        topic: "B",
+        humanInput: {
+          request: "ship release B",
+          constraints: ["tests", "review"],
+        },
+      },
+    };
 
     const result = await runWorkflow(
       "root-mailbox-input",
-      {
-        ...workflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        runtimeVariables: {
-          topic: "B",
-          humanInput: {
-            request: "ship release B",
-            constraints: ["tests", "review"],
-          },
-        },
-      },
+      options,
       deterministicAdapter,
     );
 
@@ -6988,18 +6970,6 @@ describe("runWorkflow", () => {
     );
     expect(managerInput.promptText).toContain('"request":"ship release B"');
 
-    const receiptRaw = await readFile(
-      path.join(
-        bootstrapCommunication.artifactDir,
-        "attempts",
-        bootstrapCommunication.activeDeliveryAttemptId ?? "attempt-000001",
-        "receipt.json",
-      ),
-      "utf8",
-    );
-    const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("rielflow-manager");
-
     const sourceOutputRaw = await readFile(
       path.join(
         root,
@@ -7013,16 +6983,17 @@ describe("runWorkflow", () => {
       ),
       "utf8",
     );
-    const mailboxOutputRaw = await readFile(
-      path.join(
-        bootstrapCommunication.artifactDir,
-        "outbox",
-        "__workflow-input-mailbox__",
-        "output.json",
-      ),
-      "utf8",
+    const bootstrapMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      bootstrapCommunication.communicationId,
+      options,
     );
-    expect(mailboxOutputRaw).toBe(sourceOutputRaw);
+    expect(bootstrapMessage.activeDeliveryAttemptId).toBe(
+      bootstrapCommunication.activeDeliveryAttemptId ?? null,
+    );
+    expect(JSON.parse(bootstrapMessage.payloadJson ?? "null")).toEqual(
+      JSON.parse(sourceOutputRaw) as unknown,
+    );
   });
 
   test("normalizes plain-text human input to canonical text objects", async () => {
@@ -7117,29 +7088,20 @@ describe("runWorkflow", () => {
       return;
     }
 
-    const outputRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "outbox",
-        "workflow-output",
-        "output.json",
-      ),
-      "utf8",
+    const outputMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      outputCommunication.communicationId,
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
     );
-    const outputJson = JSON.parse(outputRaw) as { payload: { nodeId: string } };
+    const outputJson = JSON.parse(outputMessage.payloadJson ?? "null") as {
+      payload: { nodeId: string };
+    };
     expect(outputJson.payload.nodeId).toBe("workflow-output");
-
-    const receiptRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "attempts",
-        outputCommunication.activeDeliveryAttemptId ?? "attempt-000001",
-        "receipt.json",
-      ),
-      "utf8",
-    );
-    const receiptJson = JSON.parse(receiptRaw) as { deliveredByNodeId: string };
-    expect(receiptJson.deliveredByNodeId).toBe("rielflow-manager");
 
     const publishedExec = result.value.session.nodeExecutions.find(
       (entry) => entry.nodeId === "workflow-output",
@@ -7152,7 +7114,9 @@ describe("runWorkflow", () => {
       path.join(publishedExec.artifactDir, "output.json"),
       "utf8",
     );
-    expect(outputRaw).toBe(sourceOutputRaw);
+    expect(JSON.parse(outputMessage.payloadJson ?? "null")).toEqual(
+      JSON.parse(sourceOutputRaw) as unknown,
+    );
   });
 
   test("publishes the latest root output node result when a manager runs again afterward", async () => {
@@ -7200,16 +7164,19 @@ describe("runWorkflow", () => {
     }
 
     expect(outputCommunication.fromNodeId).toBe("workflow-output");
-    const outputRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "outbox",
-        "workflow-output",
-        "output.json",
-      ),
-      "utf8",
+    const outputMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      outputCommunication.communicationId,
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
     );
-    const outputJson = JSON.parse(outputRaw) as { payload: { final: string } };
+    const outputJson = JSON.parse(outputMessage.payloadJson ?? "null") as {
+      payload: { final: string };
+    };
     expect(outputJson.payload.final).toBe("published-result");
   });
 
@@ -7260,16 +7227,19 @@ describe("runWorkflow", () => {
     }
 
     expect(outputCommunication.fromNodeId).toBe("second-output");
-    const outputRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "outbox",
-        "second-output",
-        "output.json",
-      ),
-      "utf8",
+    const outputMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      outputCommunication.communicationId,
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
     );
-    const outputJson = JSON.parse(outputRaw) as { payload: { final: string } };
+    const outputJson = JSON.parse(outputMessage.payloadJson ?? "null") as {
+      payload: { final: string };
+    };
     expect(outputJson.payload.final).toBe("second");
     expect(result.value.session.runtimeVariables["workflowOutput"]).toEqual({
       final: "second",
@@ -7326,16 +7296,19 @@ describe("runWorkflow", () => {
     }
 
     expect(outputCommunication.fromNodeId).toBe("workflow-output");
-    const outputRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "outbox",
-        "workflow-output",
-        "output.json",
-      ),
-      "utf8",
+    const outputMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      outputCommunication.communicationId,
+      {
+        ...workflowLoadOpts,
+        workflowRoot: root,
+        artifactRoot: path.join(root, "artifacts"),
+        sessionStoreRoot: path.join(root, "sessions"),
+      },
     );
-    const outputJson = JSON.parse(outputRaw) as { payload: { final: string } };
+    const outputJson = JSON.parse(outputMessage.payloadJson ?? "null") as {
+      payload: { final: string };
+    };
     expect(outputJson.payload.final).toBe("published");
     expect(result.value.session.runtimeVariables["workflowOutput"]).toEqual({
       final: "published",
@@ -7608,6 +7581,155 @@ describe("runWorkflow", () => {
         expect.objectContaining({ nodeId: "step-2", status: "succeeded" }),
       ]),
     );
+    const step2Exec = continued.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-2",
+    );
+    expect(step2Exec).toBeDefined();
+    if (step2Exec === undefined) {
+      return;
+    }
+    const inputRaw = await readFile(
+      path.join(step2Exec.artifactDir, "input.json"),
+      "utf8",
+    );
+    const inputJson = JSON.parse(inputRaw) as {
+      arguments: { upstreamNode: string } | null;
+    };
+    expect(inputJson.arguments).toEqual({ upstreamNode: "step-1" });
+  });
+
+  test("continues from a failed workflow after the workflow definition is fixed", async () => {
+    const root = await makeTempDir();
+    const workflowName = "hist-continue-fixed-after-failure";
+    await createManagerlessWorkflowFixture(root, workflowName);
+
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "broken step 2",
+      variables: {},
+      argumentsTemplate: { upstreamNode: "" },
+      argumentBindings: [
+        {
+          targetPath: "upstreamNode",
+          source: "node-output",
+          sourceRef: "step-1",
+          sourcePath: "output.payload.nodeId",
+          required: true,
+        },
+      ],
+    });
+
+    class FailsBrokenStep2PromptAdapter implements NodeAdapter {
+      readonly calls: string[] = [];
+
+      async execute(
+        input: Parameters<NodeAdapter["execute"]>[0],
+        context: Parameters<NodeAdapter["execute"]>[1],
+      ): Promise<AdapterExecutionOutput> {
+        this.calls.push(input.nodeId);
+        if (input.nodeId === "step-2" && input.promptText.includes("broken")) {
+          throw new AdapterExecutionError(
+            "provider_error",
+            "step-2 prompt is broken",
+          );
+        }
+        return deterministicAdapter.execute(input, context);
+      }
+    }
+
+    const adapter = new FailsBrokenStep2PromptAdapter();
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      runtimeVariables: { topic: "B" },
+    };
+
+    const failed = await runWorkflow(workflowName, opts, adapter);
+    expect(failed.ok).toBe(false);
+    if (failed.ok) {
+      return;
+    }
+    expect(failed.error.message).toContain("adapter failure for step 'step-2'");
+    expect(adapter.calls).toEqual(["step-1", "step-2"]);
+
+    expect(failed.error.sessionId).toBeDefined();
+    if (failed.error.sessionId === undefined) {
+      return;
+    }
+    const failedSession = await loadSession(failed.error.sessionId, opts);
+    expect(failedSession.ok).toBe(true);
+    if (!failedSession.ok) {
+      return;
+    }
+    expect(failedSession.value.status).toBe("failed");
+    expect(failedSession.value.nodeExecutions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ nodeId: "step-2", status: "failed" }),
+      ]),
+    );
+    const step1Exec = failedSession.value.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(step1Exec).toBeDefined();
+    if (step1Exec === undefined) {
+      return;
+    }
+    expect(step1Exec.executionOrdinal).toBeDefined();
+    if (step1Exec.executionOrdinal === undefined) {
+      return;
+    }
+    expect(step1Exec.status).toBe("succeeded");
+
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "fixed step 2",
+      variables: {},
+      argumentsTemplate: { upstreamNode: "" },
+      argumentBindings: [
+        {
+          targetPath: "upstreamNode",
+          source: "node-output",
+          sourceRef: "step-1",
+          sourcePath: "output.payload.nodeId",
+          required: true,
+        },
+      ],
+    });
+
+    adapter.calls.length = 0;
+    const continued = await runWorkflow(
+      workflowName,
+      {
+        ...opts,
+        continueFromWorkflowExecutionId: failedSession.value.sessionId,
+        continueAfterStepRunId: step1Exec.nodeExecId,
+        continueStartStepId: "step-2",
+      },
+      adapter,
+    );
+
+    expect(continued.ok).toBe(true);
+    if (!continued.ok) {
+      return;
+    }
+    expect(continued.value.session.status).toBe("completed");
+    expect(adapter.calls).toEqual(["step-2"]);
+    expect(continued.value.session.historyImports).toEqual([
+      {
+        sourceWorkflowExecutionId: failedSession.value.sessionId,
+        throughStepRunId: step1Exec.nodeExecId,
+        throughExecutionOrdinal: step1Exec.executionOrdinal,
+      },
+    ]);
+    expect(continued.value.session.nodeExecutions).toEqual([
+      expect.objectContaining({ nodeId: "step-2", status: "succeeded" }),
+    ]);
     const step2Exec = continued.value.session.nodeExecutions.find(
       (entry) => entry.nodeId === "step-2",
     );
@@ -9756,7 +9878,7 @@ describe("runWorkflow", () => {
     );
   });
 
-  test("preserves selected external output artifact bytes when publication resumes", async () => {
+  test("preserves selected external output payload when publication resumes", async () => {
     const root = await makeTempDir();
     const workflowName = "resume-external-output-byte-preservation";
     const sessionId = "sess-resume-external-output-byte-preservation";
@@ -9839,19 +9961,17 @@ describe("runWorkflow", () => {
       return;
     }
 
-    const mailboxOutputRaw = await readFile(
-      path.join(
-        outputCommunication.artifactDir,
-        "outbox",
-        "workflow-output",
-        "output.json",
-      ),
-      "utf8",
+    const outputMessage = await loadSqliteMessageRecord(
+      resumed.value.session.sessionId,
+      outputCommunication.communicationId,
+      options,
     );
-    expect(mailboxOutputRaw).toBe(reformattedOutputRaw);
+    expect(JSON.parse(outputMessage.payloadJson ?? "null")).toEqual(
+      JSON.parse(reformattedOutputRaw) as unknown,
+    );
   });
 
-  test("fails deterministically when external output publication cannot persist its mailbox artifacts", async () => {
+  test("does not depend on communication mailbox artifacts for external output publication", async () => {
     const root = await makeTempDir();
     const workflowName = "external-output-publication-write-failure";
     const sessionId = "sess-publication-write-failure";
@@ -9887,32 +10007,24 @@ describe("runWorkflow", () => {
       deterministicAdapter,
     );
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     if (!result.ok) {
-      expect(result.error.exitCode).toBe(1);
-      expect(result.error.message).toContain(
-        "failed to persist external output publication",
-      );
-      expect(result.error.message).toContain("workflow-output");
-      expect(result.error.message).toContain("exec-000002");
-    }
-
-    const failedSession = await loadSession(sessionId, options);
-    expect(failedSession.ok).toBe(true);
-    if (!failedSession.ok) {
       return;
     }
-
-    expect(failedSession.value.status).toBe("failed");
-    expect(failedSession.value.lastError).toContain(
-      "failed to persist external output publication",
+    expect(result.value.session.status).toBe("completed");
+    const outputCommunication = result.value.session.communications.find(
+      (entry) => entry.deliveryKind === "external-output",
     );
-    expect(failedSession.value.lastError).toContain("exec-000002");
-    expect(
-      failedSession.value.communications.some(
-        (entry) => entry.deliveryKind === "external-output",
-      ),
-    ).toBe(false);
+    expect(outputCommunication).toBeDefined();
+    if (outputCommunication === undefined) {
+      return;
+    }
+    const outputMessage = await loadSqliteMessageRecord(
+      sessionId,
+      outputCommunication.communicationId,
+      options,
+    );
+    expect(outputMessage.deliveryKind).toBe("external-output");
   });
 
   test("reports completed-session persistence failure when the session file target path is invalid", async () => {

@@ -11,6 +11,7 @@ import {
   hashManagerAuthToken,
 } from "./manager-session-store";
 import { createManagerMessageService } from "./manager-message-service";
+import { loadWorkflowMessageFromRuntimeDb } from "./runtime-db";
 import { createSessionState, type WorkflowSessionState } from "./session";
 import { loadSession, saveSession } from "./session-store";
 
@@ -464,19 +465,16 @@ describe("manager-message-service", () => {
     expect(result.createdCommunicationIds).toHaveLength(1);
     expect(result.parsedIntent[0]?.kind).toBe("replay-communication");
 
-    const loaded = await loadSession(session.sessionId, options);
-    expect(loaded.ok).toBe(true);
-    if (!loaded.ok) {
-      return;
-    }
-    expect(
-      loaded.value.communications.some(
-        (entry) =>
-          entry.communicationId === result.createdCommunicationIds[0] &&
-          entry.replayedFromCommunicationId ===
-            sourceCommunication.communicationId,
-      ),
-    ).toBe(true);
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: result.createdCommunicationIds[0] ?? "",
+      },
+      options,
+    );
+    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+      sourceCommunication.communicationId,
+    );
 
     const replayed = await service.sendManagerMessage(
       {
@@ -496,6 +494,67 @@ describe("manager-message-service", () => {
     );
 
     expect(replayed).toEqual(result);
+  });
+
+  test("replays a sqlite-backed communication from a manager message when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T02:30:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T02:30:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+    const sourceCommunication = session.communications.at(-1);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const stripped = await saveSession(
+      {
+        ...session,
+        communications: session.communications.filter(
+          (entry) =>
+            entry.communicationId !== sourceCommunication.communicationId,
+        ),
+      },
+      options,
+    );
+    expect(stripped.ok).toBe(true);
+
+    const result = await service.sendManagerMessage(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        managerSessionId: "mgrsess-000001",
+        message: "Replay the sqlite-backed delivery.",
+        actions: [
+          {
+            type: "replay-communication",
+            communicationId: sourceCommunication.communicationId,
+            reason: "session row removed",
+          },
+        ],
+        idempotencyKey: "idem-replay-sqlite-backed-delivery",
+      },
+      options,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.createdCommunicationIds).toHaveLength(1);
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: result.createdCommunicationIds[0] ?? "",
+      },
+      options,
+    );
+    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+      sourceCommunication.communicationId,
+    );
   });
 
   test("applies optional-node execute/skip actions through manager messages", async () => {

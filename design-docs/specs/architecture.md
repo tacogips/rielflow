@@ -937,7 +937,16 @@ In user-scoped catalog mode, `{rootDataDir}` defaults to `<user-root>/artifacts`
 For direct workflow-definition-dir and other non-scoped runtime entrypoints, the default
 `{rootDataDir}` is `<user-root>/artifacts`.
 
-File artifacts remain the authoritative source for execution payloads. SQLite is a best-effort index for CLI and GraphQL inspection queries.
+File artifacts remain the authoritative source for node execution payloads.
+SQLite is the canonical store for workflow communication messages and a query
+index for other runtime inspection data.
+
+Workflow communication messages are the exception to that index-only rule for
+new writes. New inbound and outbound workflow message records must be durably
+inserted into the runtime SQLite database as part of the same manager-owned
+publication step. Message metadata, delivery state, replay/retry state, and
+structured non-binary payload snapshots are read from SQLite. See
+`design-docs/specs/design-sqlite-message-store.md`.
 
 Temporary workflow runs add one source-specific artifact area under the
 individual run artifact tree:
@@ -1701,6 +1710,14 @@ Delivery kinds:
 - `external-output`
 
 This mailbox layer is the architectural boundary that lets one workflow execution, cross-workflow invocation, and external callers use the same handoff model.
+
+New mailbox publications persist the communication as a SQLite message row.
+SQLite stores identifiers, routing metadata, lifecycle state, payload
+references, and bounded structured payload JSON when the message is
+JSON-compatible. File or binary handoff content is not stored in SQLite; SQLite
+stores only a normalized path reference under the runtime attachment root,
+shaped as
+`{workflow_id_path_friendly}/{workflow_run_id}/messages/{communicationId}/{some_path}`.
 
 Planned continuation extension:
 

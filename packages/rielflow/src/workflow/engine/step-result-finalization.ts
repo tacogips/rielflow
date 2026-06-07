@@ -928,6 +928,7 @@ export async function finalizeExecutedNode(
     upstreamCommunicationIds,
     nodeExecId,
     endedAt,
+    options,
   );
   if (!consumedCommunicationsResult.ok) {
     const failed: WorkflowSessionState = {

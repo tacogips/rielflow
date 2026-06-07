@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Database } from "bun:sqlite";
@@ -11,12 +11,16 @@ import {
   listRuntimeSessions,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
+  listWorkflowMessagesFromRuntimeDb,
+  loadWorkflowMessageFromRuntimeDb,
   loadRuntimeSessionSummary,
   resolveRuntimeDbPath,
   saveCommunicationEventToRuntimeDb,
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
   saveSessionSnapshotToRuntimeDb,
+  saveWorkflowMessageToRuntimeDb,
+  updateWorkflowMessageStatusInRuntimeDb,
 } from "./runtime-db";
 import { createSessionState, type CommunicationRecord } from "./session";
 
@@ -277,12 +281,401 @@ describe("runtime-db", () => {
       const logCount = db
         .query("SELECT count(*) as count FROM node_logs")
         .get() as { count: number };
+      const messageCount = db
+        .query("SELECT count(*) as count FROM workflow_messages")
+        .get() as { count: number };
       expect(sessionCount.count).toBeGreaterThanOrEqual(1);
       expect(nodeCount.count).toBeGreaterThanOrEqual(2);
       expect(logCount.count).toBeGreaterThanOrEqual(2);
+      expect(messageCount.count).toBe(
+        result.value.session.communications.length,
+      );
     } finally {
       db.close();
     }
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: result.value.session.sessionId },
+      options,
+    );
+    expect(messages).toHaveLength(result.value.session.communications.length);
+    const latestMessage = messages.at(-1);
+    expect(latestMessage?.payloadJson).toContain("scenario-mock");
+    if (latestMessage !== undefined) {
+      await expect(
+        loadWorkflowMessageFromRuntimeDb(
+          {
+            workflowExecutionId: result.value.session.sessionId,
+            communicationId: latestMessage.communicationId,
+          },
+          options,
+        ),
+      ).resolves.toEqual(latestMessage);
+      await expect(
+        listWorkflowMessagesFromRuntimeDb(
+          {
+            workflowExecutionId: result.value.session.sessionId,
+            fromNodeId: latestMessage.fromNodeId,
+          },
+          options,
+        ),
+      ).resolves.toContainEqual(latestMessage);
+      await expect(
+        listWorkflowMessagesFromRuntimeDb(
+          {
+            workflowExecutionId: result.value.session.sessionId,
+            toNodeId: latestMessage.toNodeId,
+          },
+          options,
+        ),
+      ).resolves.toContainEqual(latestMessage);
+    }
+  });
+
+  test("materializes root-data attachments under the attachment root before storing sqlite refs", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "runtime-data");
+    const attachmentRoot = path.join(root, "message-files");
+    const sourceRelativePath =
+      "files/demo/sess-message-attachments/attachments/brief.txt";
+    const sourcePath = path.join(rootDataDir, ...sourceRelativePath.split("/"));
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, "attachment body\n", "utf8");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-message-attachments",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-message-attachments",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+    const outputRaw = `${JSON.stringify({
+      provider: "manager-message",
+      model: "manager",
+      promptText: "deliver",
+      completionPassed: true,
+      when: { always: true },
+      payload: {
+        attachments: [
+          {
+            path: sourceRelativePath,
+            mediaType: "text/plain",
+            content: "must not be stored in sqlite",
+          },
+        ],
+      },
+    })}\n`;
+
+    const record = await saveWorkflowMessageToRuntimeDb(
+      { communication, outputRaw },
+      {
+        cwd: root,
+        rootDataDir,
+        env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+      },
+    );
+
+    const refs = JSON.parse(record.artifactRefsJson ?? "[]") as Array<{
+      readonly pathBase: string;
+      readonly path: string;
+      readonly mediaType?: string;
+      readonly byteLength?: number;
+      readonly sourcePath?: string;
+    }>;
+    expect(refs).toEqual([
+      {
+        pathBase: "attachment-root",
+        path: "demo/sess-message-attachments/messages/comm-000001/files/attachments/brief.txt",
+        mediaType: "text/plain",
+        byteLength: 16,
+        sourcePath: sourceRelativePath,
+      },
+    ]);
+    await expect(
+      readFile(
+        path.join(
+          attachmentRoot,
+          "demo",
+          "sess-message-attachments",
+          "messages",
+          "comm-000001",
+          "files",
+          "attachments",
+          "brief.txt",
+        ),
+        "utf8",
+      ),
+    ).resolves.toBe("attachment body\n");
+    expect(record.payloadJson).toContain("attachment-root");
+    expect(record.payloadJson).not.toContain("must not be stored in sqlite");
+  });
+
+  test("fails sqlite message persistence before delivery when attachment source files are missing", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "runtime-data");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-missing-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-missing-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+
+    await expect(
+      saveWorkflowMessageToRuntimeDb(
+        {
+          communication,
+          outputRaw: JSON.stringify({
+            payload: {
+              attachments: [
+                {
+                  path: "files/demo/sess-missing-attachment/attachments/missing.txt",
+                },
+              ],
+            },
+          }),
+        },
+        { cwd: root, rootDataDir },
+      ),
+    ).rejects.toThrow("ENOENT");
+  });
+
+  test("rejects absolute attachment paths for new sqlite message records", async () => {
+    const root = await makeTempDir();
+    const absoluteAttachmentPath = path.join(root, "absolute.txt");
+    await writeFile(absoluteAttachmentPath, "must remain outside sqlite\n");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-absolute-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-absolute-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+
+    await expect(
+      saveWorkflowMessageToRuntimeDb(
+        {
+          communication,
+          outputRaw: JSON.stringify({
+            payload: {
+              attachments: [
+                {
+                  path: absoluteAttachmentPath,
+                  mediaType: "text/plain",
+                },
+              ],
+            },
+          }),
+        },
+        { cwd: root },
+      ),
+    ).rejects.toThrow("absolute paths");
+  });
+
+  test("stores scoped attachment-root refs only when the relative file exists", async () => {
+    const root = await makeTempDir();
+    const attachmentRoot = path.join(root, "message-files");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-relative-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-relative-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+    const attachmentRelativePath = "attachments/brief.txt";
+    const attachmentPath = path.join(
+      attachmentRoot,
+      "demo",
+      "sess-relative-attachment",
+      "messages",
+      "comm-000001",
+      "attachments",
+      "brief.txt",
+    );
+
+    await expect(
+      saveWorkflowMessageToRuntimeDb(
+        {
+          communication,
+          outputRaw: JSON.stringify({
+            payload: { attachments: [{ path: attachmentRelativePath }] },
+          }),
+        },
+        { cwd: root, env: { RIEL_ATTACHMENT_ROOT: attachmentRoot } },
+      ),
+    ).rejects.toThrow("ENOENT");
+
+    await mkdir(path.dirname(attachmentPath), { recursive: true });
+    await writeFile(attachmentPath, "existing attachment\n", "utf8");
+
+    const record = await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: JSON.stringify({
+          payload: {
+            attachments: [
+              { path: attachmentRelativePath, mediaType: "text/plain" },
+            ],
+          },
+        }),
+      },
+      { cwd: root, env: { RIEL_ATTACHMENT_ROOT: attachmentRoot } },
+    );
+
+    expect(JSON.parse(record.artifactRefsJson ?? "[]")).toEqual([
+      {
+        pathBase: "attachment-root",
+        path: "demo/sess-relative-attachment/messages/comm-000001/attachments/brief.txt",
+        mediaType: "text/plain",
+        byteLength: 20,
+      },
+    ]);
+  });
+
+  test("preserves sqlite payload and artifact refs on state-only message updates", async () => {
+    const root = await makeTempDir();
+    const rootDataDir = path.join(root, "runtime-data");
+    const attachmentRoot = path.join(root, "message-files");
+    const sourceRelativePath =
+      "files/demo/sess-state-update-attachment/attachments/brief.txt";
+    const sourcePath = path.join(rootDataDir, ...sourceRelativePath.split("/"));
+    await mkdir(path.dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, "retry-safe attachment\n", "utf8");
+    const communication = {
+      workflowId: "demo",
+      workflowExecutionId: "sess-state-update-attachment",
+      communicationId: "comm-000001",
+      fromNodeId: "manager",
+      toNodeId: "worker",
+      routingScope: "intra-workflow",
+      sourceNodeExecId: "exec-000001",
+      payloadRef: {
+        kind: "node-output",
+        workflowExecutionId: "sess-state-update-attachment",
+        workflowId: "demo",
+        outputNodeId: "manager",
+        nodeExecId: "exec-000001",
+        artifactDir: path.join(root, "artifacts", "manager"),
+      },
+      deliveryKind: "edge-transition",
+      transitionWhen: "always",
+      status: "delivered",
+      deliveryAttemptIds: ["attempt-000001"],
+      activeDeliveryAttemptId: "attempt-000001",
+      createdAt: "2026-04-20T00:00:00.000Z",
+      deliveredAt: "2026-04-20T00:00:00.000Z",
+      artifactDir: path.join(root, "artifacts", "communications", "comm-1"),
+    } satisfies CommunicationRecord;
+    const options = {
+      cwd: root,
+      rootDataDir,
+      env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+    };
+    const savedRecord = await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: JSON.stringify({
+          payload: {
+            message: "keep me",
+            attachments: [{ path: sourceRelativePath }],
+          },
+        }),
+      },
+      options,
+    );
+
+    await updateWorkflowMessageStatusInRuntimeDb(
+      {
+        ...communication,
+        status: "superseded",
+        supersededAt: "2026-04-20T00:00:01.000Z",
+        supersededByCommunicationId: "comm-000002",
+      },
+      options,
+    );
+
+    const updatedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: communication.workflowExecutionId,
+        communicationId: communication.communicationId,
+      },
+      options,
+    );
+
+    expect(updatedRecord?.status).toBe("superseded");
+    expect(updatedRecord?.supersededByCommunicationId).toBe("comm-000002");
+    expect(updatedRecord?.payloadJson).toBe(savedRecord.payloadJson);
+    expect(updatedRecord?.artifactRefsJson).toBe(savedRecord.artifactRefsJson);
   });
 
   test("persists output validation retry metadata for node executions", async () => {
@@ -1000,6 +1393,15 @@ describe("runtime-db", () => {
           db
             .query(
               "SELECT count(*) as count FROM node_logs WHERE session_id = ?",
+            )
+            .get("sess-sqlite-delete-session") as { count: number }
+        ).count,
+      ).toBe(0);
+      expect(
+        (
+          db
+            .query(
+              "SELECT count(*) as count FROM workflow_messages WHERE workflow_execution_id = ?",
             )
             .get("sess-sqlite-delete-session") as { count: number }
         ).count,
