@@ -74,7 +74,7 @@ describe("official SDK adapter live smoke tests", () => {
       const output = await adapter.execute(
         createInput({
           backend: "official/openai-sdk",
-          model: process.env["RIELFLOW_OPENAI_SDK_SMOKE_MODEL"] ?? "gpt-5-nano",
+          model: process.env["RIELFLOW_OPENAI_SDK_SMOKE_MODEL"] ?? "gpt-5.5",
         }),
         createContext(),
       );

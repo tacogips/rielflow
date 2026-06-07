@@ -94,8 +94,7 @@ describe("CLI agent adapter live smoke tests", () => {
       const output = await adapter.execute(
         createInput({
           backend: "codex-agent",
-          model:
-            process.env["RIELFLOW_CODEX_AGENT_SMOKE_MODEL"] ?? "gpt-5-nano",
+          model: process.env["RIELFLOW_CODEX_AGENT_SMOKE_MODEL"] ?? "gpt-5.5",
           workingDirectory,
         }),
         createContext(),
