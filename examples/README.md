@@ -283,7 +283,7 @@ Minimal Telegram trio chat workflow using the SDK-backed worker add-ons:
 - routes normalized Telegram messages through `rielflow/chat-persona-router`
 - `Yui Codex SDK` uses `rielflow/codex-sdk-worker`
 - `Mika Claude SDK` uses `rielflow/claude-sdk-worker`
-- `Rina Cursor SDK` uses `rielflow/cursor-sdk-worker`
+- `Rina Cursor SDK` uses `rielflow/cursor-sdk-worker` with model `gpt-5.5`
 - replies use `rielflow/chat-reply-worker` and dry-run when a local run has no
   Telegram chat target
 - the deterministic mock scenario exercises the routing and reply path without
