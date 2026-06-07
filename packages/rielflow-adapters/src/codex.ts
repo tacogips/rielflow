@@ -9,7 +9,12 @@ import {
 } from "rielflow-core";
 import {
   type AgentNormalizedChunkEvent,
+  type ApprovalMode,
+  type SandboxMode,
+  type SessionConfig as CodexSessionConfig,
+  type SessionResult as CodexSessionResult,
   SessionRunner,
+  type SessionRunnerOptions as CodexSessionRunnerOptions,
   type SessionStreamChunk,
   toNormalizedEvents,
 } from "codex-agent/sdk";
@@ -32,42 +37,6 @@ import {
   resolveRetryPolicy,
 } from "./shared";
 import { getCodexBackendLoginStatus } from "./readiness";
-
-type CodexSandboxMode = "full" | "network-only" | "none";
-type CodexApprovalMode =
-  | "always"
-  | "unless-allow-listed"
-  | "never"
-  | "on-failure";
-
-interface CodexSessionRunnerOptions {
-  readonly codexBinary?: string;
-  readonly codexHome?: string;
-}
-
-interface CodexSessionConfig {
-  readonly prompt: string;
-  readonly systemPrompt?: string;
-  readonly cwd?: string;
-  readonly sandbox?: CodexSandboxMode;
-  readonly approvalMode?: CodexApprovalMode;
-  readonly fullAuto?: boolean;
-  readonly model?: string;
-  readonly additionalArgs?: readonly string[];
-  readonly configOverrides?: readonly string[];
-  readonly images?: readonly string[];
-  readonly streamGranularity?: "event" | "char";
-}
-
-interface CodexSessionResult {
-  readonly success: boolean;
-  readonly exitCode: number;
-  readonly stats: {
-    readonly startedAt: string;
-    readonly completedAt: string;
-    readonly messageCount: number;
-  };
-}
 
 interface CodexRunningSessionLike {
   readonly sessionId: string;
@@ -97,8 +66,8 @@ export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly cwd?: string;
   readonly codexBinary?: string;
   readonly codexHome?: string;
-  readonly sandbox?: CodexSandboxMode;
-  readonly approvalMode?: CodexApprovalMode;
+  readonly sandbox?: SandboxMode;
+  readonly approvalMode?: ApprovalMode;
   readonly fullAuto?: boolean;
   readonly additionalArgs?: readonly string[];
   readonly env?: Readonly<Record<string, string | undefined>>;
@@ -106,6 +75,7 @@ export interface CodexAdapterConfig extends LlmSessionStallWatchConfig {
   readonly checkAuthPreflight?: (
     input: AdapterExecutionInput,
     options: {
+      readonly codexBinary?: string;
       readonly cwd?: string;
       readonly env?: Readonly<Record<string, string | undefined>>;
       readonly timeoutMs?: number;
@@ -173,6 +143,9 @@ async function runCodexAuthPreflight(
       : { ...input.ambientManagerContext.environment },
   );
   const options = {
+    ...(config.codexBinary === undefined
+      ? {}
+      : { codexBinary: config.codexBinary }),
     cwd: config.cwd ?? input.workingDirectory,
     ...(env === undefined ? {} : { env }),
     timeoutMs: config.authPreflightTimeoutMs ?? DEFAULT_AUTH_PREFLIGHT_TIMEOUT_MS,

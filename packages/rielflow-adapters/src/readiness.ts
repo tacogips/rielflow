@@ -4,6 +4,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { verifyClaudeReadiness } from "claude-code-agent/sdk";
+import {
+  checkCodexModelAvailability as checkCodexModelAvailabilitySdk,
+  getCodexLoginStatus as getCodexLoginStatusSdk,
+  getToolVersions as getToolVersionsSdk,
+} from "codex-agent/sdk";
 import { createCursorAgentSdk } from "cursor-cli-agent/sdk";
 import type {
   ToolCommandRunOptions as CursorToolCommandRunOptions,
@@ -14,6 +19,7 @@ const DEFAULT_TOOL_TIMEOUT_MS = 5_000;
 const DEFAULT_MODEL_TIMEOUT_MS = 30_000;
 
 export interface AgentBackendProbeOptions {
+  readonly codexBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -113,6 +119,29 @@ export interface CursorBackendModelAvailability {
   readonly binary: AgentBackendToolInfo;
   readonly auth: CursorBackendAuthAvailability;
   readonly modelReachability: CursorBackendModelReachability;
+}
+
+interface CodexBackendSdkOperations {
+  readonly checkCodexModelAvailability: typeof checkCodexModelAvailabilitySdk;
+  readonly getCodexLoginStatus: typeof getCodexLoginStatusSdk;
+  readonly getToolVersions: typeof getToolVersionsSdk;
+}
+
+const defaultCodexBackendSdkOperations: CodexBackendSdkOperations = {
+  checkCodexModelAvailability: checkCodexModelAvailabilitySdk,
+  getCodexLoginStatus: getCodexLoginStatusSdk,
+  getToolVersions: getToolVersionsSdk,
+};
+
+let codexBackendSdkOperations = defaultCodexBackendSdkOperations;
+
+export function setCodexBackendSdkOperationsForTest(
+  operations: Partial<CodexBackendSdkOperations> | undefined,
+): void {
+  codexBackendSdkOperations =
+    operations === undefined
+      ? defaultCodexBackendSdkOperations
+      : { ...defaultCodexBackendSdkOperations, ...operations };
 }
 
 interface ProbeCommandResult {
@@ -291,28 +320,6 @@ function commandFailureMessage(result: ProbeCommandResult): string {
     : `command failed (${reason}): ${details}`;
 }
 
-function extractCodexErrorMessage(result: ProbeCommandResult): string {
-  const combined = `${result.stderr}\n${result.stdout}`;
-  const match = /ERROR:\s*(\{.*\})/s.exec(combined);
-  if (match?.[1] !== undefined) {
-    try {
-      const parsed = JSON.parse(match[1]) as unknown;
-      if (typeof parsed === "object" && parsed !== null) {
-        const error = (parsed as Record<string, unknown>)["error"];
-        if (typeof error === "object" && error !== null) {
-          const message = (error as Record<string, unknown>)["message"];
-          if (typeof message === "string" && message.length > 0) {
-            return message;
-          }
-        }
-      }
-    } catch {
-      // Fall back to command diagnostics below.
-    }
-  }
-  return commandFailureMessage(result);
-}
-
 function availableTool(
   name: string,
   command: string,
@@ -329,23 +336,27 @@ function unavailableTool(
   return { name, command, version: null, status: "unavailable", error };
 }
 
-function normalizeToolVersionCommand(
+function normalizeCodexToolVersion(
   name: string,
   command: string,
-  result: ProbeCommandResult,
+  info:
+    | {
+        readonly version: string | null;
+        readonly error: string | null;
+      }
+    | undefined,
 ): AgentBackendToolInfo {
-  if (result.exitCode === 0 && !result.timedOut && result.error === undefined) {
-    const version = firstLine(result.stdout) ?? firstLine(result.stderr);
-    if (version !== null) {
-      return availableTool(name, command, version);
-    }
-    return unavailableTool(
-      name,
-      command,
-      "version command succeeded but produced no output",
-    );
+  if (info === undefined) {
+    return unavailableTool(name, command, "version command returned no result");
   }
-  return unavailableTool(name, command, commandFailureMessage(result));
+  if (info.error === null && info.version !== null) {
+    return availableTool(name, command, info.version);
+  }
+  return unavailableTool(
+    name,
+    command,
+    info.error ?? "version command succeeded but produced no output",
+  );
 }
 
 function normalizeCursorToolInfo(info: {
@@ -365,11 +376,15 @@ function normalizeCursorToolInfo(info: {
 }
 
 function buildProbeOptions(input: {
+  readonly codexBinary?: string | undefined;
   readonly cwd?: string | undefined;
   readonly env?: Readonly<Record<string, string | undefined>> | undefined;
   readonly timeoutMs?: number | undefined;
 }): AgentBackendProbeOptions {
   return {
+    ...(input.codexBinary === undefined
+      ? {}
+      : { codexBinary: input.codexBinary }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
     ...(input.env === undefined ? {} : { env: input.env }),
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
@@ -405,51 +420,32 @@ function createCursorCommandRunner(options: AgentBackendProbeOptions) {
 export async function getCodexBackendToolVersions(
   options: AgentBackendProbeOptions = {},
 ): Promise<CodexBackendToolVersions> {
-  const probeOptions = buildProbeOptions({
-    cwd: options.cwd,
-    env: options.env,
-    timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_TOOL_TIMEOUT_MS),
+  const versions = await codexBackendSdkOperations.getToolVersions({
+    includeGit: true,
+    ...buildProbeOptions({
+      codexBinary: options.codexBinary,
+      cwd: options.cwd,
+      env: options.env,
+      timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_TOOL_TIMEOUT_MS),
+    }),
   });
-  const [codex, git] = await Promise.all([
-    runProbeCommand("codex", ["--version"], probeOptions),
-    runProbeCommand("git", ["--version"], probeOptions),
-  ]);
   return {
-    codex: normalizeToolVersionCommand("codex", "codex", codex),
-    git: normalizeToolVersionCommand("git", "git", git),
+    codex: normalizeCodexToolVersion("codex", "codex", versions.codex),
+    git: normalizeCodexToolVersion("git", "git", versions.git),
   };
 }
 
 export async function getCodexBackendLoginStatus(
   options: AgentBackendProbeOptions = {},
 ): Promise<CodexBackendLoginStatus> {
-  const result = await runProbeCommand("codex", ["login", "status"], {
-    ...options,
-    timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
+  return await codexBackendSdkOperations.getCodexLoginStatus({
+    ...buildProbeOptions({
+      codexBinary: options.codexBinary,
+      cwd: options.cwd,
+      env: options.env,
+      timeoutMs: normalizeTimeout(options.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
+    }),
   });
-  if (result.exitCode === 0 && !result.timedOut && result.error === undefined) {
-    const status = firstLine(result.stdout) ?? firstLine(result.stderr);
-    if (status !== null) {
-      return {
-        ok: true,
-        status,
-        error: null,
-        exitCode: result.exitCode,
-      };
-    }
-    return {
-      ok: false,
-      status: null,
-      error: "login status command succeeded but produced no output",
-      exitCode: result.exitCode,
-    };
-  }
-  return {
-    ok: false,
-    status: null,
-    error: commandFailureMessage(result),
-    exitCode: result.exitCode,
-  };
 }
 
 function blankModelAvailability(model: string): CodexBackendModelAvailability {
@@ -475,6 +471,7 @@ function blankModelAvailability(model: string): CodexBackendModelAvailability {
 
 export async function checkCodexBackendModelAvailability(input: {
   readonly model: string;
+  readonly codexBinary?: string;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs?: number;
@@ -484,69 +481,37 @@ export async function checkCodexBackendModelAvailability(input: {
   if (model.length === 0) {
     return blankModelAvailability(input.model);
   }
-  const auth = await getCodexBackendLoginStatus({
-    ...buildProbeOptions({
-      cwd: input.cwd,
-      env: input.env,
-      timeoutMs: input.timeoutMs,
-    }),
-  });
-  if (!auth.ok) {
-    const message = auth.error ?? auth.status ?? "codex login status failed";
+  try {
+    return await codexBackendSdkOperations.checkCodexModelAvailability({
+      model,
+      ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
+      ...buildProbeOptions({
+        codexBinary: input.codexBinary,
+        cwd: input.cwd,
+        env: input.env,
+        timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
+      }),
+    });
+  } catch (error) {
+    const message = toErrorMessage(error);
     return {
       ok: false,
       model,
-      auth,
+      auth: {
+        ok: false,
+        status: null,
+        error: message,
+        exitCode: null,
+      },
       probe: {
         ok: false,
         model,
         output: null,
         error: message,
-        exitCode: auth.exitCode,
+        exitCode: null,
       },
     };
   }
-  const result = await runProbeCommand(
-    "codex",
-    [
-      "exec",
-      "--model",
-      model,
-      "--skip-git-repo-check",
-      "--sandbox",
-      "read-only",
-      input.prompt ?? "Reply with ok.",
-    ],
-    {
-      ...buildProbeOptions({
-        cwd: input.cwd,
-        env: input.env,
-      }),
-      timeoutMs: normalizeTimeout(input.timeoutMs, DEFAULT_MODEL_TIMEOUT_MS),
-    },
-  );
-  const probe: CodexBackendModelProbe =
-    result.exitCode === 0 && !result.timedOut && result.error === undefined
-      ? {
-          ok: true,
-          model,
-          output: result.stdout.trim() || null,
-          error: null,
-          exitCode: result.exitCode,
-        }
-      : {
-          ok: false,
-          model,
-          output: result.stdout.trim() || null,
-          error: extractCodexErrorMessage(result),
-          exitCode: result.exitCode,
-        };
-  return {
-    ok: auth.ok && probe.ok,
-    model,
-    auth,
-    probe,
-  };
 }
 
 export async function getClaudeBackendToolVersion(
