@@ -696,6 +696,132 @@ describe("communication-service", () => {
     ).rejects.toThrow("idempotency conflict");
   });
 
+  test("concurrent same-key replays reuse one durable communication side effect", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const sourceCommunication = session.communications.at(-1);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+
+    const managerStore = await createManagerSession(
+      root,
+      session.sessionId,
+      "main-rielflow",
+    );
+    const service = createCommunicationService({
+      idempotencyStore: managerStore,
+    });
+
+    const [first, second] = await Promise.all([
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: sourceCommunication.communicationId,
+          managerSessionId: "mgrsess-000001",
+          idempotencyKey: "idem-concurrent-replay",
+          reason: "same concurrent replay",
+        },
+        options,
+      ),
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: sourceCommunication.communicationId,
+          managerSessionId: "mgrsess-000001",
+          idempotencyKey: "idem-concurrent-replay",
+          reason: "same concurrent replay",
+        },
+        options,
+      ),
+    ]);
+
+    expect(second).toEqual(first);
+    const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(
+      sqliteMessages.filter(
+        (message) =>
+          message.replayedFromCommunicationId ===
+          sourceCommunication.communicationId,
+      ),
+    ).toHaveLength(1);
+
+    const loadedAfterSecondCall = await loadSession(session.sessionId, options);
+    expect(loadedAfterSecondCall.ok).toBe(true);
+    if (!loadedAfterSecondCall.ok) {
+      return;
+    }
+    expect(loadedAfterSecondCall.value.communicationCounter).toBe(
+      session.communicationCounter + 1,
+    );
+
+    await expect(
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: sourceCommunication.communicationId,
+          managerSessionId: "mgrsess-000001",
+          idempotencyKey: "idem-concurrent-replay",
+          reason: "changed concurrent replay",
+        },
+        options,
+      ),
+    ).rejects.toThrow("idempotency conflict");
+  });
+
+  test("failed same-key replays reuse the stored failure without stale pending timeout", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(
+      root,
+      session.sessionId,
+      "main-rielflow",
+    );
+    const service = createCommunicationService({
+      idempotencyStore: managerStore,
+    });
+    const beforeMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    const input = {
+      workflowId: "demo",
+      workflowExecutionId: session.sessionId,
+      communicationId: "comm-missing",
+      managerSessionId: "mgrsess-000001",
+      idempotencyKey: "idem-failed-replay",
+      reason: "missing communication",
+    } as const;
+
+    await expect(service.replayCommunication(input, options)).rejects.toThrow(
+      "communication 'comm-missing' was not found",
+    );
+    await expect(service.replayCommunication(input, options)).rejects.toThrow(
+      "communication 'comm-missing' was not found",
+    );
+    const afterMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(afterMessages).toHaveLength(beforeMessages.length);
+    const idempotent = await managerStore.loadIdempotentResult({
+      mutationName: "replayCommunication",
+      managerSessionId: "mgrsess-000001",
+      idempotencyKey: "idem-failed-replay",
+    });
+    expect(idempotent).toMatchObject({
+      status: "failed",
+      normalizedRequestHash: expect.stringMatching(/^sha256:/),
+    });
+  });
+
   test("retries communication delivery with a new delivery attempt id", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);

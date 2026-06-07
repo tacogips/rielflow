@@ -824,6 +824,14 @@ rielflow graphql '<GraphQL document>' \
 
 Prefer typed GraphQL manager actions when operating an active rielflow-managed
 session instead of encoding control actions only in prose.
+
+GraphQL manager mutations that accept an `idempotencyKey`, including
+`sendManagerMessage`, `replayCommunication`, and `retryCommunicationDelivery`,
+reserve `(mutationName, managerSessionId, idempotencyKey)` in the runtime store
+before side effects run. Same-key/same-payload concurrent callers wait for the
+completed response or stored failure. Same-key/different-payload callers fail as
+an idempotency conflict before manager messages, replay, retry, or step-queue
+side effects are created.
 ```
 
 ## Hooks

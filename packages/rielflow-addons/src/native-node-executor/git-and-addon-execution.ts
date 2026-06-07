@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   AdapterExecutionError,
@@ -77,6 +77,130 @@ export async function rejectDirectoryCommittedFiles(input: {
     }
   }
 }
+async function pathExists(input: {
+  readonly cwd: string;
+  readonly filePath: string;
+}): Promise<boolean> {
+  try {
+    await stat(path.join(input.cwd, input.filePath));
+    return true;
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+async function isTrackedGitPath(input: {
+  readonly gitPath: string;
+  readonly cwd: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly context: NativeNodeExecutionContext;
+  readonly artifactDir: string;
+  readonly filePath: string;
+}): Promise<boolean> {
+  try {
+    await runGitCommand({
+      gitPath: input.gitPath,
+      args: ["ls-files", "--error-unmatch", "--", input.filePath],
+      cwd: input.cwd,
+      env: input.env,
+      context: input.context,
+      artifactDir: input.artifactDir,
+      label: "git-committed-file-tracked-check",
+    });
+    return true;
+  } catch (error: unknown) {
+    if (
+      error instanceof AdapterExecutionError &&
+      error.message.includes("exited with code 1")
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+async function resolveCommittedFilesForGitAdd(input: {
+  readonly gitPath: string;
+  readonly cwd: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly context: NativeNodeExecutionContext;
+  readonly artifactDir: string;
+  readonly nodeId: string;
+  readonly files: readonly string[];
+  readonly processLogs: AdapterProcessLog[];
+}): Promise<readonly string[]> {
+  const resolvedFiles: string[] = [];
+
+  for (const filePath of input.files) {
+    if (await pathExists({ cwd: input.cwd, filePath })) {
+      resolvedFiles.push(filePath);
+      continue;
+    }
+
+    const archiveMatch = /^impl-plans\/active\/([^/]+)$/.exec(filePath);
+    if (archiveMatch !== null) {
+      const archivedPath = `impl-plans/completed/${archiveMatch[1]}`;
+      if (await pathExists({ cwd: input.cwd, filePath: archivedPath })) {
+        resolvedFiles.push(archivedPath);
+        continue;
+      }
+    }
+
+    if (
+      await isTrackedGitPath({
+        gitPath: input.gitPath,
+        cwd: input.cwd,
+        env: input.env,
+        context: input.context,
+        artifactDir: input.artifactDir,
+        filePath,
+      })
+    ) {
+      resolvedFiles.push(filePath);
+      continue;
+    }
+
+    throw new AdapterExecutionError(
+      "invalid_output",
+      `node '${input.nodeId}' could not resolve missing committedFiles path '${filePath}' to an existing, dirty, or tracked git path`,
+      { processLogs: input.processLogs },
+    );
+  }
+
+  return [...new Set(resolvedFiles)];
+}
+async function resolveBranchFromGitHead(
+  cwd: string,
+): Promise<string | undefined> {
+  const dotGitPath = path.join(cwd, ".git");
+  let gitDirPath = dotGitPath;
+  try {
+    const dotGitStat = await stat(dotGitPath);
+    if (!dotGitStat.isDirectory()) {
+      const dotGit = await readFile(dotGitPath, "utf8");
+      const match = /^gitdir:\s*(.+)\s*$/m.exec(dotGit);
+      if (match === null) {
+        return undefined;
+      }
+      const gitDir = match[1];
+      if (gitDir === undefined) {
+        return undefined;
+      }
+      gitDirPath = path.resolve(cwd, gitDir);
+    }
+    const head = await readFile(path.join(gitDirPath, "HEAD"), "utf8");
+    const headMatch = /^ref:\s*refs\/heads\/(.+)\s*$/m.exec(head);
+    return headMatch?.[1];
+  } catch {
+    return undefined;
+  }
+}
 export function parseGitRefTemplate(input: {
   readonly value: string | undefined;
   readonly fieldName: string;
@@ -136,7 +260,8 @@ export async function resolveCurrentGitBranch(input: {
     args: ["rev-parse", "--abbrev-ref", "HEAD"],
     label: "git-current-branch",
   });
-  const branch = result.stdout.trim();
+  const branch =
+    result.stdout.trim() || (await resolveBranchFromGitHead(input.cwd)) || "";
   if (branch.length === 0 || branch === "HEAD") {
     throw new AdapterExecutionError(
       "provider_error",
@@ -198,12 +323,6 @@ export async function executeGitCommit(input: {
     input.nodeInput.workflowWorkingDirectory,
     input.nodeInput.node.workingDirectory,
   );
-  await rejectDirectoryCommittedFiles({
-    cwd,
-    files: committedFiles,
-    nodeId: input.nodeInput.nodeId,
-  });
-
   const gitPath = input.config.gitPath ?? "git";
   const gitEnv = buildRunnerEnv({
     ...(input.nodeInput.env === undefined
@@ -214,12 +333,27 @@ export async function executeGitCommit(input: {
   const appendLogs = (logs: readonly AdapterProcessLog[]): void => {
     processLogs.push(...logs);
   };
+  const resolvedCommittedFiles = await resolveCommittedFilesForGitAdd({
+    gitPath,
+    cwd,
+    env: gitEnv,
+    context: input.context,
+    artifactDir: input.nodeInput.artifactDir,
+    nodeId: input.nodeInput.nodeId,
+    files: committedFiles,
+    processLogs,
+  });
+  await rejectDirectoryCommittedFiles({
+    cwd,
+    files: resolvedCommittedFiles,
+    nodeId: input.nodeInput.nodeId,
+  });
 
   appendLogs(
     (
       await runGitCommand({
         gitPath,
-        args: ["add", "--", ...committedFiles],
+        args: ["add", "--", ...resolvedCommittedFiles],
         cwd,
         env: gitEnv,
         context: input.context,
@@ -231,7 +365,13 @@ export async function executeGitCommit(input: {
 
   const staged = await runGitCommand({
     gitPath,
-    args: ["diff", "--cached", "--name-only", "--"],
+    args: [
+      "diff",
+      "--cached",
+      "--name-only",
+      `--output=${path.join(input.nodeInput.artifactDir, "git-staged-files.txt")}`,
+      "--",
+    ],
     cwd,
     env: gitEnv,
     context: input.context,
@@ -239,11 +379,16 @@ export async function executeGitCommit(input: {
     label: "git-staged-files",
   });
   appendLogs(staged.processLogs);
-  const stagedFiles = staged.result.stdout
+  const stagedFiles = (
+    await readFile(
+      path.join(input.nodeInput.artifactDir, "git-staged-files.txt"),
+      "utf8",
+    )
+  )
     .split(/\r?\n/)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
-  const allowedFiles = new Set(committedFiles);
+  const allowedFiles = new Set(resolvedCommittedFiles);
   const unexpectedStagedFiles = stagedFiles.filter(
     (filePath) => !allowedFiles.has(filePath),
   );
@@ -276,9 +421,13 @@ export async function executeGitCommit(input: {
     ).processLogs,
   );
 
+  const commitHashPath = path.join(
+    input.nodeInput.artifactDir,
+    "git-commit-hash.txt",
+  );
   const commitHashResult = await runGitCommand({
     gitPath,
-    args: ["rev-parse", "HEAD"],
+    args: ["log", "-1", "--format=%H", `--output=${commitHashPath}`],
     cwd,
     env: gitEnv,
     context: input.context,
@@ -286,7 +435,7 @@ export async function executeGitCommit(input: {
     label: "git-commit-hash",
   });
   appendLogs(commitHashResult.processLogs);
-  const commitHash = commitHashResult.result.stdout.trim();
+  const commitHash = (await readFile(commitHashPath, "utf8")).trim();
   if (commitHash.length === 0) {
     throw new AdapterExecutionError(
       "provider_error",
@@ -393,9 +542,13 @@ export async function executeGitPushAddonNode(
     );
   }
 
+  const commitHashPath = path.join(
+    input.artifactDir,
+    "git-push-commit-hash.txt",
+  );
   const commitHashResult = await runGitCommand({
     gitPath,
-    args: ["rev-parse", "HEAD"],
+    args: ["log", "-1", "--format=%H", `--output=${commitHashPath}`],
     cwd,
     env: gitEnv,
     context,
@@ -403,7 +556,7 @@ export async function executeGitPushAddonNode(
     label: "git-push-commit-hash",
   });
   appendLogs(commitHashResult.processLogs);
-  const commitHash = commitHashResult.result.stdout.trim();
+  const commitHash = (await readFile(commitHashPath, "utf8")).trim();
   if (commitHash.length === 0) {
     throw new AdapterExecutionError(
       "provider_error",

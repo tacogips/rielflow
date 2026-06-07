@@ -377,6 +377,111 @@ describe("manager-message-service", () => {
     );
   });
 
+  test("concurrent same-key manager messages reuse one durable side effect", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T01:35:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T01:35:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+
+    const [first, second] = await Promise.all([
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Hold this idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Hold this idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+    ]);
+
+    expect(second).toEqual(first);
+    const messages = await managerStore.listMessages("mgrsess-000001");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.managerMessageId).toBe(first.managerMessageId);
+
+    await expect(
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Changed idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+    ).rejects.toThrow("idempotency conflict");
+    expect(await managerStore.listMessages("mgrsess-000001")).toHaveLength(1);
+  });
+
+  test("failed same-key manager messages reuse the stored failure without stale pending timeout", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T01:40:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T01:40:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+
+    const input = {
+      workflowId: "demo",
+      workflowExecutionId: session.sessionId,
+      managerSessionId: "mgrsess-000001",
+      message: "   ",
+      idempotencyKey: "idem-failed-note",
+    } as const;
+
+    await expect(service.sendManagerMessage(input, options)).rejects.toThrow(
+      "manager message must contain a message, attachments, or actions",
+    );
+    await expect(service.sendManagerMessage(input, options)).rejects.toThrow(
+      "manager message must contain a message, attachments, or actions",
+    );
+    expect(await managerStore.listMessages("mgrsess-000001")).toHaveLength(0);
+    await expect(
+      service.sendManagerMessage(
+        {
+          ...input,
+          message: "Changed after failed claim.",
+        },
+        options,
+      ),
+    ).rejects.toThrow("idempotency conflict");
+
+    const idempotent = await managerStore.loadIdempotentResult({
+      mutationName: "sendManagerMessage",
+      managerSessionId: "mgrsess-000001",
+      idempotencyKey: "idem-failed-note",
+    });
+    expect(idempotent).toMatchObject({
+      status: "failed",
+      normalizedRequestHash: expect.stringMatching(/^sha256:/),
+    });
+  });
+
   test("rejects attachments outside the current workflow execution namespace", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);

@@ -407,8 +407,9 @@ describe("manager-session-store", () => {
             `
               INSERT INTO idempotent_mutations (
                 mutation_name, manager_session_id, idempotency_key,
-                normalized_request_hash, response_json, completed_at
-              ) VALUES (?, ?, ?, ?, ?, ?)
+                normalized_request_hash, status, claim_token, claimed_at,
+                response_json, completed_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
           )
           .run(
@@ -416,6 +417,9 @@ describe("manager-session-store", () => {
             "mgrsess-json-checks",
             "idem-bad-json",
             "sha256:bad-json",
+            "completed",
+            "claim-bad-json",
+            "2026-06-07T00:02:00.000Z",
             "{bad-json",
             "2026-06-07T00:02:00.000Z",
           ),
@@ -492,12 +496,45 @@ describe("manager-session-store", () => {
         1,
         "2026-06-07T00:01:00.000Z",
       );
+    validDb
+      .prepare(
+        `
+          INSERT INTO idempotent_mutations (
+            mutation_name,
+            manager_session_id,
+            idempotency_key,
+            normalized_request_hash,
+            response_json,
+            completed_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "retryStep",
+        "mgrsess-valid-legacy",
+        "idem-valid-legacy",
+        "sha256:valid-legacy",
+        '{"ok":true}',
+        "2026-06-07T00:02:00.000Z",
+      );
     validDb.close();
 
     const validStore = createManagerSessionStore(validOptions);
     expect(await validStore.listMessages("mgrsess-valid-legacy")).toHaveLength(
       1,
     );
+    expect(
+      await validStore.loadIdempotentResult({
+        mutationName: "retryStep",
+        managerSessionId: "mgrsess-valid-legacy",
+        idempotencyKey: "idem-valid-legacy",
+      }),
+    ).toMatchObject({
+      status: "completed",
+      normalizedRequestHash: "sha256:valid-legacy",
+      responseJson: '{"ok":true}',
+      completedAt: "2026-06-07T00:02:00.000Z",
+    });
     const migratedDb = new Database(resolveRuntimeDbPath(validOptions));
     try {
       const table = migratedDb

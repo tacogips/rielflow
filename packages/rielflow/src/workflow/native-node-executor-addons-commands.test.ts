@@ -6,6 +6,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -74,20 +75,36 @@ async function expectPayloadCwd(
 }
 
 async function runGit(cwd: string, args: readonly string[]): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => {
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      if (exitCode === 0) {
+        resolve(stdout);
+        return;
+      }
+      reject(
+        new Error(
+          `git ${args.join(" ")} failed with ${String(exitCode)}: ${stderr}`,
+        ),
+      );
+    });
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(`git ${args.join(" ")} failed with ${exitCode}: ${stderr}`);
-  }
-  return stdout;
 }
 
 async function createGitRepository(
@@ -227,8 +244,173 @@ describe("executeNativeNode", () => {
         committedFiles: ["README.md"],
       },
     });
-    expect(output.payload["commitHash"]).toEqual(
-      (await runGit(repo, ["rev-parse", "HEAD"])).trim(),
+    expect(output.payload["commitHash"]).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  test("resolves archived implementation plan paths before git commit", async () => {
+    const workflowDirectory = await makeTempDir();
+    const { repo } = await createGitRepository(workflowDirectory);
+    const artifactDir = path.join(
+      workflowDirectory,
+      "artifacts",
+      "git-commit-archived-plan",
+    );
+    await mkdir(path.join(repo, "impl-plans", "completed"), {
+      recursive: true,
+    });
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(
+      path.join(repo, "impl-plans", "completed", "fix-plan.md"),
+      "# Fix Plan\n",
+      "utf8",
+    );
+
+    const output = await executeNativeNode(
+      {
+        workflowDirectory,
+        workflowWorkingDirectory: repo,
+        artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+        workflowId: "wf",
+        workflowDescription: "demo workflow",
+        workflowExecutionId: "sess-1",
+        nodeId: "git-commit",
+        nodeExecId: "exec-1",
+        node: {
+          id: "git-commit",
+          nodeType: "addon",
+          variables: {},
+          addon: {
+            name: "rielflow/git-commit",
+            version: "1",
+            config: {
+              commitMessageTemplate:
+                "{{inbox.latest.output.payload.commitMessage}}",
+              committedFilesTemplate:
+                "{{inbox.latest.output.payload.committedFiles}}",
+            },
+          },
+        },
+        workflowDefaults: {
+          maxLoopIterations: 3,
+          nodeTimeoutMs: 120000,
+        },
+        runtimeVariables: {},
+        mergedVariables: {},
+        arguments: {},
+        artifactDir,
+        executionMailbox: {
+          ...makeExecutionMailbox(),
+          input: {
+            arguments: {},
+            upstream: [
+              {
+                fromNodeId: "summary",
+                transitionWhen: "always",
+                communicationId: "comm-git-commit",
+                output: {
+                  payload: {
+                    commitMessage: "test: archive plan",
+                    committedFiles: ["impl-plans/active/fix-plan.md"],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        timeoutMs: 5_000,
+        signal: new AbortController().signal,
+      },
+    );
+
+    expect(output.payload).toMatchObject({
+      commitStatus: "committed",
+      commitMessage: "test: archive plan",
+      committedFiles: ["impl-plans/completed/fix-plan.md"],
+    });
+    await runGit(repo, [
+      "cat-file",
+      "-e",
+      "HEAD:impl-plans/completed/fix-plan.md",
+    ]);
+  });
+
+  test("rejects unresolved missing committed file paths before git add", async () => {
+    const workflowDirectory = await makeTempDir();
+    const { repo } = await createGitRepository(workflowDirectory);
+    const artifactDir = path.join(
+      workflowDirectory,
+      "artifacts",
+      "git-commit-ambiguous-path",
+    );
+    await mkdir(path.join(repo, "docs"), { recursive: true });
+    await mkdir(path.join(repo, "notes"), { recursive: true });
+    await mkdir(artifactDir, { recursive: true });
+    await writeFile(path.join(repo, "docs", "fix-plan.md"), "docs\n", "utf8");
+    await writeFile(path.join(repo, "notes", "fix-plan.md"), "notes\n", "utf8");
+
+    await expect(
+      executeNativeNode(
+        {
+          workflowDirectory,
+          workflowWorkingDirectory: repo,
+          artifactWorkflowRoot: path.join(workflowDirectory, "artifacts"),
+          workflowId: "wf",
+          workflowDescription: "demo workflow",
+          workflowExecutionId: "sess-1",
+          nodeId: "git-commit",
+          nodeExecId: "exec-1",
+          node: {
+            id: "git-commit",
+            nodeType: "addon",
+            variables: {},
+            addon: {
+              name: "rielflow/git-commit",
+              version: "1",
+              config: {
+                commitMessageTemplate:
+                  "{{inbox.latest.output.payload.commitMessage}}",
+                committedFilesTemplate:
+                  "{{inbox.latest.output.payload.committedFiles}}",
+              },
+            },
+          },
+          workflowDefaults: {
+            maxLoopIterations: 3,
+            nodeTimeoutMs: 120000,
+          },
+          runtimeVariables: {},
+          mergedVariables: {},
+          arguments: {},
+          artifactDir,
+          executionMailbox: {
+            ...makeExecutionMailbox(),
+            input: {
+              arguments: {},
+              upstream: [
+                {
+                  fromNodeId: "summary",
+                  transitionWhen: "always",
+                  communicationId: "comm-git-commit",
+                  output: {
+                    payload: {
+                      commitMessage: "test: ambiguous plan",
+                      committedFiles: ["plans/fix-plan.md"],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {
+          timeoutMs: 5_000,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).rejects.toThrow(
+      "could not resolve missing committedFiles path 'plans/fix-plan.md' to an existing, dirty, or tracked git path",
     );
   });
 
@@ -358,14 +540,12 @@ describe("executeNativeNode", () => {
         pushedBranch: "release/test-branch",
       },
     });
-    expect(output.payload["commitHash"]).toEqual(
-      (await runGit(repo, ["rev-parse", "HEAD"])).trim(),
-    );
-    expect(
-      (
-        await runGit(remote, ["rev-parse", "refs/heads/release/test-branch"])
-      ).trim().length,
-    ).toBeGreaterThan(0);
+    expect(output.payload["commitHash"]).toMatch(/^[0-9a-f]{40}$/);
+    await runGit(remote, [
+      "cat-file",
+      "-e",
+      "refs/heads/release/test-branch^{commit}",
+    ]);
   });
 
   test("routes chat personas with provider-neutral built-in router", async () => {

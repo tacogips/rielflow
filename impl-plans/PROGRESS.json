@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-07T17:48:00+09:00",
+  "lastUpdated": "2026-06-07T19:05:00+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -567,6 +567,9 @@
     },
     "192": {
       "status": "COMPLETED"
+    },
+    "193": {
+      "status": "COMPLETED"
     }
   },
   "plans": {
@@ -765,6 +768,92 @@
           ]
         }
       }
+    },
+    "completed/manager-control-idempotency-atomic-claim": {
+      "phase": 193,
+      "status": "Completed",
+      "path": "impl-plans/completed/manager-control-idempotency-atomic-claim.md",
+      "designReference": "design-docs/specs/design-graphql-manager-control-plane.md#idempotency-contract; design-docs/specs/design-graphql-manager-control-plane.md#atomic-idempotency-claim-flow; design-docs/specs/notes.md#manager-authidempotency-contract",
+      "workflowMode": "issue-resolution",
+      "issueReference": "PR #54 / feature/sqlite-message-store; SEC-001; source finding MED-001",
+      "workflowId": "codex-design-and-implement-review-loop",
+      "lastImplementationNode": "step6-implement",
+      "codexAgentReference": "codex-agent / gpt-5.5 execution provider only; SEC-001 is rielflow manager-control persistence behavior below the agent adapter boundary.",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-001",
+            "TASK-002"
+          ]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": [
+            "TASK-003"
+          ]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": [
+            "TASK-004"
+          ]
+        }
+      },
+      "verificationCommands": [
+        "rg -n \"loadIdempotentResult|runIdempotentMutation|saveIdempotentResult|claimIdempotentMutation|completeIdempotentMutation|failIdempotentMutation|ON CONFLICT\\\\(mutation_name\" packages/rielflow/src/workflow/manager-message-service/idempotency.ts packages/rielflow/src/workflow/manager-session-store.ts packages/rielflow/src/workflow/manager-session-store-idempotency.ts",
+        "bun run lint:biome",
+        "bun run typecheck",
+        "bun test packages/rielflow/src/workflow/native-node-executor-addons-commands.test.ts --test-name-pattern \"git commit|unresolved|git push\"",
+        "bun test packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts -t 'failed same-key|pending timeout'",
+        "bun test packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts -t 'idempotent'",
+        "bun test packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts -t 'concurrent|same-key|race'",
+        "bun test packages/rielflow/src/workflow/manager-session-store.test.ts",
+        "bun test packages/rielflow/src/workflow/manager-session-store.test.ts packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts",
+        "jq empty impl-plans/PROGRESS.json",
+        "git diff --check",
+        "bun run packages/rielflow/src/bin.ts workflow run codex-source-security-check-loop --variables '{\"workflowInput\":{\"targetPath\":\".\",\"runNetworkAudits\":\"false\",\"maxFindings\":50,\"constraints\":[\"Do not stage, commit, or push unless the user explicitly asks.\",\"Do not revert unrelated dirty worktree changes.\",\"Keep fixes narrowly scoped to verified security findings.\",\"Focus on PR #54 / feature/sqlite-message-store changes, especially SQLite JSON validation, migration behavior, attachment paths, runtime DB writes, and documentation/skill edits.\"]}}' --output json --verbose --no-auto-improve"
+      ],
+      "securityLoopEvidence": {
+        "sessionId": "riel-codex-source-security-check-loop-1780824492-fb9a81ee",
+        "result": "partial_run_step3_no_blocking_findings_step4_terminated_code_-1",
+        "step3NeedsFixAfterTriage": false,
+        "blockingFindings": []
+      },
+      "adversarialReviewCorrections": [
+        {
+          "nodeId": "step7-adversarial-review",
+          "severity": "mid",
+          "findingId": "needs_revision_for_pending_claim_failure_recovery",
+          "file": "packages/rielflow/src/workflow/manager-message-service/idempotency.ts",
+          "finding": "Caller-owned pending claims were not completed or abandoned when the action threw, causing same-key retries to wait for pending timeout.",
+          "resolution": "Added failed idempotency state, failIdempotentMutation, stored error replay for same-key retries, polling support for failed rows, and failed same-key regression coverage for sendManagerMessage and replayCommunication.",
+          "verificationCommands": [
+            "bun test packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts -t 'failed same-key|pending timeout'",
+            "bun test packages/rielflow/src/workflow/manager-session-store.test.ts packages/rielflow/src/workflow/communication-service.test.ts packages/rielflow/src/workflow/manager-message-service.test.ts"
+          ]
+        }
+      ],
+      "residualRisks": [
+        "Nested codex-source-security-check-loop rerun stalled in Step 4 adversarial verification and was terminated; deterministic scanner/triage steps in session riel-codex-source-security-check-loop-1780824492-fb9a81ee had reached zero triaged high/medium source findings before the stall.",
+        "Network audits remained disabled per workflow input runNetworkAudits=false.",
+        "The original workflow commit handoff used a stale active plan path after archival; TASK-005 adds the recurrence guard and focused regression coverage."
+      ]
     },
     "completed/product-rename-rielflow": {
       "phase": 185,

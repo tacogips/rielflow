@@ -727,30 +727,6 @@ export function ensureManagerSessionJsonConstraints(db: Database): void {
     ],
     policies: [{ columnName: "parsed_intent_json", nullability: "required" }],
   });
-  rebuildTableWithJsonChecks({
-    db,
-    tableName: "idempotent_mutations",
-    createSql: `
-      CREATE TABLE idempotent_mutations (
-        mutation_name TEXT NOT NULL,
-        manager_session_id TEXT NOT NULL,
-        idempotency_key TEXT NOT NULL,
-        normalized_request_hash TEXT NOT NULL,
-        ${requiredJsonTextColumn("response_json")},
-        completed_at TEXT NOT NULL,
-        PRIMARY KEY (mutation_name, manager_session_id, idempotency_key)
-      );
-    `,
-    columns: [
-      "mutation_name",
-      "manager_session_id",
-      "idempotency_key",
-      "normalized_request_hash",
-      "response_json",
-      "completed_at",
-    ],
-    policies: [{ columnName: "response_json", nullability: "required" }],
-  });
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_manager_messages_session
       ON manager_messages (manager_session_id, created_at);

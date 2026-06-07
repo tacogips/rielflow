@@ -160,6 +160,18 @@ runtime JSON columns follow the same policy as `workflow_messages`
 `feature/sqlite-message-store`, and `codex-agent` execution references explicit
 in workflow outputs.
 
+Manager-control idempotency issue-resolution runs such as `SEC-001` in `PR #54`
+/ `feature/sqlite-message-store` should refresh `README.md`, the GraphQL
+manager-control design, compact architecture notes, and this workflow skill.
+User-facing docs must state that GraphQL manager mutations with an
+`idempotencyKey` atomically claim `(mutationName, managerSessionId,
+idempotencyKey)` before side effects; same-key/same-payload callers wait for or
+read the completed response or stored failure; same-key/different-payload
+callers fail before side effects; and caller-owned pending claims are completed
+or failed without overwriting another caller's row. Keep accepted review
+decisions, residual low risks, verification commands, and `codex-agent`
+execution references explicit in workflow outputs.
+
 ## Reporting
 
 After the workflow finishes, report:

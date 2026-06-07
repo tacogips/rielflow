@@ -734,10 +734,64 @@ The send mutation must return:
   - the normalized request fingerprint
   - the original response payload
   - the first completion timestamp
-- retrying the same mutation with the same key and the same normalized payload must return the original response without re-executing side effects
-- retrying the same mutation with the same key but a different normalized payload must fail as a conflict
+- the storage record must distinguish a caller-owned pending claim from a
+  completed response or stored failure so side effects cannot run before the
+  idempotency key is reserved
+- retrying the same mutation with the same key and the same normalized payload
+  must return the original response without re-executing side effects when the
+  response is complete
+- retrying the same mutation with the same key and the same normalized payload
+  while another caller owns a pending claim must wait for or re-read the
+  completed response or stored failure; it must not execute the action body
+  itself
+- retrying the same mutation with the same key but a different normalized
+  payload must fail as a conflict before execution-affecting side effects run
 - `sendManagerMessage`, `replayCommunication`, and `retryCommunicationDelivery` must all support this behavior when `idempotencyKey` is provided
 - for `sendManagerMessage`, the fingerprint must use the canonicalized request shape after message trimming, attachment path normalization, and action-shape normalization so semantically identical retries do not conflict
+- completed responses are immutable for the claimed key/hash except for the
+  caller that owns the matching pending claim completing that pending record
+- failed action results are immutable for the claimed key/hash except for the
+  caller that owns the matching pending claim recording that failed record
+
+### Atomic Idempotency Claim Flow
+
+Manager-control mutations must treat idempotency as a storage-boundary
+reservation, not as a load-before/save-after cache.
+
+Required flow:
+
+1. Canonicalize the mutation-specific request payload and compute the normalized
+   request hash before action execution.
+2. Atomically insert or observe an idempotency record for
+   `(mutationName, managerSessionId, idempotencyKey)`.
+3. If no row existed, persist a pending claim with the normalized request hash
+   and a caller-owned claim token before any manager-control side effect runs.
+4. If a row exists with a different normalized request hash, reject the request
+   as an idempotency conflict before executing side effects.
+5. If a row exists with the same hash and a completed response, return that
+   response.
+6. If a row exists with the same hash and pending status owned by another
+   caller, wait briefly and re-read until completion, stored failure, or an
+   explicit pending-timeout error; do not run the mutation action body.
+7. After the action body succeeds, complete only the caller-owned pending row
+   with the stored response. A caller must not overwrite a completed row or a
+   pending row claimed by another caller.
+8. If the action body throws, mark only the caller-owned pending row failed
+   with structured error data so same-key retries return the same failure
+   instead of waiting on a stale pending claim.
+
+This contract applies equally to GraphQL resolver calls and in-process local
+GraphQL execution. It protects manager-control side effects such as appending
+manager messages, replaying communications, retrying delivery attempts,
+queueing steps, and returning response envelopes. SQLite should enforce the
+single-key claim with the existing manager-session idempotency scope; TypeScript
+normalization remains responsible for making semantically identical requests
+produce the same hash before the claim attempt.
+
+Regression coverage must include concurrent same-key callers for at least
+`sendManagerMessage` and one communication mutation (`replayCommunication` or
+`retryCommunicationDelivery`) and must prove that only one durable side effect is
+created while all same-hash callers receive the same completed response.
 
 ## Relationship to Existing `managerControl.actions`
 
