@@ -219,7 +219,7 @@ Backend capability matrix:
 
 | Backend | Authentication | Model reachability | Plan executability | Valid mode | Valid effort |
 | ------- | -------------- | ------------------ | ------------------ | ---------- | ------------ |
-| `codex-agent` | Active preflight uses `codex login status` through `<codex-agent-checkout>/src/sdk/model-availability.ts`; unauthenticated is `invalid`. | Active preflight uses `codex-agent model check --model <model> --json` or the SDK `checkCodexModelAvailability`; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate Codex process options against `<codex-agent-checkout>/src/process/types.ts`: sandbox `full`, `network-only`, `none`; approval mode `always`, `unless-allow-listed`, `never`, `on-failure`; stream granularity `event`, `char`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `codex-agent` and map to Codex `model_reasoning_effort` config overrides. |
+| `codex-agent` | Active preflight uses the installed Codex CLI `codex login status`; unauthenticated is `invalid`. | Active preflight uses bounded `codex exec --model <model> --skip-git-repo-check --sandbox read-only <prompt>` and parses CLI diagnostics; unavailable model is `invalid`. | Codex reference has no dedicated plan mode. With no authored plan field, return `valid` and `not applicable`; if Rielflow later exposes a Codex plan field, unsupported values are `invalid` until the Codex adapter maps them. | Validate only Rielflow-authored Codex adapter options. The installed `codex-cli 0.137.0` readiness path accepts `--sandbox read-only` and rejects the removed `--ask-for-approval` flag. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `codex-agent` and map to Codex `model_reasoning_effort` config overrides. |
 | `claude-code-agent` | Active preflight uses `<claude-code-agent-checkout>/src/sdk/credentials/reader.ts` or `claude-code-agent auth status`; missing or expired credentials are `invalid`. | No inspected stable model reachability probe exists. Return `unknown` for model reachability while still reporting the authored model. | Plan executability maps to Claude `PermissionMode` value `plan` in `<claude-code-agent-checkout>/src/sdk/session-runner.ts`; static mode validation can be `valid`, but live plan execution remains `unknown` unless a future bounded command is added. | Validate `PermissionMode`: `default`, `acceptEdits`, `plan`, `bypassPermissions`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `claude-code-agent` and map to Claude Code `--effort`. |
 | `cursor-cli-agent` | Cursor has no stable local auth-status API in `<cursor-agent-checkout>/src/cursor/model-availability.ts`; return `unknown` unless a bounded probe reports an auth-like failure, which is `invalid`. | Active preflight may run the Cursor model probe from `<cursor-agent-checkout>/src/cursor/model-availability.ts`; unavailable model is `invalid`, unprobed passive validation is `unknown`. | Plan executability maps to Cursor mode `plan` in `<cursor-agent-checkout>/src/sdk/agent-runner.ts`; the adapter validates the enum and reports live auth/model limitations separately. | Validate Cursor mode values `default`, `plan`, and `ask`. Unsupported authored values are `invalid`. | Authored or patched `effort` values `low`, `medium`, `high`, and `xhigh` are valid for `cursor-cli-agent` and map through the Cursor SDK's model-id effort selection. |
 
@@ -234,6 +234,33 @@ Rielflow implementation boundary:
   Codex or Claude validation
 - unsupported authored capability fields should include the node id, step ids,
   backend, field path, and accepted values in the result message
+
+### Installed Codex CLI Compatibility
+
+Codex readiness is adapter-owned behavior, not a workflow schema contract. The
+current accepted local CLI compatibility target is `codex-cli 0.137.0`.
+Rielflow should call the installed CLI directly for readiness rather than
+depending on a checked-out `codex-agent` SDK when that local reference
+repository is unavailable.
+
+The model probe command shape is:
+
+```text
+codex exec --model <model> --skip-git-repo-check --sandbox read-only <prompt>
+```
+
+The previous `--ask-for-approval never` flag is intentionally removed from the
+probe because it is not accepted by the installed CLI. Tests should include a
+fake `codex` executable that fails when `--ask-for-approval` is present and
+fails when `--sandbox read-only` is absent. Failure parsing should inspect the
+full captured stdout and stderr so JSON error diagnostics following progress
+text become the node-validation message.
+
+Process I/O capture for active backend probes must route stdout and stderr to
+unique temporary files, wait for process close/error/timeout, read both files,
+and then remove the temp directory. This policy applies to Codex readiness and
+the shared runtime-readiness command helper so diagnostics remain deterministic
+without leaking credential-bearing output into persistent artifacts.
 
 ## Cursor CLI Behavior Mapping
 

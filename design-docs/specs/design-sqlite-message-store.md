@@ -275,6 +275,49 @@ artifacts, review output, and commits. Live chat gateway smoke evidence may
 confirm end-to-end behavior, but credential material and private conversation
 content are not design artifacts.
 
+## Regression Repair Review Addendum
+
+The `feature/sqlite-message-store` review after commit
+`b6bcfde8579a89328dd8bdd28d22e011be752978` is a high-risk regression repair
+review, not a new compatibility migration. Later implementation and review
+steps must treat the SQLite message-store boundary above as unchanged while
+checking the repair work around runtime DB placement, process I/O capture,
+runtime readiness, and adapter live-smoke tests.
+
+Design decisions for this repair:
+
+- SQLite remains the canonical communication store; passing tests must not be
+  achieved by reintroducing legacy message-file or session-array read
+  fallbacks.
+- Explicit `artifactRoot` or `sessionStoreRoot` options may infer the default
+  SQLite database path from the parent of the explicit storage root when
+  `rootDataDir` and `RIEL_RUNTIME_DB` are absent. Environment override
+  precedence remains `RIEL_RUNTIME_DB` first, then runtime data-root inference.
+- Backend readiness and model probes should capture subprocess stdout and
+  stderr through unique temporary files, read them after process error, close,
+  or timeout, and clean the directory after read. This keeps diagnostics
+  deterministic when child process pipe events race with process exit.
+- Probe timeouts should terminate the child, allow a short graceful interval,
+  then force-kill if needed. Timed-out probes are failures and must still return
+  any captured stdout or stderr.
+- Captured probe logs are diagnostic evidence only. They must not be persisted
+  as message bodies, committed fixtures, or user-facing artifacts containing
+  credentials.
+- Codex model readiness for the installed `codex-cli 0.137.0` must run
+  `codex login status` first and then `codex exec --model <model>
+  --skip-git-repo-check --sandbox read-only <prompt>`. The removed
+  `--ask-for-approval` flag is not part of the accepted behavior.
+- Codex probe failure parsing should preserve the model-specific error message
+  emitted in `ERROR: {...}` JSON even when the CLI writes progress text before
+  the JSON diagnostic.
+- Cursor-specific behavior remains isolated behind the Cursor adapter. This
+  repair introduces no Cursor schema or runtime-mode changes.
+
+Adversarial review for this branch should reject changes that make the full Bun
+suite pass by weakening SQLite-only reads, reducing JSON validity constraints,
+dropping captured process diagnostics, accepting obsolete Codex flags, or
+mixing Cursor CLI assumptions into the Codex readiness path.
+
 ## Validation
 
 Validation must cover:
@@ -291,6 +334,16 @@ Validation must cover:
 - replay row creation and retry delivery-attempt updates
 - GraphQL list/detail and manager-control behavior when session communication
   arrays are missing
+- regression coverage for explicit `artifactRoot` and `sessionStoreRoot`
+  database co-location inference when `rootDataDir` is absent
+- readiness probe stdout/stderr capture across nonzero exit, spawn error, and
+  timeout paths without credential leakage
+- installed Codex CLI 0.137.0 compatibility: `codex exec` uses
+  `--sandbox read-only` and never passes `--ask-for-approval`
+- model probe diagnostics preserve JSON error messages that appear after CLI
+  progress text
+- branch verification commands remain explicit: `bun run test`,
+  `bun run typecheck`, and `bun run lint:biome`
 
 History deletion and cleanup delete message file roots using workflow-scoped
 attachment-root rules. No new retention policy is introduced by this design.

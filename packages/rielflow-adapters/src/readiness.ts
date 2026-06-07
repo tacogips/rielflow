@@ -513,8 +513,8 @@ export async function checkCodexBackendModelAvailability(input: {
       "--model",
       model,
       "--skip-git-repo-check",
-      "--ask-for-approval",
-      "never",
+      "--sandbox",
+      "read-only",
       input.prompt ?? "Reply with ok.",
     ],
     {
