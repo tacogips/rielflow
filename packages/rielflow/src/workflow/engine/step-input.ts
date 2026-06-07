@@ -2,6 +2,7 @@ import { createScheduledEventManager } from "../../events/scheduled-event-manage
 import { publishNodeOutputArtifacts } from "../runtime-execution-contracts";
 import {
   markWorkflowSleepScheduledEventRef,
+  type CommunicationRecord,
   type NodeExecutionRecord,
   type PendingOptionalNodeDecision,
   type WorkflowScheduledEventRefStatus,
@@ -21,6 +22,7 @@ import type {
 } from "../types";
 import type {
   NormalizedWorkflowRunOptions,
+  UpstreamCommunicationConsumptionRef,
   WorkflowRunFailure,
   WorkflowRunResult,
 } from "./types-and-session-state";
@@ -47,6 +49,7 @@ const {
   saveNodeExecutionToRuntimeDb,
   markCommunicationsConsumed,
   err,
+  allocateNextWorkflowMessageCommunicationId,
   persistCommunicationArtifact,
   resolveWorkflowManagerStepId,
   dedupeNodeIds,
@@ -246,7 +249,7 @@ export interface PreparedStepInput {
   readonly mailboxInstanceId: string;
   readonly stepExecutionAddress: ResolvedStepExecutionAddress;
   readonly options: NormalizedWorkflowRunOptions;
-  readonly upstreamCommunicationIds: readonly string[];
+  readonly upstreamCommunicationRefs: readonly UpstreamCommunicationConsumptionRef[];
   readonly loaded: LoadedWorkflowSuccess;
   readonly workflowName: string;
 }
@@ -276,7 +279,7 @@ export async function handlePreparedStepInput(
     mailboxInstanceId,
     stepExecutionAddress,
     options,
-    upstreamCommunicationIds,
+    upstreamCommunicationRefs,
     loaded,
     workflowName,
   } = input;
@@ -394,7 +397,7 @@ export async function handlePreparedStepInput(
     } catch {}
     const consumedCommunicationsResult = await markCommunicationsConsumed(
       session,
-      upstreamCommunicationIds,
+      upstreamCommunicationRefs,
       nodeExecId,
       endedAt,
       options,
@@ -417,14 +420,24 @@ export async function handlePreparedStepInput(
         message: failed.lastError ?? "mailbox consumption persistence failed",
       });
     }
-    const transitionCommunications = await Promise.all(
-      selected.map((edge, index) =>
-        persistCommunicationArtifact({
+    let currentCommunicationCounter = session.communicationCounter;
+    const transitionCommunications: CommunicationRecord[] = [];
+    for (const edge of selected) {
+      const allocatedCommunication =
+        await allocateNextWorkflowMessageCommunicationId(
+          {
+            workflowExecutionId: session.sessionId,
+            sessionCommunicationCounter: currentCommunicationCounter,
+          },
+          options,
+        );
+      transitionCommunications.push(
+        await persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
           workflowId: workflow.workflowId,
           workflowExecutionId: session.sessionId,
-          communicationCounter: session.communicationCounter + index,
+          communicationCounter: allocatedCommunication.communicationCounter - 1,
           fromNodeId: edge.from,
           toNodeId: edge.to,
           routingScope: "intra-workflow",
@@ -436,8 +449,9 @@ export async function handlePreparedStepInput(
           deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
           createdAt: endedAt,
         }),
-      ),
-    );
+      );
+      currentCommunicationCounter = allocatedCommunication.communicationCounter;
+    }
     const {
       endedAt: _endedAt,
       lastError: _lastError,
@@ -459,8 +473,7 @@ export async function handlePreparedStepInput(
           when: edge.when,
         })),
       ],
-      communicationCounter:
-        session.communicationCounter + transitionCommunications.length,
+      communicationCounter: currentCommunicationCounter,
       communications: [
         ...consumedCommunicationsResult.value,
         ...transitionCommunications,
@@ -696,7 +709,7 @@ export async function handlePreparedStepInput(
     } catch {}
     const consumedCommunicationsResult = await markCommunicationsConsumed(
       session,
-      upstreamCommunicationIds,
+      upstreamCommunicationRefs,
       nodeExecId,
       endedAt,
       options,
@@ -720,14 +733,24 @@ export async function handlePreparedStepInput(
       });
     }
     let currentCommunications = consumedCommunicationsResult.value;
-    const transitionCommunications = await Promise.all(
-      selected.map((edge, index) => {
-        return persistCommunicationArtifact({
+    let currentCommunicationCounter = session.communicationCounter;
+    const transitionCommunications: CommunicationRecord[] = [];
+    for (const edge of selected) {
+      const allocatedCommunication =
+        await allocateNextWorkflowMessageCommunicationId(
+          {
+            workflowExecutionId: session.sessionId,
+            sessionCommunicationCounter: currentCommunicationCounter,
+          },
+          options,
+        );
+      transitionCommunications.push(
+        await persistCommunicationArtifact({
           artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
           runtimeLogOptions: options,
           workflowId: workflow.workflowId,
           workflowExecutionId: session.sessionId,
-          communicationCounter: session.communicationCounter + index,
+          communicationCounter: allocatedCommunication.communicationCounter - 1,
           fromNodeId: edge.from,
           toNodeId: edge.to,
           routingScope: "intra-workflow",
@@ -738,9 +761,10 @@ export async function handlePreparedStepInput(
           outputRaw,
           deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
           createdAt: endedAt,
-        });
-      }),
-    );
+        }),
+      );
+      currentCommunicationCounter = allocatedCommunication.communicationCounter;
+    }
     currentCommunications = [
       ...currentCommunications,
       ...transitionCommunications,
@@ -762,8 +786,7 @@ export async function handlePreparedStepInput(
         })),
       ],
       nodeExecutions: [...session.nodeExecutions, nodeExecution],
-      communicationCounter:
-        session.communicationCounter + transitionCommunications.length,
+      communicationCounter: currentCommunicationCounter,
       communications: currentCommunications,
       runtimeVariables: isWorkflowOutputKindNode(workflow, nodeId)
         ? {

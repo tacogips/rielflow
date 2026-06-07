@@ -48,6 +48,7 @@ import {
   toStepIdentityFields,
 } from "../runtime-addressing";
 import {
+  allocateNextWorkflowMessageCommunicationId,
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
 } from "../runtime-db";
@@ -177,6 +178,7 @@ export const workflowRunnerDeps = {
   toStepIdentityFields,
   saveNodeExecutionToRuntimeDb,
   saveProcessLogsToRuntimeDb,
+  allocateNextWorkflowMessageCommunicationId,
   inspectWorkflowRuntimeReadiness,
   ScenarioNodeAdapter,
   evaluateCompletion,
@@ -513,6 +515,7 @@ export type WorkflowStepInputPort = Pick<
   | "saveNodeExecutionToRuntimeDb"
   | "markCommunicationsConsumed"
   | "err"
+  | "allocateNextWorkflowMessageCommunicationId"
   | "persistCommunicationArtifact"
   | "resolveWorkflowManagerStepId"
   | "dedupeNodeIds"
@@ -539,6 +542,7 @@ export const workflowStepInputPort: WorkflowStepInputPort = {
   saveNodeExecutionToRuntimeDb,
   markCommunicationsConsumed,
   err,
+  allocateNextWorkflowMessageCommunicationId,
   persistCommunicationArtifact,
   resolveWorkflowManagerStepId,
   dedupeNodeIds,
@@ -576,6 +580,7 @@ export type WorkflowStepResultFinalizationPort = Pick<
   | "applyOptionalManagerDecisions"
   | "buildCommitMessageTemplate"
   | "markCommunicationsConsumed"
+  | "allocateNextWorkflowMessageCommunicationId"
   | "persistCommunicationArtifact"
   | "readBusinessPayload"
 >;
@@ -611,6 +616,7 @@ export const workflowStepResultFinalizationPort: WorkflowStepResultFinalizationP
     applyOptionalManagerDecisions,
     buildCommitMessageTemplate,
     markCommunicationsConsumed,
+    allocateNextWorkflowMessageCommunicationId,
     persistCommunicationArtifact,
     readBusinessPayload,
   };

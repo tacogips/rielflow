@@ -1,5 +1,6 @@
 import { publishWorkflowBusinessFinalExternalOutput } from "../../events/external-output";
 import { err, ok } from "../result";
+import { allocateNextWorkflowMessageCommunicationId } from "../runtime-db";
 import type { CommunicationRecord } from "../session";
 import type { LoadedWorkflow } from "../load";
 import type { WorkflowJson } from "../types";
@@ -76,7 +77,18 @@ export async function finalizeCompletedWorkflowRun(
     }
 
     let externalOutputCommunication: CommunicationRecord;
+    let allocatedCommunicationCounter: number;
     try {
+      const allocatedCommunication =
+        await allocateNextWorkflowMessageCommunicationId(
+          {
+            workflowExecutionId: completed.sessionId,
+            sessionCommunicationCounter: completed.communicationCounter,
+          },
+          options,
+        );
+      allocatedCommunicationCounter =
+        allocatedCommunication.communicationCounter;
       externalOutputCommunication =
         await persistExternalMailboxOutputCommunication({
           artifactWorkflowRoot: loaded.artifactWorkflowRoot,
@@ -85,7 +97,7 @@ export async function finalizeCompletedWorkflowRun(
           session: completed,
           execution: publishedResultExecution,
           outputRaw: outputPayload.value.raw,
-          communicationCounter: completed.communicationCounter,
+          communicationCounter: allocatedCommunicationCounter - 1,
           createdAt: completed.endedAt ?? nowIso(),
         });
     } catch (error: unknown) {
@@ -105,7 +117,7 @@ export async function finalizeCompletedWorkflowRun(
 
     completed = {
       ...completed,
-      communicationCounter: completed.communicationCounter + 1,
+      communicationCounter: allocatedCommunicationCounter,
       communications: [
         ...completed.communications,
         externalOutputCommunication,

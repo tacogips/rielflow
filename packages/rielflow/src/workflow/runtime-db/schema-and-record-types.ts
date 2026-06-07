@@ -306,6 +306,15 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
 }
 
 export type RuntimeDatabaseSchemaExtension = (db: Database) => void;
+const RUNTIME_SCHEMA_VERSION = 1;
+const ACTIVE_RUNTIME_TABLES = {
+  workflowMessages: "workflow_messages",
+  workflowMessageSequences: "workflow_message_sequences",
+  sessions: "sessions",
+  nodeExecutions: "node_executions",
+  nodeLogs: "node_logs",
+  llmSessionMessages: "llm_session_messages",
+} as const;
 
 export async function withRuntimeDatabase<T>(
   options: LoadOptions,
@@ -647,6 +656,14 @@ export function toRuntimeSessionSummary(
 export function ensureSchema(db: Database): void {
   db.exec(`
     PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS runtime_schema_metadata (
+      metadata_id TEXT PRIMARY KEY CHECK (metadata_id = 'active'),
+      schema_version INTEGER NOT NULL,
+      active_tables_json TEXT NOT NULL CHECK (json_valid(active_tables_json)),
+      migration_metadata_json TEXT CHECK (migration_metadata_json IS NULL OR json_valid(migration_metadata_json)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       session_id TEXT PRIMARY KEY,
       workflow_name TEXT NOT NULL,
@@ -742,15 +759,35 @@ export function ensureSchema(db: Database): void {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (workflow_execution_id, communication_id)
     );
+    CREATE TABLE IF NOT EXISTS workflow_message_sequences (
+      workflow_execution_id TEXT PRIMARY KEY,
+      last_counter INTEGER NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_sessions_workflow_name ON sessions (workflow_name);
     CREATE INDEX IF NOT EXISTS idx_node_exec_session ON node_executions (session_id, node_id);
     CREATE INDEX IF NOT EXISTS idx_node_logs_session ON node_logs (session_id, at);
     CREATE INDEX IF NOT EXISTS idx_llm_session_messages_session ON llm_session_messages (session_id, node_exec_id, ordinal);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created_order ON workflow_messages (workflow_execution_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound_created ON workflow_messages (workflow_execution_id, to_node_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound_created_order ON workflow_messages (workflow_execution_id, from_node_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
   `);
+  db.query(
+    `
+        INSERT INTO runtime_schema_metadata (
+          metadata_id, schema_version, active_tables_json,
+          migration_metadata_json, created_at, updated_at
+        )
+        VALUES ('active', ?, ?, NULL, datetime('now'), datetime('now'))
+        ON CONFLICT(metadata_id) DO UPDATE SET
+          schema_version = excluded.schema_version,
+          active_tables_json = excluded.active_tables_json,
+          updated_at = excluded.updated_at
+      `,
+  ).run(RUNTIME_SCHEMA_VERSION, JSON.stringify(ACTIVE_RUNTIME_TABLES));
 
   const nodeExecutionColumns = db
     .query("PRAGMA table_info(node_executions)")
@@ -846,8 +883,11 @@ export function ensureSchema(db: Database): void {
   }
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created_order ON workflow_messages (workflow_execution_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound_created ON workflow_messages (workflow_execution_id, to_node_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound_created_order ON workflow_messages (workflow_execution_id, from_node_id, created_at, communication_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
   `);
   const sessionColumns = db

@@ -20,6 +20,7 @@ import {
 import { loadWorkflowByIdFromDisk } from "../load";
 import type { ParsedManagerControl } from "../manager-control";
 import { err, ok, type Result } from "../result";
+import { allocateNextWorkflowMessageCommunicationId } from "../runtime-db";
 import { isWorkflowOutputKindNode } from "../runtime-addressing";
 import { evaluateBranch } from "../semantics";
 import {
@@ -760,12 +761,20 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
     fanoutGroupRunId,
     aggregate,
   });
+  const allocatedCommunication =
+    await allocateNextWorkflowMessageCommunicationId(
+      {
+        workflowExecutionId: input.base.session.sessionId,
+        sessionCommunicationCounter: input.communicationCounter,
+      },
+      input.base.options,
+    );
   const communication = await persistCommunicationArtifact({
     artifactWorkflowRoot: input.base.artifactWorkflowRoot,
     runtimeLogOptions: input.base.options,
     workflowId: input.base.workflow.workflowId,
     workflowExecutionId: input.base.session.sessionId,
-    communicationCounter: input.communicationCounter,
+    communicationCounter: allocatedCommunication.communicationCounter - 1,
     fromNodeId: input.base.callerNodeId,
     toNodeId: fanout.joinStepId,
     routingScope: "intra-workflow",
@@ -780,7 +789,7 @@ export async function executeCrossWorkflowFanoutDispatch(input: {
 
   return ok({
     communications: [...input.currentCommunications, communication],
-    communicationCounter: input.communicationCounter + 1,
+    communicationCounter: allocatedCommunication.communicationCounter,
     queuedNodeIds: [fanout.joinStepId],
     transitions: [
       {

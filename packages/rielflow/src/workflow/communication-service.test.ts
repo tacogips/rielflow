@@ -1,6 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 import type { MockNodeScenario } from "./scenario-adapter";
 import { createWorkflowTemplate } from "./create";
@@ -20,6 +21,7 @@ import {
   persistManagerMessageCommunication,
 } from "./manager-message-service/artifacts";
 import {
+  listWorkflowMessagesFromRuntimeDb,
   loadWorkflowMessageFromRuntimeDb,
   workflowMessageRecordToCommunication,
 } from "./runtime-db";
@@ -190,6 +192,45 @@ describe("communication-service", () => {
     );
   });
 
+  test("no legacy file fallback and no session array fallback: ignores communication without a sqlite row", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communication = session.communications.at(-1);
+    expect(communication).toBeDefined();
+    if (communication === undefined) {
+      return;
+    }
+    await mkdir(communication.artifactDir, { recursive: true });
+    await writeFile(
+      path.join(communication.artifactDir, "message.json"),
+      `${JSON.stringify({ communicationId: communication.communicationId })}\n`,
+      "utf8",
+    );
+    const saved = await saveSession(session, options);
+    expect(saved.ok).toBe(true);
+
+    const db = new Database(path.join(options.rootDataDir, "rielflow.db"));
+    try {
+      db.query(
+        "DELETE FROM workflow_messages WHERE workflow_execution_id = ? AND communication_id = ?",
+      ).run(session.sessionId, communication.communicationId);
+    } finally {
+      db.close();
+    }
+
+    const service = createCommunicationService();
+    const view = await service.getCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+      },
+      options,
+    );
+
+    expect(view).toBeNull();
+  });
+
   test("replays a sqlite-backed communication when session communications are missing", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
@@ -240,6 +281,257 @@ describe("communication-service", () => {
     expect(sqliteReplay?.replayedFromCommunicationId).toBe(
       communication.communicationId,
     );
+    const reloaded = await loadSession(session.sessionId, options);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+    expect(
+      reloaded.value.communications.some(
+        (entry) => entry.communicationId === replayed.replayedCommunicationId,
+      ),
+    ).toBe(true);
+  });
+
+  test("replays with stale session communication counter without overwriting sqlite source row", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const communication = session.communications.at(0);
+    expect(communication).toBeDefined();
+    if (communication === undefined) {
+      return;
+    }
+    const stripped: WorkflowSessionState = {
+      ...session,
+      communications: [],
+      communicationCounter: 0,
+    };
+    const saved = await saveSession(stripped, options);
+    expect(saved.ok).toBe(true);
+
+    const service = createCommunicationService();
+    const replayed = await service.replayCommunication(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+        reason: "stale counter sqlite-backed replay",
+      },
+      options,
+    );
+
+    expect(replayed.replayedCommunicationId).not.toBe(
+      communication.communicationId,
+    );
+    const sqliteSource = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: communication.communicationId,
+      },
+      options,
+    );
+    expect(sqliteSource?.status).toBe("superseded");
+    expect(sqliteSource?.supersededByCommunicationId).toBe(
+      replayed.replayedCommunicationId,
+    );
+    const sqliteReplay = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: replayed.replayedCommunicationId,
+      },
+      options,
+    );
+    expect(sqliteReplay?.replayedFromCommunicationId).toBe(
+      communication.communicationId,
+    );
+    const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(sqliteMessages.map((message) => message.communicationId)).toEqual(
+      expect.arrayContaining([
+        communication.communicationId,
+        replayed.replayedCommunicationId,
+      ]),
+    );
+    const reloaded = await loadSession(session.sessionId, options);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+    expect(reloaded.value.communicationCounter).toBeGreaterThan(0);
+  });
+
+  test("concurrent replays allocate distinct sqlite communication ids", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const sourceCommunications = session.communications.slice(0, 2);
+    expect(sourceCommunications).toHaveLength(2);
+    const [firstSource, secondSource] = sourceCommunications;
+    if (firstSource === undefined || secondSource === undefined) {
+      return;
+    }
+    const stripped: WorkflowSessionState = {
+      ...session,
+      communications: [],
+      communicationCounter: 0,
+    };
+    const saved = await saveSession(stripped, options);
+    expect(saved.ok).toBe(true);
+
+    const service = createCommunicationService();
+    const [firstReplay, secondReplay] = await Promise.all([
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: firstSource.communicationId,
+          reason: "first concurrent replay",
+        },
+        options,
+      ),
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: secondSource.communicationId,
+          reason: "second concurrent replay",
+        },
+        options,
+      ),
+    ]);
+
+    expect(firstReplay.replayedCommunicationId).not.toBe(
+      secondReplay.replayedCommunicationId,
+    );
+    const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(sqliteMessages.map((message) => message.communicationId)).toEqual(
+      expect.arrayContaining([
+        firstSource.communicationId,
+        secondSource.communicationId,
+        firstReplay.replayedCommunicationId,
+        secondReplay.replayedCommunicationId,
+      ]),
+    );
+    expect(
+      sqliteMessages.find(
+        (message) => message.communicationId === firstSource.communicationId,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        status: "superseded",
+        supersededByCommunicationId: firstReplay.replayedCommunicationId,
+      }),
+    );
+    expect(
+      sqliteMessages.find(
+        (message) => message.communicationId === secondSource.communicationId,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        status: "superseded",
+        supersededByCommunicationId: secondReplay.replayedCommunicationId,
+      }),
+    );
+    const replayMessages = sqliteMessages.filter((message) =>
+      [
+        firstReplay.replayedCommunicationId,
+        secondReplay.replayedCommunicationId,
+      ].includes(message.communicationId),
+    );
+    expect(replayMessages).toHaveLength(2);
+
+    const reloaded = await loadSession(session.sessionId, options);
+    expect(reloaded.ok).toBe(true);
+    if (!reloaded.ok) {
+      return;
+    }
+    expect(
+      reloaded.value.communications.map(
+        (communication) => communication.communicationId,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        firstReplay.replayedCommunicationId,
+        secondReplay.replayedCommunicationId,
+      ]),
+    );
+  });
+
+  test("failed replay save leaves source sqlite message delivered", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const sourceCommunication = session.communications.at(0);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const db = new Database(path.join(options.rootDataDir, "rielflow.db"));
+    try {
+      db.query(
+        [
+          "UPDATE workflow_messages",
+          "SET status = 'delivered', consumed_by_node_exec_id = NULL, consumed_at = NULL, payload_json = ?",
+          "WHERE workflow_execution_id = ? AND communication_id = ?",
+        ].join(" "),
+      ).run(
+        JSON.stringify({
+          payload: {
+            attachments: [
+              {
+                pathBase: "root-data",
+                path: "missing-replay-source.txt",
+              },
+            ],
+          },
+        }),
+        session.sessionId,
+        sourceCommunication.communicationId,
+      );
+    } finally {
+      db.close();
+    }
+
+    const service = createCommunicationService();
+    await expect(
+      service.replayCommunication(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          communicationId: sourceCommunication.communicationId,
+          reason: "force replay save failure",
+        },
+        options,
+      ),
+    ).rejects.toThrow("ENOENT");
+
+    const sqliteSource = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: sourceCommunication.communicationId,
+      },
+      options,
+    );
+    expect(sqliteSource).toEqual(
+      expect.objectContaining({
+        status: "delivered",
+        supersededByCommunicationId: null,
+      }),
+    );
+    const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId },
+      options,
+    );
+    expect(
+      sqliteMessages.some(
+        (message) =>
+          message.replayedFromCommunicationId ===
+          sourceCommunication.communicationId,
+      ),
+    ).toBe(false);
   });
 
   test("retries a sqlite-backed communication when session communications are missing", async () => {
@@ -523,7 +815,7 @@ describe("communication-service", () => {
       artifactWorkflowRoot: loadedWf.value.artifactWorkflowRoot,
       workflowId: "demo",
       workflowExecutionId: session.sessionId,
-      communicationCounter: session.communicationCounter,
+      communicationCounter: 0,
       managerMessageId,
       managerStepId: "rielflow-manager",
       managerNodeExecId: "exec-000001",
@@ -533,6 +825,11 @@ describe("communication-service", () => {
       createdAt: "2026-03-15T04:00:00.000Z",
       runtimeLogOptions: options,
     });
+    expect(
+      session.communications.some(
+        (entry) => entry.communicationId === communication.communicationId,
+      ),
+    ).toBe(false);
     const seeded: WorkflowSessionState = {
       ...session,
       communications: [...session.communications, communication],

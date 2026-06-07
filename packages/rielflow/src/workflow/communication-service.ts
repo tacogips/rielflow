@@ -1,7 +1,9 @@
 import path from "node:path";
 import {
+  allocateNextWorkflowMessageCommunicationId,
+  listWorkflowMessagesFromRuntimeDb,
   loadWorkflowMessageFromRuntimeDb,
-  saveWorkflowMessageToRuntimeDb,
+  saveWorkflowMessageReplayToRuntimeDb,
   updateWorkflowMessageStatusInRuntimeDb,
   type RuntimeWorkflowMessageRecord,
   workflowMessageRecordToCommunication,
@@ -20,7 +22,6 @@ import type {
 } from "./session";
 import {
   initialDeliveryAttemptId,
-  nextCommunicationId,
   nextDeliveryAttemptId,
 } from "./runtime-execution-contracts";
 import { getWorkflowTelemetry } from "../telemetry";
@@ -323,9 +324,17 @@ export function createCommunicationService(
                 workflowMessageRecordToCommunication(sourceRecord);
 
               const outputRaw = loadSourceOutputRaw(sourceRecord);
-              const replayedCommunicationId = nextCommunicationId(
-                loaded.value.communicationCounter + 1,
-              );
+              const allocatedCommunication =
+                await allocateNextWorkflowMessageCommunicationId(
+                  {
+                    workflowExecutionId: input.workflowExecutionId,
+                    sessionCommunicationCounter:
+                      loaded.value.communicationCounter,
+                  },
+                  options,
+                );
+              const replayedCommunicationId =
+                allocatedCommunication.communicationId;
               const replayedDeliveryAttemptId = initialDeliveryAttemptId();
               const replayedArtifactDir = path.join(
                 resolveArtifactWorkflowRoot(sourceCommunication.artifactDir),
@@ -361,22 +370,36 @@ export function createCommunicationService(
                 supersededByCommunicationId: replayedCommunicationId,
                 supersededAt: now,
               };
-              const updatedSession: WorkflowSessionState = {
-                ...loaded.value,
-                communicationCounter: loaded.value.communicationCounter + 1,
-              };
-              await updateWorkflowMessageStatusInRuntimeDb(
-                updatedSourceCommunication,
-                options,
-              );
-              await saveWorkflowMessageToRuntimeDb(
+              await saveWorkflowMessageReplayToRuntimeDb(
                 {
-                  communication: replayedRecord,
+                  replayedCommunication: replayedRecord,
+                  sourceCommunication: updatedSourceCommunication,
                   outputRaw,
                   updatedAt: now,
                 },
                 options,
               );
+              const latestSession = await loadSession(
+                input.workflowExecutionId,
+                options,
+              );
+              if (!latestSession.ok) {
+                throw new Error(latestSession.error.message);
+              }
+              const latestMessages = await listWorkflowMessagesFromRuntimeDb(
+                { workflowExecutionId: input.workflowExecutionId },
+                options,
+              );
+              const updatedSession: WorkflowSessionState = {
+                ...latestSession.value,
+                communicationCounter: Math.max(
+                  latestSession.value.communicationCounter,
+                  allocatedCommunication.communicationCounter,
+                ),
+                communications: latestMessages.map(
+                  workflowMessageRecordToCommunication,
+                ),
+              };
               await persistUpdatedSession(updatedSession, options);
               return {
                 sourceCommunicationId: sourceCommunication.communicationId,

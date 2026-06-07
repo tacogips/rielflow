@@ -26,6 +26,7 @@ import {
   type FanoutGroupRunRecord,
   type WorkflowSessionState,
 } from "../session";
+import { allocateNextWorkflowMessageCommunicationId } from "../runtime-db";
 import { loadSession, saveSession } from "../session-store";
 import type {
   NodePayload,
@@ -524,12 +525,20 @@ export async function executeLocalFanoutTransition(
     fanoutGroupRunId,
     aggregate: reduction.aggregate,
   });
+  const allocatedCommunication =
+    await allocateNextWorkflowMessageCommunicationId(
+      {
+        workflowExecutionId: input.session.sessionId,
+        sessionCommunicationCounter: input.communicationCounter,
+      },
+      input.options,
+    );
   const communication = await persistCommunicationArtifact({
     artifactWorkflowRoot: input.artifactWorkflowRoot,
     runtimeLogOptions: input.options,
     workflowId: input.workflow.workflowId,
     workflowExecutionId: input.session.sessionId,
-    communicationCounter: input.communicationCounter,
+    communicationCounter: allocatedCommunication.communicationCounter - 1,
     fromNodeId: input.callerNodeId,
     toNodeId: fanout.joinStepId,
     routingScope: "intra-workflow",
@@ -544,7 +553,7 @@ export async function executeLocalFanoutTransition(
 
   return ok({
     communications: [...input.currentCommunications, communication],
-    communicationCounter: input.communicationCounter + 1,
+    communicationCounter: allocatedCommunication.communicationCounter,
     queuedNodeIds: [fanout.joinStepId],
     transitions: [
       {
@@ -746,12 +755,20 @@ export async function executeCrossWorkflowDispatchesForNode(
       );
     }
 
+    const allocatedCommunication =
+      await allocateNextWorkflowMessageCommunicationId(
+        {
+          workflowExecutionId: input.session.sessionId,
+          sessionCommunicationCounter: currentCommunicationCounter,
+        },
+        input.options,
+      );
     const communication = await persistCommunicationArtifact({
       artifactWorkflowRoot: input.artifactWorkflowRoot,
       runtimeLogOptions: input.options,
       workflowId: input.workflow.workflowId,
       workflowExecutionId: input.session.sessionId,
-      communicationCounter: currentCommunicationCounter,
+      communicationCounter: allocatedCommunication.communicationCounter - 1,
       fromNodeId: input.callerNodeId,
       toNodeId: dispatch.resumeStepId,
       routingScope: "intra-workflow",
@@ -763,7 +780,7 @@ export async function executeCrossWorkflowDispatchesForNode(
       deliveredByNodeId: resolveWorkflowManagerStepId(input.workflow),
       createdAt: input.createdAt,
     });
-    currentCommunicationCounter += 1;
+    currentCommunicationCounter = allocatedCommunication.communicationCounter;
     currentCommunications.push(communication);
     queuedNodeIds.push(dispatch.resumeStepId);
     transitions.push({

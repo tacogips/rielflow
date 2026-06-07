@@ -313,6 +313,9 @@ export async function deleteRuntimeSession(
       db.prepare(
         "DELETE FROM workflow_messages WHERE workflow_execution_id = ?",
       ).run(targetSessionId);
+      db.prepare(
+        "DELETE FROM workflow_message_sequences WHERE workflow_execution_id = ?",
+      ).run(targetSessionId);
       db.prepare("DELETE FROM llm_session_messages WHERE session_id = ?").run(
         targetSessionId,
       );

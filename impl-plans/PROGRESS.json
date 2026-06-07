@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-06T22:23:12+09:00",
+  "lastUpdated": "2026-06-07T14:50:27+09:00",
   "phases": {
     "1": {
       "status": "COMPLETED"
@@ -7270,52 +7270,55 @@
         }
       }
     },
-    "active/sqlite-message-store": {
+    "completed/sqlite-message-store": {
       "phase": 191,
       "status": "Completed",
-      "path": "impl-plans/active/sqlite-message-store.md",
+      "path": "impl-plans/completed/sqlite-message-store.md",
       "designReference": "design-docs/specs/design-sqlite-message-store.md; design-docs/specs/command.md#environment-variables; design-docs/specs/design-node-mailbox.md",
       "tasks": {
         "TASK-001": {
           "status": "Completed",
-          "parallelizable": true,
+          "parallelizable": false,
           "deps": []
         },
         "TASK-002": {
           "status": "Completed",
-          "parallelizable": true,
-          "deps": []
+          "parallelizable": false,
+          "deps": [
+            "TASK-001"
+          ]
         },
         "TASK-003": {
           "status": "Completed",
           "parallelizable": false,
           "deps": [
-            "TASK-001",
-            "TASK-002"
+            "TASK-001"
           ]
         },
         "TASK-004": {
           "status": "Completed",
           "parallelizable": false,
           "deps": [
-            "TASK-001",
+            "TASK-002",
             "TASK-003"
           ]
         },
         "TASK-005": {
           "status": "Completed",
-          "parallelizable": false,
+          "parallelizable": true,
           "deps": [
-            "TASK-001",
-            "TASK-002",
-            "TASK-003",
-            "TASK-004"
+            "TASK-001"
           ]
         },
         "TASK-006": {
           "status": "Completed",
-          "parallelizable": true,
-          "deps": []
+          "parallelizable": false,
+          "deps": [
+            "TASK-002",
+            "TASK-003",
+            "TASK-004",
+            "TASK-005"
+          ]
         }
       }
     }

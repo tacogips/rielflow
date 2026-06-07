@@ -153,7 +153,7 @@ describe("runtime storage paths", () => {
     expect(roots.workflowRoot).toBe(path.join(cwd, ".rielflow"));
   });
 
-  test("normalizes message attachment paths under the attachment root", async () => {
+  test("normalizes attachment-root-relative message attachment paths under RIEL_ATTACHMENT_ROOT", async () => {
     const cwd = await makeTempDir();
     const normalized = normalizeMessageAttachmentPath(
       {
@@ -185,7 +185,7 @@ describe("runtime storage paths", () => {
     });
   });
 
-  test("rejects traversal in message attachment path components", async () => {
+  test("rejects path traversal in message attachment path components", async () => {
     const cwd = await makeTempDir();
 
     expect(() =>

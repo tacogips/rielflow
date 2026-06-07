@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import type { NodeAdapter } from "./adapter";
 import type { MockNodeScenario } from "./scenario-adapter";
 import { createCommunicationService } from "./communication-service";
 import { createWorkflowTemplate } from "./create";
@@ -555,6 +556,102 @@ describe("manager-message-service", () => {
     expect(replayedRecord?.replayedFromCommunicationId).toBe(
       sourceCommunication.communicationId,
     );
+  });
+
+  test("replay-communication with retry-step makes the replayed payload available to the retried node", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T03:00:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T03:00:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+    const sourceCommunication = session.communications.find(
+      (entry) => entry.toNodeId === "main-worker",
+    );
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+
+    const result = await service.sendManagerMessage(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        managerSessionId: "mgrsess-000001",
+        message: "Replay the manager handoff and retry the worker.",
+        actions: [
+          {
+            type: "replay-communication",
+            communicationId: sourceCommunication.communicationId,
+            reason: "retry with replayed input",
+          },
+          { type: "retry-step", stepId: "main-worker" },
+        ],
+        idempotencyKey: "idem-replay-then-retry-worker",
+      },
+      options,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.createdCommunicationIds).toHaveLength(1);
+    expect(result.queuedNodeIds).toEqual(["main-worker"]);
+    const replayedCommunicationId = result.createdCommunicationIds[0];
+    expect(replayedCommunicationId).toBeDefined();
+    if (replayedCommunicationId === undefined) {
+      return;
+    }
+    const loadedAfterMessage = await loadSession(session.sessionId, options);
+    expect(loadedAfterMessage.ok).toBe(true);
+    if (!loadedAfterMessage.ok) {
+      return;
+    }
+    expect(
+      loadedAfterMessage.value.communications.find(
+        (entry) => entry.communicationId === replayedCommunicationId,
+      ),
+    ).toMatchObject({
+      communicationId: replayedCommunicationId,
+      toNodeId: "main-worker",
+      status: "delivered",
+    });
+
+    const capturedUpstreamCommunicationIds: string[][] = [];
+    const adapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "main-worker") {
+          capturedUpstreamCommunicationIds.push([
+            ...input.upstreamCommunicationIds,
+          ]);
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: input.promptText,
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const rerun = await runWorkflow(
+      "demo",
+      {
+        ...options,
+        resumeSessionId: session.sessionId,
+      },
+      adapter,
+    );
+
+    expect(rerun.ok).toBe(true);
+    expect(capturedUpstreamCommunicationIds[0]).toEqual([
+      replayedCommunicationId,
+    ]);
   });
 
   test("applies optional-node execute/skip actions through manager messages", async () => {

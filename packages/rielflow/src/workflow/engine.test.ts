@@ -17,6 +17,7 @@ import {
 } from "./engine";
 import { createManagerSessionStore } from "./manager-session-store";
 import {
+  listWorkflowMessagesFromRuntimeDb,
   listRuntimeNodeExecutions,
   listRuntimeNodeLogs,
   loadWorkflowMessageFromRuntimeDb,
@@ -4991,6 +4992,7 @@ describe("runWorkflow", () => {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
     };
 
     const first = await runWorkflow(
@@ -7598,6 +7600,634 @@ describe("runWorkflow", () => {
     expect(inputJson.arguments).toEqual({ upstreamNode: "step-1" });
   });
 
+  test("resumes queued step from sqlite messages when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-sqlite-upstream-bindings";
+    await createManagerlessWorkflowFixture(root, workflowName);
+
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "consume upstream",
+      variables: {},
+      argumentsTemplate: { upstreamNode: "" },
+      argumentBindings: [
+        {
+          targetPath: "upstreamNode",
+          source: "node-output",
+          sourceRef: "step-1",
+          sourcePath: "output.payload.nodeId",
+          required: true,
+        },
+      ],
+    });
+
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      runtimeVariables: { topic: "B" },
+    };
+
+    const paused = await runWorkflow(
+      workflowName,
+      { ...opts, maxSteps: 1 },
+      deterministicAdapter,
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    expect(paused.value.session.status).toBe("paused");
+
+    const step1Exec = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(step1Exec).toBeDefined();
+    if (step1Exec === undefined) {
+      return;
+    }
+    const sourceCommunication = paused.value.session.communications.find(
+      (entry) =>
+        entry.sourceNodeExecId === step1Exec.nodeExecId &&
+        entry.toNodeId === "step-2",
+    );
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+
+    const strippedSession = {
+      ...paused.value.session,
+      communications: [],
+      communicationCounter: 0,
+    };
+    const savedStrippedSession = await saveSession(strippedSession, opts);
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      {
+        ...opts,
+        resumeSessionId: paused.value.session.sessionId,
+      },
+      deterministicAdapter,
+    );
+
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+    expect(resumed.value.session.status).toBe("completed");
+
+    const step2Exec = resumed.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-2",
+    );
+    expect(step2Exec).toBeDefined();
+    if (step2Exec === undefined) {
+      return;
+    }
+    const inputRaw = await readFile(
+      path.join(step2Exec.artifactDir, "input.json"),
+      "utf8",
+    );
+    const inputJson = JSON.parse(inputRaw) as {
+      arguments: { upstreamNode: string } | null;
+    };
+    expect(inputJson.arguments).toEqual({ upstreamNode: "step-1" });
+
+    const consumedSourceMessage = await loadSqliteMessageRecord(
+      paused.value.session.sessionId,
+      sourceCommunication.communicationId,
+      opts,
+    );
+    expect(consumedSourceMessage.status).toBe("consumed");
+    expect(consumedSourceMessage.consumedByNodeExecId).toBe(
+      step2Exec.nodeExecId,
+    );
+    expect(consumedSourceMessage.consumedAt).toBeDefined();
+  });
+
+  test("resume transition delivery does not overwrite existing sqlite messages with stale session counter", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-sqlite-transition-allocation";
+    await createManagerlessWorkflowFixture(root, workflowName);
+
+    await writeJson(path.join(root, workflowName, "workflow.json"), {
+      workflowId: workflowName,
+      description: "managerless three-step transition allocation fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "step-1",
+      nodes: [
+        { id: "step-1", nodeFile: "node-step-1.json" },
+        { id: "step-2", nodeFile: "node-step-2.json" },
+        { id: "step-3", nodeFile: "node-step-3.json" },
+      ],
+      steps: [
+        {
+          id: "step-1",
+          nodeId: "step-1",
+          transitions: [{ toStepId: "step-2" }],
+        },
+        {
+          id: "step-2",
+          nodeId: "step-2",
+          transitions: [{ toStepId: "step-3" }],
+        },
+        { id: "step-3", nodeId: "step-3" },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-step-2.json"), {
+      id: "step-2",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "consume upstream and continue",
+      variables: {},
+      argumentsTemplate: { upstreamNode: "" },
+      argumentBindings: [
+        {
+          targetPath: "upstreamNode",
+          source: "node-output",
+          sourceRef: "step-1",
+          sourcePath: "output.payload.nodeId",
+          required: true,
+        },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-step-3.json"), {
+      id: "step-3",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "consume step 2",
+      variables: {},
+      argumentsTemplate: { upstreamNode: "" },
+      argumentBindings: [
+        {
+          targetPath: "upstreamNode",
+          source: "node-output",
+          sourceRef: "step-2",
+          sourcePath: "output.payload.nodeId",
+          required: true,
+        },
+      ],
+    });
+
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      runtimeVariables: { topic: "B" },
+    };
+
+    const paused = await runWorkflow(
+      workflowName,
+      { ...opts, maxSteps: 1 },
+      deterministicAdapter,
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    expect(paused.value.session.status).toBe("paused");
+
+    const step1Exec = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-1",
+    );
+    expect(step1Exec).toBeDefined();
+    if (step1Exec === undefined) {
+      return;
+    }
+
+    const strippedSession = {
+      ...paused.value.session,
+      communications: [],
+      communicationCounter: 0,
+    };
+    const savedStrippedSession = await saveSession(strippedSession, opts);
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      {
+        ...opts,
+        resumeSessionId: paused.value.session.sessionId,
+      },
+      deterministicAdapter,
+    );
+
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+    expect(resumed.value.session.status).toBe("completed");
+
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: paused.value.session.sessionId },
+      opts,
+    );
+    expect(messages).toHaveLength(2);
+    const firstMessage = messages.find(
+      (entry) => entry.communicationId === "comm-000001",
+    );
+    const secondMessage = messages.find(
+      (entry) => entry.communicationId === "comm-000002",
+    );
+    expect(firstMessage).toEqual(
+      expect.objectContaining({
+        fromNodeId: "step-1",
+        toNodeId: "step-2",
+        sourceNodeExecId: step1Exec.nodeExecId,
+        status: "consumed",
+      }),
+    );
+    expect(firstMessage?.consumedByNodeExecId).toBeDefined();
+    expect(secondMessage).toEqual(
+      expect.objectContaining({
+        fromNodeId: "step-2",
+        toNodeId: "step-3",
+        status: "consumed",
+      }),
+    );
+    expect(secondMessage?.sourceNodeExecId).not.toBe(step1Exec.nodeExecId);
+  });
+
+  test("resume local fanout join delivery does not overwrite sqlite messages with stale session counter", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-sqlite-local-fanout-allocation";
+    await createLocalFanoutFixture(root, workflowName);
+    await writeJson(path.join(root, workflowName, "workflow.json"), {
+      workflowId: workflowName,
+      description: "local fanout stale counter allocation fixture",
+      defaults: {
+        maxLoopIterations: 3,
+        nodeTimeoutMs: 120000,
+        fanoutConcurrency: 2,
+      },
+      entryStepId: "pre",
+      nodes: [
+        { id: "pre", nodeFile: "node-pre.json" },
+        { id: "writer", nodeFile: "node-writer.json" },
+        { id: "reviewer", nodeFile: "node-reviewer.json" },
+        { id: "review-result", nodeFile: "node-review-result.json" },
+      ],
+      steps: [
+        {
+          id: "pre",
+          nodeId: "pre",
+          role: "worker",
+          transitions: [{ toStepId: "writer" }],
+        },
+        {
+          id: "writer",
+          nodeId: "writer",
+          role: "worker",
+          transitions: [
+            {
+              toStepId: "reviewer",
+              fanout: {
+                groupId: "local-feature-reviews",
+                itemsFrom: "/payload/features",
+                itemVariable: "feature",
+                concurrency: 2,
+                joinStepId: "review-result",
+                failurePolicy: "collect-all",
+                resultOrder: "input",
+                writeOwnership: { mode: "read-only" },
+              },
+            },
+          ],
+        },
+        { id: "reviewer", nodeId: "reviewer", role: "worker" },
+        { id: "review-result", nodeId: "review-result", role: "worker" },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-pre.json"), {
+      id: "pre",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "pre",
+      variables: {},
+    });
+
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const paused = await runWorkflow(
+      workflowName,
+      { ...opts, maxSteps: 1 },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    const preExec = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "pre",
+    );
+    expect(preExec).toBeDefined();
+    if (preExec === undefined) {
+      return;
+    }
+
+    const savedStrippedSession = await saveSession(
+      {
+        ...paused.value.session,
+        communications: [],
+        communicationCounter: 0,
+      },
+      opts,
+    );
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      { ...opts, resumeSessionId: paused.value.session.sessionId },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: paused.value.session.sessionId },
+      opts,
+    );
+    expect(messages).toHaveLength(2);
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000001"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "pre",
+        toNodeId: "writer",
+        sourceNodeExecId: preExec.nodeExecId,
+        status: "consumed",
+      }),
+    );
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000002"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "writer",
+        toNodeId: "review-result",
+        status: "consumed",
+        transitionWhen: expect.stringMatching(/^fanout-join:/),
+      }),
+    );
+  });
+
+  test("resume workflow-call result delivery does not overwrite sqlite messages with stale session counter", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-sqlite-workflow-call-allocation";
+    await createWorkflowCallFixture(root, workflowName);
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+    await writeJson(path.join(root, workflowName, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow-call stale counter allocation fixture",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "pre",
+      nodes: [
+        { id: "pre", nodeFile: "node-pre.json" },
+        { id: "writer", nodeFile: "node-writer.json" },
+        { id: "review-result", nodeFile: "node-review-result.json" },
+      ],
+      steps: [
+        {
+          id: "pre",
+          nodeId: "pre",
+          role: "worker",
+          transitions: [{ toStepId: "writer" }],
+        },
+        {
+          id: "writer",
+          nodeId: "writer",
+          role: "worker",
+          transitions: [
+            {
+              toWorkflowId: "review-flow",
+              toStepId: "reviewer",
+              resumeStepId: "review-result",
+            },
+          ],
+        },
+        { id: "review-result", nodeId: "review-result", role: "worker" },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-pre.json"), {
+      id: "pre",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "pre",
+      variables: {},
+    });
+
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const paused = await runWorkflow(
+      workflowName,
+      { ...opts, maxSteps: 1 },
+      deterministicAdapter,
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    const preExec = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "pre",
+    );
+    expect(preExec).toBeDefined();
+    if (preExec === undefined) {
+      return;
+    }
+
+    const savedStrippedSession = await saveSession(
+      {
+        ...paused.value.session,
+        communications: [],
+        communicationCounter: 0,
+      },
+      opts,
+    );
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      {
+        ...opts,
+        resumeSessionId: paused.value.session.sessionId,
+      },
+      deterministicAdapter,
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: paused.value.session.sessionId },
+      opts,
+    );
+    expect(messages).toHaveLength(2);
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000001"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "pre",
+        toNodeId: "writer",
+        sourceNodeExecId: preExec.nodeExecId,
+        status: "consumed",
+      }),
+    );
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000002"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "writer",
+        toNodeId: "review-result",
+        transitionWhen: "workflow-call:__cw:writer",
+      }),
+    );
+  });
+
+  test("resume workflow-call fanout join delivery does not overwrite sqlite messages with stale session counter", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-sqlite-workflow-call-fanout-allocation";
+    await createWorkflowCallFanoutFixture(root, workflowName);
+    await createWorkflowCallCalleeFixture(root, "review-flow");
+    await writeJson(path.join(root, workflowName, "workflow.json"), {
+      workflowId: workflowName,
+      description: "workflow-call fanout stale counter allocation fixture",
+      defaults: {
+        maxLoopIterations: 3,
+        nodeTimeoutMs: 120000,
+        fanoutConcurrency: 2,
+      },
+      entryStepId: "pre",
+      nodes: [
+        { id: "pre", nodeFile: "node-pre.json" },
+        { id: "writer", nodeFile: "node-writer.json" },
+        { id: "review-result", nodeFile: "node-review-result.json" },
+      ],
+      steps: [
+        {
+          id: "pre",
+          nodeId: "pre",
+          role: "worker",
+          transitions: [{ toStepId: "writer" }],
+        },
+        {
+          id: "writer",
+          nodeId: "writer",
+          role: "worker",
+          transitions: [
+            {
+              toWorkflowId: "review-flow",
+              toStepId: "reviewer",
+              resumeStepId: "review-result",
+              fanout: {
+                groupId: "feature-reviews",
+                itemsFrom: "/payload/features",
+                itemVariable: "feature",
+                concurrency: 2,
+                joinStepId: "review-result",
+                failurePolicy: "collect-all",
+                resultOrder: "input",
+                writeOwnership: { mode: "read-only" },
+              },
+            },
+          ],
+        },
+        { id: "review-result", nodeId: "review-result", role: "worker" },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-pre.json"), {
+      id: "pre",
+      executionBackend: "codex-agent",
+      model: "gpt-5-nano",
+      promptTemplate: "pre",
+      variables: {},
+    });
+
+    const opts = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+    };
+    const paused = await runWorkflow(
+      workflowName,
+      { ...opts, maxSteps: 1 },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    const preExec = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "pre",
+    );
+    expect(preExec).toBeDefined();
+    if (preExec === undefined) {
+      return;
+    }
+
+    const savedStrippedSession = await saveSession(
+      {
+        ...paused.value.session,
+        communications: [],
+        communicationCounter: 0,
+      },
+      opts,
+    );
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      { ...opts, resumeSessionId: paused.value.session.sessionId },
+      new CrossWorkflowFanoutAdapter(),
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: paused.value.session.sessionId },
+      opts,
+    );
+    expect(messages).toHaveLength(2);
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000001"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "pre",
+        toNodeId: "writer",
+        sourceNodeExecId: preExec.nodeExecId,
+        status: "consumed",
+      }),
+    );
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000002"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "writer",
+        toNodeId: "review-result",
+        status: "consumed",
+        transitionWhen: expect.stringMatching(/^fanout-join:/),
+      }),
+    );
+  });
+
   test("continues from a failed workflow after the workflow definition is fixed", async () => {
     const root = await makeTempDir();
     const workflowName = "hist-continue-fixed-after-failure";
@@ -7683,6 +8313,25 @@ describe("runWorkflow", () => {
       return;
     }
     expect(step1Exec.status).toBe("succeeded");
+    const sourceCommunication = failedSession.value.communications.find(
+      (entry) =>
+        entry.sourceNodeExecId === step1Exec.nodeExecId &&
+        entry.toNodeId === "step-2",
+    );
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const strippedFailedSession = {
+      ...failedSession.value,
+      communications: [],
+      communicationCounter: 0,
+    };
+    const savedStrippedFailedSession = await saveSession(
+      strippedFailedSession,
+      opts,
+    );
+    expect(savedStrippedFailedSession.ok).toBe(true);
 
     await writeJson(path.join(root, workflowName, "node-step-2.json"), {
       id: "step-2",
@@ -7745,6 +8394,56 @@ describe("runWorkflow", () => {
       arguments: { upstreamNode: string } | null;
     };
     expect(inputJson.arguments).toEqual({ upstreamNode: "step-1" });
+    const reusableSourceMessage = await loadSqliteMessageRecord(
+      failedSession.value.sessionId,
+      sourceCommunication.communicationId,
+      opts,
+    );
+    expect(reusableSourceMessage.status).toBe("delivered");
+    expect(reusableSourceMessage.consumedByNodeExecId).toBeNull();
+    expect(reusableSourceMessage.consumedAt).toBeNull();
+
+    adapter.calls.length = 0;
+    const continuedAgain = await runWorkflow(
+      workflowName,
+      {
+        ...opts,
+        continueFromWorkflowExecutionId: failedSession.value.sessionId,
+        continueAfterStepRunId: step1Exec.nodeExecId,
+        continueStartStepId: "step-2",
+      },
+      adapter,
+    );
+
+    expect(continuedAgain.ok).toBe(true);
+    if (!continuedAgain.ok) {
+      return;
+    }
+    expect(continuedAgain.value.session.status).toBe("completed");
+    expect(adapter.calls).toEqual(["step-2"]);
+    const step2ExecAgain = continuedAgain.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-2",
+    );
+    expect(step2ExecAgain).toBeDefined();
+    if (step2ExecAgain === undefined) {
+      return;
+    }
+    const inputRawAgain = await readFile(
+      path.join(step2ExecAgain.artifactDir, "input.json"),
+      "utf8",
+    );
+    const inputJsonAgain = JSON.parse(inputRawAgain) as {
+      arguments: { upstreamNode: string } | null;
+    };
+    expect(inputJsonAgain.arguments).toEqual({ upstreamNode: "step-1" });
+    const reusableSourceMessageAfterSecond = await loadSqliteMessageRecord(
+      failedSession.value.sessionId,
+      sourceCommunication.communicationId,
+      opts,
+    );
+    expect(reusableSourceMessageAfterSecond.status).toBe("delivered");
+    expect(reusableSourceMessageAfterSecond.consumedByNodeExecId).toBeNull();
+    expect(reusableSourceMessageAfterSecond.consumedAt).toBeNull();
   });
 
   test("retries invalid node payloads until output schema validation succeeds", async () => {
@@ -9727,6 +10426,7 @@ describe("runWorkflow", () => {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
     };
 
     const paused = await runWorkflow(
@@ -9786,6 +10486,7 @@ describe("runWorkflow", () => {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
     };
 
     const completed = await runWorkflow(
@@ -9889,6 +10590,7 @@ describe("runWorkflow", () => {
       workflowRoot: root,
       artifactRoot: path.join(root, "artifacts"),
       sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
     };
 
     const completed = await runWorkflow(
@@ -9968,6 +10670,94 @@ describe("runWorkflow", () => {
     );
     expect(JSON.parse(outputMessage.payloadJson ?? "null")).toEqual(
       JSON.parse(reformattedOutputRaw) as unknown,
+    );
+  });
+
+  test("resume external output publication does not overwrite sqlite messages with stale session counter", async () => {
+    const root = await makeTempDir();
+    const workflowName = "resume-external-output-sqlite-allocation";
+    const sessionId = "sess-resume-external-output-sqlite-allocation";
+    await createSingleRootOutputFixture(root, workflowName);
+
+    const options = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      rootDataDir: path.join(root, "data"),
+    };
+
+    const paused = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        sessionId,
+        maxSteps: 1,
+      },
+      deterministicAdapter,
+    );
+    expect(paused.ok).toBe(true);
+    if (!paused.ok) {
+      return;
+    }
+    expect(paused.value.session.status).toBe("paused");
+
+    const managerExecution = paused.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "rielflow-manager",
+    );
+    expect(managerExecution).toBeDefined();
+    if (managerExecution === undefined) {
+      return;
+    }
+
+    const savedStrippedSession = await saveSession(
+      {
+        ...paused.value.session,
+        communications: [],
+        communicationCounter: 0,
+      },
+      options,
+    );
+    expect(savedStrippedSession.ok).toBe(true);
+
+    const resumed = await runWorkflow(
+      workflowName,
+      {
+        ...options,
+        resumeSessionId: sessionId,
+      },
+      deterministicAdapter,
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) {
+      return;
+    }
+    expect(resumed.value.session.status).toBe("completed");
+
+    const messages = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: sessionId },
+      options,
+    );
+    expect(messages).toHaveLength(2);
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000001"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "rielflow-manager",
+        toNodeId: "workflow-output",
+        sourceNodeExecId: managerExecution.nodeExecId,
+        status: "consumed",
+      }),
+    );
+    expect(
+      messages.find((entry) => entry.communicationId === "comm-000002"),
+    ).toEqual(
+      expect.objectContaining({
+        fromNodeId: "workflow-output",
+        toNodeId: "__workflow-output-mailbox__",
+        deliveryKind: "external-output",
+        transitionWhen: "external-mailbox:workflow-output",
+      }),
     );
   });
 

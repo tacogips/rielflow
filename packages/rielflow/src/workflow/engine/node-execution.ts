@@ -398,6 +398,7 @@ export async function runWorkflowQueue(
         session,
         nodeId,
         continuationSnapshotsForMergedReads,
+        options,
       );
       if (!upstreamInputsResult.ok) {
         const failed: WorkflowSessionState = {
@@ -451,6 +452,10 @@ export async function runWorkflowQueue(
       const upstreamCommunicationIds = upstreamInputs.map(
         (entry) => entry.communicationId,
       );
+      const upstreamCommunicationRefs = upstreamInputs.map((entry) => ({
+        workflowExecutionId: entry.workflowExecutionId,
+        communicationId: entry.communicationId,
+      }));
       const transcriptInput = (session.conversationTurns ?? []).map(
         (turn: ConversationTurnRecord) => ({
           conversationId: turn.conversationId,
@@ -607,7 +612,7 @@ export async function runWorkflowQueue(
         mailboxInstanceId,
         stepExecutionAddress,
         options,
-        upstreamCommunicationIds,
+        upstreamCommunicationRefs,
         loaded,
         workflowName,
       });
@@ -907,7 +912,7 @@ export async function runWorkflowQueue(
         isOptionalExecutionNode,
         inputJson,
         executionNodePayload,
-        upstreamCommunicationIds,
+        upstreamCommunicationRefs,
         stuckRestartBackoffMs,
         agentNodePayload,
         processLogs,

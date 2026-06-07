@@ -1,7 +1,10 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../../shared/fs";
-import { saveWorkflowMessageToRuntimeDb } from "../runtime-db";
+import {
+  allocateNextWorkflowMessageCommunicationId,
+  saveWorkflowMessageToRuntimeDb,
+} from "../runtime-db";
 import {
   initialDeliveryAttemptId,
   nextCommunicationId,
@@ -203,7 +206,20 @@ export async function persistManagerMessageCommunication(args: {
   readonly createdAt: string;
   readonly runtimeLogOptions?: SessionStoreOptions;
 }): Promise<CommunicationRecord> {
-  const communicationId = nextCommunicationId(args.communicationCounter + 1);
+  const allocatedCommunication =
+    args.runtimeLogOptions === undefined
+      ? {
+          communicationCounter: args.communicationCounter + 1,
+          communicationId: nextCommunicationId(args.communicationCounter + 1),
+        }
+      : await allocateNextWorkflowMessageCommunicationId(
+          {
+            workflowExecutionId: args.workflowExecutionId,
+            sessionCommunicationCounter: args.communicationCounter,
+          },
+          args.runtimeLogOptions,
+        );
+  const communicationId = allocatedCommunication.communicationId;
   const deliveryAttemptId = initialDeliveryAttemptId();
   const artifactDir = path.join(
     args.artifactWorkflowRoot,

@@ -46,6 +46,7 @@ const {
   applyOptionalManagerDecisions,
   buildCommitMessageTemplate,
   markCommunicationsConsumed,
+  allocateNextWorkflowMessageCommunicationId,
   persistCommunicationArtifact,
   readBusinessPayload,
 } = workflowStepResultFinalizationPort;
@@ -98,7 +99,7 @@ export async function finalizeExecutedNode(
     isOptionalExecutionNode,
     inputJson,
     executionNodePayload,
-    upstreamCommunicationIds,
+    upstreamCommunicationRefs,
     stuckRestartBackoffMs,
     agentNodePayload,
     processLogs,
@@ -925,7 +926,7 @@ export async function finalizeExecutedNode(
   }
   const consumedCommunicationsResult = await markCommunicationsConsumed(
     { ...session, communications: currentCommunications },
-    upstreamCommunicationIds,
+    upstreamCommunicationRefs,
     nodeExecId,
     endedAt,
     options,
@@ -959,14 +960,23 @@ export async function finalizeExecutedNode(
     );
   }
   currentCommunications = consumedCommunicationsResult.value;
-  const transitionCommunications = await Promise.all(
-    regularSelected.map((edge, index) => {
-      return persistCommunicationArtifact({
+  const transitionCommunications: CommunicationRecord[] = [];
+  for (const edge of regularSelected) {
+    const allocatedCommunication =
+      await allocateNextWorkflowMessageCommunicationId(
+        {
+          workflowExecutionId: session.sessionId,
+          sessionCommunicationCounter: currentCommunicationCounter,
+        },
+        options,
+      );
+    transitionCommunications.push(
+      await persistCommunicationArtifact({
         artifactWorkflowRoot: loaded.value.artifactWorkflowRoot,
         runtimeLogOptions: options,
         workflowId: workflow.workflowId,
         workflowExecutionId: session.sessionId,
-        communicationCounter: currentCommunicationCounter + index,
+        communicationCounter: allocatedCommunication.communicationCounter - 1,
         fromNodeId: edge.from,
         toNodeId: edge.to,
         routingScope: "intra-workflow",
@@ -977,14 +987,14 @@ export async function finalizeExecutedNode(
         outputRaw,
         deliveredByNodeId: resolveWorkflowManagerStepId(workflow),
         createdAt: endedAt,
-      });
-    }),
-  );
+      }),
+    );
+    currentCommunicationCounter = allocatedCommunication.communicationCounter;
+  }
   currentCommunications = [
     ...currentCommunications,
     ...transitionCommunications,
   ];
-  currentCommunicationCounter += transitionCommunications.length;
   const transitionFinalization = await finalizeStepTransitions({
     session,
     workflowName,

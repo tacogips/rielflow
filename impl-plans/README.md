@@ -34,7 +34,6 @@ impl-plans/
 | `active/run-log-workflow-definition-body` | Ready | `design-graphql-manager-control-plane#run-scoped-workflow-definition-body` |
 | `active/sequential-list-event-source` | Completed | `design-event-listener-workflow-trigger`, `command` |
 | `active/server-workflow-manifest` | Ready | `design-server-workflow-manifest` |
-| `active/sqlite-message-store` | Ready | `design-sqlite-message-store`, `command`, `design-node-mailbox` |
 | `active/workflow-package-checkout-search` | In Progress | `design-workflow-package-checkout-search`, `design-workflow-package-integrity`, `command` |
 | `active/workflow-package-install-scoped-callee-validation` | Ready | `design-workflow-package-checkout#scoped-cross-workflow-validation-during-install`, `architecture#workflow-checkout-boundary` |
 | `active/workflow-node-package-install` | Completed | `design-workflow-node-package-install`, `design-workflow-package-registry`, `design-workflow-package-commands` |
@@ -46,6 +45,7 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sqlite-message-store` | 2026-06-07 | `design-sqlite-message-store`, `command`, `design-node-mailbox` |
 | `inherited-cross-workflow-callee-validation` | 2026-06-05 | `architecture`, `command#workflow-validate-name`, `design-workflow-json#extends` |
 | `temporary-workflow-execution` | 2026-05-31 | `design-temporary-workflow-execution`, `command`, `architecture` |
 | `chat-source-restart-history` | 2026-05-29 | `design-matrix-chat-history`, `design-chat-sdk-chat-history`, `design-matrix-attachment-text` |

@@ -733,7 +733,14 @@ shared runtime data root. `RIEL_ATTACHMENT_ROOT` overrides file and binary
 message handoff storage only. SQLite stores path references for file and binary
 handoffs; it does not store file contents. Communication reads, replay, retry,
 GraphQL inspection, and manager mutation scope checks use SQLite as the message
-source.
+source. Legacy per-message files and session communication arrays are not
+fallback sources for new communication reads.
+
+File and binary handoffs are materialized under the workflow/run/message scope
+before the SQLite row is stored. Attachment references recorded in SQLite are
+attachment-root-relative paths, and absolute or escaping paths are rejected.
+Message publication succeeds only after the SQLite write succeeds, so failed
+database writes block delivery instead of leaving file-only communication state.
 
 ### Install Or Run A Workflow Package
 

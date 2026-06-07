@@ -26,6 +26,7 @@ import type { LoadedWorkflowSuccess } from "./run-setup";
 import type {
   EngineExecutionGuards,
   NormalizedWorkflowRunOptions,
+  UpstreamCommunicationConsumptionRef,
   WorkflowRunFailure,
   WorkflowRunResult,
 } from "./types-and-session-state";
@@ -87,7 +88,7 @@ export interface FinalizeExecutedNodeInput {
   readonly isOptionalExecutionNode: boolean;
   readonly inputJson: string;
   readonly executionNodePayload: NodePayload;
-  readonly upstreamCommunicationIds: readonly string[];
+  readonly upstreamCommunicationRefs: readonly UpstreamCommunicationConsumptionRef[];
   readonly stuckRestartBackoffMs: number;
   readonly agentNodePayload: AgentNodePayload | null;
   readonly processLogs: readonly AdapterProcessLog[];

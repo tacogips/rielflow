@@ -123,18 +123,58 @@ Core columns:
 - `manager_message_id`
 - `updated_at`
 
+JSON columns use SQLite `TEXT` storage with canonical JSON strings. SQLite does
+not provide a native JSON storage class; JSON1 operates on text JSON, so the
+runtime stores `*_json` fields as text and should add `CHECK(json_valid(...))`
+constraints only when a non-null column needs structural validation. The design
+does not promote arbitrary JSON fields into table fields. Only values that are
+needed for filtering, ordering, joining, or stable inspection should be
+duplicated as ordinary typed columns while also remaining inside the canonical
+JSON text. File and binary bodies remain outside SQLite regardless of JSON
+column shape.
+
 Indexes:
 
 - primary key on `(workflow_execution_id, communication_id)`
-- `(workflow_execution_id, created_at)`
+- `(workflow_execution_id, created_at, communication_id)` for canonical
+  whole-run timeline ordering
 - `(workflow_execution_id, to_node_id, status)`
-- `(workflow_execution_id, from_node_id, created_at)`
+- `(workflow_execution_id, to_node_id, created_at, communication_id)` for
+  canonical inbound list ordering
+- `(workflow_execution_id, from_node_id, created_at, communication_id)` for
+  canonical outbound list ordering
 - `(source_node_exec_id, created_at)`
 
 `payload_json` is for structured, JSON-compatible payload snapshots only. When
 payloads include files, binary content, or large generated artifacts,
 `payload_json` stores metadata and path references, while `artifact_refs_json`
 stores attachment-root-relative paths and media metadata.
+
+## Schema Versioning And Migrations
+
+The runtime database must include a metadata table that records the active
+schema version before large schema changes are introduced. The metadata row is
+the source of truth for migration decisions and should include at least:
+
+- `schema_version`
+- `created_at`
+- `updated_at`
+- optional migration metadata such as source database path, migration id, or
+  tool version
+
+Future large schema changes should create a new database file, create the new
+schema there, migrate data from the old tables, verify the migrated row counts
+and required invariants, then atomically switch the configured database path or
+replace the old database file. In-place table rewrites are reserved for small,
+low-risk additions.
+
+Physical table names should carry a schema/table version for new large schema
+generations, for example `workflow_messages_v1`, `sessions_v1`, and
+`node_executions_v1`. Runtime code may expose logical repository methods, but
+the SQLite schema metadata must map the active logical tables to their physical
+versioned table names. This keeps future database-wide migrations explicit and
+prevents ambiguous reads when old and new table shapes temporarily coexist
+during migration.
 
 ## Write Flow
 
@@ -154,6 +194,33 @@ replay/retry selection, and consumed-state updates read from
 
 GraphQL inspection surfaces synthesize message snapshots from the SQLite row.
 They do not require per-communication mailbox files.
+
+## PR #54 Review Boundary
+
+PR #54 is an issue-resolution review of the SQLite message-store transition,
+not a compatibility migration. The accepted behavior is that new workflow
+communication reads are SQLite-backed even when legacy per-communication files
+or session communication arrays are missing. Old file-backed message artifacts
+are intentionally ignored by the canonical read path.
+
+The feature boundary includes:
+
+- workflow step publication and consumption
+- failed workflow continuation after the workflow definition is fixed
+- GraphQL communication list and detail views
+- manager `sendManagerMessage` attachment recording
+- manager-control `replay-communication` and delivery retry behavior
+- runtime path override behavior for database and attachment roots
+
+Review should reject any implementation that silently falls back to old
+message files for new communication behavior, stores binary/file contents in
+SQLite, accepts absolute or escaping attachment paths for new records, or lets
+GraphQL/manager views diverge from `workflow_messages`.
+
+Operational verification for this boundary must keep credentials out of logs,
+artifacts, review output, and commits. Live chat gateway smoke evidence may
+confirm end-to-end behavior, but credential material and private conversation
+content are not design artifacts.
 
 ## Validation
 

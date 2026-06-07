@@ -1,7 +1,11 @@
-import { copyFile, mkdir, stat } from "node:fs/promises";
+import { lstat, mkdir, open, realpath, stat } from "node:fs/promises";
+import type { Database } from "bun:sqlite";
 import path from "node:path";
-import { normalizeMessageAttachmentPath } from "../message-attachment-paths";
-import { resolveRootDataDir } from "../paths";
+import {
+  normalizeMessageAttachmentPath,
+  resolveWorkflowMessageArtifactRef,
+} from "../message-attachment-paths";
+import { resolveAttachmentRoot, resolveRootDataDir } from "../paths";
 import type { CommunicationRecord } from "../session";
 import type { LoadOptions } from "../types";
 import type {
@@ -9,6 +13,18 @@ import type {
   WorkflowMessageArtifactRef,
 } from "./schema-and-record-types";
 import { withDatabase } from "./schema-and-record-types";
+import {
+  cleanupMaterializedAttachmentFiles,
+  isErrnoException,
+} from "./fs-safety";
+import { copyFileHandleContents } from "./file-handle-copy";
+import { isJsonObject } from "./value-guards";
+import {
+  runBeforeAttachmentSourceOpenForTests,
+  runBeforeAttachmentTargetCloseForTests,
+  runBeforeAttachmentTargetFileWriteForTests,
+  runBeforeAttachmentTargetWriteForTests,
+} from "./workflow-message-test-hooks";
 
 interface RuntimeWorkflowMessageRow {
   readonly workflow_id: string;
@@ -45,6 +61,13 @@ export interface SaveWorkflowMessageInput {
   readonly updatedAt?: string;
 }
 
+export interface SaveWorkflowMessageReplayInput {
+  readonly replayedCommunication: CommunicationRecord;
+  readonly sourceCommunication: CommunicationRecord;
+  readonly outputRaw: string;
+  readonly updatedAt?: string;
+}
+
 export interface WorkflowMessageQueryInput {
   readonly workflowExecutionId: string;
   readonly communicationId?: string;
@@ -57,10 +80,11 @@ interface WorkflowMessagePayloadSnapshot {
   readonly artifactRefs: readonly WorkflowMessageArtifactRef[];
 }
 
-function isJsonObject(
-  value: unknown,
-): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+interface AttachmentSourceSnapshot {
+  readonly byteLength: number;
+  readonly dev: number;
+  readonly ino: number;
+  readonly sourceRealPath: string;
 }
 
 function normalizeRootDataRelativePath(relativePath: string): string {
@@ -84,9 +108,293 @@ function messageAttachmentTail(
   communication: CommunicationRecord,
 ): string {
   const prefix = `files/${communication.workflowId}/${communication.workflowExecutionId}/`;
-  return sourcePath.startsWith(prefix)
-    ? sourcePath.slice(prefix.length)
-    : path.posix.basename(sourcePath);
+  if (!sourcePath.startsWith(prefix)) {
+    throw new Error(
+      "message attachment ref must stay within the current workflow execution",
+    );
+  }
+  const tail = sourcePath.slice(prefix.length);
+  if (tail.length === 0) {
+    throw new Error("message attachment ref must include a scoped file path");
+  }
+  return tail;
+}
+
+function existingAttachmentRootTail(
+  sourcePath: string,
+  communication: CommunicationRecord,
+): string {
+  const messageScopePrefix = `${communication.workflowId}/${communication.workflowExecutionId}/messages/`;
+  if (!sourcePath.startsWith(messageScopePrefix)) {
+    throw new Error(
+      "message attachment ref must stay within the current workflow execution",
+    );
+  }
+  const scopedTail = sourcePath.slice(messageScopePrefix.length);
+  const [sourceCommunicationId, ...tailSegments] = scopedTail.split("/");
+  if (
+    sourceCommunicationId === undefined ||
+    sourceCommunicationId.length === 0 ||
+    tailSegments.length === 0
+  ) {
+    throw new Error("message attachment ref must include a scoped file path");
+  }
+  return tailSegments.join("/");
+}
+
+function isPathWithinScope(scopePath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(scopePath, candidatePath);
+  return (
+    relativePath.length > 0 &&
+    !relativePath.startsWith("..") &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+function isPathAtOrWithinScope(
+  scopePath: string,
+  candidatePath: string,
+): boolean {
+  const relativePath = path.relative(scopePath, candidatePath);
+  return (
+    relativePath.length === 0 ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
+}
+
+async function assertDirectoryPathWithoutSymlinks(input: {
+  readonly rootAbsolutePath: string;
+  readonly segments: readonly string[];
+}): Promise<void> {
+  await mkdir(input.rootAbsolutePath, { recursive: true });
+  let currentPath = input.rootAbsolutePath;
+  for (const segment of input.segments) {
+    currentPath = path.join(currentPath, segment);
+    await ensureDirectoryWithoutSymlink(currentPath);
+  }
+}
+
+async function ensureDirectoryWithoutSymlink(
+  directoryPath: string,
+): Promise<void> {
+  try {
+    const directoryStats = await lstat(directoryPath);
+    if (directoryStats.isSymbolicLink()) {
+      throw new Error(
+        "message attachment target must stay within the current workflow execution",
+      );
+    }
+    if (!directoryStats.isDirectory()) {
+      throw new Error("message attachment target parent must be a directory");
+    }
+    return;
+  } catch (error) {
+    if (!isErrnoException(error) || error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  try {
+    await mkdir(directoryPath);
+  } catch (error) {
+    if (!isErrnoException(error) || error.code !== "EEXIST") {
+      throw error;
+    }
+  }
+  const directoryStats = await lstat(directoryPath);
+  if (directoryStats.isSymbolicLink()) {
+    throw new Error(
+      "message attachment target must stay within the current workflow execution",
+    );
+  }
+  if (!directoryStats.isDirectory()) {
+    throw new Error("message attachment target parent must be a directory");
+  }
+}
+
+async function assertAttachmentSourceWithinScope(input: {
+  readonly sourceAbsolutePath: string;
+  readonly rootAbsolutePath: string;
+  readonly scopeSegments: readonly string[];
+  readonly sourcePath: string;
+}): Promise<AttachmentSourceSnapshot> {
+  const sourceLinkStats = await lstat(input.sourceAbsolutePath);
+  if (sourceLinkStats.isSymbolicLink()) {
+    throw new Error("message attachment source must not be a symlink");
+  }
+  if (sourceLinkStats.isFile() && sourceLinkStats.nlink > 1) {
+    throw new Error("message attachment source must not be a hardlink");
+  }
+  const sourceRealPath = await realpath(input.sourceAbsolutePath);
+  const rootRealPath = await realpath(input.rootAbsolutePath);
+  const expectedScopeRealPath = path.resolve(
+    rootRealPath,
+    ...input.scopeSegments,
+  );
+  const scopeRealPath = await realpath(
+    path.resolve(input.rootAbsolutePath, ...input.scopeSegments),
+  );
+  if (
+    scopeRealPath !== expectedScopeRealPath ||
+    !isPathWithinScope(expectedScopeRealPath, sourceRealPath)
+  ) {
+    throw new Error(
+      "message attachment ref must stay within the current workflow execution",
+    );
+  }
+  const sourceStats = await stat(sourceRealPath);
+  if (!sourceStats.isFile()) {
+    throw new Error(
+      `message attachment '${input.sourcePath}' is not a regular file`,
+    );
+  }
+  if (sourceStats.nlink > 1) {
+    throw new Error("message attachment source must not be a hardlink");
+  }
+  return {
+    byteLength: sourceStats.size,
+    dev: sourceStats.dev,
+    ino: sourceStats.ino,
+    sourceRealPath,
+  };
+}
+
+async function assertAttachmentTargetWithinScope(input: {
+  readonly targetAbsolutePath: string;
+  readonly rootAbsolutePath: string;
+  readonly scopeSegments: readonly string[];
+}): Promise<void> {
+  const targetParentPath = path.dirname(input.targetAbsolutePath);
+  const scopeAbsolutePath = path.resolve(
+    input.rootAbsolutePath,
+    ...input.scopeSegments,
+  );
+  if (!isPathAtOrWithinScope(scopeAbsolutePath, targetParentPath)) {
+    throw new Error(
+      "message attachment target must stay within the current workflow execution",
+    );
+  }
+  const targetParentTail = path.relative(scopeAbsolutePath, targetParentPath);
+  await assertDirectoryPathWithoutSymlinks({
+    rootAbsolutePath: input.rootAbsolutePath,
+    segments: [
+      ...input.scopeSegments,
+      ...(targetParentTail.length === 0
+        ? []
+        : targetParentTail.split(path.sep)),
+    ],
+  });
+  const rootRealPath = await realpath(input.rootAbsolutePath);
+  const expectedScopeRealPath = path.resolve(
+    rootRealPath,
+    ...input.scopeSegments,
+  );
+  const scopeRealPath = await realpath(scopeAbsolutePath);
+  const targetParentRealPath = await realpath(targetParentPath);
+  if (
+    scopeRealPath !== expectedScopeRealPath ||
+    !isPathAtOrWithinScope(expectedScopeRealPath, targetParentRealPath)
+  ) {
+    throw new Error(
+      "message attachment target must stay within the current workflow execution",
+    );
+  }
+  try {
+    const targetStats = await lstat(input.targetAbsolutePath);
+    if (targetStats.isSymbolicLink()) {
+      throw new Error(
+        "message attachment target must stay within the current workflow execution",
+      );
+    }
+    if (!targetStats.isFile()) {
+      throw new Error("message attachment target must be a regular file path");
+    }
+    if (targetStats.nlink > 1) {
+      throw new Error("message attachment target must not be a hardlink");
+    }
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function copyAttachmentFileExclusive(input: {
+  readonly source: AttachmentSourceSnapshot;
+  readonly targetAbsolutePath: string;
+  readonly rootAbsolutePath: string;
+  readonly scopeSegments: readonly string[];
+}): Promise<void> {
+  await runBeforeAttachmentSourceOpenForTests(input.source.sourceRealPath);
+  let sourceHandle: Awaited<ReturnType<typeof open>> | undefined;
+  let targetHandle: Awaited<ReturnType<typeof open>> | undefined;
+  let createdTargetPath: string | undefined;
+  try {
+    sourceHandle = await open(input.source.sourceRealPath, "r");
+    const sourceStats = await sourceHandle.stat();
+    if (
+      !sourceStats.isFile() ||
+      sourceStats.nlink > 1 ||
+      sourceStats.dev !== input.source.dev ||
+      sourceStats.ino !== input.source.ino
+    ) {
+      throw new Error(
+        "message attachment source changed during materialization",
+      );
+    }
+    await assertAttachmentTargetWithinScope(input);
+    await runBeforeAttachmentTargetWriteForTests(input.targetAbsolutePath);
+    await assertAttachmentTargetWithinScope(input);
+
+    targetHandle = await open(input.targetAbsolutePath, "wx");
+    createdTargetPath = input.targetAbsolutePath;
+    const rootRealPath = await realpath(input.rootAbsolutePath);
+    const expectedScopeRealPath = path.resolve(
+      rootRealPath,
+      ...input.scopeSegments,
+    );
+    const targetRealPath = await realpath(input.targetAbsolutePath);
+    if (!isPathWithinScope(expectedScopeRealPath, targetRealPath)) {
+      throw new Error(
+        "message attachment target must stay within the current workflow execution",
+      );
+    }
+    const targetStats = await targetHandle.stat();
+    if (!targetStats.isFile() || targetStats.nlink > 1) {
+      throw new Error("message attachment target must be a regular file path");
+    }
+    await runBeforeAttachmentTargetFileWriteForTests(input.targetAbsolutePath);
+    await copyFileHandleContents(sourceHandle, targetHandle);
+    await runBeforeAttachmentTargetCloseForTests(input.targetAbsolutePath);
+    await targetHandle.close();
+    targetHandle = undefined;
+  } catch (error) {
+    if (createdTargetPath !== undefined) {
+      await closeFileHandleIgnoringErrors(targetHandle);
+      targetHandle = undefined;
+      await cleanupMaterializedAttachmentFiles([createdTargetPath]).catch(
+        () => undefined,
+      );
+    }
+    if (isErrnoException(error) && error.code === "EEXIST") {
+      throw new Error("message attachment target must not already exist");
+    }
+    throw error;
+  } finally {
+    await targetHandle?.close();
+    await sourceHandle?.close();
+  }
+}
+
+async function closeFileHandleIgnoringErrors(
+  handle: Awaited<ReturnType<typeof open>> | undefined,
+): Promise<void> {
+  try {
+    await handle?.close();
+  } catch {
+    return;
+  }
 }
 
 async function materializeRootDataAttachment(input: {
@@ -94,35 +402,117 @@ async function materializeRootDataAttachment(input: {
   readonly communication: CommunicationRecord;
   readonly mediaType: string | undefined;
   readonly options: LoadOptions;
+  readonly createdAttachmentPaths: string[];
 }): Promise<WorkflowMessageArtifactRef> {
   const normalizedSource = normalizeRootDataRelativePath(input.sourcePath);
+  const targetTail = messageAttachmentTail(
+    normalizedSource,
+    input.communication,
+  );
+  const rootDataDir = resolveRootDataDir(input.options);
   const sourceAbsolutePath = path.resolve(
-    resolveRootDataDir(input.options),
+    rootDataDir,
     ...normalizedSource.split("/"),
   );
-  const sourceStats = await stat(sourceAbsolutePath);
-  if (!sourceStats.isFile()) {
-    throw new Error(
-      `message attachment '${input.sourcePath}' is not a regular file`,
-    );
-  }
+  const source = await assertAttachmentSourceWithinScope({
+    sourceAbsolutePath,
+    rootAbsolutePath: rootDataDir,
+    scopeSegments: [
+      "files",
+      input.communication.workflowId,
+      input.communication.workflowExecutionId,
+    ],
+    sourcePath: input.sourcePath,
+  });
   const normalizedTarget = normalizeMessageAttachmentPath(
     {
       workflowId: input.communication.workflowId,
       workflowExecutionId: input.communication.workflowExecutionId,
       communicationId: input.communication.communicationId,
     },
-    `files/${messageAttachmentTail(normalizedSource, input.communication)}`,
+    `files/${targetTail}`,
     input.options,
   );
-  await mkdir(path.dirname(normalizedTarget.absolutePath), { recursive: true });
-  await copyFile(sourceAbsolutePath, normalizedTarget.absolutePath);
+  await copyAttachmentFileExclusive({
+    source,
+    targetAbsolutePath: normalizedTarget.absolutePath,
+    rootAbsolutePath: resolveAttachmentRoot(input.options),
+    scopeSegments: [
+      input.communication.workflowId,
+      input.communication.workflowExecutionId,
+      "messages",
+      input.communication.communicationId,
+    ],
+  });
+  input.createdAttachmentPaths.push(normalizedTarget.absolutePath);
   return {
     pathBase: "attachment-root",
     path: normalizedTarget.relativePath,
     ...(input.mediaType === undefined ? {} : { mediaType: input.mediaType }),
-    byteLength: sourceStats.size,
+    byteLength: source.byteLength,
     sourcePath: normalizedSource,
+  };
+}
+
+async function materializeAttachmentRootRef(input: {
+  readonly sourcePath: string;
+  readonly communication: CommunicationRecord;
+  readonly mediaType: string | undefined;
+  readonly options: LoadOptions;
+  readonly createdAttachmentPaths: string[];
+}): Promise<WorkflowMessageArtifactRef> {
+  const targetTail = existingAttachmentRootTail(
+    input.sourcePath,
+    input.communication,
+  );
+  const source = resolveWorkflowMessageArtifactRef(
+    {
+      pathBase: "attachment-root",
+      path: input.sourcePath,
+      ...(input.mediaType === undefined ? {} : { mediaType: input.mediaType }),
+    },
+    input.options,
+  );
+  const attachmentRoot = resolveAttachmentRoot(input.options);
+  const sourceFile = await assertAttachmentSourceWithinScope({
+    sourceAbsolutePath: source.absolutePath,
+    rootAbsolutePath: attachmentRoot,
+    scopeSegments: [
+      input.communication.workflowId,
+      input.communication.workflowExecutionId,
+      "messages",
+    ],
+    sourcePath: input.sourcePath,
+  });
+  const normalizedTarget = normalizeMessageAttachmentPath(
+    {
+      workflowId: input.communication.workflowId,
+      workflowExecutionId: input.communication.workflowExecutionId,
+      communicationId: input.communication.communicationId,
+    },
+    targetTail,
+    input.options,
+  );
+  if (sourceFile.sourceRealPath !== normalizedTarget.absolutePath) {
+    await copyAttachmentFileExclusive({
+      source: sourceFile,
+      targetAbsolutePath: normalizedTarget.absolutePath,
+      rootAbsolutePath: attachmentRoot,
+      scopeSegments: [
+        input.communication.workflowId,
+        input.communication.workflowExecutionId,
+        "messages",
+        input.communication.communicationId,
+      ],
+    });
+    input.createdAttachmentPaths.push(normalizedTarget.absolutePath);
+  }
+  return {
+    pathBase: "attachment-root",
+    path: normalizedTarget.relativePath,
+    ...(input.mediaType === undefined ? {} : { mediaType: input.mediaType }),
+    byteLength: sourceFile.byteLength,
+    sourcePath: input.sourcePath,
   };
 }
 
@@ -130,6 +520,7 @@ async function materializeAttachmentRef(input: {
   readonly attachment: Readonly<Record<string, unknown>>;
   readonly communication: CommunicationRecord;
   readonly options: LoadOptions;
+  readonly createdAttachmentPaths: string[];
 }): Promise<WorkflowMessageArtifactRef | null> {
   const sourcePath = input.attachment["path"];
   if (typeof sourcePath !== "string" || sourcePath.length === 0) {
@@ -138,12 +529,22 @@ async function materializeAttachmentRef(input: {
   const mediaType = input.attachment["mediaType"];
   const normalizedMediaType =
     typeof mediaType === "string" ? mediaType : undefined;
+  if (input.attachment["pathBase"] === "attachment-root") {
+    return await materializeAttachmentRootRef({
+      sourcePath,
+      communication: input.communication,
+      mediaType: normalizedMediaType,
+      options: input.options,
+      createdAttachmentPaths: input.createdAttachmentPaths,
+    });
+  }
   if (sourcePath.startsWith("files/")) {
     return await materializeRootDataAttachment({
       sourcePath,
       communication: input.communication,
       mediaType: normalizedMediaType,
       options: input.options,
+      createdAttachmentPaths: input.createdAttachmentPaths,
     });
   }
   if (path.isAbsolute(sourcePath)) {
@@ -160,17 +561,25 @@ async function materializeAttachmentRef(input: {
     sourcePath,
     input.options,
   );
-  const attachmentStats = await stat(normalized.absolutePath);
-  if (!attachmentStats.isFile()) {
-    throw new Error(`message attachment '${sourcePath}' is not a regular file`);
-  }
+  const attachmentRoot = resolveAttachmentRoot(input.options);
+  const attachmentFile = await assertAttachmentSourceWithinScope({
+    sourceAbsolutePath: normalized.absolutePath,
+    rootAbsolutePath: attachmentRoot,
+    scopeSegments: [
+      input.communication.workflowId,
+      input.communication.workflowExecutionId,
+      "messages",
+      input.communication.communicationId,
+    ],
+    sourcePath,
+  });
   return {
     pathBase: "attachment-root",
     path: normalized.relativePath,
     ...(normalizedMediaType === undefined
       ? {}
       : { mediaType: normalizedMediaType }),
-    byteLength: attachmentStats.size,
+    byteLength: attachmentFile.byteLength,
   };
 }
 
@@ -178,6 +587,7 @@ async function buildWorkflowMessagePayloadSnapshot(
   communication: CommunicationRecord,
   outputRaw: string | undefined,
   options: LoadOptions,
+  createdAttachmentPaths: string[],
 ): Promise<WorkflowMessagePayloadSnapshot> {
   if (outputRaw === undefined) {
     return { payloadJson: null, artifactRefs: [] };
@@ -204,6 +614,7 @@ async function buildWorkflowMessagePayloadSnapshot(
       attachment,
       communication,
       options,
+      createdAttachmentPaths,
     });
     if (ref !== null) {
       artifactRefs.push(ref);
@@ -353,18 +764,35 @@ export async function saveWorkflowMessageToRuntimeDb(
   options: LoadOptions = {},
 ): Promise<RuntimeWorkflowMessageRecord> {
   const preservePayloadOnConflict = input.outputRaw === undefined;
-  const payloadSnapshot = await buildWorkflowMessagePayloadSnapshot(
-    input.communication,
-    input.outputRaw,
-    options,
-  );
-  const record = toRuntimeWorkflowMessageRecord(
-    input.communication,
-    payloadSnapshot,
-    input.updatedAt ?? new Date().toISOString(),
-  );
-  await withDatabase(options, (db) => {
-    const stmt = db.prepare(`
+  const createdAttachmentPaths: string[] = [];
+  try {
+    const payloadSnapshot = await buildWorkflowMessagePayloadSnapshot(
+      input.communication,
+      input.outputRaw,
+      options,
+      createdAttachmentPaths,
+    );
+    const record = toRuntimeWorkflowMessageRecord(
+      input.communication,
+      payloadSnapshot,
+      input.updatedAt ?? new Date().toISOString(),
+    );
+    await withDatabase(options, (db) => {
+      runWorkflowMessageUpsert(db, record, preservePayloadOnConflict);
+    });
+    return record;
+  } catch (error) {
+    await cleanupMaterializedAttachmentFiles(createdAttachmentPaths);
+    throw error;
+  }
+}
+
+function runWorkflowMessageUpsert(
+  db: Database,
+  record: RuntimeWorkflowMessageRecord,
+  preservePayloadOnConflict: boolean,
+): void {
+  const stmt = db.prepare(`
       INSERT INTO workflow_messages (
         workflow_id, workflow_execution_id, communication_id, from_node_id,
         to_node_id, routing_scope, delivery_kind, transition_when,
@@ -401,38 +829,73 @@ export async function saveWorkflowMessageToRuntimeDb(
         manager_message_id=excluded.manager_message_id,
         updated_at=excluded.updated_at
     `);
-    stmt.run(
-      record.workflowId,
-      record.workflowExecutionId,
-      record.communicationId,
-      record.fromNodeId,
-      record.toNodeId,
-      record.routingScope,
-      record.deliveryKind,
-      record.transitionWhen,
-      record.sourceNodeExecId,
-      record.status,
-      record.activeDeliveryAttemptId,
-      record.deliveryAttemptIdsJson,
-      record.payloadRefJson,
-      record.payloadJson,
-      record.artifactRefsJson,
-      record.artifactDir,
-      record.createdAt,
-      record.deliveredAt,
-      record.consumedByNodeExecId,
-      record.consumedAt,
-      record.failureReason,
-      record.supersededByCommunicationId,
-      record.supersededAt,
-      record.replayedFromCommunicationId,
-      record.managerMessageId,
-      record.updatedAt,
-      preservePayloadOnConflict,
-      preservePayloadOnConflict,
+  stmt.run(
+    record.workflowId,
+    record.workflowExecutionId,
+    record.communicationId,
+    record.fromNodeId,
+    record.toNodeId,
+    record.routingScope,
+    record.deliveryKind,
+    record.transitionWhen,
+    record.sourceNodeExecId,
+    record.status,
+    record.activeDeliveryAttemptId,
+    record.deliveryAttemptIdsJson,
+    record.payloadRefJson,
+    record.payloadJson,
+    record.artifactRefsJson,
+    record.artifactDir,
+    record.createdAt,
+    record.deliveredAt,
+    record.consumedByNodeExecId,
+    record.consumedAt,
+    record.failureReason,
+    record.supersededByCommunicationId,
+    record.supersededAt,
+    record.replayedFromCommunicationId,
+    record.managerMessageId,
+    record.updatedAt,
+    preservePayloadOnConflict,
+    preservePayloadOnConflict,
+  );
+}
+
+export async function saveWorkflowMessageReplayToRuntimeDb(
+  input: SaveWorkflowMessageReplayInput,
+  options: LoadOptions = {},
+): Promise<RuntimeWorkflowMessageRecord> {
+  const updatedAt = input.updatedAt ?? new Date().toISOString();
+  const createdAttachmentPaths: string[] = [];
+  try {
+    const replayPayloadSnapshot = await buildWorkflowMessagePayloadSnapshot(
+      input.replayedCommunication,
+      input.outputRaw,
+      options,
+      createdAttachmentPaths,
     );
-  });
-  return record;
+    const replayRecord = toRuntimeWorkflowMessageRecord(
+      input.replayedCommunication,
+      replayPayloadSnapshot,
+      updatedAt,
+    );
+    const sourceRecord = toRuntimeWorkflowMessageRecord(
+      input.sourceCommunication,
+      { payloadJson: null, artifactRefs: [] },
+      updatedAt,
+    );
+    await withDatabase(options, (db) => {
+      const saveReplay = db.transaction(() => {
+        runWorkflowMessageUpsert(db, replayRecord, false);
+        runWorkflowMessageUpsert(db, sourceRecord, true);
+      });
+      saveReplay();
+    });
+    return replayRecord;
+  } catch (error) {
+    await cleanupMaterializedAttachmentFiles(createdAttachmentPaths);
+    throw error;
+  }
 }
 
 export async function loadWorkflowMessageFromRuntimeDb(
@@ -504,7 +967,7 @@ export async function markWorkflowMessagesConsumedInRuntimeDb(
         consumed_by_node_exec_id = ?,
         consumed_at = ?,
         updated_at = ?
-      WHERE workflow_execution_id = ? AND communication_id = ?
+      WHERE workflow_execution_id = ? AND communication_id = ? AND status = 'delivered'
     `);
     const runUpdate = db.transaction(() => {
       for (const communicationId of input.communicationIds) {
