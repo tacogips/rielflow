@@ -565,7 +565,7 @@ Useful starting points in `examples/`:
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
 - `telegram-sdk-trio-chat`: Telegram persona trio using SDK-backed worker
   add-ons for `official/openai-sdk`, `official/anthropic-sdk`, and
-  `official/cursor-sdk`.
+  `official/cursor-sdk`; its Rina Cursor SDK worker uses model `gpt-5.5`.
 - `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
   the Telegram trio chat.
 - `x-follower-ai-business-digest`: hourly X follower-post digest that fetches
