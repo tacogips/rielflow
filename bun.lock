@@ -13,7 +13,7 @@
         "@opentelemetry/sdk-node": "0.218.0",
         "@opentelemetry/semantic-conventions": "1.41.1",
         "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
-        "codex-agent": "github:tacogips/codex-agent#9f9a78815f4de545cd9cf6723e88f31fe77b50a5",
+        "codex-agent": "github:tacogips/codex-agent#eea2171c937749a074f47aa967d88a5dcc22e023",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
         "graphql": "16.13.1",
         "graphql-yoga": "5.18.1",
@@ -48,7 +48,7 @@
         "@anthropic-ai/sdk": "0.78.0",
         "@cursor/sdk": "1.0.17",
         "claude-code-agent": "github:tacogips/claude-code-agent#2c3ecc17000d1b881fb05f7a27fc6399a57f1328",
-        "codex-agent": "github:tacogips/codex-agent#9f9a78815f4de545cd9cf6723e88f31fe77b50a5",
+        "codex-agent": "github:tacogips/codex-agent#eea2171c937749a074f47aa967d88a5dcc22e023",
         "cursor-cli-agent": "github:tacogips/cursor-cli-agent#64805ea106c98575916f6f69b84d0c9be3486e6f",
         "openai": "6.27.0",
         "rielflow-core": "workspace:*",
@@ -422,7 +422,7 @@
 
     "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#9f9a788", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./dist/bin.js" } }, "tacogips-codex-agent-9f9a788"],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#eea2171", { "dependencies": { "graphql": "16.13.1" }, "bin": { "codex-agent": "./dist/bin.js" } }, "tacogips-codex-agent-eea2171"],
 
     "color-convert": ["color-convert@2.0.1", "", { "dependencies": { "color-name": "~1.1.4" } }, "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ=="],
 
