@@ -8,6 +8,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { Database } from "bun:sqlite";
@@ -358,6 +359,92 @@ describe("runtime-db", () => {
         },
       }),
     ).toBe(path.join(root, "custom", "runtime.sqlite"));
+  });
+
+  test("serializes concurrent event runtime schema bootstrap across processes", async () => {
+    const root = await makeTempDir();
+    const dbPath = path.join(root, "shared-runtime.sqlite");
+    const workerCount = 8;
+    const script = `
+      import { withEventRuntimeDatabase } from "./packages/rielflow/src/workflow/runtime-db.ts";
+      const dbPath = process.argv[1];
+      const index = process.argv[2];
+      await withEventRuntimeDatabase(
+        { cwd: process.cwd(), env: { RIEL_RUNTIME_DB: dbPath } },
+        (db) => {
+          db.prepare(\`
+            INSERT INTO event_reply_dispatches (
+              idempotency_key, source_id, provider, workflow_id,
+              workflow_execution_id, node_id, node_exec_id, event_id,
+              conversation_id, status, request_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          \`).run(
+            \`concurrent-\${index}\`,
+            "source",
+            "test",
+            "workflow",
+            \`session-\${index}\`,
+            "node",
+            \`exec-\${index}\`,
+            \`event-\${index}\`,
+            "conversation",
+            "sent",
+            JSON.stringify({ index }),
+            "2026-06-07T00:00:00.000Z",
+            "2026-06-07T00:00:00.000Z",
+          );
+        },
+      );
+    `;
+
+    const children = Array.from({ length: workerCount }, (_, index) =>
+      spawn(
+        "bun",
+        ["--input-type=module", "-e", script, dbPath, String(index)],
+        {
+          cwd: process.cwd(),
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      ),
+    );
+
+    const results = await Promise.all(
+      children.map(
+        (child) =>
+          new Promise<{
+            readonly code: number | null;
+            readonly stderr: string;
+            readonly stdout: string;
+          }>((resolve) => {
+            let stdout = "";
+            let stderr = "";
+            child.stdout?.setEncoding("utf8");
+            child.stderr?.setEncoding("utf8");
+            child.stdout?.on("data", (chunk: string) => {
+              stdout += chunk;
+            });
+            child.stderr?.on("data", (chunk: string) => {
+              stderr += chunk;
+            });
+            child.on("close", (code) => {
+              resolve({ code, stderr, stdout });
+            });
+          }),
+      ),
+    );
+
+    const failures = results.filter((result) => result.code !== 0);
+    expect(failures).toEqual([]);
+
+    const db = new Database(dbPath);
+    try {
+      const row = db
+        .prepare("SELECT COUNT(*) AS count FROM event_reply_dispatches")
+        .get() as { readonly count: number };
+      expect(row.count).toBe(workerCount);
+    } finally {
+      db.close();
+    }
   });
 
   test("writes session and node execution index rows to sqlite", async () => {

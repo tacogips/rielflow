@@ -52,7 +52,7 @@ function rebuildTableWithJsonChecks(input: {
   }
   const tempTableName = `${input.tableName}_json_checks_new`;
   const columnsSql = input.columns.join(", ");
-  const rebuild = input.db.transaction(() => {
+  const rebuild = () => {
     input.db.exec(`DROP TABLE IF EXISTS ${tempTableName};`);
     input.db.exec(input.createSql.replace(input.tableName, tempTableName));
     input.db
@@ -66,8 +66,12 @@ function rebuildTableWithJsonChecks(input: {
       .run();
     input.db.exec(`DROP TABLE ${input.tableName};`);
     input.db.exec(`ALTER TABLE ${tempTableName} RENAME TO ${input.tableName};`);
-  });
-  rebuild();
+  };
+  if (input.db.inTransaction) {
+    rebuild();
+    return;
+  }
+  input.db.transaction(rebuild)();
 }
 
 function ensureBaseRuntimeIndexes(db: Database): void {

@@ -286,6 +286,7 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
 
 export type RuntimeDatabaseSchemaExtension = (db: Database) => void;
 const RUNTIME_SCHEMA_VERSION = 1;
+const RUNTIME_DB_BUSY_TIMEOUT_MS = 60_000;
 const ACTIVE_RUNTIME_TABLES = {
   workflowMessages: "workflow_messages",
   workflowMessageSequences: "workflow_message_sequences",
@@ -294,6 +295,34 @@ const ACTIVE_RUNTIME_TABLES = {
   nodeLogs: "node_logs",
   llmSessionMessages: "llm_session_messages",
 } as const;
+
+function configureRuntimeDatabase(db: Database): void {
+  db.exec(`
+    PRAGMA busy_timeout = ${RUNTIME_DB_BUSY_TIMEOUT_MS};
+    PRAGMA journal_mode = WAL;
+  `);
+}
+
+function runRuntimeSchemaBootstrap(
+  db: Database,
+  schemaExtensions: readonly RuntimeDatabaseSchemaExtension[],
+): void {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    ensureSchema(db);
+    for (const extendSchema of schemaExtensions) {
+      extendSchema(db);
+    }
+    db.exec("COMMIT");
+  } catch (error: unknown) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // Preserve the original schema bootstrap error.
+    }
+    throw error;
+  }
+}
 
 export async function withRuntimeDatabase<T>(
   options: LoadOptions,
@@ -304,10 +333,8 @@ export async function withRuntimeDatabase<T>(
   await mkdir(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
   try {
-    ensureSchema(db);
-    for (const extendSchema of schemaExtensions) {
-      extendSchema(db);
-    }
+    configureRuntimeDatabase(db);
+    runRuntimeSchemaBootstrap(db, schemaExtensions);
     return action(db);
   } finally {
     db.close();
@@ -637,7 +664,6 @@ export function toRuntimeSessionSummary(
 }
 export function ensureSchema(db: Database): void {
   db.exec(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS runtime_schema_metadata (
       metadata_id TEXT PRIMARY KEY CHECK (metadata_id = 'active'),
       schema_version INTEGER NOT NULL,
