@@ -13,6 +13,10 @@ import {
   resolveSupervisionMutableWorkflowDirectory,
   resolveSupervisionRunDirectory,
 } from "./paths";
+import {
+  normalizeMessageAttachmentPath,
+  resolveWorkflowMessageArtifactRef,
+} from "./message-attachment-paths";
 
 const tempDirs: string[] = [];
 
@@ -147,6 +151,94 @@ describe("runtime storage paths", () => {
     });
 
     expect(roots.workflowRoot).toBe(path.join(cwd, ".rielflow"));
+  });
+
+  test("normalizes attachment-root-relative message attachment paths under RIEL_ATTACHMENT_ROOT", async () => {
+    const cwd = await makeTempDir();
+    const normalized = normalizeMessageAttachmentPath(
+      {
+        workflowId: "demo-workflow",
+        workflowExecutionId: "wfexec-000001",
+        communicationId: "comm-000001",
+      },
+      "files/report.json",
+      {
+        cwd,
+        env: { RIEL_ATTACHMENT_ROOT: "message-files" },
+      },
+    );
+
+    expect(normalized).toEqual({
+      pathBase: "attachment-root",
+      relativePath:
+        "demo-workflow/wfexec-000001/messages/comm-000001/files/report.json",
+      absolutePath: path.join(
+        cwd,
+        "message-files",
+        "demo-workflow",
+        "wfexec-000001",
+        "messages",
+        "comm-000001",
+        "files",
+        "report.json",
+      ),
+    });
+  });
+
+  test("rejects path traversal in message attachment path components", async () => {
+    const cwd = await makeTempDir();
+
+    expect(() =>
+      normalizeMessageAttachmentPath(
+        {
+          workflowId: "demo-workflow",
+          workflowExecutionId: "wfexec-000001",
+          communicationId: "comm-000001",
+        },
+        "../escape.txt",
+        { cwd, env: {} },
+      ),
+    ).toThrow("must not contain traversal");
+    expect(() =>
+      normalizeMessageAttachmentPath(
+        {
+          workflowId: "demo-workflow",
+          workflowExecutionId: "wfexec/000001",
+          communicationId: "comm-000001",
+        },
+        "safe.txt",
+        { cwd, env: {} },
+      ),
+    ).toThrow("safe message attachment path segment");
+  });
+
+  test("resolves message artifact refs under the attachment root", async () => {
+    const cwd = await makeTempDir();
+    const attachmentRoot = path.join(cwd, "message-files");
+
+    expect(
+      resolveWorkflowMessageArtifactRef(
+        {
+          pathBase: "attachment-root",
+          path: "demo/wfexec-000001/messages/comm-000001/payload.json",
+        },
+        {
+          cwd,
+          env: { RIEL_ATTACHMENT_ROOT: attachmentRoot },
+        },
+      ),
+    ).toEqual({
+      pathBase: "attachment-root",
+      relativePath: "demo/wfexec-000001/messages/comm-000001/payload.json",
+      absolutePath: path.join(
+        attachmentRoot,
+        "demo",
+        "wfexec-000001",
+        "messages",
+        "comm-000001",
+        "payload.json",
+      ),
+    });
   });
 });
 

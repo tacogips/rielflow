@@ -45,6 +45,10 @@ impl-plans/
 
 | Plan                                               | Completed  | Design Reference                                                                                                                                                                            |
 | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sqlite-message-payload-attachment-snapshot-preservation` | 2026-06-08 | `design-sqlite-message-store#payload-attachment-snapshot-rules` |
+| `manager-control-idempotency-atomic-claim` | 2026-06-07 | `design-graphql-manager-control-plane#idempotency-contract`, `design-graphql-manager-control-plane#atomic-idempotency-claim-flow`, `notes#manager-authidempotency-contract` |
+| `sqlite-runtime-json-checks` | 2026-06-07 | `design-sqlite-message-store#runtime-json-validation-policy`, `architecture#runtime-storage-layout` |
+| `sqlite-message-store` | 2026-06-07 | `design-sqlite-message-store`, `command`, `design-node-mailbox` |
 | `inherited-cross-workflow-callee-validation` | 2026-06-05 | `architecture`, `command#workflow-validate-name`, `design-workflow-json#extends` |
 | `temporary-workflow-execution` | 2026-05-31 | `design-temporary-workflow-execution`, `command`, `architecture` |
 | `chat-source-restart-history` | 2026-05-29 | `design-matrix-chat-history`, `design-chat-sdk-chat-history`, `design-matrix-attachment-text` |

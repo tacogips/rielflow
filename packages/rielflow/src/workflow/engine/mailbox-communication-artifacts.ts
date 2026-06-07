@@ -1,10 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import {
-  atomicWriteJsonFile as writeJsonFile,
-  atomicWriteTextFile as writeRawTextFile,
-} from "../../shared/fs";
+import { atomicWriteTextFile as writeRawTextFile } from "../../shared/fs";
 import { isAdapterExecutionOutputEnvelope } from "../adapter";
 import {
   DEFAULT_SUPERVISER_WORKFLOW_ID,
@@ -14,8 +11,13 @@ import { buildMergedContinuationTimeline } from "../history-continuation";
 import { normalizeExternalMailboxBusinessPayload } from "../json-boundary";
 import type { PromptCompositionLatestOutput } from "../node-execution-mailbox";
 import { err, ok, type Result } from "../result";
-import { saveCommunicationEventToRuntimeDb } from "../runtime-db";
-import { persistDeliveredCommunicationArtifacts } from "../communication-artifact-persistence";
+import {
+  listWorkflowMessagesFromRuntimeDb,
+  markWorkflowMessagesConsumedInRuntimeDb,
+  saveCommunicationEventToRuntimeDb,
+  saveWorkflowMessageToRuntimeDb,
+  workflowMessageRecordToCommunication,
+} from "../runtime-db";
 import {
   buildOutputRefForExecution,
   type CommunicationRecord,
@@ -33,6 +35,7 @@ import type {
 } from "../types";
 import { asAgentNodePayload, resolveWorkflowManagerStepId } from "../types";
 import type {
+  UpstreamCommunicationConsumptionRef,
   UpstreamInput,
   UpstreamOutputRef,
 } from "./types-and-session-state";
@@ -40,17 +43,70 @@ import {
   WORKFLOW_EXTERNAL_INPUT_NODE_ID,
   WORKFLOW_EXTERNAL_OUTPUT_NODE_ID,
   initialDeliveryAttemptId,
+  nextCommunicationId,
   outputArtifactJsonText,
   readOutputPayloadArtifact,
 } from "./types-and-session-state";
-import { buildUpstreamOutputRefs } from "./fanout-dispatch";
 
-export function buildMergedUpstreamOutputRefs(
+async function buildLocalUpstreamOutputRefsFromRuntimeDb(
+  session: WorkflowSessionState,
+  nodeId: string,
+  options: LoadOptions,
+): Promise<Result<readonly UpstreamOutputRef[], string>> {
+  let sqliteMessages: readonly CommunicationRecord[];
+  try {
+    const rows = await listWorkflowMessagesFromRuntimeDb(
+      { workflowExecutionId: session.sessionId, toNodeId: nodeId },
+      options,
+    );
+    sqliteMessages = rows.map(workflowMessageRecordToCommunication);
+  } catch (error) {
+    return err(
+      `failed to load workflow messages for execution '${session.sessionId}': ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  return ok(
+    sqliteMessages
+      .filter((communication) => communication.status === "delivered")
+      .map((communication) => {
+        const payloadRef = communication.payloadRef;
+        if (payloadRef.kind === "manager-message") {
+          return undefined;
+        }
+        const execution = session.nodeExecutions.find(
+          (candidate) =>
+            candidate.nodeExecId === communication.sourceNodeExecId,
+        );
+        return {
+          fromNodeId: communication.fromNodeId,
+          transitionWhen: communication.transitionWhen,
+          status: execution?.status ?? communication.status,
+          communicationId: communication.communicationId,
+          ...payloadRef,
+        };
+      })
+      .filter((entry): entry is UpstreamOutputRef => entry !== undefined),
+  );
+}
+
+export async function buildMergedUpstreamOutputRefs(
   session: WorkflowSessionState,
   nodeId: string,
   continuationSnapshots: ReadonlyMap<string, WorkflowSessionState> | undefined,
-): Result<readonly UpstreamOutputRef[], string> {
-  const localRefs = buildUpstreamOutputRefs(session, nodeId);
+  options: LoadOptions = {},
+): Promise<Result<readonly UpstreamOutputRef[], string>> {
+  const localRefsResult = await buildLocalUpstreamOutputRefsFromRuntimeDb(
+    session,
+    nodeId,
+    options,
+  );
+  if (!localRefsResult.ok) {
+    return err(localRefsResult.error);
+  }
+  const localRefs = localRefsResult.value;
   if (
     continuationSnapshots === undefined ||
     session.historyImports === undefined ||
@@ -91,7 +147,23 @@ export function buildMergedUpstreamOutputRefs(
     if (snapshot.sessionId === session.sessionId) {
       continue;
     }
-    for (const communication of snapshot.communications) {
+    let snapshotCommunications: readonly CommunicationRecord[];
+    try {
+      const sqliteMessages = await listWorkflowMessagesFromRuntimeDb(
+        { workflowExecutionId: snapshot.sessionId },
+        options,
+      );
+      snapshotCommunications = sqliteMessages.map(
+        workflowMessageRecordToCommunication,
+      );
+    } catch (error) {
+      return err(
+        `failed to load continuation workflow messages for execution '${snapshot.sessionId}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    for (const communication of snapshotCommunications) {
       if (
         communication.status !== "delivered" ||
         communication.toNodeId !== nodeId ||
@@ -140,12 +212,14 @@ export async function buildUpstreamInputs(
   session: WorkflowSessionState,
   nodeId: string,
   continuationSnapshots: ReadonlyMap<string, WorkflowSessionState> | undefined,
+  options: LoadOptions = {},
 ): Promise<Result<readonly UpstreamInput[], string>> {
   const upstreamTargetNoun = workflow.steps !== undefined ? "step" : "node";
-  const refsResult = buildMergedUpstreamOutputRefs(
+  const refsResult = await buildMergedUpstreamOutputRefs(
     session,
     nodeId,
     continuationSnapshots,
+    options,
   );
   if (!refsResult.ok) {
     return err(refsResult.error);
@@ -275,7 +349,16 @@ export async function persistCommunicationArtifact(
   const { getWorkflowTelemetry, messagePayloadTelemetryAttributes } =
     await import("../../telemetry");
   const telemetry = getWorkflowTelemetry();
-  const persisted = await telemetry.startSpan(
+  const communicationId = nextCommunicationId(input.communicationCounter + 1);
+  const deliveryAttemptId = initialDeliveryAttemptId();
+  const artifactDir = path.join(
+    input.artifactWorkflowRoot,
+    "executions",
+    input.workflowExecutionId,
+    "communications",
+    communicationId,
+  );
+  await telemetry.startSpan(
     "rielflow.communication.deliver",
     {
       "workflow.id": input.workflowId,
@@ -291,28 +374,13 @@ export async function persistCommunicationArtifact(
         exportMessages: telemetry.config.exportMessages,
       }),
     },
-    async () =>
-      await persistDeliveredCommunicationArtifacts({
-        artifactWorkflowRoot: input.artifactWorkflowRoot,
-        workflowId: input.workflowId,
-        workflowExecutionId: input.workflowExecutionId,
-        communicationCounter: input.communicationCounter,
-        fromNodeId: input.fromNodeId,
-        toNodeId: input.toNodeId,
-        routingScope: input.routingScope,
-        sourceNodeExecId: input.sourceNodeExecId,
-        deliveryKind: input.deliveryKind,
-        payloadRef: input.payloadRef,
-        outputRaw: input.outputRaw,
-        deliveredByNodeId: input.deliveredByNodeId,
-        createdAt: input.createdAt,
-      }),
+    async () => undefined,
   );
 
   const communication: CommunicationRecord = {
     workflowId: input.workflowId,
     workflowExecutionId: input.workflowExecutionId,
-    communicationId: persisted.communicationId,
+    communicationId,
     fromNodeId: input.fromNodeId,
     toNodeId: input.toNodeId,
     routingScope: input.routingScope,
@@ -321,14 +389,22 @@ export async function persistCommunicationArtifact(
     deliveryKind: input.deliveryKind,
     transitionWhen: input.transitionWhen,
     status: "delivered",
-    activeDeliveryAttemptId: persisted.deliveryAttemptId,
-    deliveryAttemptIds: [persisted.deliveryAttemptId],
+    activeDeliveryAttemptId: deliveryAttemptId,
+    deliveryAttemptIds: [deliveryAttemptId],
     createdAt: input.createdAt,
     deliveredAt: input.createdAt,
-    artifactDir: persisted.artifactDir,
+    artifactDir,
   };
 
   if (input.runtimeLogOptions !== undefined) {
+    await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: input.outputRaw,
+        updatedAt: input.createdAt,
+      },
+      input.runtimeLogOptions,
+    );
     try {
       await saveCommunicationEventToRuntimeDb(
         communication,
@@ -438,79 +514,70 @@ export async function persistExternalMailboxOutputCommunication(input: {
 }
 export async function markCommunicationsConsumed(
   session: WorkflowSessionState,
-  communicationIds: readonly string[],
+  communicationRefs: readonly UpstreamCommunicationConsumptionRef[],
   consumedByNodeExecId: string,
   consumedAt: string,
+  runtimeLogOptions?: LoadOptions,
 ): Promise<Result<readonly CommunicationRecord[], string>> {
-  if (communicationIds.length === 0) {
+  if (communicationRefs.length === 0) {
     return ok(session.communications);
   }
 
-  const consumedSet = new Set(communicationIds);
-  const updates: CommunicationRecord[] = [];
-  for (const communication of session.communications) {
-    if (!consumedSet.has(communication.communicationId)) {
-      updates.push(communication);
-      continue;
-    }
+  const localConsumedSet = new Set(
+    communicationRefs
+      .filter((ref) => ref.workflowExecutionId === session.sessionId)
+      .map((ref) => ref.communicationId),
+  );
+  const updates = session.communications.map((communication) =>
+    localConsumedSet.has(communication.communicationId)
+      ? {
+          ...communication,
+          status: "consumed" as const,
+          consumedByNodeExecId,
+          consumedAt,
+        }
+      : communication,
+  );
 
-    const activeAttemptId =
-      communication.activeDeliveryAttemptId ??
-      communication.deliveryAttemptIds[
-        communication.deliveryAttemptIds.length - 1
-      ] ??
-      initialDeliveryAttemptId();
-    const metaPath = path.join(communication.artifactDir, "meta.json");
-    const receiptPath = path.join(
-      communication.artifactDir,
-      "attempts",
-      activeAttemptId,
-      "receipt.json",
-    );
-
-    let parsedMeta: Record<string, unknown>;
-    let parsedReceipt: Record<string, unknown>;
+  if (runtimeLogOptions !== undefined) {
     try {
-      parsedMeta = JSON.parse(await readFile(metaPath, "utf8")) as Record<
+      const communicationIdsByWorkflowExecutionId = new Map<
         string,
-        unknown
-      >;
-      parsedReceipt = JSON.parse(await readFile(receiptPath, "utf8")) as Record<
-        string,
-        unknown
-      >;
+        Set<string>
+      >();
+      for (const ref of communicationRefs.filter(
+        (entry) => entry.workflowExecutionId === session.sessionId,
+      )) {
+        let communicationIds = communicationIdsByWorkflowExecutionId.get(
+          ref.workflowExecutionId,
+        );
+        if (communicationIds === undefined) {
+          communicationIds = new Set<string>();
+          communicationIdsByWorkflowExecutionId.set(
+            ref.workflowExecutionId,
+            communicationIds,
+          );
+        }
+        communicationIds.add(ref.communicationId);
+      }
+      for (const [
+        workflowExecutionId,
+        communicationIds,
+      ] of communicationIdsByWorkflowExecutionId) {
+        await markWorkflowMessagesConsumedInRuntimeDb(
+          {
+            workflowExecutionId,
+            communicationIds: [...communicationIds],
+            consumedByNodeExecId,
+            consumedAt,
+          },
+          runtimeLogOptions,
+        );
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "unknown error";
-      return err(
-        `failed to load mailbox delivery metadata for '${communication.communicationId}': ${message}`,
-      );
+      return err(`failed to persist sqlite message consumption: ${message}`);
     }
-
-    try {
-      await writeJsonFile(receiptPath, {
-        ...parsedReceipt,
-        consumedByNodeExecId,
-        consumedAt,
-      });
-      await writeJsonFile(metaPath, {
-        ...parsedMeta,
-        status: "consumed",
-        consumedByNodeExecId,
-        consumedAt,
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      return err(
-        `failed to persist mailbox consumption for '${communication.communicationId}': ${message}`,
-      );
-    }
-
-    updates.push({
-      ...communication,
-      status: "consumed",
-      consumedByNodeExecId,
-      consumedAt,
-    });
   }
 
   return ok(updates);

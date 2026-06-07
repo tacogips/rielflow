@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path, { dirname, resolve } from "node:path";
 import {
   AdapterExecutionError,
   type AdapterExecutionContext,
@@ -369,30 +372,59 @@ async function runClaudePrintCommand(input: {
   readonly env?: Readonly<Record<string, string>>;
   readonly signal: AbortSignal;
 }): Promise<{ readonly stdout: string; readonly stderr: string }> {
+  const captureDir = await mkdtemp(path.join(os.tmpdir(), "rielflow-claude-"));
+  const captureId = randomUUID();
+  const stdinPath = path.join(captureDir, `${captureId}-stdin.txt`);
+  const stdoutPath = path.join(captureDir, `${captureId}-stdout.log`);
+  const stderrPath = path.join(captureDir, `${captureId}-stderr.log`);
+  await writeFile(stdinPath, input.prompt, "utf8");
+  const readCapturedLogs = async (): Promise<{
+    readonly stdout: string;
+    readonly stderr: string;
+  }> => {
+    const [stdout, stderr] = await Promise.all([
+      readFile(stdoutPath, "utf8").catch(() => ""),
+      readFile(stderrPath, "utf8").catch(() => ""),
+    ]);
+    await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+    return { stdout, stderr };
+  };
   return await new Promise((resolve, reject) => {
     if (input.signal.aborted) {
       reject(new AdapterExecutionError("timeout", "claude adapter aborted"));
       return;
     }
 
-    const child = spawn("claude", [...input.args], {
-      cwd: input.cwd,
-      env:
-        input.env === undefined
-          ? process.env
-          : { ...process.env, ...input.env },
-      detached: true,
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = spawn(
+      "sh",
+      [
+        "-c",
+        'exec "$@" <"$RIEL_CLAUDE_STDIN" >"$RIEL_CLAUDE_STDOUT" 2>"$RIEL_CLAUDE_STDERR"',
+        "rielflow-claude",
+        "claude",
+        ...input.args,
+      ],
+      {
+        cwd: input.cwd,
+        env: {
+          ...(input.env === undefined
+            ? process.env
+            : { ...process.env, ...input.env }),
+          RIEL_CLAUDE_STDIN: stdinPath,
+          RIEL_CLAUDE_STDOUT: stdoutPath,
+          RIEL_CLAUDE_STDERR: stderrPath,
+        },
+        detached: true,
+        shell: false,
+        stdio: ["ignore", "ignore", "ignore"],
+      },
+    );
 
-    let stdout = "";
-    let stderr = "";
     let settled = false;
     let abortRequested = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const settle = (callback: () => void): void => {
+    const settle = (callback: () => void | Promise<void>): void => {
       if (settled) {
         return;
       }
@@ -401,7 +433,7 @@ async function runClaudePrintCommand(input: {
       if (killTimer !== undefined) {
         clearTimeout(killTimer);
       }
-      callback();
+      void callback();
     };
 
     const onAbort = (): void => {
@@ -416,22 +448,15 @@ async function runClaudePrintCommand(input: {
     if (input.signal.aborted) {
       onAbort();
     }
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.stdin.end(input.prompt);
     child.on("error", (error: unknown) => {
-      settle(() => {
+      settle(async () => {
+        await readCapturedLogs();
         reject(error);
       });
     });
     child.on("close", (code, signal) => {
-      settle(() => {
+      settle(async () => {
+        const logs = await readCapturedLogs();
         if (abortRequested) {
           reject(
             new AdapterExecutionError("timeout", "claude adapter aborted"),
@@ -439,14 +464,14 @@ async function runClaudePrintCommand(input: {
           return;
         }
         if (code === 0) {
-          resolve({ stdout, stderr });
+          resolve(logs);
           return;
         }
         const reason =
           signal === null
             ? `exit code ${String(code ?? "unknown")}`
             : `signal ${signal}`;
-        const detail = stderr.trim() || stdout.trim() || reason;
+        const detail = logs.stderr.trim() || logs.stdout.trim() || reason;
         reject(
           new AdapterExecutionError(
             "provider_error",

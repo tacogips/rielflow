@@ -1,16 +1,62 @@
-import { execFile } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { lstat, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { WorkflowSelfImproveGitCommitResult } from "./types";
 
-const execFileAsync = promisify(execFile);
-
 async function git(cwd: string, args: readonly string[]): Promise<string> {
-  const result = await execFileAsync("git", ["-C", cwd, ...args], {
-    maxBuffer: 1024 * 1024,
+  const captureDir = await mkdtemp(
+    path.join(os.tmpdir(), "rielflow-self-improve-git-"),
+  );
+  const captureId = randomUUID();
+  const stdoutPath = path.join(captureDir, `${captureId}-stdout.log`);
+  const stderrPath = path.join(captureDir, `${captureId}-stderr.log`);
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(
+      "sh",
+      [
+        "-c",
+        'exec "$@" >"$RIEL_GIT_STDOUT" 2>"$RIEL_GIT_STDERR"',
+        "rielflow-git",
+        "git",
+        "-C",
+        cwd,
+        ...args,
+      ],
+      {
+        stdio: ["ignore", "ignore", "ignore"],
+        env: {
+          ...process.env,
+          RIEL_GIT_STDOUT: stdoutPath,
+          RIEL_GIT_STDERR: stderrPath,
+        },
+      },
+    );
+
+    child.on("error", (error: unknown) => {
+      void rm(captureDir, { recursive: true, force: true });
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      void (async () => {
+        const [stdout, stderr] = await Promise.all([
+          readFile(stdoutPath, "utf8").catch(() => ""),
+          readFile(stderrPath, "utf8").catch(() => ""),
+        ]);
+        await rm(captureDir, { recursive: true, force: true }).catch(() => {});
+        if (exitCode === 0) {
+          resolve(stdout.trim());
+          return;
+        }
+        reject(
+          new Error(
+            `git ${args.join(" ")} failed with ${String(exitCode)}: ${stderr.trim()}`,
+          ),
+        );
+      })();
+    });
   });
-  return result.stdout.trim();
 }
 
 async function pathIsDirectory(filePath: string): Promise<boolean> {

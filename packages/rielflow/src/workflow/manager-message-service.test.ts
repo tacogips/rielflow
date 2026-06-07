@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
+import type { NodeAdapter } from "./adapter";
 import type { MockNodeScenario } from "./scenario-adapter";
 import { createCommunicationService } from "./communication-service";
 import { createWorkflowTemplate } from "./create";
@@ -11,6 +12,7 @@ import {
   hashManagerAuthToken,
 } from "./manager-session-store";
 import { createManagerMessageService } from "./manager-message-service";
+import { loadWorkflowMessageFromRuntimeDb } from "./runtime-db";
 import { createSessionState, type WorkflowSessionState } from "./session";
 import { loadSession, saveSession } from "./session-store";
 
@@ -375,6 +377,111 @@ describe("manager-message-service", () => {
     );
   });
 
+  test("concurrent same-key manager messages reuse one durable side effect", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T01:35:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T01:35:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+
+    const [first, second] = await Promise.all([
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Hold this idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Hold this idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+    ]);
+
+    expect(second).toEqual(first);
+    const messages = await managerStore.listMessages("mgrsess-000001");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.managerMessageId).toBe(first.managerMessageId);
+
+    await expect(
+      service.sendManagerMessage(
+        {
+          workflowId: "demo",
+          workflowExecutionId: session.sessionId,
+          managerSessionId: "mgrsess-000001",
+          message: "Changed idempotent note.",
+          idempotencyKey: "idem-concurrent-note",
+        },
+        options,
+      ),
+    ).rejects.toThrow("idempotency conflict");
+    expect(await managerStore.listMessages("mgrsess-000001")).toHaveLength(1);
+  });
+
+  test("failed same-key manager messages reuse the stored failure without stale pending timeout", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T01:40:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T01:40:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+
+    const input = {
+      workflowId: "demo",
+      workflowExecutionId: session.sessionId,
+      managerSessionId: "mgrsess-000001",
+      message: "   ",
+      idempotencyKey: "idem-failed-note",
+    } as const;
+
+    await expect(service.sendManagerMessage(input, options)).rejects.toThrow(
+      "manager message must contain a message, attachments, or actions",
+    );
+    await expect(service.sendManagerMessage(input, options)).rejects.toThrow(
+      "manager message must contain a message, attachments, or actions",
+    );
+    expect(await managerStore.listMessages("mgrsess-000001")).toHaveLength(0);
+    await expect(
+      service.sendManagerMessage(
+        {
+          ...input,
+          message: "Changed after failed claim.",
+        },
+        options,
+      ),
+    ).rejects.toThrow("idempotency conflict");
+
+    const idempotent = await managerStore.loadIdempotentResult({
+      mutationName: "sendManagerMessage",
+      managerSessionId: "mgrsess-000001",
+      idempotencyKey: "idem-failed-note",
+    });
+    expect(idempotent).toMatchObject({
+      status: "failed",
+      normalizedRequestHash: expect.stringMatching(/^sha256:/),
+    });
+  });
+
   test("rejects attachments outside the current workflow execution namespace", async () => {
     const root = await makeTempDir();
     const { options, session } = await createCompletedWorkflowFixture(root);
@@ -464,19 +571,16 @@ describe("manager-message-service", () => {
     expect(result.createdCommunicationIds).toHaveLength(1);
     expect(result.parsedIntent[0]?.kind).toBe("replay-communication");
 
-    const loaded = await loadSession(session.sessionId, options);
-    expect(loaded.ok).toBe(true);
-    if (!loaded.ok) {
-      return;
-    }
-    expect(
-      loaded.value.communications.some(
-        (entry) =>
-          entry.communicationId === result.createdCommunicationIds[0] &&
-          entry.replayedFromCommunicationId ===
-            sourceCommunication.communicationId,
-      ),
-    ).toBe(true);
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: result.createdCommunicationIds[0] ?? "",
+      },
+      options,
+    );
+    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+      sourceCommunication.communicationId,
+    );
 
     const replayed = await service.sendManagerMessage(
       {
@@ -496,6 +600,163 @@ describe("manager-message-service", () => {
     );
 
     expect(replayed).toEqual(result);
+  });
+
+  test("replays a sqlite-backed communication from a manager message when session communications are missing", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T02:30:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T02:30:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+    const sourceCommunication = session.communications.at(-1);
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const stripped = await saveSession(
+      {
+        ...session,
+        communications: session.communications.filter(
+          (entry) =>
+            entry.communicationId !== sourceCommunication.communicationId,
+        ),
+      },
+      options,
+    );
+    expect(stripped.ok).toBe(true);
+
+    const result = await service.sendManagerMessage(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        managerSessionId: "mgrsess-000001",
+        message: "Replay the sqlite-backed delivery.",
+        actions: [
+          {
+            type: "replay-communication",
+            communicationId: sourceCommunication.communicationId,
+            reason: "session row removed",
+          },
+        ],
+        idempotencyKey: "idem-replay-sqlite-backed-delivery",
+      },
+      options,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.createdCommunicationIds).toHaveLength(1);
+    const replayedRecord = await loadWorkflowMessageFromRuntimeDb(
+      {
+        workflowExecutionId: session.sessionId,
+        communicationId: result.createdCommunicationIds[0] ?? "",
+      },
+      options,
+    );
+    expect(replayedRecord?.replayedFromCommunicationId).toBe(
+      sourceCommunication.communicationId,
+    );
+  });
+
+  test("replay-communication with retry-step makes the replayed payload available to the retried node", async () => {
+    const root = await makeTempDir();
+    const { options, session } = await createCompletedWorkflowFixture(root);
+    const managerStore = await createManagerSession(root, session.sessionId);
+    const service = createManagerMessageService({
+      now: () => "2026-03-15T03:00:00.000Z",
+      managerSessionStore: managerStore,
+      communicationService: createCommunicationService({
+        now: () => "2026-03-15T03:00:00.000Z",
+        idempotencyStore: managerStore,
+      }),
+    });
+    const sourceCommunication = session.communications.find(
+      (entry) => entry.toNodeId === "main-worker",
+    );
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+
+    const result = await service.sendManagerMessage(
+      {
+        workflowId: "demo",
+        workflowExecutionId: session.sessionId,
+        managerSessionId: "mgrsess-000001",
+        message: "Replay the manager handoff and retry the worker.",
+        actions: [
+          {
+            type: "replay-communication",
+            communicationId: sourceCommunication.communicationId,
+            reason: "retry with replayed input",
+          },
+          { type: "retry-step", stepId: "main-worker" },
+        ],
+        idempotencyKey: "idem-replay-then-retry-worker",
+      },
+      options,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.createdCommunicationIds).toHaveLength(1);
+    expect(result.queuedNodeIds).toEqual(["main-worker"]);
+    const replayedCommunicationId = result.createdCommunicationIds[0];
+    expect(replayedCommunicationId).toBeDefined();
+    if (replayedCommunicationId === undefined) {
+      return;
+    }
+    const loadedAfterMessage = await loadSession(session.sessionId, options);
+    expect(loadedAfterMessage.ok).toBe(true);
+    if (!loadedAfterMessage.ok) {
+      return;
+    }
+    expect(
+      loadedAfterMessage.value.communications.find(
+        (entry) => entry.communicationId === replayedCommunicationId,
+      ),
+    ).toMatchObject({
+      communicationId: replayedCommunicationId,
+      toNodeId: "main-worker",
+      status: "delivered",
+    });
+
+    const capturedUpstreamCommunicationIds: string[][] = [];
+    const adapter: NodeAdapter = {
+      async execute(input) {
+        if (input.nodeId === "main-worker") {
+          capturedUpstreamCommunicationIds.push([
+            ...input.upstreamCommunicationIds,
+          ]);
+        }
+        return {
+          provider: "test-adapter",
+          model: input.node.model,
+          promptText: input.promptText,
+          completionPassed: true,
+          when: { always: true },
+          payload: { nodeId: input.nodeId },
+        };
+      },
+    };
+
+    const rerun = await runWorkflow(
+      "demo",
+      {
+        ...options,
+        resumeSessionId: session.sessionId,
+      },
+      adapter,
+    );
+
+    expect(rerun.ok).toBe(true);
+    expect(capturedUpstreamCommunicationIds[0]).toEqual([
+      replayedCommunicationId,
+    ]);
   });
 
   test("applies optional-node execute/skip actions through manager messages", async () => {

@@ -450,6 +450,8 @@ may generate a file URL or locally patched formula for smoke testing.
 | `RIEL_SERVE_HOST`              | No              | `127.0.0.1`                                     | Default bind address for `serve`                                                                                                                              |
 | `RIEL_SERVE_PORT`              | No              | `43173`                                         | Default listen port for `serve`                                                                                                                               |
 | `RIEL_ARTIFACT_DIR`            | No              | owning scope artifacts root or user artifacts   | Canonical root data directory override: sessions, `workflow/`, `files/`, `rielflow.db`                                                                         |
+| `RIEL_RUNTIME_DB`              | No              | resolved runtime data root + `/rielflow.db`     | Overrides the SQLite runtime database path used for sessions, inspection indexes, and persisted workflow message records                                      |
+| `RIEL_ATTACHMENT_ROOT`         | No              | resolved runtime data root + `/files`           | Overrides the root used for message file and binary handoff artifacts; SQLite stores relative path references to files under this root                        |
 | `RIEL_GRAPHQL_ENDPOINT`        | No              | local serve endpoint                            | Default GraphQL endpoint for CLI manager/control-plane commands                                                                                               |
 | `RIEL_MANAGER_AUTH_TOKEN`      | No              | none                                            | Manager-session auth token for `rielflow graphql` and GraphQL control-plane mutations                                                                          |
 | `RIEL_MANAGER_SESSION_ID`      | No              | none                                            | Ambient manager session id forwarded by `rielflow graphql` to `/graphql` for manager-scoped requests                                                           |
@@ -600,6 +602,8 @@ Runtime-root co-location rule:
 
 1. when `--artifact-root` and/or `--session-store` are supplied, `rielflow` infers `rootDataDir` from those explicit roots when they provide an unambiguous parent directory
 2. that inferred root keeps `rielflow.db` and sibling default roots aligned with the explicit storage tree instead of an unrelated ambient `RIEL_ARTIFACT_DIR`
+3. `RIEL_RUNTIME_DB` bypasses co-location inference for SQLite only; artifact,
+   session, and attachment roots still resolve through their own rules
 
 Session store root resolution order:
 
@@ -608,6 +612,22 @@ Session store root resolution order:
 3. `RIEL_ARTIFACT_DIR/sessions` when `RIEL_ARTIFACT_DIR` is set
 4. owning scope default: `<scope-root>/artifacts/sessions`
 5. non-scoped default: `<user-root>/artifacts/sessions`
+
+Message file and binary attachment root resolution order:
+
+1. `RIEL_ATTACHMENT_ROOT`
+2. `RIEL_ARTIFACT_DIR/files` when `RIEL_ARTIFACT_DIR` is set
+3. owning scope default: `<scope-root>/artifacts/files`
+4. non-scoped default: `<user-root>/artifacts/files`
+
+SQLite runtime database resolution order:
+
+1. `RIEL_RUNTIME_DB`
+2. inferred `rootDataDir/rielflow.db` from explicit storage roots when
+   available
+3. `RIEL_ARTIFACT_DIR/rielflow.db` when `RIEL_ARTIFACT_DIR` is set
+4. owning scope default: `<scope-root>/artifacts/rielflow.db`
+5. non-scoped default: `<user-root>/artifacts/rielflow.db`
 
 Log root resolution order:
 

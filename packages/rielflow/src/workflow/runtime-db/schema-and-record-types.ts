@@ -5,6 +5,21 @@ import type { AdapterLlmSessionMessage } from "../adapter";
 import { resolveRootDataDir } from "../paths";
 import type { NodeExecutionRecord, SessionStatus } from "../session";
 import type { LoadOptions } from "../types";
+import {
+  ensureBaseRuntimeJsonConstraints,
+  ensureEventRuntimeJsonConstraints,
+  nullableJsonTextColumn,
+  requiredJsonTextColumn,
+} from "./json-schema-constraints";
+import type { RuntimeEventReplyDispatchStatus } from "./message-types";
+export type {
+  RuntimeEventReplyDispatchStatus,
+  RuntimeWorkflowMessageRecord,
+  WorkflowMessageArtifactRef,
+  WorkflowMessageArtifactPathBase,
+  WorkflowMessageDeliveryKind,
+  WorkflowMessageStatus,
+} from "./message-types";
 
 export type RuntimeNodeLogLevel = "info" | "warning" | "error";
 export const PROCESS_LOG_MESSAGE_TEXT_LIMIT = 500;
@@ -134,12 +149,6 @@ export interface RuntimeEventReceiptSaveInput {
   readonly receivedAt: string;
   readonly updatedAt: string;
 }
-export type RuntimeEventReplyDispatchStatus =
-  | "dispatching"
-  | "sent"
-  | "queued"
-  | "failed"
-  | "no_delivery_target";
 export interface RuntimeEventReplyDispatchRecord {
   readonly idempotencyKey: string;
   readonly sourceId: string;
@@ -253,10 +262,67 @@ export function resolveRuntimeDbPath(options: LoadOptions): string {
   if (typeof dbPath === "string" && dbPath.length > 0) {
     return path.isAbsolute(dbPath) ? dbPath : path.resolve(cwd, dbPath);
   }
+  if (options.rootDataDir === undefined) {
+    const explicitStorageRoot =
+      options.sessionStoreRoot !== undefined
+        ? path.dirname(
+            path.isAbsolute(options.sessionStoreRoot)
+              ? options.sessionStoreRoot
+              : path.resolve(cwd, options.sessionStoreRoot),
+          )
+        : options.artifactRoot === undefined
+          ? undefined
+          : path.dirname(
+              path.isAbsolute(options.artifactRoot)
+                ? options.artifactRoot
+                : path.resolve(cwd, options.artifactRoot),
+            );
+    if (explicitStorageRoot !== undefined) {
+      return path.join(explicitStorageRoot, "rielflow.db");
+    }
+  }
   return path.join(resolveRootDataDir(options), "rielflow.db");
 }
 
 export type RuntimeDatabaseSchemaExtension = (db: Database) => void;
+const RUNTIME_SCHEMA_VERSION = 1;
+const RUNTIME_DB_BUSY_TIMEOUT_MS = 60_000;
+const ACTIVE_RUNTIME_TABLES = {
+  workflowMessages: "workflow_messages",
+  workflowMessageSequences: "workflow_message_sequences",
+  sessions: "sessions",
+  nodeExecutions: "node_executions",
+  nodeLogs: "node_logs",
+  llmSessionMessages: "llm_session_messages",
+} as const;
+
+function configureRuntimeDatabase(db: Database): void {
+  db.exec(`
+    PRAGMA busy_timeout = ${RUNTIME_DB_BUSY_TIMEOUT_MS};
+    PRAGMA journal_mode = WAL;
+  `);
+}
+
+function runRuntimeSchemaBootstrap(
+  db: Database,
+  schemaExtensions: readonly RuntimeDatabaseSchemaExtension[],
+): void {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    ensureSchema(db);
+    for (const extendSchema of schemaExtensions) {
+      extendSchema(db);
+    }
+    db.exec("COMMIT");
+  } catch (error: unknown) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // Preserve the original schema bootstrap error.
+    }
+    throw error;
+  }
+}
 
 export async function withRuntimeDatabase<T>(
   options: LoadOptions,
@@ -267,10 +333,8 @@ export async function withRuntimeDatabase<T>(
   await mkdir(path.dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
   try {
-    ensureSchema(db);
-    for (const extendSchema of schemaExtensions) {
-      extendSchema(db);
-    }
+    configureRuntimeDatabase(db);
+    runRuntimeSchemaBootstrap(db, schemaExtensions);
     return action(db);
   } finally {
     db.close();
@@ -314,8 +378,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       status TEXT NOT NULL,
       dispatch_id TEXT,
       provider_message_id TEXT,
-      request_json TEXT NOT NULL,
-      response_json TEXT,
+      ${requiredJsonTextColumn("request_json")},
+      ${nullableJsonTextColumn("response_json")},
       error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -336,8 +400,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       model TEXT,
       turn_id TEXT,
       payload_hash TEXT NOT NULL,
-      payload_ref_json TEXT,
-      response_json TEXT,
+      ${nullableJsonTextColumn("payload_ref_json")},
+      ${nullableJsonTextColumn("response_json")},
       status TEXT NOT NULL,
       error TEXT,
       created_at TEXT NOT NULL,
@@ -375,9 +439,9 @@ export function ensureEventRuntimeSchema(db: Database): void {
       binding_id TEXT NOT NULL,
       correlation_key TEXT NOT NULL,
       action TEXT NOT NULL,
-      args_json TEXT,
+      ${nullableJsonTextColumn("args_json")},
       receipt_id TEXT NOT NULL,
-      result_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("result_json")},
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_event_supervised_runs_correlation
@@ -392,14 +456,14 @@ export function ensureEventRuntimeSchema(db: Database): void {
       binding_id TEXT NOT NULL,
       source_receipt_id TEXT NOT NULL,
       workflow_name TEXT NOT NULL,
-      workflow_source_json TEXT,
+      ${nullableJsonTextColumn("workflow_source_json")},
       kind TEXT NOT NULL,
       timezone TEXT NOT NULL,
       due_at TEXT,
       cron TEXT,
       next_due_at TEXT NOT NULL,
       status TEXT NOT NULL,
-      workflow_input_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("workflow_input_json")},
       conversation_id TEXT,
       thread_id TEXT,
       actor_id TEXT,
@@ -426,7 +490,7 @@ export function ensureEventRuntimeSchema(db: Database): void {
       correlation_key TEXT NOT NULL,
       conversation_revision INTEGER NOT NULL,
       selected_managed_run_id TEXT,
-      selected_managed_run_ids_by_workflow_key_json TEXT,
+      ${nullableJsonTextColumn("selected_managed_run_ids_by_workflow_key_json")},
       status TEXT NOT NULL,
       artifact_dir TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -451,8 +515,8 @@ export function ensureEventRuntimeSchema(db: Database): void {
       profile_revision TEXT NOT NULL,
       conversation_revision INTEGER NOT NULL,
       status TEXT NOT NULL,
-      proposal_json TEXT NOT NULL,
-      result_summary_json TEXT,
+      ${requiredJsonTextColumn("proposal_json")},
+      ${nullableJsonTextColumn("result_summary_json")},
       receipt_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -516,8 +580,11 @@ export function ensureEventRuntimeSchema(db: Database): void {
     supervisorCommandColumns.map((row) => row.name),
   );
   if (!supervisorCommandColumnSet.has("args_json")) {
-    db.exec("ALTER TABLE event_supervisor_commands ADD COLUMN args_json TEXT");
+    db.exec(
+      `ALTER TABLE event_supervisor_commands ADD COLUMN ${nullableJsonTextColumn("args_json")}`,
+    );
   }
+  ensureEventRuntimeJsonConstraints(db);
 }
 
 export const eventRuntimeSchemaExtensions = [ensureEventRuntimeSchema] as const;
@@ -597,7 +664,14 @@ export function toRuntimeSessionSummary(
 }
 export function ensureSchema(db: Database): void {
   db.exec(`
-    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS runtime_schema_metadata (
+      metadata_id TEXT PRIMARY KEY CHECK (metadata_id = 'active'),
+      schema_version INTEGER NOT NULL,
+      active_tables_json TEXT NOT NULL CHECK (json_valid(active_tables_json)),
+      migration_metadata_json TEXT CHECK (migration_metadata_json IS NULL OR json_valid(migration_metadata_json)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       session_id TEXT PRIMARY KEY,
       workflow_name TEXT NOT NULL,
@@ -608,7 +682,7 @@ export function ensureSchema(db: Database): void {
       current_node_id TEXT,
       current_step_id TEXT,
       node_execution_counter INTEGER NOT NULL,
-      queue_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("queue_json")},
       last_error TEXT,
       updated_at TEXT NOT NULL
     );
@@ -625,7 +699,7 @@ export function ensureSchema(db: Database): void {
       ended_at TEXT NOT NULL,
       attempt INTEGER,
       output_attempt_count INTEGER,
-      output_validation_errors_json TEXT,
+      ${nullableJsonTextColumn("output_validation_errors_json")},
       prompt_variant TEXT,
       timeout_ms INTEGER,
       backend_session_mode TEXT,
@@ -634,8 +708,8 @@ export function ensureSchema(db: Database): void {
       execution_ordinal INTEGER,
       input_hash TEXT NOT NULL,
       output_hash TEXT NOT NULL,
-      input_json TEXT NOT NULL,
-      output_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("input_json")},
+      ${requiredJsonTextColumn("output_json")},
       created_at TEXT NOT NULL,
       PRIMARY KEY (session_id, node_exec_id)
     );
@@ -646,7 +720,7 @@ export function ensureSchema(db: Database): void {
       node_id TEXT,
       level TEXT NOT NULL,
       message TEXT NOT NULL,
-      payload_json TEXT,
+      ${nullableJsonTextColumn("payload_json")},
       at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS llm_session_messages (
@@ -661,14 +735,67 @@ export function ensureSchema(db: Database): void {
       role TEXT,
       event_type TEXT NOT NULL,
       content_text TEXT,
-      raw_message_json TEXT,
+      ${nullableJsonTextColumn("raw_message_json")},
       at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS workflow_messages (
+      workflow_id TEXT NOT NULL,
+      workflow_execution_id TEXT NOT NULL,
+      communication_id TEXT NOT NULL,
+      from_node_id TEXT NOT NULL,
+      to_node_id TEXT NOT NULL,
+      routing_scope TEXT NOT NULL,
+      delivery_kind TEXT NOT NULL,
+      transition_when TEXT NOT NULL,
+      source_node_exec_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      active_delivery_attempt_id TEXT,
+      ${requiredJsonTextColumn("delivery_attempt_ids_json")},
+      ${requiredJsonTextColumn("payload_ref_json")},
+      ${nullableJsonTextColumn("payload_json")},
+      ${nullableJsonTextColumn("artifact_refs_json")},
+      artifact_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      delivered_at TEXT,
+      consumed_by_node_exec_id TEXT,
+      consumed_at TEXT,
+      failure_reason TEXT,
+      superseded_by_communication_id TEXT,
+      superseded_at TEXT,
+      replayed_from_communication_id TEXT,
+      manager_message_id TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (workflow_execution_id, communication_id)
+    );
+    CREATE TABLE IF NOT EXISTS workflow_message_sequences (
+      workflow_execution_id TEXT PRIMARY KEY,
+      last_counter INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_workflow_name ON sessions (workflow_name);
     CREATE INDEX IF NOT EXISTS idx_node_exec_session ON node_executions (session_id, node_id);
     CREATE INDEX IF NOT EXISTS idx_node_logs_session ON node_logs (session_id, at);
     CREATE INDEX IF NOT EXISTS idx_llm_session_messages_session ON llm_session_messages (session_id, node_exec_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created_order ON workflow_messages (workflow_execution_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound_created ON workflow_messages (workflow_execution_id, to_node_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound_created_order ON workflow_messages (workflow_execution_id, from_node_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
   `);
+  db.query(
+    `
+        INSERT INTO runtime_schema_metadata (
+          metadata_id, schema_version, active_tables_json,
+          migration_metadata_json, created_at, updated_at
+        )
+        VALUES ('active', ?, ?, NULL, datetime('now'), datetime('now'))
+        ON CONFLICT(metadata_id) DO UPDATE SET
+          schema_version = excluded.schema_version,
+          active_tables_json = excluded.active_tables_json,
+          updated_at = excluded.updated_at
+      `,
+  ).run(RUNTIME_SCHEMA_VERSION, JSON.stringify(ACTIVE_RUNTIME_TABLES));
 
   const nodeExecutionColumns = db
     .query("PRAGMA table_info(node_executions)")
@@ -683,7 +810,7 @@ export function ensureSchema(db: Database): void {
   }
   if (!existingNodeExecutionColumns.has("output_validation_errors_json")) {
     db.exec(
-      "ALTER TABLE node_executions ADD COLUMN output_validation_errors_json TEXT",
+      `ALTER TABLE node_executions ADD COLUMN ${nullableJsonTextColumn("output_validation_errors_json")}`,
     );
   }
   if (!existingNodeExecutionColumns.has("backend_session_mode")) {
@@ -692,6 +819,95 @@ export function ensureSchema(db: Database): void {
   if (!existingNodeExecutionColumns.has("backend_session_id")) {
     db.exec("ALTER TABLE node_executions ADD COLUMN backend_session_id TEXT");
   }
+  const workflowMessageColumns = db
+    .query("PRAGMA table_info(workflow_messages)")
+    .all() as Array<{ name: string }>;
+  const existingWorkflowMessageColumns = new Set(
+    workflowMessageColumns.map((row) => row.name),
+  );
+  if (existingWorkflowMessageColumns.has("compat_artifact_dir")) {
+    const artifactDirExpression = existingWorkflowMessageColumns.has(
+      "artifact_dir",
+    )
+      ? "CASE WHEN artifact_dir <> '' THEN artifact_dir ELSE compat_artifact_dir END"
+      : "compat_artifact_dir";
+    const rebuildWorkflowMessages = db.transaction(() => {
+      db.exec(`
+        DROP TABLE IF EXISTS workflow_messages_new;
+        CREATE TABLE workflow_messages_new (
+          workflow_id TEXT NOT NULL,
+          workflow_execution_id TEXT NOT NULL,
+          communication_id TEXT NOT NULL,
+          from_node_id TEXT NOT NULL,
+          to_node_id TEXT NOT NULL,
+          routing_scope TEXT NOT NULL,
+          delivery_kind TEXT NOT NULL,
+          transition_when TEXT NOT NULL,
+          source_node_exec_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          active_delivery_attempt_id TEXT,
+          ${requiredJsonTextColumn("delivery_attempt_ids_json")},
+          ${requiredJsonTextColumn("payload_ref_json")},
+          ${nullableJsonTextColumn("payload_json")},
+          ${nullableJsonTextColumn("artifact_refs_json")},
+          artifact_dir TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          delivered_at TEXT,
+          consumed_by_node_exec_id TEXT,
+          consumed_at TEXT,
+          failure_reason TEXT,
+          superseded_by_communication_id TEXT,
+          superseded_at TEXT,
+          replayed_from_communication_id TEXT,
+          manager_message_id TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workflow_execution_id, communication_id)
+        );
+      `);
+      db.prepare(
+        `
+          INSERT INTO workflow_messages_new (
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, artifact_dir, created_at, delivered_at,
+            consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          )
+          SELECT
+            workflow_id, workflow_execution_id, communication_id, from_node_id,
+            to_node_id, routing_scope, delivery_kind, transition_when,
+            source_node_exec_id, status, active_delivery_attempt_id,
+            delivery_attempt_ids_json, payload_ref_json, payload_json,
+            artifact_refs_json, ${artifactDirExpression}, created_at, delivered_at,
+            consumed_by_node_exec_id, consumed_at, failure_reason,
+            superseded_by_communication_id, superseded_at,
+            replayed_from_communication_id, manager_message_id, updated_at
+          FROM workflow_messages
+        `,
+      ).run();
+      db.exec(`
+        DROP TABLE workflow_messages;
+        ALTER TABLE workflow_messages_new RENAME TO workflow_messages;
+      `);
+    });
+    rebuildWorkflowMessages();
+  } else if (!existingWorkflowMessageColumns.has("artifact_dir")) {
+    db.exec(
+      "ALTER TABLE workflow_messages ADD COLUMN artifact_dir TEXT NOT NULL DEFAULT ''",
+    );
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created ON workflow_messages (workflow_execution_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_created_order ON workflow_messages (workflow_execution_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound ON workflow_messages (workflow_execution_id, to_node_id, status);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_inbound_created ON workflow_messages (workflow_execution_id, to_node_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound ON workflow_messages (workflow_execution_id, from_node_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_outbound_created_order ON workflow_messages (workflow_execution_id, from_node_id, created_at, communication_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_messages_source_exec ON workflow_messages (source_node_exec_id, created_at);
+  `);
   const sessionColumns = db
     .query("PRAGMA table_info(sessions)")
     .all() as Array<{
@@ -724,7 +940,9 @@ export function ensureSchema(db: Database): void {
     .all() as Array<{ name: string }>;
   const sessionColumnSet = new Set(sessionColumnsFinal.map((row) => row.name));
   if (!sessionColumnSet.has("supervision_json")) {
-    db.exec("ALTER TABLE sessions ADD COLUMN supervision_json TEXT");
+    db.exec(
+      `ALTER TABLE sessions ADD COLUMN ${nullableJsonTextColumn("supervision_json")}`,
+    );
   }
   const sessionContinuationColumns = db
     .query("PRAGMA table_info(sessions)")
@@ -754,8 +972,11 @@ export function ensureSchema(db: Database): void {
     db.exec("ALTER TABLE sessions ADD COLUMN continued_start_step_id TEXT");
   }
   if (!sessionContinuationColumnSet.has("history_imports_json")) {
-    db.exec("ALTER TABLE sessions ADD COLUMN history_imports_json TEXT");
+    db.exec(
+      `ALTER TABLE sessions ADD COLUMN ${nullableJsonTextColumn("history_imports_json")}`,
+    );
   }
+  ensureBaseRuntimeJsonConstraints(db);
   backfillMissingNodeExecutionOrdinals(db);
 }
 export function toRuntimeEventReceiptIndexRecord(row: {

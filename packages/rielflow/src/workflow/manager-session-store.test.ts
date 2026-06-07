@@ -31,6 +31,10 @@ afterEach(async () => {
   );
 });
 
+function expectSqliteJsonCheckRejection(action: () => unknown): void {
+  expect(action).toThrow(/CHECK constraint failed|constraint/i);
+}
+
 describe("manager-session-store", () => {
   test("migrates manager_runtime_id columns to manager_step_id for legacy runtime databases", async () => {
     const root = await makeTempDir();
@@ -349,6 +353,272 @@ describe("manager-session-store", () => {
     } finally {
       db.close();
     }
+  });
+
+  test("rejects malformed JSON in manager control-plane tables", async () => {
+    const root = await makeTempDir();
+    const options = {
+      cwd: root,
+      rootDataDir: path.join(root, "data"),
+    };
+    const store = createManagerSessionStore(options);
+
+    await store.createOrResumeSession({
+      managerSessionId: "mgrsess-json-checks",
+      workflowId: "wf",
+      workflowExecutionId: "exec-1",
+      managerStepId: "manager",
+      managerNodeExecId: "exec-000001",
+      status: "active",
+      createdAt: "2026-06-07T00:00:00.000Z",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+      authTokenHash: hashManagerAuthToken("token"),
+      authTokenExpiresAt: "2026-06-08T00:00:00.000Z",
+    });
+
+    const db = new Database(resolveRuntimeDbPath(options));
+    try {
+      expectSqliteJsonCheckRejection(() =>
+        db
+          .prepare(
+            `
+              INSERT INTO manager_messages (
+                manager_message_id, manager_session_id, workflow_id,
+                workflow_execution_id, manager_step_id, manager_node_exec_id,
+                parsed_intent_json, accepted, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            "mgrmsg-bad-json",
+            "mgrsess-json-checks",
+            "wf",
+            "exec-1",
+            "manager",
+            "exec-000001",
+            "{bad-json",
+            1,
+            "2026-06-07T00:01:00.000Z",
+          ),
+      );
+      expectSqliteJsonCheckRejection(() =>
+        db
+          .prepare(
+            `
+              INSERT INTO idempotent_mutations (
+                mutation_name, manager_session_id, idempotency_key,
+                normalized_request_hash, status, claim_token, claimed_at,
+                response_json, completed_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          )
+          .run(
+            "retryStep",
+            "mgrsess-json-checks",
+            "idem-bad-json",
+            "sha256:bad-json",
+            "completed",
+            "claim-bad-json",
+            "2026-06-07T00:02:00.000Z",
+            "{bad-json",
+            "2026-06-07T00:02:00.000Z",
+          ),
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rebuilds legacy manager tables with JSON checks and rejects malformed history", async () => {
+    const validRoot = await makeTempDir();
+    const validOptions = {
+      cwd: validRoot,
+      rootDataDir: path.join(validRoot, "data"),
+    };
+    await mkdir(validOptions.rootDataDir, { recursive: true });
+    const validDb = new Database(resolveRuntimeDbPath(validOptions));
+    validDb.exec(`
+      CREATE TABLE manager_sessions (
+        manager_session_id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        manager_step_id TEXT NOT NULL,
+        manager_node_exec_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_message_id TEXT,
+        control_mode TEXT,
+        auth_token_hash TEXT NOT NULL,
+        auth_token_expires_at TEXT NOT NULL
+      );
+      CREATE TABLE manager_messages (
+        manager_message_id TEXT PRIMARY KEY,
+        manager_session_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        manager_step_id TEXT NOT NULL,
+        manager_node_exec_id TEXT NOT NULL,
+        message TEXT,
+        parsed_intent_json TEXT NOT NULL,
+        accepted INTEGER NOT NULL,
+        rejection_reason TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE idempotent_mutations (
+        mutation_name TEXT NOT NULL,
+        manager_session_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        normalized_request_hash TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        PRIMARY KEY (mutation_name, manager_session_id, idempotency_key)
+      );
+    `);
+    validDb
+      .prepare(
+        `
+          INSERT INTO manager_messages (
+            manager_message_id, manager_session_id, workflow_id,
+            workflow_execution_id, manager_step_id, manager_node_exec_id,
+            parsed_intent_json, accepted, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "mgrmsg-valid-legacy",
+        "mgrsess-valid-legacy",
+        "wf",
+        "exec-1",
+        "manager",
+        "exec-000001",
+        '[{"kind":"wait"}]',
+        1,
+        "2026-06-07T00:01:00.000Z",
+      );
+    validDb
+      .prepare(
+        `
+          INSERT INTO idempotent_mutations (
+            mutation_name,
+            manager_session_id,
+            idempotency_key,
+            normalized_request_hash,
+            response_json,
+            completed_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "retryStep",
+        "mgrsess-valid-legacy",
+        "idem-valid-legacy",
+        "sha256:valid-legacy",
+        '{"ok":true}',
+        "2026-06-07T00:02:00.000Z",
+      );
+    validDb.close();
+
+    const validStore = createManagerSessionStore(validOptions);
+    expect(await validStore.listMessages("mgrsess-valid-legacy")).toHaveLength(
+      1,
+    );
+    expect(
+      await validStore.loadIdempotentResult({
+        mutationName: "retryStep",
+        managerSessionId: "mgrsess-valid-legacy",
+        idempotencyKey: "idem-valid-legacy",
+      }),
+    ).toMatchObject({
+      status: "completed",
+      normalizedRequestHash: "sha256:valid-legacy",
+      responseJson: '{"ok":true}',
+      completedAt: "2026-06-07T00:02:00.000Z",
+    });
+    const migratedDb = new Database(resolveRuntimeDbPath(validOptions));
+    try {
+      const table = migratedDb
+        .query(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'manager_messages'",
+        )
+        .get() as { readonly sql: string } | null;
+      expect(table?.sql).toContain("CHECK (json_valid(parsed_intent_json))");
+    } finally {
+      migratedDb.close();
+    }
+
+    const invalidRoot = await makeTempDir();
+    const invalidOptions = {
+      cwd: invalidRoot,
+      rootDataDir: path.join(invalidRoot, "data"),
+    };
+    await mkdir(invalidOptions.rootDataDir, { recursive: true });
+    const invalidDb = new Database(resolveRuntimeDbPath(invalidOptions));
+    invalidDb.exec(`
+      CREATE TABLE manager_sessions (
+        manager_session_id TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        manager_step_id TEXT NOT NULL,
+        manager_node_exec_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_message_id TEXT,
+        control_mode TEXT,
+        auth_token_hash TEXT NOT NULL,
+        auth_token_expires_at TEXT NOT NULL
+      );
+      CREATE TABLE manager_messages (
+        manager_message_id TEXT PRIMARY KEY,
+        manager_session_id TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        workflow_execution_id TEXT NOT NULL,
+        manager_step_id TEXT NOT NULL,
+        manager_node_exec_id TEXT NOT NULL,
+        message TEXT,
+        parsed_intent_json TEXT NOT NULL,
+        accepted INTEGER NOT NULL,
+        rejection_reason TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE idempotent_mutations (
+        mutation_name TEXT NOT NULL,
+        manager_session_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        normalized_request_hash TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        PRIMARY KEY (mutation_name, manager_session_id, idempotency_key)
+      );
+    `);
+    invalidDb
+      .prepare(
+        `
+          INSERT INTO manager_messages (
+            manager_message_id, manager_session_id, workflow_id,
+            workflow_execution_id, manager_step_id, manager_node_exec_id,
+            parsed_intent_json, accepted, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        "mgrmsg-invalid-legacy",
+        "mgrsess-invalid-legacy",
+        "wf",
+        "exec-1",
+        "manager",
+        "exec-000001",
+        "{bad-json",
+        1,
+        "2026-06-07T00:01:00.000Z",
+      );
+    invalidDb.close();
+
+    const invalidStore = createManagerSessionStore(invalidOptions);
+    await expect(
+      invalidStore.listMessages("mgrsess-invalid-legacy"),
+    ).rejects.toThrow();
   });
 
   test("resolves ambient manager execution context only when required fields exist", () => {

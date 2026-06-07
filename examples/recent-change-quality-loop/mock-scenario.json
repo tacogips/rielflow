@@ -370,9 +370,9 @@
       "residualRisks": []
     }
   },
-  "step10-commit-push": {
+  "step10-git-commit": {
     "provider": "scenario-mock",
-    "model": "command/commit-and-push",
+    "model": "rielflow/git-commit@1",
     "when": {
       "always": true
     },
@@ -380,9 +380,43 @@
       "workflowMode": "issue-resolution",
       "commitMessage": "feat: delegate recent-change findings into design workflow",
       "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+      "commitStatus": "committed",
+      "committedFiles": [
+        "README.md",
+        ".rielflow/README.md",
+        ".rielflow/workflows/recent-change-quality-loop/workflow.json"
+      ],
+      "git": {
+        "status": "committed",
+        "commitMessage": "feat: delegate recent-change findings into design workflow",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "committedFiles": [
+          "README.md",
+          ".rielflow/README.md",
+          ".rielflow/workflows/recent-change-quality-loop/workflow.json"
+        ]
+      },
+      "residualRisks": []
+    }
+  },
+  "step11-git-push": {
+    "provider": "scenario-mock",
+    "model": "rielflow/git-push@1",
+    "when": {
+      "always": true
+    },
+    "payload": {
+      "workflowMode": "issue-resolution",
+      "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
       "pushedRemote": "origin",
       "pushedBranch": "main",
       "pushStatus": "pushed",
+      "git": {
+        "status": "pushed",
+        "commitHash": "fedcba9876543210fedcba9876543210fedcba98",
+        "pushedRemote": "origin",
+        "pushedBranch": "main"
+      },
       "residualRisks": []
     }
   },

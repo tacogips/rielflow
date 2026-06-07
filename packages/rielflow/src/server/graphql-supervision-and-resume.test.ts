@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { createWorkflowControlPlaneService } from "../graphql/control-plane-service";
 import { createWorkflowTemplate } from "../workflow/create";
 import * as workflowEngine from "../workflow/engine";
 import { createSessionState } from "../workflow/session";
@@ -57,24 +58,21 @@ describe("GraphQL HTTP transport", () => {
     );
     expect(saved.ok).toBe(true);
 
-    const runWorkflowSpy = vi
-      .spyOn(workflowEngine, "runWorkflow")
-      .mockResolvedValue({
-        ok: true,
-        value: {
-          session: {
-            ...createSessionState({
-              sessionId: "sess-http-supervision-result",
-              workflowName: "demo",
-              workflowId: "demo",
-              initialNodeId: "rielflow-manager",
-              runtimeVariables: {},
-            }),
-            status: "running" as const,
-          },
-          exitCode: 0,
-        },
-      });
+    const baseControlPlane = createWorkflowControlPlaneService();
+    const runWorkflowSpy = vi.fn(
+      async (_input: Parameters<typeof baseControlPlane.runWorkflow>[0]) => ({
+        workflowExecutionId: "sess-http-supervision-result",
+        sessionId: "sess-http-supervision-result",
+        status: "running" as const,
+        exitCode: 0,
+      }),
+    );
+    const deps = {
+      workflowControlPlaneService: {
+        ...baseControlPlane,
+        runWorkflow: runWorkflowSpy,
+      },
+    };
 
     const executeResponse = await handleGraphqlRequest(
       new Request("http://localhost/graphql", {
@@ -105,6 +103,7 @@ describe("GraphQL HTTP transport", () => {
         }),
       }),
       options,
+      deps,
     );
 
     expect(executeResponse.status).toBe(200);
@@ -144,6 +143,7 @@ describe("GraphQL HTTP transport", () => {
         }),
       }),
       options,
+      deps,
     );
 
     expect(resumeResponse.status).toBe(200);
@@ -185,6 +185,7 @@ describe("GraphQL HTTP transport", () => {
         }),
       }),
       options,
+      deps,
     );
 
     expect(rerunResponse.status).toBe(200);
@@ -200,36 +201,42 @@ describe("GraphQL HTTP transport", () => {
 
     expect(runWorkflowSpy).toHaveBeenNthCalledWith(
       1,
-      "demo",
       expect.objectContaining({
-        nestedSuperviserDriver: true,
-        autoImprove: expect.objectContaining({
-          enabled: true,
-          monitorIntervalMs: 6000,
-          stallTimeoutMs: 12000,
+        workflowName: "demo",
+        options: expect.objectContaining({
+          nestedSuperviserDriver: true,
+          autoImprove: expect.objectContaining({
+            enabled: true,
+            monitorIntervalMs: 6000,
+            stallTimeoutMs: 12000,
+          }),
         }),
       }),
     );
     expect(runWorkflowSpy).toHaveBeenNthCalledWith(
       2,
-      "demo",
       expect.objectContaining({
-        resumeSessionId: sourceSessionId,
-        nestedSuperviserDriver: true,
-        autoImprove: expect.objectContaining({
-          enabled: true,
+        workflowName: "demo",
+        options: expect.objectContaining({
+          resumeSessionId: sourceSessionId,
+          nestedSuperviserDriver: true,
+          autoImprove: expect.objectContaining({
+            enabled: true,
+          }),
         }),
       }),
     );
     expect(runWorkflowSpy).toHaveBeenNthCalledWith(
       3,
-      "demo",
       expect.objectContaining({
-        rerunFromSessionId: sourceSessionId,
-        rerunFromStepId: "main-worker",
-        autoImprove: expect.objectContaining({
-          enabled: true,
-          maxSupervisedAttempts: 2,
+        workflowName: "demo",
+        options: expect.objectContaining({
+          rerunFromSessionId: sourceSessionId,
+          rerunFromStepId: "main-worker",
+          autoImprove: expect.objectContaining({
+            enabled: true,
+            maxSupervisedAttempts: 2,
+          }),
         }),
       }),
     );
@@ -250,7 +257,14 @@ describe("GraphQL HTTP transport", () => {
       rootDataDir: path.join(root, "data"),
       cwd: root,
     };
-    const runWorkflowSpy = vi.spyOn(workflowEngine, "runWorkflow");
+    const baseControlPlane = createWorkflowControlPlaneService();
+    const runWorkflowSpy = vi.fn(baseControlPlane.runWorkflow);
+    const deps = {
+      workflowControlPlaneService: {
+        ...baseControlPlane,
+        runWorkflow: runWorkflowSpy,
+      },
+    };
 
     const response = await handleGraphqlRequest(
       new Request("http://localhost/graphql", {
@@ -276,18 +290,24 @@ describe("GraphQL HTTP transport", () => {
         }),
       }),
       options,
+      deps,
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      data: null,
-      errors: [
-        expect.objectContaining({
-          message:
-            "workflow runtime readiness failed: code-manager runtime: managerType='code' execution is not available on the current runtime path yet; steps=rielflow-manager",
-        }),
-      ],
-    });
+    const responseJson = await response.json();
+    expect(responseJson.data).toBeNull();
+    expect(Array.isArray(responseJson.errors)).toBe(true);
+    const responseErrorEntry = responseJson.errors[0] as {
+      readonly message?: unknown;
+    };
+    const responseError =
+      typeof responseErrorEntry.message === "string"
+        ? responseErrorEntry.message
+        : String(responseErrorEntry);
+    expect(responseError).toContain("workflow runtime readiness failed:");
+    expect(responseError).toContain(
+      "code-manager runtime: managerType='code' execution is not available on the current runtime path yet; steps=rielflow-manager",
+    );
     expect(runWorkflowSpy).toHaveBeenCalledTimes(1);
   });
 

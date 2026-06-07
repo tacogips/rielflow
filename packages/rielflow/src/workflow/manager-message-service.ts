@@ -24,6 +24,10 @@ import {
   runIdempotentMutation,
 } from "./manager-message-service/idempotency";
 import {
+  loadWorkflowMessageFromRuntimeDb,
+  workflowMessageRecordToCommunication,
+} from "./runtime-db";
+import {
   applyOptionalNodeDecision,
   dedupe,
   isTerminalStatus,
@@ -195,9 +199,18 @@ export function createManagerMessageService(
                   queuedNodeIds.push(action.stepId);
                   break;
                 case "replay-communication": {
-                  const sourceCommunication = nextSession.communications.find(
-                    (entry) => entry.communicationId === action.communicationId,
+                  const sqliteRecord = await loadWorkflowMessageFromRuntimeDb(
+                    {
+                      workflowExecutionId: input.workflowExecutionId,
+                      communicationId: action.communicationId,
+                    },
+                    options,
                   );
+                  const sourceCommunication =
+                    sqliteRecord === null ||
+                    sqliteRecord.workflowId !== input.workflowId
+                      ? undefined
+                      : workflowMessageRecordToCommunication(sqliteRecord);
                   if (sourceCommunication === undefined) {
                     throw new Error(
                       `communication '${action.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
@@ -227,6 +240,14 @@ export function createManagerMessageService(
                   createdCommunicationIds.push(
                     replayed.replayedCommunicationId,
                   );
+                  const reloadedSession = await loadSession(
+                    input.workflowExecutionId,
+                    options,
+                  );
+                  if (!reloadedSession.ok) {
+                    throw new Error(reloadedSession.error.message);
+                  }
+                  nextSession = reloadedSession.value;
                   break;
                 }
                 case "execute-optional-step":

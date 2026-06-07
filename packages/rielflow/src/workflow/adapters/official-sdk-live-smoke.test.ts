@@ -59,15 +59,22 @@ function hasConfiguredApiKey(name: string): boolean {
   return value !== undefined && value.length > 0 && value !== "test-key";
 }
 
+function shouldRunOfficialSdkSmoke(apiKeyName: string): boolean {
+  return (
+    process.env["RIELFLOW_RUN_OFFICIAL_SDK_LIVE_SMOKE"] === "1" &&
+    hasConfiguredApiKey(apiKeyName)
+  );
+}
+
 describe("official SDK adapter live smoke tests", () => {
-  test.skipIf(!hasConfiguredApiKey("OPENAI_API_KEY"))(
-    "executes the OpenAI/Codex SDK adapter when OPENAI_API_KEY is configured",
+  test.skipIf(!shouldRunOfficialSdkSmoke("OPENAI_API_KEY"))(
+    "executes the OpenAI/Codex SDK adapter when live smoke is enabled and OPENAI_API_KEY is configured",
     async () => {
       const adapter = new OpenAiSdkAdapter();
       const output = await adapter.execute(
         createInput({
           backend: "official/openai-sdk",
-          model: process.env["RIELFLOW_OPENAI_SDK_SMOKE_MODEL"] ?? "gpt-5-nano",
+          model: process.env["RIELFLOW_OPENAI_SDK_SMOKE_MODEL"] ?? "gpt-5.5",
         }),
         createContext(),
       );
@@ -78,8 +85,8 @@ describe("official SDK adapter live smoke tests", () => {
     SMOKE_TIMEOUT_MS,
   );
 
-  test.skipIf(!hasConfiguredApiKey("ANTHROPIC_API_KEY"))(
-    "executes the Anthropic/Claude SDK adapter when ANTHROPIC_API_KEY is configured",
+  test.skipIf(!shouldRunOfficialSdkSmoke("ANTHROPIC_API_KEY"))(
+    "executes the Anthropic/Claude SDK adapter when live smoke is enabled and ANTHROPIC_API_KEY is configured",
     async () => {
       const adapter = new AnthropicSdkAdapter({ maxTokens: 64 });
       const output = await adapter.execute(
@@ -98,8 +105,8 @@ describe("official SDK adapter live smoke tests", () => {
     SMOKE_TIMEOUT_MS,
   );
 
-  test.skipIf(!hasConfiguredApiKey("CURSOR_API_KEY"))(
-    "executes the Cursor SDK adapter when CURSOR_API_KEY is configured",
+  test.skipIf(!shouldRunOfficialSdkSmoke("CURSOR_API_KEY"))(
+    "executes the Cursor SDK adapter when live smoke is enabled and CURSOR_API_KEY is configured",
     async () => {
       const adapter = new CursorSdkAdapter();
       const output = await adapter.execute(

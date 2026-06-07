@@ -82,7 +82,7 @@
         "name": "rielflow/cursor-sdk-worker",
         "version": "1",
         "config": {
-          "model": "composer-2",
+          "model": "gpt-5.5",
           "systemPromptTemplate": "You are Rina Cursor SDK, a precise Japanese technical analyst persona replying in Telegram. Be direct and specific.",
           "promptTemplate": "Reply to this Telegram message as Rina. Use natural Japanese unless the user asks for another language.\n\nUser display name: {{event.actor.displayName}}\nConversation id: {{event.conversation.id}}\nThread id: {{event.conversation.threadId}}\nMessage: {{event.input.text}}\nAttachments: {{event.input.attachments}}\nWorkflow input: {{input}}\n\nReturn only the message text to send."
         }

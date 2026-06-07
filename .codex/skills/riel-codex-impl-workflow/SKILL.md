@@ -64,6 +64,9 @@ explicit issue/reference context. Typical fields:
 - `workflowInput.codexAgentReferences`
 - `workflowInput.referenceRepositoryRoot`
 - `workflowInput.referenceRepositoryUrl`
+- `workflowInput.reviewMode`
+- `workflowInput.riskLevel`
+- `workflowInput.requiresAdversarialReview`
 
 Keep `workflowInput.codexAgentReferences` explicit when the issue depends on
 Codex-specific behavior. `codex-agent` is an execution-backend identifier, not
@@ -88,12 +91,23 @@ The workflow is responsible for:
 8. implementation work
 9. implementation self-review
 10. implementation review
-11. user-facing documentation refresh (`README.md`, mandatory workflow skill
+11. adversarial implementation review for high-risk accepted changes
+12. user-facing documentation refresh (`README.md`, mandatory workflow skill
     docs, and any directly affected user-facing skills such as event-source
     runbooks)
-12. staged secret scan with `gitleaks git --pre-commit --redact --staged --verbose`
-13. commit-message generation
-14. built-in git commit and git push add-on steps
+13. implementation-plan completion/archive check, with a documentation refresh
+    reconciliation pass if plan index files changed after Step 12
+14. staged secret scan with `gitleaks git --pre-commit --redact --staged --verbose`
+15. commit-message generation
+16. built-in git commit and git push add-on steps
+
+The adversarial implementation review gate runs when explicitly requested with
+`workflowInput.requiresAdversarialReview`, `workflowInput.reviewMode:
+"adversarial"`, `workflowInput.riskLevel: "high"` / `"critical"`, or when Step
+7 accepts a high-blast-radius change involving security, destructive
+filesystem behavior, git commit/push, migrations, package installation,
+workflow execution, manager control, event sources, external commands, or
+similar automation risk.
 
 Because the workflow ends with commit/push, do not use it when the user has
 explicitly asked to avoid workflow-driven commits or wants manual local edits
@@ -125,6 +139,44 @@ JSON reference, and this workflow skill when shipped behavior changes
 `stringReplacements`, or same-family workflow reference rewriting. Keep
 `codex-agent` references explicit as execution-backend references, and document
 the accepted verification commands.
+
+SQLite message-store issue-resolution runs should refresh `README.md`, the
+SQLite message-store design, the node-mailbox design when communication
+semantics change, and this workflow skill. User-facing docs must state that
+`workflow_messages` is the canonical source for communication reads, replay,
+retry, GraphQL inspection, and manager mutations; legacy per-message files and
+session communication arrays are not fallback sources. Also document that
+`RIEL_RUNTIME_DB`, `RIEL_ARTIFACT_DIR`, and `RIEL_ATTACHMENT_ROOT` control the
+runtime database and file/binary handoff roots, that SQLite stores only
+attachment-root-relative references for file/binary handoffs, and that failed
+SQLite writes block message publication. For payload attachment snapshot
+changes, user-facing docs must state that `payload.attachments[]` is a mixed
+descriptor array: non-file descriptors remain in
+`workflow_messages.payload_json`, only safely materialized file-backed
+descriptors are rewritten to normalized `attachment-root` refs, and
+`workflow_messages.artifact_refs_json` stays limited to materialized file refs.
+When the run hardens runtime JSON TEXT columns, also document that required
+JSON text uses
+`CHECK(json_valid(column))`, nullable JSON text uses
+`CHECK(column IS NULL OR json_valid(column))`, malformed historical rows may
+fail rebuild migrations explicitly, and manager/session/event/supervisor
+runtime JSON columns follow the same policy as `workflow_messages`
+`delivery_attempt_ids_json`, `payload_ref_json`, `payload_json`, and
+`artifact_refs_json`. Keep PR references such as `PR #54`, branch names such as
+`feature/sqlite-message-store`, and `codex-agent` execution references explicit
+in workflow outputs.
+
+Manager-control idempotency issue-resolution runs such as `SEC-001` in `PR #54`
+/ `feature/sqlite-message-store` should refresh `README.md`, the GraphQL
+manager-control design, compact architecture notes, and this workflow skill.
+User-facing docs must state that GraphQL manager mutations with an
+`idempotencyKey` atomically claim `(mutationName, managerSessionId,
+idempotencyKey)` before side effects; same-key/same-payload callers wait for or
+read the completed response or stored failure; same-key/different-payload
+callers fail before side effects; and caller-owned pending claims are completed
+or failed without overwriting another caller's row. Keep accepted review
+decisions, residual low risks, verification commands, and `codex-agent`
+execution references explicit in workflow outputs.
 
 ## Reporting
 

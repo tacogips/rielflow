@@ -122,7 +122,8 @@ non-SDK Telegram trio:
   Rina Cursor on CLI-agent backends.
 - `examples/telegram-sdk-trio-chat` keeps the same router and reply-worker graph
   shape while using `rielflow/codex-sdk-worker`,
-  `rielflow/claude-sdk-worker`, and `rielflow/cursor-sdk-worker`.
+  `rielflow/claude-sdk-worker`, and `rielflow/cursor-sdk-worker`; the Rina
+  Cursor SDK node runs model `gpt-5.5`.
 - `examples/event-sources/.rielflow-events/bindings/telegram-gateway-sdk-trio-to-workflow.json`
   binds the SDK trio to the same normalized `telegram-gateway` event source and
   the same Telegram reply destination family.
@@ -266,8 +267,9 @@ adapter. The event layer must not special-case Cursor, and Cursor-agent
 behavior must not alter Telegram/Discord/Matrix event normalization, reply
 target mapping, destination publishing, or chat add-on validation.
 
-For the SDK trio, Rina Cursor uses `rielflow/cursor-sdk-worker`, which resolves
-to `official/cursor-sdk`. Cursor SDK behavior is isolated behind
+For the SDK trio, Rina Cursor uses `rielflow/cursor-sdk-worker` with model
+`gpt-5.5`, which resolves to `official/cursor-sdk`. Cursor SDK behavior is
+isolated behind
 `packages/rielflow-adapters/src/cursor-sdk.ts` and must not leak Bun child
 process details, JSONL store paths, or SDK credential handling into the
 Telegram event binding or workflow JSON.

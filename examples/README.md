@@ -161,6 +161,7 @@ Discord chat workflow using the generic Chat SDK event boundary:
 - receives normalized Discord messages from the `chat-sdk-discord` event source
 - generates a reply with `codex-agent` model `gpt-5.4-mini`
 - sends the generated text back through `rielflow/chat-reply-worker`
+- dry-runs the reply when a direct local mock run has no chat target
 - keeps the reply destination external through `chat-sdk-discord-replies`
 
 Validate it:
@@ -282,7 +283,7 @@ Minimal Telegram trio chat workflow using the SDK-backed worker add-ons:
 - routes normalized Telegram messages through `rielflow/chat-persona-router`
 - `Yui Codex SDK` uses `rielflow/codex-sdk-worker`
 - `Mika Claude SDK` uses `rielflow/claude-sdk-worker`
-- `Rina Cursor SDK` uses `rielflow/cursor-sdk-worker`
+- `Rina Cursor SDK` uses `rielflow/cursor-sdk-worker` with model `gpt-5.5`
 - replies use `rielflow/chat-reply-worker` and dry-run when a local run has no
   Telegram chat target
 - the deterministic mock scenario exercises the routing and reply path without

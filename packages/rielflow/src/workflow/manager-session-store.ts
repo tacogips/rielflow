@@ -1,7 +1,34 @@
 import { timingSafeEqual, createHash, randomBytes } from "node:crypto";
 import type { Database } from "bun:sqlite";
+import {
+  ensureIdempotentMutationAtomicClaimSchema,
+  loadIdempotentMutationRow,
+  toIdempotentMutationClaim,
+} from "./manager-session-store-idempotency";
+import type {
+  ClaimIdempotentMutationInput,
+  CompleteIdempotentMutationInput,
+  FailIdempotentMutationInput,
+  IdempotentMutationClaim,
+  IdempotentMutationLookup,
+  IdempotentMutationRecord,
+} from "./manager-session-store-idempotency";
 import { withRuntimeDatabase } from "./runtime-db";
+import {
+  ensureManagerSessionJsonConstraints,
+  requiredJsonTextColumn,
+} from "./runtime-db/json-schema-constraints";
 import type { LoadOptions } from "./types";
+
+export type {
+  ClaimIdempotentMutationInput,
+  CompleteIdempotentMutationInput,
+  FailIdempotentMutationInput,
+  IdempotentMutationClaim,
+  IdempotentMutationLookup,
+  IdempotentMutationRecord,
+  IdempotentMutationStatus,
+} from "./manager-session-store-idempotency";
 
 export interface ManagerIntentSummary {
   readonly kind:
@@ -47,21 +74,6 @@ export interface ManagerMessageRecord {
   readonly accepted: boolean;
   readonly rejectionReason?: string;
   readonly createdAt: string;
-}
-
-export interface IdempotentMutationRecord {
-  readonly mutationName: string;
-  readonly managerSessionId: string;
-  readonly idempotencyKey: string;
-  readonly normalizedRequestHash: string;
-  readonly responseJson: string;
-  readonly completedAt: string;
-}
-
-export interface IdempotentMutationLookup {
-  readonly mutationName: string;
-  readonly managerSessionId: string;
-  readonly idempotencyKey: string;
 }
 
 export interface AmbientManagerExecutionContext {
@@ -113,9 +125,18 @@ export interface ManagerSessionStore {
   saveIdempotentResult(
     input: IdempotentMutationRecord,
   ): Promise<IdempotentMutationRecord>;
+  claimIdempotentMutation(
+    input: ClaimIdempotentMutationInput,
+  ): Promise<IdempotentMutationClaim>;
+  completeIdempotentMutation(
+    input: CompleteIdempotentMutationInput,
+  ): Promise<IdempotentMutationClaim | null>;
+  failIdempotentMutation(
+    input: FailIdempotentMutationInput,
+  ): Promise<IdempotentMutationClaim | null>;
   loadIdempotentResult(
     input: IdempotentMutationLookup,
-  ): Promise<IdempotentMutationRecord | null>;
+  ): Promise<IdempotentMutationClaim | null>;
   validateAuthToken(input: {
     readonly managerSessionId: string;
     readonly authToken: string;
@@ -150,15 +171,6 @@ interface ManagerMessageRow {
   readonly accepted: number;
   readonly rejection_reason: string | null;
   readonly created_at: string;
-}
-
-interface IdempotentMutationRow {
-  readonly mutation_name: string;
-  readonly manager_session_id: string;
-  readonly idempotency_key: string;
-  readonly normalized_request_hash: string;
-  readonly response_json: string;
-  readonly completed_at: string;
 }
 
 function readEnvValue(
@@ -208,17 +220,14 @@ function toManagerMessageRecord(row: ManagerMessageRow): ManagerMessageRecord {
   };
 }
 
-function toIdempotentMutationRecord(
-  row: IdempotentMutationRow,
-): IdempotentMutationRecord {
-  return {
-    mutationName: row.mutation_name,
-    managerSessionId: row.manager_session_id,
-    idempotencyKey: row.idempotency_key,
-    normalizedRequestHash: row.normalized_request_hash,
-    responseJson: row.response_json,
-    completedAt: row.completed_at,
-  };
+function listManagerSessionColumns(db: Database): Set<string> {
+  return new Set(
+    (
+      db.prepare("PRAGMA table_info(manager_sessions)").all() as readonly {
+        readonly name: string;
+      }[]
+    ).map((column) => column.name),
+  );
 }
 
 export function hashManagerAuthToken(authToken: string): string {
@@ -338,31 +347,18 @@ function ensureManagerSessionSchema(db: Database): void {
       manager_step_id TEXT NOT NULL,
       manager_node_exec_id TEXT NOT NULL,
       message TEXT,
-      parsed_intent_json TEXT NOT NULL,
+      ${requiredJsonTextColumn("parsed_intent_json")},
       accepted INTEGER NOT NULL,
       rejection_reason TEXT,
       created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS idempotent_mutations (
-      mutation_name TEXT NOT NULL,
-      manager_session_id TEXT NOT NULL,
-      idempotency_key TEXT NOT NULL,
-      normalized_request_hash TEXT NOT NULL,
-      response_json TEXT NOT NULL,
-      completed_at TEXT NOT NULL,
-      PRIMARY KEY (mutation_name, manager_session_id, idempotency_key)
     );
     CREATE INDEX IF NOT EXISTS idx_manager_messages_session
       ON manager_messages (manager_session_id, created_at);
   `);
 
-  const managerSessionColumns = new Set(
-    (
-      db.prepare("PRAGMA table_info(manager_sessions)").all() as readonly {
-        readonly name: string;
-      }[]
-    ).map((column) => column.name),
-  );
+  ensureIdempotentMutationAtomicClaimSchema(db);
+
+  const managerSessionColumns = listManagerSessionColumns(db);
   if (!managerSessionColumns.has("control_mode")) {
     db.exec("ALTER TABLE manager_sessions ADD COLUMN control_mode TEXT");
   }
@@ -388,6 +384,7 @@ function ensureManagerSessionSchema(db: Database): void {
       );
     }
   }
+  ensureManagerSessionJsonConstraints(db);
 }
 
 async function withManagerDatabase<T>(
@@ -637,49 +634,143 @@ export function createManagerSessionStore(
           `
           INSERT INTO idempotent_mutations (
             mutation_name, manager_session_id, idempotency_key,
-            normalized_request_hash, response_json, completed_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
+            normalized_request_hash, status, claim_token, claimed_at,
+            response_json, completed_at, error_json, failed_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
           ON CONFLICT(mutation_name, manager_session_id, idempotency_key)
-          DO UPDATE SET
-            normalized_request_hash=excluded.normalized_request_hash,
-            response_json=excluded.response_json,
-            completed_at=excluded.completed_at
+          DO NOTHING
         `,
         ).run(
           input.mutationName,
           input.managerSessionId,
           input.idempotencyKey,
           input.normalizedRequestHash,
+          "completed",
+          "legacy-save",
+          input.completedAt,
           input.responseJson,
           input.completedAt,
         );
       });
       return input;
     },
+    async claimIdempotentMutation(input) {
+      return await withManagerDatabase(options, (db) => {
+        db.prepare(
+          `
+          INSERT INTO idempotent_mutations (
+            mutation_name,
+            manager_session_id,
+            idempotency_key,
+            normalized_request_hash,
+            status,
+            claim_token,
+            claimed_at,
+            response_json,
+            completed_at,
+            error_json,
+            failed_at
+          ) VALUES (?, ?, ?, ?, 'pending', ?, ?, NULL, NULL, NULL, NULL)
+          ON CONFLICT(mutation_name, manager_session_id, idempotency_key)
+          DO NOTHING
+        `,
+        ).run(
+          input.mutationName,
+          input.managerSessionId,
+          input.idempotencyKey,
+          input.normalizedRequestHash,
+          input.claimToken,
+          input.claimedAt,
+        );
+        const persisted = loadIdempotentMutationRow(db, input);
+        if (persisted === null) {
+          throw new Error(
+            `failed to claim idempotent mutation '${input.mutationName}' for key '${input.idempotencyKey}'`,
+          );
+        }
+        return toIdempotentMutationClaim(persisted);
+      });
+    },
+    async completeIdempotentMutation(input) {
+      return await withManagerDatabase(options, (db) => {
+        db.prepare(
+          `
+          UPDATE idempotent_mutations
+          SET status = 'completed',
+              response_json = ?,
+              completed_at = ?,
+              error_json = NULL,
+              failed_at = NULL
+          WHERE mutation_name = ?
+            AND manager_session_id = ?
+            AND idempotency_key = ?
+            AND normalized_request_hash = ?
+            AND claim_token = ?
+            AND status = 'pending'
+        `,
+        ).run(
+          input.responseJson,
+          input.completedAt,
+          input.mutationName,
+          input.managerSessionId,
+          input.idempotencyKey,
+          input.normalizedRequestHash,
+          input.claimToken,
+        );
+        const persisted = loadIdempotentMutationRow(db, input);
+        if (
+          persisted === null ||
+          persisted.status !== "completed" ||
+          persisted.claim_token !== input.claimToken ||
+          persisted.normalized_request_hash !== input.normalizedRequestHash
+        ) {
+          return null;
+        }
+        return toIdempotentMutationClaim(persisted);
+      });
+    },
+    async failIdempotentMutation(input) {
+      return await withManagerDatabase(options, (db) => {
+        db.prepare(
+          `
+          UPDATE idempotent_mutations
+          SET status = 'failed',
+              response_json = NULL,
+              completed_at = NULL,
+              error_json = ?,
+              failed_at = ?
+          WHERE mutation_name = ?
+            AND manager_session_id = ?
+            AND idempotency_key = ?
+            AND normalized_request_hash = ?
+            AND claim_token = ?
+            AND status = 'pending'
+        `,
+        ).run(
+          input.errorJson,
+          input.failedAt,
+          input.mutationName,
+          input.managerSessionId,
+          input.idempotencyKey,
+          input.normalizedRequestHash,
+          input.claimToken,
+        );
+        const persisted = loadIdempotentMutationRow(db, input);
+        if (
+          persisted === null ||
+          persisted.status !== "failed" ||
+          persisted.claim_token !== input.claimToken ||
+          persisted.normalized_request_hash !== input.normalizedRequestHash
+        ) {
+          return null;
+        }
+        return toIdempotentMutationClaim(persisted);
+      });
+    },
     async loadIdempotentResult(input) {
       return await withManagerDatabase(options, (db) => {
-        const row = db
-          .prepare(
-            `
-            SELECT
-              mutation_name,
-              manager_session_id,
-              idempotency_key,
-              normalized_request_hash,
-              response_json,
-              completed_at
-            FROM idempotent_mutations
-            WHERE mutation_name = ?
-              AND manager_session_id = ?
-              AND idempotency_key = ?
-          `,
-          )
-          .get(
-            input.mutationName,
-            input.managerSessionId,
-            input.idempotencyKey,
-          ) as IdempotentMutationRow | null;
-        return row === null ? null : toIdempotentMutationRecord(row);
+        const row = loadIdempotentMutationRow(db, input);
+        return row === null ? null : toIdempotentMutationClaim(row);
       });
     },
     async validateAuthToken(input) {

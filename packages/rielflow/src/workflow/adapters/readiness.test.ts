@@ -1,14 +1,18 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   checkCodexBackendModelAvailability,
   checkCursorBackendModelAvailability,
+  type CodexBackendModelAvailability,
   getClaudeBackendCliAuthStatus,
+  setCodexBackendSdkOperationsForTest,
 } from "./readiness";
 
 const tempDirs: string[] = [];
+let codexModelAvailabilityCalls: unknown[] = [];
+let codexModelAvailabilityResult: CodexBackendModelAvailability | undefined;
 
 async function makeTempDir(): Promise<string> {
   const directory = await mkdtemp(
@@ -24,6 +28,7 @@ async function writeExecutable(filePath: string, body: string): Promise<void> {
 }
 
 afterEach(async () => {
+  setCodexBackendSdkOperationsForTest(undefined);
   await Promise.all(
     tempDirs
       .splice(0)
@@ -31,8 +36,22 @@ afterEach(async () => {
   );
 });
 
+beforeEach(() => {
+  codexModelAvailabilityCalls = [];
+  codexModelAvailabilityResult = undefined;
+  setCodexBackendSdkOperationsForTest({
+    checkCodexModelAvailability: async (input) => {
+      codexModelAvailabilityCalls.push(input);
+      if (codexModelAvailabilityResult === undefined) {
+        throw new Error("codex model availability mock result is not set");
+      }
+      return codexModelAvailabilityResult;
+    },
+  });
+});
+
 describe("agent backend readiness adapters", () => {
-  test("normalizes codex SDK validation exceptions into model availability failures", async () => {
+  test("normalizes blank codex models into availability failures", async () => {
     const availability = await checkCodexBackendModelAvailability({
       model: " ",
     });
@@ -49,6 +68,7 @@ describe("agent backend readiness adapters", () => {
         error: "model is required",
       },
     });
+    expect(codexModelAvailabilityCalls).toHaveLength(0);
   });
 
   test("normalizes cursor SDK validation exceptions into model availability failures", async () => {
@@ -70,28 +90,34 @@ describe("agent backend readiness adapters", () => {
     });
   });
 
-  test("preserves codex model probe diagnostics beyond the first stderr line", async () => {
-    const root = await makeTempDir();
-    const binDir = path.join(root, "bin");
-    await writeExecutable(
-      path.join(binDir, "codex"),
-      [
-        "#!/usr/bin/env bash",
-        'if [[ "$1 $2" == "login status" ]]; then',
-        '  echo "Logged in using ChatGPT"',
-        "  exit 0",
-        "fi",
-        'echo "Reading additional input from stdin..." >&2',
-        `echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The gpt-5 model is not supported for this account."}}' >&2`,
-        "exit 1",
-      ].join("\n"),
-    );
+  test("delegates codex model availability to the codex-agent SDK", async () => {
+    codexModelAvailabilityResult = {
+      ok: false,
+      model: "gpt-5",
+      auth: {
+        ok: true,
+        status: "Logged in using ChatGPT",
+        error: null,
+        exitCode: 0,
+      },
+      probe: {
+        ok: false,
+        model: "gpt-5",
+        output: null,
+        error: "The gpt-5 model is not supported for this account.",
+        exitCode: 1,
+      },
+    };
 
     const availability = await checkCodexBackendModelAvailability({
       model: "gpt-5",
+      codexBinary: "/tmp/fake-codex",
+      cwd: "/tmp/workflow",
       env: {
-        PATH: `${binDir}:${process.env["PATH"] ?? ""}`,
+        CODEX_HOME: "/tmp/codex-home",
       },
+      timeoutMs: 1234,
+      prompt: "Reply with ok.",
     });
 
     expect(availability).toMatchObject({
@@ -106,6 +132,17 @@ describe("agent backend readiness adapters", () => {
     expect(availability.probe.error).toContain(
       "The gpt-5 model is not supported for this account.",
     );
+    expect(codexModelAvailabilityCalls).toHaveLength(1);
+    expect(codexModelAvailabilityCalls[0]).toEqual({
+      model: "gpt-5",
+      codexBinary: "/tmp/fake-codex",
+      cwd: "/tmp/workflow",
+      env: {
+        CODEX_HOME: "/tmp/codex-home",
+      },
+      timeoutMs: 1234,
+      prompt: "Reply with ok.",
+    });
   });
 
   test("reads Claude CLI auth status JSON", async () => {

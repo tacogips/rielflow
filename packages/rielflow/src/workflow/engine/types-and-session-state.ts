@@ -268,6 +268,10 @@ export interface UpstreamOutputRef extends OutputRef {
     | CommunicationRecord["status"];
   readonly communicationId: string;
 }
+export interface UpstreamCommunicationConsumptionRef {
+  readonly workflowExecutionId: string;
+  readonly communicationId: string;
+}
 export interface UpstreamInput extends UpstreamOutputRef {
   readonly output: Readonly<Record<string, unknown>>;
   readonly outputRaw: string;

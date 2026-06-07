@@ -572,7 +572,7 @@ Useful starting points in `examples/`:
   `matrix-agent-trio-chat`: provider-specific persona chat examples.
 - `telegram-sdk-trio-chat`: Telegram persona trio using SDK-backed worker
   add-ons for `official/openai-sdk`, `official/anthropic-sdk`, and
-  `official/cursor-sdk`.
+  `official/cursor-sdk`; its Rina Cursor SDK worker uses model `gpt-5.5`.
 - `telegram-agent-trio-time-signal`: scheduled Telegram time-signal reply for
   the Telegram trio chat.
 - `x-follower-ai-business-digest`: hourly X follower-post digest that fetches
@@ -725,6 +725,48 @@ the run artifact tree so local resume, rerun, and continue operations do not
 depend on the original inline string or JSON file.
 ```
 
+### Runtime Message Storage
+
+Workflow message handoffs are persisted in SQLite by default. The runtime writes
+one canonical `workflow_messages` row per communication id:
+
+```text
+~/.rielflow/artifacts/rielflow.db
+~/.rielflow/artifacts/files/{workflowId}/{workflowExecutionId}/messages/{communicationId}/...
+```
+
+`RIEL_RUNTIME_DB` overrides the SQLite file. `RIEL_ARTIFACT_DIR` overrides the
+shared runtime data root. `RIEL_ATTACHMENT_ROOT` overrides file and binary
+message handoff storage only. SQLite stores path references for file and binary
+handoffs; it does not store file contents. Communication reads, replay, retry,
+GraphQL inspection, and manager mutation scope checks use SQLite as the message
+source. Legacy per-message files and session communication arrays are not
+fallback sources for new communication reads.
+
+Runtime JSON text columns are validated by SQLite. Required JSON values use
+`CHECK(json_valid(column))`, while nullable JSON values use
+`CHECK(column IS NULL OR json_valid(column))`. For message handoffs this covers
+`workflow_messages.delivery_attempt_ids_json`, `payload_ref_json`,
+`payload_json`, and `artifact_refs_json`; malformed JSON rejects the runtime
+write instead of being accepted for later repair. The same policy applies to
+rielflow-owned runtime JSON columns used for session state, node execution
+records, event runtime metadata, supervisor dispatch records, schedules, and
+manager control-plane messages.
+
+File and binary handoffs are materialized under the workflow/run/message scope
+before the SQLite row is stored. Attachment references recorded in SQLite are
+attachment-root-relative paths, and absolute or escaping paths are rejected.
+Message publication succeeds only after the SQLite write succeeds, so failed
+database writes block delivery instead of leaving file-only communication state.
+
+`payload.attachments[]` is persisted as a mixed descriptor array. Non-file
+descriptors such as links, text metadata, unsupported provider descriptors,
+entries without a usable local path, and JSON scalar entries remain in
+`workflow_messages.payload_json` for message views, replay, retry, GraphQL
+inspection, and downstream workflow inspection. Only safely materialized
+file-backed descriptors are rewritten to normalized `attachment-root` refs, and
+only those file refs are recorded in `workflow_messages.artifact_refs_json`.
+
 ### Install Or Run A Workflow Package
 
 ```text
@@ -797,6 +839,14 @@ rielflow graphql '<GraphQL document>' \
 
 Prefer typed GraphQL manager actions when operating an active rielflow-managed
 session instead of encoding control actions only in prose.
+
+GraphQL manager mutations that accept an `idempotencyKey`, including
+`sendManagerMessage`, `replayCommunication`, and `retryCommunicationDelivery`,
+reserve `(mutationName, managerSessionId, idempotencyKey)` in the runtime store
+before side effects run. Same-key/same-payload concurrent callers wait for the
+completed response or stored failure. Same-key/different-payload callers fail as
+an idempotency conflict before manager messages, replay, retry, or step-queue
+side effects are created.
 ```
 
 ## Hooks

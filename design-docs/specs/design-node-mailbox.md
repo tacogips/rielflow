@@ -1,13 +1,17 @@
 # Node Mailbox Design
 
-This document defines the file-based mailbox mechanism for node-to-node communication inside a workflow execution.
+This document defines the manager-owned mailbox mechanism for node-to-node
+communication inside a workflow execution. New message transport records are
+persisted in SQLite by default; SQLite is the canonical transport store for
+communication reads, replay, retry, GraphQL inspection, and manager mutation
+scope checks.
 
 ## Overview
 
 The runtime introduces a mailbox artifact layer for routed node communication.
 
 Design goals:
-- file-based and auditable
+- SQLite-backed message records by default
 - deterministic replay across workflow re-execution
 - no direct worker-to-worker transport
 - clear separation between sender output production and manager-mediated delivery
@@ -76,7 +80,7 @@ Manager scoping rules:
 
 ## Mailbox Directory Layout
 
-Mailbox artifacts are stored under the execution artifact root:
+Compatibility mailbox artifacts are stored under the execution artifact root:
 
 ```text
 {artifact-root}/{workflowId}/executions/{workflowExecutionId}/communications/{communicationId}/
@@ -115,6 +119,13 @@ Recommended id formats:
 - `agentSessionId`: `agentsess-000001`
 
 The exact encoding can change, but ordering must be monotonic for allocator-issued sequence values within one workflow execution (not wall-clock creation order across managers).
+
+New message publications must also write a corresponding SQLite row before the
+delivery is considered successful. The SQLite row stores the envelope, routing
+metadata, lifecycle state, payload reference, and path references for files or
+binary handoff artifacts. It must not store file or binary contents. See
+`design-docs/specs/design-sqlite-message-store.md` for schema, root, and
+override rules.
 
 ## Message Files
 

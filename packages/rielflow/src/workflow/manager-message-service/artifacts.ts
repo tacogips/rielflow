@@ -1,7 +1,14 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteJsonFile, atomicWriteTextFile } from "../../shared/fs";
-import { persistDeliveredCommunicationArtifacts } from "../communication-artifact-persistence";
+import {
+  allocateNextWorkflowMessageCommunicationId,
+  saveWorkflowMessageToRuntimeDb,
+} from "../runtime-db";
+import {
+  initialDeliveryAttemptId,
+  nextCommunicationId,
+} from "../runtime-execution-contracts";
 import { resolveRootDataDir } from "../paths";
 import type { SessionStoreOptions } from "../session-store";
 import type { CommunicationRecord, ManagerMessagePayloadRef } from "../session";
@@ -197,29 +204,35 @@ export async function persistManagerMessageCommunication(args: {
   readonly payloadRef: ManagerMessagePayloadRef;
   readonly outputRaw: string;
   readonly createdAt: string;
+  readonly runtimeLogOptions?: SessionStoreOptions;
 }): Promise<CommunicationRecord> {
-  const persisted = await persistDeliveredCommunicationArtifacts({
-    artifactWorkflowRoot: args.artifactWorkflowRoot,
-    workflowId: args.workflowId,
-    workflowExecutionId: args.workflowExecutionId,
-    communicationCounter: args.communicationCounter,
-    fromNodeId: args.managerStepId,
-    toNodeId: args.targetNodeId,
-    routingScope: "intra-workflow",
-    sourceNodeExecId: args.managerNodeExecId,
-    deliveryKind: "edge-transition",
-    payloadRef: args.payloadRef,
-    outputRaw: args.outputRaw,
-    deliveredByNodeId: args.managerStepId,
-    createdAt: args.createdAt,
-    extraEnvelopeFields: { managerMessageId: args.managerMessageId },
-    extraMetaFields: { managerMessageId: args.managerMessageId },
-  });
+  const allocatedCommunication =
+    args.runtimeLogOptions === undefined
+      ? {
+          communicationCounter: args.communicationCounter + 1,
+          communicationId: nextCommunicationId(args.communicationCounter + 1),
+        }
+      : await allocateNextWorkflowMessageCommunicationId(
+          {
+            workflowExecutionId: args.workflowExecutionId,
+            sessionCommunicationCounter: args.communicationCounter,
+          },
+          args.runtimeLogOptions,
+        );
+  const communicationId = allocatedCommunication.communicationId;
+  const deliveryAttemptId = initialDeliveryAttemptId();
+  const artifactDir = path.join(
+    args.artifactWorkflowRoot,
+    "executions",
+    args.workflowExecutionId,
+    "communications",
+    communicationId,
+  );
 
-  return {
+  const communication: CommunicationRecord = {
     workflowId: args.workflowId,
     workflowExecutionId: args.workflowExecutionId,
-    communicationId: persisted.communicationId,
+    communicationId,
     fromNodeId: args.managerStepId,
     toNodeId: args.targetNodeId,
     routingScope: "intra-workflow",
@@ -228,11 +241,22 @@ export async function persistManagerMessageCommunication(args: {
     deliveryKind: "edge-transition",
     transitionWhen: `manager-message:${args.managerMessageId}:to-node:${args.targetNodeId}`,
     status: "delivered",
-    deliveryAttemptIds: [persisted.deliveryAttemptId],
-    activeDeliveryAttemptId: persisted.deliveryAttemptId,
+    deliveryAttemptIds: [deliveryAttemptId],
+    activeDeliveryAttemptId: deliveryAttemptId,
     createdAt: args.createdAt,
     deliveredAt: args.createdAt,
     managerMessageId: args.managerMessageId,
-    artifactDir: persisted.artifactDir,
+    artifactDir,
   };
+  if (args.runtimeLogOptions !== undefined) {
+    await saveWorkflowMessageToRuntimeDb(
+      {
+        communication,
+        outputRaw: args.outputRaw,
+        updatedAt: args.createdAt,
+      },
+      args.runtimeLogOptions,
+    );
+  }
+  return communication;
 }

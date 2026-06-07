@@ -10,6 +10,11 @@ import { buildFanoutGroupSummaries } from "../../workflow/inspect";
 import { loadWorkflowFromCatalog } from "../../workflow/load";
 import { assertCommunicationInManagerScope } from "../../workflow/manager-control";
 import {
+  listWorkflowMessagesFromRuntimeDb,
+  loadWorkflowMessageFromRuntimeDb,
+  workflowMessageRecordToCommunication,
+} from "../../workflow/runtime-db";
+import {
   createLifecycleSupervisionPolicyInput,
   type AutoImprovePolicyInput,
 } from "../../workflow/auto-improve-policy";
@@ -441,7 +446,22 @@ export async function buildCommunicationConnection(
     return { items: [], totalCount: 0 };
   }
 
-  let records = session.communications.filter((communication) => {
+  const sqliteRecords = await listWorkflowMessagesFromRuntimeDb(
+    {
+      workflowExecutionId: input.workflowExecutionId,
+    },
+    context,
+  );
+  let records = sqliteRecords
+    .map(workflowMessageRecordToCommunication)
+    .sort((left, right) => {
+      const byCreatedAt = left.createdAt.localeCompare(right.createdAt);
+      return byCreatedAt === 0
+        ? left.communicationId.localeCompare(right.communicationId)
+        : byCreatedAt;
+    });
+
+  records = records.filter((communication) => {
     if (communication.workflowId !== input.workflowId) {
       return false;
     }
@@ -525,9 +545,17 @@ export async function loadScopedCommunicationForManagerMutation(
       `workflow execution '${input.workflowExecutionId}' does not belong to workflow '${input.workflowId}'`,
     );
   }
-  const communication = loaded.communications.find(
-    (entry) => entry.communicationId === input.communicationId,
+  const sqliteRecord = await loadWorkflowMessageFromRuntimeDb(
+    {
+      workflowExecutionId: input.workflowExecutionId,
+      communicationId: input.communicationId,
+    },
+    context,
   );
+  const communication =
+    sqliteRecord === null || sqliteRecord.workflowId !== input.workflowId
+      ? undefined
+      : workflowMessageRecordToCommunication(sqliteRecord);
   if (communication === undefined) {
     throw new Error(
       `communication '${input.communicationId}' was not found in workflow execution '${input.workflowExecutionId}'`,
@@ -541,14 +569,14 @@ export async function loadScopedCommunicationForManagerMutation(
     throw new Error(`workflow '${loaded.workflowName}' was not found`);
   }
   assertCommunicationInManagerScope(
-    communication as unknown as CommunicationRecord,
+    communication,
     loadedWorkflow.bundle.workflow,
     {
       managerStepId: scope.session.managerStepId,
     },
     "GraphQL manager mutation",
   );
-  return communication as unknown as CommunicationRecord;
+  return communication;
 }
 
 function formatWorkflowLoadFailure(error: {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -166,54 +166,74 @@ export async function runSpawnedProcess(input: {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly context: NativeNodeExecutionContext;
+  readonly captureDirectory?: string;
 }): Promise<SpawnedProcessResult> {
+  const captureDirectory = input.captureDirectory ?? input.cwd;
+  await mkdir(captureDirectory, { recursive: true });
+  const captureId = randomUUID();
+  const stdoutPath = path.join(captureDirectory, `${captureId}-stdout.log`);
+  const stderrPath = path.join(captureDirectory, `${captureId}-stderr.log`);
+  const readCapturedLogs = async (): Promise<SpawnedProcessResult> => {
+    const [stdout, stderr] = await Promise.all([
+      readFile(stdoutPath, "utf8").catch(() => ""),
+      readFile(stderrPath, "utf8").catch(() => ""),
+    ]);
+    return { stdout, stderr };
+  };
+
   return await new Promise<SpawnedProcessResult>((resolve, reject) => {
-    const child = spawn(input.command, input.args, {
-      cwd: input.cwd,
-      env: input.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn(
+      "sh",
+      [
+        "-c",
+        'exec "$@" >"$RIEL_PROCESS_STDOUT" 2>"$RIEL_PROCESS_STDERR"',
+        "rielflow-process",
+        input.command,
+        ...input.args,
+      ],
+      {
+        cwd: input.cwd,
+        env: {
+          ...input.env,
+          RIEL_PROCESS_STDOUT: stdoutPath,
+          RIEL_PROCESS_STDERR: stderrPath,
+        },
+        stdio: ["ignore", "ignore", "ignore"],
+      },
+    );
 
-    let stdout = "";
-    let stderr = "";
     let settled = false;
+    let abortRequested = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const finish = (fn: () => void): void => {
+    const finish = (fn: () => void | Promise<void>): void => {
       if (settled) {
         return;
       }
       settled = true;
       input.context.signal.removeEventListener("abort", onAbort);
-      fn();
+      if (killTimer !== undefined) {
+        clearTimeout(killTimer);
+      }
+      void fn();
     };
 
     const onAbort = (): void => {
+      abortRequested = true;
       child.kill("SIGTERM");
-      finish(() => {
-        reject(
-          new AdapterExecutionError(
-            "timeout",
-            "native node execution timed out",
-            { processLogs: buildProcessLogAttachments({ stdout, stderr }) },
-          ),
-        );
-      });
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, 1_000);
     };
 
     input.context.signal.addEventListener("abort", onAbort, { once: true });
-
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
+    if (input.context.signal.aborted) {
+      onAbort();
+    }
 
     child.on("error", (error: unknown) => {
-      finish(() => {
+      finish(async () => {
+        await readCapturedLogs();
         const message =
           error instanceof Error ? error.message : "unknown spawn error";
         reject(
@@ -226,9 +246,20 @@ export async function runSpawnedProcess(input: {
     });
 
     child.on("close", (code, signal) => {
-      finish(() => {
+      finish(async () => {
+        const logs = await readCapturedLogs();
+        if (abortRequested) {
+          reject(
+            new AdapterExecutionError(
+              "timeout",
+              "native node execution timed out",
+              { processLogs: buildProcessLogAttachments(logs) },
+            ),
+          );
+          return;
+        }
         if (code === 0) {
-          resolve({ stdout, stderr });
+          resolve(logs);
           return;
         }
         reject(
@@ -237,7 +268,7 @@ export async function runSpawnedProcess(input: {
             signal === null
               ? `native node execution exited with code ${String(code ?? "unknown")}`
               : `native node execution exited via signal ${signal}`,
-            { processLogs: buildProcessLogAttachments({ stdout, stderr }) },
+            { processLogs: buildProcessLogAttachments(logs) },
           ),
         );
       });
@@ -391,6 +422,7 @@ export async function runLoggedSpawnedProcess(input: {
       cwd: input.cwd,
       env: input.env,
       context: input.context,
+      captureDirectory: input.artifactDir,
     });
     await writeProcessLogs({
       artifactDir: input.artifactDir,
