@@ -22,7 +22,8 @@
         "config": {
           "textTemplate": "{{inbox.latest.output.payload.replyText}}",
           "visibility": "public",
-          "threadPolicy": "same-thread"
+          "threadPolicy": "same-thread",
+          "onMissingTarget": "dry-run"
         }
       }
     }

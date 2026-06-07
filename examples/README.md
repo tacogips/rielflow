@@ -161,6 +161,7 @@ Discord chat workflow using the generic Chat SDK event boundary:
 - receives normalized Discord messages from the `chat-sdk-discord` event source
 - generates a reply with `codex-agent` model `gpt-5.4-mini`
 - sends the generated text back through `rielflow/chat-reply-worker`
+- dry-runs the reply when a direct local mock run has no chat target
 - keeps the reply destination external through `chat-sdk-discord-replies`
 
 Validate it:
