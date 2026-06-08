@@ -701,3 +701,17 @@ attachment-only reference, or this implementation plan.
   typecheck`; `bun run lint:biome`; `git diff --check -- packages/rielflow-core
   packages/rielflow packages/rielflow-addons README.md examples .codex
   design-docs impl-plans`.
+- 2026-06-08: Step 6 rerun exec `exec-000047` addressed
+  `step7-adversarial-review` exec `exec-000046` feedback. Latest completed
+  output context now indexes SQLite `workflow_messages` rows in either
+  `delivered` or `consumed` status so later steps retain prior completed
+  outputs after downstream consumption, while still excluding created, failed,
+  or superseded messages. Expanded the engine regression to run a three-step
+  managerless workflow and prove step 3 sees both step 1 and step 2
+  `latestOutputs` after the step 1 message has status `consumed`. Verification
+  passed: `bun test packages/rielflow/src/workflow/engine.test.ts -t "persists
+  latest completed outputs"`; `bun test
+  packages/rielflow/src/workflow/engine.test.ts`; `bun run typecheck`; `bun run
+  lint:biome`; `git diff --check --
+  packages/rielflow/src/workflow/engine/mailbox-communication-artifacts.ts
+  packages/rielflow/src/workflow/engine.test.ts impl-plans`.

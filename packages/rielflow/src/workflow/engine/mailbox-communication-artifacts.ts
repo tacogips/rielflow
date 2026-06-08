@@ -323,7 +323,7 @@ export async function buildLatestOutputMailboxIndex(
   }
   const messagesBySourceExec = new Map<string, RuntimeWorkflowMessageRecord>();
   for (const message of messages) {
-    if (message.status !== "delivered") {
+    if (message.status !== "delivered" && message.status !== "consumed") {
       continue;
     }
     messagesBySourceExec.set(message.sourceNodeExecId, message);

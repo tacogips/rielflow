@@ -741,7 +741,11 @@ message handoff storage only. SQLite stores path references for file and binary
 handoffs; it does not store file contents. Communication reads, replay, retry,
 GraphQL inspection, and manager mutation scope checks use SQLite as the message
 source. Legacy per-message files and session communication arrays are not
-fallback sources for new communication reads.
+fallback sources for new communication reads. Resolved node input also builds
+`latestOutputs` from SQLite-backed completed communications: delivered and
+already consumed `workflow_messages` rows remain eligible for downstream
+completed-output context, while created, failed, or superseded rows are
+excluded.
 
 Node execution no longer exposes a `RIEL_MAILBOX_DIR` inbox/outbox message
 contract. Native command, container, and add-on workers receive resolved

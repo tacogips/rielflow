@@ -9795,19 +9795,52 @@ describe("runWorkflow", () => {
     );
   });
 
-  test("persists latest completed outputs in resolved input for downstream review context", async () => {
+  test("persists latest completed outputs after source messages are consumed", async () => {
     const root = await makeTempDir();
-    await createManagerlessWorkflowFixture(root, "latest-mailbox-context");
+    const workflowName = "latest-mailbox-context";
+    await createManagerlessWorkflowFixture(root, workflowName);
+    await writeJson(path.join(root, workflowName, "workflow.json"), {
+      workflowId: workflowName,
+      description: "managerless three-step fixture (no manager step)",
+      defaults: { maxLoopIterations: 3, nodeTimeoutMs: 120000 },
+      entryStepId: "step-1",
+      nodes: [
+        { id: "step-1", nodeFile: "node-step-1.json" },
+        { id: "step-2", nodeFile: "node-step-2.json" },
+        { id: "step-3", nodeFile: "node-step-3.json" },
+      ],
+      steps: [
+        {
+          id: "step-1",
+          nodeId: "step-1",
+          transitions: [{ toStepId: "step-2" }],
+        },
+        {
+          id: "step-2",
+          nodeId: "step-2",
+          transitions: [{ toStepId: "step-3" }],
+        },
+        { id: "step-3", nodeId: "step-3" },
+      ],
+    });
+    await writeJson(path.join(root, workflowName, "node-step-3.json"), {
+      id: "step-3",
+      executionBackend: "claude-code-agent",
+      model: "claude-opus-4-1",
+      promptTemplate: "step 3",
+      variables: {},
+    });
+    const runOptions = {
+      ...workflowLoadOpts,
+      workflowRoot: root,
+      artifactRoot: path.join(root, "artifacts"),
+      sessionStoreRoot: path.join(root, "sessions"),
+      runtimeVariables: { topic: "context" },
+    };
 
     const result = await runWorkflow(
-      "latest-mailbox-context",
-      {
-        ...workflowLoadOpts,
-        workflowRoot: root,
-        artifactRoot: path.join(root, "artifacts"),
-        sessionStoreRoot: path.join(root, "sessions"),
-        runtimeVariables: { topic: "context" },
-      },
+      workflowName,
+      runOptions,
       deterministicAdapter,
     );
 
@@ -9855,6 +9888,64 @@ describe("runWorkflow", () => {
     expect(nodeInput.promptText).toContain("Latest completed step outputs:");
     expect(nodeInput.promptText).toContain("latestOutputs");
     expect(nodeInput.promptText).toContain("node=step-1");
+
+    const step3Exec = result.value.session.nodeExecutions.find(
+      (entry) => entry.nodeId === "step-3",
+    );
+    expect(step3Exec).toBeDefined();
+    if (step3Exec === undefined) {
+      return;
+    }
+
+    const step3Input = JSON.parse(
+      await readFile(
+        path.join(step3Exec.artifactDir, "resolved-input", "input.json"),
+        "utf8",
+      ),
+    ) as {
+      readonly latestOutputs?: readonly {
+        readonly nodeId: string;
+        readonly stepId?: string;
+        readonly nodeExecId: string;
+        readonly payload?: { readonly nodeId?: string };
+      }[];
+    };
+    expect(step3Input.latestOutputs).toHaveLength(2);
+    expect(
+      step3Input.latestOutputs?.map((entry) => ({
+        nodeId: entry.nodeId,
+        stepId: entry.stepId,
+        nodeExecId: entry.nodeExecId,
+        payloadNodeId: entry.payload?.nodeId,
+      })),
+    ).toEqual([
+      {
+        nodeId: "step-1",
+        stepId: "step-1",
+        nodeExecId: "exec-000001",
+        payloadNodeId: "step-1",
+      },
+      {
+        nodeId: "step-2",
+        stepId: "step-2",
+        nodeExecId: "exec-000002",
+        payloadNodeId: "step-2",
+      },
+    ]);
+
+    const sourceCommunication = result.value.session.communications.find(
+      (entry) => entry.fromNodeId === "step-1" && entry.toNodeId === "step-2",
+    );
+    expect(sourceCommunication).toBeDefined();
+    if (sourceCommunication === undefined) {
+      return;
+    }
+    const sourceMessage = await loadSqliteMessageRecord(
+      result.value.session.sessionId,
+      sourceCommunication.communicationId,
+      runOptions,
+    );
+    expect(sourceMessage.status).toBe("consumed");
   });
 
   test("makes runtime-owned publication rules explicit to contract-enabled adapters", async () => {

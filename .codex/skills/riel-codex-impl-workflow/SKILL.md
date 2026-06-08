@@ -141,6 +141,9 @@ semantics change, and this workflow skill. User-facing docs must state that
 `workflow_messages` is the canonical source for communication reads, replay,
 retry, GraphQL inspection, and manager mutations; legacy per-message
 communication files and session communication arrays are not fallback sources.
+Also state that resolved node input builds `latestOutputs` from SQLite-backed
+completed communications, including delivered and already consumed
+`workflow_messages` rows while excluding created, failed, or superseded rows.
 For file-mailbox removal runs, also state that `RIEL_MAILBOX_DIR`
 `inbox/input.json` and `outbox/output.json` are not node execution message
 contracts, native command/container/add-on workers receive resolved structured
